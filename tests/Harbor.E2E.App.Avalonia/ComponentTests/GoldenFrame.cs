@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text.Json;
+using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -10,51 +10,61 @@ using Avalonia.Styling;
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
 /// <summary>
-///     Golden-frame plumbing for screenshot-diff tests (sprint Testing Strategy
-///     Z.2). A golden is a SHA-256 hash of the captured PNG bytes plus the PNG
-///     itself, stored under <c>tests/fixtures/golden/&lt;name&gt;.golden.png</c>
-///     (+ <c>.sha256</c>). Any pixel-level diff from the baseline changes the
-///     PNG bytes → changes the hash → the test FAILS. "File exists" is never
-///     an assertion: a missing or empty fixture is an error, not a pass.
+///     Golden-frame plumbing for the component golden lane (#1795). A
+///     golden is a TEXT snapshot of the rendered frame — the content of the
+///     visual tree, written by <see cref="FrameSnapshot" /> and stored under
+///     <c>tests/fixtures/golden/&lt;name&gt;.golden.txt</c> (and
+///     <c>tests/fixtures/avalonia/frames/&lt;surface&gt;/&lt;scenario&gt;.golden.txt</c>
+///     for the frames lane).
 ///
-///     Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to
-///     overwrite baselines; CI never regenerates.
+///     <para>
+///         The lane used to compare SHA-256 hashes of PNG rasters, and every
+///         one of those comparisons was skipped on CI: a raster is a function
+///         of the machine's Skia build and font stack, so a baseline captured
+///         on one host never matched another. The snapshot is a function of
+///         the code alone, so the SAME baseline is checked on every host —
+///         CI included.
+///     </para>
 ///
-///     Determinism contract: the frame is captured only after TWO consecutive
-///     render passes produce identical PNG hashes (animations settled). If the
-///     frame never settles within the iteration budget the capture throws — 
-///     a nondeterministic frame can never pass a golden compare.
+///     <para>
+///         Regeneration contract: run with <c>HARBOR_UPDATE_GOLDENS=1</c> to
+///         overwrite the baselines; CI never regenerates, it compares. A
+///         change of the rendered content therefore fails the build unless
+///         the baseline was regenerated in the same change — the same
+///         deliberate re-sign the public-API snapshot gate asks for.
+///     </para>
+///
+///     <para>
+///         Determinism contract: the frame is captured only after TWO
+///         consecutive render passes produce identical PNG hashes (the
+///         animations have settled). If the frame never settles within the
+///         iteration budget the capture throws — a nondeterministic frame can
+///         never pass a golden compare.
+///     </para>
 /// </summary>
 internal static class GoldenFrame
 {
-    private static readonly Lazy<string> FixtureDirLazy = new(ResolveFixtureDir);
-    private static readonly Lazy<string> FramesRootLazy = new(ResolveFramesRoot);
-    private static readonly Lazy<string> ManifestPathLazy = new(ResolveManifestPath);
+    private static readonly Lazy<string> RepoRootLazy = new(ResolveRepoRoot);
 
-    /// <summary>Absolute path of <c>tests/fixtures/golden</c>.</summary>
-    public static string FixtureDir => FixtureDirLazy.Value;
-
-    /// <summary>Absolute path of <c>tests/fixtures/avalonia/frames</c>.</summary>
-    public static string FramesRoot => FramesRootLazy.Value;
-
-    /// <summary>Absolute path of the frames hash manifest.</summary>
-    public static string ManifestPath => ManifestPathLazy.Value;
+    /// <summary>Absolute path of the repository root.</summary>
+    public static string RepoRoot => RepoRootLazy.Value;
 
     private static bool UpdateMode =>
         string.Equals(Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS"), "1", StringComparison.Ordinal);
 
     /// <summary>
     ///     Render <paramref name="window" /> in the headless compositor and
-    ///     capture its pixels once the frame has settled (two consecutive
+    ///     snapshot its content once the frame has settled (two consecutive
     ///     identical PNG hashes). Runs synchronously on the UI thread — call
     ///     through <see cref="HeadlessAvaloniaDriver.OnUIThread{T}(Func{T})" />.
     /// </summary>
-    public static (byte[] Png, string Sha256) CaptureSettledFrame(Window window)
+    /// <param name="window">The window to capture.</param>
+    /// <returns>The frame's content snapshot.</returns>
+    public static string CaptureSettledSnapshot(Window window)
     {
         window.Show();
 
         string? previousHash = null;
-        byte[] previousPng = [];
         for (int i = 0; i < 60; i++)
         {
             window.UpdateLayout();
@@ -72,11 +82,12 @@ internal static class GoldenFrame
             string hash = Convert.ToHexString(SHA256.HashData(png));
             if (hash == previousHash)
             {
-                return (png, hash);
+                // The frame has settled: the tree below is the tree the user
+                // would see, and the snapshot of it is stable.
+                return FrameSnapshot.Dump(window);
             }
 
             previousHash = hash;
-            previousPng = png;
         }
 
         throw new TimeoutException(
@@ -133,69 +144,89 @@ internal static class GoldenFrame
     }
 
     /// <summary>
-    ///     Compare <paramref name="png" />/<paramref name="sha256" /> against
-    ///     the stored baseline for <paramref name="testName" />. Any pixel
-    ///     difference (→ different PNG bytes → different hash) fails the test.
+    ///     Compare the captured snapshot against the stored baseline at
+    ///     <paramref name="relativePath" /> (a repo-relative path). Any
+    ///     difference in the frame's content fails the test and names the
+    ///     first differing line.
     /// </summary>
-    public static void Verify(string testName, byte[] png, string sha256)
+    /// <param name="relativePath">Repo-relative path of the baseline file.</param>
+    /// <param name="actual">The snapshot the frame just produced.</param>
+    public static void VerifySnapshot(string relativePath, string actual)
     {
-        string pngPath = Path.Combine(FixtureDir, testName + ".golden.png");
-        string shaPath = Path.Combine(FixtureDir, testName + ".golden.sha256");
+        string path = Path.Combine(RepoRoot, relativePath);
 
         if (UpdateMode)
         {
-            Directory.CreateDirectory(FixtureDir);
-            File.WriteAllBytes(pngPath, png);
-            File.WriteAllText(shaPath, sha256 + "\n");
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, actual);
             return;
         }
 
-        if (!File.Exists(pngPath) || !File.Exists(shaPath))
+        if (!File.Exists(path))
         {
             throw new InvalidOperationException(
-                $"golden fixture missing: {pngPath} (+ .sha256). Run once with HARBOR_UPDATE_GOLDENS=1 to seed it.");
+                $"golden baseline missing: {relativePath}. " +
+                "Regenerate it with HARBOR_UPDATE_GOLDENS=1 (or the `goldens` workflow) and commit it in the same change.");
         }
 
-        string expected = File.ReadAllText(shaPath).Trim();
-        if (!string.Equals(expected, sha256, StringComparison.OrdinalIgnoreCase))
+        string expected = Normalize(File.ReadAllText(path));
+        string got = Normalize(actual);
+        if (string.Equals(expected, got, StringComparison.Ordinal))
         {
-            string verifiedPath = Path.Combine(FixtureDir, testName + ".verified.png");
-            File.WriteAllBytes(verifiedPath, png);
-            throw new InvalidOperationException(
-                $"golden frame MISMATCH for {testName}: pixels differ from the baseline.\n" +
-                $"  expected sha256: {expected}\n" +
-                $"  actual   sha256: {sha256}\n" +
-                $"  actual PNG written to: {verifiedPath}\n" +
-                $"  If the visual change is INTENDED, regenerate with HARBOR_UPDATE_GOLDENS=1.");
+            return;
         }
 
-        // Belt-and-braces: the stored PNG must hash to the stored value too — 
-        // a corrupted/updated-by-half fixture fails loudly instead of silently.
-        byte[] storedPng = File.ReadAllBytes(pngPath);
-        string storedHash = Convert.ToHexString(SHA256.HashData(storedPng));
-        if (!string.Equals(storedHash, expected, StringComparison.OrdinalIgnoreCase))
+        // The captured snapshot is written next to the baseline so a human can
+        // diff the two files instead of reading the message. It is NOT a
+        // baseline: the goldens workflow never commits it.
+        string actualPath = path + ".actual.txt";
+        File.WriteAllText(actualPath, got);
+
+        throw new InvalidOperationException(
+            $"golden frame MISMATCH for {relativePath}: the rendered content differs from the baseline.\n" +
+            $"{DescribeDifference(expected, got)}\n" +
+            $"  the captured snapshot was written to: {actualPath}\n" +
+            "  If the change is INTENDED, regenerate the baseline (HARBOR_UPDATE_GOLDENS=1 locally, " +
+            "or the `goldens` workflow on this branch) and commit it in the SAME change.");
+    }
+
+    /// <summary>
+    ///     The first difference between two snapshots, with a little context —
+    ///     the same shape of report the public-API snapshot gate prints.
+    /// </summary>
+    private static string DescribeDifference(string expected, string got)
+    {
+        string[] expectedLines = expected.Split('\n');
+        string[] gotLines = got.Split('\n');
+        int count = Math.Max(expectedLines.Length, gotLines.Length);
+
+        for (int i = 0; i < count; i++)
         {
-            throw new InvalidOperationException(
-                $"golden fixture is inconsistent: {pngPath} does not hash to {shaPath} contents.");
+            string expectedLine = i < expectedLines.Length ? expectedLines[i] : "<missing>";
+            string gotLine = i < gotLines.Length ? gotLines[i] : "<missing>";
+            if (string.Equals(expectedLine, gotLine, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("  first difference at line ").Append(i + 1).Append(":\n");
+            sb.Append("    baseline: ").Append(expectedLine.TrimEnd('\r')).Append('\n');
+            sb.Append("    actual:  ").Append(gotLine.TrimEnd('\r')).Append('\n');
+            sb.Append("  (baseline ").Append(expectedLines.Length)
+              .Append(" lines, actual ").Append(gotLines.Length).Append(" lines)");
+            return sb.ToString();
         }
+
+        return "  the snapshots differ only in their line endings.";
     }
 
-    private static string ResolveFixtureDir()
-    {
-        return Path.Combine(ResolveRepoRoot(), "tests", "fixtures", "golden");
-    }
-
-    private static string ResolveFramesRoot()
-    {
-        return Path.Combine(ResolveRepoRoot(), "tests", "fixtures", "avalonia", "frames");
-    }
-
-    private static string ResolveManifestPath()
-    {
-        return Path.Combine(
-            ResolveRepoRoot(),
-            "tests", "Harbor.E2E.App.Avalonia", "ComponentTests", "baselines", "sha256.json");
-    }
+    /// <summary>
+    ///     Normalize line endings so a baseline written on Windows (CRLF) and
+    ///     a snapshot produced on Linux (LF) compare equal.
+    /// </summary>
+    private static string Normalize(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
     private static string ResolveRepoRoot()
     {
@@ -211,115 +242,5 @@ internal static class GoldenFrame
         }
 
         return dir.FullName;
-    }
-
-    /// <summary>
-    ///     Compare <paramref name="png" />/<paramref name="sha256" /> against
-    ///     the frames-lane baseline for <c>&lt;surface&gt;/&lt;scenario&gt;</c>.
-    ///     The reference PNG lives under
-    ///     <c>tests/fixtures/avalonia/frames/&lt;surface&gt;/&lt;scenario&gt;.png</c>
-    ///     and every hash is mirrored in the
-    ///     <c>ComponentTests/baselines/sha256.json</c> manifest, so one file
-    ///     shows the whole lane at a glance. Update mode writes the PNG and
-    ///     the manifest entry together — a baseline and its hash can never
-    ///     drift apart.
-    /// </summary>
-    public static void VerifyFrame(string surface, string scenario, byte[] png, string sha256)
-    {
-        CheckName(surface, nameof(surface));
-        CheckName(scenario, nameof(scenario));
-        string key = surface + "/" + scenario;
-        string pngPath = Path.Combine(FramesRoot, surface, scenario + ".png");
-
-        if (UpdateMode)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(pngPath)!);
-            File.WriteAllBytes(pngPath, png);
-            var entries = ReadManifest();
-            entries[key] = sha256;
-            WriteManifest(entries);
-            return;
-        }
-
-        var manifest = ReadManifest();
-        if (!manifest.TryGetValue(key, out string? expected) || !File.Exists(pngPath))
-        {
-            throw new InvalidOperationException(
-                $"golden fixture missing: {pngPath} (manifest key '{key}'). " +
-                "Run once with HARBOR_UPDATE_GOLDENS=1 to seed it.");
-        }
-
-        if (!string.Equals(expected, sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            string verifiedPath = Path.Combine(
-                Path.GetDirectoryName(pngPath)!, scenario + ".verified.png");
-            File.WriteAllBytes(verifiedPath, png);
-            throw new InvalidOperationException(
-                $"golden frame MISMATCH for {key}: pixels differ from the baseline.\n" +
-                $"  expected sha256: {expected}\n" +
-                $"  actual   sha256: {sha256}\n" +
-                $"  actual PNG written to: {verifiedPath}\n" +
-                $"  If the visual change is INTENDED, regenerate with HARBOR_UPDATE_GOLDENS=1.");
-        }
-
-        byte[] storedPng = File.ReadAllBytes(pngPath);
-        string storedHash = Convert.ToHexString(SHA256.HashData(storedPng));
-        if (!string.Equals(storedHash, expected, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"golden fixture is inconsistent: {pngPath} does not hash to the manifest entry for '{key}'.");
-        }
-    }
-
-    private static void CheckName(string value, string paramName)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value.Contains('/') || value.Contains('\\') || value.Contains(".."))
-        {
-            throw new ArgumentException($"invalid golden name '{value}'", paramName);
-        }
-
-        foreach (char c in value)
-        {
-            if (!char.IsLetterOrDigit(c) && c != '-' && c != '_')
-            {
-                throw new ArgumentException($"invalid golden name '{value}'", paramName);
-            }
-        }
-    }
-
-    private static SortedDictionary<string, string> ReadManifest()
-    {
-        var map = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        if (!File.Exists(ManifestPath))
-        {
-            return map;
-        }
-
-        string json = File.ReadAllText(ManifestPath);
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return map;
-        }
-
-        var parsed = JsonSerializer.Deserialize<SortedDictionary<string, string>>(json);
-        if (parsed is null)
-        {
-            return map;
-        }
-
-        foreach (var kv in parsed)
-        {
-            map[kv.Key] = kv.Value;
-        }
-
-        return map;
-    }
-
-    private static void WriteManifest(SortedDictionary<string, string> entries)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)!);
-        string json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ManifestPath, json + "\n");
     }
 }

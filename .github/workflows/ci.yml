@@ -110,6 +110,10 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The skipped-test report (issue #1795) — same #618 argument:
+              # an edit to the script alone must not skip the job that
+              # executes it.
+              - 'tools/test-skips.py'
               # The pack-validation gate's instrument (#429). Same #618
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
@@ -1050,7 +1054,17 @@ jobs:
           set -uo pipefail
           guard=""
           if [ "${{ matrix.guard }}" = "true" ]; then
-            guard="--minimum-expected-tests 1"
+            # --zero-tests-policy strict (#1795): MTP's default policy is
+            # `allow-skipped`, under which a run in which EVERY test was
+            # skipped still exits 0 — a suite that stopped running anything
+            # would be indistinguishable from a green one. `strict` treats a
+            # skipped test as not run, so an all-skipped run is a failure.
+            # The flag is here for the runs that do NOT pass
+            # --minimum-expected-tests (a developer's `dotnet run`, a workflow
+            # that forgot the guard); with the minimum in force, MTP applies
+            # the count-based verdict instead (exit 9, MinimumExpectedTests
+            # PolicyViolation) — see the non-vacuity step below.
+            guard="--minimum-expected-tests 1 --zero-tests-policy strict"
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
@@ -1077,6 +1091,37 @@ jobs:
             echo "| $p | $status | $((end - start))s |" >> "$summary"
           done
           exit $rc
+
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It runs on ONE shard: the verdict is a property of the runner, not of
+      # the suite, and paying a process start on four shards buys nothing.
+      - name: The zero-test guard can go red (issue #1795)
+        if: matrix.shard == 'core'
+        shell: bash
+        run: |
+          set -uo pipefail
+          dll="tests/Harbor.Abstractions.Tests/bin/Release/net10.0/Harbor.Abstractions.Tests.dll"
+          if [ ! -f "$dll" ]; then
+            echo "::error::missing $dll — the guard check would be vacuous"
+            exit 1
+          fi
+          set +e
+          dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
+            --treenode-filter "/*/*/NoSuchClassForTheGuardCheck/*" > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 8 ] && [ "$rc" -ne 9 ]; then
+            echo "::error::the zero-test guard is vacuous: a run that discovered no test exited $rc (expected 8 or 9)"
+            exit 1
+          fi
+          echo "the zero-test guard is not vacuous: an empty run exits $rc"
 
       # Issue #618 — per-test measurements in the JOB SUMMARY, never in the log.
       # The shard loop above prints per-ASSEMBLY counts only ("Test run summary:
@@ -1109,6 +1154,19 @@ jobs:
         shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Issue #1795 — the SKIPPED tests, with their reasons, in the same
+      # summary panel. A skipped test asserts nothing, and the shard loop
+      # prints per-ASSEMBLY counts only, so a suite that quietly stopped
+      # running half its tests stayed green until somebody counted by hand
+      # (that is how the 20 skipped Avalonia golden tests were found).
+      # Reporting only, never a gate: the script exits 0 on a missing TRX.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Publish Test Results

@@ -133,6 +133,8 @@ jobs:
               # the script alone would set dotnet=false, skip the very job
               # that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The skipped-test report (issue #1795) — same #618 argument.
+              - 'tools/test-skips.py'
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false and land unvalidated.
@@ -374,7 +376,7 @@ jobs:
           foreach ($p in $projects) {
             Write-Host "::group::dotnet exec $p"
             $dll = "tests/$p/bin/Release/net10.0/$p.dll"
-            dotnet exec $dll --minimum-expected-tests 1 --report-trx `
+            dotnet exec $dll --minimum-expected-tests 1 --zero-tests-policy strict --report-trx `
               --results-directory $trxDir --report-trx-filename "$p.trx"
             if ($LASTEXITCODE -ne 0) { $failed += $p }
             Write-Host "::endgroup::"
@@ -398,4 +400,14 @@ jobs:
         shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.os }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Issue #1795 — the skipped tests, with their reasons, in the same
+      # summary panel. Same rationale as the `test` job in ci.yml: a skipped
+      # test asserts nothing, and nothing in the log said how many there were.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.os }}" \
             --summary "$GITHUB_STEP_SUMMARY"

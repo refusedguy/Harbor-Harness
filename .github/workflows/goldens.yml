@@ -1,18 +1,26 @@
 # Regenerate golden baselines on demand and commit them back.
 #
-# Golden tests (ScreenshotHashTests, GoldenGridDumpTests, ce3-*, Avalonia
-# *GoldenFrame/*Frames_*) fail when painted output intentionally changes.
-# Regeneration requires a full test run with HARBOR_UPDATE_GOLDENS=1 —
-# agents and reviewers without a local .NET setup use this workflow instead:
+# Golden tests (the CellForge grid dumps, the Avalonia frame snapshots,
+# ScreenshotHashTests, ce3-*) fail when the painted output intentionally
+# changes. Regeneration requires a full test run with HARBOR_UPDATE_GOLDENS=1
+# — agents and reviewers without a local .NET setup use this workflow instead:
 #
 #   gh workflow run goldens.yml --ref <branch>   (-PR branch, not dev)
 #   gh workflow run goldens.yml --ref <branch> -f suites="tests/Harbor.E2E.App.Avalonia"
 #
-# The job runs the selected golden suites with the flag set and commits any
-# changed baselines straight back to the same branch, so the PR's CI re-runs
-# green. Only baseline files (*.golden.txt, *.golden.png, *.golden.sha256,
-# *.verified.*, hashes manifest, Avalonia frames + sha256.json)
-# are committed — never source changes. Manual dispatch only, never a gate.
+# The job runs the selected golden suites with the flag set, then runs them
+# AGAIN in verify mode. A baseline the code does not reproduce is a broken
+# regeneration, and the job says so instead of committing it — the old
+# version swallowed every failure with `|| true` and could commit nothing at
+# all while reporting success.
+#
+# It then commits the changed baselines straight back to the same branch, so
+# the PR's CI re-runs green. Only baseline files (*.golden.txt, *.verified.*)
+# are committed — never source changes. Manual dispatch only; the CHECK is
+# the test job in ci.yml, which compares the committed baseline on EVERY run:
+# a frame that changed without its baseline changing in the same PR fails the
+# build, and a baseline that changed without the frame is where the reviewer
+# looks.
 name: goldens
 
 on:
@@ -43,12 +51,8 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Regenerate goldens
-        env:
-          HARBOR_UPDATE_GOLDENS: 1
-          HARBOR_GOLDENS_STRICT: 1
-          DOTNET_NOLOGO: true
-          DOTNET_CLI_TELEMETRY_OPTOUT: true
+      - name: Resolve the suites
+        id: suites
         run: |
           set -uo pipefail
           if [ -z "${{ inputs.suites }}" ]; then
@@ -56,7 +60,16 @@ jobs:
           else
             suites="${{ inputs.suites }}"
           fi
-          for p in $suites; do
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate goldens
+        env:
+          HARBOR_UPDATE_GOLDENS: 1
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
+        run: |
+          set -uo pipefail
+          for p in ${{ steps.suites.outputs.suites }}; do
             echo "::group::goldens $p"
             # TUnit treenode filters are /assembly/namespace/class/method paths;
             # a bare "*Golden*" glob matches nothing and silently regenerates
@@ -67,6 +80,33 @@ jobs:
           done
           exit 0
 
+      # The regeneration above runs in update mode, where a golden test
+      # cannot fail: it writes the baseline and returns. That is what makes
+      # "regenerated -> committed -> never checked" possible — the committed
+      # baseline was never compared with anything. This pass compares: the
+      # suites run WITHOUT the update flag, so the baseline the job is about
+      # to commit has to match what the code renders right now. A failure
+      # here means the regeneration produced a baseline the code does not
+      # reproduce (a path bug, a half-written file), and the job fails
+      # instead of committing it.
+      - name: Verify the regenerated baselines
+        env:
+          HARBOR_UPDATE_GOLDENS: 0
+          DOTNET_NOLOGO: true
+          DOTNET_CLI_TELEMETRY_OPTOUT: true
+        run: |
+          set -uo pipefail
+          rc=0
+          for p in ${{ steps.suites.outputs.suites }}; do
+            echo "::group::verify goldens $p"
+            if ! dotnet run --project "$p" -c Release -- --treenode-filter "/*/*/*Golden*/*"; then
+              echo "::error::the regenerated baselines of $p do not match what the code renders"
+              rc=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $rc
+
       - name: Commit baselines back
         run: |
           git config user.name "harbor-goldens"
@@ -75,14 +115,12 @@ jobs:
           # nothing, so a repo with no *.verified.* files staged nothing at
           # all and every dispatch reported "No baseline changes". Add each
           # pattern on its own so a missing family cannot swallow the rest.
-          # The Avalonia frames lane keeps reference PNGs under
-          # tests/fixtures/avalonia/frames/ plus the sha256.json manifest —
-          # those two paths are added as literal directories so the *.png
-          # glob below cannot sweep up unrelated screenshots.
-          for pattern in '*.golden.txt' '*.golden.png' '*.golden.sha256' '*.verified.*' '*hashes*.json' '*Hashes*.json' 'sha256.json'; do
+          # The Avalonia frame snapshots (*.golden.txt) live under
+          # tests/fixtures/golden and tests/fixtures/avalonia/frames — the
+          # *.golden.txt pathspec covers both, at any depth.
+          for pattern in '*.golden.txt' '*.verified.*'; do
             git add -A -- "$pattern" || true
           done
-          git add -A -- tests/fixtures/avalonia/frames tests/Harbor.E2E.App.Avalonia/ComponentTests/baselines || true
           if git diff --cached --quiet; then
             echo "No baseline changes."
           else
