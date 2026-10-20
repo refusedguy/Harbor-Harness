@@ -6,6 +6,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
+using Harbor.Application.Observability;
 using Harbor.App.Cli.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Tui.CellForge.Input;
@@ -404,7 +405,14 @@ internal sealed class ReplRunner
                 // IGitQuery for the CLI (same reason it registers the file-tree
                 // seam — the consumer is a TUI surface, and the CLI is the default
                 // CellForge backend), so this resolves on the normal path.
-                _rendererHost.GetService<Harbor.Abstractions.Git.IGitQuery>()),
+                _rendererHost.GetService<Harbor.Abstractions.Git.IGitQuery>())
+            {
+                // #1745: the harness-side change oracle. Resolved HERE, at the
+                // composition root, because the oracle subscribes to the bus in
+                // its constructor: a host that resolved it after the first turn
+                // would have missed that turn's changes.
+                TurnChanges = _rendererHost.GetService<TurnChangeOracle>(),
+            },
             screens,
             sessionResult.Value,
             modeController);
@@ -508,7 +516,25 @@ internal sealed class ReplRunner
         _agent.Initialize(sessionResult.Value, defaultAgent);
         (_renderer as BaseTuiRenderer)?.SetActiveAgent(defaultAgent.Name.Value);
         ReplRunnerLog.AskAgentInitializedSendingPrompt(_logger);
+
+        // #1745: the oracle is resolved BEFORE the prompt, because it
+        // subscribes to the bus in its constructor — an oracle resolved after
+        // the run would have missed every turn of that run.
+        var changes = new TurnChangeSummary(_rendererHost.GetService<TurnChangeOracle>());
         var result = await _agent.PromptAsync(prompt).ConfigureAwait(false);
+
+        // What the run changed in the workspace, as the harness saw it. One
+        // line per turn, written through the renderer so the output lands in
+        // the same stream as the assistant's own text.
+        foreach (string line in changes.TakeNewLines())
+        {
+            Result written = await _renderer.WriteLineAsync(line).ConfigureAwait(false);
+            if (written.IsFailure)
+            {
+                ReplRunnerLog.AskChangeSummaryNotWritten(_logger, written.Error);
+            }
+        }
+
         ReplRunnerLog.AskCompleted(_logger, result.IsSuccess);
         return result.IsSuccess ? 0 : 1;
     }
@@ -713,4 +739,7 @@ internal static partial class ReplRunnerLog
 
     [LoggerMessage(EventId = 37, Level = LogLevel.Information, Message = "Line REPL ended")]
     public static partial void LineReplEnded(ILogger logger);
+
+    [LoggerMessage(EventId = 38, Level = LogLevel.Warning, Message = "The turn-change summary could not be written: {Error}")]
+    public static partial void AskChangeSummaryNotWritten(ILogger logger, string error);
 }

@@ -299,7 +299,7 @@ public sealed class SlashResultChannelTests
             """;
 
         // Negative control for rule B: the fall-through IS the failure arm.
-        // ReplRunner.cs:185 is the live example — `if (consoleResult.IsSuccess)
+        // ReplRunner.cs:186 is the live example — `if (consoleResult.IsSuccess)
         // return …;` then a LogWarning naming the error.
         const string FallThroughIsTheFailureArm = """
             var consoleResult = await RunCellForgeAsync(ct);

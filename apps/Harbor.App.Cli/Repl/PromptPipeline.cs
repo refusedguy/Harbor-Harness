@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
+using Harbor.Application.Observability;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
@@ -30,13 +31,21 @@ internal sealed class PromptPipeline(
     ILogger logger,
     ITokenTracker? tokens,
     Lazy<LegacySlashRunner> legacy,
-    SetupChecklistController? setupChecklist = null) : IDisposable
+    SetupChecklistController? setupChecklist = null,
+    TurnChangeOracle? turnChanges = null) : IDisposable
 {
     /// <summary>Stream-retry budget mirrored from AgentLoop's C7 policy —
     /// kept in sync for the countdown's «n/3» display only.</summary>
     private const int MaxStreamRetries = 3;
 
     private volatile bool _promptInFlight;
+
+    /// <summary>
+    ///     The reader over the harness-side change oracle (#1745). It yields
+    ///     one line per turn that changed the workspace, and nothing at all
+    ///     when the host registered no oracle.
+    /// </summary>
+    private readonly TurnChangeSummary _changeSummary = new(turnChanges);
 
     private int _retryAttempt;
     private int _retryMax = MaxStreamRetries;
@@ -322,6 +331,15 @@ internal sealed class PromptPipeline(
             {
                 host.Status.Mode = StatusBarMode.Idle;
                 ResetRetryCountdown();
+            }
+
+            // #1745: what the turn actually changed, as the harness saw it.
+            // One line per turn, and the line says when the harness could not
+            // see through a tool — the summary is never «nothing changed»
+            // when it only means «nothing I could see changed».
+            foreach (string line in _changeSummary.TakeNewLines())
+            {
+                host.Bridge.AppendSystemLine(line);
             }
 
             _usageDirty = true;

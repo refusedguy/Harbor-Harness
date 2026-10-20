@@ -95,7 +95,7 @@ recorded, because they answer #44's topology question.
 | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104` | mandatory | in-process client stream |
 | `src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18` | mandatory | CellForge renderer |
 | `src/Harbor.Tui.CellForge/Chat/Streaming/InlineAgentStreamBridge.cs:31` | mandatory | inline agent stream renderer |
-| `apps/Harbor.App.Cli/Repl/ReplRunner.cs:270,389` | mandatory | REPL renderer, live for the session |
+| `apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467` | mandatory | REPL renderer, live for the session |
 | `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103` | mandatory | CellForge REPL event pump (`_events` channel → render loop) |
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
 | `apps/Harbor.App.Cli/Commands/DemoCommand.cs:236` | optional | demo renderer; no state depends on it |

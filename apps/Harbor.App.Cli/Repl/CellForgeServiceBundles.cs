@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Configuration;
+using Harbor.Application.Observability;
 using Harbor.Hosting.Rendering;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;
@@ -44,4 +45,12 @@ internal sealed record CellForgeOptionalServices(
     // #857: the worktree column of the /jump palette. Null in test doubles and
     // in a host that registered no query — the command then lists sessions
     // only, the degradation the jump panel already documents.
-    Harbor.Abstractions.Git.IGitQuery? GitQuery);
+    Harbor.Abstractions.Git.IGitQuery? GitQuery)
+{
+    /// <summary>
+    ///     The harness-side change oracle (#1745). Null in test doubles and in
+    ///     a host that registered no oracle: the REPL then prints nothing
+    ///     about what a turn changed, which is honest rather than empty.
+    /// </summary>
+    public TurnChangeOracle? TurnChanges { get; init; }
+}

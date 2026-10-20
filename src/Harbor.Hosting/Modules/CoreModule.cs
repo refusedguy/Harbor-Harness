@@ -2,6 +2,7 @@ using Harbor.Application.Agents;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Diagnostics;
 using Harbor.Application.Hooks;
+using Harbor.Application.Observability;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Skills;
@@ -117,6 +118,17 @@ internal static class CoreModule
             sp.GetService<Harbor.Abstractions.Lsp.ILspService>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
                 .CreateLogger<DiagnosticsAggregator>()));
+
+        // #1745: the harness-side oracle of what a turn changed in the
+        // workspace. A singleton for the same reason the aggregator is one: it
+        // is ONE answer about the workspace, and a second instance would be a
+        // second, silent truth. It subscribes to the bus in its constructor,
+        // so a host that never resolves it never observes anything — the
+        // resolution happens at the composition root, before the first turn.
+        services.AddSingleton(sp => new TurnChangeOracle(
+            sp.GetRequiredService<IEventBus>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                .CreateLogger<TurnChangeOracle>()));
 
         return services;
     }
