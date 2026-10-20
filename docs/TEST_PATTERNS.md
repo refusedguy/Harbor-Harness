@@ -729,15 +729,17 @@ public class MyMessageTests
 
 Every row above is a TUnit type that resolves in any test project. The one
 bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is gone:
-it is the built-in `[RunOn(OS.Linux)]` now, and no test project carries a
-hand-written skip attribute any more.
+it is the built-in `[RunOn(OS.Linux)]` now. The only `SkipAttribute` subclass
+left in the tree is `KnownFlakeAttribute`, and that one is a flake WAIVER
+(a named test that is known to fail), not a conditional skip.
 
 ### Skipping a test
 
 A skip is a claim about the world, not about the code: "this cannot be
 measured here". TUnit ships the whole vocabulary, so the repository does not
-hand-write skip attributes. Every skip in `tests/` is one of the four shapes
-below, and every one of them carries a REASON that lands in the run report.
+hand-write skip attributes. Every conditional skip in `tests/` is one of the
+four shapes below, and every one of them carries a REASON that lands in the
+run report (and in the per-shard skip table that CI publishes).
 
 | Shape | Use it when | Reason |
 |---|---|---|
