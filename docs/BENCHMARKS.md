@@ -2185,10 +2185,11 @@ it is the one a spike can be priced against today.
 > * **B — after**, run **39420115031** (this branch, TUnit 1.75): three
 >   processes, before the toast-timer change of §6.4 landed. **A → B is this
 >   change alone.**
-> * **C — final**, run **39440361839** (this branch's head, after the
->   toast-timer change of §6.4 and after `StateTestRunnerTests` moved to a
->   project of its own): three processes, 107 tests instead of 133. The plan
->   checked in is measured from run **39436580540**, the run before it.
+> * **C — final**, run **39456355648** (this branch's head, after the
+>   toast-timer change of §6.4, after `StateTestRunnerTests` moved to a
+>   project of its own, and after the golden frames started running on CI):
+>   three processes, 107 tests instead of 133, and 7 skipped instead of 19.
+>   The plan checked in is measured from run **39436580540**.
 >
 > The runs are on the same runner CLASS but not on the same runner, so read
 > the numbers as "the same work in about half the wall", not as a
@@ -2207,7 +2208,7 @@ process. All three are process-wide, so the lever is the PROCESS.
 |---|--:|--:|--:|--:|--:|
 | A, 39404823168 (before) | 1 | 58.59 s (the sum of the class durations) | **60.56 s** | 133 | 20 |
 | B, 39420115031 (this change) | 3 | **29.0 s** | **29.6 s** | 133 | 19 |
-| C, 39440361839 (final tree) | 3 | **15.5 s** | **15.9 s** | 107 | 19 |
+| C, 39456355648 (final tree) | 3 | **15.1 s** | **15.6 s** | 107 | 7 |
 
 **A → B is the change this section is about:** 60.56 s → 29.6 s, and the
 project's wall becomes the slowest shard (29.0 s) instead of the sum of the
@@ -2219,14 +2220,14 @@ processes.
 **B → C is not this change:** it is the toast-timer change of §6.4 (which
 removed five waits of ~4 s each, ~20.5 s of the project's wall) and
 `StateTestRunnerTests` moving to a project of its own (26 tests, 0.2 s).
-Run C's shards measured 13.4 s (shard-0, 41 tests), 15.5 s (shard-1, 61) and
+Run C's shards measured 12.2 s (shard-0, 41 tests), 15.1 s (shard-1, 61) and
 4.9 s (shard-2, 5) — the plan is measured from run 39436580540's TRX, so the
 next run's split is balanced against ITS costs (11.80 / 11.74 / 1.87 s of
 measured class time).
 
 The e2e SHARD as a whole (its projects, sequentially) went from **67.7 s**
-(run A) to **38.5 s** (run B) to **24.3 s** (run C): the project above is
-60.6 s of the 67.7 s before, and 15.9 s of the 24.3 s after.
+(run A) to **38.5 s** (run B) to **24.5 s** (run C): the project above is
+60.6 s of the 67.7 s before, and 15.6 s of the 24.5 s after.
 
 **This is not the binding shard.** The `test` job's shard walls on the same
 lane: `core` 159.4 s, `ui` 126.3 s, `e2e` 60.0 s, `platform` 31.4 s — so the
