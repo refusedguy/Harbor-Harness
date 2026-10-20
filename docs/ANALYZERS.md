@@ -37,8 +37,11 @@ Harbor runs three layers of static analysis + DI validation:
 binding flags, overloads, `nameof`, generic type arguments, `InvokeMember`
 targets. **None of them is about dynamic code** — the shipped analyzer
 assembly contains no `Assembly.Load`, `AssemblyLoadContext`, `Reflection.Emit`,
-`TypeBuilder` or `DynamicMethod` rule, so the ban on the dynamic-code family
-in `src/` + `apps/` is held by `ReflectionConventionRule` alone.
+`TypeBuilder` or `DynamicMethod` rule. The ban on the dynamic-code family in
+`src/` + `apps/` is held by the compiler: `RS0030` over
+[`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) (see
+[the dynamic-code ban](#the-dynamic-code-ban-bannedsymbolsdynamiccodetxt)
+below).
 
 Measured on this tree (#1905, CI build log of a green run): nine rules fire,
 216 instances, and every one of them is in `tests/`:
@@ -186,17 +189,17 @@ blocks were inert configuration that read like live policy.
 `DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
 the entire surface.
 
-### Banned APIs (`BannedSymbols.txt`)
+### Banned APIs (`BannedSymbols.txt`, `BannedSymbols.DynamicCode.txt`)
 
 [`BannedSymbols.txt`](../BannedSymbols.txt) is the RS0030 rule set — the
 mechanical expression of the "What NOT to do" list in CLAUDE.md. It is wired in
 `Directory.Build.props` via `<AdditionalFiles Include="BannedSymbols.txt" />`.
 
-> **The filename is load-bearing.** The analyzer only reads files literally named
-> `BannedSymbols.txt`. The rules sat dead under the old name `BannedApi.txt`
-> until ROP-D Z2, which both renamed the file and added the `AdditionalFiles`
-> entry — two independent reasons for it to be invisible. If you rename it, the
-> whole rule set silently stops firing.
+> **The filename is load-bearing.** The analyzer reads files named
+> `BannedSymbols.txt` or `BannedSymbols.*.txt` — nothing else. The rules sat
+> dead under the old name `BannedApi.txt` until ROP-D Z2, which both renamed the
+> file and added the `AdditionalFiles` entry — two independent reasons for it to
+> be invisible. If you rename it, the whole rule set silently stops firing.
 
 What it bans, and why each one is a hard rule rather than a style preference:
 
@@ -226,6 +229,56 @@ If you add a pragma, add the catalog entry in the same commit — an uncatalogue
 pragma is indistinguishable from a suppression someone forgot to remove.
 `AGENTS.md` §"What NOT to do" forbids blanket `#pragma warning disable`; a
 single-rule, commented, catalogued exemption is the only accepted form.
+
+### The dynamic-code ban (`BannedSymbols.DynamicCode.txt`)
+
+[`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) is the second
+RS0030 rule set: the dynamic-code convention of
+[#626](https://github.com/refusedguy/Harbor-Harness/issues/626) — no shipped
+product file outside `src/Harbor.Plugins.*` loads an assembly or emits IL at run
+time. It used to be a hand-written regex over the source text
+(`tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs`, plus a comment
+stripper and ten planted controls); since
+[#1844](https://github.com/refusedguy/Harbor-Harness/issues/1844) the compiler
+enforces it. The migration added **no package** — the analyzer was already
+referenced solution-wide.
+
+| Rule | Reason |
+|---|---|
+| `Assembly.Load` / `LoadFrom` / `LoadFile` (all seven public overloads) | A run-time-loaded assembly is in no `<ProjectReference>` and invisible to NativeAOT. |
+| `System.Runtime.Loader.AssemblyLoadContext` | The load side of the same door. |
+| `System.Reflection.Emit` (namespace, plus `TypeBuilder` and `DynamicMethod`) | The manufacture-code side: IL the compiler never saw. |
+
+Two things about this file that are easy to get wrong:
+
+- **An ID with no parameter list matches only the parameterless overload.**
+  `M:System.Reflection.Assembly.Load` on its own bans nothing, because every
+  `Assembly.Load` overload takes an argument and Roslyn's ID resolver requires
+  the parameter count to match exactly. Every overload is listed with its
+  parameter list, and `The_Ban_File_Covers_Every_Public_Assembly_Load_Overload`
+  fails when the list stops covering the framework's surface.
+- **`AppDomain.DefineDynamicAssembly` is deliberately absent.** It is not public
+  API in .NET 10, so the compiler rejects the call before any analyzer sees it;
+  a ban entry for it would resolve to no symbol and enforce nothing. Its live
+  spelling, `System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly`, is in
+  the banned namespace.
+
+**The plugin exception is expressed by the tool.** The ban file is **not added**
+to the `src/Harbor.Plugins.*` projects' `<AdditionalFiles>`, so the compiler
+never sees the rule there:
+
+```xml
+<AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.DynamicCode.txt"
+                 Condition="!$(MSBuildProjectName.StartsWith('$(HarborDynamicCodeBanExemptProjectNamePrefix)'))" />
+```
+
+That is the absence of a file — something a tool enforces — rather than a
+baseline a scanner subtracts, which a reader has to believe. The prefix lives in
+one property (`HarborDynamicCodeBanExemptProjectNamePrefix`) so the wiring and
+the architecture test read the same fact.
+
+The dynamic-code rule has no pragma form: its exemption is the plugin family,
+and it is expressed by leaving the ban file out of that family's projects.
 
 ### Excubo DI validation rules (Excubo.Analyzers.DependencyInjectionValidation 1.0.33)
 

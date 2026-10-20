@@ -141,14 +141,49 @@
     Banned API analyzer input (Microsoft.CodeAnalysis.BannedApiAnalyzers, RS0030).
     The analyzer package is referenced above, but the rules in /BannedSymbols.txt
     were dead until ROP-D Z2: (a) the file was never listed in AdditionalFiles,
-    and (b) the analyzer only reads files named `BannedSymbols.txt` — the old
-    `BannedApi.txt` name was invisible to it. Every new use of a banned API now
-    fails the build. Accepted legacy exemptions carry a documented reason at the
-    call site (#pragma warning disable RS0030 // reason) and are catalogued by
-    class in BannedSymbols.txt itself.
+    and (b) the analyzer only reads files named `BannedSymbols.txt` or
+    `BannedSymbols.*.txt` — the old `BannedApi.txt` name was invisible to it.
+    Every new use of a banned API now fails the build. Accepted legacy
+    exemptions carry a documented reason at the call site
+    (#pragma warning disable RS0030 // reason) and are catalogued by class in
+    BannedSymbols.txt itself.
   -->
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
+
+  <!--
+    #1844: the dynamic-code ban (#626) — /BannedSymbols.DynamicCode.txt.
+
+    THE CONVENTION is written down in
+    tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs; the RULE is
+    the ban file, and the compiler enforces it. Before this the same rule was a
+    hand-written regex over the source text (plus a comment stripper, plus ten
+    planted controls): the compiler already knows how to say "this symbol is
+    banned here", and saying it in the compiler's language is both shorter and
+    stricter — it matches the SYMBOL, so a type alias, a different spelling or
+    a comment cannot slip past.
+
+    THE PLUGIN EXCEPTION IS EXPRESSED BY THE TOOL, NOT BY A COMMENT
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    `src/Harbor.Plugins.*` loads code at run time because loading code at run
+    time IS the plugin product. The exemption is therefore not a pragma at the
+    call site and not a baseline subtracted by a scanner: the ban file is simply
+    NOT ADDED to the plugin projects' AdditionalFiles, so the compiler never
+    sees the rule there. The exemption is the absence of the file, which is a
+    thing the tool enforces rather than a thing a reader has to believe.
+
+    `$(MSBuildProjectName)` (not a path) is the predicate, so the check does
+    not depend on how the checkout spells `/` versus `\`. The prefix lives in a
+    property so it is ONE fact with ONE home: the convention's prose, this
+    condition, and the architecture test that reads both.
+  -->
+  <PropertyGroup>
+    <HarborDynamicCodeBanExemptProjectNamePrefix>Harbor.Plugins.</HarborDynamicCodeBanExemptProjectNamePrefix>
+  </PropertyGroup>
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.DynamicCode.txt"
+                     Condition="!$(MSBuildProjectName.StartsWith('$(HarborDynamicCodeBanExemptProjectNamePrefix)'))" />
   </ItemGroup>
 
   <!--

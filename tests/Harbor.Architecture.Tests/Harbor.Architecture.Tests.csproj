@@ -52,6 +52,25 @@
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
     <!--
+      #1844: the dynamic-code ban is enforced by the COMPILER now (RS0030 over
+      BannedSymbols.DynamicCode.txt), and the architecture test proves the rule
+      is live by running the build's own analyzer in-process over planted
+      source. To do that it needs the analyzer ASSEMBLY at run time, and the
+      analyzer package does not copy itself to the output directory.
+
+      `GeneratePathProperty` makes NuGet publish the package's install path as
+      `$(PkgMicrosoft_CodeAnalysis_BannedApiAnalyzers)`; the csproj passes it
+      into the test assembly as metadata so the test can load the exact
+      analyzer the build uses. `Update` (not `Include`) because the package
+      reference itself lives in the solution-wide Directory.Build.props — adding
+      it a second time here would be a duplicate PackageReference.
+
+      The analyzer itself is NOT copied to the output: `Update` only adds the
+      path property, so the analyzer still runs as an analyzer and nothing new
+      ships.
+    -->
+    <PackageReference Update="Microsoft.CodeAnalysis.BannedApiAnalyzers" GeneratePathProperty="true"/>
+    <!--
       Two guards name Maybe<T> in a rule: TuiReadLineContractRules asserts that
       ITuiRenderer.ReadLineAsync returns Task<Maybe<string>> (#589), and
       CellForgeWidgetStateRules documents the CellForge widget-state rule (#592).
@@ -60,6 +79,17 @@
       is not a guard.
     -->
     <PackageReference Include="CSharpFunctionalExtensions"/>
+  </ItemGroup>
+
+  <!--
+    #1844: where the banned-API analyzer package lives on disk, for the test
+    that runs the analyzer in-process. `$(Pkg...)` is written by NuGet into the
+    generated `obj/*.nuget.g.props`, which the SDK imports before this file is
+    evaluated.
+  -->
+  <ItemGroup>
+    <AssemblyMetadata Include="BannedApiAnalyzersPackagePath"
+                      Value="$(PkgMicrosoft_CodeAnalysis_BannedApiAnalyzers)"/>
   </ItemGroup>
 
   <!--

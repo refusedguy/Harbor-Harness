@@ -955,8 +955,14 @@ overloads, `nameof`), and the shipped analyzer contains no rule for `Assembly.Lo
 `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder` or `DynamicMethod` — measured in
 issue #1905. The dynamic-code ban was held by `ReflectionConventionRule` and by nothing
 else. Nothing in the repo said it was a rule, so a contributor adding `Assembly.Load`
-somewhere new had no way to know it was the thing the codebase is built to avoid. Enforced
-by `ReflectionConventionRule`.
+somewhere new had no way to know it was the thing the codebase is built to avoid. Since
+[#1844](https://github.com/refusedguy/Harbor-Harness/issues/1844) it is **the compiler's
+rule**: the ban file [`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) is
+listed in every product project's `<AdditionalFiles>` and enforced by the `RS0030`
+diagnostic of `Microsoft.CodeAnalysis.BannedApiAnalyzers` (already referenced
+solution-wide — the migration added no package). The convention, its reason and the proof
+that the compiler-side configuration is live live in
+`tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs`.
 
 **What is banned, and where.** The dynamic-code family — `Assembly.Load` / `LoadFrom` /
 `LoadFile`, `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`, `DynamicMethod`,
@@ -964,7 +970,35 @@ by `ReflectionConventionRule`.
 one capability, not seven: a run-time-loaded or emitted assembly is invisible to NativeAOT,
 appears in no `<ProjectReference>`, and is therefore invisible to every reference rule in
 §5.1–§5.2. A guard naming only `Assembly.Load(` would be satisfied by switching to
-`AssemblyLoadContext`. The scan covers the product trees `src/` and `apps/`.
+`AssemblyLoadContext`. The rule covers every product project (`src/` and `apps/`) plus
+`contrib/` and `samples/`; `tests/` and `samples/` carry `RS0030` in `NoWarn`, because the
+convention allows reflection there.
+
+Two details of the compiler-side expression are worth writing down, because both are
+traps:
+
+* **An ID with no parameter list matches only the parameterless overload.**
+  `M:System.Reflection.Assembly.Load` on its own bans *nothing*: every `Assembly.Load`
+  overload takes an argument, and Roslyn's documentation-comment-ID resolver requires the
+  parameter count to match exactly. The ban file therefore lists all seven public
+  `Load` / `LoadFrom` / `LoadFile` overloads with their parameter lists, and
+  `The_Ban_File_Covers_Every_Public_Assembly_Load_Overload` fails when the list stops
+  covering the framework's own surface.
+* **`AppDomain.DefineDynamicAssembly` is not in the ban list, on purpose.** It is the
+  .NET Framework spelling of "manufacture an assembly at run time" and it is **not public
+  API in .NET 10** — the compiler rejects the call with `CS1061` before any analyzer sees
+  it, so a ban entry for it would resolve to no symbol and enforce nothing. Its live
+  spelling, `System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly`, sits in the
+  banned `System.Reflection.Emit` namespace. `Every_Ban_Entry_Resolves_To_A_Real_Symbol`
+  is what keeps dead entries out.
+
+**The plugin exception is expressed by the tool, not by a comment.** The ban file is
+**not added** to the `src/Harbor.Plugins.*` projects' `<AdditionalFiles>`, so the compiler
+never sees the rule there. That is the absence of a file — something a tool enforces —
+rather than a baseline a scanner subtracts, which a reader has to believe. The predicate is
+`$(MSBuildProjectName.StartsWith('Harbor.Plugins.'))` (a project *name*, so it does not
+depend on how a checkout spells a path separator), and the prefix lives in one property,
+`HarborDynamicCodeBanExemptProjectNamePrefix`, in `Directory.Build.props`.
 
 **What is deliberately NOT banned.** `GetMethod("Name")` / `GetProperty("Name")` /
 `GetField("Name")` looks like the same thing and is not. Over `src/` and `apps/` the
@@ -997,26 +1031,45 @@ needs no host restart; `Harbor.Plugins.Host` is the separate-process boundary. T
 allowance is therefore a permission carrying a **reason**, not a TODO — the point is that
 the next contributor reads it as a decision and does not "fix" it like a bug.
 
-**Non-vacuity, in three places.** A guard that names a path nobody occupies is the
-NetArchTest trap in a new coat:
+**Non-vacuity, in five places.** A guard that names a path nobody occupies is the
+NetArchTest trap in a new coat — and a rule that lives in the build has no test of its
+own at all, because the only evidence it works is a build that has not failed yet:
 
-1. `The_Plugin_Allowance_Is_Not_A_Dead_Prefix` — the allowance must be **occupied** by a
-   real forbidden construct. An unused exemption is a comment with a table around it, and a
-   renamed construct leaves the rule green while the thing it describes is gone.
-2. `The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained` — the prefix must match real
-   project directories, must carry a reason, and must not reach past the plugin family. A
-   prefix that matches nothing is a satisfied constraint enforcing nothing.
-3. `NonVacuity_The_Forbidden_Construct_Matcher_Fires_On_A_Planted_Offender_Only` — the
-   matcher is handed ten synthetic snippets and must report six, staying silent on JSON
-   property access, on `///` prose that quotes the construct, and on a non-dynamic
-   `Assembly` member.
+1. `The_Ban_File_Holds_Exactly_The_Declared_List` — the file holds the declared list and
+   nothing else. A ban added without being declared is a rule nobody reviewed; a declared
+   ban missing from the file is a rule that reads as enforced and is not.
+2. `Every_Ban_Entry_Resolves_To_A_Real_Symbol` — no dead entries. An ID that resolves to
+   nothing is inert configuration that reads like live policy.
+3. `The_Ban_File_Covers_Every_Public_Assembly_Load_Overload` — the list is complete
+   against the framework's own public surface, with the parameter lists the resolver
+   requires.
+4. `NonVacuity_The_Compiler_Bans_A_Synthetic_Violation` and
+   `NonVacuity_The_Compiler_Stays_Silent_On_The_Near_Misses` — the build's **own**
+   analyzer, run in-process over planted source, must report every capability the
+   convention names and stay silent on JSON property access, on `///` prose that quotes a
+   banned API, and on a non-dynamic `Assembly` member.
+5. `The_Ban_File_Reaches_Every_Product_Project_Except_The_Plugin_Family` and
+   `The_Plugin_Family_Code_Is_Banned_Only_Because_The_Tool_Exempts_It` — the wiring is
+   live: the plugin family's own code trips the ban when the ban file is applied and is
+   silent when it is not, so the exemption is the tool's doing rather than a stale entry
+   nobody reads.
 
-**Why "tests are allowed" is proved rather than asserted.** The convention leans on
-`SourceScan`'s `tests/` exclusion, so
-`NonVacuity_Discovery_Sees_The_Product_Tree_And_Excludes_Tests_On_Purpose` requires the
-excluded tree to really contain what the rule bans: `tests/Harbor.Architecture.Tests/GlobalUsings.cs`
-calls `Assembly.Load` in `ArchitectureTestHelpers.LoadHarborAssemblies`. If that stops being
-true, the exclusion has become an accident and the scope statement above is a lie.
+The allowance itself keeps its own two checks —
+`The_Plugin_Allowance_Is_NonEmpty_Scoped_And_Explained` (the prefix must match real
+project directories, must carry a reason, and must not reach past the plugin family) and
+`The_Plugin_Allowance_Is_Not_A_Dead_Prefix` (the family is still allowed, and the rest of
+the product tree is not).
+
+**What is left of the text rule, and why.** The matcher, its baseline and its ten planted
+controls survive in `ReflectionConventionRule.Rule` — as the **oracle of the #1729 pilot**
+(`PilotRoslynAnalyzerTests`), which measures a Roslyn analyzer against a text rule and
+therefore needs both implementations. It gates nothing: the compiler decides, on every
+build, for every product project, and it decides on the SYMBOL rather than on the
+spelling. The two tests that keep the oracle honest
+(`NonVacuity_The_Forbidden_Construct_Matcher_Fires_On_A_Planted_Offender_Only` and
+`NonVacuity_Discovery_Sees_The_Product_Tree_And_Excludes_Tests_On_Purpose`) are the
+remains of the old rule's own checks, and they measure the oracle rather than the
+convention. When the pilot is retired, the matcher goes with it.
 
 ### 5.8a The trim-safety convention — zero allocations is not AOT-safety
 
@@ -1024,7 +1077,7 @@ true, the exclusion has become an accident and the scope statement above is a li
 
 Added by [#414](https://github.com/refusedguy/Harbor-Harness/issues/414) ("48/S3"), enforced by
 `TrimUnsafeReflectionRules`. It is a **separate** rule from §5.8, not an extension of it: §5.8's
-banned family is dynamic *code*, and this one is dynamic *metadata*. `ReflectionConventionRule`'s
+banned family is dynamic *code*, and this one is dynamic *metadata*. `PluginAllowance`'s
 plugin allowance is `internal` and **shared** rather than copied — two tables describing one
 architectural fact is the drift `SourceScan` exists to end.
 

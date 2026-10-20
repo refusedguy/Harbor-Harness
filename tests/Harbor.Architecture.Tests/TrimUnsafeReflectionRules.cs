@@ -3,14 +3,16 @@
 //
 // WHAT THIS FILE IS NOT
 // ---------------------
-// It is NOT a second `ReflectionConventionRule`. #626 is merged, working, and
+// It is NOT a second dynamic-code rule. #626 is merged, working, and
 // deliberately scoped: it bans the DYNAMIC-CODE family — `Assembly.Load*`,
 // `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`, `DynamicMethod`,
 // `AppDomain.DefineDynamicAssembly` — everywhere outside `src/Harbor.Plugins.*`.
-// Nothing here repeats that, and nothing here edits that file's rule. This is a
-// separate guard on a separate axis, filed beside it. The one thing shared is
-// the plugin allowance table, because two copies of the same architectural fact
-// is the drift `SourceScan` was written to end.
+// Since #1844 that rule is the compiler's: the ban file
+// `BannedSymbols.DynamicCode.txt`, enforced by RS0030. Nothing here repeats
+// that, and nothing here edits that rule. This is a separate guard on a
+// separate axis, filed beside it. The one thing shared is the plugin allowance
+// table, because two copies of the same architectural fact is the drift
+// `SourceScan` was written to end.
 //
 // THE AXIS: WHY ZERO ALLOCATIONS SAYS NOTHING ABOUT TRIMMING
 // ---------------------------------------------------------
@@ -117,7 +119,7 @@
 // honest, which is the property worth having here.
 //
 // The plugin-family exemption is NOT restated here either: it is read off
-// ReflectionConventionRule.AllowedProjectPrefixes into the ScanRule baseline,
+// PluginAllowance.AllowedProjectPrefixes into the ScanRule baseline,
 // so the shared fact has one home.
 //
 // MECHANISM (#1086, step 2)
@@ -150,7 +152,7 @@ namespace Harbor.Architecture.Tests;
 /// <summary>
 ///     Issue #414: the hot paths must not depend on the trimmer having proven a
 ///     type, which is the half of the AOT claim that allocation benchmarks do not
-///     measure. Sits beside <see cref="ReflectionConventionRule" /> and shares its
+///     measure. Sits beside <see cref="PluginAllowance" /> and shares its
 ///     plugin allowance rather than restating it.
 /// </summary>
 public sealed class TrimUnsafeReflectionRules
@@ -470,7 +472,7 @@ public sealed class TrimUnsafeReflectionRules
         ],
         Baseline =
         [
-            .. ReflectionConventionRule.AllowedProjectPrefixes.Select(static a => new ScanBaseline(
+            .. PluginAllowance.AllowedProjectPrefixes.Select(static a => new ScanBaseline(
                 a.Prefix,
                 IsPrefix: true,
                 a.Allowance.Reason,
@@ -662,7 +664,7 @@ public sealed class TrimUnsafeReflectionRules
         var failures = new List<string>();
         foreach (Hit hit in hits)
         {
-            if (ReflectionConventionRule.IsAllowed(ProjectDirOf(hit.File)))
+            if (PluginAllowance.IsAllowed(ProjectDirOf(hit.File)))
             {
                 continue;
             }
@@ -917,11 +919,11 @@ public sealed class TrimUnsafeReflectionRules
             .Because("three different capabilities are being described; two rules sharing an id "
                    + "makes a failure message ambiguous about which claim was violated");
 
-        await Assert.That(ReflectionConventionRule.IsAllowed("src/Harbor.Plugins.Compilation")).IsTrue()
+        await Assert.That(PluginAllowance.IsAllowed("src/Harbor.Plugins.Compilation")).IsTrue()
             .Because("this file reads #626's table instead of restating it, so the shared fact has to "
                    + "stay reachable — if the table moved, the plugin family would start reporting here");
 
-        await Assert.That(ReflectionConventionRule.IsAllowed("src/Harbor.Storage.Jsonl")).IsFalse()
+        await Assert.That(PluginAllowance.IsAllowed("src/Harbor.Storage.Jsonl")).IsFalse()
             .Because("a prefix that matched everything would exempt the entire product tree, which is "
                    + "the widening #626's own allowance test refuses");
     }
