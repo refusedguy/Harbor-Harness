@@ -496,6 +496,7 @@ public sealed class SqliteSessionQuery : ISessionQuery
             .OrderByDescending(hit => hit.Timestamp)
             .ThenBy(hit => hit.RecordId, StringComparer.Ordinal)
             .ToList(),
+        _ => throw new ArgumentOutOfRangeException(nameof(rank), rank, "unmapped session query rank"),
     };
 
     /// <summary>The order of the indexed (full-text) message branch.</summary>
@@ -507,6 +508,7 @@ public sealed class SqliteSessionQuery : ISessionQuery
             "ORDER BY session_query_fts.created_at_ms ASC, session_query_fts.rowid ASC",
         SessionQueryRank.NewestFirst =>
             "ORDER BY session_query_fts.created_at_ms DESC, session_query_fts.rowid ASC",
+        _ => throw new ArgumentOutOfRangeException(nameof(rank), rank, "unmapped session query rank"),
     };
 
     /// <summary>The order of the literal message branch.</summary>
@@ -515,6 +517,7 @@ public sealed class SqliteSessionQuery : ISessionQuery
         SessionQueryRank.Relevance => "ORDER BY pos ASC, m.created_at_ms ASC, m.rowid ASC",
         SessionQueryRank.OldestFirst => "ORDER BY m.created_at_ms ASC, m.rowid ASC",
         SessionQueryRank.NewestFirst => "ORDER BY m.created_at_ms DESC, m.rowid ASC",
+        _ => throw new ArgumentOutOfRangeException(nameof(rank), rank, "unmapped session query rank"),
     };
 
     /// <summary>The order of the session branch.</summary>
@@ -523,6 +526,7 @@ public sealed class SqliteSessionQuery : ISessionQuery
         SessionQueryRank.Relevance => "ORDER BY pos ASC, ts ASC, s.rowid ASC",
         SessionQueryRank.OldestFirst => "ORDER BY ts ASC, s.rowid ASC",
         SessionQueryRank.NewestFirst => "ORDER BY ts DESC, s.rowid ASC",
+        _ => throw new ArgumentOutOfRangeException(nameof(rank), rank, "unmapped session query rank"),
     };
 
     /// <summary>
