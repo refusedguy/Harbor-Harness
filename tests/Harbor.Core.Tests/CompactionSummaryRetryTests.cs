@@ -166,5 +166,19 @@ public class CompactionSummaryRetryTests
                 }
             }
         }
+
+        /// <summary>
+        ///     The value-shaped retry path (#1514) is not the one the compaction
+        ///     summary uses — that path still reports its failures as
+        ///     exceptions — so the fake refuses it loudly instead of pretending
+        ///     to retry.
+        /// </summary>
+        public Task<Result<T, StreamFailure>> ExecuteValueAsync<T>(
+            Func<CancellationToken, Task<Result<T, StreamFailure>>> operation,
+            RetryOptions options,
+            Action<StreamFailure, int>? onRetry,
+            CancellationToken ct)
+            => throw new NotSupportedException(
+                "The value-shaped retry path is not used by the compaction summary retry.");
     }
 }

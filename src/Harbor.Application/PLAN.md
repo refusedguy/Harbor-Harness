@@ -27,7 +27,7 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 - [x] Central retry policy helpers for 429/5xx (`Resilience/RetryPolicyExtensions.cs:17`)
       (the implementations moved to `Harbor.AgentRuntime` by #1623; the contracts
       `IRetryPolicy` / `RetryOptions` / `IToolRetryDecider` / `IRetryAfterHint`
-      stay here — the session-context cohort reads them)
+      / `StreamFailure` stay here — the session-context cohort reads them)
 - [x] `TokenTracker` / `WorkspaceContextSource` session helpers (`Sessions/`)
       (moved to `Harbor.SessionContext` by #1624)
 - [x] AGENTLOOP-DECOMP: `ToolDispatcher` extracted from the loop — parallel dispatch,
