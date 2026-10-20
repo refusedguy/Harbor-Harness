@@ -3,6 +3,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -139,7 +140,7 @@ public class RendererMoatPerfTests
         double fullAvg = Math.Min(full1, full2);
         double hintedAvg = Math.Min(hinted1, hinted2);
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"renderer-moat diff: full={fullAvg:F3} ms hinted={hintedAvg:F3} ms " +
             $"(120×500 grid, {frames} frames each, steady spinner tick)");
 
@@ -153,7 +154,11 @@ public class RendererMoatPerfTests
         // Observed red in commit 3 of 4 (inverted on purpose; CI run 37932073171,
         // test (ui): "Expected to be less than 0.209761 but received 0.3621896" —
         // full 0.36 ms vs hinted 0.21 ms, so the pairing itself is sound).
-        await Assert.That(hintedAvg).IsLessThan(fullAvg);
+        await Assert.That(hintedAvg).IsLessThan(fullAvg)
+            .Because(
+                $"renderer-moat diff: full={fullAvg:F3} ms hinted={hintedAvg:F3} ms "
+                + $"(120×500 grid, {frames} frames each, steady spinner tick). The hinted path has to "
+                + "beat the full scan on the same runner, otherwise the moat is gone.");
     }
 
     [Test]
@@ -204,7 +209,7 @@ public class RendererMoatPerfTests
 
         sw.Stop();
         double avg = sw.Elapsed.TotalMilliseconds / frames;
-        Console.WriteLine($"renderer-moat frame: {avg:F3} ms average over {frames} hinted frames (budget 16 ms)");
+        TestContext.Current?.Output.WriteLine($"renderer-moat frame: {avg:F3} ms average over {frames} hinted frames (budget 16 ms)");
         // #996: reported only — the gates for this path are the hinted-vs-full
         // pairing in Diff_Time above and the allocation-free counts beside it.
         return Task.CompletedTask;
@@ -282,7 +287,7 @@ public class RendererMoatPerfTests
 
         sw.Stop();
         double glowAvg = sw.Elapsed.TotalMilliseconds / frames;
-        Console.WriteLine($"renderer-moat glow frame: {glowAvg:F3} ms average over {frames} hinted frames with armed glow (budget 16 ms)");
+        TestContext.Current?.Output.WriteLine($"renderer-moat glow frame: {glowAvg:F3} ms average over {frames} hinted frames with armed glow (budget 16 ms)");
         // #996: reported only — same gates as the plain path (pairing + allocation).
         return Task.CompletedTask;
     }

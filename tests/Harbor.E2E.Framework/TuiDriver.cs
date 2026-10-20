@@ -706,7 +706,7 @@ public sealed class TuiDriver : IE2eDriver
         {
             // Terminal emulator mode: poll for text via xdotool window title,
             // then fallback to ReadScreenAsync (PTY buffer) with a delay.
-            Console.WriteLine($"DEBUG [TuiDriver] WaitForTextAsync: polling for '{pattern}' in terminal-emulator mode");
+            TestContext.Current?.Output.WriteLine($"DEBUG [TuiDriver] WaitForTextAsync: polling for '{pattern}' in terminal-emulator mode");
             var deadline = timeout ?? TimeSpan.FromSeconds(10);
             var sw = Stopwatch.StartNew();
             while (sw.Elapsed < deadline)
@@ -728,7 +728,7 @@ public sealed class TuiDriver : IE2eDriver
 
             // Pattern was not found within the deadline. In terminal emulator mode
             // we can't reliably read the screen, so report failure honestly.
-            Console.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, pattern '{pattern}' not found within timeout");
+            TestContext.Current?.Output.WriteLine($"WARN [TuiDriver] terminal-emulator text polling unavailable, pattern '{pattern}' not found within timeout");
             return false;
         }
 

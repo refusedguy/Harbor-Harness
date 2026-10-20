@@ -39,7 +39,7 @@ public abstract class TuiE2eTestBase : E2eTestBase
         {
             string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
             string head = screen.Length > 600 ? screen[..600] : screen;
-            System.Console.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
+            TestContext.Current?.Output.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
         }
         return driver;
     }
@@ -58,7 +58,7 @@ public abstract class TuiE2eTestBase : E2eTestBase
         {
             string screen = await driver.ReadScreenAsync().ConfigureAwait(false);
             string head = screen.Length > 600 ? screen[..600] : screen;
-            System.Console.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
+            TestContext.Current?.Output.WriteLine($"[TUI-E2E] boot sentinel '{BootSentinel}' not seen. Screen (first 600 chars):\n{head}");
         }
         return saw;
     }

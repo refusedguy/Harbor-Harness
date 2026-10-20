@@ -56,6 +56,7 @@ using Harbor.Application.Sessions;
 using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using TUnit.Core;
 
 namespace Harbor.Core.Tests;
 
@@ -137,7 +138,7 @@ public class CompactionPolicyMaterializeScalingTests
                 MaxUnits = LegacyMaxCycles,
             });
 
-        Console.WriteLine(legacy.Report);
+        TestContext.Current?.Output.WriteLine(legacy.Report);
     }
 
     /// <summary>
@@ -198,7 +199,7 @@ public class CompactionPolicyMaterializeScalingTests
                 MaxUnits = LegacyMaxSteadyHistory,
             });
 
-        Console.WriteLine(legacy.Report);
+        TestContext.Current?.Output.WriteLine(legacy.Report);
     }
 
     // ---- the legs -----------------------------------------------------

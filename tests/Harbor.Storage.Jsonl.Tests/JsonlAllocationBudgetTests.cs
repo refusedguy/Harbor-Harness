@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core;
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
@@ -47,8 +48,11 @@ public class JsonlAllocationBudgetTests
         }
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Console.WriteLine($"jsonl-alloc: Parse avg = {(double)allocated / parses:F0} B over {parses} user lines");
-        await Assert.That(allocated).IsLessThanOrEqualTo(parses * 8L * 1_024L);
+        TestContext.Current?.Output.WriteLine($"jsonl-alloc: Parse avg = {(double)allocated / parses:F0} B over {parses} user lines");
+        await Assert.That(allocated).IsLessThanOrEqualTo(parses * 8L * 1_024L)
+            .Because(
+                $"jsonl-alloc: Parse avg = {(double)allocated / parses:F0} B over {parses} user lines "
+                + $"(budget {parses * 8L * 1_024L} B in total)");
     }
 
     [Test]
@@ -80,8 +84,11 @@ public class JsonlAllocationBudgetTests
             }
 
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-            Console.WriteLine($"jsonl-alloc: GetMessages(100 msgs) avg = {(double)allocated / reads:F0} B over {reads} reads");
-            await Assert.That(allocated).IsLessThanOrEqualTo(reads * 512L * 1_024L);
+            TestContext.Current?.Output.WriteLine($"jsonl-alloc: GetMessages(100 msgs) avg = {(double)allocated / reads:F0} B over {reads} reads");
+            await Assert.That(allocated).IsLessThanOrEqualTo(reads * 512L * 1_024L)
+                .Because(
+                    $"jsonl-alloc: GetMessages(100 msgs) avg = {(double)allocated / reads:F0} B over {reads} reads "
+                    + $"(budget {reads * 512L * 1_024L} B in total)");
         }
         finally
         {

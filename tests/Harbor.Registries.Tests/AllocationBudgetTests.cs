@@ -8,6 +8,7 @@ using Harbor.Registries.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using TUnit.Assertions;
+using TUnit.Core;
 using Harbor.Registries.Events;
 
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
@@ -79,8 +80,11 @@ public class EventBusAllocationTests
         }
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Console.WriteLine($"eventbus-alloc: 1 subscriber × {publishes} publishes = {allocated} B ({(double)allocated / publishes:F1} B/publish)");
-        await Assert.That(allocated).IsLessThanOrEqualTo(publishes * 1_024L);
+        TestContext.Current?.Output.WriteLine($"eventbus-alloc: 1 subscriber × {publishes} publishes = {allocated} B ({(double)allocated / publishes:F1} B/publish)");
+        await Assert.That(allocated).IsLessThanOrEqualTo(publishes * 1_024L)
+            .Because(
+                $"eventbus-alloc: 1 subscriber × {publishes} publishes = {allocated} B "
+                + $"({(double)allocated / publishes:F1} B/publish; budget {publishes * 1_024L} B in total)");
     }
 
     [Test]
@@ -109,8 +113,11 @@ public class EventBusAllocationTests
         }
 
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        Console.WriteLine($"eventbus-alloc: 10 subscribers × {publishes} publishes = {allocated} B ({(double)allocated / publishes:F1} B/publish)");
-        await Assert.That(allocated).IsLessThanOrEqualTo(publishes * 2_048L);
+        TestContext.Current?.Output.WriteLine($"eventbus-alloc: 10 subscribers × {publishes} publishes = {allocated} B ({(double)allocated / publishes:F1} B/publish)");
+        await Assert.That(allocated).IsLessThanOrEqualTo(publishes * 2_048L)
+            .Because(
+                $"eventbus-alloc: 10 subscribers × {publishes} publishes = {allocated} B "
+                + $"({(double)allocated / publishes:F1} B/publish; budget {publishes * 2_048L} B in total)");
     }
 }
 

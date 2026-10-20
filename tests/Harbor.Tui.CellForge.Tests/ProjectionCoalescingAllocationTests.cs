@@ -9,6 +9,7 @@ using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -191,7 +192,7 @@ public class ProjectionCoalescingAllocationTests
         long legacy = BestLegacyPerDelta();
         long current = await BestPerDeltaAsync();
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"proj-alloc: per-delta projection = {legacy} B before #466, {current} B after (min of 3)");
 
         // Both arms drive the same store with the same messages, so the
@@ -202,7 +203,11 @@ public class ProjectionCoalescingAllocationTests
         // reference-identical. The collapse must therefore be at least one
         // full session-list copy, which is derived from the shape the audit
         // describes rather than from a tuning pass.
-        await Assert.That(legacy - current).IsGreaterThanOrEqualTo(SessionCopyFloor);
+        await Assert.That(legacy - current).IsGreaterThanOrEqualTo(SessionCopyFloor)
+            .Because(
+                $"proj-alloc: per-delta projection = {legacy} B before #466, {current} B after (min of 3); "
+                + $"the collapse is {legacy - current} B and the floor is {SessionCopyFloor} B. A collapse "
+                + "below the floor means the #466 body still copies the session list per delta.");
     }
 
     [Test]
@@ -213,12 +218,16 @@ public class ProjectionCoalescingAllocationTests
 
         long best = BestLegacyPerDelta();
 
-        Console.WriteLine($"proj-alloc: legacy per-delta projection = {best} B (min of 3)");
+        TestContext.Current?.Output.WriteLine($"proj-alloc: legacy per-delta projection = {best} B (min of 3)");
         // One 200-element array copy (1600 B) plus the draft copy, on top of
         // the store's own cost. The gate above demands a collapse of at least
         // SessionCopyFloor, so this proves the thing being removed is real and
         // that large — the collapse cannot come from measuring nothing.
-        await Assert.That(best).IsGreaterThan(SessionCopyFloor);
+        await Assert.That(best).IsGreaterThan(SessionCopyFloor)
+            .Because(
+                $"proj-alloc: legacy per-delta projection = {best} B (min of 3); the floor is "
+                + $"{SessionCopyFloor} B. Below the floor the legacy path is NOT what the collapse "
+                + "above is measured against, so that collapse would mean nothing.");
     }
 
     /// <summary>

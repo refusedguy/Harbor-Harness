@@ -5,6 +5,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using TUnit.Core;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -158,7 +159,7 @@ public class AgentLoopAllocationTests
         var agent = TestAgents.AllowAll();
         long best = await MinOf3Async(loops, sessions, agent);
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"agentloop-alloc: text-only turn avg = {(double)best / turns:F0} B over {turns} turns (min of 3)");
 
         // LOWER BOUND, first. #741's missing half: a measurement that could not
@@ -201,7 +202,7 @@ public class AgentLoopAllocationTests
         var agent = TestAgents.AllowAll();
         long best = await MinOf3Async(loops, sessions, agent);
 
-        Console.WriteLine($"agentloop-alloc: tool-call turn avg = {(double)best / runs:F0} B over {runs} runs (min of 3)");
+        TestContext.Current?.Output.WriteLine($"agentloop-alloc: tool-call turn avg = {(double)best / runs:F0} B over {runs} runs (min of 3)");
 
         // The floor again, for the same reason as above — see TextOnly.
         await Assert.That(best).IsGreaterThanOrEqualTo(0)

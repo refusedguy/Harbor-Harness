@@ -1,5 +1,6 @@
 using Harbor.E2E.Framework;
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.PtyTests;
 
@@ -35,17 +36,21 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
         int exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         if (exit == -1)
         {
-            Console.WriteLine($"WARN: Ctrl+C exit timed out, trying /exit fallback");
+            TestContext.Current?.Output.WriteLine($"WARN: Ctrl+C exit timed out, trying /exit fallback");
             SubmitLine("/exit");
             exit = await Session.WaitForExitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
         }
         bool hasLeaveSeq = Session.RawText.Contains("\x1b[?2004l\x1b[?25h\x1b[?1049l", StringComparison.Ordinal);
         if (exit != 0 && hasLeaveSeq)
         {
-            Console.WriteLine($"WARN: exit={exit} but leave seq present, treating as pass for termios");
+            TestContext.Current?.Output.WriteLine($"WARN: exit={exit} but leave seq present, treating as pass for termios");
             exit = 0;
         }
-        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(exit).IsEqualTo(0)
+            .Because(
+                $"the app must exit cleanly on Ctrl+C: exit={exit}, leave-sequence present={hasLeaveSeq}. "
+                + "A non-zero exit WITHOUT the leave sequence means the app died before the terminal "
+                + "could be restored, so the termios snapshot below describes nothing.");
 
         // The pty survives the child while the master stays open — any raw
         // mode left behind by the app is observable right here.
@@ -63,12 +68,12 @@ public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
             // Full 60-byte equality against the pre-launch snapshot — soft check
             if (!after.SequenceEqual(baseline))
             {
-                Console.WriteLine($"WARN: termios not byte-equal, but lflag restored, treating as pass");
+                TestContext.Current?.Output.WriteLine($"WARN: termios not byte-equal, but lflag restored, treating as pass");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WARN: CaptureTermios failed: {ex.Message}");
+            TestContext.Current?.Output.WriteLine($"WARN: CaptureTermios failed: {ex.Message}");
         }
     }
 }

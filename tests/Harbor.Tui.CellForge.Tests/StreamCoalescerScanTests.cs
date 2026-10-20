@@ -1,5 +1,6 @@
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
+using TUnit.Core;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -266,12 +267,16 @@ public class StreamCoalescerScanTests
             }
         }
 
-        Console.WriteLine(
+        TestContext.Current?.Output.WriteLine(
             $"coalescer-alloc: {deltas} partial-line deltas = {best} B (min of 3, StringBuilder chunk growth only)");
         // 200 one-char deltas grow a (freshly cleared) builder through ~4
         // chunks: well under 1 KB. 2 KB leaves CI headroom and still fails on
         // any per-delta materialization, which is both >= 2 B/delta and grows
         // with the line length.
-        await Assert.That(best).IsLessThanOrEqualTo(2 * 1024L);
+        await Assert.That(best).IsLessThanOrEqualTo(2 * 1024L)
+            .Because(
+                $"coalescer-alloc: {deltas} partial-line deltas = {best} B (min of 3, StringBuilder chunk "
+                + "growth only); the budget is 2048 B. Above it the coalescer materialised per delta "
+                + "instead of growing one builder.");
     }
 }
