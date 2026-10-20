@@ -139,12 +139,13 @@ public sealed class LspServerSession : IAsyncDisposable
     ///         stderr and nowhere else, and a dead server otherwise presents as "no
     ///         diagnostics" — the same unexplained-empty-answer bug #884 was.
     ///     </para>
+    ///     <para>
+    ///         <c>requestTimeout</c> is the ceiling for one operation on the
+    ///         session. It defaults to <see cref="DefaultRequestTimeout" />; a
+    ///         shorter budget is how a test exercises the timeout path without
+    ///         waiting for the real one.
+    ///     </para>
     /// </remarks>
-    /// <param name="requestTimeout">
-    ///     The ceiling for one operation on this session. Defaults to
-    ///     <see cref="DefaultRequestTimeout" />; a shorter budget is how a test
-    ///     exercises the timeout path without waiting for the real one.
-    /// </param>
     public static async Task<LspServerSession> StartAsync(
         LspServerDefinition definition,
         string workspaceRoot,
