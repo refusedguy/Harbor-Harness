@@ -66,14 +66,14 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
-│  - Harbor.Application (config, permissions, resources, skills,    │
-│                        filesystem + git probes)                   │
-│  - Harbor.AgentRuntime (agent loop: AgentLoop, TurnRunner,       │
-│    ToolDispatcher, pipeline behaviors; #1623 extraction)         │
-│  - Harbor.SessionContext (compaction, prompt assembly, token     │
+│  - Harbor.Application (config, permissions, resources, skills,  │
+│                        filesystem + git probes)                 │
+│  - Harbor.AgentRuntime (agent loop: AgentLoop, TurnRunner,      │
+│    ToolDispatcher, pipeline behaviors; #1623 extraction)        │
+│  - Harbor.SessionContext (compaction, prompt assembly, token    │
 │    tracker, workspace probes, session fork; #1624 extraction)   │
-│  - Harbor.ChangeTracking (verified-change pipeline, #1616)        │
-│  - Harbor.Hooks (user-hook runner, #1613 extraction)           │
+│  - Harbor.ChangeTracking (verified-change pipeline, #1616)      │
+│  - Harbor.Hooks (user-hook runner, #1613 extraction)            │
 │  - Harbor.Permissions (PermissionService, ApprovalCoordinator,  │
 │    path policies; seam IPermissionConfigStore over config.json) │
 │  - Harbor.Onboarding (first-run wizard + setup-checklist        │
@@ -83,7 +83,10 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - contrib/scripting: Harbor.Scripting.* (ScriptHost, Bridge)   │
 │  Depends on: Domain ONLY (Harbor.Abstractions +                 │
 │              Harbor.Abstractions.Contracts); Harbor.            │
-│              Onboarding rides Application too (#1614, 1-way)    │
+│              Onboarding rides Application too (#1614, 1-way);   │
+│              AgentRuntime + SessionContext + ChangeTracking     │
+│              ride Application (#1623, #1624, #1616: the split,  │
+│              ADR-018).                                          │
 └─────────────────────────────────────────────────────────────────┘
                                   ▲
                                   │ implements
@@ -124,6 +127,23 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │              Application / Infrastructure / Presentation.       │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Update 2026-10-20: the Application box now shows the split.** `Harbor.Application`
+> was a 14-area, 19.5k-line project (Sessions 44%, Agents 27%), and the owner decided
+> on 2026-10-16 to decompose it into **five assemblies (variant A)**. The decision and
+> the slice issues are recorded in
+> [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md). Three of them have
+> landed and are now rows of this box: `Harbor.AgentRuntime` (#1623, PR #1666),
+> `Harbor.SessionContext` (#1624, PR #1714) and `Harbor.ChangeTracking` (#1616,
+> PR #1660). The remaining two slices are open: #1625 (`PolicyConfig`, its
+> remaining cohort is `Configuration/*` alone, because Permissions and Onboarding
+> already left under #1658 and #1701) and #1626 (`Intelligence`). This box lists
+> what exists today; it does not pre-announce the slices.
+>
+> Each new assembly in this plan costs one row in the matrix below (§5.4), the cost
+> variant A's own minus-column names. The plan runs under #555's standing rule
+> that the guard lands before the rewrite. A split is not a new extension axis: it
+> adds no marker interface and no `Register*` door.
 
 > **Two of this box's entries were wrong until #751, and they were wrong from the
 > start, not out of date.** `Harbor.Desktop.Abstractions` and
@@ -307,7 +327,7 @@ flowchart TB
     end
 
     subgraph App["Application (use cases)"]
-        AppLayer["Harbor.Application<br/>(AgentLoop, config, permissions)"]
+        AppLayer["Harbor.Application<br/>(config, resources, skills, fs + git probes)"]
         Core["Harbor.Registries"]
         Plugins["Harbor.Plugins.*<br/>(8 projects, Roslyn CS-source)"]
     end
@@ -368,6 +388,15 @@ flowchart TB
 `Harbor.Terminal.Abstractions` sits in a Presentation subgraph rather than the Domain
 one: it is an `-Abstractions`-named project that the matrix does not place in Domain.
 Corrected in #751 — see the note under the ASCII diagram above.
+
+> **The Application subgraph above is coarse (2026-10-20).** It names three of the
+> Application-layer projects and does not enumerate the others: `Harbor.Hooks`,
+> `Harbor.Permissions`, `Harbor.Onboarding`, and, since the #1608 split (variant A),
+> `Harbor.AgentRuntime`, `Harbor.SessionContext` and `Harbor.ChangeTracking`. §1's box
+> lists the Application layer as it stands; the matrix in §5.4 is the one that is
+> enforced, and
+> [ADR-018](adr/ADR-018-harbor-application-split-variant-a.md) records the split's
+> decision and its remaining slices.
 
 **Dependency direction = inward only.** Outer layers may reference inner layers;
 inner layers never reference outer layers. The Domain layer has no inbound

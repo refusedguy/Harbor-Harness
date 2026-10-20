@@ -172,7 +172,9 @@ Clean / Hexagonal layering enforced mechanically by [tests/Harbor.Architecture.T
 Domain            Harbor.Abstractions (+ .Contracts), Harbor.Diagnostics.Abstractions,
                   Harbor.Extensions, Harbor.Ipc.Abstractions,
                   Harbor.Ui.Framework.Abstractions
-Application       Harbor.Application, Harbor.Registries, Harbor.Plugins.Abstractions
+Application       Harbor.Application, Harbor.Registries, Harbor.Plugins.Abstractions,
+                  Harbor.AgentRuntime, Harbor.SessionContext, Harbor.ChangeTracking,
+                  Harbor.Hooks, Harbor.Permissions, Harbor.Onboarding
 Infrastructure    Harbor.Storage.{Jsonl,Memory,Sqlite}, Harbor.Providers.{Anthropic,
                   OpenAI,Ollama,OpenAiCompatible,Shared}, Harbor.Tools.Builtin,
                   Harbor.Logging, Harbor.Telemetry.*, Harbor.Transport.Remote,

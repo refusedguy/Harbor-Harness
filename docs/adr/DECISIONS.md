@@ -466,3 +466,36 @@ and the README link (no live URL until the first green deploy).
 
 - Full text, the three measured reasons, the wired-vs-deferred split:
   [ADR-017](ADR-017-docs-site-docfx.md).
+
+## ADR-018: the `Harbor.Application` split, variant A (the maximal five-assembly plan)
+
+Issue #1608 asked the owner to choose between three shapes for decomposing
+`Harbor.Application` (A: five assemblies; B: three; C: one plus an optional
+second), on research that had measured 14 areas / 19.5k lines with Sessions at
+44% and Agents at 27%, and no real dependency cycles at all. The research
+recommended the incremental `C → B` path; the owner chose **variant A** on
+2026-10-16, and the issue stayed open with the decision living only in its
+comment thread. This ADR is the durable record.
+
+Variant A, as decided, is five assemblies: `Harbor.AgentRuntime` (Agents +
+Pipeline + Resilience, ~5.9k), `Harbor.SessionContext` (compaction / prompt /
+tracker, ~3.1k), `Harbor.PolicyConfig` (Permissions + Configuration +
+Onboarding, ~3.4k), `Harbor.Intelligence` (Skills + Hooks + Diagnostics + Git +
+Fs, ~3.5k), and `Harbor.ChangeTracking` (~5.6k). The four `[decomp-max]` slices
+[#1623](https://github.com/refusedguy/Harbor-Harness/issues/1623)–[#1626](https://github.com/refusedguy/Harbor-Harness/issues/1626)
+cover the first four; `ChangeTracking` landed separately under #1616. The owner's
+reasons: faster parallel compilation, physical boundaries rather than boundaries
+held in the head, and the assemblies being pullable into other projects later as
+packages.
+
+State of the slices when this was written: **#1623 merged** (PR #1666),
+**#1624 merged** (PR #1714), **#1616 merged** (PR #1660), **#1625 / #1626 open**.
+Two caveats are recorded rather than smoothed over. The cohort boundary has moved
+(Permissions and Onboarding already left under #1658 and #1701, so #1625's remaining
+scope is `Configuration/*` alone), and the "additive and registered" axis rule that
+came out of the #555 freeze lift is still policy only until #1719 lands.
+
+- Full text, the rejected variants and what the issues do *not* record about
+  them, the sequencing DAG, the standing rules and the assembled
+  definition-of-done:
+  [ADR-018](ADR-018-harbor-application-split-variant-a.md).

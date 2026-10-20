@@ -62,7 +62,14 @@ src/Harbor.Abstractions.Contracts/    — models, events, records, PermissionRul
 
 src/Harbor.Registries/                — Agent/Tool/Provider registries; builtin agents are declared in
                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
-src/Harbor.Application/               — sessions, permissions, configuration
+src/Harbor.Application/               — config, resources, skills, diagnostics, git, filesystem,
+                                       telemetry (being split per ADR-018)
+src/Harbor.AgentRuntime/              — agents + pipeline + resilience (extracted from Harbor.Application, #1623)
+src/Harbor.SessionContext/            — compaction, prompt, token tracker, session fork (extracted from Harbor.Application, #1624)
+src/Harbor.ChangeTracking/            — verified-change pipeline (extracted from Harbor.Application, #1616)
+src/Harbor.Hooks/                     — user-hook runner (extracted from Harbor.Application, #1613)
+src/Harbor.Permissions/               — permission subdomain (extracted from Harbor.Application, #1615)
+src/Harbor.Onboarding/                — first-run wizard + setup checklist (extracted from Harbor.Application, #1614)
 src/Harbor.Hosting/                   — DI modules wired by the CLI (TuiModule, StorageModule, CoreModule, ...)
 src/Harbor.Terminal.Abstractions/     — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
 src/Harbor.Tui.AnsiPlain/             — unified ANSI-streaming + plain-text renderer (pipes/CI via HARBOR_TUI=plain; merges former Ansi/Plain backends)
@@ -471,7 +478,7 @@ below are kept so the contract has a name and a future wiring has somewhere to
 land — **they do not add a panel today.** For a plugin panel that is actually
 painted, implement `ITuiPanelPlugin`.
 
-1. Create a class library project referencing `Harbor.Terminal.Abstractions`. (This step used to add "`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6". **That project does not exist** — there is no `src/Harbor.Tui.Abstractions`, no `.csproj` by that name anywhere outside `contrib/`, and no matrix row for it. It was a rename to `Harbor.Terminal.Abstractions`; see `docs/ARCHITECTURE_LAYERS.md:381` and `CLAUDE.md:99`. Do not add a reference to it, and do not describe it as pending removal.)
+1. Create a class library project referencing `Harbor.Terminal.Abstractions`. (This step used to add "`Harbor.Tui.Abstractions` is a deprecated facade slated for removal in v0.6". **That project does not exist** — there is no `src/Harbor.Tui.Abstractions`, no `.csproj` by that name anywhere outside `contrib/`, and no matrix row for it. It was a rename to `Harbor.Terminal.Abstractions`; see `docs/ARCHITECTURE_LAYERS.md:407` and `CLAUDE.md:113`. Do not add a reference to it, and do not describe it as pending removal.)
 2. Implement `ITuiPlugin` — set `Name`, `Version`, `Description`.
 3. In `RegisterTui(ViewRegistry, ViewModelRegistry)`, register any custom views / view models.
 4. Register *before* `BaseTuiRenderer.InitializeAsync` to override builtins.
