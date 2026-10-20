@@ -172,6 +172,14 @@ jobs:
               # step with the test job's shard lists. Same #618 argument:
               # editing it must run the build job that executes it.
               - 'tools/ci-shard-slices.py'
+              # The ONE source the CI project lists are generated from
+              # (issue #1800). The same argument as the line above, one step
+              # further: editing the source is the ORDINARY way to change a
+              # list, and if the source were not in the filter then the edit
+              # that changes what CI runs would also be the edit that stops
+              # the gate that checks it from running — unvalidated, which is
+              # the #618 defect again with a different payload.
+              - 'tools/ci-project-lists.json'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -1127,16 +1135,27 @@ jobs:
         with:
           job-name: build
 
-      # The build job uploads one artifact per consumer, and each shard's
-      # artifact carries only that shard's projects. The shard's project
-      # list and the slice's project list are the same list written twice
-      # (the `test` job's matrix and the upload steps below), so this
-      # checks that they still agree — a project added to a shard without
-      # being added to the slice fails here, with the project's name, instead
-      # of failing in the shard with a "Missing …dll" that points at the
-      # download.
-      - name: The build-output slices match the test shards
-        run: python3 tools/ci-shard-slices.py
+      # The CI project lists have ONE source (tools/ci-project-lists.json,
+      # issue #1800), and every place that names a test project to run it is
+      # generated from it: the `test` job's matrix, the build job's upload
+      # slices, the coverage list in nightly.yml and the OS matrix in
+      # test-os.yml. This gate reads the source and all four, and fails when
+      # they disagree — a project added to a shard without being added to
+      # the slice fails here, with the project's name, instead of failing in
+      # the shard with a "Missing …dll" that points at the download.
+      #
+      # The floors are the non-vacuity proof: a gate handed a source with
+      # one shard and no projects must not report "clean".
+      - name: The CI project lists match their one source
+        run: python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
+
+      # The gate's own failure path. A gate edited until it never fires is
+      # indistinguishable from a gate that found nothing, so the fixture
+      # plants a desync in each place — the source, the shard list, the
+      # slice, the coverage list, the OS list — and asserts that each one
+      # is named.
+      - name: Self-test the CI project-list gate
+        run: python3 tools/ci-shard-slices.py --self-test
 
       # The evaluation-cost instrument's own failure path (issue #1919).
       # Same argument as the aot gate's self-test below and docs.yml's
@@ -1341,12 +1360,12 @@ jobs:
 
       - name: Stash build outputs — ui shard
         uses: actions/upload-artifact@v7
+        # The slice carries the CLI's own output directory: CliDriver (the e2e
+        # shard) and the CellForge PTY scenarios (the ui shard) start the CLI
+        # from THERE, not from the test project's copy of the assembly.
         with:
           name: solution-binaries-ui
           path: |
-            # The CLI's own output directory: CliDriver (the e2e shard) and the
-            # CellForge PTY scenarios (the ui shard) start the CLI from THERE, not
-            # from the test project's copy of the assembly.
             Harbor.slnx
             tests/Harbor.Tui.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
@@ -1391,12 +1410,12 @@ jobs:
 
       - name: Stash build outputs — e2e shard (+ the CLI it spawns)
         uses: actions/upload-artifact@v7
+        # The slice carries the CLI's own output directory: CliDriver (the e2e
+        # shard) and the CellForge PTY scenarios (the ui shard) start the CLI
+        # from THERE, not from the test project's copy of the assembly.
         with:
           name: solution-binaries-e2e
           path: |
-            # The CLI's own output directory: CliDriver (the e2e shard) and the
-            # CellForge PTY scenarios (the ui shard) start the CLI from THERE, not
-            # from the test project's copy of the assembly.
             Harbor.slnx
             tests/Harbor.E2E.Cli/bin/Release/net10.0/*.*
             tests/Harbor.E2E.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*

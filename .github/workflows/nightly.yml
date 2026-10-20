@@ -181,6 +181,12 @@ jobs:
   # Excluded suites: ui (Avalonia-headless flakes amplify under
   # instrumentation), e2e/load (slow, need display). Scope is stated in the
   # summary so numbers are never misread as whole-repo coverage.
+  #
+  # The projects of the covered shards that the coverage job does NOT measure
+  # are named one by one, each with the reason, in the one source of the CI
+  # project lists: tools/ci-project-lists.json. The list below is generated
+  # from that source (python3 tools/ci-shard-slices.py --write), and the gate
+  # in ci.yml fails when the two disagree.
   coverage:
     needs: [gate]
     if: needs.gate.outputs.proceed == 'true'

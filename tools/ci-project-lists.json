@@ -1,0 +1,131 @@
+{
+  "_comment": [
+    "THE single source of the CI project lists (issue #1800).",
+    "",
+    "Every place in the tree that NAMES a test project to run it is generated",
+    "from this file by tools/ci-shard-slices.py:",
+    "",
+    "  shards.<name>.projects  ->  the `test` job's matrix in .github/workflows/ci.yml",
+    "                              AND the build job's `solution-binaries-<name>`",
+    "                              upload slice (the same list, written twice)",
+    "  shards.<name>.cli       ->  whether that slice also carries the CLI's own",
+    "                              output directory (apps/Harbor.App.Cli/bin/...)",
+    "  coverage.from           ->  the shards the coverage list is the union of",
+    "  coverage.exclude        ->  the projects of those shards that are NOT",
+    "                              measured for coverage, each with the reason",
+    "  os[]                    ->  the OS matrix list in .github/workflows/test-os.yml",
+    "                              (a project and the note that says why it is",
+    "                              there)",
+    "",
+    "To change a list: edit THIS file, then run",
+    "  python3 tools/ci-shard-slices.py --write",
+    "and commit both. The gate (the same tool, without --write) fails when the",
+    "committed tree says anything else, so the lists cannot drift apart."
+  ],
+  "version": 1,
+  "shards": {
+    "core": {
+      "projects": [
+        "Harbor.Abstractions.Tests",
+        "Harbor.Config.Tests",
+        "Harbor.Domain.Tests",
+        "Harbor.Application.Tests",
+        "Harbor.ChangeTracking.Tests",
+        "Harbor.Core.Tests",
+        "Harbor.Registries.Tests",
+        "Harbor.Hosting.Tests",
+        "Harbor.Architecture.Tests",
+        "Harbor.Lsp.Tests",
+        "Harbor.Terminal.Pty.Tests",
+        "Harbor.Telemetry.Tests",
+        "Harbor.TestKit.Generators.Tests",
+        "Harbor.TestKit.Tests"
+      ],
+      "cli": false
+    },
+    "platform": {
+      "projects": [
+        "Harbor.Tools.Builtin.Tests",
+        "Harbor.Storage.Tests",
+        "Harbor.Storage.Jsonl.Tests",
+        "Harbor.Providers.Tests",
+        "Harbor.Transport.Remote.Tests",
+        "Harbor.Plugins.Abstractions.Tests",
+        "Harbor.Plugins.Runtime.Tests",
+        "Harbor.Plugins.Host.Tests",
+        "Harbor.Ipc.Tests"
+      ],
+      "cli": false
+    },
+    "ui": {
+      "projects": [
+        "Harbor.Tui.Tests",
+        "Harbor.Tui.RendererTests",
+        "Harbor.Tui.CellForge.Tests",
+        "Harbor.Ui.Framework.Tests",
+        "Harbor.DesignSystem.Tests",
+        "Harbor.Tui.CellForge.PtyTests",
+        "Harbor.Terminal.Abstractions.Tests",
+        "Harbor.App.Avalonia.Tests"
+      ],
+      "cli": true
+    },
+    "e2e": {
+      "projects": [
+        "Harbor.E2E.Cli",
+        "Harbor.E2E.App.Avalonia",
+        "Harbor.Tui.E2E.Tests",
+        "Harbor.App.Cli.Tests",
+        "Harbor.LoadTests",
+        "Harbor.E2E.Framework.Tests"
+      ],
+      "cli": true
+    }
+  },
+  "coverage": {
+    "from": [
+      "core",
+      "platform"
+    ],
+    "exclude": [
+      {
+        "project": "Harbor.Terminal.Pty.Tests",
+        "note": "the PTY suite starts a child process, so the code it measures runs in that child, not in the measured process"
+      },
+      {
+        "project": "Harbor.TestKit.Generators.Tests",
+        "note": "the suite exercises a Roslyn source generator, which runs at compile time, not in the measured process"
+      },
+      {
+        "project": "Harbor.TestKit.Tests",
+        "note": "the suite tests the test kit itself, which is a test helper library and not product code"
+      }
+    ]
+  },
+  "os": [
+    {
+      "project": "Harbor.Core.Tests",
+      "note": "the agent core's host-dependent paths"
+    },
+    {
+      "project": "Harbor.Storage.Tests",
+      "note": "SQLite on NTFS"
+    },
+    {
+      "project": "Harbor.Storage.Jsonl.Tests",
+      "note": "file semantics of the JSONL store"
+    },
+    {
+      "project": "Harbor.Tui.Tests",
+      "note": "terminal rendering"
+    },
+    {
+      "project": "Harbor.Tui.CellForge.Tests",
+      "note": "the fullscreen cell renderer"
+    },
+    {
+      "project": "Harbor.Ipc.Tests",
+      "note": "named pipes on Windows"
+    }
+  ]
+}
