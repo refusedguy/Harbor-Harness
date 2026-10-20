@@ -1,8 +1,11 @@
-// StorePathScalingGates.cs — #410: the store path's SCALING is a merge gate,
-// and the gate is RELATIVE to a measurement taken in the same run.
+// StorePathScalingGates.cs — #410: the store path's SCALING is a merge gate.
+// Since #1948 the COST gate is a BUDGET PER UNIT OF WORK (bytes per scripted
+// delta, hard; probe units per delta, soft) over a FIXED amount of work, and
+// the SHAPE gate is a set of COUNTS. Both are machine-independent; neither
+// reads a ratio.
 //
-// WHY THIS FILE IS ABOUT RATIOS AND NOT NUMBERS
-// ---------------------------------------------
+// WHY THIS FILE IS ABOUT BUDGETS AND NOT ABSOLUTE NUMBERS
+// --------------------------------------------------------
 // #60 measured this path once and wrote the numbers down
 // (docs/BENCHMARKS.md, `StreamingDeltaFrequencyBenchmark`):
 //
@@ -53,10 +56,25 @@
 //
 // WHAT IS ASSERTED, AND WHY EACH BOUND HAS THE SHAPE IT DOES
 // --------------------------------------------------------
-// Cost, as a RATIO against a 3x bound for a 2x input:
+// Cost, as a BUDGET PER UNIT OF WORK since #1948 (it used to be a RATIO
+// against a 3x bound for a 2x input - t(2N) <= 3*t(N), alloc(2N) <= 3*alloc(N)
+// - and the ratio moved with the runner's speed, because the leg scaler that
+// chose how much work a leg carried raised the count until the leg reached
+// ~100 ms: the faster the runner, the fewer deltas the leg held, the smaller
+// the retained working set, and the lower the ratio read):
 //
-//     t(2N)    <= 3 * t(N)
-//     alloc(2N) <= 3 * alloc(N)
+//     bytes per scripted delta <= 1 700     — machine-independent, HARD.
+//     probe units per delta    <= 13       — machine-scaled time, SOFT.
+//
+// The amount of work is FIXED (100 000 deltas per leg, in drives of 1 000), so
+// the budget is a per-delta number and the runner's load cannot move it. The
+// time branch is expressed in PROBE UNITS - the cost of one delta divided by
+// the cost of one unit of the fixed calibration probe measured on the SAME
+// runner in the SAME run - so the runner's speed cancels, and it stands down
+// when the rounds do not reproduce each other.
+//
+// The SUBLINEARITY claim is the SHAPE gate below, not this one: counts are a
+// property of the algorithm and hold on any machine.
 //
 // Shape, as COUNTS, because a count is a property of the algorithm and not of
 // the machine — the same argument `StreamingFrequencyTests` and
@@ -190,37 +208,52 @@ public sealed class StorePathScalingGates
     private const int ChunkChars = 24;
 
     /// <summary>
-    ///     Growth allowed for a DOUBLED input, on cost.
+    ///     Scripted deltas per measured leg - the amount of work the leg
+    ///     performs. 100 000 deltas is 100 drives, about 33 ms of real work on
+    ///     the CI runner: long enough for the round-to-round spread to mean
+    ///     something, short enough that the leg does not dominate the shard.
     /// </summary>
     /// <remarks>
-    ///     <para>
-    ///         Chosen from the shape of the claim, not from a measurement. The
-    ///         question is "is this still linear", and linear means
-    ///         <c>t(2N)/t(N) = 2</c>. So 3 leaves 50% of headroom over the ideal
-    ///         for a tiered-JIT recompile landing inside one leg and for a
-    ///         collection that hits the 2N leg and not the N leg — while an
-    ///         O(N^2) regression lands at 4 and cannot hide underneath it.
-    ///     </para>
-    ///     <para>
-    ///         2 would be the sharpest defensible bound and would also redden a
-    ///         correct tree whenever one leg took a collection the other did
-    ///         not: the #939 shape, a rule that fails on right numbers. 8 is
-    ///         what #465 rejected for the mirror-image reason — it sits above
-    ///         the quadratic shape the gate exists to catch.
-    ///     </para>
-    ///     <para>
-    ///         The measure lives in the SHARED Harbor.TestKit
-    ///         <see cref="TestScalingGate" /> (#1652; since #1889 this project
-    ///         references the shared file instead of keeping a local copy —
-    ///         the TestKit core no longer drags Harbor.Application into the
-    ///         slice this project measures): GC-fenced legs scaled toward
-    ///         ~100 ms of real work, medians over five rounds,
-    ///         x1.05 noise band on the time branch only. The hand-rolled
-    ///         best-of-5 loop stayed at a ~10 ms leg, which was exactly small
-    ///         enough for a neighbour or a collection to decide the ratio.
-    ///     </para>
+    ///     The old gate let the shared leg SCALER choose this number, and the
+    ///     scaler raises the count until a leg lasts ~100 ms - so the faster
+    ///     the runner, the FEWER deltas the leg carried, and the more the
+    ///     ratio moved with the runner. This number is fixed instead: the
+    ///     amount of work a leg does no longer depends on the machine.
     /// </remarks>
-    private const double GrowthLimit = 3.0;
+    private const int DeltasPerLeg = 100_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE scripted delta, in bytes. Machine-
+    ///     independent, so it is compared as measured, with no band. This is
+    ///     the branch that can be a hard gate on any runner.
+    ///     <para>
+    ///         Pinned from the CI measurement of the ratio gate this replaced
+    ///         (run 39423151864): 71 508 360 B over 55 drives of 1 000 deltas
+    ///         = 1 300 B per delta. The budget leaves ~1.31x headroom.
+    ///     </para>
+    /// </summary>
+    private const long MaxBytesPerDelta = 1_700;
+
+    /// <summary>
+    ///     Time budget for ONE scripted delta, in PROBE UNITS (see
+    ///     <see cref="PerfGate" />). Machine-scaled and SOFT: it stands down
+    ///     when the rounds do not reproduce each other.
+    ///     <para>
+    ///         Pinned from the same run: 18.189 ms over 55 000 deltas =
+    ///         0.331 us per delta against a probe that costs 0.000380 ms/unit,
+    ///         i.e. ~0.87 probe units per delta.
+    ///     </para>
+    ///     <para>
+    ///         The budget is wide on purpose: the probe's OWN measured cost
+    ///         moved 5.3x between two CI runs of the SAME tree (0.000380
+    ///         ms/unit in run 39423151864, 0.000072 ms/unit in run
+    ///         39436405496), so the probe-unit currency is only as stable as
+    ///         the yardstick behind it. The BYTE budget is the branch that
+    ///         can fail on any runner - it is exact - and the time budget is
+    ///         the gross-regression detector.
+    ///     </para>
+    /// </summary>
+    private const double MaxProbeUnitsPerDelta = 13.0;
 
     // =====================================================================
     // 1. The measurement.
@@ -289,8 +322,8 @@ public sealed class StorePathScalingGates
     private static int ExpectedDispatches(int deltas) => Messages * ((deltas / Messages) + 2);
 
     [Test]
-    [Timeout(120_000)]
-    public async Task Cost_GrowsSubLinearly_InDeltas()
+    [Timeout(300_000)]
+    public async Task Cost_PerDelta_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
         {
@@ -302,57 +335,77 @@ public sealed class StorePathScalingGates
             return;
         }
 
-        // The leg is a REPEAT of the same unit, per the helper's own contract
-        // (#1652): the unit is one full Deltas-delta drive — self-contained
-        // store + projector, exactly the shape the gate is about — and the
-        // scaler repeats it until the leg reaches ~100 ms of real work. It
-        // must NOT amplify N itself (Deltas*units deltas in one drive): that
-        // changes the problem the ratio is about, and a drive of 46k deltas
-        // folds/flushes differently than 10 drives of 1k — the x3.77 alloc
-        // ratio the scaled-drive variant measured on CI was that changed
-        // shape, not the code under test. Probes (the first JIT-paying pass
-        // over ChatAppReducer.Update / DefaultUiProjector.Project) are
-        // discarded by the helper, so the discarded-first-iteration argument
-        // still holds verbatim.
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(RepeatDriveLeg(Deltas, units)),
-            measureLargeLeg: units => Task.FromResult(RepeatDriveLeg(Deltas * 2, units)),
-            initialUnits: 1,
-            options: new TestScalingGateOptions
+        // THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio.
+        //
+        // It used to be `time(2N)/time(N) <= 3` and `alloc(2N)/alloc(N) <= 3`
+        // over 1 000 against 2 000 deltas, decided by the shared
+        // TestScalingGate (#1652), whose leg SCALER chose how much work a leg
+        // carried: it raises the count until a leg lasts ~100 ms, so the
+        // faster the runner the FEWER deltas the leg held and the more the
+        // ratio moved with the runner. The measured receipt is run
+        // 39423151864: 18.189 ms / 71 508 360 B on the 1 000-delta leg and
+        // 33.471 ms / 142 347 480 B on the 2 000-delta one - and the gate's
+        // wall time swung between 3.6 s and 27.4 s across runs, the largest
+        // variance source in the `ui` shard.
+        //
+        // The gate is now:
+        //
+        //     bytes per scripted delta  <= 1 700      (machine-independent, HARD)
+        //     probe units per delta     <= 13         (machine-scaled time, SOFT)
+        //
+        // measured over a FIXED amount of work (100 000 deltas, in drives of
+        // 1 000), so the amount of work a leg does no longer depends on the
+        // machine. The allocation branch is machine-independent and is
+        // asserted hard; the time branch is in PROBE UNITS and stands down
+        // when the rounds do not reproduce each other. The report prints on
+        // every run, pass or fail.
+        //
+        // The SUBLINEARITY claim itself is the SHAPE gate below: counts
+        // (folds, flushes, materialisations, restyles) are a property of the
+        // algorithm and hold on any machine, so that is where "the cost does
+        // not grow with the delta count" is decided. This gate decides that
+        // the per-delta cost stays inside a reviewed constant.
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: deltas => Task.FromResult(DriveLeg(deltas)),
+            units: DeltasPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "store-path-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "store-path-cost",
+                MaxBytesPerUnit = MaxBytesPerDelta,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerDelta,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "time(2N)/time(N)",
-            linearWhy:
-                "Linear is 2.00 and an O(N^2) regression is 4.00, so this bound separates them without "
-                + "depending on how fast this runner is — which an absolute millisecond would, and which is why "
-                + "#410 does not use one.");
+        await result.AssertWithinBudgetsAsync("ui store dispatch+project per scripted delta");
     }
 
     /// <summary>
-    ///     One measured leg: <paramref name="units" /> full repeats of the same
-    ///     <paramref name="deltas" />-delta drive, elapsed time and allocation
-    ///     summed over the repeats. Each repeat rebuilds its own
+    ///     One measured leg: <paramref name="deltas" /> scripted deltas, driven
+    ///     as whole <see cref="Deltas" />-delta drives - elapsed time
+    ///     and allocation summed over the drives. Each drive rebuilds its own
     ///     <see cref="UiStore" /> + <see cref="DefaultUiProjector" />, and
     ///     <see cref="DriveCost" /> fences GC before its own inner window, so
-    ///     repeat-to-repeat carryover is fenced on both scales.
+    ///     drive-to-drive carryover is fenced on both scales.
     /// </summary>
-    private static TestScalingGateLeg RepeatDriveLeg(int deltas, int units)
+    /// <remarks>
+    ///     The drive size is FIXED rather than scaled: amplifying N inside one
+    ///     drive changes the problem the gate is about, and a drive of 46k
+    ///     deltas folds and flushes differently than 46 drives of 1k.
+    /// </remarks>
+    private static PerfGateLeg DriveLeg(int deltas)
     {
+        int drives = deltas / Deltas;
         TimeSpan total = TimeSpan.Zero;
         long allocated = 0;
-        for (int u = 0; u < units; u++)
+        for (int u = 0; u < drives; u++)
         {
-            Drive drive = DriveCost(deltas);
+            Drive drive = DriveCost(Deltas);
             total += drive.Elapsed;
             allocated += drive.Allocated;
         }
 
-        return new TestScalingGateLeg(total.TotalMilliseconds, allocated);
+        return new PerfGateLeg(total.TotalMilliseconds, allocated);
     }
+
 
     [Test]
     [Timeout(120_000)]
@@ -488,13 +541,20 @@ public sealed class StorePathScalingGates
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The limit is carried PER ROW rather than read from
-    ///         <see cref="GrowthLimit" />, on purpose: the table then pins the
-    ///         decision FUNCTION, so retuning the constant cannot silently
-    ///         rewrite what the control is asserting. Changing
-    ///         <see cref="GrowthLimit" /> is a tuning change; changing a verdict
-    ///         below is a change to what the gate means, and only one of those
-    ///         should be able to happen quietly.
+    ///         The limit is carried PER ROW rather than read from a constant,
+    ///         on purpose: the table then pins the decision FUNCTION, so
+    ///         retuning a constant cannot silently rewrite what the control is
+    ///         asserting. Changing a limit is a tuning change; changing a
+    ///         verdict below is a change to what the rule means, and only one
+    ///         of those should be able to happen quietly.
+    ///     </para>
+    ///     <para>
+    ///         This table controls the SHARED ratio rule
+    ///         (<see cref="TestScalingGate" />, #1652), which the other ratio
+    ///         gates in the tree still ride. The cost gate in this file does
+    ///         NOT: it is a budget per unit of work since #1948, and its own
+    ///         control is the SHAPE gate below - counts, which are a property
+    ///         of the algorithm and hold on any machine.
     ///     </para>
     ///     <para>
     ///         Row 1 is the #60 measurement, so the function is anchored to a

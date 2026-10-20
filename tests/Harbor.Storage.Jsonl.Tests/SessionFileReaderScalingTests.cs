@@ -61,6 +61,44 @@ public class SessionFileReaderScalingTests
     /// <summary>Messages in the small leg's file; the large leg doubles it.</summary>
     private const int Messages = 2_000;
 
+    /// <summary>
+    ///     Messages in the file the cost gate MEASURES - the larger one, so a
+    ///     per-read cost that grows with the message count lands in the
+    ///     measurement instead of hiding behind the smaller file.
+    /// </summary>
+    private const int MeasuredMessages = Messages * 2;
+
+    /// <summary>
+    ///     Full file reads per measured leg - the FIXED amount of work. 8
+    ///     reads of a 4 000-message file is about 77 ms of real work on the
+    ///     CI runner.
+    /// </summary>
+    private const int ReadsPerLeg = 8;
+
+    /// <summary>
+    ///     Allocation budget for ONE full file read, in bytes. Machine-
+    ///     independent, so it is compared as measured, with no band. Pinned
+    ///     from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 16 583 576 B over 13 reads of a 4 000-message file =
+    ///     1 275 659 B per read. The budget leaves ~1.25x headroom.
+    /// </summary>
+    private const long MaxBytesPerRead = 1_600_000;
+
+    /// <summary>
+    ///     Time budget for ONE full file read, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 124.699 ms over 13 reads = 9.59 ms per
+    ///     read against a probe that costs 0.000380 ms/unit, i.e. ~25 200 probe
+    ///     units per read.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
+    /// </summary>
+    private const double MaxProbeUnitsPerRead = 300_000.0;
+
     /// <summary>Full file reads where the leg-scaling probe starts; one read is a few ms over this size.</summary>
     private const int InitialReads = 8;
 
@@ -86,20 +124,38 @@ public class SessionFileReaderScalingTests
             string smallFile = await WriteSessionFileAsync(
                 Path.Combine(dir, $"small-{Messages}.jsonl"), CreateSessionId(), Messages);
             string largeFile = await WriteSessionFileAsync(
-                Path.Combine(dir, $"large-{Messages * 2}.jsonl"), CreateSessionId(), Messages * 2);
+                Path.Combine(dir, $"large-{MeasuredMessages}.jsonl"), CreateSessionId(), MeasuredMessages);
 
-            TestScalingGateResult fresh = await TestScalingGate.MeasureAsync(
-                measureSmallLeg: units => MeasureReadLegAsync(units, smallFile),
-                measureLargeLeg: units => MeasureReadLegAsync(units, largeFile),
-                initialUnits: InitialReads,
-                options: new TestScalingGateOptions
+            // THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It
+            // used to be `t(2N) <= 3*t(N)` and `alloc(2N) <= 3*alloc(N)` over a
+            // 2 000-message against a 4 000-message file, decided by the shared
+            // TestScalingGate (#1652), whose leg SCALER chose how much work a
+            // leg carried. It is now:
+            //
+            //     bytes per full read   <= 1 600 000   (machine-independent, HARD)
+            //     probe units per read   <= 300 000     (machine-scaled time, SOFT)
+            //
+            // measured over a FIXED amount of work (8 full reads of the
+            // 4 000-message file) on the SAME runner in the SAME run. The
+            // allocation branch is machine-independent and is asserted hard;
+            // the time branch is in PROBE UNITS and stands down when the rounds
+            // do not reproduce each other. The report prints on every run,
+            // pass or fail.
+            //
+            // A re-emergent per-read O(n log n) sort - the #1533 shape -
+            // allocates a second list per read and lands far above the byte
+            // budget.
+            PerfGateResult fresh = await PerfGate.MeasureAsync(
+                work: reads => MeasureReadLegAsync(reads, largeFile),
+                units: ReadsPerLeg,
+                options: new PerfGateOptions
                 {
-                    Label = "session-read#1533",
+                    Label = "session-read-cost",
+                    MaxBytesPerUnit = MaxBytesPerRead,
+                    MaxProbeUnitsPerUnit = MaxProbeUnitsPerRead,
                 });
 
-            await fresh.AssertWithinLimitsAsync(
-                "parse+order(2N messages)/parse+order(N messages)",
-                "Linear is 2.00; a re-emergent per-read O(n log n) sort lands at 3+ over these legs.");
+            await fresh.AssertWithinBudgetsAsync("jsonl session file read per read");
 
             // Non-vacuity: the files are what the ratios claim they are, and
             // the reads the gate measured are whole reads.
@@ -108,7 +164,7 @@ public class SessionFileReaderScalingTests
             await Assert.That(small.IsSuccess).IsTrue();
             await Assert.That(large.IsSuccess).IsTrue();
             await Assert.That(small.Value.Messages.Count).IsEqualTo(Messages);
-            await Assert.That(large.Value.Messages.Count).IsEqualTo(Messages * 2);
+            await Assert.That(large.Value.Messages.Count).IsEqualTo(MeasuredMessages);
             await Assert.That(small.Value.IsStable).IsTrue()
                 .Because("the gate measures whole reads; a racing-file measurement is not what this gate grades");
 
@@ -308,7 +364,7 @@ public class SessionFileReaderScalingTests
     ///     session file. The wall clock and the process-wide allocation probe
     ///     wrap the SAME window, so both columns answer for the same reads.
     /// </summary>
-    private static async Task<TestScalingGateLeg> MeasureReadLegAsync(int units, string file)
+    private static async Task<PerfGateLeg> MeasureReadLegAsync(int units, string file)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -331,7 +387,7 @@ public class SessionFileReaderScalingTests
         });
         sw.Stop();
 
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, Allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, Allocated);
     }
 
     /// <summary>

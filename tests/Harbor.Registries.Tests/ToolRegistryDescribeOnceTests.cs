@@ -20,31 +20,61 @@ namespace Harbor.Registries.Tests;
 ///     resolve pays N evaluates + one array, an allow-all ruleset shares the
 ///     <c>_all</c> instance itself, and no re-sort is needed.
 ///     <para>
-///         The scaling gate is relative, not absolute: a first-time filtered
-///         resolve over twice the tools must cost at most 3x the time and
-///         allocations of the single-size run, measured in the same process
-///         (<c>t(2N) &lt;= 3*t(N)</c>). A quadratic regression lands at 4x and
-///         cannot hide under it; runner speed cancels in the ratio. Each measured
-///         resolve uses a fresh ruleset instance (the per-ruleset cache is keyed
-///         by reference), so every iteration pays the filter cost. Synchronous
-///         body, so <c>AllocationProbe.MeasureThread</c> (exact per-thread
-///         counter, no serialisation needed). Measured through
-///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652): GC-fenced
-///         legs scaled to ~100 ms of real work, medians over five rounds, and
-///         a x1.05 noise band on the time branch only. Linux-only (GC
-///         accounting varies by OS).
+///         THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+///         to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+///         over 100 against 200 tools, decided by the shared
+///         <see cref="Harbor.TestKit.TestScalingGate" /> (#1652). It is now:
+///         <code>
+///         bytes per first-time resolve &lt;= 1 500   (machine-independent, HARD)
+///         probe units per resolve      &lt;= 40     (machine-scaled time, SOFT)
+///         </code>
+///         measured over a FIXED amount of work (100 000 first-time filtered
+///         resolves over a 100-tool frozen registry) on the SAME runner in the
+///         SAME run. Each measured resolve uses a fresh ruleset instance (the
+///         per-ruleset cache is keyed by reference), so every iteration pays
+///         the filter cost. Synchronous body, so
+///         <c>AllocationProbe.MeasureThread</c> (exact per-thread counter, no
+///         serialisation needed). The allocation branch is machine-independent
+///         and is asserted hard; the time branch is in PROBE UNITS and stands
+///         down when the rounds do not reproduce each other. The report prints
+///         on every run, pass or fail. Linux-only (GC accounting varies by OS).
 ///     </para>
 /// </summary>
+[NotInParallel]
 public class ToolRegistryDescribeOnceTests
 {
-    /// <summary>Tools in the small leg; the large one doubles it.</summary>
+    /// <summary>Tools in the frozen registry the gate resolves against.</summary>
     private const int ToolCount = 100;
 
-    /// <summary>Resolves per leg's unit: one fresh-ruleset filtered resolve.</summary>
-    private const int Iterations = 50;
+    /// <summary>
+    ///     First-time filtered resolves per measured leg - the FIXED amount of
+    ///     work. 100 000 resolves is about 64 ms of real work on the CI runner.
+    /// </summary>
+    private const int ResolvesPerLeg = 100_000;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Allocation budget for ONE first-time filtered resolve, in bytes.
+    ///     Machine-independent, so it is compared as measured, with no band.
+    ///     Pinned from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 98 400 000 B over 100 000 resolves = 984 B per
+    ///     resolve. The budget leaves ~1.52x headroom.
+    /// </summary>
+    private const long MaxBytesPerResolve = 1_500;
+
+    /// <summary>
+    ///     Time budget for ONE first-time filtered resolve, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 64.487 ms over 100 000 resolves = 0.645 us
+    ///     per resolve against a probe that costs 0.000380 ms/unit, i.e. ~1.7
+    ///     probe units per resolve.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
+    /// </summary>
+    private const double MaxProbeUnitsPerResolve = 40.0;
 
     private static readonly JsonDocument SchemaDoc = JsonDocument.Parse("""{"type":"object"}""");
 
@@ -151,7 +181,7 @@ public class ToolRegistryDescribeOnceTests
     ///     ruleset per iteration is INSIDE the window (the per-ruleset cache is
     ///     keyed by reference), so every iteration pays the filter cost.
     /// </summary>
-    private static TestScalingGateLeg MeasureFirstTimeResolves(ToolRegistry registry, int units)
+    private static PerfGateLeg MeasureFirstTimeResolves(ToolRegistry registry, int units)
     {
         var sw = Stopwatch.StartNew();
         long allocated = AllocationProbe.MeasureThread(() =>
@@ -164,33 +194,30 @@ public class ToolRegistryDescribeOnceTests
             }
         });
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     [Test]
-    [Timeout(120_000)]
-    public async Task ResolveTools_DoubledTools_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task ResolveTools_CostPerResolve_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
         {
             return; // GC accounting varies across OS runtimes.
         }
 
-        var small = CreateFrozenRegistry(ToolCount);
-        var large = CreateFrozenRegistry(ToolCount * 2);
+        var registry = CreateFrozenRegistry(ToolCount);
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(MeasureFirstTimeResolves(small, units)),
-            measureLargeLeg: units => Task.FromResult(MeasureFirstTimeResolves(large, units)),
-            initialUnits: Iterations,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: units => Task.FromResult(MeasureFirstTimeResolves(registry, units)),
+            units: ResolvesPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "toolregistry-describeonce-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "toolregistry-describeonce-cost",
+                MaxBytesPerUnit = MaxBytesPerResolve,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerResolve,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "resolve(2N)/resolve(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("first-time filtered tool resolve");
     }
 }

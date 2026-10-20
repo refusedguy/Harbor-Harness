@@ -67,17 +67,50 @@ namespace Harbor.Application.Tests;
 [NotInParallel]
 public class CachingSystemPromptBuilderKeyScalingTests
 {
-    /// <summary>Contex-file payload of the small leg, in UTF-16 chars (~64 KiB of context content).</summary>
+    /// <summary>Context-file payload, in UTF-16 chars (~64 KiB of context content).</summary>
     private const int BaseFileChars = 32_768;
 
-    /// <summary>Growth allowed for a doubled context, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     The context size the gate MEASURES at - twice
+    ///     <see cref="BaseFileChars" />, because a per-turn cost that grows
+    ///     with the context must land in the measurement instead of hiding
+    ///     behind the smaller one (the same argument
+    ///     <c>ProjectHistoryScalingGates</c> makes).
+    /// </summary>
+    private const int MeasuredFileChars = BaseFileChars * 2;
 
     /// <summary>
-    ///     Where the shared helper's leg-scaling probe starts; every measured leg
-    ///     is one fixed work window repeated <c>UnitsPerLeg</c> times.
+    ///     Turns per measured leg - the FIXED amount of work. 1 000 turns at the
+    ///     measured context size is about 65 ms of real work on the CI runner.
     /// </summary>
-    private const int InitialUnits = 20;
+    private const int TurnsPerLeg = 1_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE turn's key computation, in bytes.
+    ///     Machine-independent, so it is compared as measured, with no band.
+    ///     Pinned from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 2 954 192 B over 3 002 turns = 984 B per turn - and
+    ///     the SAME number at twice the context size, which is the point: the
+    ///     key streams the context through one bounded buffer, so its
+    ///     allocation does not grow with the context. The budget leaves ~1.56x
+    ///     headroom.
+    /// </summary>
+    private const long MaxBytesPerTurn = 1_536;
+
+    /// <summary>
+    ///     Time budget for ONE turn's key computation, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run at the measured context size: 195.252 ms
+    ///     over 3 002 turns = 65.0 us per turn against a probe that costs
+    ///     0.000380 ms/unit, i.e. ~171 probe units per turn.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
+    /// </summary>
+    private const double MaxProbeUnitsPerTurn = 2_400.0;
 
     /// <summary>One fixed real working directory for both legs (the key holds the path).</summary>
     private static readonly string WorkDir = TestTempDirs.NewDirectory("harbor-prompt-key-scaling");
@@ -87,27 +120,43 @@ public class CachingSystemPromptBuilderKeyScalingTests
     private static readonly ModelInfo TestModel =
         new("test-model", "test", "Test Model", 200_000, 4096, false, false, true, Pricing.Unknown, "openai");
 
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+    ///     over a 32 768-char against a 65 536-char context, decided by the
+    ///     shared TestScalingGate (#1652). It is now:
+    ///     <code>
+    ///     bytes per turn        &lt;= 1 536   (machine-independent, HARD)
+    ///     probe units per turn  &lt;= 2 400   (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (1 000 turns at the LARGER
+    ///     context) on the SAME runner in the SAME run. The allocation branch
+    ///     is machine-independent and is asserted hard; the time branch is in
+    ///     PROBE UNITS and stands down when the rounds do not reproduce each
+    ///     other. The report prints on every run, pass or fail.
+    ///     <para>
+    ///         A regression that re-materialises the intermediate string and
+    ///         byte array - the #1532 pre-rewrite shape, StringBuilder +
+    ///         GetBytes + HashData - allocates the whole context per turn and
+    ///         lands far above the byte budget. A regression that re-walks the
+    ///         fields many times lands above the probe-unit budget.
+    ///     </para>
+    /// </summary>
     [Test]
-    [Timeout(180_000)]
-    public async Task KeyCost_GrowsLinearly_InContextSize()
+    [Timeout(300_000)]
+    public async Task KeyCost_PerTurn_StaysWithinBudget()
     {
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(TurnLeg(BaseFileChars, units)),
-            measureLargeLeg: units => Task.FromResult(TurnLeg(BaseFileChars * 2, units)),
-            initialUnits: InitialUnits,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: turns => Task.FromResult(TurnLeg(MeasuredFileChars, turns)),
+            units: TurnsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "prompt-key-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "prompt-key-cost",
+                MaxBytesPerUnit = MaxBytesPerTurn,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerTurn,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "keyCost(2N)/keyCost(N)",
-            linearWhy:
-                "Streaming the context into one SHA-256 pass is byte-linear: linear is 2.00, and a "
-                + "regression that joins the whole context into a string (the #1532 pre-rewrite shape, "
-                + "StringBuilder + GetBytes + HashData) or re-walks the fields many times is 4.00, so this "
-                + "bound tells them apart without depending on the runner's speed.");
+        await result.AssertWithinBudgetsAsync("system prompt key computation per turn");
     }
 
     /// <summary>
@@ -117,7 +166,7 @@ public class CachingSystemPromptBuilderKeyScalingTests
     ///     string and the context are built ONCE per leg, outside the measured
     ///     window, so the window is exactly the per-turn slice #1532 targets.
     /// </summary>
-    private static TestScalingGateLeg TurnLeg(int fileChars, int units)
+    private static PerfGateLeg TurnLeg(int fileChars, int units)
     {
         // Built OUTSIDE the measured window: an O(fileChars) string, identical
         // in kind and count for both legs (one per unit), so its cost cancels
@@ -152,7 +201,7 @@ public class CachingSystemPromptBuilderKeyScalingTests
             allocated += probed;
         }
 
-        return new TestScalingGateLeg(ms, allocated);
+        return new PerfGateLeg(ms, allocated);
     }
 
     // ── The key-hit contract — what a relative gate cannot assert ──

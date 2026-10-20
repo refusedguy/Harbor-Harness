@@ -57,6 +57,48 @@ public class TurnRunnerUpdateCoalescingTests
     /// <summary>Deltas per streamed turn in the behaviour tests.</summary>
     private const int DeltaCount = 1000;
 
+    /// <summary>Deltas in one turn of the script the cost gate drives.</summary>
+    private const int DeltasPerTurn = 2_000;
+
+    /// <summary>
+    ///     Deltas published per measured leg - the FIXED amount of work.
+    ///     1 000 000 deltas is 500 turns of 2 000, about 44 ms of real work on
+    ///     the CI runner.
+    /// </summary>
+    private const int DeltasPerLeg = 1_000_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE published delta, in bytes. Machine-
+    ///     independent, so it is compared as measured, with no band. Pinned
+    ///     from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 147 649 968 B over 1 024 turns of 2 000 deltas =
+    ///     72 B per delta. The budget leaves ~1.28x headroom.
+    /// </summary>
+    private const long MaxBytesPerDelta = 92;
+
+    /// <summary>
+    ///     Time budget for ONE published delta, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 90.172 ms over 2 048 000 deltas = 0.044 us
+    ///     per delta against a probe that costs 0.000380 ms/unit, i.e. ~0.116
+    ///     probe units per delta.
+    ///     <para>
+    ///         This one is the receipt for the note below: the probe-unit
+    ///         currency for this allocation-bound workload moved 11x between
+    ///         two CI runs of the SAME tree - 0.116 probe units per delta in
+    ///         run 39423151864 and 1.27 in run 39436405496, whose probe cost
+    ///         0.000072 ms/unit against the other run's 0.000380 ms/unit -
+    ///         while the BYTE branch read 72 B per delta in BOTH.
+    ///     </para>
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
+    /// </summary>
+    private const double MaxProbeUnitsPerDelta = 6.0;
+
     /// <summary>
     ///     The policy the behaviour tests pin: a delta cap and no time bound,
     ///     so the published count is a pure function of the delta cap.
@@ -251,33 +293,45 @@ public class TurnRunnerUpdateCoalescingTests
     // ── the measurement (CI) ────────────────────────────────────────────────
 
     /// <summary>
-    ///     The relative gate: the publish path's cost must stay LINEAR in the
-    ///     number of deltas. A merge that re-copied the accumulated text per
-    ///     delta (the obvious way to get this wrong) is O(N²) and lands at 4x
-    ///     the bound; the shipped merge is O(N).
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>t(2N) &lt;= 3*t(N)</c> and <c>alloc(2N) &lt;= 3*alloc(N)</c>
+    ///     over 1 000 against 2 000 deltas, decided by the shared
+    ///     TestScalingGate (#1652). It is now:
+    ///     <code>
+    ///     bytes per published delta  &lt;= 92    (machine-independent, HARD)
+    ///     probe units per delta      &lt;= 6.0   (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (1 000 000 deltas, in turns of
+    ///     2 000) on the SAME runner in the SAME run. The allocation branch is
+    ///     machine-independent and is asserted hard; the time branch is in
+    ///     PROBE UNITS and stands down when the rounds do not reproduce each
+    ///     other. The report prints on every run, pass or fail.
+    ///     <para>
+    ///         A merge that re-copies the accumulated text per delta - the
+    ///         obvious way to get this wrong, and O(N^2) - lands far above
+    ///         the byte budget.
+    ///     </para>
     /// </summary>
     [Test]
-    [Timeout(180_000)]
-    public async Task PublishCost_DoubledDeltas_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task PublishCost_PerDelta_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
         {
             return; // GC accounting varies across OS runtimes.
         }
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => MeasureLegAsync(BoundedPolicy, Script1000, units),
-            measureLargeLeg: units => MeasureLegAsync(BoundedPolicy, Script2000, units),
-            initialUnits: 2,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: deltas => MeasureLegAsync(BoundedPolicy, Script2000, deltas / DeltasPerTurn),
+            units: DeltasPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "turnrunner-update-coalescing-scaling",
-                GrowthLimit = 3.0,
+                Label = "turnrunner-update-coalescing-cost",
+                MaxBytesPerUnit = MaxBytesPerDelta,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerDelta,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "publish(2N)/publish(N)",
-            linearWhy: "Linear is 2.00, so this bound separates a linear merge from a quadratic one without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("streamed delta publication per delta");
     }
 
     /// <summary>
@@ -317,12 +371,12 @@ public class TurnRunnerUpdateCoalescingTests
     ///     stream, timed and allocated as one window (#741: the body awaits, so
     ///     the process-wide counter is the honest one).
     /// </summary>
-    private static async Task<TestScalingGateLeg> MeasureLegAsync(UpdateFlushPolicy policy, LlmEvent[] script, int units)
+    private static async Task<PerfGateLeg> MeasureLegAsync(UpdateFlushPolicy policy, LlmEvent[] script, int units)
     {
         var sw = Stopwatch.StartNew();
         long allocated = await AllocationProbe.MeasureProcessAsync(() => RunTurnsAsync(policy, script, units)).ConfigureAwait(false);
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     /// <summary>The turns of one measured leg, one after another.</summary>
