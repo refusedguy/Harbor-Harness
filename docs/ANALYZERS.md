@@ -537,6 +537,130 @@ through a base this rule cannot see is out of scope. The tree has none: all
 four exception types under `src/` + `apps/` derive from `System.Exception`
 directly.
 
+### Public API freeze (`Microsoft.CodeAnalysis.PublicApiAnalyzers` 5.6.0)
+
+The public-API freeze of #428 is a **compile-time** gate. The package is
+referenced by exactly two projects — `Harbor.Abstractions` and
+`Harbor.Abstractions.Contracts`, the two assemblies #428 freezes — with
+`PrivateAssets=all`, so the RS00xx diagnostics exist in no other project in
+the tree. There is no CI job for the freeze itself: the compiler runs it
+while those two assemblies build, in the ordinary `build` job.
+
+The baseline is the analyzer's own format, next to the code it describes:
+
+| File | What it holds |
+|---|---|
+| `src/Harbor.Abstractions/PublicAPI.Shipped.txt` | the frozen surface |
+| `src/Harbor.Abstractions/PublicAPI.Unshipped.txt` | the pending changes |
+| `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | the frozen surface |
+| `src/Harbor.Abstractions.Contracts/PublicAPI.Unshipped.txt` | the pending changes |
+
+Both are picked up as analyzer additional files by the package's own
+`buildTransitive` targets; nothing lists them in a `.csproj`. The first line
+of each is `#nullable enable` — without it the analyzer cannot track
+nullability at all (RS0037).
+
+| Rule | What it says | Severity | Where it is configured | Why |
+|---|---|---|---|---|
+| RS0016 | a public symbol is not in the declared API | error | `.editorconfig` | the gate's core: an added member fails the build until the baseline names it |
+| RS0017 | a declared API symbol is not in the code | error | `<WarningsAsErrors>` | the other half: a removed or renamed member fails the build until the baseline says so |
+| RS0022 | a constructor makes a non-inheritable base inheritable | error | `.editorconfig` | it exposes the base's `protected` members |
+| RS0024 | the public API files are invalid | error | `<WarningsAsErrors>` | a malformed baseline is not a baseline |
+| RS0025 | a symbol appears twice in the public API files | error | `<WarningsAsErrors>` | a duplicate row is a row nobody reviewed twice |
+| RS0026 | do not add several public overloads with optional parameters | error | `.editorconfig` | breaks compatibility when the API is extended |
+| RS0027 | an API with optional parameters must have the most parameters among its overloads | error | `.editorconfig` | same back-compat family |
+| RS0036 | a declared API symbol is missing its nullability annotations | error | `.editorconfig` | nullability is part of the signature a consumer compiles against |
+| RS0037 | the API files must carry `#nullable enable` | error | `.editorconfig` | without it the analyzer tracks nothing about nullability |
+| RS0041 | a public member uses an oblivious reference type | none | `.editorconfig` | off until the tree is fully annotated, per the analyzer's own guidance |
+| RS0048 | an API file is missing or is not an analyzer additional file | error | `<WarningsAsErrors>` | without it the analyzer would silently track nothing |
+| RS0050 | a symbol is marked removed but still exists in the code | error | `<WarningsAsErrors>` | the removal marker and the code must agree |
+
+**Why two places, and not one.** Roslyn applies a per-rule `.editorconfig`
+severity to a diagnostic **only when the diagnostic's location has a syntax
+tree** (`AnalyzerDriver.GetFilteredDiagnostic` tests
+`diagnostic.Location.SourceTree`). Six of the twelve rules are reported at a
+symbol and are configured in `.editorconfig` as usual. The other five —
+RS0017, RS0024, RS0025 and RS0050, which are reported **inside
+`PublicAPI.*.txt`**, and RS0048, which is reported at **no location at
+all** — cannot be reached that way: a `.editorconfig` row for them would
+read like policy and change nothing. They are configured in the two frozen
+projects' `.csproj` files with `<WarningsAsErrors>`, which the compiler
+applies to a diagnostic **by its id, wherever it is reported**.
+
+This was found by the non-vacuity job, not by reading the documentation: with
+only the `.editorconfig` rows, the planted removal produced
+`warning RS0017` and the build succeeded. The same job would have missed it
+if it had been written to accept a warning.
+
+**Why `severity = error` and not the global warnings-as-errors.** The
+analyzer package's own `buildTransitive` props appends every RS id to
+`WarningsNotAsErrors` when `CodeAnalysisTreatWarningsAsErrors` is false, so
+relying on `TreatWarningsAsErrors=true` to promote them would make the gate
+depend on a property **inside a package** rather than on a decision recorded
+in this repository. The two mechanisms above do not go through that
+promotion, so the gate stays an error even if the warnings-as-errors policy
+is relaxed. The non-vacuity job proves it: it builds a throwaway project
+**outside** the repository (so `Directory.Build.props` does not apply and
+`TreatWarningsAsErrors` is **off**) with this repository's `.editorconfig`
+and the frozen projects' `<WarningsAsErrors>` list copied in, and the planted
+violation fails as `error RS0016`.
+
+**What the analyzer cannot do.** It sees one tree. The old gate's rule was
+about a diff — "commit the regenerated baseline in the SAME PR as the API
+change" — and the reviewer's half of it was about a *commit*. That half
+survived the migration as
+[`tools/check-public-api-resign.py`](../tools/check-public-api-resign.py):
+a commit that edits the frozen baseline must edit the assembly's sources
+with it, and a commit that changes a public declaration must re-sign the
+baseline with it. Its `--self-test` runs in the `docs.yml` `selftest` job;
+its non-vacuity companion for the compile half is
+[`tools/public-api-nonvacuity.sh`](../tools/public-api-nonvacuity.sh), run by
+the `ci.yml` `public-api` job.
+
+#### The parity contract (#1845)
+
+The two python gates this replaced — `tools/check-public-api.py` (607 lines,
+`Harbor.Abstractions.Contracts`) and `tools/check-public-api-abstractions.py`
+(605 lines, `Harbor.Abstractions`) — were the same program with a different
+scope. Their four rules were: a surface member with no baseline row fails
+(ADDED), a baseline row with no surface member fails (REMOVED), a missing
+baseline file fails (BASELINE-MISSING), and a scan that saw fewer members
+than the floor fails (FLOOR). This table is the contract: every row says
+what the python gate did and what covers it now.
+
+| What the python gate checked | What covers it now |
+|---|---|
+| a public type or member with no baseline row → fail | RS0016, at compile time |
+| a baseline row with no public member → fail (removal, re-sign) | RS0017, at compile time |
+| a missing baseline file → fail | RS0048, at compile time |
+| a malformed or duplicated baseline row → fail | RS0024, RS0025 |
+| a scan that stopped matching → fail | RS0017 (every shipped row would be reported missing) + the row floor in `check-public-api-resign.py` |
+| a `public` member of an `internal` type is not API | the analyzer computes effective accessibility, so it agrees |
+| moves and re-wraps must not fail the gate | the analyzer compares symbols, not text |
+| `const` values and enum values are part of the surface | the analyzer includes constant values in the API name |
+| an explicit interface implementation is one member | the analyzer knows it is one member and renders it |
+| `ref` / `out` / `in` / `params` are part of the signature | the analyzer renders them in the parameter list |
+| a default parameter value is part of the signature | the analyzer renders it, and reasons about it (RS0026, RS0027) |
+| generic arity is part of the signature | the analyzer renders `Foo<T>` and `Foo<T1, T2>` as different members |
+| an `init` accessor is part of the signature | the analyzer knows accessors from properties; the text scan dropped the accessor list entirely |
+| `readonly struct` / `record struct` are distinguishable | the analyzer knows the type kind |
+| — (nothing checked this) | nullability: `string` → `string?` is a signature change (RS0036, RS0037) |
+| — (nothing checked this) | a constructor that exposes the `protected` members of a non-inheritable base (RS0022) |
+| — (nothing checked this) | overloads with optional parameters (RS0026, RS0027) |
+| — (nothing checked this) | a `*REMOVED*` marker that disagrees with the code (RS0050) |
+| — (not a python rule) | the re-signing pairing per COMMIT (`tools/check-public-api-resign.py`) |
+| XML-doc coverage | unchanged: `tools/check-xml-doc-coverage.py`, which the analyzer has no rule for |
+
+The floor's MEANING changed, and the change is the point of stating it.
+Before: "the python scanner saw at least N members in the tree" — a ratchet
+against a matcher that had silently stopped matching. After: "the frozen
+baseline file still holds at least N rows" — a ratchet against a baseline
+that was truncated or rewritten. The blindness the old floor guarded against
+is now guarded by RS0017 itself. The two numbers are not comparable and were
+never meant to be: the analyzer's rows include implicit constructors and
+property accessors, which the text scan never counted because they have no
+`public` keyword in the source.
+
 ### Banned APIs (`BannedSymbols.txt`, `BannedSymbols.DynamicCode.txt`)
 
 [`BannedSymbols.txt`](../BannedSymbols.txt) is the RS0030 rule set — the
