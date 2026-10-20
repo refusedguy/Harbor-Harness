@@ -68,6 +68,18 @@ public CellDiffBatch Encode(
 It compares per-row hashes, so an unchanged frame costs one pass and no
 allocation.
 
+A backend that reads a frame it does not own goes through the port
+[`IFrameSource`](./Protocol/IFrameSource.cs): `Cols`, `Rows` and `Get` are the
+whole crossing, and the `FrameCell` the port answers with carries the cell
+plus the two values that live beside it (the per-cell diff directive and the
+forced cursor advance). The protocol never names the buffer that holds the
+frame, so the two sides vary independently. The CellForge engine's front
+buffer is read through the port by `EngineFrameSource`
+([`../Harbor.Tui.CellForge/Chat/Adapters/EngineFrameSource.cs`](../Harbor.Tui.CellForge/Chat/Adapters/EngineFrameSource.cs)),
+which is also where the diff directive is translated member by member between
+the two copies of `CellDiffOption` (the engine is a leaf and cannot borrow the
+shared layer's copy, so the two are separate types; #1519).
+
 ### Streaming markdown
 
 `StreamingMarkdownRenderer` ([`Markdown/`](./Markdown/)) pushes text chunks in

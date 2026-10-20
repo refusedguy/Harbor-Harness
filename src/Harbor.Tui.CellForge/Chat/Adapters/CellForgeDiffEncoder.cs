@@ -13,6 +13,15 @@ using Harbor.Ui.Framework.Rendering.Protocol;
 // the boundary through a field-for-field snapshot (the reverse of
 // ScreenSession.CopyPaintToBack; both cell structs share the 16-byte
 // layout, so every field round-trips).
+//
+// #1519: the crossing is now a PORT rather than a pair of concrete types.
+// The copy loop below reads the frame through IFrameSource (the narrow
+// contract in the shared rendering layer) and knows nothing about the
+// engine's buffer: the engine side answers in the Rendering vocabulary
+// (EngineFrameSource), so the translation lives in one place and the
+// diff-directive table is spelled out member by member instead of being
+// carried across by a numeric cast. The snapshot semantics are unchanged:
+// a cell-for-cell copy, then InvalidateAll.
 using EngineCells = Harbor.Tui.CellForge.Rendering;
 using UIR = Harbor.Ui.Framework.Rendering;
 
@@ -60,8 +69,9 @@ public static class CellForgeDiffEncoder
     /// <summary>
     ///     Encodes the delta from <paramref name="engine"/>'s front buffer
     ///     (the last frame the ANSI path flushed) to <paramref name="next"/>.
-    ///     The front crosses into the Rendering vocabulary through a snapshot
-    ///     copy; the portable encoder then diffs two Rendering buffers.
+    ///     The front crosses into the Rendering vocabulary through the narrow
+    ///     frame-source port; the portable encoder then diffs two Rendering
+    ///     buffers.
     /// </summary>
     public static CellDiffBatch EncodeFromEngineFront(
         EngineCells.DiffEngine engine,
@@ -71,39 +81,39 @@ public static class CellForgeDiffEncoder
     {
         Ensure.NotNull(engine);
         Ensure.NotNull(next);
-        var prev = SnapshotFront(engine.Front);
+        var prev = SnapshotFront(new EngineFrameSource(engine.Front));
         _cachedEncoder ??= new RowHashDiffEncoder();
         return _cachedEncoder.Encode(prev, next, hints, sequence);
     }
 
     /// <summary>
-    ///     Snapshots an engine front buffer into the Rendering vocabulary:
-    ///     exact cell-for-cell copy, then row-hash invalidation so the
-    ///     portable encoder rehashes what the copy touched (At() writes do
-    ///     not invalidate, same discipline as
+    ///     Snapshots a frame into the Rendering vocabulary: exact
+    ///     cell-for-cell copy, then row-hash invalidation so the portable
+    ///     encoder rehashes what the copy touched (At() writes do not
+    ///     invalidate, same discipline as
     ///     <see cref="Harbor.Tui.CellForge.Streaming.ScreenSession"/>).
     /// </summary>
-    private static UIR.ScreenBuffer SnapshotFront(EngineCells.ScreenBuffer front)
+    private static UIR.ScreenBuffer SnapshotFront(IFrameSource front)
     {
         var snap = new UIR.ScreenBuffer(front.Cols, front.Rows);
-        CopyEngineToRendering(front, snap);
+        CopyFrameToRendering(front, snap);
         return snap;
     }
 
-    private static void CopyEngineToRendering(EngineCells.ScreenBuffer src, UIR.ScreenBuffer dst)
+    private static void CopyFrameToRendering(IFrameSource src, UIR.ScreenBuffer dst)
     {
         for (int y = 0; y < src.Rows; y++)
         {
             for (int x = 0; x < src.Cols; x++)
             {
-                var c = src.Get(x, y);
-                dst.At(x, y) = UIR.Cell.FromRaw(c.Rune, c.Fg, c.Bg, c.Flags, c.Width);
-                // R1 steal: the directive table crosses with the cells — both
-                // enums are byte-backed with identical members in identical
-                // order, so the numeric cast is exact. Copied per cell (not
-                // just when non-None): the snapshot buffer is retained across
-                // calls and a stale Skip would hide the next frame.
-                dst.SetDiffOption(x, y, (UIR.CellDiffOption)(byte)src.GetDiffOption(x, y), src.GetForcedWidth(x, y));
+                FrameCell cell = src.Get(x, y);
+                dst.At(x, y) = cell.Cell;
+                // R1 steal: the directive crosses with the cell, translated
+                // member by member on the engine side (EngineFrameSource).
+                // Copied per cell (not just when non-None): the snapshot
+                // buffer is retained across calls and a stale Skip would hide
+                // the next frame.
+                dst.SetDiffOption(x, y, cell.DiffOption, cell.ForcedWidth);
             }
         }
 
@@ -154,13 +164,13 @@ public static class CellForgeDiffEncoder
 
         private void SyncSnapshot()
         {
-            var front = _engine.Front;
+            var front = new EngineFrameSource(_engine.Front);
             if (_snapshot.Cols != front.Cols || _snapshot.Rows != front.Rows)
             {
                 _snapshot = new UIR.ScreenBuffer(front.Cols, front.Rows);
             }
 
-            CopyEngineToRendering(front, _snapshot);
+            CopyFrameToRendering(front, _snapshot);
         }
     }
 }
