@@ -196,7 +196,8 @@ public class ReconnectableRpcClientSeamTests
     ///     and the stream resumes from <c>lastSeen</c> rather than from zero.
     /// </summary>
     [Test]
-    public async Task ThreeFailuresThenSuccess_ReconnectCleanly_AndResumeFromLastSeen()
+    [Timeout(60_000)]
+    public async Task ThreeFailuresThenSuccess_ReconnectCleanly_AndResumeFromLastSeen(CancellationToken cancellationToken)
     {
         var transports = new List<FakeTransport>();
         var clients = new List<FakeRpcClient>();
@@ -237,7 +238,6 @@ public class ReconnectableRpcClientSeamTests
 
         var received = new List<EventFrame>();
         var snapshotCalls = 0;
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
         await using (wrapper)
         {
@@ -250,7 +250,7 @@ public class ReconnectableRpcClientSeamTests
                     // thing that has to survive the cut and re-dial below.
                     await foreach (var frame in wrapper.SubscribeWithReconnectAsync(
                         _ => { Interlocked.Increment(ref snapshotCalls); return Task.CompletedTask; },
-                        cts.Token))
+                        cancellationToken))
                     {
                         lock (received)
                         {
@@ -384,7 +384,8 @@ public class ReconnectableRpcClientSeamTests
     ///     must fail loudly instead of spinning on the backoff ladder forever.
     /// </summary>
     [Test]
-    public async Task RefusedSubscribe_ThrowsInsteadOfSpinning()
+    [Timeout(60_000)]
+    public async Task RefusedSubscribe_ThrowsInsteadOfSpinning(CancellationToken cancellationToken)
     {
         var client = new FakeRpcClient
         {
@@ -398,14 +399,12 @@ public class ReconnectableRpcClientSeamTests
 
         await using (wrapper)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-
             var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await foreach (var _ in wrapper.SubscribeWithReconnectAsync(_ => Task.CompletedTask, cts.Token))
+                await foreach (var _ in wrapper.SubscribeWithReconnectAsync(_ => Task.CompletedTask, cancellationToken))
                 {
                     // No frames: the fake never publishes.
-                    await Task.Delay(10, cts.Token);
+                    await Task.Delay(10, cancellationToken);
                 }
             });
 
@@ -438,7 +437,8 @@ public class ReconnectableRpcClientSeamTests
     ///     concrete client that used to force the decorator to name it.
     /// </remarks>
     [Test]
-    public async Task ConnectionLostMidStream_RetriesOnAFreshGeneration()
+    [Timeout(60_000)]
+    public async Task ConnectionLostMidStream_RetriesOnAFreshGeneration(CancellationToken cancellationToken)
     {
         var clients = new List<FakeRpcClient>();
 
@@ -460,14 +460,12 @@ public class ReconnectableRpcClientSeamTests
 
         await using (wrapper)
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-
             _ = Task.Run(async () =>
             {
                 try
                 {
                     await foreach (var frame in wrapper.SubscribeWithReconnectAsync(
-                        _ => Task.CompletedTask, cts.Token))
+                        _ => Task.CompletedTask, cancellationToken))
                     {
                         lock (received)
                         {

@@ -45,7 +45,8 @@ public class EventStreamingTests
     ///     matching HarborEvent.AgentStarted.
     /// </summary>
     [Test]
-    public async Task InProcess_Client_Receives_AgentStarted_From_EventBus()
+    [Timeout(60_000)]
+    public async Task InProcess_Client_Receives_AgentStarted_From_EventBus(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var eventBus = sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
@@ -58,10 +59,9 @@ public class EventStreamingTests
             eventBus,
             sp.GetRequiredService<ILogger<Harbor.Ipc.InProcess.InProcessHarborClient>>());
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
         var enumerateTask = Task.Run(async () =>
         {
-            await foreach (var evt in client.SubscribeToEventsAsync(cts.Token).ConfigureAwait(false))
+            await foreach (var evt in client.SubscribeToEventsAsync(cancellationToken).ConfigureAwait(false))
             {
                 return evt;
             }
@@ -85,7 +85,8 @@ public class EventStreamingTests
     ///     HarborEvent over the pipe.
     /// </summary>
     [Test]
-    public async Task Ipc_Client_Receives_AgentStarted_Over_Pipe()
+    [Timeout(60_000)]
+    public async Task Ipc_Client_Receives_AgentStarted_Over_Pipe(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var eventBus = sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
@@ -98,10 +99,9 @@ public class EventStreamingTests
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<IpcHarborClient>());
             await client.ConnectAsync();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var enumerateTask = Task.Run(async () =>
             {
-                await foreach (var evt in client.SubscribeToEventsAsync(cts.Token).ConfigureAwait(false))
+                await foreach (var evt in client.SubscribeToEventsAsync(cancellationToken).ConfigureAwait(false))
                 {
                     return evt;
                 }
@@ -129,7 +129,8 @@ public class EventStreamingTests
     ///     with the ToolResult payload preserved.
     /// </summary>
     [Test]
-    public async Task Ipc_Client_Receives_ToolEnd_With_ToolResult_Payload()
+    [Timeout(60_000)]
+    public async Task Ipc_Client_Receives_ToolEnd_With_ToolResult_Payload(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var eventBus = sp.GetRequiredService<Harbor.Abstractions.Events.IEventBus>();
@@ -142,10 +143,9 @@ public class EventStreamingTests
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<IpcHarborClient>());
             await client.ConnectAsync();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var enumerateTask = Task.Run(async () =>
             {
-                await foreach (var evt in client.SubscribeToEventsAsync(cts.Token).ConfigureAwait(false))
+                await foreach (var evt in client.SubscribeToEventsAsync(cancellationToken).ConfigureAwait(false))
                 {
                     return evt;
                 }

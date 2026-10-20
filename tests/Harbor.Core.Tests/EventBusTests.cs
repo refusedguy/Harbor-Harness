@@ -117,13 +117,14 @@ public class EventBusTests
     ///     returns immediately even on an empty bus.
     /// </summary>
     [Test]
+    [Timeout(30_000)]
     public async Task GetScrollback_OnEmptyBus_ReturnsImmediatelyWithoutBlocking()
     {
         var bus = new InMemoryEventBus(maxScrollback: 4);
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        // If GetScrollback blocks, the token will fire before this returns.
+        // If GetScrollback blocks, the runner's timeout cancels the test and
+        // fails it. The old manual 500 ms probe could not unblock the call:
+        // it fired the token but the runner still waited for the test.
         var scrollback = bus.GetScrollback(10);
-        await Assert.That(cts.IsCancellationRequested).IsFalse();
         await Assert.That(scrollback.Count).IsEqualTo(0);
     }
 

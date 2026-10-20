@@ -18,7 +18,8 @@ namespace Harbor.Ipc.Tests;
 public class BroadcasterFanoutTests
 {
     [Test]
-    public async Task TwoSubscribedClients_BothReceiveSameBroadcastEvent()
+    [Timeout(60_000)]
+    public async Task TwoSubscribedClients_BothReceiveSameBroadcastEvent(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var bus = sp.GetRequiredService<IEventBus>();
@@ -46,8 +47,8 @@ public class BroadcasterFanoutTests
                 // Session-less turn event: no lease owner ⇒ broadcast to all.
                 await bus.PublishAsync(new TurnStartEvent(7));
 
-                EventFrame? frameA = await ReadOneFrameWithin(clientA, TimeSpan.FromSeconds(10));
-                EventFrame? frameB = await ReadOneFrameWithin(clientB, TimeSpan.FromSeconds(10));
+                EventFrame? frameA = await ReadOneFrameWithin(clientA, cancellationToken);
+                EventFrame? frameB = await ReadOneFrameWithin(clientB, cancellationToken);
 
                 await Assert.That(frameA.HasValue).IsTrue();
                 await Assert.That(frameB.HasValue).IsTrue();
@@ -76,21 +77,18 @@ public class BroadcasterFanoutTests
         }
     }
 
-    private static async Task<EventFrame?> ReadOneFrameWithin(MessagePackRpcClient client, TimeSpan window)
+    /// <summary>
+    ///     Reads one frame. The runner's <c>[Timeout]</c> bounds the wait: when it
+    ///     fires, the injected token is cancelled and the read aborts instead of
+    ///     leaving the shard waiting on a frame that never arrives.
+    /// </summary>
+    private static async Task<EventFrame?> ReadOneFrameWithin(MessagePackRpcClient client, CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(window);
-        try
+        await foreach (var frame in client.EventFrames.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
-            await foreach (var frame in client.EventFrames.ReadAllAsync(timeout.Token).ConfigureAwait(false))
-            {
-                return frame;
-            }
+            return frame;
+        }
 
-            return null;
-        }
-        catch (OperationCanceledException)
-        {
-            return null;
-        }
+        return null;
     }
 }

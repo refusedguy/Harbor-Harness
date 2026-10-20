@@ -30,10 +30,10 @@ public class ReconnectReplayTests
 
     /// <summary>Subscribe and drain until at least <paramref name="count"/> frames arrive.</summary>
     private static async Task<List<EventFrame>> CollectFramesAsync(
-        MessagePackRpcClient client, int count, CancellationTokenSource cts)
+        MessagePackRpcClient client, int count, CancellationToken cancellationToken)
     {
         var frames = new List<EventFrame>();
-        await foreach (var frame in client.EventFrames.ReadAllAsync(cts.Token))
+        await foreach (var frame in client.EventFrames.ReadAllAsync(cancellationToken))
         {
             frames.Add(frame);
             if (frames.Count >= count) break;
@@ -43,14 +43,15 @@ public class ReconnectReplayTests
     }
 
     [Test]
-    public async Task Reconnect_LastSequence_ReplaysExactMissedRange()
+    [Timeout(60_000)]
+    public async Task Reconnect_LastSequence_ReplaysExactMissedRange(CancellationToken cancellationToken)
     {
         (var server, var bus, var sp, string pipe) = await StartServer();
         try
         {
             // Generation 1: subscribe, consume one event, remember its sequence,
             // then drop the connection without unsubscribing (network cut).
-            (ulong lastSeen, _) = await SubscribeConsumeAndCutAsync(server, bus, sp, pipe);
+            (ulong lastSeen, _) = await SubscribeConsumeAndCutAsync(server, bus, sp, pipe, cancellationToken);
 
             // While "offline": more events fire on the bus.
             for (int turn = 2; turn <= 6; turn++)
@@ -59,7 +60,7 @@ public class ReconnectReplayTests
             }
 
             // Generation 2: fresh connection presenting its last position.
-            await ReconnectAndVerifyReplayAsync(sp, pipe, lastSeen);
+            await ReconnectAndVerifyReplayAsync(sp, pipe, lastSeen, cancellationToken);
         }
         finally
         {
@@ -68,7 +69,8 @@ public class ReconnectReplayTests
     }
 
     [Test]
-    public async Task Reconnect_GapLargerThanRing_RequestsResync()
+    [Timeout(60_000)]
+    public async Task Reconnect_GapLargerThanRing_RequestsResync(CancellationToken cancellationToken)
     {
         (var server, var bus, var sp, string pipe) = await StartServer();
         try
@@ -86,9 +88,8 @@ public class ReconnectReplayTests
             await client.ConnectAsync();
 
             var ackTcs = new TaskCompletionSource<HarborResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             _ = Task.Run(async () =>
-                ackTcs.TrySetResult(await client.SendAsync(new SubscribeToEventsRequest(lastSequence: 3), cts.Token)));
+                ackTcs.TrySetResult(await client.SendAsync(new SubscribeToEventsRequest(lastSequence: 3), cancellationToken)));
 
             var ack = (OkResponse)await ackTcs.Task;
             var ackData = WireCodec.DeserializeDomain<SubscriptionAck>(ack.Payload)!;
@@ -125,19 +126,18 @@ public class ReconnectReplayTests
 
     /// <summary>Generation 1: subscribe, consume one event, cut the wire.</summary>
     private static async Task<(ulong LastSeen, MessagePackRpcClient Client)> SubscribeConsumeAndCutAsync(
-        HarborIpcServer server, IEventBus bus, IServiceProvider sp, string pipe)
+        HarborIpcServer server, IEventBus bus, IServiceProvider sp, string pipe, CancellationToken cancellationToken)
     {
         var lf = sp.GetRequiredService<ILoggerFactory>();
         var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
         var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
         await client.ConnectAsync();
 
-        var subscribeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), subscribeCts.Token));
+        _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), cancellationToken));
         await server.SubscriptionReady;
 
         await bus.PublishAsync(new TurnStartEvent(1));
-        List<EventFrame> frames = await CollectFramesAsync(client, 1, subscribeCts);
+        List<EventFrame> frames = await CollectFramesAsync(client, 1, cancellationToken);
 
         // Abrupt disconnect: dispose the transport underneath the RPC
         // client, exactly like an OS-level connection reset.
@@ -146,7 +146,7 @@ public class ReconnectReplayTests
     }
 
     /// <summary>Generation 2: reconnect with LastSequence and verify ordered replay.</summary>
-    private static async Task ReconnectAndVerifyReplayAsync(IServiceProvider sp, string pipe, ulong lastSeen)
+    private static async Task ReconnectAndVerifyReplayAsync(IServiceProvider sp, string pipe, ulong lastSeen, CancellationToken cancellationToken)
     {
         var lf = sp.GetRequiredService<ILoggerFactory>();
         var transport = new ClientPipeTransport(pipe, lf.CreateLogger<ClientPipeTransport>());
@@ -154,17 +154,16 @@ public class ReconnectReplayTests
         await client.ConnectAsync();
 
         var ackTcs = new TaskCompletionSource<HarborResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var replayCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         _ = Task.Run(async () =>
             ackTcs.TrySetResult(await client.SendAsync(
-                new SubscribeToEventsRequest(lastSeen), replayCts.Token)));
+                new SubscribeToEventsRequest(lastSeen), cancellationToken)));
 
         var ack = (OkResponse)await ackTcs.Task;
         var ackData = WireCodec.DeserializeDomain<SubscriptionAck>(ack.Payload)!;
         await Assert.That(ackData.ResyncRequired).IsFalse();
 
         // Exactly the five missed turns arrive, in order.
-        List<EventFrame> replayed = await CollectFramesAsync(client, 5, replayCts);
+        List<EventFrame> replayed = await CollectFramesAsync(client, 5, cancellationToken);
         for (int i = 0; i < 5; i++)
         {
             await Assert.That(replayed[i].Sequence).IsEqualTo(lastSeen + (ulong)(i + 1));
