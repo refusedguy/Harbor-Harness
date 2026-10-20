@@ -49,16 +49,23 @@ WHAT THE GATE ANSWERS
 
     PROJECT-UNCLAIMED     A test project with tests that no CI execution
                           context discovers. Its tests never run.
-    PROJECT-EMPTY         A test project with no `[Test]` method. Allowed,
-                          but only with a declared reason and an owner.
+    PROJECT-EMPTY         A test project with no `[Test]` method that no
+                          project carrying tests consumes. A helper
+                          library that a test project consumes is a
+                          library, not a hole; a project nobody consumes
+                          and nothing runs is a project whose tests were
+                          never written.
     TEST-DUPLICATED       A test project's test classes are discovered in
                           more than one CI execution context, because
                           several listed projects reference it.
     TEST-REFERENCE-UNUSED A test project references another test project
-                          at runtime and uses none of its types. The
-                          reference duplicates the referenced project's
-                          tests and drags its product closure in for
-                          nothing.
+                          at runtime, uses none of its types, and the
+                          reference is not free: it duplicates the
+                          referenced project's tests, or it drags product
+                          assemblies into the referencing project's
+                          closure. A reference that costs neither is
+                          reported as a note, because the tree cannot tell
+                          a deliberate re-export from a pointless edge.
     SHARD-UNWIRED         A project defines a treenode-filter partition on
                           disk and no CI list runs it with a filter, so the
                           partition is dead code.
@@ -159,9 +166,42 @@ HOW A PROJECT IS CLASSIFIED
                           gate's purposes.
 
     `Harbor.Benchmarks` and `Harbor.TestKit.Generators` set
-    `IsTestProject=false` and are not test projects. `Harbor.TestKit` is a
-    fixture library that inherits `true` and has no `[Test]`: it is a
-    PROJECT-EMPTY finding, carried in the baseline with a reason.
+    `IsTestProject=false` and are not test projects. `Harbor.TestKit`,
+    `Harbor.TestKit.Support` and `Harbor.TestKit.Tui` inherit `true` and
+    have no `[Test]`: they are helper libraries, and the rule below says
+    so rather than reporting them as holes.
+
+HOW A HELPER LIBRARY IS TOLD FROM A PROJECT WITH NO TESTS
+
+    A test project with no `[Test]` method is a helper library when a
+    project that CARRIES TESTS consumes it, directly or through another
+    helper library. Consumption is the discriminator, because it is what
+    the tree already says: a library exists to be consumed, and a project
+    that nothing consumes and that no CI run reaches is the other thing,
+    the project whose tests were never written.
+
+    The alternative discriminators do not work. "Is it in the solution" is
+    true of every project in the universe. "Does it have tests" is the
+    question itself. An explicit declaration would work too, but it would
+    put the answer in a second list that can drift from the tree, and the
+    tree already carries the answer.
+
+WHY AN UNUSED REFERENCE IS ONLY A FINDING WHEN IT COSTS SOMETHING
+
+    The gate can see that a project names none of the types of the project
+    it references. It cannot see that the reference is pointless, because
+    the users of a re-export are one hop further out than the referencing
+    project. `Harbor.TestKit` references `Harbor.TestKit.Support` and names
+    none of its types, and its csproj says why: "Referencing the sibling
+    here means a consumer of this project gets those types transitively,
+    in the same `Harbor.TestKit` namespace, without adding a product
+    assembly to anybody's closure."
+
+    So the rule asks about the COST rather than about the usage. A
+    reference that duplicates a project's tests, or that drags product
+    assemblies into the referencing project's closure, pays for itself
+    only if it is used, and it is not used: that is a finding. A reference
+    that pays for neither is free, and it is reported as a note.
 
 THE BASELINE IS A RATCHET
 
@@ -192,13 +232,16 @@ NON-VACUITY
     primary list's own job condition not condemning every project that
     shares it; a project whose tests run in more than one context; a
     reference that uses none of the referenced project's types, and one that
-    does use them; a build-time reference (an analyzer, or one with no
-    output assembly) duplicating nothing; a treenode partition that no list
-    applies, and one that a list does apply; a test project with no tests;
-    a baseline row that matches nothing; a baseline row with no reason; a
-    finding the baseline does not carry failing; a scan floor firing on a
-    truncated list; a list that names nothing; a workflow with no primary
-    list; and a test project missing from the solution.
+    does use them; a reference that costs nothing (a re-export) not being
+    reported; a build-time reference (an analyzer, or one with no output
+    assembly) duplicating nothing; a helper library with no tests not
+    being a hole, and a test project with no tests that NOTHING consumes
+    being one; a treenode partition that no list applies, and one that a
+    list does apply; a baseline row that matches nothing; a baseline row
+    with no reason; a finding the baseline does not carry failing; a scan
+    floor firing on a truncated list; a list that names nothing; a
+    workflow with no primary list; and a test project missing from the
+    solution.
 
     Every fixture added after the first version was checked by mutation:
     it fails when its own fix is reverted.
@@ -1250,22 +1293,65 @@ def analyse(root):
             f"they are executed by more than one job: {', '.join(repeated)}"
         )
 
+    # The projects that carry tests and that a CI run discovers. They are
+    # the test world: a helper library consumed by one of them is exercised
+    # by the CI run that exercises its consumer.
+    exercisers = {
+        name
+        for name, project in universe.items()
+        if project["tests"] > 0 and contexts.get(name)
+    }
+
+    # The helper libraries: the test projects with no tests of their own
+    # that a project carrying tests consumes, directly or through another
+    # helper library.
+    #
+    # The discriminator is CONSUMPTION, and it is the honest one. A helper
+    # library exists to be consumed: that is why it is in the solution at
+    # all. A test project that nothing consumes and that no CI run reaches
+    # is the other thing, the project whose tests were never written, and
+    # it is the one the rule is for.
+    #
+    # The alternative discriminators do not work. "Is it in the solution" is
+    # true of every project in the universe. "Does it have tests" is the
+    # question itself. An explicit declaration would work, but it would put
+    # the answer in a second list that can drift from the tree, and the
+    # tree already says the answer: a library that a test project consumes
+    # is a library, whatever its own test count is.
+    consumed_by_tests = set()
+    for name in exercisers:
+        seen = set()
+        stack = [name]
+        while stack:
+            current = stack.pop()
+            for target, attributes in graph.get(current, []):
+                if target not in universe or target in seen:
+                    continue
+                if not is_runtime_reference(attributes):
+                    continue
+                seen.add(target)
+                consumed_by_tests.add(target)
+                stack.append(target)
+
     # The holes.
     for name, project in sorted(universe.items()):
         entries = claims.get(name, [])
         found_in = contexts.get(name, [])
         if project["tests"] == 0:
-            findings.append(
-                Finding(
-                    "PROJECT-EMPTY",
-                    name,
-                    f"{name} is a test project (IsTestProject is not false "
-                    "there) but carries no [Test] method. If that is "
-                    "deliberate, a fixture library for instance, record it "
-                    f"in {BASELINE_FILE} with a reason and an owner; if it "
-                    "is not, this project has tests that no list will run.",
+            if name not in consumed_by_tests:
+                findings.append(
+                    Finding(
+                        "PROJECT-EMPTY",
+                        name,
+                        f"{name} is a test project (IsTestProject is not "
+                        "false there) but carries no [Test] method, and no "
+                        "project that carries tests consumes it. It is in "
+                        "the solution, so it is compiled on every PR, and "
+                        "nothing runs it and nothing uses it. Either give "
+                        "it tests, or make it a helper library that a test "
+                        "project consumes.",
+                    )
                 )
-            )
             continue
         if not found_in:
             findings.append(
@@ -1357,18 +1443,54 @@ def analyse(root):
                 assembly_closure(graph, target) - without
             )
             product = [item for item in dragged if not item.endswith("Tests")]
+            duplicated = universe[target]["tests"] > 0
+
+            # A reference that costs nothing is not a finding.
+            #
+            # The tree cannot tell a pointless reference from a deliberate
+            # RE-EXPORT: Harbor.TestKit references Harbor.TestKit.Support
+            # and names none of its types, because the point of that
+            # reference is that Support's types reach TestKit's CONSUMERS
+            # (its csproj says so). The users of the reference are one hop
+            # further out than the referencing project.
+            #
+            # So the rule asks about the COST rather than about the usage:
+            # a reference that duplicates a project's tests, or that drags
+            # product assemblies into the referencing project's closure,
+            # pays for itself only if it is used, and it is not used. A
+            # reference that pays for neither is free, and the gate reports
+            # it as a note rather than as a hole.
+            if not product and not duplicated:
+                notes.append(
+                    f"{name} references {target} and names none of its "
+                    "types, but the reference costs nothing: the project "
+                    "carries no tests and adds no assembly to the closure. "
+                    "That is what a deliberate re-export looks like; the "
+                    "gate cannot tell it from a pointless edge."
+                )
+                continue
+
+            costs = []
+            if duplicated:
+                costs.append(
+                    f"it makes {target}'s {universe[target]['tests']} "
+                    f"[Test] method(s) run inside {name} as well"
+                )
+            if product:
+                costs.append(
+                    f"it drags {len(product)} product assembl"
+                    f"{'y' if len(product) == 1 else 'ies'} into {name}'s "
+                    f"closure ({', '.join(product)})"
+                )
             findings.append(
                 Finding(
                     "TEST-REFERENCE-UNUSED",
                     f"{name} -> {target}",
                     f"{name} references the test project {target} and names "
-                    "none of its types, so the reference buys nothing. It "
-                    f"drags {len(product)} product assembl"
-                    f"{'y' if len(product) == 1 else 'ies'} into "
-                    f"{name}'s closure ({', '.join(product)}) and it makes "
-                    f"{target}'s test classes run inside {name} as well. "
-                    "Drop the reference, after checking that it carries no "
-                    "package or analyzer the project still needs.",
+                    "none of its types, so the reference buys nothing, and "
+                    f"it is not free: {'; '.join(costs)}. Drop the "
+                    "reference, after checking that it carries no package "
+                    "or analyzer the project still needs.",
                 )
             )
 
@@ -2185,7 +2307,86 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 18. A treenode partition on disk that no CI list applies.
+    # 18. A helper library with no tests of its own, consumed by a
+    #     project that carries tests. It is a library, not a hole.
+    root = base_fixture(
+        {
+            SOLUTION_FILE: solution(
+                [
+                    "tests/Clean.Tests/Clean.Tests.csproj",
+                    "tests/Helper/Helper.csproj",
+                ]
+            ),
+            "tests/Clean.Tests/Clean.Tests.csproj": CSPROJ_REFERENCES.format(
+                target="Helper"
+            ),
+            "tests/Helper/Helper.csproj": CSPROJ,
+            "tests/Helper/Helper.cs": EMPTY_SOURCE,
+        }
+    )
+    _, found = analyse(root)
+    check(
+        "a helper library with no tests is not a hole",
+        not any(
+            f.rule == "PROJECT-EMPTY" and f.subject == "Helper"
+            for f in found
+        ),
+        shown(found),
+    )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 19. A test project with no tests that NOTHING consumes. Nobody runs
+    #     it and nobody uses it: a project whose tests were never written.
+    root = base_fixture(
+        {
+            SOLUTION_FILE: solution(
+                [
+                    "tests/Clean.Tests/Clean.Tests.csproj",
+                    "tests/Lonely/Lonely.csproj",
+                ]
+            ),
+            "tests/Lonely/Lonely.csproj": CSPROJ,
+            "tests/Lonely/Lonely.cs": EMPTY_SOURCE,
+        }
+    )
+    _, found = analyse(root)
+    check(
+        "a test project with no tests that nothing consumes is a hole",
+        any(
+            f.rule == "PROJECT-EMPTY" and f.subject == "Lonely"
+            for f in found
+        ),
+        shown(found),
+    )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 20. A reference that costs nothing is not a finding. The tree cannot
+    #     tell a deliberate re-export from a pointless edge, and a rule
+    #     that cries wolf on the re-export is a rule nobody believes.
+    root = base_fixture(
+        {
+            SOLUTION_FILE: solution(
+                [
+                    "tests/Clean.Tests/Clean.Tests.csproj",
+                    "tests/Helper/Helper.csproj",
+                ]
+            ),
+            "tests/Clean.Tests/Clean.Tests.csproj": CSPROJ_REFERENCES.format(
+                target="Helper"
+            ),
+            "tests/Helper/Helper.csproj": CSPROJ,
+            "tests/Helper/Helper.cs": EMPTY_SOURCE,
+        }
+    )
+    _, found = analyse(root)
+    check(
+        "a reference that costs nothing is not reported",
+        not any(f.rule == "TEST-REFERENCE-UNUSED" for f in found),
+        shown(found),
+    )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 21. A treenode partition on disk that no CI list applies.
     root = base_fixture(
         {
             SOLUTION_FILE: solution(
@@ -2214,7 +2415,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 18. The same partition, applied by the list that runs it. No
+    # 22. The same partition, applied by the list that runs it. No
     #     finding: the partition is wired.
     root = base_fixture(
         {
@@ -2242,7 +2443,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 19. A BUILD-TIME reference drags no test classes into a test process.
+    # 23. A BUILD-TIME reference drags no test classes into a test process.
     #     An analyzer reference must not create a duplication finding.
     root = base_fixture(
         {
@@ -2277,7 +2478,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 20. The other build-time shape: a reference whose output assembly is
+    # 24. The other build-time shape: a reference whose output assembly is
     #     not referenced at all.
     root = base_fixture(
         {
@@ -2312,7 +2513,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 21. A list that names nothing is blindness, not cleanliness.
+    # 25. A list that names nothing is blindness, not cleanliness.
     root = base_fixture(
         {
             CI_WORKFLOW: ci_workflow(
@@ -2332,7 +2533,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 22. The scan floors.
+    # 26. The scan floors.
     root = base_fixture()
     census, _ = analyse(root)
     shutil.rmtree(root, ignore_errors=True)
@@ -2362,7 +2563,7 @@ def selftest():
         str(census["totals"]),
     )
 
-    # 23. A workflow without the primary list.
+    # 27. A workflow without the primary list.
     root = base_fixture(
         {
             CI_WORKFLOW: "name: ci\njobs:\n  coverage:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n",
@@ -2379,7 +2580,7 @@ def selftest():
     )
     shutil.rmtree(root, ignore_errors=True)
 
-    # 24. The gate must not be able to count itself: this file lives under
+    # 28. The gate must not be able to count itself: this file lives under
     #     tools/, and the scope is tests/, so the two cannot overlap.
     here = os.path.realpath(__file__)
     inside = here.startswith(
