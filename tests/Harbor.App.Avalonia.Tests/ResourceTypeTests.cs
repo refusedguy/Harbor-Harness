@@ -108,11 +108,15 @@ public class ResourceTypeTests
         foreach (var file in axamlFiles)
         {
             var doc = XDocument.Load(file);
+            // The Selector attribute is NOT in the xaml namespace: Avalonia writes
+            // it plain (`<Style Selector=":pointerover">`), so looking it up under
+            // XNamespace matched nothing at all and this guard examined zero
+            // elements. Found by the non-vacuity assertion #1859 added below.
             foreach (var style in doc.Descendants()
                 .Where(e => e.Name.LocalName == "Style"
-                         && e.Attribute(XName.Get("Selector", XNamespace)) is not null))
+                         && e.Attribute(XName.Get("Selector")) is not null))
             {
-                var selector = style.Attribute(XName.Get("Selector", XNamespace))?.Value ?? string.Empty;
+                var selector = style.Attribute(XName.Get("Selector"))?.Value ?? string.Empty;
                 if (selector.Contains(":pointerover"))
                 {
                     candidates++;
