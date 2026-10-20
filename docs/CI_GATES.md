@@ -15,25 +15,32 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `c077befa`, the tree this policy landed on:
+Measured on `dev` at `15b5e44c`, the tree this policy landed on:
 
 | | |
 |---|---|
-| python tools in `tools/` | 21 files, 18 807 lines |
-| of them, the `check-*.py` family | 11 files, 14 788 lines; 10 files and 13 793 lines before this policy added its own checker |
-| workflows that run a python tool | 4: `ci.yml`, `docs.yml`, `demo.yml`, `test-os.yml` |
-| gates that block a build | 15 |
+| python tools in `tools/` | 23 files, 20 057 lines |
+| of them, the `check-*.py` family | 12 files, 15 489 lines |
+| workflows that run a python tool | 5: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml` |
+| gates that block a build | 16 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
-| reporters, helpers, libraries | 3 reporters, 1 helper, 1 library |
-| tools with a self-test | 18 |
-| tools with a ratchet | 8 |
-| tools with a floor | 11 |
+| reporters, helpers, libraries | 4 reporters, 1 helper, 1 library |
+| tools with a self-test | 20 |
+| tools with a ratchet | 9 |
+| tools with a floor | 12 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
 
 The last two rows are the two gaps this policy closed on the way in, and both
 were found by the checker rather than by reading: the checker was run against
 the tree before the table was written, and it named them.
+
+One more gap, found the same way and worth naming: the policy was written
+against a base that had already moved, and the rebased tree carried two
+python tools the first draft of the table did not know about
+(`check-reference-trimmer.py` and `msbuild-evaluation-cost.py`). The checker
+named both on the first run against the new base, which is the whole argument
+for having it.
 
 ## Why the gates are python
 
@@ -186,8 +193,8 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` that CI runs (20 of the 21 python files in the
-directory; the 21st, `md_gate.py`, is imported by two of them and is listed
+Every python tool in `tools/` that CI runs (22 of the 23 python files in the
+directory; the 23rd, `md_gate.py`, is imported by two of them and is listed
 because a tool that is not listed is a tool nobody reviews), with the question
 it answers, where it runs, whether it blocks a build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
@@ -208,9 +215,10 @@ The modes are:
 | `tools/check-abstractions-contract.py` | every dependency the four guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 13 --min-namespaces 7 --min-files 130` |
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 21` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 23` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
+| `tools/check-reference-trimmer.py` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
 | `tools/check-test-dup.py` | a test body is a copy of another test body | docs.yml | selftest, testdup | advisory | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
 | `tools/check-test-json-reflection.py` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
 | `tools/check-test-packages.py` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 40 --min-packages 1400 --min-output-dirs 40` |
@@ -220,16 +228,20 @@ The modes are:
 | `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
+| `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, evaluation-cost.yml | build, measurement | reporter | `--self-test` | — | — |
 | `tools/normalize-mtimes.py` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
 | `tools/pack-validate.py` | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | build, selftest | gate | `--selftest` | — | — |
-| `tools/test-census.py` | the per-test and per-project wall census of a CI run | docs.yml | selftest | reporter | `--self-test` | — | — |
+| `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
-| `tools/test-skips.py` | the tests a run skipped, and the reason each declared | docs.yml, test-os.yml | selftest, test-os | reporter | `--self-test` | — | — |
+| `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 
 Two things the table says that are easy to miss:
 
-- `tools/test-census.py` has a self-test and no job of its own. It is a
-  reporter, and a reporter is not a gate: nothing fails because of it.
+- `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It
+  is a reporter in a workflow of its own, and the policy's "a gate must not
+  measure time" rule applies to gates alone: a measurement that fails a build
+  on a slow runner is a gate that gets switched off, and a measurement that
+  only reports belongs where this one is.
 - `tools/ci-shard-slices.py` and `tools/demo_repro.py` have no self-test.
   They are gates, and they are the two gaps in the "every gate has a
   self-test" rule. Both compare two things that CI itself produced (the
@@ -271,7 +283,7 @@ Run it:
 
 ```bash
 ./tools/check-gate-policy.py --self-test
-./tools/check-gate-policy.py --min-gates 21
+./tools/check-gate-policy.py --min-gates 23
 ```
 
 Its own `--self-test` plants one defect per rule in a synthetic tree and

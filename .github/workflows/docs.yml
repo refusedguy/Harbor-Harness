@@ -820,7 +820,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
-        run: python3 tools/check-gate-policy.py --min-gates 21
+        run: python3 tools/check-gate-policy.py --min-gates 23
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #
