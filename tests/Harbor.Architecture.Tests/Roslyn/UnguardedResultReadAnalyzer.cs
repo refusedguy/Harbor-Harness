@@ -302,7 +302,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 // (3) SHORT CIRCUIT — the right operand of `&&` runs only when
                 // the left one is true; the left operand of `||` runs only when
                 // the left one is false.
-                case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.AndAlsoExpression):
+                case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.LogicalAndExpression):
                     if (current == andAlso.Right)
                     {
                         facts.Merge(ConditionFacts(context, andAlso.Left).WhenTrue);
@@ -310,7 +310,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 
                     break;
 
-                case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.OrElseExpression):
+                case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.LogicalOrExpression):
                     if (current == orElse.Left)
                     {
                         facts.Merge(ConditionFacts(context, orElse.Left).WhenFalse);
@@ -457,7 +457,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // `A && B` is true when BOTH are true: a fact holds when it holds
             // in either operand's true branch. It is false when either is
             // false, so only a fact that holds in BOTH false branches survives.
-            case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.AndAlsoExpression):
+            case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.LogicalAndExpression):
             {
                 ConditionOutcome left = ConditionFacts(context, andAlso.Left);
                 ConditionOutcome right = ConditionFacts(context, andAlso.Right);
@@ -469,7 +469,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // `A || B` is false when BOTH are false: a fact holds when it
             // holds in either operand's false branch. It is true when either
             // is true, so only a fact that holds in BOTH true branches survives.
-            case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.OrElseExpression):
+            case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.LogicalOrExpression):
             {
                 ConditionOutcome left = ConditionFacts(context, orElse.Left);
                 ConditionOutcome right = ConditionFacts(context, orElse.Right);
@@ -686,6 +686,11 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
         while (expression is ParenthesizedExpressionSyntax parenthesized)
         {
             expression = parenthesized.Expression;
+        }
+
+        if (expression is null)
+        {
+            return "<implicit this>";
         }
 
         string text = expression.ToString();
