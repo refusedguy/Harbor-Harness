@@ -157,6 +157,13 @@ on:
       - '.github/workflows/**'
       - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
+      # #1731. `gen-seam-graph.py` generates docs/SEAM_GRAPH.md from the C#
+      # sources, and `--check` fails when the committed document no longer
+      # matches the tree. The gate reads src/ and apps/, so a PR that edits
+      # either has to run it - and a PR that edits the generator or the
+      # document it writes has to run it too.
+      - 'tools/gen-seam-graph.py'
+      - 'docs/SEAM_GRAPH.md'
       # #1888. The gate policy's own checker, and the three tools whose
       # self-test no workflow ran until the policy asked for one. A PR that
       # edits any of them must run the checker, because the checker's
@@ -271,6 +278,10 @@ on:
       - '.github/workflows/**'
       - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
+      # #1731. Same trigger as above: the seam-graph gate reads the C# tree
+      # and compares the result with the committed document.
+      - 'tools/gen-seam-graph.py'
+      - 'docs/SEAM_GRAPH.md'
       # #1888. Same trigger as above: the policy checker, and the three tools
       # whose self-test no workflow ran until the policy asked for one.
       - 'tools/check-gate-policy.py'
@@ -477,6 +488,16 @@ jobs:
       # switch, the unlisted switch, the stale row and the floor.
       - name: String-switch gate fails on an unlisted string switch
         run: python3 tools/check-string-switch.py --self-test
+      # #1731. The seam-graph gate is the only one that GENERATES a document
+      # and then compares it with the committed one. Its failure path is the
+      # whole point: a generator whose output drifts from the tree is a
+      # generator that has stopped reading the tree, and the committed
+      # document is then a hand-maintained document wearing a generated one's
+      # name. The self-test plants a stale file and requires the check to
+      # fail, and separately requires the route grader to tell a registering
+      # route from a refusing one.
+      - name: Seam-graph gate fails on a stale document
+        run: python3 tools/gen-seam-graph.py --self-test
       # #1781. The shard-balance gate is the only one that asks whether the CI
       # TEST SHARDS are laid out by cost. Its failure path is tested here for
       # the same reason as the others: a rule edited until it matches nothing
@@ -1125,6 +1146,40 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check XML-doc coverage of the frozen contract assembly
         run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
+
+  # #1731. Twelfth question, and the only one that asks whether a GENERATED
+  # document still matches the tree it was generated from.
+  #
+  # `tools/gen-seam-graph.py` reads the C# sources and writes
+  # `docs/SEAM_GRAPH.md`: the seam graph — who implements a seam, who extends
+  # what implements it, who consumes it, who is registered in the container,
+  # and where the seam is bypassed. The point of generating it rather than
+  # writing it is that the document cannot drift: this job regenerates the
+  # document and fails if the committed one differs.
+  #
+  # The floors are a ratchet on the SCAN SIZE, like the floors above: a scan
+  # that silently stopped covering the tree would produce a document that
+  # agrees with itself and says nothing. Measured on this tree: the C# files
+  # under src/, apps/, tests/ and samples/, and the interfaces declared under
+  # src/.
+  #
+  # The gate reads the C# tree (and the .csproj files), so it is triggered by
+  # a change to any of them as well as by a change to the generator or to the
+  # document.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a stale document
+  # fails, a freshly generated one passes, and the route grader tells a
+  # registering route from a refusing one), run in the `selftest` job above.
+  seamgraph:
+    name: seam graph
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the committed seam graph matches the tree
+        run: python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191
 
   # #1888. Eleventh question, and the only one about the gates themselves:
   # not "do the links resolve" and not "is the file shaped right" and not

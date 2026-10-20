@@ -17,6 +17,7 @@
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 39 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
+> - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `./tools/gen-seam-graph.py --write` after changing a type under `src/` or `apps/`; the `seam graph` CI job fails when the committed copy is stale.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
 
 ## What Harbor is
@@ -119,7 +120,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 78 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 79 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 46 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
