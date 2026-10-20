@@ -12,11 +12,25 @@ namespace Harbor.Abstractions.Tests;
 ///     reaches hermetic tests, portable installs and OAuth tokens alike.
 /// </summary>
 /// <remarks>
-///     Writes <c>HARBOR_HOME</c> process state, so the class holds the bare
-///     <c>[NotInParallel]</c> gate (issue #823's rule) and restores the value
-///     it read — never a typed one (#847).
+///     Writes <c>HARBOR_HOME</c> process state, so the class declares a
+///     parallelism form (issue #823's rule) and restores the value it read —
+///     never a typed one (#847).
+///     <para>
+///         KEYED, not bare (#1790). The bare form is TUnit's global mutex —
+///         "the test runs completely alone" — so it held this class alone in
+///         the whole assembly for the sake of one environment variable that
+///         nothing else in <c>Harbor.Abstractions.Tests</c> reads:
+///         <c>HarborPaths.GetHarborHome</c> has no caller inside
+///         <c>Harbor.Abstractions</c> besides itself, and this class is the
+///         only writer of <c>HARBOR_HOME</c> in the project. The competitor
+///         set is enumerable — it is the <c>process-env</c> writers, the
+///         spelling the rest of the repository already uses for a class that
+///         writes the process environment — so a named key is the right shape:
+///         a future class here that writes or reads the Harbor home has to
+///         take the same key, and until it does, the two do not overlap.
+///     </para>
 /// </remarks>
-[NotInParallel]
+[NotInParallel("process-env")]
 public class HarborPathsTests
 {
     [Test]

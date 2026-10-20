@@ -774,6 +774,46 @@ message and keep the reason as a comment on the attribute. #720 put the key back
 on `ThemeFileWatcherTests` without a word, and the class sat racing unkeyed
 palette readers until this was noticed.
 
+#### Which form to write: the decision procedure
+
+The table above says what each form *does*. This says which one to *write*.
+
+> **Bare** when the class mutates a process-wide static AND the readers of
+> that static are unkeyed — i.e. when you cannot enumerate the competitors.
+> **A named key** when the competitors are knowable and enumerable: the other
+> process-environment writers, the other PTY holders, the classes that share
+> one headless session.
+
+A named key is a label as much as a lock — a key nobody else holds excludes
+nothing at all. So before writing one, *name the peers*. If the honest answer
+is "every other test in the assembly", the form is the bare one.
+
+The bare form is not a smell and it is not the default. Each class that uses
+it in this repository says why in a comment on the attribute, and the reasons
+are always the same shape: a process-global palette, a process-global counter,
+a process-wide allocation measurement, a wall-clock stopwatch, `Console.Out`.
+Those are exactly the cases where the competitor set is the whole assembly.
+
+#### One key on EVERY class is a sharding problem, not a locking problem
+
+A named key that every class in a project holds serialises the whole project:
+the wall time becomes the SUM of the test durations, and the parallelism
+factor (sum of durations ÷ wall) falls to ≈1. That is *correct* — those
+classes really do share one resource — but it is not the end of the story,
+because the same classes are free to run in **parallel processes**: a process
+has its own statics, its own environment, and its own application instance.
+
+`Harbor.E2E.App.Avalonia` is the worked example. Fifteen classes, one
+`[NotInParallel("e2e-framework")]` key, one headless Avalonia application
+(`Application.Current` is a per-AppDomain singleton — there is no second app
+to build), one `$HOME` and one Harbor home. Re-keying the classes apart would
+not make the suite faster; it would make two of them drive the same window.
+The lever is the process, not the attribute: the two shards are defined in
+[`E2eShards.cs`](../tests/Harbor.E2E.App.Avalonia/E2eShards.cs), guarded by
+`E2eShardsTests` (which fails if a class is left out of both shards), and run
+by CI as two `dotnet exec` invocations of the same assembly with different
+`--treenode-filter` expressions.
+
 ### Running tests
 
 ```bash

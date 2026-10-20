@@ -53,6 +53,17 @@ namespace Harbor.Application.Tests;
 // per unit keeps every unit a miss without a cache that grows `units`
 // entries per leg — where that constant ctor cost lands equally on both
 // legs and cancels in the ratio.
+//
+// The `[NotInParallel]` is the BARE form, and it is load-bearing (#1790). The
+// time leg reads wall-clock elapsed, and elapsed time is not thread-local: a
+// neighbouring test burning cores — or, under the server GC every CI job
+// enables, a collection that pauses this thread mid-window — decides the
+// ratio. Run 38129838108 (PR #1285) is the receipt: the same tree measured
+// time x3.10 against the x3.00 limit while the same run measured alloc x1.99
+// — linear memory with an inflated stopwatch, on a tree that had passed the
+// identical binary forty minutes earlier. A NAMED key would not help: it
+// excludes only same-key peers, and every other class in this assembly still
+// runs alongside. See docs/TEST_PATTERNS.md §Parallelism.
 [NotInParallel]
 public class CachingSystemPromptBuilderKeyScalingTests
 {
