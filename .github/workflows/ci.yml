@@ -165,6 +165,10 @@ jobs:
             # problem.
               - 'tools/check-reference-trimmer.py'
               - 'tools/reference-trimmer-baseline.txt'
+              # The skipped-test report (issue #1795) — same #618 argument:
+              # an edit to the script alone must not skip the job that
+              # executes it.
+              - 'tools/test-skips.py'
             # #1882. The package set of the test and sample projects can only
             # change through one of these: a project's own .csproj, the props
             # that inject a PackageReference into every project, the version
@@ -208,6 +212,31 @@ jobs:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
 
+  # #428 / #1845. The public-API freeze of the two frozen assemblies.
+  #
+  # The freeze itself is a COMPILE-time gate now, not a job:
+  # Microsoft.CodeAnalysis.PublicApiAnalyzers is referenced by
+  # Harbor.Abstractions and Harbor.Abstractions.Contracts and by nothing
+  # else, so RS0016 (a public symbol that is not in the declared API) and
+  # RS0017 (a declared API symbol that is not in the code) fail the build
+  # of the `build` job above. No runner, no python, no second copy of the
+  # surface: the compiler already has the symbol table.
+  #
+  # What the analyzer cannot see is WHICH COMMIT carried a change, so the
+  # re-signing half of the freeze lives here: a commit that edits the
+  # frozen baseline must edit the assembly's sources with it, and a commit
+  # that changes a public declaration must re-sign the baseline with it.
+  # tools/check-public-api-resign.py reads the PR's commit range and says
+  # so. Its --self-test is the non-vacuity proof of the python half, and it
+  # runs in the docs.yml `selftest` job.
+  #
+  # The second step is the non-vacuity proof of the COMPILE-time half, and
+  # it is here because it needs an SDK: a throwaway project with one public
+  # member and an empty baseline must FAIL the build with `error RS0016`,
+  # must PASS once the analyzer's own requested row is added, and must FAIL
+  # again with `error RS0017` when the member is deleted while the baseline
+  # still names it. A gate that stopped firing is indistinguishable from a
+  # surface nobody changed, and this job is what tells the two apart.
   public-api:
     name: public-api freeze
     runs-on: ubuntu-latest
@@ -1440,6 +1469,18 @@ jobs:
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
+          # #1884: the results directory is ABSOLUTE on purpose. Before the
+          # TUnit 1.75 upgrade (b6fcc333) the same relative path
+          # ("TestResults/<shard>") landed at the workspace root, so the
+          # upload below found the files and the TRX artifacts existed.
+          # After it, the runner resolves a relative --results-directory
+          # against the test app's OWN working directory, which is the
+          # assembly's own output folder, and the TRX landed in
+          # tests/<project>/bin/Release/net10.0/TestResults/<shard>/, where
+          # neither the artifact upload (TestResults/**, relative to the
+          # workspace) nor tools/test-measurements.py can see it. Both
+          # reported "no TRX" and the per-test measurements were unreachable.
+          # An absolute path is unambiguous in both layouts.
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
