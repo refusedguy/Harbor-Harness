@@ -46,7 +46,7 @@ The population is the CI runs of the `ci` workflow, 2026-09-26 to 2026-10-20.
 | failed `build` and `test (core)` jobs read | 317 |
 | runs with at least one architecture-guard firing | 43 |
 | distinct firings (one run, one rule, one assertion) | 52 |
-| raw observations before deduplication | 165 |
+| raw observations before deduplication | 219 |
 
 Two things about the shape of this corpus matter for reading the numbers.
 
@@ -54,9 +54,9 @@ Two things about the shape of this corpus matter for reading the numbers.
 runs twice in a failed run: once in the `build` job (the in-build
 `HarborArchitectureGate` target in `Directory.Build.props:563`) and once in the
 `core` shard. The build job prints the suite output three times (the exec
-task, the MSBuild error, the build tool's own report). 165 raw observations
-collapse into 52 firings. Counting the raw ones would have tripled every
-number on this page.
+task, the MSBuild error, the build tool's own report). 219 raw observations
+collapse into 52 firings. Counting the raw ones would have multiplied every
+number on this page by four.
 
 **A green run has no firing, by definition.** Only failed runs were read. A
 guard that fired in a run that later went green still counts: the firing
