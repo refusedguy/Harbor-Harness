@@ -349,7 +349,7 @@ jobs:
       - name: Restore the solution (the resolved package graph, no build)
         run: |
           dotnet restore Harbor.slnx
-          # The one scope project outside Harbor.slnx. Harbor.Samples.slnx is
+          # The scope projects outside Harbor.slnx. Harbor.Samples.slnx is
           # NOT restored as a whole: it also lists the contrib/ sample apps,
           # which need workloads this job does not have.
           dotnet restore samples/designsystem-consumer/Harbor.Samples.DesignSystemConsumer.csproj
