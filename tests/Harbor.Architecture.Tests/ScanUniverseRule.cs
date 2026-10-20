@@ -389,6 +389,13 @@ public sealed class ScanUniverseRule
     ///         src/ and neither is in the inventory. They exist so that a test
     ///         project can reach the shared test helpers without gaining a
     ///         product assembly it did not already have.
+    ///         #1812: +1 (tests=37) — the E2E framework's own tests moved to
+    ///         <c>Harbor.E2E.Framework.Tests</c>, which references
+    ///         Harbor.Abstractions.Contracts and Harbor.Ui.Framework.State, so it
+    ///         is a non-product project that declares a ProjectReference into
+    ///         src/ and, like every other test project here, is not in the
+    ///         inventory: the architecture tests do not reference it, so no
+    ///         reflection rule built on this helper can see it.
     ///     </para>
     ///     <para>
     ///         The vendored SharpConsoleUI renderer moving out of <c>src/</c> moved
@@ -400,7 +407,7 @@ public sealed class ScanUniverseRule
     ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=15", "samples=5", "tests=36", "tools=1"];
+        ["apps=2", "contrib=15", "samples=5", "tests=37", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(
