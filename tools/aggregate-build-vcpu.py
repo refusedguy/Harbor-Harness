@@ -64,6 +64,38 @@ def compile_window(data: dict) -> float | None:
     return wall - gate / 1000.0
 
 
+def cpu_series(data: dict) -> list[float]:
+    """The busy-core series of a run, in CORES.
+
+    The samples are recomputed from the raw series instead of trusting the
+    stored summary, so that a run measured with the earlier (wrong) metric —
+    which stored the fraction of the machine that was busy instead of the
+    number of busy cores — is scaled correctly instead of silently wrong.
+    """
+    ncpu = data.get("ncpu_stat") or data.get("ncpu", 1) or 1
+    samples = data.get("cpu_samples", [])
+    if not samples:
+        return []
+    values = [c for _, c in samples]
+    if max(values) <= 1.5:
+        # legacy format: fraction of the machine, not cores
+        return [v * ncpu for v in values]
+    return values
+
+
+def cpu_stats(data: dict) -> dict:
+    values = cpu_series(data)
+    ncpu = data.get("ncpu_stat") or data.get("ncpu", 1) or 1
+    if not values:
+        return {"avg": 0.0, "peak": 0.0, "at_3_5": 0.0, "below_1_5": 0.0}
+    return {
+        "avg": sum(values) / len(values),
+        "peak": max(values),
+        "at_3_5": sum(1 for v in values if v >= 0.875 * ncpu) / len(values),
+        "below_1_5": sum(1 for v in values if v < 0.375 * ncpu) / len(values),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory")
@@ -111,12 +143,15 @@ def main() -> int:
 
     print(
         f"{'arm':<12} {'n':>2} {'wall (s)':<30} {'avg cores':>10} {'max cores':>10} "
-        f"{'Csc (s)':>9} {'Csc n':>6} {'gate (s)':>9} {'wall ratio':>30} {'window ratio':>30}"
+        f"{'at 3.5+':>10} {'Csc (s)':>9} {'Csc n':>6} {'gate (s)':>9} "
+        f"{'wall ratio':>30} {'window ratio':>30}"
     )
     for arm, data in sorted(arms.items()):
         walls = [d["wall_seconds"] for d in data]
-        avg = [d["cpu"].get("avg_busy_cores", 0) or 0 for d in data]
-        peak = [d["cpu"].get("max_busy_cores", 0) or 0 for d in data]
+        stats = [cpu_stats(d) for d in data]
+        avg = [s["avg"] for s in stats]
+        peak = [s["peak"] for s in stats]
+        at4 = [s["at_3_5"] for s in stats]
         csc_ms = [
             d.get("tasks", {}).get("Csc", {}).get("total_ms", 0) or 0 for d in data
         ]
@@ -136,6 +171,7 @@ def main() -> int:
         print(
             f"{arm:<12} {len(data):>2} {fmt_range(walls):<30} "
             f"{statistics.mean(avg):>10.2f} {statistics.mean(peak):>10.2f} "
+            f"{statistics.mean(at4):>10.2f} "
             f"{statistics.mean(csc_ms) / 1000:>9.1f} {statistics.mean(csc_n):>6.1f} "
             f"{statistics.mean(gate_ms) / 1000:>9.1f} "
             f"{(fmt_range(ratios) if ratios else 'n/a'):>30} "

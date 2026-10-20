@@ -45,6 +45,12 @@ on:
         default: ""
   push:
     branches: [ci/1929-vcpu-falsification]
+    # Only the harness itself re-runs the matrix. A docs-only commit must
+    # not spend 14 build slots.
+    paths:
+      - '.github/workflows/meas-build-vcpu.yml'
+      - 'tools/measure-build-cpu.py'
+      - 'tools/aggregate-build-vcpu.py'
 
 permissions:
   contents: read
@@ -184,13 +190,44 @@ jobs:
           echo "build_exit=$rc" >> "restore-$LABEL.txt"
           exit $rc
 
+      # WHAT THE RUNNER IS, and WHAT THE METER READS. The busy-core number
+      # is derived from the jiffy deltas of /proc/stat, so the divisor has to
+      # be the number of CPUs /proc/stat accounts for — which is not
+      # necessarily the number the job can run on.
+      - name: Runner diagnostics
+        if: always()
+        run: |
+          {
+            echo "nproc=$(nproc)"
+            echo "procstat_cpu_lines=$(grep -c '^cpu' /proc/stat)"
+            echo "affinity=$(taskset -pc $$ 2>/dev/null | tail -1)"
+            echo "cgroup_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo n/a)"
+            echo "cgroup_cpu_quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null || echo n/a)"
+            echo "cgroup_cpu_period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null || echo n/a)"
+          } | tee runner-diag.txt
+
+      # The calibration of the meter, end to end: a known 4-way load must
+      # read as four busy cores and a known 1-way load as one. One job is
+      # enough — it is the same runner image as every other job.
+      - name: CPU-meter calibration (known 1-way and 4-way loads)
+        if: always() && matrix.label == 'a-ci-exact'
+        run: |
+          for n in 1 4; do
+            for i in $(seq 1 "$n"); do
+              ( end=$((SECONDS + 20)); while [ $SECONDS -lt $end ]; do :; done ) &
+            done
+            python3 tools/measure-build-cpu.py --label "calib-$n-way" \
+              --out-dir calib -- bash -c "sleep 20"
+            wait
+          done
+
       - name: Report
         if: always()
         env:
           LABEL: ${{ matrix.label }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, glob
           label = os.environ["LABEL"]
           path = f"meas/{label}.json"
           restore = ""
@@ -207,18 +244,24 @@ jobs:
           csc = tasks.get("Csc", {})
           gate = tasks.get("Exec", {})
           print(f"{label}: wall={d['wall_seconds']}s exit={d['exit_code']} "
+                f"ncpu={d.get('ncpu')} ncpu_stat={d.get('ncpu_stat')} "
                 f"avg_cores={cpu.get('avg_busy_cores')} max_cores={cpu.get('max_busy_cores')} "
                 f"at_3_5_cores={cpu.get('fraction_at_or_above_3_5_cores')} "
                 f"csc={csc.get('calls')}calls/{csc.get('total_ms')}ms "
                 f"gate={gate.get('total_ms')}ms "
                 f"max_projects_in_flight={pf.get('max_in_flight')} "
                 f"frac_ge4_in_flight={pf.get('fraction_at_or_above_4')} {restore}")
+          print(f"{label}: process CPU seconds: {d.get('process_cpu_seconds')}")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write(f"| {label} | {d['wall_seconds']} | {cpu.get('avg_busy_cores')} "
                        f"| {cpu.get('max_busy_cores')} | {csc.get('total_ms')} "
                        f"| {csc.get('calls')} | {gate.get('total_ms')} "
                        f"| {pf.get('max_in_flight')} "
                        f"| {pf.get('fraction_at_or_above_4')} |\n")
+          for calib in sorted(glob.glob("calib/calib-*.json")):
+              c = json.load(open(calib))
+              print(f"  CALIBRATION {c['label']}: avg_cores="
+                    f"{c['cpu'].get('avg_busy_cores')} ncpu_stat={c.get('ncpu_stat')}")
           PY
 
       - name: Upload measurement
@@ -230,6 +273,8 @@ jobs:
             meas/${{ matrix.label }}.json
             meas/${{ matrix.label }}.log
             restore-${{ matrix.label }}.txt
+            runner-diag.txt
+            calib/calib-*.json
             tests/Harbor.Architecture.Tests/obj/Release/net10.0/harbor-arch-gate.log
           retention-days: 30
           if-no-files-found: warn

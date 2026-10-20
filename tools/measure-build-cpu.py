@@ -107,13 +107,69 @@ def cpu_model() -> str:
     return "unknown"
 
 
+def stat_cpu_count() -> int:
+    """How many CPUs /proc/stat accounts for.
+
+    This is NOT necessarily os.cpu_count(): a sandbox can expose four
+    schedulable CPUs while /proc/stat only carries the CPUs of the cgroup
+    the job runs in. The number of busy CORES is derived from the jiffy
+    deltas of /proc/stat, so the divisor has to be the one /proc/stat uses —
+    otherwise "the machine is 99 % busy" and "one core is busy" look
+    identical, which is the whole question this script exists to answer.
+    """
+    try:
+        with open("/proc/stat", "r", encoding="ascii") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return 0
+    count = sum(1 for line in lines if line.startswith("cpu") and not line.startswith("cpu "))
+    return count
+
+
+def read_process_cpu() -> dict[str, int]:
+    """Total CPU jiffies per process name (comm).
+
+    The machine-level number says HOW MUCH of the CPU was used; this says
+    WHO used it — the compiler server, the MSBuild nodes, the architecture
+    test process. Without it, "the build used three cores" cannot be told
+    apart from "the build used one core and something else used two".
+    """
+    totals: dict[str, int] = {}
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return totals
+    for entry in entries:
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat", "r", encoding="utf-8", errors="replace") as fh:
+                data = fh.read()
+            # comm is parenthesised and may contain spaces, so the fields
+            # after it start at the last ')'.
+            open_paren = data.find("(")
+            close_paren = data.rfind(")")
+            if open_paren < 0 or close_paren < open_paren:
+                continue
+            comm = data[open_paren + 1 : close_paren]
+            fields = data[close_paren + 2 :].split()
+            # fields[0] is state; utime is field 14 and stime field 15 of the
+            # whole stat line, i.e. index 11 and 12 after the state.
+            totals[comm] = totals.get(comm, 0) + int(fields[11]) + int(fields[12])
+        except (OSError, ValueError, IndexError):
+            continue
+    return totals
+
+
 class CpuSampler(threading.Thread):
     """Samples /proc/stat on a fixed interval and keeps the whole series."""
 
-    def __init__(self, interval: float) -> None:
+    def __init__(self, interval: float, ncpu: int) -> None:
         super().__init__(daemon=True)
         self.interval = interval
+        self.ncpu = max(1, ncpu)
         self.samples: list[tuple[float, float]] = []  # (elapsed_s, busy_cores)
+        self.process_samples: list[dict[str, float]] = []
         # NOTE: the attribute names below are deliberately NOT `_stop`/`_start`:
         # threading.Thread owns private methods with those names, and shadowing
         # them breaks Thread.join() with "TypeError: 'Event' object is not
@@ -121,22 +177,53 @@ class CpuSampler(threading.Thread):
         self._stop_event = threading.Event()
         self._started_at = 0.0
         self._prev_total, self._prev_busy = read_cpu_times()
+        self._prev_process = read_process_cpu()
 
     def run(self) -> None:
         self._started_at = time.monotonic()
         previous_time = self._started_at
+        previous_process = self._prev_process
         while not self._stop_event.wait(self.interval):
             now = time.monotonic()
             total, busy = read_cpu_times()
             delta_total = total - self._prev_total
             delta_busy = busy - self._prev_busy
-            cores = (delta_busy / delta_total) if delta_total > 0 else 0.0
+            elapsed = now - previous_time
+            # delta_total counts jiffies on EVERY cpu /proc/stat knows about,
+            # so delta_busy/delta_total is the FRACTION of the machine that is
+            # busy. The number of busy CORES is that fraction times the number
+            # of cpus /proc/stat accounts for — the difference between "the
+            # machine is 99 % busy" (4 of 4 cores) and "one core is busy"
+            # (25 % of a 4-cpu box), which is the whole question.
+            cores = (
+                (delta_busy / delta_total) * self.ncpu if delta_total > 0 else 0.0
+            )
             self.samples.append((now - self._started_at, round(cores, 3)))
+
+            current_process = read_process_cpu()
+            breakdown: dict[str, float] = {}
+            for name, jiffies in current_process.items():
+                delta = jiffies - previous_process.get(name, jiffies)
+                if delta > 0:
+                    breakdown[name] = round(delta / 100.0, 2)  # jiffies -> seconds
+            self.process_samples.append(
+                {"t": round(now - self._started_at, 3), "cpu_seconds": breakdown}
+            )
             self._prev_total, self._prev_busy = total, busy
+            previous_process = current_process
             previous_time = now
 
     def stop_sampling(self) -> None:
         self._stop_event.set()
+
+
+def process_cpu_totals(samples: list[dict]) -> dict[str, float]:
+    """Sum the per-process CPU seconds over the whole run."""
+    totals: dict[str, float] = {}
+    for sample in samples:
+        for name, seconds in sample.get("cpu_seconds", {}).items():
+            totals[name] = totals.get(name, 0.0) + seconds
+    return {k: round(v, 1) for k, v in sorted(totals.items(), key=lambda kv: -kv[1])}
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -297,7 +384,8 @@ def main() -> int:
     json_path = os.path.join(args.out_dir, f"{args.label}.json")
 
     ncpu = os.cpu_count() or 0
-    sampler = CpuSampler(args.interval)
+    ncpu_stat = stat_cpu_count() or ncpu
+    sampler = CpuSampler(args.interval, ncpu_stat)
     sampler.start()
 
     started = time.monotonic()
@@ -327,9 +415,11 @@ def main() -> int:
         "exit_code": exit_code,
         "wall_seconds": round(wall, 3),
         "ncpu": ncpu,
+        "ncpu_stat": ncpu_stat,
         "cpu_model": cpu_model(),
-        "cpu": summarize_cpu(sampler.samples, ncpu),
+        "cpu": summarize_cpu(sampler.samples, ncpu_stat),
         "cpu_samples": [[round(t, 3), c] for t, c in sampler.samples],
+        "process_cpu_seconds": process_cpu_totals(sampler.process_samples),
     }
 
     # The measurement above is the point of the run: write it BEFORE the
