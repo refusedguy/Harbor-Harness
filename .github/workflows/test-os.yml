@@ -1,0 +1,401 @@
+# The OS matrix — windows-latest + macos-latest — for the portable core suites
+# (TUI headless + IPC + storage included).
+#
+# WHY THIS IS ITS OWN WORKFLOW (issue #1787)
+# -------------------------------------------
+# It used to be the `test-os` job inside `ci.yml`, where it cost 19.4
+# runner-minutes on EVERY pull request — 13.3 of them rebuilding the whole
+# solution (measured on run 39368167225, dev, 2026-10-20: the build step was
+# 420 s on windows-latest and 380 s on macos-latest, while the ten suites it
+# then ran took 93 s and 103 s). Two things were wrong with that:
+#
+#   1. It was EXPENSIVE. The shard's own build was 3-4x the work the shard
+#      existed to do, and it paid that price on every PR of every branch.
+#   2. It was in the WRONG PLACE. We work on Linux; a permanently-green
+#      macOS/Windows build for ordinary work is not what the owner wants.
+#      What the owner wants is a RELEASE GUARANTEE: «релиз — это влитие в
+#      мастер и гарантия, что везде это работает». So the OS signal is
+#      produced where a release happens, not on every keystroke.
+#
+# The split is structural, not cosmetic: GitHub triggers are WORKFLOW-level,
+# so a job cannot be moved off `pull_request` from inside `ci.yml` — the
+# `on:` block is shared by every job in the file. Moving the shard into its
+# own workflow is what makes the trigger changeable at all.
+#
+# THE TRIGGERS, AND WHAT EACH ONE MEANS
+# ---------------------------------------
+#   push: [dev, master]      — a merge landed. This is where the expensive
+#                               work is allowed to happen (the demo-gifs
+#                               workflow's analog: the recording runs on push,
+#                               not on every PR).
+#   pull_request: [master]    — the RELEASE GATE. The PR that merges into
+#                               master gets the OS signal BEFORE the merge,
+#                               which is exactly «релиз = гарантия, что везде
+#                               работает». PRs into dev get no OS run: that is
+#                               the deliberate cost saving, and it is the
+#                               owner's call, not an accident.
+#   schedule: "17 */2 * * *"  — a 2-hourly safety net for a dev that did not
+#                               move. It DEDUPES against merges (see the
+#                               `gate` job): a scheduled run is skipped when
+#                               dev's newest commit is younger than an hour,
+#                               because the push-run that merge triggered
+#                               already covered that commit.
+#   workflow_dispatch        — the owner's release flow: dispatch it, and
+#                               dispatch an agent to fix whatever it finds.
+#
+# NOTE on running tests: do NOT use `dotnet test` in this repo. The
+# `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
+# (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
+# for every tests/*.Tests project) while the same assemblies run green via
+# direct host execution. So every job below runs test projects as plain
+# executables: `dotnet exec tests/<Name>/bin/Release/net10.0/<Name>.dll`.
+# MTP args forward after `--`: --minimum-expected-tests N (zero-test guard),
+# --treenode-filter (TUnit selection), --output Detailed (per-test console).
+#
+# On test measurements (issue #618): neither the console log nor `--output
+# Detailed` is where a test's `Console.WriteLine` belongs — the log prints
+# per-assembly counts and nothing per-test, and Detailed would bury the one
+# `failed <TestName>` line under a line per green test. Instead the test job
+# keeps `--report-trx` (TUnit already files each test's stdout under that
+# test) and hands the TRX to `tools/test-measurements.py`, which renders a
+# `Class.Method -> measurement` table into the job summary. Read-only, never a
+# gate: the script exits 0 on a missing or corrupt TRX set.
+name: test-os
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [master]
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: test-os-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+  DOTNET_gcServer: 1
+
+jobs:
+  # Change detection, equivalent to the `changes` job in `ci.yml`.
+  #
+  # REPLICATED, not referenced (the orchestrator's question, answered): the
+  # filter below is the SAME `dotnet` filter `ci.yml` uses — same action, same
+  # path list — plus this workflow's own file. The reason it is replicated
+  # rather than shared is that a workflow cannot consume another workflow's
+  # job outputs; the only ways to share would be a reusable workflow
+  # (`workflow_call`) or a duplicated filter, and the duplicated filter is the
+  # smaller change. The consequence to watch: the two lists can drift, so the
+  # rule this file follows is "a path that can change what the OS shard
+  # compiles or runs must be in BOTH filters" — the dotnet surface
+  # (src/tests/apps/contrib/Directory.*/Harbor.slnx/global.json) plus every
+  # instrument the shard executes.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+    steps:
+      # No `submodules: recursive` here (ci.yml's `changes` job has it): a
+      # paths filter reads the repository's own paths, the vendored submodule
+      # is not in the filter, and cloning it would cost a checkout on every
+      # run of a job whose only job is to answer a yes/no question.
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dotnet:
+              - 'src/**'
+              - 'tests/**'
+              - 'apps/**'
+              - 'contrib/**'
+              - 'Directory.*'
+              - 'Harbor.slnx'
+              - 'global.json'
+              - '.github/workflows/ci.yml'
+              # This file IS the gate: an edit to it must run the job that
+              # executes it, or it lands unvalidated (issue #618's argument).
+              - '.github/workflows/test-os.yml'
+              # Runs INSIDE the test job below. Without this line an edit to
+              # the script alone would set dotnet=false, skip the very job
+              # that executes it, and land unvalidated (issue #618).
+              - 'tools/test-measurements.py'
+              # NUKE build code, the installer and the native-packaging
+              # scripts. Same #618 argument: without these lines an edit to
+              # the build tool would set dotnet=false and land unvalidated.
+              - 'build/**'
+              - 'dist/**'
+              - 'packaging/**'
+              # Harbor.Evals is a real csproj inside Harbor.slnx — the `build`
+              # job compiles it like everything else. It lives under tools/,
+              # so without this line a code change to the evals runner would
+              # set dotnet=false and land unvalidated (issue #618).
+              - 'tools/Harbor.Evals/**'
+
+  # ── the dedupe gate ──────────────────────────────────────────────────────
+  # The owner's rule: «не надо запускать дубликаты билдов/тестов в деве, если
+  # было влитие в течение часа» — do not run duplicate builds/tests in dev if
+  # there was a merge within the hour.
+  #
+  # So a SCHEDULED run is skipped when dev's newest commit is younger than 60
+  # minutes: the push-run that the merge triggered already covered exactly
+  # that commit, and running it again is the duplicate the rule forbids.
+  #
+  # FAIL-OPEN by construction, and that is the point: `proceed` starts true
+  # and is only ever set to false when the age is KNOWN to be inside the
+  # window. If the checkout or the git command fails, the gate proceeds and
+  # says so in the log — a gate that looks present and silently skips work is
+  # the failure mode this repo keeps paying for (the #901 "Found 0" shape).
+  # For push and pull_request events the gate ALWAYS proceeds: only the
+  # schedule can be a duplicate.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Check out dev (the branch the work happens on)
+        if: github.event_name == 'schedule'
+        uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 1
+
+      - name: Decide whether this run duplicates a push-run
+        id: decide
+        shell: bash
+        run: |
+          set -uo pipefail
+          proceed=true
+          reason="event '${{ github.event_name }}' is not a scheduled run — the dedupe does not apply"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            now=$(date +%s)
+            head_ts=$(git log -1 --format=%ct 2>/dev/null || true)
+            if ! printf '%s' "${head_ts:-}" | grep -Eq '^[0-9]+$'; then
+              reason="could not determine dev's newest commit age — proceeding (fail-open)"
+              echo "::warning::$reason"
+            else
+              age=$((now - head_ts))
+              if [ "$age" -lt 3600 ]; then
+                proceed=false
+                reason="dev's newest commit is ${age}s old (< 3600s) — a merge landed within the hour and the push-run already covered it"
+              else
+                reason="dev's newest commit is ${age}s old (>= 3600s) — no merge in the last hour, the safety net is due"
+              fi
+              echo "$reason"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+  # ── the OS matrix ────────────────────────────────────────────────────────
+  # Portable suites only — the bash tool, PTY and SpectreTUI suites are
+  # Linux-bound; the heavy Avalonia E2E stays on ubuntu.
+  test-os:
+    needs: [changes, gate]
+    # The dedupe gate first, then the change filter. The schedule path
+    # deliberately IGNORES the change filter: the safety net exists to cover
+    # a dev that did not move, and a filter that compares "the last commit"
+    # would skip the run exactly when the last commit was docs-only — the
+    # one case where the net is most wanted. workflow_dispatch is the owner's
+    # manual lever and always runs.
+    if: >-
+      needs.gate.outputs.proceed == 'true' &&
+      (needs.changes.outputs.dotnet == 'true' ||
+       github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        # ONE declaration of the suites this shard runs, read by BOTH steps
+        # below: the build step compiles exactly these projects (and their
+        # transitive dependency closure), the test step runs exactly these
+        # projects. Before #1787 the list lived only in the test step, so the
+        # build step had no way to know what it actually needed and compiled
+        # the entire solution instead. A project added here is now built AND
+        # run; there is no second list to keep in sync.
+        #
+        # The list is the OS-SENSITIVE half of what the ubuntu shards already
+        # run. What was dropped (issue #1787, the owner's decision) is the
+        # four suites whose behaviour does not vary by OS —
+        # Harbor.Abstractions.Tests, Harbor.Config.Tests, Harbor.Domain.Tests
+        # and Harbor.Application.Tests — which the ubuntu `core` shard runs on
+        # every PR anyway. What stays is the part that can only be wrong on
+        # another operating system:
+        #   Harbor.Storage.Tests       — SQLite on NTFS
+        #   Harbor.Storage.Jsonl.Tests — file semantics of the JSONL store
+        #   Harbor.Tui.Tests           — terminal rendering
+        #   Harbor.Tui.CellForge.Tests — the fullscreen cell renderer
+        #   Harbor.Ipc.Tests           — named pipes on Windows
+        #   Harbor.Core.Tests          — the agent core's host-dependent paths
+        include:
+          - projects: >-
+              Harbor.Core.Tests
+              Harbor.Storage.Tests
+              Harbor.Storage.Jsonl.Tests
+              Harbor.Tui.Tests
+              Harbor.Tui.CellForge.Tests
+              Harbor.Ipc.Tests
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          # The NuGet package set is determined by MORE than the root pins.
+          # `Directory.Packages.props` is the root's Central Package
+          # Management file, but `Directory.Build.props` also feeds the
+          # restore (it carries the CPM switches and the feature-flag
+          # defaults that decide which ProjectReferences — and therefore
+          # which packages — are in the graph). Hashing both makes the cache
+          # key follow the package graph instead of following one file that
+          # only describes part of it. setup-dotnet turns this into
+          # `dotnet-cache-<os>-<hash>` with a `dotnet-cache-<os>-` fallback,
+          # so a bump of either file re-keys the cache and the fallback keeps
+          # the previous blob usable while the new one is filled.
+          cache-dependency-path: |
+            Directory.Packages.props
+            Directory.Build.props
+
+      # Documentation stays OFF here on purpose (#701): doc diagnostics are
+      # platform-independent, so the doc gate has exactly one home — the
+      # ubuntu `build` job, which builds the same Harbor.slnx. Re-enabling the
+      # doc file on the matrix would double the cost of a signal that cannot
+      # differ by OS. This job exists for OS coverage, not for warnings.
+      #
+      # #1787 — the build is NARROW: the six suites this shard runs and their
+      # transitive dependency closure (58 of the 104 projects the full
+      # solution build compiles — the ubuntu `build` job still compiles all
+      # 104 on every PR). MSBuild resolves the closure itself, so the list
+      # below is the whole input.
+      #
+      # Why a generated solution file rather than six `dotnet build` calls:
+      # one MSBuild invocation evaluates the graph once, restores it once and
+      # compiles it in parallel; six calls would pay the start-up and
+      # project-evaluation cost six times over, which is exactly the kind of
+      # overhead this change exists to remove. The file is generated in the
+      # workspace and never committed.
+      #
+      # Why NOT the linux artifact the `build` job uploads (the `test` and
+      # `coverage` jobs download it): the MANAGED assemblies are portable —
+      # they are plain net10.0 IL — but the NATIVE assets beside them are
+      # not. A linux build drops runtimes/linux-x64/native/* into the output
+      # (SQLitePCLRaw's e_sqlite3 among them); windows-latest needs
+      # e_sqlite3.dll and macos-latest needs libe_sqlite3.dylib, and
+      # Harbor.Storage.Tests exercises SQLite on exactly those filesystems.
+      # Reusing the linux output would silently test the wrong native
+      # library, so this job still builds natively on its own runner — it
+      # just no longer builds projects it does not run.
+      #
+      # What is NOT lost by the narrowing: the ubuntu `build` job still
+      # compiles the WHOLE solution on every PR (zero-warning gate +
+      # HarborArchGate), and no project in this repository declares an
+      # OS-conditional compilation symbol — `WINDOWS`, `OSX` and `UNIX` appear
+      # in no csproj/props/targets — so the excluded projects compile
+      # identically on all three runners. What IS lost: an OS-side COMPILE of
+      # the 46 projects this shard never runs. That is a compile-only signal,
+      # not a behavioural one, and it is already covered on ubuntu.
+      #
+      # ONE concrete consequence, stated rather than glossed: the
+      # HarborArchitectureGate target in Directory.Build.props fires
+      # AfterTargets="Build" of Harbor.Architecture.Tests, so compiling the
+      # whole solution used to run that gate on windows and macOS too. It no
+      # longer does here — the gate is a static, source-scanning gate whose
+      # rules normalise path separators (`Path.DirectorySeparatorChar`,
+      # `Replace('\\', '/')`), and the copy that GATES the PR is the ubuntu
+      # one, which still runs twice there (as the build-time gate and again
+      # as the `core` shard's test suite).
+      - name: Build OS-shard projects on ${{ matrix.os }} (local, no Linux artifact)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2086
+          set -- ${{ matrix.projects }}
+          if [ "$#" -eq 0 ]; then
+            echo "::error::The OS-shard project list is empty — refusing to build an empty solution."
+            exit 1
+          fi
+          {
+            echo '<Solution>'
+            for p in "$@"; do
+              echo "  <Project Path=\"tests/$p/$p.csproj\"/>"
+            done
+            echo '</Solution>'
+          } > ci-os-shard.slnx
+          echo "Building $# OS-shard projects and their dependency closure:"
+          cat ci-os-shard.slnx
+          dotnet build ci-os-shard.slnx -c Release \
+            -p:ContinuousIntegrationBuild=true \
+            -p:GenerateDocumentationFile=false
+
+      - name: Test critical suites on ${{ matrix.os }}
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          # Same list the build step above compiled (matrix.projects) — one
+          # declaration, so the two cannot drift apart (#1787).
+          $projects = @("${{ matrix.projects }}" -split '\s+' | Where-Object { $_ -ne '' })
+          if ($projects.Count -eq 0) {
+            Write-Host "::error::The OS-shard project list resolved to zero entries - refusing to report green."
+            exit 1
+          }
+          $failed = @()
+          # --report-trx (issue #618): this job produced no TRX at all, so a
+          # measurement a test printed was unrecoverable here. TRX is written to
+          # the runner's disk and consumed by the next step — nothing is
+          # uploaded, so this adds no artifact and no retention cost.
+          $trxDir = "TestResults/${{ matrix.os }}"
+          New-Item -ItemType Directory -Force -Path $trxDir | Out-Null
+          foreach ($p in $projects) {
+            Write-Host "::group::dotnet exec $p"
+            $dll = "tests/$p/bin/Release/net10.0/$p.dll"
+            dotnet exec $dll --minimum-expected-tests 1 --report-trx `
+              --results-directory $trxDir --report-trx-filename "$p.trx"
+            if ($LASTEXITCODE -ne 0) { $failed += $p }
+            Write-Host "::endgroup::"
+          }
+          if ($failed.Count -gt 0) {
+            Write-Host "Failed on ${{ matrix.os }}: $($failed -join ', ')"
+            exit 1
+          }
+
+      # Same rationale as the `test` job in ci.yml — see the long comment
+      # there. Worth the extra plumbing here because these are the
+      # platform-sensitive measurements (bytes per agent turn, event-bus
+      # publish allocations): the question a reader otherwise has to ask by
+      # hand is precisely "does this number differ on windows/macOS?", and
+      # this shard is the only place that can be answered. `if: always()` so a
+      # failing OS still reports.
+      # `shell: bash` — the windows-latest default shell is pwsh, where the
+      # trailing `\` in the command below is a ParserError, not a continuation.
+      - name: Report test measurements (issue #618)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-measurements.py "TestResults/${{ matrix.os }}" \
+            --summary "$GITHUB_STEP_SUMMARY"

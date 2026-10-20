@@ -8,8 +8,6 @@
 #              SEQUENTIALLY inside each shard (cross-module parallelism
 #              amplifies the known Avalonia-headless and perf-ceiling flakes
 #              that reproduce under a solution-wide `dotnet test`).
-#   test-os  — windows-latest + macOS-latest matrix for the portable core
-#              suites (TUI headless + IPC included).
 #   coverage — report-only coverage collection (issue #99): core + platform
 #              suites under the MTP CodeCoverage extension, per-project line
 #              rates in the job summary + raw cobertura.xml artifacts.
@@ -23,6 +21,15 @@
 #              See docs/AOT_PUBLISH.md.
 #   publish  — self-contained single-file Harbor.App.Cli (linux-x64) upload.
 #
+# The windows/macOS matrix that used to live here as the `test-os` job is now
+# its own workflow, `.github/workflows/test-os.yml` (issue #1787). GitHub
+# triggers are workflow-level, so a job cannot be moved off `pull_request`
+# from inside this file — and the owner's intent is that the OS signal is a
+# RELEASE guarantee («релиз — это влитие в мастер и гарантия, что везде это
+# работает»), produced on merges into dev/master, on the PR that merges into
+# master, on a 2-hourly deduplicated schedule, and on demand — not on every
+# pull request into dev.
+#
 # NOTE on running tests: do NOT use `dotnet test` in this repo. The
 # `dotnet test` → Microsoft.Testing.Platform bridge discovers ZERO tests
 # (MTP host exits 5 with one silent discovery error; verified on SDK 10.0.302
@@ -35,11 +42,12 @@
 # On test measurements (issue #618): neither the console log nor `--output
 # Detailed` is where a test's `Console.WriteLine` belongs — the log prints
 # per-assembly counts and nothing per-test, and Detailed would bury the one
-# `failed <TestName>` line under a line per green test. Instead both test jobs
-# keep `--report-trx` (TUnit already files each test's stdout under that test)
-# and hand the TRX to `tools/test-measurements.py`, which renders a
+# `failed <TestName>` line under a line per green test. Instead the test job
+# keeps `--report-trx` (TUnit already files each test's stdout under that test)
+# and hands the TRX to `tools/test-measurements.py`, which renders a
 # `Class.Method -> measurement` table into the job summary. Read-only, never a
-# gate: the script exits 0 on a missing or corrupt TRX set.
+# gate: the script exits 0 on a missing or corrupt TRX set. The OS matrix in
+# `test-os.yml` does the same for the platform-sensitive numbers.
 name: ci
 
 on:
@@ -91,7 +99,12 @@ jobs:
               - 'Harbor.slnx'
               - 'global.json'
               - '.github/workflows/ci.yml'
-              # Runs INSIDE the test/test-os jobs below. Without this line an
+              # The OS matrix is its own workflow since #1787
+              # (.github/workflows/test-os.yml). Same #618 argument as the
+              # line above, one file over: editing the workflow that runs the
+              # OS suites must set dotnet=true, or the edit lands unvalidated.
+              - '.github/workflows/test-os.yml'
+              # Runs INSIDE the test job below. Without this line an
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
@@ -436,8 +449,9 @@ jobs:
             # 36849021180, so none is near the zero the flag exists to catch.
             # Without it a suite that discovered nothing exits 0 and this shard
             # reports green — and e2e is the ONLY home of those 479 tests:
-            # neither test-os's 9-project list nor coverage's 19 contains any of
-            # them, and fail-on-empty: false never notices an empty TRX.
+            # neither the OS matrix's 6-project list (test-os.yml) nor
+            # coverage's 19 contains any of them, and fail-on-empty: false
+            # never notices an empty TRX.
             guard: true
             projects: >-
               Harbor.E2E.Cli
@@ -531,9 +545,9 @@ jobs:
       # shard, which skips every following step without it — i.e. exactly when
       # the measurement is most wanted. Reporting only, never a gate: the
       # script exits 0 on a missing or corrupt TRX set.
-      # `shell: bash` is explicit because test-os reuses this step on
-      # windows-latest, where the default shell is pwsh and a trailing `\` is
-      # a ParserError, not a line continuation.
+      # `shell: bash` is explicit because the OS matrix (test-os.yml) reuses
+      # this step on windows-latest, where the default shell is pwsh and a
+      # trailing `\` is a ParserError, not a line continuation.
       - name: Report test measurements (issue #618)
         if: always()
         shell: bash
@@ -722,92 +736,6 @@ jobs:
           path: "Coverage/*.cobertura.xml"
           if-no-files-found: warn
           retention-days: 30
-
-  # Task: matrix builds. Portable suites only — the bash tool, PTY and
-  # SpectreTUI suites are Linux-bound; the heavy Avalonia E2E stays on ubuntu.
-  test-os:
-    needs: [changes, build]
-    # Dependabot action-bump PRs cannot break OS-specific behavior — the
-    # slowest matrix is skipped, linux shards still verify correctness.
-    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
-
-      # Documentation stays OFF here on purpose (#701): doc diagnostics are
-      # platform-independent, so the doc gate has exactly one home — the
-      # ubuntu `build` job, which builds the same Harbor.slnx. Re-enabling the
-      # doc file on the matrix would double the cost of a signal that cannot
-      # differ by OS. This job exists for OS coverage, not for warnings.
-      - name: Build for ${{ matrix.os }} (local, no Linux artifact)
-        run: dotnet build Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true -p:GenerateDocumentationFile=false
-
-      - name: Test critical suites on ${{ matrix.os }}
-        timeout-minutes: 15
-        shell: pwsh
-        run: |
-          $projects = @(
-            'Harbor.Abstractions.Tests',
-            'Harbor.Config.Tests',
-            'Harbor.Domain.Tests',
-            'Harbor.Application.Tests',
-            'Harbor.Core.Tests',
-            'Harbor.Storage.Tests',
-            'Harbor.Storage.Jsonl.Tests',
-            'Harbor.Tui.Tests',
-            'Harbor.Tui.CellForge.Tests',
-            'Harbor.Ipc.Tests'
-          )
-          $failed = @()
-          # --report-trx (issue #618): this job produced no TRX at all, so a
-          # measurement a test printed was unrecoverable here. TRX is written to
-          # the runner's disk and consumed by the next step — nothing is
-          # uploaded, so this adds no artifact and no retention cost.
-          $trxDir = "TestResults/${{ matrix.os }}"
-          New-Item -ItemType Directory -Force -Path $trxDir | Out-Null
-          foreach ($p in $projects) {
-            Write-Host "::group::dotnet exec $p"
-            $dll = "tests/$p/bin/Release/net10.0/$p.dll"
-            dotnet exec $dll --minimum-expected-tests 1 --report-trx `
-              --results-directory $trxDir --report-trx-filename "$p.trx"
-            if ($LASTEXITCODE -ne 0) { $failed += $p }
-            Write-Host "::endgroup::"
-          }
-          if ($failed.Count -gt 0) {
-            Write-Host "Failed on ${{ matrix.os }}: $($failed -join ', ')"
-            exit 1
-          }
-
-      # Same rationale as the `test` job — see the long comment there. Worth
-      # the extra plumbing here because these are the platform-sensitive
-      # measurements (bytes per agent turn, event-bus publish allocations): the
-      # question a reader otherwise has to ask by hand is precisely "does this
-      # number differ on windows/macOS?", and `test-os` is the only place that
-      # can be answered. `if: always()` so a failing OS still reports.
-      # `shell: bash` — the windows-latest default shell is pwsh, where the
-      # trailing `\` in the command below is a ParserError, not a continuation.
-      - name: Report test measurements (issue #618)
-        if: always()
-        shell: bash
-        run: |
-          python3 tools/test-measurements.py "TestResults/${{ matrix.os }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
 
   # Task: artifact publishing — self-contained single-file CLI.
   # ── aot-publish (issue #413) ───────────────────────────────────────────────
