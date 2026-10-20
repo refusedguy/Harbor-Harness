@@ -749,17 +749,17 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 
 ### 5.6.1 The blind spot now has a type-resolving analyser beside it (report-only, #1868)
 
-`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH003`) reads the
-**operation tree** instead of the text, and resolves the **type** instead of the spelling:
+`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH003`) resolves the
+**type of the property being read** instead of the symbol of the receiver:
 
-- `SemanticModel.GetOperation` on `(await X).Value` is an `IPropertyReferenceOperation` whose
-  `Property.ContainingType` IS `Result<T>` — the await, the parentheses and the
-  `ConfigureAwait(false)` are folded away, so the shape CFE0001 skips is visible here;
-- the rule asks whether an `IsSuccess`/`IsFailure` check on the SAME value **dominates** the
-  read, which is a question about the tree: branch containment (an `if`, a ternary), an early
-  exit (`if (r.IsFailure) return;`), a short circuit (`r.IsSuccess && …`) and a property pattern
-  (`is { IsSuccess: true }`) all count, and a reassignment between the check and the read
-  invalidates the check.
+- `Value`'s containing type is `Result<T>` whatever stands in front of it — an await, an
+  invocation, a field, a local. CFE0001 asks "is the RECEIVER a Result?", and an await is not a
+  symbol, so the question cannot be asked; this rule asks "is the PROPERTY a Result?", and the
+  answer survives the await. The blind spot is closed **by type, not by form**.
+- the rule then asks whether an `IsSuccess`/`IsFailure` check on the SAME value **dominates** the
+  read: branch containment (an `if`, a ternary), an early exit (`if (r.IsFailure) return;`), a
+  short circuit (`r.IsSuccess && …`) and a property pattern (`is { IsSuccess: true }`) all count,
+  and a reassignment between the check and the read invalidates the check.
 
 It is **report-only**: it runs in-process from the architecture suite, it is not a build-time
 gate, and the text rule

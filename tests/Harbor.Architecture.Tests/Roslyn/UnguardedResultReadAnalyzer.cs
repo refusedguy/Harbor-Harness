@@ -7,62 +7,85 @@
 // `UnguardedResultReadRules.cs` (788 lines) bans three shapes in `src/` +
 // `apps/`:
 //
-//   AWAIT-VALUE       `(await …).Value`
-//   GETRESULT-VALUE   `…GetResult().Value`
+//   AWAIT-VALUE        `(await …).Value`
+//   GETRESULT-VALUE    `…GetResult().Value`
 //   REGISTRY-ZERO-INDEX `GetAllAgents()[0]`
 //
 // The first two exist ONLY because `CSharpFunctionalExtensions.Analyzers`
-// (CFE0001, adopted repo-wide) cannot see them. CFE0001 registers on
-// `SimpleMemberAccessExpression` and resolves the RECEIVER to an
-// `IPropertySymbol` on `CSharpFunctionalExtensions.Result`; for
+// (CFE0001, adopted repo-wide) cannot see them. CFE0001 resolves the
+// RECEIVER of `.Value` to an `IPropertySymbol` on
+// `CSharpFunctionalExtensions.Result` and asks "is this a Result?". For
 // `(await store.LoadAsync()).Value` the receiver is a parenthesized await
-// expression, so there is no symbol to resolve and the node is skipped. The
-// sync spelling `store.LoadAsync().GetAwaiter().GetResult().Value` has an
-// invocation as its receiver and is skipped for the same reason.
+// expression — an expression, not a symbol — so the question cannot be
+// asked and the node is skipped. The sync spelling
+// `store.LoadAsync().GetAwaiter().GetResult().Value` has an invocation as its
+// receiver and is skipped for the same reason.
 //
 // So the text rule is a workaround for a hole in another analyzer, and the
 // workaround is TEXTUAL. That costs three things:
 //
 //   1. It matches a SPELLING, not an invariant. `(await …).Value` and
-//      `…GetResult().Value` are two regexes for ONE operation — the read of
-//      `Result<T>.Value` — and a third spelling (`MakeResult().Value`) is
-//      invisible to both.
+//      `…GetResult().Value` are two regexes for ONE read of `Result<T>.Value`,
+//      and a third spelling (`MakeResult().Value`) is invisible to both.
 //   2. It cannot ask whether the Result was CHECKED. The regex fires on the
 //      form, whether or not an `IsSuccess`/`IsFailure` check dominates the
-//      read. The rule therefore has to forbid the shape outright, which is
-//      why its prose says "read it through a local you have checked" rather
-//      than "check it".
+//      read. That is why the rule's prose says "read it through a local you
+//      have checked" instead of "check it".
 //   3. It needs its own comment stripper, its own controls per FORM, and it
 //      cannot see a `.Value` read that is genuinely guarded.
 //
-// An analyzer sees the OPERATION, not the spelling:
+// WHAT THIS ANALYZER RESOLVES INSTEAD
+// -----------------------------------
+// The blind spot is not about the syntax tree; it is about WHICH symbol is
+// resolved. CFE0001 resolves the RECEIVER. This analyzer resolves the
+// PROPERTY BEING READ:
 //
-//   * `SemanticModel.GetOperation(node)` on `(await X).Value` yields an
-//     `IPropertyReferenceOperation` whose `Property.ContainingType` IS
-//     `Result<T>` — the await, the parentheses and the `ConfigureAwait(false)`
-//     are all folded away. The type is resolved, not spelled.
-//   * The question "was this Result checked?" becomes a question about the
-//     OPERATION TREE: is there an `IsSuccess`/`IsFailure` test on the SAME
-//     value that DOMINATES this read?
+//     memberAccess.Name  ->  IPropertySymbol `Value`
+//                         ->  ContainingType == CSharpFunctionalExtensions.Result<T>
+//
+// `Value`'s containing type is `Result<T>` whatever stands in front of it —
+// an await, an invocation, a field, a local, a conditional access. The type
+// is a fact about the PROPERTY, not about the expression in front of it, so
+// the shape CFE0001 cannot see is the shape this rule sees first.
+//
+// The second half of the rule asks the question the text rule cannot: "is
+// there an `IsSuccess`/`IsFailure` check on the SAME value that DOMINATES
+// this read?" That is a question about the STRUCTURE around the read (the
+// branches, the early exits, the short circuits, the patterns) and about the
+// TYPES of the values involved.
+//
+// WHY THE DOMINANCE WALK IS OVER THE SYNTAX TREE
+// ------------------------------------------------
+// Roslyn 5.x's operation tree has no `if` statement at all — `OperationKind`
+// has no `IfStatement`, and `IIfStatementOperation` no longer exists (the `if`
+// lives in the flow graph, which is not part of the public operation API). A
+// dominance analysis over the operation tree would therefore have to be
+// written against a CFG that is not public API. The structure a dominance
+// analysis needs — branches, blocks, early exits, short circuits, patterns —
+// is all in the SYNTAX tree, and every symbol it needs is resolved by the
+// semantic model. So: the syntax tree carries the structure, the semantic
+// model carries the types, and the TYPE-RESOLVED property is what makes the
+// rule see the blind spot at all.
 //
 // THE DOMINANCE RULE, PRECISELY
 // -----------------------------
 // A SITE is a read of the `Value` property of `CSharpFunctionalExtensions.
-// Result` or `Result<T>`, resolved by the property's CONTAINING TYPE (never by
-// the spelling "Value"), anywhere in the compiled unit.
+// Result` or `Result<T>`, resolved by the property's CONTAINING TYPE (never
+// by the spelling "Value"), anywhere in the compiled unit.
 //
-// A site is REPORTED unless one of the following holds. "The same value"
-// means the receiver denotes the same storage location:
+// A site is REPORTED unless the fact "that value is a SUCCESS" holds at the
+// read. "The same value" means the receiver denotes the same storage
+// location — a local, a parameter, a field or a property — identified by its
+// name.
 //
-//   * The receiver is a local, parameter, field or property reference, and
-//     the fact "that value is a SUCCESS" holds at the read.
-//
-// The fact "value V is a success" is established by the operation tree:
+// The fact is established by the structure around the read:
 //
 //   (1) BRANCH CONTAINMENT. The read lies in the THEN branch of an `if`
 //       whose condition tests `V.IsSuccess`, or in the ELSE branch of an `if`
 //       whose condition tests `V.IsFailure`. The same holds for a ternary:
 //       `V.IsSuccess ? … V.Value … : …` and `V.IsFailure ? … : … V.Value …`.
+//       The mirror image does NOT protect a read: `V.IsFailure ? … V.Value
+//       … : …` reads the value of a FAILED result.
 //   (2) EARLY EXIT. In the block that contains the read, an EARLIER statement
 //       is an `if` whose condition tests `V.IsFailure` and whose THEN branch
 //       leaves the flow (return / throw / continue / break) and which has no
@@ -75,7 +98,7 @@
 //       (V is a success there).
 //   (4) PATTERN. The read's value is a pattern variable declared by
 //       `is { IsSuccess: true }` (or `is { IsFailure: false }`) and the read
-//       lies in the branch that pattern matched.
+//       lies in the branch the pattern matched.
 //
 // Facts are dropped when the value is REASSIGNED between the check and the
 // read: `if (V.IsFailure) return; V = other(); use(V.Value);` is reported.
@@ -83,7 +106,7 @@
 // WHY THE FACTS ARE ABOUT A NAME
 // ------------------------------
 // A "value" here is a STORAGE LOCATION: a local, a parameter, a field or a
-// property, identified by its symbol name. Two limits follow, and both are
+// property, identified by its symbol's name. Two limits follow, and both are
 // stated rather than hidden:
 //
 //   * Two different values with the same name (a local and a field, or two
@@ -125,7 +148,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace Harbor.Architecture.Tests;
 
@@ -134,12 +156,13 @@ namespace Harbor.Architecture.Tests;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The rule is about the TYPE and about the OPERATION TREE, never about
-///         a spelling. A read of <c>Result&lt;T&gt;.Value</c> whose receiver is
-///         an await, an invocation or any other computed expression is exactly
-///         the shape <c>CFE0001</c> cannot see, and it is reported here — while
-///         a read that a dominating <c>IsSuccess</c>/<c>IsFailure</c> check
-///         protects is not, which is the thing no text scan can decide.
+///         The rule is about the TYPE and about the STRUCTURE around the read,
+///         never about a spelling. A read of <c>Result&lt;T&gt;.Value</c> whose
+///         receiver is an await, an invocation or any other computed
+///         expression is exactly the shape <c>CFE0001</c> cannot see, and it is
+///         reported here — while a read that a dominating
+///         <c>IsSuccess</c>/<c>IsFailure</c> check protects is not, which is
+///         the thing no text scan can decide.
 ///     </para>
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -182,25 +205,27 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
 
-        // The OPERATION, not the syntax: `GetOperation` on `(await X).Value`
-        // is an IPropertyReferenceOperation whose property belongs to
-        // `Result<T>` — the shape CFE0001 skips because it resolves SYMBOLS on
-        // the receiver instead.
-        context.RegisterOperationAction(AnalyzePropertyReference, OperationKind.PropertyReference);
+        // The member access, and the PROPERTY behind it: `Value`'s containing
+        // type is `Result<T>` whatever the receiver is — an await, an
+        // invocation, a field, a local. Resolving the receiver instead (what
+        // CFE0001 does) is exactly what makes the await shape invisible.
+        context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression);
     }
 
     /// <summary>
     ///     A read of <c>Result&lt;T&gt;.Value</c>: reported unless a dominating
     ///     guard establishes that the value is a success.
     /// </summary>
-    private static void AnalyzePropertyReference(OperationAnalysisContext context)
+    private static void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
     {
-        var reference = (IPropertyReferenceOperation)context.Operation;
+        var memberAccess = (MemberAccessExpressionSyntax)context.Node;
 
-        // The NAME first: it is the cheap test, and it keeps the type
-        // resolution (which builds strings) off the ~99 % of property reads
-        // that are not `Value` at all.
-        if (reference.Property is not { Name: "Value" } property)
+        if (memberAccess.Name.Identifier.ValueText != "Value")
+        {
+            return;
+        }
+
+        if (context.SemanticModel.GetSymbolInfo(memberAccess, context.CancellationToken).Symbol is not IPropertySymbol property)
         {
             return;
         }
@@ -210,8 +235,8 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        string? key = KeyOf(reference.Instance);
-        if (key is not null && DominatingFacts(reference, context.SemanticModel).IsSuccess(key))
+        string? key = KeyOf(context.SemanticModel, memberAccess.Expression, context.CancellationToken);
+        if (key is not null && DominatingFacts(context, memberAccess).IsSuccess(key))
         {
             return;
         }
@@ -219,57 +244,57 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
         object?[] arguments =
         [
             property.ContainingType.ToDisplayString() + "." + property.Name,
-            Describe(reference.Instance),
+            Describe(memberAccess.Expression),
         ];
 
-        context.ReportDiagnostic(Diagnostic.Create(Rule, LocationOf(reference), arguments));
+        context.ReportDiagnostic(Diagnostic.Create(Rule, memberAccess.Name.GetLocation(), arguments));
     }
 
     /// <summary>
-    ///     The facts that hold at a read, gathered by walking the operation
-    ///     tree UP from the read.
+    ///     The facts that hold at a read, gathered by walking the structure
+    ///     around it.
     /// </summary>
     /// <remarks>
     ///     <para>
     ///         The walk is upward on purpose. A downward walk would have to
-    ///         model every control-flow construct to thread a fact environment
-    ///         through them; the upward walk asks, for each enclosing
-    ///         construct, the one question that matters — "does this construct
-    ///         establish a fact about the value at this point?" — and the
-    ///         answer is local to the construct.
+    ///         model every construct to thread a fact environment through them;
+    ///         the upward walk asks, for each enclosing construct, the one
+    ///         question that matters — "does this construct establish a fact
+    ///         about the value at this point?" — and the answer is local to the
+    ///         construct.
     ///     </para>
     /// </remarks>
-    private static Facts DominatingFacts(IOperation read, SemanticModel model)
+    private static Facts DominatingFacts(SyntaxNodeAnalysisContext context, SyntaxNode read)
     {
         var facts = new Facts();
-        IOperation? current = read;
+        SyntaxNode? current = read;
 
         while (current.Parent is { } parent)
         {
             switch (parent)
             {
                 // (1) BRANCH CONTAINMENT — an `if` whose condition tests the value.
-                case IIfStatementOperation ifStatement:
-                    if (ReferenceEquals(current, ifStatement.Then))
+                case IfStatementSyntax ifStatement:
+                    if (current == ifStatement.Statement)
                     {
-                        facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenTrue);
+                        facts.Merge(ConditionFacts(context, ifStatement.Condition).WhenTrue);
                     }
-                    else if (ReferenceEquals(current, ifStatement.Else))
+                    else if (current == ifStatement.Else)
                     {
-                        facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenFalse);
+                        facts.Merge(ConditionFacts(context, ifStatement.Condition).WhenFalse);
                     }
 
                     break;
 
                 // (1) BRANCH CONTAINMENT — a ternary.
-                case IConditionalOperation conditional:
-                    if (ReferenceEquals(current, conditional.WhenTrue))
+                case ConditionalExpressionSyntax conditional:
+                    if (current == conditional.WhenTrue)
                     {
-                        facts.Merge(FactsOfCondition(conditional.Condition, model).WhenTrue);
+                        facts.Merge(ConditionFacts(context, conditional.Condition).WhenTrue);
                     }
-                    else if (ReferenceEquals(current, conditional.WhenFalse))
+                    else if (current == conditional.WhenFalse)
                     {
-                        facts.Merge(FactsOfCondition(conditional.Condition, model).WhenFalse);
+                        facts.Merge(ConditionFacts(context, conditional.Condition).WhenFalse);
                     }
 
                     break;
@@ -277,31 +302,35 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 // (3) SHORT CIRCUIT — the right operand of `&&` runs only when
                 // the left one is true; the left operand of `||` runs only when
                 // the left one is false.
-                case IBinaryOperation andOperation when andOperation.Kind == BinaryOperatorKind.And:
-                    if (ReferenceEquals(current, andOperation.RightOperand))
+                case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.AndAlsoExpression):
+                    if (current == andAlso.Right)
                     {
-                        facts.Merge(FactsOfCondition(andOperation.LeftOperand, model).WhenTrue);
+                        facts.Merge(ConditionFacts(context, andAlso.Left).WhenTrue);
                     }
 
                     break;
 
-                case IBinaryOperation orOperation when orOperation.Kind == BinaryOperatorKind.Or:
-                    if (ReferenceEquals(current, orOperation.LeftOperand))
+                case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.OrElseExpression):
+                    if (current == orElse.Left)
                     {
-                        facts.Merge(FactsOfCondition(orOperation.LeftOperand, model).WhenFalse);
+                        facts.Merge(ConditionFacts(context, orElse.Left).WhenFalse);
                     }
 
                     break;
 
-                // (4) PATTERN — a switch arm whose pattern demands the value.
-                case ISwitchCaseOperation switchCase:
-                    facts.Merge(SwitchCaseFacts(switchCase));
+                // (4) PATTERN — a switch section whose pattern demands the value.
+                case SwitchSectionSyntax section:
+                    facts.Merge(SwitchSectionFacts(context, section));
+                    break;
+
+                case SwitchExpressionArmSyntax arm:
+                    facts.Merge(SwitchArmFacts(context, arm));
                     break;
 
                 // (2) EARLY EXIT — the statements BEFORE the read's own
                 // statement in this block may have established a fact.
-                case IBlockOperation block:
-                    facts.Merge(PrecedingStatementFacts(block, current, model));
+                case BlockSyntax block:
+                    facts.Merge(PrecedingStatementFacts(context, block, current));
                     break;
             }
 
@@ -315,18 +344,18 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     ///     The facts the statements before <paramref name="child" /> establish
     ///     inside <paramref name="block" />.
     /// </summary>
-    private static Facts PrecedingStatementFacts(IBlockOperation block, IOperation child, SemanticModel model)
+    private static Facts PrecedingStatementFacts(SyntaxNodeAnalysisContext context, BlockSyntax block, SyntaxNode child)
     {
         var facts = new Facts();
 
-        foreach (IOperation statement in block.Operations)
+        foreach (StatementSyntax statement in block.Statements)
         {
-            if (ReferenceEquals(statement, child))
+            if (statement == child)
             {
                 break;
             }
 
-            ApplyStatement(statement, facts, model);
+            ApplyStatement(context, statement, facts);
         }
 
         return facts;
@@ -335,83 +364,69 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     /// <summary>
     ///     What one statement does to the facts that hold after it.
     /// </summary>
-    private static void ApplyStatement(IOperation statement, Facts facts, SemanticModel model)
+    private static void ApplyStatement(SyntaxNodeAnalysisContext context, StatementSyntax statement, Facts facts)
     {
-        switch (statement)
+        // (2) EARLY EXIT. The THEN branch leaves the flow and there is no
+        // ELSE, so the only way to reach the code after this `if` is the
+        // condition being FALSE.
+        if (statement is IfStatementSyntax ifStatement
+            && ifStatement.Else is null
+            && EndsFlow(ifStatement.Statement))
         {
-            // (2) EARLY EXIT. The THEN branch leaves the flow and there is no
-            // ELSE, so the only way to reach the code after this `if` is the
-            // condition being FALSE.
-            case IIfStatementOperation ifStatement
-                when ifStatement.Else is null && EndsFlow(ifStatement.Then):
-                facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenFalse);
-                break;
-
-            // An assignment may have replaced the value the fact was about.
-            case IExpressionStatementOperation expressionStatement:
-                InvalidateAssigned(expressionStatement.Operation, facts);
-                break;
+            facts.Merge(ConditionFacts(context, ifStatement.Condition).WhenFalse);
+            return;
         }
+
+        // An assignment may have replaced the value the fact was about.
+        InvalidateAssigned(context, statement, facts);
     }
 
     /// <summary>
-    ///     Drops the fact about any value this operation assigns to.
+    ///     Drops the fact about any value this syntax assigns to.
     /// </summary>
-    private static void InvalidateAssigned(IOperation operation, Facts facts)
+    private static void InvalidateAssigned(SyntaxNodeAnalysisContext context, SyntaxNode node, Facts facts)
     {
-        switch (operation)
+        if (node is AssignmentExpressionSyntax assignment)
         {
-            case IAssignmentOperation assignment:
-                facts.Remove(KeyOf(assignment.Target));
-                return;
-
-            case ICompoundAssignmentOperation compound:
-                facts.Remove(KeyOf(compound.Target));
-                return;
-
-            case IIncrementOrDecrementOperation increment:
-                facts.Remove(KeyOf(increment.Target));
-                return;
+            facts.Remove(KeyOf(context.SemanticModel, assignment.Left, context.CancellationToken));
+            return;
         }
 
-        foreach (IOperation child in operation.ChildOperations)
+        foreach (SyntaxNode child in node.ChildNodes())
         {
-            InvalidateAssigned(child, facts);
+            InvalidateAssigned(context, child, facts);
         }
     }
 
     /// <summary>
     ///     Whether every path through this branch leaves the flow.
     /// </summary>
-    private static bool EndsFlow(IOperation? branch)
+    private static bool EndsFlow(StatementSyntax? branch)
     {
         switch (branch)
         {
             case null:
                 return false;
 
-            case IReturnOperation:
+            case ReturnStatementSyntax:
                 return true;
 
-            case IThrowOperation:
+            case ThrowStatementSyntax:
                 return true;
 
-            case IContinueOperation:
+            case ContinueStatementSyntax:
                 return true;
 
-            case IBreakOperation:
+            case BreakStatementSyntax:
                 return true;
 
-            case IBlockOperation block:
-                return block.Operations.Length > 0 && EndsFlow(block.Operations[block.Operations.Length - 1]);
+            case BlockSyntax block:
+                return block.Statements.Count > 0 && EndsFlow(block.Statements[block.Statements.Count - 1]);
 
-            case IExpressionStatementOperation expressionStatement:
-                return EndsFlow(expressionStatement.Operation);
-
-            case IIfStatementOperation ifStatement:
+            case IfStatementSyntax ifStatement:
                 return ifStatement.Else is not null
-                    && EndsFlow(ifStatement.Then)
-                    && EndsFlow(ifStatement.Else);
+                    && EndsFlow(ifStatement.Statement)
+                    && EndsFlow(ifStatement.Else.Statement);
 
             default:
                 return false;
@@ -426,52 +441,26 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     /// <summary>
     ///     The facts a condition establishes on each of its two outcomes.
     /// </summary>
-    private static ConditionOutcome FactsOfCondition(IOperation? condition, SemanticModel model)
+    private static ConditionOutcome ConditionFacts(SyntaxNodeAnalysisContext context, ExpressionSyntax? condition)
     {
         var whenTrue = new Facts();
         var whenFalse = new Facts();
 
         switch (condition)
         {
-            case IPropertyReferenceOperation success
-                when IsResultFlag(success.Property, "IsSuccess"):
+            case PrefixUnaryExpressionSyntax negated when negated.IsKind(SyntaxKind.LogicalNotExpression):
             {
-                string? key = KeyOf(success.Instance);
-                if (key is not null)
-                {
-                    whenTrue.Set(key, Fact.Success);
-                    whenFalse.Set(key, Fact.Failure);
-                }
-
-                break;
-            }
-
-            case IPropertyReferenceOperation failure
-                when IsResultFlag(failure.Property, "IsFailure"):
-            {
-                string? key = KeyOf(failure.Instance);
-                if (key is not null)
-                {
-                    whenTrue.Set(key, Fact.Failure);
-                    whenFalse.Set(key, Fact.Success);
-                }
-
-                break;
-            }
-
-            case IUnaryOperation negated when negated.Kind == UnaryOperatorKind.Not:
-            {
-                ConditionOutcome inner = FactsOfCondition(negated.Operand, model);
+                ConditionOutcome inner = ConditionFacts(context, negated.Operand);
                 return new ConditionOutcome(inner.WhenFalse, inner.WhenTrue);
             }
 
             // `A && B` is true when BOTH are true: a fact holds when it holds
             // in either operand's true branch. It is false when either is
             // false, so only a fact that holds in BOTH false branches survives.
-            case IBinaryOperation andOperation when andOperation.Kind == BinaryOperatorKind.And:
+            case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.AndAlsoExpression):
             {
-                ConditionOutcome left = FactsOfCondition(andOperation.LeftOperand, model);
-                ConditionOutcome right = FactsOfCondition(andOperation.RightOperand, model);
+                ConditionOutcome left = ConditionFacts(context, andAlso.Left);
+                ConditionOutcome right = ConditionFacts(context, andAlso.Right);
                 return new ConditionOutcome(
                     left.WhenTrue.Union(right.WhenTrue),
                     left.WhenFalse.Intersect(right.WhenFalse));
@@ -480,17 +469,34 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // `A || B` is false when BOTH are false: a fact holds when it
             // holds in either operand's false branch. It is true when either
             // is true, so only a fact that holds in BOTH true branches survives.
-            case IBinaryOperation orOperation when orOperation.Kind == BinaryOperatorKind.Or:
+            case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.OrElseExpression):
             {
-                ConditionOutcome left = FactsOfCondition(orOperation.LeftOperand, model);
-                ConditionOutcome right = FactsOfCondition(orOperation.RightOperand, model);
+                ConditionOutcome left = ConditionFacts(context, orElse.Left);
+                ConditionOutcome right = ConditionFacts(context, orElse.Right);
                 return new ConditionOutcome(
                     left.WhenTrue.Intersect(right.WhenTrue),
                     left.WhenFalse.Union(right.WhenFalse));
             }
         }
 
-        AddPatternFacts(condition?.Syntax, model, whenTrue, whenFalse);
+        // A plain `V.IsSuccess` / `V.IsFailure` test.
+        if (condition is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Name.Identifier.ValueText is "IsSuccess" or "IsFailure"
+            && context.SemanticModel.GetSymbolInfo(memberAccess, context.CancellationToken).Symbol is IPropertySymbol property
+            && IsResultType(property.ContainingType))
+        {
+            string? key = KeyOf(context.SemanticModel, memberAccess.Expression, context.CancellationToken);
+            if (key is not null)
+            {
+                bool success = memberAccess.Name.Identifier.ValueText == "IsSuccess";
+                whenTrue.Set(key, success ? Fact.Success : Fact.Failure);
+                whenFalse.Set(key, success ? Fact.Failure : Fact.Success);
+            }
+        }
+
+        // A pattern: `V is { IsSuccess: true }`.
+        ApplyPatternFacts(context, condition, whenTrue, whenFalse);
+
         return new ConditionOutcome(whenTrue, whenFalse);
     }
 
@@ -498,68 +504,78 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     ///     The facts a property PATTERN establishes: <c>is { IsSuccess: true }</c>
     ///     declares that the matched value is a success.
     /// </summary>
-    private static void AddPatternFacts(SyntaxNode? syntax, SemanticModel model, Facts whenTrue, Facts whenFalse)
+    private static void ApplyPatternFacts(
+        SyntaxNodeAnalysisContext context,
+        ExpressionSyntax condition,
+        Facts whenTrue,
+        Facts whenFalse)
     {
-        if (syntax is null)
+        if (condition is not IsPatternExpressionSyntax isPattern
+            || isPattern.Pattern is not RecursivePatternSyntax recursive)
         {
             return;
         }
 
-        foreach (IsPatternExpressionSyntax isPattern in syntax.DescendantNodesAndSelf().OfType<IsPatternExpressionSyntax>())
-        {
-            if (isPattern.Pattern is not RecursivePatternSyntax recursive)
-            {
-                continue;
-            }
-
-            // The pattern VARIABLE is the storage the fact is about; without a
-            // designation the fact is about the matched expression itself.
-            ApplyPatternRequirement(
-                recursive,
-                KeyOfExpression(isPattern.Expression, model),
-                whenTrue,
-                whenFalse);
-        }
+        ApplyPatternRequirement(context, recursive, isPattern.Expression, whenTrue, whenFalse);
     }
 
     /// <summary>
-    ///     The facts a switch arm's pattern establishes.
+    ///     The facts a switch SECTION's pattern establishes.
     /// </summary>
-    /// <remarks>
-    ///     A case body is entered only when the pattern MATCHED, so the facts
-    ///     the pattern demands are the facts that hold in the body.
-    /// </remarks>
-    private static Facts SwitchCaseFacts(ISwitchCaseOperation switchCase)
+    private static Facts SwitchSectionFacts(SyntaxNodeAnalysisContext context, SwitchSectionSyntax section)
     {
-        var whenTrue = new Facts();
-        var whenFalse = new Facts();
+        var facts = new Facts();
 
-        IOperation? switched = (switchCase.Parent as ISwitchOperation)?.Value;
-        string? subjectKey = KeyOf(switched);
+        ExpressionSyntax? switched = (section.Parent as SwitchStatementSyntax)?.Expression;
 
-        foreach (RecursivePatternSyntax recursive in switchCase.Syntax
-                     .DescendantNodesAndSelf()
-                     .OfType<RecursivePatternSyntax>())
+        foreach (SwitchLabelSyntax label in section.Labels)
         {
-            ApplyPatternRequirement(recursive, subjectKey, whenTrue, whenFalse);
+            if (label is CasePatternSwitchLabelSyntax patternLabel
+                && patternLabel.Pattern is RecursivePatternSyntax recursive)
+            {
+                // The case body is entered only when the pattern MATCHED, so
+                // only the facts the pattern demands hold there.
+                ApplyPatternRequirement(context, recursive, switched, facts, new Facts());
+            }
         }
 
-        return whenTrue;
+        return facts;
+    }
+
+    /// <summary>
+    ///     The facts a switch EXPRESSION arm's pattern establishes.
+    /// </summary>
+    private static Facts SwitchArmFacts(SyntaxNodeAnalysisContext context, SwitchExpressionArmSyntax arm)
+    {
+        var facts = new Facts();
+
+        ExpressionSyntax? switched = (arm.Parent as SwitchExpressionSyntax)?.GoverningExpression;
+
+        if (arm.Pattern is RecursivePatternSyntax recursive)
+        {
+            // The arm is entered only when the pattern MATCHED.
+            ApplyPatternRequirement(context, recursive, switched, facts, new Facts());
+        }
+
+        return facts;
     }
 
     /// <summary>
     ///     Reads the <c>IsSuccess</c>/<c>IsFailure</c> requirement out of a
-    ///     recursive pattern and records what it means for the pattern's value.
+    ///     pattern and records what it means for the matched value.
     /// </summary>
     private static void ApplyPatternRequirement(
+        SyntaxNodeAnalysisContext context,
         RecursivePatternSyntax recursive,
-        string? subjectKey,
+        ExpressionSyntax? switched,
         Facts whenTrue,
         Facts whenFalse)
     {
+        // The pattern VARIABLE is the storage the fact is about; without a
+        // designation the fact is about the matched value.
         string? key = recursive.Designation is SingleVariableDesignationSyntax designation
             ? designation.Identifier.ValueText
-            : subjectKey;
+            : KeyOf(context.SemanticModel, switched, context.CancellationToken);
 
         if (key is null || recursive.PropertyPatternClause is not { } clause)
         {
@@ -571,12 +587,12 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // A property subpattern reads `Name: pattern`. The typed accessor
             // for the NAME is not a stable surface — Roslyn 4.x called the
             // node `PropertySubpatternSyntax` and 5.x calls it
-            // `SubpatternSyntax`, and the accessor was renamed inside 5.x — so
-            // the requirement is read from the subpattern's own two-token
-            // shape. Only `IsSuccess: true` and `IsFailure: false` establish
-            // a fact; every other shape establishes none, which is the safe
-            // direction (a missed report, never a false accusation). The TYPE
-            // the rule judges is still resolved by symbol.
+            // `SubpatternSyntax` — so the requirement is read from the
+            // subpattern's own two-token shape. Only `IsSuccess: true` and
+            // `IsFailure: false` establish a fact; every other shape
+            // establishes none, which is the safe direction (a missed report,
+            // never a false accusation). The TYPE the rule judges is still
+            // resolved by symbol.
             string shape = subpattern.ToString();
             int colon = shape.IndexOf(':');
             if (colon < 0)
@@ -619,26 +635,27 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     ///     calls are two different results, so a check on one cannot protect
     ///     the other.
     /// </remarks>
-    private static string? KeyOf(IOperation? instance)
+    private static string? KeyOf(SemanticModel model, ExpressionSyntax? expression, CancellationToken cancellationToken)
     {
-        while (instance is IConversionOperation conversion)
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
         {
-            instance = conversion.Operand;
+            expression = parenthesized.Expression;
         }
 
-        return instance switch
+        if (expression is null)
         {
-            ILocalReferenceOperation local => local.Local.Name,
-            IParameterReferenceOperation parameter => parameter.Parameter.Name,
-            IFieldReferenceOperation field => field.Field.Name,
-            IPropertyReferenceOperation property => property.Property.Name,
-            _ => null,
-        };
-    }
+            return null;
+        }
 
-    /// <summary>The key of an expression, resolved through the semantic model.</summary>
-    private static string? KeyOfExpression(ExpressionSyntax expression, SemanticModel model)
-        => model.GetSymbolInfo(expression).Symbol is { } symbol ? symbol.Name : null;
+        if (model.GetSymbolInfo(expression, cancellationToken).Symbol is not { } symbol)
+        {
+            return null;
+        }
+
+        return symbol.Kind is SymbolKind.Local or SymbolKind.Parameter or SymbolKind.Field or SymbolKind.Property
+            ? symbol.Name
+            : null;
+    }
 
     /// <summary>
     ///     Whether the type is <c>CSharpFunctionalExtensions.Result</c> or
@@ -658,25 +675,20 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             && definition.MetadataName is "Result" or "Result`1";
     }
 
-    /// <summary>Whether the property is <c>IsSuccess</c>/<c>IsFailure</c> on a <c>Result</c>.</summary>
-    private static bool IsResultFlag(IPropertySymbol property, string name)
-        => property.Name == name && IsResultType(property.ContainingType);
-
-    /// <summary>The location of the read: the member NAME, not the whole expression.</summary>
-    private static Location LocationOf(IPropertyReferenceOperation reference)
-        => reference.Syntax is MemberAccessExpressionSyntax memberAccess
-            ? memberAccess.Name.GetLocation()
-            : reference.Syntax.GetLocation();
-
     /// <summary>A short description of the receiver, for the message.</summary>
-    private static string Describe(IOperation? instance)
+    private static string Describe(ExpressionSyntax? expression)
     {
-        if (instance is null)
+        if (expression is null)
         {
             return "<implicit this>";
         }
 
-        string text = instance.Syntax.ToString();
+        while (expression is ParenthesizedExpressionSyntax parenthesized)
+        {
+            expression = parenthesized.Expression;
+        }
+
+        string text = expression.ToString();
         return text.Length <= 60 ? text : text[..57] + "...";
     }
 
