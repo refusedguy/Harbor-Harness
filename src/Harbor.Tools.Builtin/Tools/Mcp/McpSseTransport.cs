@@ -25,14 +25,13 @@ namespace Harbor.Tools.Mcp;
 ///     <c>Authorization</c> header wins, else the OAuth token provider result
 ///     is attached as <c>Bearer</c>.
 /// </summary>
-public sealed class McpSseTransport : IMcpRemoteTransport
+public sealed class McpSseTransport : McpRemoteTransportBase
 {
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
     private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
-    private HttpClient? _client;
     private bool _disposed;
 
     public McpSseTransport(
@@ -50,6 +49,15 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     }
 
     /// <summary>
+    ///     The client is NOT bounded: the GET stream outlives any single
+    ///     request, so the client's own timeout is infinite and each attempt is
+    ///     bounded by its own linked cancellation source instead. The client
+    ///     itself is assembled by the base's Factory Method (#1567); the timeout
+    ///     is the only thing that differs from the streamable-HTTP transport.
+    /// </summary>
+    protected override TimeSpan ClientTimeout => Timeout.InfiniteTimeSpan;
+
+    /// <summary>
     ///     Result railway for the round-trip (#201 C4, sealed to the interface in
     ///     #587): expected network failures (closed SSE stream, message-endpoint
     ///     errors, client-side timeout) surface as
@@ -61,7 +69,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
+    public override async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
@@ -127,7 +135,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
     }
 
-    public ValueTask DisposeAsync()
+    public override ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -135,7 +143,7 @@ public sealed class McpSseTransport : IMcpRemoteTransport
         }
 
         _disposed = true;
-        _client?.Dispose();
+        DisposeClient();
         return ValueTask.CompletedTask;
     }
 
@@ -355,24 +363,6 @@ public sealed class McpSseTransport : IMcpRemoteTransport
 
     private static Task BackoffAsync(int attempt, CancellationToken cancellationToken)
         => Task.Delay(TransientFailurePolicy.BackoffDelay(attempt), cancellationToken);
-
-    private HttpClient GetClient()
-    {
-        if (_client is { } existing)
-        {
-            return existing;
-        }
-
-        var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
-        var client = new HttpClient(handler)
-        {
-            Timeout = Timeout.InfiniteTimeSpan, // the GET stream outlives any single request; per-attempt CTS bounds it
-        };
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        _client = client;
-        return client;
-    }
 }
 
 /// <summary>
