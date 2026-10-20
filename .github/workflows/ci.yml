@@ -1216,9 +1216,9 @@ jobs:
           # The TRX has to land under the WORKSPACE, not under the assembly's
           # own bin directory: the upload step globs `TestResults/**/*.trx`
           # from the workspace root, and a relative --results-directory is
-          # resolved against the assembly directory by the test platform -
-          # so a relative path put every TRX where the glob could not see
-          # it, and the shard uploaded no results at all.
+          # resolved against the assembly directory by the current test
+          # platform - so a relative path put every TRX where the glob could
+          # not see it, and the shard uploaded no results at all.
           trx_dir="$GITHUB_WORKSPACE/TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
           summary="$GITHUB_STEP_SUMMARY"

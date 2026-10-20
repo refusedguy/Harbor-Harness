@@ -368,7 +368,12 @@ def main() -> int:
         return 2
 
     guard = args.guard.split() if args.guard else []
-    os.makedirs(args.results_dir, exist_ok=True)
+    # The results directory must be ABSOLUTE: the test platform resolves a
+    # relative --results-directory against the ASSEMBLY's directory, not the
+    # working directory, so a relative path puts the TRX where the caller
+    # cannot find it (and where the CI's upload glob cannot see it).
+    results_dir = os.path.abspath(args.results_dir)
+    os.makedirs(results_dir, exist_ok=True)
 
     discovered_counts, discovered_total, discovery_note = run_discovery(args.dll)
     if discovery_note:
@@ -377,7 +382,7 @@ def main() -> int:
     shards = plan["shards"]
     with ThreadPoolExecutor(max_workers=len(shards)) as pool:
         results = list(pool.map(
-            lambda shard: run_shard(shard, args.dll, args.results_dir, guard),
+            lambda shard: run_shard(shard, args.dll, results_dir, guard),
             shards))
 
     total_tests = sum(result["tests"] for result in results)
