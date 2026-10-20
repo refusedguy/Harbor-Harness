@@ -229,7 +229,7 @@ public sealed class ArchAnalyzerWiringTests
     /// <summary>The value of a child element, or <c>null</c> when there is none.</summary>
     private static string? Child(XElement parent, string name) => parent
         .Elements()
-        .FirstOrDefault(static e => e.Name.LocalName == name)
+        .FirstOrDefault(e => e.Name.LocalName == name)
         ?.Value;
 
     /// <summary>Reads a repo-relative file.</summary>
