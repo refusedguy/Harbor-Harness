@@ -130,7 +130,7 @@ public class TestMessagesTests
         await Assert.That(built.Parts.Count).IsEqualTo(handwritten.Parts.Count)
             .Because("the text form carries exactly one text part, which is what the hand-written call carried");
         await Assert.That(built.Parts[0]).IsTypeOf<TextPart>();
-        await Assert.That(((TextPart)built.Parts[0]).Text).IsEqualTo(((TextPart)handwritten.Parts[0]).Text));
+        await Assert.That(((TextPart)built.Parts[0]).Text).IsEqualTo(((TextPart)handwritten.Parts[0]).Text);
         await Assert.That(built.StopReason).IsEqualTo(handwritten.StopReason);
         await Assert.That(built.Usage).IsEqualTo(handwritten.Usage);
         await Assert.That(built.Model).IsEqualTo(handwritten.Model);

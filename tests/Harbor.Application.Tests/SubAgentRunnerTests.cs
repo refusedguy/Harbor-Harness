@@ -8,6 +8,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
 using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
+using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore; // #1816: the local double — the shared kit has one of the same name, and an alias names the one this file means
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
