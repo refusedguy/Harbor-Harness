@@ -48,28 +48,19 @@ public class RunChangeTransitionsTests
         await Assert.That(second.IsSuccess).IsTrue();
     }
 
+    // #1770: the three illegal-transition copies differed only in the pair of
+    // states and the reason fragment — the asserts never changed. They are the
+    // table now, and every row keeps its original test name as the display
+    // name.
     [Test]
-    public async Task AcceptBeforeReported_NamesTheReason()
+    [Arguments(RunState.Checked, RunState.Accepted, "cannot apply a run that is not Reported", DisplayName = "AcceptBeforeReported_NamesTheReason")]
+    [Arguments(RunState.Isolated, RunState.Rejected, "cannot reject a run that is not Reported", DisplayName = "RejectBeforeReported_NamesTheReason")]
+    [Arguments(RunState.Pinned, RunState.Reported, "Illegal run transition", DisplayName = "SkipAhead_IsRejected")]
+    public async Task IllegalTransition_NamesTheReason(RunState from, RunState to, string expectedReason)
     {
-        Result<RunState> step = RunChangeTransitions.TryTransition(RunState.Checked, RunState.Accepted);
+        Result<RunState> step = RunChangeTransitions.TryTransition(from, to);
         await Assert.That(step.IsFailure).IsTrue();
-        await Assert.That(step.Error.Contains("cannot apply a run that is not Reported")).IsTrue();
-    }
-
-    [Test]
-    public async Task RejectBeforeReported_NamesTheReason()
-    {
-        Result<RunState> step = RunChangeTransitions.TryTransition(RunState.Isolated, RunState.Rejected);
-        await Assert.That(step.IsFailure).IsTrue();
-        await Assert.That(step.Error.Contains("cannot reject a run that is not Reported")).IsTrue();
-    }
-
-    [Test]
-    public async Task SkipAhead_IsRejected()
-    {
-        Result<RunState> step = RunChangeTransitions.TryTransition(RunState.Pinned, RunState.Reported);
-        await Assert.That(step.IsFailure).IsTrue();
-        await Assert.That(step.Error.Contains("Illegal run transition")).IsTrue();
+        await Assert.That(step.Error.Contains(expectedReason)).IsTrue();
     }
 
     [Test]

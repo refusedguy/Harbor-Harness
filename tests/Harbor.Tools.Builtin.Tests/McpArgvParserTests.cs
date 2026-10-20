@@ -12,91 +12,46 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </summary>
 public class McpArgvParserTests
 {
+    // #1770: the parse vectors differed only in the command line and the
+    // expected tokens — the asserts never changed. The command is the table
+    // and the expected tokens are one '|'-separated string, because an
+    // attribute argument cannot carry an implicitly-typed array. Every row
+    // keeps its original test name as the display name.
     [Test]
-    public async Task Parse_SimpleCommand_SplitsOnWhitespace()
+    [Arguments("npx -y pkg", "npx|-y|pkg", DisplayName = "Parse_SimpleCommand_SplitsOnWhitespace")]
+    [Arguments("node script.js --flag value", "node|script.js|--flag|value", DisplayName = "Parse_FlagWithValue_ProducesSeparateTokens")]
+    [Arguments("node \"/path/with space/x.js\" --port 3000", "node|/path/with space/x.js|--port|3000", DisplayName = "Parse_DoubleQuotedPathWithSpaces_IsSingleArgument")]
+    [Arguments("sh -c 'echo \"hello world\"'", "sh|-c|echo \"hello world\"", DisplayName = "Parse_SingleQuotedArgument_IsLiteral")]
+    [Arguments("\"a \\\"b\\\" c\"", "a \"b\" c", DisplayName = "Parse_EscapedQuotesInsideDoubleQuotes_Unescape")]
+    [Arguments("cmd \"C:\\\\temp\\\\x y\"", "cmd|C:\\temp\\x y", DisplayName = "Parse_EscapedBackslashInsideDoubleQuotes_Unescapes")]
+    [Arguments("run arg\\ with\\ spaces", "run|arg with spaces", DisplayName = "Parse_BackslashOutsideQuotes_EscapesNextChar")]
+    [Arguments("npx\t  -y \t pkg", "npx|-y|pkg", DisplayName = "Parse_RepeatedWhitespace_Collapses")]
+    [Arguments("cmd 'a b' \"c d\" e", "cmd|a b|c d|e", DisplayName = "Parse_MixedQuoting_TokensAreIndependent")]
+    [Arguments("foo", "foo", DisplayName = "Parse_SingleToken_HasNoArgs")]
+    public async Task Parse_Command_SplitsOnWhitespace(string command, string expectedTokens)
     {
-        var result = McpArgvParser.ParseCommand("npx -y pkg");
+        var result = McpArgvParser.ParseCommand(command);
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "npx", "-y", "pkg" });
+        await Assert.That(result.Value).IsEquivalentTo(expectedTokens.Split('|'));
     }
 
     [Test]
-    public async Task Parse_FlagWithValue_ProducesSeparateTokens()
+    [Arguments("", DisplayName = "Parse_EmptyString_Fails")]
+    [Arguments("   \t  ", DisplayName = "Parse_WhitespaceOnly_Fails")]
+    public async Task Parse_BlankCommand_Fails(string command)
     {
-        var result = McpArgvParser.ParseCommand("node script.js --flag value");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "node", "script.js", "--flag", "value" });
-    }
-
-    [Test]
-    public async Task Parse_DoubleQuotedPathWithSpaces_IsSingleArgument()
-    {
-        var result = McpArgvParser.ParseCommand("node \"/path/with space/x.js\" --port 3000");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(
-            new[] { "node", "/path/with space/x.js", "--port", "3000" });
-    }
-
-    [Test]
-    public async Task Parse_SingleQuotedArgument_IsLiteral()
-    {
-        var result = McpArgvParser.ParseCommand("""sh -c 'echo "hello world"'""");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "sh", "-c", "echo \"hello world\"" });
-    }
-
-    [Test]
-    public async Task Parse_EscapedQuotesInsideDoubleQuotes_Unescape()
-    {
-        var result = McpArgvParser.ParseCommand("\"a \\\"b\\\" c\"");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "a \"b\" c" });
-    }
-
-    [Test]
-    public async Task Parse_EscapedBackslashInsideDoubleQuotes_Unescapes()
-    {
-        var result = McpArgvParser.ParseCommand("cmd \"C:\\\\temp\\\\x y\"");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "cmd", "C:\\temp\\x y" });
-    }
-
-    [Test]
-    public async Task Parse_BackslashOutsideQuotes_EscapesNextChar()
-    {
-        var result = McpArgvParser.ParseCommand("run arg\\ with\\ spaces");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "run", "arg with spaces" });
-    }
-
-    [Test]
-    public async Task Parse_EmptyString_Fails()
-    {
-        var result = McpArgvParser.ParseCommand("");
+        var result = McpArgvParser.ParseCommand(command);
         await Assert.That(result.IsFailure).IsTrue();
     }
 
     [Test]
-    public async Task Parse_WhitespaceOnly_Fails()
+    [Arguments("cmd \"never closed", "double", DisplayName = "Parse_UnterminatedDoubleQuote_FailsWithPosition")]
+    [Arguments("cmd 'never closed", "single", DisplayName = "Parse_UnterminatedSingleQuote_FailsWithPosition")]
+    public async Task Parse_UnterminatedQuote_FailsWithPosition(string command, string expectedErrorFragment)
     {
-        var result = McpArgvParser.ParseCommand("   \t  ");
+        var result = McpArgvParser.ParseCommand(command);
         await Assert.That(result.IsFailure).IsTrue();
-    }
-
-    [Test]
-    public async Task Parse_UnterminatedDoubleQuote_FailsWithPosition()
-    {
-        var result = McpArgvParser.ParseCommand("cmd \"never closed");
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("double");
-    }
-
-    [Test]
-    public async Task Parse_UnterminatedSingleQuote_FailsWithPosition()
-    {
-        var result = McpArgvParser.ParseCommand("cmd 'never closed");
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Error).Contains("single");
+        await Assert.That(result.Error).Contains(expectedErrorFragment);
     }
 
     [Test]
@@ -106,30 +61,6 @@ public class McpArgvParserTests
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Length).IsEqualTo(3);
         await Assert.That(result.Value[1]).IsEqualTo("");
-    }
-
-    [Test]
-    public async Task Parse_RepeatedWhitespace_Collapses()
-    {
-        var result = McpArgvParser.ParseCommand("npx\t  -y \t pkg");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "npx", "-y", "pkg" });
-    }
-
-    [Test]
-    public async Task Parse_MixedQuoting_TokensAreIndependent()
-    {
-        var result = McpArgvParser.ParseCommand("cmd 'a b' \"c d\" e");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "cmd", "a b", "c d", "e" });
-    }
-
-    [Test]
-    public async Task Parse_SingleToken_HasNoArgs()
-    {
-        var result = McpArgvParser.ParseCommand("foo");
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value).IsEquivalentTo(new[] { "foo" });
     }
 
     [Test]

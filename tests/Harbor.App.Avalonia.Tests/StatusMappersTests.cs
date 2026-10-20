@@ -18,92 +18,46 @@ public class StatusMappersTests
 {
     // ── StatusToBrushKey ────────────────────────────────────────────
 
-    [Test]
-    public async Task StatusToBrushKey_Running_ReturnsRunningBrush()
-    {
-        await Assert.That(StatusMappers.StatusToBrushKey("running"))
-            .IsEqualTo("StatusRunningBrush");
-    }
+    // #1770: one table per mapper. The former copies differed only in the
+    // input and the expected key — the assert never changed — so the input
+    // and the expectation are the table now. Every row keeps its original
+    // test name as the case display name.
 
     [Test]
-    public async Task StatusToBrushKey_Compacting_ReturnsCompactBrush()
+    [Arguments("running", "StatusRunningBrush", DisplayName = "StatusToBrushKey_Running_ReturnsRunningBrush")]
+    [Arguments("compacting", "StatusCompactBrush", DisplayName = "StatusToBrushKey_Compacting_ReturnsCompactBrush")]
+    [Arguments("error", "StatusErrorBrush", DisplayName = "StatusToBrushKey_Error_ReturnsErrorBrush")]
+    [Arguments("idle", "StatusIdleBrush", DisplayName = "StatusToBrushKey_Idle_ReturnsIdleBrush")]
+    [Arguments("xyz", "StatusIdleBrush", DisplayName = "StatusToBrushKey_Unknown_ReturnsIdleBrush")]
+    [Arguments(null, "StatusIdleBrush", DisplayName = "StatusToBrushKey_Null_ReturnsIdleBrush")]
+    public async Task StatusToBrushKey_ReturnsBrushKey(string? status, string expectedBrush)
     {
-        await Assert.That(StatusMappers.StatusToBrushKey("compacting"))
-            .IsEqualTo("StatusCompactBrush");
-    }
-
-    [Test]
-    public async Task StatusToBrushKey_Error_ReturnsErrorBrush()
-    {
-        await Assert.That(StatusMappers.StatusToBrushKey("error"))
-            .IsEqualTo("StatusErrorBrush");
-    }
-
-    [Test]
-    public async Task StatusToBrushKey_Idle_ReturnsIdleBrush()
-    {
-        await Assert.That(StatusMappers.StatusToBrushKey("idle"))
-            .IsEqualTo("StatusIdleBrush");
-    }
-
-    [Test]
-    public async Task StatusToBrushKey_Unknown_ReturnsIdleBrush()
-    {
-        await Assert.That(StatusMappers.StatusToBrushKey("xyz"))
-            .IsEqualTo("StatusIdleBrush");
-    }
-
-    [Test]
-    public async Task StatusToBrushKey_Null_ReturnsIdleBrush()
-    {
-        await Assert.That(StatusMappers.StatusToBrushKey(null))
-            .IsEqualTo("StatusIdleBrush");
+        await Assert.That(StatusMappers.StatusToBrushKey(status))
+            .IsEqualTo(expectedBrush);
     }
 
     // ── ToolCallStateToBrushKey ────────────────────────────────────
 
     [Test]
-    public async Task ToolCallStateToBrushKey_Running_ReturnsYellow()
+    [Arguments(ToolCallState.Running, "MochaYellow", DisplayName = "ToolCallStateToBrushKey_Running_ReturnsYellow")]
+    [Arguments(ToolCallState.Success, "MochaGreen", DisplayName = "ToolCallStateToBrushKey_Success_ReturnsGreen")]
+    [Arguments(ToolCallState.Error, "MochaRed", DisplayName = "ToolCallStateToBrushKey_Error_ReturnsRed")]
+    public async Task ToolCallStateToBrushKey_ReturnsBrushKey(ToolCallState state, string expectedBrush)
     {
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running))
-            .IsEqualTo("MochaYellow");
-    }
-
-    [Test]
-    public async Task ToolCallStateToBrushKey_Success_ReturnsGreen()
-    {
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Success))
-            .IsEqualTo("MochaGreen");
-    }
-
-    [Test]
-    public async Task ToolCallStateToBrushKey_Error_ReturnsRed()
-    {
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error))
-            .IsEqualTo("MochaRed");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(state))
+            .IsEqualTo(expectedBrush);
     }
 
     // ── ToolCallStateToPill ────────────────────────────────────────
 
     [Test]
-    public async Task ToolCallStateToPill_Running_ReturnsRunningLabel()
+    [Arguments(ToolCallState.Running, "running", DisplayName = "ToolCallStateToPill_Running_ReturnsRunningLabel")]
+    [Arguments(ToolCallState.Success, "ok", DisplayName = "ToolCallStateToPill_Success_ReturnsOkLabel")]
+    [Arguments(ToolCallState.Error, "err", DisplayName = "ToolCallStateToPill_Error_ReturnsErrLabel")]
+    public async Task ToolCallStateToPill_ReturnsLabel(ToolCallState state, string expectedPill)
     {
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Running))
-            .IsEqualTo("running");
-    }
-
-    [Test]
-    public async Task ToolCallStateToPill_Success_ReturnsOkLabel()
-    {
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Success))
-            .IsEqualTo("ok");
-    }
-
-    [Test]
-    public async Task ToolCallStateToPill_Error_ReturnsErrLabel()
-    {
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Error))
-            .IsEqualTo("err");
+        await Assert.That(StatusMappers.ToolCallStateToPill(state))
+            .IsEqualTo(expectedPill);
     }
 
     // #567: the two terminal states the old `_ =>` arms could not express. Both
@@ -189,91 +143,43 @@ public class StatusMappersTests
     // ── SessionStatusToText ────────────────────────────────────────
 
     [Test]
-    public async Task SessionStatusToText_Working_ReturnsWorkingLabel()
+    [Arguments(SessionStatus.Working, "working", DisplayName = "SessionStatusToText_Working_ReturnsWorkingLabel")]
+    [Arguments(SessionStatus.Done, "done", DisplayName = "SessionStatusToText_Done_ReturnsDoneLabel")]
+    [Arguments(SessionStatus.Error, "error", DisplayName = "SessionStatusToText_Error_ReturnsErrorLabel")]
+    [Arguments(SessionStatus.Aborted, "aborted", DisplayName = "SessionStatusToText_Aborted_ReturnsAbortedLabel")]
+    [Arguments(SessionStatus.Idle, "idle", DisplayName = "SessionStatusToText_Idle_ReturnsIdleLabel")]
+    public async Task SessionStatusToText_ReturnsLabel(SessionStatus status, string expectedText)
     {
-        await Assert.That(StatusMappers.SessionStatusToText(SessionStatus.Working))
-            .IsEqualTo("working");
-    }
-
-    [Test]
-    public async Task SessionStatusToText_Done_ReturnsDoneLabel()
-    {
-        await Assert.That(StatusMappers.SessionStatusToText(SessionStatus.Done))
-            .IsEqualTo("done");
-    }
-
-    [Test]
-    public async Task SessionStatusToText_Error_ReturnsErrorLabel()
-    {
-        await Assert.That(StatusMappers.SessionStatusToText(SessionStatus.Error))
-            .IsEqualTo("error");
-    }
-
-    [Test]
-    public async Task SessionStatusToText_Aborted_ReturnsAbortedLabel()
-    {
-        await Assert.That(StatusMappers.SessionStatusToText(SessionStatus.Aborted))
-            .IsEqualTo("aborted");
-    }
-
-    [Test]
-    public async Task SessionStatusToText_Idle_ReturnsIdleLabel()
-    {
-        await Assert.That(StatusMappers.SessionStatusToText(SessionStatus.Idle))
-            .IsEqualTo("idle");
+        await Assert.That(StatusMappers.SessionStatusToText(status))
+            .IsEqualTo(expectedText);
     }
 
     // ── SessionStatusToBrushKey ────────────────────────────────────
 
     [Test]
-    public async Task SessionStatusToBrushKey_Working_ReturnsYellow()
+    [Arguments(SessionStatus.Working, "MochaYellow", DisplayName = "SessionStatusToBrushKey_Working_ReturnsYellow")]
+    [Arguments(SessionStatus.Done, "MochaGreen", DisplayName = "SessionStatusToBrushKey_Done_ReturnsGreen")]
+    [Arguments(SessionStatus.Error, "MochaRed", DisplayName = "SessionStatusToBrushKey_Error_ReturnsRed")]
+    [Arguments(SessionStatus.Idle, "MochaOverlay0", DisplayName = "SessionStatusToBrushKey_Idle_ReturnsOverlay0")]
+    public async Task SessionStatusToBrushKey_ReturnsBrushKey(SessionStatus status, string expectedBrush)
     {
-        await Assert.That(StatusMappers.SessionStatusToBrushKey(SessionStatus.Working))
-            .IsEqualTo("MochaYellow");
-    }
-
-    [Test]
-    public async Task SessionStatusToBrushKey_Done_ReturnsGreen()
-    {
-        await Assert.That(StatusMappers.SessionStatusToBrushKey(SessionStatus.Done))
-            .IsEqualTo("MochaGreen");
-    }
-
-    [Test]
-    public async Task SessionStatusToBrushKey_Error_ReturnsRed()
-    {
-        await Assert.That(StatusMappers.SessionStatusToBrushKey(SessionStatus.Error))
-            .IsEqualTo("MochaRed");
-    }
-
-    [Test]
-    public async Task SessionStatusToBrushKey_Idle_ReturnsOverlay0()
-    {
-        await Assert.That(StatusMappers.SessionStatusToBrushKey(SessionStatus.Idle))
-            .IsEqualTo("MochaOverlay0");
+        await Assert.That(StatusMappers.SessionStatusToBrushKey(status))
+            .IsEqualTo(expectedBrush);
     }
 
     // ── DurationToText ─────────────────────────────────────────────
 
+    // The millisecond count is the table because a TimeSpan is not an
+    // attribute constant. 0.5 ms is the former FromMicroseconds(500) — the
+    // same 5 000 ticks — so the sub-millisecond branch is still covered.
     [Test]
-    public async Task DurationToText_SubMillisecond_ReturnsEmpty()
+    [Arguments(0.5, "", DisplayName = "DurationToText_SubMillisecond_ReturnsEmpty")]
+    [Arguments(234.0, "234ms", DisplayName = "DurationToText_BelowOneSecond_ReturnsMilliseconds")]
+    [Arguments(1500.0, "1.5s", DisplayName = "DurationToText_AboveOneSecond_ReturnsSeconds")]
+    public async Task DurationToText_ReturnsText(double milliseconds, string expectedText)
     {
-        await Assert.That(StatusMappers.DurationToText(TimeSpan.FromMicroseconds(500)))
-            .IsEqualTo(string.Empty);
-    }
-
-    [Test]
-    public async Task DurationToText_BelowOneSecond_ReturnsMilliseconds()
-    {
-        await Assert.That(StatusMappers.DurationToText(TimeSpan.FromMilliseconds(234)))
-            .IsEqualTo("234ms");
-    }
-
-    [Test]
-    public async Task DurationToText_AboveOneSecond_ReturnsSeconds()
-    {
-        await Assert.That(StatusMappers.DurationToText(TimeSpan.FromMilliseconds(1500)))
-            .IsEqualTo("1.5s");
+        await Assert.That(StatusMappers.DurationToText(TimeSpan.FromMilliseconds(milliseconds)))
+            .IsEqualTo(expectedText);
     }
 
     // ── TimeAgo ────────────────────────────────────────────────────
@@ -291,55 +197,41 @@ public class StatusMappersTests
         await Assert.That(StatusMappers.TimeAgo(recent)).IsEqualTo("just now");
     }
 
+    // The offset is in minutes so it stays an attribute constant: 120 minutes
+    // is the former AddHours(-2) and 4 320 minutes is the former AddDays(-3),
+    // to the tick.
     [Test]
-    public async Task TimeAgo_FiveMinutesAgo_Returns5mAgo()
+    [Arguments(5, "5m ago", DisplayName = "TimeAgo_FiveMinutesAgo_Returns5mAgo")]
+    [Arguments(120, "2h ago", DisplayName = "TimeAgo_TwoHoursAgo_Returns2hAgo")]
+    [Arguments(4320, "3d ago", DisplayName = "TimeAgo_ThreeDaysAgo_Returns3dAgo")]
+    public async Task TimeAgo_PastInstant_ReturnsRelativeLabel(int minutesAgo, string expectedLabel)
     {
-        var past = DateTime.UtcNow.AddMinutes(-5);
-        await Assert.That(StatusMappers.TimeAgo(past)).IsEqualTo("5m ago");
-    }
-
-    [Test]
-    public async Task TimeAgo_TwoHoursAgo_Returns2hAgo()
-    {
-        var past = DateTime.UtcNow.AddHours(-2);
-        await Assert.That(StatusMappers.TimeAgo(past)).IsEqualTo("2h ago");
-    }
-
-    [Test]
-    public async Task TimeAgo_ThreeDaysAgo_Returns3dAgo()
-    {
-        var past = DateTime.UtcNow.AddDays(-3);
-        await Assert.That(StatusMappers.TimeAgo(past)).IsEqualTo("3d ago");
+        var past = DateTime.UtcNow.AddMinutes(-minutesAgo);
+        await Assert.That(StatusMappers.TimeAgo(past)).IsEqualTo(expectedLabel);
     }
 
     // ── TokensToCompact ────────────────────────────────────────────
 
     [Test]
-    public async Task TokensToCompact_Zero_ReturnsZero() => await Assert.That(StatusMappers.TokensToCompact(0)).IsEqualTo("0");
-
-    [Test]
-    public async Task TokensToCompact_Negative_ReturnsZero() => await Assert.That(StatusMappers.TokensToCompact(-5)).IsEqualTo("0");
-
-    [Test]
-    public async Task TokensToCompact_BelowThousand_ReturnsRaw() => await Assert.That(StatusMappers.TokensToCompact(500)).IsEqualTo("500");
-
-    [Test]
-    public async Task TokensToCompact_AboveThousand_ReturnsK() => await Assert.That(StatusMappers.TokensToCompact(1200)).IsEqualTo("1.2K");
-
-    [Test]
-    public async Task TokensToCompact_AboveMillion_ReturnsM() => await Assert.That(StatusMappers.TokensToCompact(1_400_000)).IsEqualTo("1.4M");
+    [Arguments(0L, "0", DisplayName = "TokensToCompact_Zero_ReturnsZero")]
+    [Arguments(-5L, "0", DisplayName = "TokensToCompact_Negative_ReturnsZero")]
+    [Arguments(500L, "500", DisplayName = "TokensToCompact_BelowThousand_ReturnsRaw")]
+    [Arguments(1200L, "1.2K", DisplayName = "TokensToCompact_AboveThousand_ReturnsK")]
+    [Arguments(1_400_000L, "1.4M", DisplayName = "TokensToCompact_AboveMillion_ReturnsM")]
+    public async Task TokensToCompact_ReturnsCompactText(long tokens, string expectedText) =>
+        await Assert.That(StatusMappers.TokensToCompact(tokens)).IsEqualTo(expectedText);
 
     // ── CostToUsd ──────────────────────────────────────────────────
 
+    // The cost is a double because `decimal` is NOT an attribute parameter
+    // type (CS0182). The cast back is exact for these four values: a
+    // double-to-decimal conversion rounds to 15 significant digits, and
+    // 0, -1.5, 0.0123 and 12.5 all survive that unchanged.
     [Test]
-    public async Task CostToUsd_Zero_ReturnsZeroUsd() => await Assert.That(StatusMappers.CostToUsd(0m)).IsEqualTo("$0.0000");
-
-    [Test]
-    public async Task CostToUsd_Negative_ReturnsZeroUsd() => await Assert.That(StatusMappers.CostToUsd(-1.5m)).IsEqualTo("$0.0000");
-
-    [Test]
-    public async Task CostToUsd_SmallCost_ReturnsFourDecimal() => await Assert.That(StatusMappers.CostToUsd(0.0123m)).IsEqualTo("$0.0123");
-
-    [Test]
-    public async Task CostToUsd_LargeCost_ReturnsFourDecimal() => await Assert.That(StatusMappers.CostToUsd(12.5m)).IsEqualTo("$12.5000");
+    [Arguments(0d, "$0.0000", DisplayName = "CostToUsd_Zero_ReturnsZeroUsd")]
+    [Arguments(-1.5d, "$0.0000", DisplayName = "CostToUsd_Negative_ReturnsZeroUsd")]
+    [Arguments(0.0123d, "$0.0123", DisplayName = "CostToUsd_SmallCost_ReturnsFourDecimal")]
+    [Arguments(12.5d, "$12.5000", DisplayName = "CostToUsd_LargeCost_ReturnsFourDecimal")]
+    public async Task CostToUsd_ReturnsUsdText(double costUsd, string expectedText) =>
+        await Assert.That(StatusMappers.CostToUsd((decimal)costUsd)).IsEqualTo(expectedText);
 }

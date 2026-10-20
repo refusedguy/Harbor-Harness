@@ -45,7 +45,7 @@ public class LspNormalizeBoundaryTests
     [Test]
     [Arguments("42", "not-object-or-array (got Number)", DisplayName = "ScalarPayload_FailsWithNotObjectOrArray")]
     [Arguments("\"oops\"", "not-object-or-array (got String)", DisplayName = "StringPayload_FailsWithNotObjectOrArray")]
-    public async Task ScalarPayload_FailsWithNotObjectOrArray(string payload, string expectedError)
+    public async Task ScalarOrStringPayload_FailsWithNotObjectOrArray(string payload, string expectedError)
     {
         Result<Maybe<LspLocation>> normalized =
             LspServerSession.TryNormalizeFirstLocation(Parse(payload), "/fallback.ts");

@@ -146,7 +146,7 @@
    `K`: `StatusBarFactsParityTests.cs:179-180,199`,
    `StatusProjectionTests.cs:102`, `StatusProjectorPanelTests.cs:88`,
    `StatusSegmentOrderTests.cs:135,162`, `PanelWiringTests.cs:190,201,316`,
-   `CellForgeBuiltinPanelsTests.cs:383`, `StatusMappersTests.cs:327`. На `k`
+   `CellForgeBuiltinPanelsTests.cs:383`, `StatusMappersTests.cs:219`. На `k`
    стоит только `SideBarViewTests.cs:51,106-111` (и это тест сайдбара, то есть
    писателя №5). Это важно для цены: чтение тестов уже сказало «`K`», и
    смена нотации на `k` — это изменение **тестовых ожиданий**, а не
