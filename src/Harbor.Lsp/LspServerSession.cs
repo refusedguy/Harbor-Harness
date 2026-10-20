@@ -315,8 +315,8 @@ public sealed class LspServerSession : IAsyncDisposable
                     "textDocument/references",
                     new LspWire.PositionParams(
                         new LspWire.TextDocumentIdentifier(FileUri(filePath)),
-                        new LspWire.LspPosition(line, column)),
-                    new LspWire.ReferenceContext(IncludeDeclaration: true)),
+                        new LspWire.LspPosition(line, column),
+                        new LspWire.ReferenceContext(IncludeDeclaration: true)),
                     token).ConfigureAwait(false);
                 IReadOnlyList<LspLocation> locations = NormalizeAllLocations(result, filePath, out string? skippedReason);
                 if (skippedReason is not null)
