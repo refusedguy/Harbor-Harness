@@ -51,14 +51,16 @@
 // Every assertion after that point is detached: its failure is discarded and
 // the test passes. So this file does all its WORK inside a deliberately
 // synchronous `Dispatch` and every `await Assert` OUTSIDE it, where a failure
-// cannot be lost. The cast to System.Action below is there to make that
-// overload choice explicit rather than something a future edit can quietly
-// undo. Several existing tests in this suite are written the other way and
-// assert nothing; see the note at the bottom of this file.
+// cannot be lost. Since #1819 that dispatch is opened by `AvaloniaSession`,
+// which owns the cast to System.Action — it is there to make the overload
+// choice explicit rather than something a future edit can quietly undo, and
+// there is now exactly one place where it can be undone. Several existing
+// tests in this suite are written the other way and assert nothing; see the
+// note at the bottom of this file.
 
-using Avalonia.Headless;
 using Avalonia.Media;
 using Harbor.App.Avalonia;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Controls;
 using TUnit;
@@ -101,20 +103,16 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task A_Merged_Theme_Key_Is_Resolvable_But_Not_Through_The_Indexer()
     {
-        bool resolvedThroughMerged = false;
-        bool resolvedThroughIndexer = true;
-        int mergedCount = -1;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var (resolvedThroughMerged, resolvedThroughIndexer, mergedCount) = await AvaloniaSession.RunAsync(() =>
         {
             var app = global::Avalonia.Application.Current;
-            resolvedThroughMerged = app is not null
+            bool viaMergedDictionary = app is not null
                 && app.TryGetResource("StateSuccessBrush", null, out object? value)
                 && value is IBrush;
-            resolvedThroughIndexer = app?.Resources["StateSuccessBrush"] is not null;
-            mergedCount = app?.Resources.MergedDictionaries.Count ?? -1;
-        }), CancellationToken.None);
+            bool viaTopLevelIndexer = app?.Resources["StateSuccessBrush"] is not null;
+            int mergedDictionaryCount = app?.Resources.MergedDictionaries.Count ?? -1;
+            return (viaMergedDictionary, viaTopLevelIndexer, mergedDictionaryCount);
+        });
 
         await Assert
             .That(resolvedThroughMerged)
@@ -144,13 +142,8 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task The_Top_Level_Resource_Dictionary_Holds_Nothing()
     {
-        int topLevelCount = -1;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
-        {
-            topLevelCount = global::Avalonia.Application.Current?.Resources.Count ?? -1;
-        }), CancellationToken.None);
+        var topLevelCount = await AvaloniaSession.RunAsync(
+            () => global::Avalonia.Application.Current?.Resources.Count ?? -1);
 
         await Assert
             .That(topLevelCount)
@@ -166,16 +159,10 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task AMiss_Is_A_Null_Rather_Than_A_Throw_Or_A_Default()
     {
-        object? missing = "not-run";
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-
         // A throw here fails the test on its own — `Dispatch` propagates it — so
         // reaching the assertions below IS the "it does not throw" half.
-        await session.Dispatch((System.Action)(() =>
-        {
-            missing = global::Avalonia.Application.Current?.Resources["DefinitelyNotAThemeKey"];
-        }), CancellationToken.None);
+        var missing = await AvaloniaSession.RunAsync(
+            () => global::Avalonia.Application.Current?.Resources["DefinitelyNotAThemeKey"]);
 
         await Assert.That(missing).IsNull();
         await Assert
@@ -198,11 +185,10 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Toast_Kind_Resolves_Its_Theme_Brush()
     {
-        var resolved = new List<string>();
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var resolved = await AvaloniaSession.RunAsync(() =>
         {
+            var found = new List<string>();
+
             foreach (Harbor.Ui.Framework.Services.ToastKind kind in
                      Enum.GetValues<Harbor.Ui.Framework.Services.ToastKind>())
             {
@@ -210,9 +196,11 @@ public class ThemeResourceResolutionTests
                     kind, typeof(IBrush), null, System.Globalization.CultureInfo.InvariantCulture);
 
                 if (brush is not null)
-                    resolved.Add(kind.ToString());
+                    found.Add(kind.ToString());
             }
-        }), CancellationToken.None);
+
+            return found;
+        });
 
         await Assert
             .That(resolved)
@@ -228,11 +216,10 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task Every_Stepper_Position_Resolves_Its_Theme_Brush()
     {
-        var resolved = new List<string>();
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var resolved = await AvaloniaSession.RunAsync(() =>
         {
+            var found = new List<string>();
+
             // Step 3 against dot 1 is "done", step 1 against dot 1 is "active",
             // step 0 against dot 1 is "pending".
             foreach ((int step, string position) in new[] { (3, "done"), (1, "active"), (0, "pending") })
@@ -241,9 +228,11 @@ public class ThemeResourceResolutionTests
                     step, typeof(IBrush), "1", System.Globalization.CultureInfo.InvariantCulture);
 
                 if (brush is not null)
-                    resolved.Add(position);
+                    found.Add(position);
             }
-        }), CancellationToken.None);
+
+            return found;
+        });
 
         await Assert
             .That(resolved)
@@ -301,19 +290,20 @@ public class ThemeResourceResolutionTests
             "StatusErrorBrush"
         ];
 
-        List<string> unresolved = [];
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var unresolved = await AvaloniaSession.RunAsync(() =>
         {
+            var missing = new List<string>();
+
             foreach (string key in keys)
             {
                 if (ThemeBrushResolver.Resolve(key) is not SolidColorBrush solid)
-                    unresolved.Add($"{key}: did not resolve to a brush");
+                    missing.Add($"{key}: did not resolve to a brush");
                 else if (solid.Color != ResolveColour(key))
-                    unresolved.Add($"{key}: resolved to the wrong brush");
+                    missing.Add($"{key}: resolved to the wrong brush");
             }
-        }), CancellationToken.None);
+
+            return missing;
+        });
 
         foreach (string wrong in unresolved)
             Console.WriteLine(wrong);
@@ -330,14 +320,9 @@ public class ThemeResourceResolutionTests
     [Retry(3)] // Retention(#1087): headless-Avalonia resolve flake (dispatcher/compositor wobble); rerun, not fix.
     public async Task The_Generic_Brush_Key_Converter_Resolves_A_Merged_Key()
     {
-        object? brush = "not-run";
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
-        {
-            brush = BrushKeyConverter.Instance.Convert(
-                "StateSuccessBrush", typeof(IBrush), null, System.Globalization.CultureInfo.InvariantCulture);
-        }), CancellationToken.None);
+        var brush = await AvaloniaSession.RunAsync(
+            () => BrushKeyConverter.Instance.Convert(
+                "StateSuccessBrush", typeof(IBrush), null, System.Globalization.CultureInfo.InvariantCulture));
 
         await Assert
             .That(brush)
@@ -368,30 +353,31 @@ public class ThemeResourceResolutionTests
             (" ", "TextSecondaryBrush")
         ];
 
-        List<string> wrongBrush = [];
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var wrongBrush = await AvaloniaSession.RunAsync(() =>
         {
+            var painted = new List<string>();
+
             foreach ((string marker, string brushKey) in lines)
             {
                 var diff = new HdsDiffCompact { DiffText = marker + "changed" };
                 if (diff.Lines.Count != 1)
                 {
-                    wrongBrush.Add($"'{marker}': {diff.Lines.Count} lines parsed, want 1");
+                    painted.Add($"'{marker}': {diff.Lines.Count} lines parsed, want 1");
                     continue;
                 }
 
                 if (diff.Lines[0].Brush is not SolidColorBrush solid)
                 {
-                    wrongBrush.Add($"'{marker}': {diff.Lines[0].Brush?.GetType().Name ?? "null"}, want {brushKey}");
+                    painted.Add($"'{marker}': {diff.Lines[0].Brush?.GetType().Name ?? "null"}, want {brushKey}");
                     continue;
                 }
 
                 if (solid.Color != ResolveColour(brushKey))
-                    wrongBrush.Add($"'{marker}': painted {solid.Color}, want {brushKey}");
+                    painted.Add($"'{marker}': painted {solid.Color}, want {brushKey}");
             }
-        }), CancellationToken.None);
+
+            return painted;
+        });
 
         foreach (string wrong in wrongBrush)
             Console.WriteLine(wrong);

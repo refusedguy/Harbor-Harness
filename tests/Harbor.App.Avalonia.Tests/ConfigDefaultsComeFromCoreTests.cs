@@ -32,13 +32,13 @@
 // empty CommonConfig and asserts MemorySessionStore. These tests close the
 // other half: nothing in the UI is allowed to fill that empty in on the way.
 
-using Avalonia.Headless;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.App.Avalonia;
 using Harbor.App.Avalonia.Configuration;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.Abstractions.ViewModels;
@@ -421,37 +421,36 @@ public class ConfigDefaultsComeFromCoreTests
     ///         <paramref name="body" /> fails THIS test instead of vanishing, and
     ///         the session is not disposed while the body is still in flight.
     ///     </para>
+    ///     <para>
+    ///         Since #1819 that shape is not spelled out here: it is
+    ///         <c>AvaloniaSession.RunAsync</c> (the <c>Func&lt;Task&gt;</c>
+    ///         overload), whose whole job is "start the body inside the synchronous
+    ///         dispatch, await it outside, keep the session open until it lands".
+    ///         This method is the one call site whose body really does suspend,
+    ///         which is why the helper has a separate entry point for it rather than
+    ///         a flag on the synchronous one.
+    ///     </para>
     /// </remarks>
     private static async Task InAvaloniaSessionAsync(
         Func<SettingsViewModel, Task> body,
         RecordingCommonStore commonStore,
         RecordingAppStore appStore)
     {
-        SettingsViewModel vm = null!;
-        Task work = Task.CompletedTask;
+        await AvaloniaSession.RunAsync(async () =>
+        {
+            var vm = new SettingsViewModel(
+                new StubThemeReader(),
+                new StubThemeApplier(),
+                NullLogger<SettingsViewModel>.Instance,
+                NullLoggerFactory.Instance,
+                new StubToastService(),
+                commonStore,
+                appStore,
+                new EmptyProviderRegistry(),
+                new StubAuthResolver());
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch(
-            (System.Action)(() =>
-            {
-                vm = new SettingsViewModel(
-                    new StubThemeReader(),
-                    new StubThemeApplier(),
-                    NullLogger<SettingsViewModel>.Instance,
-                    NullLoggerFactory.Instance,
-                    new StubToastService(),
-                    commonStore,
-                    appStore,
-                    new EmptyProviderRegistry(),
-                    new StubAuthResolver());
-
-                work = body(vm);
-            }),
-            CancellationToken.None);
-
-        // Outside the dispatch, and therefore not detachable: this is the await that
-        // makes the body's assertions able to fail the test at all.
-        await work;
+            await body(vm);
+        });
     }
 
     // ── stubs ─────────────────────────────────────────────────────────────

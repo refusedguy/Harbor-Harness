@@ -1,7 +1,7 @@
 using System.Xml.Linq;
-using Avalonia.Headless;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.Themes;
 using TUnit;
 using TUnit.Assertions;
@@ -134,25 +134,24 @@ public class HdsThemeCatalogParityTests
         // AvaloniaDispatchAsyncVoidRule). Each disagreement is now RECORDED
         // inside the loop and reported by name below, so one bad palette no
         // longer hides the state of the rest.
-        var mismatches = new List<string>();
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var mismatches = await AvaloniaSession.RunAsync(() =>
         {
+            var found = new List<string>();
+
             foreach (string name in HdsThemeCatalog.PaletteNames)
             {
                 HdsThemePreview? preview = HdsThemeCatalog.Find(name);
                 if (preview is null)
                 {
-                    mismatches.Add(name + ": Find returned null");
+                    found.Add(name + ": Find returned null");
                     continue;
                 }
 
                 string path = Path.Combine(HdsThemesDir, name + ".axaml");
 
-                Compare(mismatches, name, "Surface", ColorOf(preview.Surface), DeclaredColor(path, "AppBackgroundBrush"));
-                Compare(mismatches, name, "Accent", ColorOf(preview.Accent), DeclaredColor(path, "AccentBrush"));
-                Compare(mismatches, name, "Text", ColorOf(preview.Text), DeclaredColor(path, "TextBrush"));
+                Compare(found, name, "Surface", ColorOf(preview.Surface), DeclaredColor(path, "AppBackgroundBrush"));
+                Compare(found, name, "Accent", ColorOf(preview.Accent), DeclaredColor(path, "AccentBrush"));
+                Compare(found, name, "Text", ColorOf(preview.Text), DeclaredColor(path, "TextBrush"));
 
                 string declared = ReadValue(path, HdsThemeCatalog.VariantKey) ?? string.Empty;
                 bool expectDark = string.Equals(
@@ -160,16 +159,18 @@ public class HdsThemeCatalogParityTests
 
                 if (preview.IsDark != expectDark)
                 {
-                    mismatches.Add(name + ": IsDark was " + preview.IsDark + ", the file says " + expectDark);
+                    found.Add(name + ": IsDark was " + preview.IsDark + ", the file says " + expectDark);
                 }
 
                 ThemeVariant expectVariant = expectDark ? ThemeVariant.Dark : ThemeVariant.Light;
                 if (preview.Variant != expectVariant)
                 {
-                    mismatches.Add(name + ": Variant was " + preview.Variant + ", expected " + expectVariant);
+                    found.Add(name + ": Variant was " + preview.Variant + ", expected " + expectVariant);
                 }
             }
-        }), CancellationToken.None);
+
+            return found;
+        });
 
         await Assert.That(string.Join(" | ", mismatches))
             .IsEqualTo(string.Empty)
@@ -196,18 +197,12 @@ public class HdsThemeCatalogParityTests
     [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Catalog_Loads_One_Preview_Per_Declared_Palette()
     {
-        int loaded = -1;
         int expected = HdsThemeCatalog.PaletteNames.Count;
-        bool vaporFound = false;
-        bool unknownFound = true;
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
-        {
-            loaded = HdsThemeCatalog.ReadAll().Count;
-            vaporFound = HdsThemeCatalog.Find("Vapor") is not null;
-            unknownFound = HdsThemeCatalog.Find("NoSuchPalette") is not null;
-        }), CancellationToken.None);
+        var (loaded, vaporFound, unknownFound) = await AvaloniaSession.RunAsync(() => (
+            loaded: HdsThemeCatalog.ReadAll().Count,
+            vaporFound: HdsThemeCatalog.Find("Vapor") is not null,
+            unknownFound: HdsThemeCatalog.Find("NoSuchPalette") is not null));
 
         await Assert.That(loaded).IsEqualTo(expected);
         await Assert.That(vaporFound).IsTrue();
@@ -232,25 +227,25 @@ public class HdsThemeCatalogParityTests
     {
         // Recorded inside the dispatch, asserted outside it — the reason is in
         // Catalog_Resolves_Preview_Brushes_From_The_Palette_Dictionaries.
-        var labels = new (string Id, string? Actual)[]
+        var (labels, unknownFound) = await AvaloniaSession.RunAsync(() =>
         {
-            ("CatppuccinMocha", null),
-            ("Vapor", null),
-            ("Lumen", null),
-            ("HarborDesignTokens", null),
-        };
-        bool unknownFound = true;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
-        {
-            for (int i = 0; i < labels.Length; i++)
+            var paletteLabels = new (string Id, string? Actual)[]
             {
-                labels[i] = (labels[i].Id, HdsThemeCatalog.Find(labels[i].Id)?.DisplayName);
+                ("CatppuccinMocha", null),
+                ("Vapor", null),
+                ("Lumen", null),
+                ("HarborDesignTokens", null),
+            };
+
+            for (int i = 0; i < paletteLabels.Length; i++)
+            {
+                paletteLabels[i] = (paletteLabels[i].Id, HdsThemeCatalog.Find(paletteLabels[i].Id)?.DisplayName);
             }
 
-            unknownFound = HdsThemeCatalog.Find("NoSuchPalette") is not null;
-        }), CancellationToken.None);
+            bool unknownPaletteFound = HdsThemeCatalog.Find("NoSuchPalette") is not null;
+
+            return (paletteLabels, unknownPaletteFound);
+        });
 
         // "CatppuccinMocha" reads as "Catppuccin Mocha"; single-word names are left
         // alone; "HarborDesignTokens" splits on the capital runs.

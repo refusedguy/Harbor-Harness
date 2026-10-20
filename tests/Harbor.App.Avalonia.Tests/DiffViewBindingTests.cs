@@ -1,9 +1,8 @@
-using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Avalonia.Controls;
-using Avalonia.Headless;
 using Avalonia.LogicalTree;
 using Harbor.App.Avalonia;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.Views;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -55,20 +54,9 @@ public class DiffViewBindingTests
         // payload this call site dropped, so the body detached at its first
         // `await Assert` and none of the six checks below could fail the test
         // (#972, #766; see AvaloniaDispatchAsyncVoidRule).
-        List<string> texts = [];
-        List<string> buttonContents = [];
-        string? leftText = null;
-        string? rightText = null;
-        ICommand? boundComputeCommand = null;
-        ICommand? expectedComputeCommand = null;
-        object? rowSource = null;
-        ObservableCollection<DiffRowViewModel>? expectedRows = null;
-        int listCount = -1;
-        int rowItemCount = -1;
-        int computedRowCount = -1;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var (texts, buttonContents, leftText, rightText, boundComputeCommand, expectedComputeCommand,
+            rowSource, expectedRows, listCount, rowItemCount, computedRowCount) =
+            await AvaloniaSession.RunAsync(() =>
         {
             var vm = new SideBySideDiffViewModel(NullLogger<SideBySideDiffViewModel>.Instance)
             {
@@ -117,12 +105,12 @@ public class DiffViewBindingTests
             // presenter having run.
 
             // LeftText/RightText → the two input boxes (empty on silent no-resolve).
-            texts = view.GetLogicalDescendants()
+            var boxTexts = view.GetLogicalDescendants()
                 .OfType<TextBox>()
                 .Select(b => b.Text)
                 .ToList();
-            leftText = vm.LeftText;
-            rightText = vm.RightText;
+            var left = vm.LeftText;
+            var right = vm.RightText;
 
             // ComputeCommand → Compute button (null on silent no-resolve).
             // Located by index rather than `.Single(...)`, so a tree that does not
@@ -131,27 +119,33 @@ public class DiffViewBindingTests
             // element" from inside a detached `async void`, which is how a missing
             // button went unnoticed here in the first place.
             List<Button> buttons = view.GetLogicalDescendants().OfType<Button>().ToList();
-            buttonContents = buttons.Select(b => b.Content?.ToString() ?? "(null)").ToList();
-            int computeIndex = buttonContents.FindIndex(c => c == "Compute");
+            var buttonLabels = buttons.Select(b => b.Content?.ToString() ?? "(null)").ToList();
+            int computeIndex = buttonLabels.FindIndex(c => c == "Compute");
+            ICommand? boundCommand = null;
             if (computeIndex >= 0)
             {
-                boundComputeCommand = buttons[computeIndex].Command;
+                boundCommand = buttons[computeIndex].Command;
             }
 
-            expectedComputeCommand = vm.ComputeCommand;
+            var expectedCommand = vm.ComputeCommand;
 
             // Rows → row list (null source / zero items on silent no-resolve).
             List<ItemsControl> lists = view.GetLogicalDescendants().OfType<ItemsControl>().ToList();
-            listCount = lists.Count;
+            int listTotal = lists.Count;
+            object? source = null;
+            int rowTotal = -1;
             if (lists.Count > 0)
             {
-                rowSource = lists[0].ItemsSource;
-                rowItemCount = lists[0].Items.Count;
+                source = lists[0].ItemsSource;
+                rowTotal = lists[0].Items.Count;
             }
 
-            expectedRows = vm.Rows;
-            computedRowCount = vm.Rows.Count;
-        }), CancellationToken.None);
+            var rows = vm.Rows;
+            int computedTotal = vm.Rows.Count;
+
+            return (boxTexts, buttonLabels, left, right, boundCommand, expectedCommand, source, rows,
+                listTotal, rowTotal, computedTotal);
+        });
 
         await Assert.That(buttonContents)
             .Contains("Compute")
