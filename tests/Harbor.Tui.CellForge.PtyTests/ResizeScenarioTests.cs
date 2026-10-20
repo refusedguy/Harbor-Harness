@@ -64,6 +64,11 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
 
             // The reflow lands as a grid repaint — wait for THAT instead of
             // sleeping a fixed interval between width reads.
+            if (ChildIsGone)
+            {
+                break; // the child is gone: the reflow will never land
+            }
+
             _ = await WaitForRepaintAsync(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
         }
 
