@@ -45,32 +45,3 @@ namespace Harbor.Storage.Jsonl;
 internal sealed record SessionSnapshot(
     Session Session,
     IReadOnlyList<AgentMessage> Messages);
-
-/// <summary>
-///     Capability: a store that can hand out a ONE-GENERATION snapshot of a
-///     session — the header, the history and the stats, all from one read.
-/// </summary>
-/// <remarks>
-///     <para>
-///         This is deliberately NOT part of <see cref="ISessionStore" />: the
-///         domain contract cannot express "these two reads must agree", and
-///         changing it would freeze the storage API for every backend (and
-///         every plugin) over one store's export bug. A capability interface
-///         keeps the promise optional and local: a store that can serve a
-///         coherent snapshot implements it, and the porter asks for one.
-///     </para>
-///     <para>
-///         A store that does NOT implement it is exported through the
-///         two-call fallback, which is still one read fewer than before.
-///     </para>
-/// </remarks>
-internal interface ISessionSnapshotSource
-{
-    /// <summary>
-    ///     Read one session as a single snapshot.
-    /// </summary>
-    /// <param name="sessionId">The session id.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The snapshot, or failure with a diagnostic.</returns>
-    Task<Result<SessionSnapshot>> ReadSessionSnapshotAsync(string sessionId, CancellationToken ct);
-}

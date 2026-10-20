@@ -40,13 +40,15 @@ public sealed partial class JsonlSessionStore
     ///         one.
     ///     </para>
     ///     <para>
-    ///         The implementation is EXPLICIT (an explicit interface member) on
-    ///         purpose: the capability is internal, so the public surface of the
-    ///         store does not grow a member whose signature names an internal
-    ///         type.
+    ///         It is INTERNAL on purpose: the promise it makes ("these two
+    ///         reads must agree") is not expressible in the domain contract
+    ///         without freezing the storage API for every backend and every
+    ///         plugin over one store's export bug. The exporter asks for the
+    ///         snapshot where it can (the JSONL store), and falls back to two
+    ///         reads where it cannot.
     ///     </para>
     /// </remarks>
-    async Task<Result<SessionSnapshot>> ISessionSnapshotSource.ReadSessionSnapshotAsync(
+    internal async Task<Result<SessionSnapshot>> ReadSessionSnapshotAsync(
         string sessionId,
         CancellationToken ct)
     {

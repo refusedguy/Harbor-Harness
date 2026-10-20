@@ -1,8 +1,7 @@
 using System.Text;
 using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Sessions;
+using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Jsonl.Tests;
@@ -22,10 +21,10 @@ namespace Harbor.Storage.Jsonl.Tests;
 ///     misleads whoever reads it.
 /// </para>
 /// <para>
-///     The three tests below pin the three ways that can go wrong: the export
-///     reading more than one generation (the split store), a write landing
-///     DURING the export (the appending writer), and a file whose records
-///     contradict each other (the crafted file).
+///     The tests below pin the ways that can go wrong: the export drifting
+///     away from the store's own one-generation snapshot, a write landing
+///     DURING the export, a file whose records contradict each other, and a
+///     store that cannot serve a snapshot at all.
 /// </para>
 /// </remarks>
 public class JsonlSessionPorterSnapshotTests
@@ -72,16 +71,16 @@ public class JsonlSessionPorterSnapshotTests
         return (envelope, messages);
     }
 
-    // ── 1. the export is assembled from ONE generation ─────────────────────
+    // ── 1. the export IS the store's one-generation snapshot ───────────────
 
     [Test]
-    public async Task Export_AssemblesEveryPartFromOneSnapshot()
+    public async Task Export_IsTheStoresOneGenerationSnapshot()
     {
-        // The store's own snapshot is generation A. The double's individual
-        // read APIs answer with generation B — a different title, a different
-        // history, a different stats record. An export assembled from more
-        // than one read mixes them; an export assembled from the snapshot is
-        // generation A all the way down.
+        // The store reads the file once and hands over a snapshot: the session
+        // record (header + the stats derived from those very messages) and the
+        // history. The export must be THAT — not a re-derivation of the same
+        // numbers from a second read, which is where the generations used to
+        // drift apart.
         var store = CreateStore();
         try
         {
@@ -89,28 +88,26 @@ public class JsonlSessionPorterSnapshotTests
             await store.UpdateAsync(created with { Title = "generation A" });
             await store.AppendMessageAsync(created.Id, Assistant(created.Id, "m-a", 10, 5));
 
-            var snapshot = await ((ISessionSnapshotSource)store).ReadSessionSnapshotAsync(created.Id, default);
+            var snapshot = await store.ReadSessionSnapshotAsync(created.Id, default);
             await Assert.That(snapshot.IsSuccess).IsTrue();
 
-            var split = new SplitGenerationStore(store, snapshot.Value);
             var porter = new JsonlSessionPorter(NullLogger<JsonlSessionPorter>.Instance);
             var payload = new StringWriter();
 
-            var exported = await porter.ExportAsync(split, created.Id, payload);
+            var exported = await porter.ExportAsync(store, created.Id, payload);
             await Assert.That(exported.IsSuccess).IsTrue();
 
             var (envelope, messages) = ParseExport(payload.ToString());
             await Assert.That(envelope.GetProperty("session").GetProperty("title").GetString())
-                .IsEqualTo("generation A");
-            await Assert.That(messages.Count).IsEqualTo(1);
+                .IsEqualTo(snapshot.Value.Session.Title);
+            await Assert.That(messages.Count).IsEqualTo(snapshot.Value.Messages.Count);
             await Assert.That(messages[0].GetProperty("id").GetString()).IsEqualTo("m-a");
 
-            // The stats describe the history under them.
-            int counted = messages.Count(m => m.GetProperty("role").GetString() == "assistant");
+            // The stats in the envelope are the snapshot's stats.
+            await Assert.That(envelope.GetProperty("metadata").GetProperty("tokensInput").GetInt32())
+                .IsEqualTo(snapshot.Value.Session.Metadata.TokensInput);
             await Assert.That(envelope.GetProperty("metadata").GetProperty("messageCount").GetInt32())
-                .IsEqualTo(counted);
-            await Assert.That(envelope.GetProperty("session").GetProperty("metadata").GetProperty("messageCount").GetInt32())
-                .IsEqualTo(counted);
+                .IsEqualTo(snapshot.Value.Session.Metadata.MessageCount);
         }
         finally
         {
@@ -129,6 +126,9 @@ public class JsonlSessionPorterSnapshotTests
         // promised), but its stats and its body must agree with EACH OTHER:
         // a log whose header counts disagree with its body misleads the
         // incident review it was collected for.
+        //
+        // On the old code this test FAILS: the body was read after the append
+        // while the stats had been derived before it.
         var store = CreateStore();
         try
         {
@@ -225,6 +225,42 @@ public class JsonlSessionPorterSnapshotTests
         }
     }
 
+    // ── 4. a store that cannot serve a snapshot ───────────────────────────
+
+    [Test]
+    public async Task Export_StoreWithoutASnapshot_KeepsTheStoresOwnStats()
+    {
+        // The fallback path (a store that cannot promise one generation) must
+        // still carry THAT store's stats — the persisted ones, cost included.
+        // Re-deriving the stats from the history instead would silently drop
+        // the price the core computed, and the export is what a person sends
+        // to an incident review.
+        var store = new MemorySessionStore();
+        Session created = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
+        await store.AppendMessageAsync(created.Id, Assistant(created.Id, "m-1", 10, 5));
+
+        var stats = SessionMetadata.Empty with
+        {
+            Cost = 0.42m,
+            TokensInput = 99,
+            TokensOutput = 11,
+            MessageCount = 3,
+        };
+        await store.UpdateStatsAsync(created.Id, stats);
+
+        var porter = new JsonlSessionPorter(NullLogger<JsonlSessionPorter>.Instance);
+        var payload = new StringWriter();
+
+        var exported = await porter.ExportAsync(store, created.Id, payload);
+        await Assert.That(exported.IsSuccess).IsTrue();
+
+        var (envelope, messages) = ParseExport(payload.ToString());
+        await Assert.That(messages.Count).IsEqualTo(1);
+        await Assert.That(envelope.GetProperty("metadata").GetProperty("cost").GetDecimal()).IsEqualTo(0.42m);
+        await Assert.That(envelope.GetProperty("metadata").GetProperty("tokensInput").GetInt32()).IsEqualTo(99);
+        await Assert.That(envelope.GetProperty("metadata").GetProperty("messageCount").GetInt32()).IsEqualTo(3);
+    }
+
     /// <summary>
     ///     One exported message record, encoded exactly as the store writes it.
     /// </summary>
@@ -270,68 +306,5 @@ public class JsonlSessionPorterSnapshotTests
         }
 
         public override string ToString() => _builder.ToString();
-    }
-
-    /// <summary>
-    ///     A store whose individual read APIs answer with a DIFFERENT
-    ///     generation than its snapshot: the snapshot is generation A, the
-    ///     reads are generation B. An export that reads more than once mixes
-    ///     them; an export that reads the snapshot once does not.
-    /// </summary>
-    private sealed class SplitGenerationStore : ISessionStore, ISessionSnapshotSource
-    {
-        private readonly ISessionStore _inner;
-        private readonly SessionSnapshot _snapshot;
-
-        public SplitGenerationStore(ISessionStore inner, SessionSnapshot snapshot)
-        {
-            _inner = inner;
-            _snapshot = snapshot;
-        }
-
-        // ── generation B: what the individual reads answer ──
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(_snapshot.Session with { Title = "generation B" }));
-
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(
-                [.. _snapshot.Messages, Assistant(sessionId, "m-generation-b", 1, 1)]));
-
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(_snapshot.Session.Metadata with { MessageCount = 99 }));
-
-        // ── generation A: the one-generation snapshot ──
-
-        async Task<Result<SessionSnapshot>> ISessionSnapshotSource.ReadSessionSnapshotAsync(
-            string sessionId, CancellationToken ct) =>
-            await ((ISessionSnapshotSource)_inner).ReadSessionSnapshotAsync(sessionId, ct).ConfigureAwait(false);
-
-        // ── everything else is not part of this story ──
-
-        public Task<Result<Session>> CreateAsync(
-            string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
-            _inner.CreateAsync(directory, agentName, providerId, modelId, ct);
-
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
-            _inner.ListAsync(projectId, ct);
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            _inner.AppendMessageAsync(sessionId, message, ct);
-
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            _inner.UpdateMessageAsync(sessionId, message, ct);
-
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
-            _inner.DeleteAsync(sessionId, ct);
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) =>
-            _inner.UpdateAsync(session, ct);
-
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
-            _inner.UpdateStatsAsync(sessionId, metadata, ct);
-
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
-            _inner.DeleteMessagesAfterAsync(sessionId, messageId, ct);
     }
 }

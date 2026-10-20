@@ -108,11 +108,11 @@ public sealed class JsonlSessionPorter : ISessionPorter
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         A store that can promise one generation is asked for a
-    ///         snapshot (the JSONL store can: it reads the file once and takes
-    ///         the header and the history from that single pass). A store that
-    ///         cannot is read in two calls — the session record (which already
-    ///         carries that store's own stats) and the history.
+    ///         The JSONL store can promise one generation, and is asked for it:
+    ///         it reads the file once and takes the header and the history from
+    ///         that single pass. A store that cannot is read in two calls — the
+    ///         session record (which already carries that store's own stats)
+    ///         and the history.
     ///     </para>
     ///     <para>
     ///         The old THIRD call is gone: <c>GetStatsAsync</c> was pure
@@ -128,9 +128,9 @@ public sealed class JsonlSessionPorter : ISessionPorter
         string sessionId,
         CancellationToken ct)
     {
-        if (store is ISessionSnapshotSource source)
+        if (store is JsonlSessionStore jsonl)
         {
-            var read = await source.ReadSessionSnapshotAsync(sessionId, ct).ConfigureAwait(false);
+            var read = await jsonl.ReadSessionSnapshotAsync(sessionId, ct).ConfigureAwait(false);
             return read.MapError(e => $"Cannot export session '{sessionId}': {e}");
         }
 
