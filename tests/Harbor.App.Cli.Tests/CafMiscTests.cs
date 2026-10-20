@@ -28,207 +28,125 @@ namespace Harbor.App.Cli.Tests;
 ///     so the comparison stays exact; install/uninstall paths touch the real
 ///     filesystem and are deliberately untested (same as <c>--follow</c>/
 ///     <c>--clean</c> in <c>CafLogsTests</c>).
+///     <para>
+///         The parity and <c>--help</c> assertions themselves live in
+///         <see cref="CafVerbTestBase" /> — this class keeps only the verb
+///         and the tail.
+///     </para>
 /// </remarks>
 [NotInParallel]
-public class CafMiscTests
+public class CafMiscTests : CafVerbTestBase
 {
     [Test]
     public async Task Ask_Bare_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => AskVerb.RunAsync(NullLogger.Instance, []));
-        var viaCaf = await RunCafAsync("ask", []);
-        await Assert.That(viaCaf.Exit).IsEqualTo(1);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "ask", [], () => AskVerb.RunAsync(NullLogger.Instance, []), expectedExit: 1);
     }
 
     [Test]
     public async Task Ask_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("ask", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("ask");
     }
 
     [Test]
     public async Task Events_Bare_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => EventsVerb.RunAsync([]));
-        var viaCaf = await RunCafAsync("events", []);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("events", [], () => EventsVerb.RunAsync([]));
     }
 
     [Test]
     public async Task Events_UnknownPositional_MatchesManualByteForByte()
     {
         string[] tail = ["bogus-sub-xyz"];
-        var direct = await CaptureAsync(() => EventsVerb.RunAsync(tail));
-        var viaCaf = await RunCafAsync("events", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("events", tail, () => EventsVerb.RunAsync(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Events_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("events", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("events");
     }
 
     [Test]
     public async Task Headless_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("headless", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("headless");
     }
 
     [Test]
     public async Task Ide_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("ide", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("ide");
     }
 
     [Test]
     public async Task Plugin_Bare_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync([]));
-        var viaCaf = await RunCafAsync("plugin", []);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "plugin", [], () => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync([]));
     }
 
     [Test]
     public async Task Plugin_UnknownSub_MatchesManualByteForByte()
     {
         string[] tail = ["bogus-sub-xyz"];
-        var direct = await CaptureAsync(() => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync(tail));
-        var viaCaf = await RunCafAsync("plugin", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "plugin", tail, () => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Plugin_InstallNoArg_MatchesManualByteForByte()
     {
         string[] tail = ["install"];
-        var direct = await CaptureAsync(() => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync(tail));
-        var viaCaf = await RunCafAsync("plugin", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "plugin", tail, () => new PluginsCommand(Console.Out, Console.Error).ExecuteAsync(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Plugin_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("plugin", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("plugin");
     }
 
     [Test]
     public async Task Skill_Bare_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync([]));
-        var viaCaf = await RunCafAsync("skill", []);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "skill", [], () => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync([]));
     }
 
     [Test]
     public async Task Skill_UnknownSub_MatchesManualByteForByte()
     {
         string[] tail = ["bogus-sub-xyz"];
-        var direct = await CaptureAsync(() => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync(tail));
-        var viaCaf = await RunCafAsync("skill", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "skill", tail, () => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Skill_InstallNoArg_MatchesManualByteForByte()
     {
         string[] tail = ["install"];
-        var direct = await CaptureAsync(() => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync(tail));
-        var viaCaf = await RunCafAsync("skill", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "skill", tail, () => new SkillsCommand(Console.Out, Console.Error).ExecuteAsync(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Skill_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("skill", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("skill");
     }
 
     [Test]
     public async Task Help_Bare_MatchesManualByteForByte()
     {
+        // The manual arm prints to stdout only, so this case compares stdout
+        // alone — it does not fit the three-way parity helper.
         string direct = CaptureOut(() => HelpVerbs.PrintHelp());
         var (exit, viaCaf, _) = await RunCafAsync("help", []);
         await Assert.That(exit).IsEqualTo(0);
         await Assert.That(viaCaf).IsEqualTo(direct);
-    }
-
-    private static string CaptureOut(Func<int> run)
-    {
-        var original = Console.Out;
-        try
-        {
-            var sw = new StringWriter();
-            Console.SetOut(sw);
-            run();
-            return sw.ToString();
-        }
-        finally
-        {
-            Console.SetOut(original);
-        }
-    }
-
-    private static async Task<(int Exit, string Out, string Err)> CaptureAsync(Func<Task<int>> run)
-    {
-        var originalOut = Console.Out;
-        var originalErr = Console.Error;
-        try
-        {
-            var swOut = new StringWriter();
-            var swErr = new StringWriter();
-            Console.SetOut(swOut);
-            Console.SetError(swErr);
-            int exit = await run().ConfigureAwait(false);
-            return (exit, swOut.ToString(), swErr.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalErr);
-        }
-    }
-
-    private static Task<(int Exit, string Out, string Err)> RunCafAsync(string verb, string[] rest)
-    {
-        Environment.ExitCode = 0;
-        return CaptureAsync(() => CafPilotVerbs.RunAsync(verb, rest));
     }
 }

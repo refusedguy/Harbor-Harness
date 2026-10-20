@@ -20,151 +20,92 @@ namespace Harbor.App.Cli.Tests;
 ///     <c>CommandDispatchTests.Program_MainDispatch_UsesICommandArray</c>);
 ///     without the constraint a concurrent swap steals our output and the
 ///     capture reads back empty.
+///     <para>
+///         The parity and <c>--help</c> assertions themselves live in
+///         <see cref="CafVerbTestBase" /> — this class keeps only the verb
+///         and the tail.
+///     </para>
 /// </remarks>
 [NotInParallel]
-public class CafSessionRunTests
+public class CafSessionRunTests : CafVerbTestBase
 {
     [Test]
     public async Task Sessions_UnknownSub_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, ["bogus-sub"]));
-        var viaCaf = await RunCafAsync("sessions", ["bogus-sub"]);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        string[] tail = ["bogus-sub"];
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_Rename_MissingArgs_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, ["rename"]));
-        var viaCaf = await RunCafAsync("sessions", ["rename"]);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        string[] tail = ["rename"];
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_Search_MissingQuery_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, ["search"]));
-        var viaCaf = await RunCafAsync("sessions", ["search"]);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        string[] tail = ["search"];
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_Search_SessionFlag_MissingQuery_MatchesManualByteForByte()
     {
         string[] tail = ["search", "--session", "abc123"];
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
-        var viaCaf = await RunCafAsync("sessions", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_Search_ShortSessionFlag_MissingQuery_MatchesManualByteForByte()
     {
         string[] tail = ["search", "-s", "abc123"];
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
-        var viaCaf = await RunCafAsync("sessions", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_NonSearch_WithSessionFlag_MatchesManualByteForByte()
     {
         string[] tail = ["--session", "abc123", "rename"];
-        var direct = await CaptureAsync(() => SessionsVerb.RunAsync(NullLogger.Instance, tail));
-        var viaCaf = await RunCafAsync("sessions", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte(
+            "sessions", tail, () => SessionsVerb.RunAsync(NullLogger.Instance, tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Sessions_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("sessions", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("sessions");
     }
 
     [Test]
     public async Task Run_Bare_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => RunTaskVerb.RunAsync([]));
-        var viaCaf = await RunCafAsync("run", []);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("run", [], () => RunTaskVerb.RunAsync([]), expectedExit: 2);
     }
 
     [Test]
     public async Task Run_UnknownSub_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => RunTaskVerb.RunAsync(["bogus"]));
-        var viaCaf = await RunCafAsync("run", ["bogus"]);
-        await Assert.That(viaCaf.Exit).IsEqualTo(1);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        string[] tail = ["bogus"];
+        await AssertMatchesManualByteForByte("run", tail, () => RunTaskVerb.RunAsync(tail), expectedExit: 1);
     }
 
     [Test]
     public async Task Run_List_MatchesManualByteForByte()
     {
-        var direct = await CaptureAsync(() => RunTaskVerb.RunAsync(["list"]));
-        var viaCaf = await RunCafAsync("run", ["list"]);
-        await Assert.That(viaCaf.Exit).IsEqualTo(0);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        string[] tail = ["list"];
+        await AssertMatchesManualByteForByte("run", tail, () => RunTaskVerb.RunAsync(tail), expectedExit: 0);
     }
 
     [Test]
     public async Task Run_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("run", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
-    }
-
-    private static async Task<(int Exit, string Out, string Err)> CaptureAsync(Func<Task<int>> run)
-    {
-        var originalOut = Console.Out;
-        var originalErr = Console.Error;
-        try
-        {
-            var swOut = new StringWriter();
-            var swErr = new StringWriter();
-            Console.SetOut(swOut);
-            Console.SetError(swErr);
-            int exit = await run().ConfigureAwait(false);
-            return (exit, swOut.ToString(), swErr.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalErr);
-        }
-    }
-
-    private static Task<(int Exit, string Out, string Err)> RunCafAsync(string verb, string[] rest)
-    {
-        Environment.ExitCode = 0;
-        return CaptureAsync(() => CafPilotVerbs.RunAsync(verb, rest));
+        await AssertHelpExitsZeroWithUsage("run");
     }
 }

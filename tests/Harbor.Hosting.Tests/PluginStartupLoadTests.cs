@@ -13,10 +13,13 @@ namespace Harbor.Hosting.Tests;
 ///     served by <c>harbor-plugins-host</c> over MCP.
 /// </summary>
 [NotInParallel("hosting")]
-public class PluginStartupLoadTests
+public class PluginStartupLoadTests : PluginProbeTestBase
 {
-    private static string TempHarborDir() =>
-        Path.Combine(Path.GetTempPath(), "harbor-startup-tests", Guid.NewGuid().ToString("N"));
+    /// <inheritdoc />
+    protected override PluginProbe Probe => new("startup-probe", "StartupProbe");
+
+    /// <inheritdoc />
+    protected override string TempDirPrefix => "harbor-startup";
 
     [Test]
     public async Task AddHarbor_WithPreexistingGlobalPlugin_DoesNotBlockOnPluginTools()
@@ -26,16 +29,14 @@ public class PluginStartupLoadTests
         Directory.CreateDirectory(pluginsDir);
         string suffix = Guid.NewGuid().ToString("N")[..8];
         await File.WriteAllTextAsync(
-            Path.Combine(pluginsDir, $"startup-probe-{suffix}.cs"),
+            Path.Combine(pluginsDir, Probe.FileName(suffix)),
             SamplePluginText(suffix));
 
-        var services = new ServiceCollection();
-        services.AddHarbor(new HarborComposeOptions
+        using var sp = Compose(new HarborComposeOptions
         {
             HarborDir = harborDir,
             DefaultStorageBackend = "memory",
         });
-        using var sp = services.BuildServiceProvider();
 
         // Startup never compiles: the registry read below observes the final
         // state, not a race with a background load.
@@ -55,16 +56,14 @@ public class PluginStartupLoadTests
         string suffix = Guid.NewGuid().ToString("N")[..8];
         string toolName = $"hello_{suffix}";
         await File.WriteAllTextAsync(
-            Path.Combine(pluginsDir, $"startup-probe-{suffix}.cs"),
+            Path.Combine(pluginsDir, Probe.FileName(suffix)),
             SamplePluginText(suffix));
 
-        var services = new ServiceCollection();
-        services.AddHarbor(new HarborComposeOptions
+        using var sp = Compose(new HarborComposeOptions
         {
             HarborDir = harborDir,
             DefaultStorageBackend = "memory",
         });
-        using var sp = services.BuildServiceProvider();
 
         // Slice 3 serves plugin tools out-of-process (harbor-plugins-host over
         // MCP 'harbor-csharp-plugins'), so the in-process registry must stay
@@ -79,45 +78,4 @@ public class PluginStartupLoadTests
             .Any(t => t.Name.Value.Equals(toolName, StringComparison.Ordinal));
         await Assert.That(found).IsEqualTo(false);
     }
-
-    private static string SamplePluginText(string suffix) => $$"""
-                                                              using System;
-                                                              using System.Collections.Generic;
-                                                              using System.Text.Json;
-                                                              using System.Threading;
-                                                              using System.Threading.Tasks;
-                                                              using CSharpFunctionalExtensions;
-                                                              using Harbor.Abstractions.Models;
-                                                              using Harbor.Abstractions.Models.Identifiers;
-                                                              using Harbor.Abstractions.Permissions;
-                                                              using Harbor.Abstractions.Plugins;
-                                                              using Harbor.Abstractions.Tools;
-                                                              using Microsoft.Extensions.Logging;
-
-                                                              public sealed class StartupProbePlugin{{suffix}} : IToolPlugin
-                                                              {
-                                                                  public string Name => "startup-probe-{{suffix}}";
-                                                                  public Version Version => new(1, 0, 0);
-                                                                  public Version RequiredHarborVersion => new(0, 4, 0);
-                                                                  public string Description => "Startup probe {{suffix}}";
-                                                                  public void Initialize(PluginContext context) { }
-                                                                  public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<ProbeTool{{suffix}}>();
-                                                                  public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-                                                              }
-
-                                                              public sealed class ProbeTool{{suffix}} : ITool
-                                                              {
-                                                                  public ToolName Name => ToolName.Create("hello_{{suffix}}");
-                                                                  public string DisplayName => "Probe {{suffix}}";
-                                                                  public string Description => "Returns a greeting";
-                                                                  public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
-                                                                  public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-                                                                  public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-                                                                  public string? PromptSnippet => null;
-                                                                  public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-                                                                  public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-                                                                      => Task.FromResult(ToolResult.Success("Hello from probe!"));
-                                                              }
-                                                              """;
 }

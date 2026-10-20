@@ -1,7 +1,6 @@
 using Harbor.Abstractions.Tools;
 using Harbor.Hosting;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Harbor.Hosting.Tests;
 
@@ -14,109 +13,10 @@ namespace Harbor.Hosting.Tests;
 ///     <c>IToolRegistry</c>.
 /// </summary>
 [NotInParallel("hosting")]
-public class PluginOutOfProcDefaultTests
+public class PluginOutOfProcDefaultTests : PluginAbsenceTestBase
 {
-    private static string TempHarborDir() =>
-        Path.Combine(Path.GetTempPath(), "harbor-outofproc-tests", Guid.NewGuid().ToString("N"));
-
-    private static ServiceProvider Compose(string harborDir, CaptureLoggerFactory capture)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(new HarborComposeOptions
-        {
-            HarborDir = harborDir,
-            DefaultStorageBackend = "memory",
-            BootstrapLoggerFactory = () => capture,
-        });
-        return services.BuildServiceProvider();
-    }
-
-    private static IDisposable WithTempCwd()
-    {
-        string previous = Directory.GetCurrentDirectory();
-        string temp = Path.Combine(Path.GetTempPath(), "harbor-outofproc-cwd", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(temp);
-        Directory.SetCurrentDirectory(temp);
-        return new RestoreCwd(previous, temp);
-    }
-
-    private sealed class RestoreCwd : IDisposable
-    {
-        private readonly string _previous;
-        private readonly string _temp;
-        public RestoreCwd(string previous, string temp)
-        {
-            _previous = previous;
-            _temp = temp;
-        }
-
-        public void Dispose()
-        {
-            Directory.SetCurrentDirectory(_previous);
-            try
-            {
-                Directory.Delete(_temp, true);
-            }
-            catch (IOException)
-            {
-                // Best-effort cleanup.
-            }
-        }
-    }
-
-    private sealed record LogEntry(LogLevel Level, string Message);
-
-    private sealed class CaptureLogger : ILogger
-    {
-        private readonly List<LogEntry> _entries;
-        public CaptureLogger(List<LogEntry> entries)
-        {
-            _entries = entries;
-        }
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            lock (_entries)
-            {
-                _entries.Add(new LogEntry(logLevel, formatter(state, exception)));
-            }
-        }
-    }
-
-    private sealed class CaptureLoggerFactory : ILoggerFactory
-    {
-        private readonly List<LogEntry> _entries = new();
-        public IReadOnlyList<LogEntry> Entries
-        {
-            get
-            {
-                lock (_entries)
-                {
-                    return _entries.ToArray();
-                }
-            }
-        }
-
-        public void AddProvider(ILoggerProvider provider)
-        {
-        }
-
-        public ILogger CreateLogger(string categoryName) => new CaptureLogger(_entries);
-
-        public void Dispose()
-        {
-        }
-    }
+    /// <inheritdoc />
+    protected override string TempDirPrefix => "harbor-outofproc";
 
     /// <summary>
     ///     #1055 slice 3: scripts on disk must NOT register tools in the CLI

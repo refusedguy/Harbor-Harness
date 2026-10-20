@@ -12,17 +12,13 @@ namespace Harbor.Hosting.Tests;
 ///     enumerating both scopes for the <c>/plugins</c> panel.
 /// </summary>
 [NotInParallel("hosting")]
-public class PluginReloadServiceTests
+public class PluginReloadServiceTests : PluginProbeTestBase
 {
-    private static string TempHarborDir() =>
-        Path.Combine(Path.GetTempPath(), "harbor-reload-tests", Guid.NewGuid().ToString("N"));
+    /// <inheritdoc />
+    protected override PluginProbe Probe => new("reload-probe", "ReloadProbe");
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
+    /// <inheritdoc />
+    protected override string TempDirPrefix => "harbor-reload";
 
     [Test]
     public async Task ReloadAsync_NewGlobalPlugin_ToolBecomesVisibleInLiveRegistry()
@@ -46,7 +42,7 @@ public class PluginReloadServiceTests
         Directory.CreateDirectory(pluginsDir);
         string uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
         await File.WriteAllTextAsync(
-            Path.Combine(pluginsDir, $"reload-probe-{uniqueSuffix}.cs"),
+            Path.Combine(pluginsDir, Probe.FileName(uniqueSuffix)),
             SamplePluginText(uniqueSuffix));
 
         var service = sp.GetRequiredService<PluginReloadService>();
@@ -86,7 +82,7 @@ public class PluginReloadServiceTests
         Directory.CreateDirectory(pluginsDir);
         string uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
         await File.WriteAllTextAsync(
-            Path.Combine(pluginsDir, $"reload-probe-{uniqueSuffix}.cs"),
+            Path.Combine(pluginsDir, Probe.FileName(uniqueSuffix)),
             SamplePluginText(uniqueSuffix));
 
         var service = sp.GetRequiredService<PluginReloadService>();
@@ -100,45 +96,4 @@ public class PluginReloadServiceTests
             .Count(t => t.Name.Value.Equals($"hello_{uniqueSuffix}", StringComparison.Ordinal));
         await Assert.That(occurrences).IsEqualTo(0);
     }
-
-    private static string SamplePluginText(string suffix) => $$"""
-                                                             using System;
-                                                             using System.Collections.Generic;
-                                                             using System.Text.Json;
-                                                             using System.Threading;
-                                                             using System.Threading.Tasks;
-                                                             using CSharpFunctionalExtensions;
-                                                             using Harbor.Abstractions.Models;
-                                                             using Harbor.Abstractions.Models.Identifiers;
-                                                             using Harbor.Abstractions.Permissions;
-                                                             using Harbor.Abstractions.Plugins;
-                                                             using Harbor.Abstractions.Tools;
-                                                             using Microsoft.Extensions.Logging;
-
-                                                             public sealed class ReloadProbePlugin{{suffix}} : IToolPlugin
-                                                             {
-                                                                 public string Name => "reload-probe-{{suffix}}";
-                                                                 public Version Version => new(1, 0, 0);
-                                                                 public Version RequiredHarborVersion => new(0, 4, 0);
-                                                                 public string Description => "Reload probe {{suffix}}";
-                                                                 public void Initialize(PluginContext context) { }
-                                                                 public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<ProbeTool{{suffix}}>();
-                                                                 public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
-                                                             }
-
-                                                             public sealed class ProbeTool{{suffix}} : ITool
-                                                             {
-                                                                 public ToolName Name => ToolName.Create("hello_{{suffix}}");
-                                                                 public string DisplayName => "Probe {{suffix}}";
-                                                                 public string Description => "Returns a greeting";
-                                                                 public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
-                                                                 public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-                                                                 public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-                                                                 public string? PromptSnippet => null;
-                                                                 public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-                                                                 public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-                                                                     => Task.FromResult(ToolResult.Success("Hello from probe!"));
-                                                             }
-                                                             """;
 }
