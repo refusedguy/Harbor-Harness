@@ -1,0 +1,1897 @@
+#nullable enable
+Harbor.Abstractions.Contracts.MoodFrameAttribute
+Harbor.Abstractions.Contracts.MoodFrameAttribute.FrameBank.get -> string!
+Harbor.Abstractions.Contracts.MoodFrameAttribute.MoodFrameAttribute(string! frameBank) -> void
+Harbor.Abstractions.Contracts.MoodFrameAttribute.PanelEars.get -> string?
+Harbor.Abstractions.Contracts.MoodFrameAttribute.PanelEars.set -> void
+Harbor.Abstractions.Contracts.MoodFrameAttribute.PanelPaws.get -> string?
+Harbor.Abstractions.Contracts.MoodFrameAttribute.PanelPaws.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute
+Harbor.Abstractions.Contracts.ObservedAttribute.CaptureArguments.get -> bool
+Harbor.Abstractions.Contracts.ObservedAttribute.CaptureArguments.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.CaptureResult.get -> bool
+Harbor.Abstractions.Contracts.ObservedAttribute.CaptureResult.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.Counter.get -> string?
+Harbor.Abstractions.Contracts.ObservedAttribute.Counter.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.Duration.get -> string?
+Harbor.Abstractions.Contracts.ObservedAttribute.Duration.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.Exclude.get -> string![]?
+Harbor.Abstractions.Contracts.ObservedAttribute.Exclude.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.ObservedAttribute() -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.ObservedAttribute(string! span) -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.Scope.get -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedAttribute.Scope.set -> void
+Harbor.Abstractions.Contracts.ObservedAttribute.Span.get -> string?
+Harbor.Abstractions.Contracts.ObservedAttribute.Span.set -> void
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.CaptureArguments.get -> bool
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.CaptureArguments.set -> void
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.ObservedPolicyAttribute() -> void
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.Scope.get -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.Scope.set -> void
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.SpanPrefix.get -> string?
+Harbor.Abstractions.Contracts.ObservedPolicyAttribute.SpanPrefix.set -> void
+Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedScope.Metrics = 2 -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedScope.None = 0 -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedScope.Span = 1 -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.ObservedScope.SpanAndMetrics = 3 -> Harbor.Abstractions.Contracts.ObservedScope
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.ClassName.get -> string!
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.ClassName.set -> void
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.Namespace.get -> string?
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.Namespace.set -> void
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.ResetMember.get -> string!
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.ResetMember.set -> void
+Harbor.Abstractions.Contracts.TerminalEscapeAttribute.TerminalEscapeAttribute() -> void
+Harbor.Abstractions.Contracts.TuiRendererAttribute
+Harbor.Abstractions.Contracts.TuiRendererAttribute.ArgsFormatter.get -> string?
+Harbor.Abstractions.Contracts.TuiRendererAttribute.ArgsFormatter.set -> void
+Harbor.Abstractions.Contracts.TuiRendererAttribute.Backend.get -> string!
+Harbor.Abstractions.Contracts.TuiRendererAttribute.Backend.set -> void
+Harbor.Abstractions.Contracts.TuiRendererAttribute.ContextType.get -> string?
+Harbor.Abstractions.Contracts.TuiRendererAttribute.ContextType.set -> void
+Harbor.Abstractions.Contracts.TuiRendererAttribute.TuiRendererAttribute() -> void
+Harbor.Abstractions.Env.HarborEnv
+Harbor.Abstractions.Events.AgentEndEvent
+Harbor.Abstractions.Events.AgentEndEvent.AgentEndEvent(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! NewMessages, bool Cancelled = false, Harbor.Abstractions.Models.RunLimitKind? Limit = null) -> void
+Harbor.Abstractions.Events.AgentEndEvent.Cancelled.get -> bool
+Harbor.Abstractions.Events.AgentEndEvent.Cancelled.init -> void
+Harbor.Abstractions.Events.AgentEndEvent.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! NewMessages, out bool Cancelled, out Harbor.Abstractions.Models.RunLimitKind? Limit) -> void
+Harbor.Abstractions.Events.AgentEndEvent.Equals(Harbor.Abstractions.Events.AgentEndEvent? other) -> bool
+Harbor.Abstractions.Events.AgentEndEvent.Limit.get -> Harbor.Abstractions.Models.RunLimitKind?
+Harbor.Abstractions.Events.AgentEndEvent.Limit.init -> void
+Harbor.Abstractions.Events.AgentEndEvent.NewMessages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Events.AgentEndEvent.NewMessages.init -> void
+Harbor.Abstractions.Events.AgentErrorEvent
+Harbor.Abstractions.Events.AgentErrorEvent.AgentErrorEvent(string! Message, string? Exception = null) -> void
+Harbor.Abstractions.Events.AgentErrorEvent.Deconstruct(out string! Message, out string? Exception) -> void
+Harbor.Abstractions.Events.AgentErrorEvent.Equals(Harbor.Abstractions.Events.AgentErrorEvent? other) -> bool
+Harbor.Abstractions.Events.AgentErrorEvent.Exception.get -> string?
+Harbor.Abstractions.Events.AgentErrorEvent.Exception.init -> void
+Harbor.Abstractions.Events.AgentErrorEvent.Message.get -> string!
+Harbor.Abstractions.Events.AgentErrorEvent.Message.init -> void
+Harbor.Abstractions.Events.AgentEvent
+Harbor.Abstractions.Events.AgentEvent.AgentEvent() -> void
+Harbor.Abstractions.Events.AgentEvent.AgentEvent(Harbor.Abstractions.Events.AgentEvent! original) -> void
+Harbor.Abstractions.Events.AgentEvent.Timestamp.get -> System.DateTimeOffset
+Harbor.Abstractions.Events.AgentEvent.Timestamp.init -> void
+Harbor.Abstractions.Events.AgentStartEvent
+Harbor.Abstractions.Events.AgentStartEvent.AgentStartEvent(string! SessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, Harbor.Abstractions.Models.ModelInfo? Model = null, Harbor.Abstractions.Models.SessionKind Kind = Harbor.Abstractions.Models.SessionKind.User) -> void
+Harbor.Abstractions.Events.AgentStartEvent.Deconstruct(out string! SessionId, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, out Harbor.Abstractions.Models.ModelInfo? Model, out Harbor.Abstractions.Models.SessionKind Kind) -> void
+Harbor.Abstractions.Events.AgentStartEvent.Equals(Harbor.Abstractions.Events.AgentStartEvent? other) -> bool
+Harbor.Abstractions.Events.AgentStartEvent.Kind.get -> Harbor.Abstractions.Models.SessionKind
+Harbor.Abstractions.Events.AgentStartEvent.Kind.init -> void
+Harbor.Abstractions.Events.AgentStartEvent.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Events.AgentStartEvent.Messages.init -> void
+Harbor.Abstractions.Events.AgentStartEvent.Model.get -> Harbor.Abstractions.Models.ModelInfo?
+Harbor.Abstractions.Events.AgentStartEvent.Model.init -> void
+Harbor.Abstractions.Events.AgentStartEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.AgentStartEvent.SessionId.init -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent
+Harbor.Abstractions.Events.CompactionCompletedEvent.CompactionCompletedEvent(string! SessionId, string! Summary, int PrunedMessageCount, int TokensSaved, System.TimeSpan Duration) -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.Deconstruct(out string! SessionId, out string! Summary, out int PrunedMessageCount, out int TokensSaved, out System.TimeSpan Duration) -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.Duration.get -> System.TimeSpan
+Harbor.Abstractions.Events.CompactionCompletedEvent.Duration.init -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.Equals(Harbor.Abstractions.Events.CompactionCompletedEvent? other) -> bool
+Harbor.Abstractions.Events.CompactionCompletedEvent.PrunedMessageCount.get -> int
+Harbor.Abstractions.Events.CompactionCompletedEvent.PrunedMessageCount.init -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.CompactionCompletedEvent.SessionId.init -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.Summary.get -> string!
+Harbor.Abstractions.Events.CompactionCompletedEvent.Summary.init -> void
+Harbor.Abstractions.Events.CompactionCompletedEvent.TokensSaved.get -> int
+Harbor.Abstractions.Events.CompactionCompletedEvent.TokensSaved.init -> void
+Harbor.Abstractions.Events.CompactionFailedEvent
+Harbor.Abstractions.Events.CompactionFailedEvent.CompactionFailedEvent(string! SessionId, string! Error) -> void
+Harbor.Abstractions.Events.CompactionFailedEvent.Deconstruct(out string! SessionId, out string! Error) -> void
+Harbor.Abstractions.Events.CompactionFailedEvent.Equals(Harbor.Abstractions.Events.CompactionFailedEvent? other) -> bool
+Harbor.Abstractions.Events.CompactionFailedEvent.Error.get -> string!
+Harbor.Abstractions.Events.CompactionFailedEvent.Error.init -> void
+Harbor.Abstractions.Events.CompactionFailedEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.CompactionFailedEvent.SessionId.init -> void
+Harbor.Abstractions.Events.CompactionStartedEvent
+Harbor.Abstractions.Events.CompactionStartedEvent.CompactionStartedEvent(string! SessionId) -> void
+Harbor.Abstractions.Events.CompactionStartedEvent.Deconstruct(out string! SessionId) -> void
+Harbor.Abstractions.Events.CompactionStartedEvent.Equals(Harbor.Abstractions.Events.CompactionStartedEvent? other) -> bool
+Harbor.Abstractions.Events.CompactionStartedEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.CompactionStartedEvent.SessionId.init -> void
+Harbor.Abstractions.Events.ErrorEvent
+Harbor.Abstractions.Events.ErrorEvent.Deconstruct(out string! Message, out string? Exception, out Harbor.Abstractions.Events.ProviderErrorKind Kind, out int? StatusCode) -> void
+Harbor.Abstractions.Events.ErrorEvent.Equals(Harbor.Abstractions.Events.ErrorEvent? other) -> bool
+Harbor.Abstractions.Events.ErrorEvent.ErrorEvent(string! Message, string? Exception = null, Harbor.Abstractions.Events.ProviderErrorKind Kind = Harbor.Abstractions.Events.ProviderErrorKind.Unknown, int? StatusCode = null) -> void
+Harbor.Abstractions.Events.ErrorEvent.Exception.get -> string?
+Harbor.Abstractions.Events.ErrorEvent.Exception.init -> void
+Harbor.Abstractions.Events.ErrorEvent.Kind.get -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ErrorEvent.Kind.init -> void
+Harbor.Abstractions.Events.ErrorEvent.Message.get -> string!
+Harbor.Abstractions.Events.ErrorEvent.Message.init -> void
+Harbor.Abstractions.Events.ErrorEvent.StatusCode.get -> int?
+Harbor.Abstractions.Events.ErrorEvent.StatusCode.init -> void
+Harbor.Abstractions.Events.FinishEvent
+Harbor.Abstractions.Events.FinishEvent.Equals(Harbor.Abstractions.Events.FinishEvent? other) -> bool
+Harbor.Abstractions.Events.FinishEvent.FinishEvent() -> void
+Harbor.Abstractions.Events.LlmEvent
+Harbor.Abstractions.Events.LlmEvent.LlmEvent() -> void
+Harbor.Abstractions.Events.LlmEvent.LlmEvent(Harbor.Abstractions.Events.LlmEvent! original) -> void
+Harbor.Abstractions.Events.LlmStreamErrorException
+Harbor.Abstractions.Events.LlmStreamErrorException.Details.get -> string?
+Harbor.Abstractions.Events.LlmStreamErrorException.Kind.get -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.LlmStreamErrorException.LlmStreamErrorException() -> void
+Harbor.Abstractions.Events.LlmStreamErrorException.LlmStreamErrorException(Harbor.Abstractions.Events.ErrorEvent! err) -> void
+Harbor.Abstractions.Events.LlmStreamErrorException.LlmStreamErrorException(string! message) -> void
+Harbor.Abstractions.Events.LlmStreamErrorException.LlmStreamErrorException(string! message, System.Exception! innerException) -> void
+Harbor.Abstractions.Events.LlmStreamErrorException.StatusCode.get -> int?
+Harbor.Abstractions.Events.MessageEndEvent
+Harbor.Abstractions.Events.MessageEndEvent.Deconstruct(out Harbor.Abstractions.Models.AssistantMessage! Message) -> void
+Harbor.Abstractions.Events.MessageEndEvent.Equals(Harbor.Abstractions.Events.MessageEndEvent? other) -> bool
+Harbor.Abstractions.Events.MessageEndEvent.Message.get -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Events.MessageEndEvent.Message.init -> void
+Harbor.Abstractions.Events.MessageEndEvent.MessageEndEvent(Harbor.Abstractions.Models.AssistantMessage! Message) -> void
+Harbor.Abstractions.Events.MessageStartEvent
+Harbor.Abstractions.Events.MessageStartEvent.Deconstruct(out Harbor.Abstractions.Models.AssistantMessage! Message) -> void
+Harbor.Abstractions.Events.MessageStartEvent.Equals(Harbor.Abstractions.Events.MessageStartEvent? other) -> bool
+Harbor.Abstractions.Events.MessageStartEvent.Message.get -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Events.MessageStartEvent.Message.init -> void
+Harbor.Abstractions.Events.MessageStartEvent.MessageStartEvent(Harbor.Abstractions.Models.AssistantMessage! Message) -> void
+Harbor.Abstractions.Events.MessageUpdateEvent
+Harbor.Abstractions.Events.MessageUpdateEvent.Deconstruct(out Harbor.Abstractions.Events.LlmEvent! LlmEvent, out Harbor.Abstractions.Models.AssistantMessage! Partial) -> void
+Harbor.Abstractions.Events.MessageUpdateEvent.Equals(Harbor.Abstractions.Events.MessageUpdateEvent? other) -> bool
+Harbor.Abstractions.Events.MessageUpdateEvent.LlmEvent.get -> Harbor.Abstractions.Events.LlmEvent!
+Harbor.Abstractions.Events.MessageUpdateEvent.LlmEvent.init -> void
+Harbor.Abstractions.Events.MessageUpdateEvent.MessageUpdateEvent(Harbor.Abstractions.Events.LlmEvent! LlmEvent, Harbor.Abstractions.Models.AssistantMessage! Partial) -> void
+Harbor.Abstractions.Events.MessageUpdateEvent.Partial.get -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Events.MessageUpdateEvent.Partial.init -> void
+Harbor.Abstractions.Events.PluginBlockedEvent
+Harbor.Abstractions.Events.PluginBlockedEvent.Deconstruct(out string! PluginName, out string! Reason, out string! Detail) -> void
+Harbor.Abstractions.Events.PluginBlockedEvent.Detail.get -> string!
+Harbor.Abstractions.Events.PluginBlockedEvent.Detail.init -> void
+Harbor.Abstractions.Events.PluginBlockedEvent.Equals(Harbor.Abstractions.Events.PluginBlockedEvent? other) -> bool
+Harbor.Abstractions.Events.PluginBlockedEvent.PluginBlockedEvent(string! PluginName, string! Reason, string! Detail) -> void
+Harbor.Abstractions.Events.PluginBlockedEvent.PluginName.get -> string!
+Harbor.Abstractions.Events.PluginBlockedEvent.PluginName.init -> void
+Harbor.Abstractions.Events.PluginBlockedEvent.Reason.get -> string!
+Harbor.Abstractions.Events.PluginBlockedEvent.Reason.init -> void
+Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Auth = 2 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Cancelled = 7 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Malformed = 6 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Network = 4 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.RateLimit = 1 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.ServerError = 5 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Timeout = 3 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrorKind.Unknown = 0 -> Harbor.Abstractions.Events.ProviderErrorKind
+Harbor.Abstractions.Events.ProviderErrors
+Harbor.Abstractions.Events.SessionChangedEvent
+Harbor.Abstractions.Events.SessionChangedEvent.Deconstruct(out string! SessionId) -> void
+Harbor.Abstractions.Events.SessionChangedEvent.Equals(Harbor.Abstractions.Events.SessionChangedEvent? other) -> bool
+Harbor.Abstractions.Events.SessionChangedEvent.SessionChangedEvent(string! SessionId) -> void
+Harbor.Abstractions.Events.SessionChangedEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.SessionChangedEvent.SessionId.init -> void
+Harbor.Abstractions.Events.SessionStatsEvent
+Harbor.Abstractions.Events.SessionStatsEvent.Deconstruct(out string! SessionId, out Harbor.Abstractions.Models.SessionMetadata! Metadata) -> void
+Harbor.Abstractions.Events.SessionStatsEvent.Equals(Harbor.Abstractions.Events.SessionStatsEvent? other) -> bool
+Harbor.Abstractions.Events.SessionStatsEvent.Metadata.get -> Harbor.Abstractions.Models.SessionMetadata!
+Harbor.Abstractions.Events.SessionStatsEvent.Metadata.init -> void
+Harbor.Abstractions.Events.SessionStatsEvent.SessionId.get -> string!
+Harbor.Abstractions.Events.SessionStatsEvent.SessionId.init -> void
+Harbor.Abstractions.Events.SessionStatsEvent.SessionStatsEvent(string! SessionId, Harbor.Abstractions.Models.SessionMetadata! Metadata) -> void
+Harbor.Abstractions.Events.StepFinishEvent
+Harbor.Abstractions.Events.StepFinishEvent.Deconstruct(out int Index, out string! FinishReason, out Harbor.Abstractions.Models.Usage? Usage, out string? ProviderModelId) -> void
+Harbor.Abstractions.Events.StepFinishEvent.Equals(Harbor.Abstractions.Events.StepFinishEvent? other) -> bool
+Harbor.Abstractions.Events.StepFinishEvent.FinishReason.get -> string!
+Harbor.Abstractions.Events.StepFinishEvent.FinishReason.init -> void
+Harbor.Abstractions.Events.StepFinishEvent.Index.get -> int
+Harbor.Abstractions.Events.StepFinishEvent.Index.init -> void
+Harbor.Abstractions.Events.StepFinishEvent.ProviderModelId.get -> string?
+Harbor.Abstractions.Events.StepFinishEvent.ProviderModelId.init -> void
+Harbor.Abstractions.Events.StepFinishEvent.StepFinishEvent(int Index, string! FinishReason, Harbor.Abstractions.Models.Usage? Usage, string? ProviderModelId = null) -> void
+Harbor.Abstractions.Events.StepFinishEvent.Usage.get -> Harbor.Abstractions.Models.Usage?
+Harbor.Abstractions.Events.StepFinishEvent.Usage.init -> void
+Harbor.Abstractions.Events.StepStartEvent
+Harbor.Abstractions.Events.StepStartEvent.Deconstruct(out int Index) -> void
+Harbor.Abstractions.Events.StepStartEvent.Equals(Harbor.Abstractions.Events.StepStartEvent? other) -> bool
+Harbor.Abstractions.Events.StepStartEvent.Index.get -> int
+Harbor.Abstractions.Events.StepStartEvent.Index.init -> void
+Harbor.Abstractions.Events.StepStartEvent.StepStartEvent(int Index) -> void
+Harbor.Abstractions.Events.TextDeltaEvent
+Harbor.Abstractions.Events.TextDeltaEvent.Deconstruct(out string! Id, out string! Delta) -> void
+Harbor.Abstractions.Events.TextDeltaEvent.Delta.get -> string!
+Harbor.Abstractions.Events.TextDeltaEvent.Delta.init -> void
+Harbor.Abstractions.Events.TextDeltaEvent.Equals(Harbor.Abstractions.Events.TextDeltaEvent? other) -> bool
+Harbor.Abstractions.Events.TextDeltaEvent.Id.get -> string!
+Harbor.Abstractions.Events.TextDeltaEvent.Id.init -> void
+Harbor.Abstractions.Events.TextDeltaEvent.TextDeltaEvent(string! Id, string! Delta) -> void
+Harbor.Abstractions.Events.TextEndEvent
+Harbor.Abstractions.Events.TextEndEvent.Deconstruct(out string! Id, out string! FinalText) -> void
+Harbor.Abstractions.Events.TextEndEvent.Equals(Harbor.Abstractions.Events.TextEndEvent? other) -> bool
+Harbor.Abstractions.Events.TextEndEvent.FinalText.get -> string!
+Harbor.Abstractions.Events.TextEndEvent.FinalText.init -> void
+Harbor.Abstractions.Events.TextEndEvent.Id.get -> string!
+Harbor.Abstractions.Events.TextEndEvent.Id.init -> void
+Harbor.Abstractions.Events.TextEndEvent.TextEndEvent(string! Id, string! FinalText) -> void
+Harbor.Abstractions.Events.TextStartEvent
+Harbor.Abstractions.Events.TextStartEvent.Deconstruct(out string! Id) -> void
+Harbor.Abstractions.Events.TextStartEvent.Equals(Harbor.Abstractions.Events.TextStartEvent? other) -> bool
+Harbor.Abstractions.Events.TextStartEvent.Id.get -> string!
+Harbor.Abstractions.Events.TextStartEvent.Id.init -> void
+Harbor.Abstractions.Events.TextStartEvent.TextStartEvent(string! Id) -> void
+Harbor.Abstractions.Events.ThinkingDeltaEvent
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Deconstruct(out string! Id, out string! Delta) -> void
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Delta.get -> string!
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Delta.init -> void
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Equals(Harbor.Abstractions.Events.ThinkingDeltaEvent? other) -> bool
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Id.get -> string!
+Harbor.Abstractions.Events.ThinkingDeltaEvent.Id.init -> void
+Harbor.Abstractions.Events.ThinkingDeltaEvent.ThinkingDeltaEvent(string! Id, string! Delta) -> void
+Harbor.Abstractions.Events.ThinkingEndEvent
+Harbor.Abstractions.Events.ThinkingEndEvent.Deconstruct(out string! Id, out string! FinalText) -> void
+Harbor.Abstractions.Events.ThinkingEndEvent.Equals(Harbor.Abstractions.Events.ThinkingEndEvent? other) -> bool
+Harbor.Abstractions.Events.ThinkingEndEvent.FinalText.get -> string!
+Harbor.Abstractions.Events.ThinkingEndEvent.FinalText.init -> void
+Harbor.Abstractions.Events.ThinkingEndEvent.Id.get -> string!
+Harbor.Abstractions.Events.ThinkingEndEvent.Id.init -> void
+Harbor.Abstractions.Events.ThinkingEndEvent.ThinkingEndEvent(string! Id, string! FinalText) -> void
+Harbor.Abstractions.Events.ThinkingStartEvent
+Harbor.Abstractions.Events.ThinkingStartEvent.Deconstruct(out string! Id) -> void
+Harbor.Abstractions.Events.ThinkingStartEvent.Equals(Harbor.Abstractions.Events.ThinkingStartEvent? other) -> bool
+Harbor.Abstractions.Events.ThinkingStartEvent.Id.get -> string!
+Harbor.Abstractions.Events.ThinkingStartEvent.Id.init -> void
+Harbor.Abstractions.Events.ThinkingStartEvent.ThinkingStartEvent(string! Id) -> void
+Harbor.Abstractions.Events.ToolCallDeltaEvent
+Harbor.Abstractions.Events.ToolCallDeltaEvent.ArgsDelta.get -> string!
+Harbor.Abstractions.Events.ToolCallDeltaEvent.ArgsDelta.init -> void
+Harbor.Abstractions.Events.ToolCallDeltaEvent.Deconstruct(out string! Id, out string! ArgsDelta) -> void
+Harbor.Abstractions.Events.ToolCallDeltaEvent.Equals(Harbor.Abstractions.Events.ToolCallDeltaEvent? other) -> bool
+Harbor.Abstractions.Events.ToolCallDeltaEvent.Id.get -> string!
+Harbor.Abstractions.Events.ToolCallDeltaEvent.Id.init -> void
+Harbor.Abstractions.Events.ToolCallDeltaEvent.ToolCallDeltaEvent(string! Id, string! ArgsDelta) -> void
+Harbor.Abstractions.Events.ToolCallEndEvent
+Harbor.Abstractions.Events.ToolCallEndEvent.Args.get -> System.Text.Json.JsonElement
+Harbor.Abstractions.Events.ToolCallEndEvent.Args.init -> void
+Harbor.Abstractions.Events.ToolCallEndEvent.Deconstruct(out string! Id, out string! ToolName, out System.Text.Json.JsonElement Args) -> void
+Harbor.Abstractions.Events.ToolCallEndEvent.Equals(Harbor.Abstractions.Events.ToolCallEndEvent? other) -> bool
+Harbor.Abstractions.Events.ToolCallEndEvent.Id.get -> string!
+Harbor.Abstractions.Events.ToolCallEndEvent.Id.init -> void
+Harbor.Abstractions.Events.ToolCallEndEvent.ToolCallEndEvent(string! Id, string! ToolName, System.Text.Json.JsonElement Args) -> void
+Harbor.Abstractions.Events.ToolCallEndEvent.ToolName.get -> string!
+Harbor.Abstractions.Events.ToolCallEndEvent.ToolName.init -> void
+Harbor.Abstractions.Events.ToolCallStartEvent
+Harbor.Abstractions.Events.ToolCallStartEvent.Deconstruct(out string! Id, out string! ToolName) -> void
+Harbor.Abstractions.Events.ToolCallStartEvent.Equals(Harbor.Abstractions.Events.ToolCallStartEvent? other) -> bool
+Harbor.Abstractions.Events.ToolCallStartEvent.Id.get -> string!
+Harbor.Abstractions.Events.ToolCallStartEvent.Id.init -> void
+Harbor.Abstractions.Events.ToolCallStartEvent.ToolCallStartEvent(string! Id, string! ToolName) -> void
+Harbor.Abstractions.Events.ToolCallStartEvent.ToolName.get -> string!
+Harbor.Abstractions.Events.ToolCallStartEvent.ToolName.init -> void
+Harbor.Abstractions.Events.ToolExecutionEndEvent
+Harbor.Abstractions.Events.ToolExecutionEndEvent.Deconstruct(out string! ToolCallId, out Harbor.Abstractions.Models.ToolResult! Result, out bool IsError) -> void
+Harbor.Abstractions.Events.ToolExecutionEndEvent.Equals(Harbor.Abstractions.Events.ToolExecutionEndEvent? other) -> bool
+Harbor.Abstractions.Events.ToolExecutionEndEvent.IsError.get -> bool
+Harbor.Abstractions.Events.ToolExecutionEndEvent.IsError.init -> void
+Harbor.Abstractions.Events.ToolExecutionEndEvent.Result.get -> Harbor.Abstractions.Models.ToolResult!
+Harbor.Abstractions.Events.ToolExecutionEndEvent.Result.init -> void
+Harbor.Abstractions.Events.ToolExecutionEndEvent.ToolCallId.get -> string!
+Harbor.Abstractions.Events.ToolExecutionEndEvent.ToolCallId.init -> void
+Harbor.Abstractions.Events.ToolExecutionEndEvent.ToolExecutionEndEvent(string! ToolCallId, Harbor.Abstractions.Models.ToolResult! Result, bool IsError) -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Args.get -> System.Text.Json.JsonElement
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Args.init -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Deconstruct(out string! ToolCallId, out string! ToolName, out System.Text.Json.JsonElement Args, out string? Glyph) -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Equals(Harbor.Abstractions.Events.ToolExecutionStartEvent? other) -> bool
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Glyph.get -> string?
+Harbor.Abstractions.Events.ToolExecutionStartEvent.Glyph.init -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent.ToolCallId.get -> string!
+Harbor.Abstractions.Events.ToolExecutionStartEvent.ToolCallId.init -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent.ToolExecutionStartEvent(string! ToolCallId, string! ToolName, System.Text.Json.JsonElement Args, string? Glyph = null) -> void
+Harbor.Abstractions.Events.ToolExecutionStartEvent.ToolName.get -> string!
+Harbor.Abstractions.Events.ToolExecutionStartEvent.ToolName.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.Deconstruct(out string! ToolCallId, out object! PartialResult, out int? RetryAttempt, out int? RetryMaxAttempts, out double? RetryBackoffSeconds) -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.Equals(Harbor.Abstractions.Events.ToolExecutionUpdateEvent? other) -> bool
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.PartialResult.get -> object!
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.PartialResult.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryAttempt.get -> int?
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryAttempt.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryBackoffSeconds.get -> double?
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryBackoffSeconds.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryMaxAttempts.get -> int?
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.RetryMaxAttempts.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.ToolCallId.get -> string!
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.ToolCallId.init -> void
+Harbor.Abstractions.Events.ToolExecutionUpdateEvent.ToolExecutionUpdateEvent(string! ToolCallId, object! PartialResult, int? RetryAttempt = null, int? RetryMaxAttempts = null, double? RetryBackoffSeconds = null) -> void
+Harbor.Abstractions.Events.TurnEndEvent
+Harbor.Abstractions.Events.TurnEndEvent.AssistantMessage.get -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Events.TurnEndEvent.AssistantMessage.init -> void
+Harbor.Abstractions.Events.TurnEndEvent.Deconstruct(out Harbor.Abstractions.Models.AssistantMessage! AssistantMessage, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultMessage!>! ToolResults, out string? SessionId) -> void
+Harbor.Abstractions.Events.TurnEndEvent.Equals(Harbor.Abstractions.Events.TurnEndEvent? other) -> bool
+Harbor.Abstractions.Events.TurnEndEvent.SessionId.get -> string?
+Harbor.Abstractions.Events.TurnEndEvent.SessionId.init -> void
+Harbor.Abstractions.Events.TurnEndEvent.ToolResults.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultMessage!>!
+Harbor.Abstractions.Events.TurnEndEvent.ToolResults.init -> void
+Harbor.Abstractions.Events.TurnEndEvent.TurnEndEvent(Harbor.Abstractions.Models.AssistantMessage! AssistantMessage, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultMessage!>! ToolResults, string? SessionId = null) -> void
+Harbor.Abstractions.Events.TurnStartEvent
+Harbor.Abstractions.Events.TurnStartEvent.Deconstruct(out int TurnIndex, out string? SessionId) -> void
+Harbor.Abstractions.Events.TurnStartEvent.Equals(Harbor.Abstractions.Events.TurnStartEvent? other) -> bool
+Harbor.Abstractions.Events.TurnStartEvent.SessionId.get -> string?
+Harbor.Abstractions.Events.TurnStartEvent.SessionId.init -> void
+Harbor.Abstractions.Events.TurnStartEvent.TurnIndex.get -> int
+Harbor.Abstractions.Events.TurnStartEvent.TurnIndex.init -> void
+Harbor.Abstractions.Events.TurnStartEvent.TurnStartEvent(int TurnIndex, string? SessionId = null) -> void
+Harbor.Abstractions.Extensions.StringTruncation
+Harbor.Abstractions.Models.AgentMessage
+Harbor.Abstractions.Models.AgentMessage.AgentMessage(Harbor.Abstractions.Models.AgentMessage! original) -> void
+Harbor.Abstractions.Models.AgentMessage.AgentMessage(string! Id, string! SessionId, System.DateTimeOffset CreatedAt, string? ParentId = null) -> void
+Harbor.Abstractions.Models.AgentMessage.CloneForSession(string! sessionId) -> Harbor.Abstractions.Models.AgentMessage!
+Harbor.Abstractions.Models.AgentMessage.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Models.AgentMessage.CreatedAt.init -> void
+Harbor.Abstractions.Models.AgentMessage.Deconstruct(out string! Id, out string! SessionId, out System.DateTimeOffset CreatedAt, out string? ParentId) -> void
+Harbor.Abstractions.Models.AgentMessage.Id.get -> string!
+Harbor.Abstractions.Models.AgentMessage.Id.init -> void
+Harbor.Abstractions.Models.AgentMessage.ParentId.get -> string?
+Harbor.Abstractions.Models.AgentMessage.ParentId.init -> void
+Harbor.Abstractions.Models.AgentMessage.SessionId.get -> string!
+Harbor.Abstractions.Models.AgentMessage.SessionId.init -> void
+Harbor.Abstractions.Models.AgentMessageVisitor<TResult>
+Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.Accept(Harbor.Abstractions.Models.AgentMessage! message) -> TResult
+Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.AgentMessageVisitor() -> void
+Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.Walk(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages) -> TResult
+Harbor.Abstractions.Models.AssistantMessage
+Harbor.Abstractions.Models.AssistantMessage.AppendText(string! text) -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Models.AssistantMessage.AppendThinking(string! text) -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Models.AssistantMessage.AppendToolCall(Harbor.Abstractions.Models.ToolCallPart! toolCall) -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Models.AssistantMessage.AssistantMessage(string! Id, string! SessionId, System.DateTimeOffset CreatedAt, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ContentPart!>! Parts, Harbor.Abstractions.Models.StopReason StopReason, Harbor.Abstractions.Models.Usage! Usage, string! Model, string? ParentId = null, bool IsSummary = false, string? SummaryFirstKeptId = null) -> void
+Harbor.Abstractions.Models.AssistantMessage.Deconstruct(out string! Id, out string! SessionId, out System.DateTimeOffset CreatedAt, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ContentPart!>! Parts, out Harbor.Abstractions.Models.StopReason StopReason, out Harbor.Abstractions.Models.Usage! Usage, out string! Model, out string? ParentId, out bool IsSummary, out string? SummaryFirstKeptId) -> void
+Harbor.Abstractions.Models.AssistantMessage.Equals(Harbor.Abstractions.Models.AssistantMessage? other) -> bool
+Harbor.Abstractions.Models.AssistantMessage.IsSummary.get -> bool
+Harbor.Abstractions.Models.AssistantMessage.IsSummary.init -> void
+Harbor.Abstractions.Models.AssistantMessage.Model.get -> string!
+Harbor.Abstractions.Models.AssistantMessage.Model.init -> void
+Harbor.Abstractions.Models.AssistantMessage.Parts.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ContentPart!>!
+Harbor.Abstractions.Models.AssistantMessage.Parts.init -> void
+Harbor.Abstractions.Models.AssistantMessage.StopReason.get -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.AssistantMessage.StopReason.init -> void
+Harbor.Abstractions.Models.AssistantMessage.SummaryFirstKeptId.get -> string?
+Harbor.Abstractions.Models.AssistantMessage.SummaryFirstKeptId.init -> void
+Harbor.Abstractions.Models.AssistantMessage.Usage.get -> Harbor.Abstractions.Models.Usage!
+Harbor.Abstractions.Models.AssistantMessage.Usage.init -> void
+Harbor.Abstractions.Models.AssistantMessage.WithFinish(Harbor.Abstractions.Models.StopReason reason, Harbor.Abstractions.Models.Usage! usage) -> Harbor.Abstractions.Models.AssistantMessage!
+Harbor.Abstractions.Models.BudgetOvershootReason
+Harbor.Abstractions.Models.BudgetOvershootReason.CancelLag = 3 -> Harbor.Abstractions.Models.BudgetOvershootReason
+Harbor.Abstractions.Models.BudgetOvershootReason.InFlightRequests = 2 -> Harbor.Abstractions.Models.BudgetOvershootReason
+Harbor.Abstractions.Models.BudgetOvershootReason.LateUsage = 1 -> Harbor.Abstractions.Models.BudgetOvershootReason
+Harbor.Abstractions.Models.BudgetOvershootReason.None = 0 -> Harbor.Abstractions.Models.BudgetOvershootReason
+Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.BudgetSource.LocalEstimate = 1 -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.BudgetSource.ProviderReported = 0 -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.BudgetSource.TariffCost = 2 -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.BudgetSource.Unknown = 3 -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.CacheStrategy
+Harbor.Abstractions.Models.CacheStrategy.Ephemeral = 1 -> Harbor.Abstractions.Models.CacheStrategy
+Harbor.Abstractions.Models.CacheStrategy.None = 0 -> Harbor.Abstractions.Models.CacheStrategy
+Harbor.Abstractions.Models.ChatLine
+Harbor.Abstractions.Models.ChatLine.ChatLine() -> void
+Harbor.Abstractions.Models.ChatLine.ChatLine(Harbor.Abstractions.Models.ChatRole Role, string! Text, string? ToolCallId = null, string? MessageId = null, System.DateTime TimestampUtc = default(System.DateTime)) -> void
+Harbor.Abstractions.Models.ChatLine.Deconstruct(out Harbor.Abstractions.Models.ChatRole Role, out string! Text, out string? ToolCallId, out string? MessageId, out System.DateTime TimestampUtc) -> void
+Harbor.Abstractions.Models.ChatLine.Equals(Harbor.Abstractions.Models.ChatLine other) -> bool
+Harbor.Abstractions.Models.ChatLine.MessageId.get -> string?
+Harbor.Abstractions.Models.ChatLine.MessageId.init -> void
+Harbor.Abstractions.Models.ChatLine.Role.get -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatLine.Role.init -> void
+Harbor.Abstractions.Models.ChatLine.Text.get -> string!
+Harbor.Abstractions.Models.ChatLine.Text.init -> void
+Harbor.Abstractions.Models.ChatLine.TimestampUtc.get -> System.DateTime
+Harbor.Abstractions.Models.ChatLine.TimestampUtc.init -> void
+Harbor.Abstractions.Models.ChatLine.ToolCallId.get -> string?
+Harbor.Abstractions.Models.ChatLine.ToolCallId.init -> void
+Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.Assistant = 1 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.Error = 6 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.System = 5 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.Thinking = 2 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.Tool = 3 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.ToolResult = 4 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ChatRole.User = 0 -> Harbor.Abstractions.Models.ChatRole
+Harbor.Abstractions.Models.ContentPart
+Harbor.Abstractions.Models.ContentPart.ContentPart() -> void
+Harbor.Abstractions.Models.ContentPart.ContentPart(Harbor.Abstractions.Models.ContentPart! original) -> void
+Harbor.Abstractions.Models.ContentPartVisitor<TResult>
+Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Accept(Harbor.Abstractions.Models.ContentPart! part) -> TResult
+Harbor.Abstractions.Models.ContentPartVisitor<TResult>.ContentPartVisitor() -> void
+Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Walk(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ContentPart!>! parts) -> TResult
+Harbor.Abstractions.Models.ContextUsage
+Harbor.Abstractions.Models.DiagnosticIssue
+Harbor.Abstractions.Models.DiagnosticIssue.<Clone>$() -> Harbor.Abstractions.Models.DiagnosticIssue!
+Harbor.Abstractions.Models.DiagnosticIssue.Deconstruct(out Harbor.Abstractions.Models.DiagnosticIssueSource Source, out Harbor.Abstractions.Models.DiagnosticIssueSeverity Severity, out string! Producer, out string? FilePath, out int Line, out string! Message) -> void
+Harbor.Abstractions.Models.DiagnosticIssue.DiagnosticIssue(Harbor.Abstractions.Models.DiagnosticIssueSource Source, Harbor.Abstractions.Models.DiagnosticIssueSeverity Severity, string! Producer, string? FilePath, int Line, string! Message) -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Equals(Harbor.Abstractions.Models.DiagnosticIssue? other) -> bool
+Harbor.Abstractions.Models.DiagnosticIssue.FilePath.get -> string?
+Harbor.Abstractions.Models.DiagnosticIssue.FilePath.init -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Line.get -> int
+Harbor.Abstractions.Models.DiagnosticIssue.Line.init -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Message.get -> string!
+Harbor.Abstractions.Models.DiagnosticIssue.Message.init -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Producer.get -> string!
+Harbor.Abstractions.Models.DiagnosticIssue.Producer.init -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Severity.get -> Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssue.Severity.init -> void
+Harbor.Abstractions.Models.DiagnosticIssue.Source.get -> Harbor.Abstractions.Models.DiagnosticIssueSource
+Harbor.Abstractions.Models.DiagnosticIssue.Source.init -> void
+Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssueSeverity.Error = 0 -> Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssueSeverity.Hint = 3 -> Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssueSeverity.Information = 2 -> Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssueSeverity.Warning = 1 -> Harbor.Abstractions.Models.DiagnosticIssueSeverity
+Harbor.Abstractions.Models.DiagnosticIssueSource
+Harbor.Abstractions.Models.DiagnosticIssueSource.LanguageServer = 0 -> Harbor.Abstractions.Models.DiagnosticIssueSource
+Harbor.Abstractions.Models.DiagnosticIssueSource.ToolOutput = 1 -> Harbor.Abstractions.Models.DiagnosticIssueSource
+Harbor.Abstractions.Models.FileAttachment
+Harbor.Abstractions.Models.FileAttachment.<Clone>$() -> Harbor.Abstractions.Models.FileAttachment!
+Harbor.Abstractions.Models.FileAttachment.Data.get -> byte[]!
+Harbor.Abstractions.Models.FileAttachment.Data.init -> void
+Harbor.Abstractions.Models.FileAttachment.Deconstruct(out string! Path, out string! MimeType, out byte[]! Data) -> void
+Harbor.Abstractions.Models.FileAttachment.Equals(Harbor.Abstractions.Models.FileAttachment? other) -> bool
+Harbor.Abstractions.Models.FileAttachment.FileAttachment(string! Path, string! MimeType, byte[]! Data) -> void
+Harbor.Abstractions.Models.FileAttachment.MimeType.get -> string!
+Harbor.Abstractions.Models.FileAttachment.MimeType.init -> void
+Harbor.Abstractions.Models.FileAttachment.Path.get -> string!
+Harbor.Abstractions.Models.FileAttachment.Path.init -> void
+Harbor.Abstractions.Models.FilePart
+Harbor.Abstractions.Models.FilePart.Data.get -> byte[]?
+Harbor.Abstractions.Models.FilePart.Data.init -> void
+Harbor.Abstractions.Models.FilePart.Deconstruct(out string! Path, out string! MimeType, out long SizeBytes, out byte[]? Data) -> void
+Harbor.Abstractions.Models.FilePart.Equals(Harbor.Abstractions.Models.FilePart? other) -> bool
+Harbor.Abstractions.Models.FilePart.FilePart(string! Path, string! MimeType, long SizeBytes, byte[]? Data = null) -> void
+Harbor.Abstractions.Models.FilePart.MimeType.get -> string!
+Harbor.Abstractions.Models.FilePart.MimeType.init -> void
+Harbor.Abstractions.Models.FilePart.Path.get -> string!
+Harbor.Abstractions.Models.FilePart.Path.init -> void
+Harbor.Abstractions.Models.FilePart.SizeBytes.get -> long
+Harbor.Abstractions.Models.FilePart.SizeBytes.init -> void
+Harbor.Abstractions.Models.Identifiers.AgentName
+Harbor.Abstractions.Models.Identifiers.AgentName.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.AgentName!
+Harbor.Abstractions.Models.Identifiers.AgentName.Equals(Harbor.Abstractions.Models.Identifiers.AgentName? other) -> bool
+Harbor.Abstractions.Models.Identifiers.AgentName.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.MessageId
+Harbor.Abstractions.Models.Identifiers.MessageId.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.MessageId!
+Harbor.Abstractions.Models.Identifiers.MessageId.Equals(Harbor.Abstractions.Models.Identifiers.MessageId? other) -> bool
+Harbor.Abstractions.Models.Identifiers.MessageId.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.ModelRef
+Harbor.Abstractions.Models.Identifiers.ModelRef.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.ModelRef!
+Harbor.Abstractions.Models.Identifiers.ModelRef.Equals(Harbor.Abstractions.Models.Identifiers.ModelRef? other) -> bool
+Harbor.Abstractions.Models.Identifiers.ModelRef.ModelId.get -> string!
+Harbor.Abstractions.Models.Identifiers.ModelRef.ProviderId.get -> Harbor.Abstractions.Models.Identifiers.ProviderId!
+Harbor.Abstractions.Models.Identifiers.ProviderId
+Harbor.Abstractions.Models.Identifiers.ProviderId.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.ProviderId!
+Harbor.Abstractions.Models.Identifiers.ProviderId.Equals(Harbor.Abstractions.Models.Identifiers.ProviderId? other) -> bool
+Harbor.Abstractions.Models.Identifiers.ProviderId.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.RunId
+Harbor.Abstractions.Models.Identifiers.RunId.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.Identifiers.RunId.Equals(Harbor.Abstractions.Models.Identifiers.RunId? other) -> bool
+Harbor.Abstractions.Models.Identifiers.RunId.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.SessionId
+Harbor.Abstractions.Models.Identifiers.SessionId.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.SessionId!
+Harbor.Abstractions.Models.Identifiers.SessionId.Equals(Harbor.Abstractions.Models.Identifiers.SessionId? other) -> bool
+Harbor.Abstractions.Models.Identifiers.SessionId.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.ToolCallId
+Harbor.Abstractions.Models.Identifiers.ToolCallId.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.ToolCallId!
+Harbor.Abstractions.Models.Identifiers.ToolCallId.Equals(Harbor.Abstractions.Models.Identifiers.ToolCallId? other) -> bool
+Harbor.Abstractions.Models.Identifiers.ToolCallId.Value.get -> string!
+Harbor.Abstractions.Models.Identifiers.ToolName
+Harbor.Abstractions.Models.Identifiers.ToolName.<Clone>$() -> Harbor.Abstractions.Models.Identifiers.ToolName!
+Harbor.Abstractions.Models.Identifiers.ToolName.Equals(Harbor.Abstractions.Models.Identifiers.ToolName? other) -> bool
+Harbor.Abstractions.Models.Identifiers.ToolName.Value.get -> string!
+Harbor.Abstractions.Models.ImageAttachment
+Harbor.Abstractions.Models.ImageAttachment.<Clone>$() -> Harbor.Abstractions.Models.ImageAttachment!
+Harbor.Abstractions.Models.ImageAttachment.Data.get -> byte[]!
+Harbor.Abstractions.Models.ImageAttachment.Data.init -> void
+Harbor.Abstractions.Models.ImageAttachment.Deconstruct(out string! Path, out string! MimeType, out int Width, out int Height, out byte[]! Data) -> void
+Harbor.Abstractions.Models.ImageAttachment.DimensionsLabel.get -> string!
+Harbor.Abstractions.Models.ImageAttachment.Equals(Harbor.Abstractions.Models.ImageAttachment? other) -> bool
+Harbor.Abstractions.Models.ImageAttachment.HasDimensions.get -> bool
+Harbor.Abstractions.Models.ImageAttachment.Height.get -> int
+Harbor.Abstractions.Models.ImageAttachment.Height.init -> void
+Harbor.Abstractions.Models.ImageAttachment.ImageAttachment(string! Path, string! MimeType, int Width, int Height, byte[]! Data) -> void
+Harbor.Abstractions.Models.ImageAttachment.MimeType.get -> string!
+Harbor.Abstractions.Models.ImageAttachment.MimeType.init -> void
+Harbor.Abstractions.Models.ImageAttachment.Path.get -> string!
+Harbor.Abstractions.Models.ImageAttachment.Path.init -> void
+Harbor.Abstractions.Models.ImageAttachment.Width.get -> int
+Harbor.Abstractions.Models.ImageAttachment.Width.init -> void
+Harbor.Abstractions.Models.JsonElementMemoryPackFormatter
+Harbor.Abstractions.Models.JsonElementMemoryPackFormatter.JsonElementMemoryPackFormatter() -> void
+Harbor.Abstractions.Models.JsonStringConverter<T>
+Harbor.Abstractions.Models.JsonStringConverter<T>.JsonStringConverter() -> void
+Harbor.Abstractions.Models.LastConfirmedState
+Harbor.Abstractions.Models.LastConfirmedState.<Clone>$() -> Harbor.Abstractions.Models.LastConfirmedState!
+Harbor.Abstractions.Models.LastConfirmedState.ConfirmedCount.get -> int
+Harbor.Abstractions.Models.LastConfirmedState.ConfirmedCount.init -> void
+Harbor.Abstractions.Models.LastConfirmedState.ConfirmedMessageId.get -> string?
+Harbor.Abstractions.Models.LastConfirmedState.ConfirmedMessageId.init -> void
+Harbor.Abstractions.Models.LastConfirmedState.Deconstruct(out string? ConfirmedMessageId, out int ConfirmedCount, out System.Collections.Generic.IReadOnlyList<string!>! UnconfirmedTailIds, out string? LastTurnBoundaryMessageId, out bool IsUnknown) -> void
+Harbor.Abstractions.Models.LastConfirmedState.Equals(Harbor.Abstractions.Models.LastConfirmedState? other) -> bool
+Harbor.Abstractions.Models.LastConfirmedState.IsUnknown.get -> bool
+Harbor.Abstractions.Models.LastConfirmedState.IsUnknown.init -> void
+Harbor.Abstractions.Models.LastConfirmedState.LastConfirmedState(string? ConfirmedMessageId, int ConfirmedCount, System.Collections.Generic.IReadOnlyList<string!>! UnconfirmedTailIds, string? LastTurnBoundaryMessageId, bool IsUnknown) -> void
+Harbor.Abstractions.Models.LastConfirmedState.LastTurnBoundaryMessageId.get -> string?
+Harbor.Abstractions.Models.LastConfirmedState.LastTurnBoundaryMessageId.init -> void
+Harbor.Abstractions.Models.LastConfirmedState.UnconfirmedTailIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Models.LastConfirmedState.UnconfirmedTailIds.init -> void
+Harbor.Abstractions.Models.ModelInfo
+Harbor.Abstractions.Models.ModelInfo.<Clone>$() -> Harbor.Abstractions.Models.ModelInfo!
+Harbor.Abstractions.Models.ModelInfo.ContextWindow.get -> int
+Harbor.Abstractions.Models.ModelInfo.ContextWindow.init -> void
+Harbor.Abstractions.Models.ModelInfo.Deconstruct(out string! Id, out string! ProviderId, out string! DisplayName, out int ContextWindow, out int MaxOutputTokens, out bool SupportsReasoning, out bool SupportsVision, out bool SupportsToolUse, out Harbor.Abstractions.Models.Pricing! Pricing, out string! PromptTemplate) -> void
+Harbor.Abstractions.Models.ModelInfo.DisplayName.get -> string!
+Harbor.Abstractions.Models.ModelInfo.DisplayName.init -> void
+Harbor.Abstractions.Models.ModelInfo.Equals(Harbor.Abstractions.Models.ModelInfo? other) -> bool
+Harbor.Abstractions.Models.ModelInfo.Id.get -> string!
+Harbor.Abstractions.Models.ModelInfo.Id.init -> void
+Harbor.Abstractions.Models.ModelInfo.MaxOutputTokens.get -> int
+Harbor.Abstractions.Models.ModelInfo.MaxOutputTokens.init -> void
+Harbor.Abstractions.Models.ModelInfo.ModelInfo(string! Id, string! ProviderId, string! DisplayName, int ContextWindow, int MaxOutputTokens, bool SupportsReasoning, bool SupportsVision, bool SupportsToolUse, Harbor.Abstractions.Models.Pricing! Pricing, string! PromptTemplate) -> void
+Harbor.Abstractions.Models.ModelInfo.Pricing.get -> Harbor.Abstractions.Models.Pricing!
+Harbor.Abstractions.Models.ModelInfo.Pricing.init -> void
+Harbor.Abstractions.Models.ModelInfo.PromptTemplate.get -> string!
+Harbor.Abstractions.Models.ModelInfo.PromptTemplate.init -> void
+Harbor.Abstractions.Models.ModelInfo.ProviderId.get -> string!
+Harbor.Abstractions.Models.ModelInfo.ProviderId.init -> void
+Harbor.Abstractions.Models.ModelInfo.SupportsReasoning.get -> bool
+Harbor.Abstractions.Models.ModelInfo.SupportsReasoning.init -> void
+Harbor.Abstractions.Models.ModelInfo.SupportsToolUse.get -> bool
+Harbor.Abstractions.Models.ModelInfo.SupportsToolUse.init -> void
+Harbor.Abstractions.Models.ModelInfo.SupportsVision.get -> bool
+Harbor.Abstractions.Models.ModelInfo.SupportsVision.init -> void
+Harbor.Abstractions.Models.NotVerifiedEntry
+Harbor.Abstractions.Models.NotVerifiedEntry.<Clone>$() -> Harbor.Abstractions.Models.NotVerifiedEntry!
+Harbor.Abstractions.Models.NotVerifiedEntry.Describe() -> string!
+Harbor.Abstractions.Models.NotVerifiedEntry.Equals(Harbor.Abstractions.Models.NotVerifiedEntry? other) -> bool
+Harbor.Abstractions.Models.NotVerifiedEntry.Reason.get -> string!
+Harbor.Abstractions.Models.NotVerifiedEntry.What.get -> string!
+Harbor.Abstractions.Models.Pricing
+Harbor.Abstractions.Models.Pricing.<Clone>$() -> Harbor.Abstractions.Models.Pricing!
+Harbor.Abstractions.Models.Pricing.CacheReadPerMillion.get -> decimal?
+Harbor.Abstractions.Models.Pricing.CacheReadPerMillion.init -> void
+Harbor.Abstractions.Models.Pricing.CacheWritePerMillion.get -> decimal?
+Harbor.Abstractions.Models.Pricing.CacheWritePerMillion.init -> void
+Harbor.Abstractions.Models.Pricing.CalculateCost(Harbor.Abstractions.Models.Usage! usage) -> decimal
+Harbor.Abstractions.Models.Pricing.Deconstruct(out decimal InputPerMillion, out decimal OutputPerMillion, out decimal? CacheReadPerMillion, out decimal? CacheWritePerMillion) -> void
+Harbor.Abstractions.Models.Pricing.Equals(Harbor.Abstractions.Models.Pricing? other) -> bool
+Harbor.Abstractions.Models.Pricing.InputPerMillion.get -> decimal
+Harbor.Abstractions.Models.Pricing.InputPerMillion.init -> void
+Harbor.Abstractions.Models.Pricing.IsUnknown.get -> bool
+Harbor.Abstractions.Models.Pricing.OutputPerMillion.get -> decimal
+Harbor.Abstractions.Models.Pricing.OutputPerMillion.init -> void
+Harbor.Abstractions.Models.Pricing.Pricing(decimal InputPerMillion, decimal OutputPerMillion, decimal? CacheReadPerMillion = null, decimal? CacheWritePerMillion = null) -> void
+Harbor.Abstractions.Models.ReasoningEffort
+Harbor.Abstractions.Models.ReasoningEffort.High = 2 -> Harbor.Abstractions.Models.ReasoningEffort
+Harbor.Abstractions.Models.ReasoningEffort.Low = 0 -> Harbor.Abstractions.Models.ReasoningEffort
+Harbor.Abstractions.Models.ReasoningEffort.Max = 3 -> Harbor.Abstractions.Models.ReasoningEffort
+Harbor.Abstractions.Models.ReasoningEffort.Medium = 1 -> Harbor.Abstractions.Models.ReasoningEffort
+Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.RecoveryBoundary.AtToolResultBoundary = 1 -> Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.RecoveryBoundary.BeforeAnyToolCall = 0 -> Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.RecoveryBoundary.InFlightToolCall = 2 -> Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.RecoveryBoundary.MidModelCall = 3 -> Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.RecoveryDecision
+Harbor.Abstractions.Models.RecoveryDecision.<Clone>$() -> Harbor.Abstractions.Models.RecoveryDecision!
+Harbor.Abstractions.Models.RecoveryDecision.Deconstruct(out bool IsResumable, out string! Reason) -> void
+Harbor.Abstractions.Models.RecoveryDecision.Equals(Harbor.Abstractions.Models.RecoveryDecision? other) -> bool
+Harbor.Abstractions.Models.RecoveryDecision.IsResumable.get -> bool
+Harbor.Abstractions.Models.RecoveryDecision.IsResumable.init -> void
+Harbor.Abstractions.Models.RecoveryDecision.Reason.get -> string!
+Harbor.Abstractions.Models.RecoveryDecision.Reason.init -> void
+Harbor.Abstractions.Models.RecoveryDecision.RecoveryDecision(bool IsResumable, string! Reason) -> void
+Harbor.Abstractions.Models.RunArtifact
+Harbor.Abstractions.Models.RunArtifact.<Clone>$() -> Harbor.Abstractions.Models.RunArtifact!
+Harbor.Abstractions.Models.RunArtifact.Equals(Harbor.Abstractions.Models.RunArtifact? other) -> bool
+Harbor.Abstractions.Models.RunArtifact.Kind.get -> Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunArtifact.Path.get -> string!
+Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunArtifactKind.Diff = 2 -> Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunArtifactKind.Log = 0 -> Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunArtifactKind.Other = 3 -> Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunArtifactKind.Report = 1 -> Harbor.Abstractions.Models.RunArtifactKind
+Harbor.Abstractions.Models.RunBudget
+Harbor.Abstractions.Models.RunBudget.<Clone>$() -> Harbor.Abstractions.Models.RunBudget!
+Harbor.Abstractions.Models.RunBudget.CostSource.get -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.RunBudget.Deconstruct(out Harbor.Abstractions.Models.Usage? ReportedUsage, out int EstimatedTokens, out decimal? TariffCostUsd, out decimal? EstimatedCost, out long OutputBytes) -> void
+Harbor.Abstractions.Models.RunBudget.Equals(Harbor.Abstractions.Models.RunBudget? other) -> bool
+Harbor.Abstractions.Models.RunBudget.EstimatedCost.get -> decimal?
+Harbor.Abstractions.Models.RunBudget.EstimatedCost.init -> void
+Harbor.Abstractions.Models.RunBudget.EstimatedTokens.get -> int
+Harbor.Abstractions.Models.RunBudget.EstimatedTokens.init -> void
+Harbor.Abstractions.Models.RunBudget.OutputBytes.get -> long
+Harbor.Abstractions.Models.RunBudget.OutputBytes.init -> void
+Harbor.Abstractions.Models.RunBudget.ReportedUsage.get -> Harbor.Abstractions.Models.Usage?
+Harbor.Abstractions.Models.RunBudget.ReportedUsage.init -> void
+Harbor.Abstractions.Models.RunBudget.RunBudget(Harbor.Abstractions.Models.Usage? ReportedUsage, int EstimatedTokens, decimal? TariffCostUsd, decimal? EstimatedCost, long OutputBytes) -> void
+Harbor.Abstractions.Models.RunBudget.TariffCostUsd.get -> decimal?
+Harbor.Abstractions.Models.RunBudget.TariffCostUsd.init -> void
+Harbor.Abstractions.Models.RunBudget.TokenSource.get -> Harbor.Abstractions.Models.BudgetSource
+Harbor.Abstractions.Models.RunBudgetCaps
+Harbor.Abstractions.Models.RunBudgetCaps.<Clone>$() -> Harbor.Abstractions.Models.RunBudgetCaps!
+Harbor.Abstractions.Models.RunBudgetCaps.Deconstruct(out int? MaxTokens, out decimal? MaxCostUsd, out long? MaxOutputBytes) -> void
+Harbor.Abstractions.Models.RunBudgetCaps.Equals(Harbor.Abstractions.Models.RunBudgetCaps? other) -> bool
+Harbor.Abstractions.Models.RunBudgetCaps.MaxCostUsd.get -> decimal?
+Harbor.Abstractions.Models.RunBudgetCaps.MaxCostUsd.init -> void
+Harbor.Abstractions.Models.RunBudgetCaps.MaxOutputBytes.get -> long?
+Harbor.Abstractions.Models.RunBudgetCaps.MaxOutputBytes.init -> void
+Harbor.Abstractions.Models.RunBudgetCaps.MaxTokens.get -> int?
+Harbor.Abstractions.Models.RunBudgetCaps.MaxTokens.init -> void
+Harbor.Abstractions.Models.RunBudgetCaps.RunBudgetCaps(int? MaxTokens = null, decimal? MaxCostUsd = null, long? MaxOutputBytes = null) -> void
+Harbor.Abstractions.Models.RunBudgetLabels
+Harbor.Abstractions.Models.RunCandidate
+Harbor.Abstractions.Models.RunCandidate.<Clone>$() -> Harbor.Abstractions.Models.RunCandidate!
+Harbor.Abstractions.Models.RunCandidate.Deconstruct(out Harbor.Abstractions.Models.Identifiers.RunId! RunId, out string! SessionId, out bool HasTerminalMarker) -> void
+Harbor.Abstractions.Models.RunCandidate.Equals(Harbor.Abstractions.Models.RunCandidate? other) -> bool
+Harbor.Abstractions.Models.RunCandidate.HasTerminalMarker.get -> bool
+Harbor.Abstractions.Models.RunCandidate.HasTerminalMarker.init -> void
+Harbor.Abstractions.Models.RunCandidate.RunCandidate(Harbor.Abstractions.Models.Identifiers.RunId! RunId, string! SessionId, bool HasTerminalMarker) -> void
+Harbor.Abstractions.Models.RunCandidate.RunId.get -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.RunCandidate.RunId.init -> void
+Harbor.Abstractions.Models.RunCandidate.SessionId.get -> string!
+Harbor.Abstractions.Models.RunCandidate.SessionId.init -> void
+Harbor.Abstractions.Models.RunCheck
+Harbor.Abstractions.Models.RunCheck.<Clone>$() -> Harbor.Abstractions.Models.RunCheck!
+Harbor.Abstractions.Models.RunCheck.Command.get -> string!
+Harbor.Abstractions.Models.RunCheck.Duration.get -> System.TimeSpan
+Harbor.Abstractions.Models.RunCheck.Environment.get -> string!
+Harbor.Abstractions.Models.RunCheck.Equals(Harbor.Abstractions.Models.RunCheck? other) -> bool
+Harbor.Abstractions.Models.RunCheck.ExitCode.get -> int?
+Harbor.Abstractions.Models.RunCheck.Reason.get -> string?
+Harbor.Abstractions.Models.RunCheck.Revision.get -> string!
+Harbor.Abstractions.Models.RunCheck.Verdict.get -> Harbor.Abstractions.Models.RunCheckVerdict
+Harbor.Abstractions.Models.RunCheckVerdict
+Harbor.Abstractions.Models.RunCheckVerdict.DidNotRun = 2 -> Harbor.Abstractions.Models.RunCheckVerdict
+Harbor.Abstractions.Models.RunCheckVerdict.Failed = 1 -> Harbor.Abstractions.Models.RunCheckVerdict
+Harbor.Abstractions.Models.RunCheckVerdict.Passed = 0 -> Harbor.Abstractions.Models.RunCheckVerdict
+Harbor.Abstractions.Models.RunEvidenceState
+Harbor.Abstractions.Models.RunEvidenceState.Complete = 0 -> Harbor.Abstractions.Models.RunEvidenceState
+Harbor.Abstractions.Models.RunEvidenceState.Unreadable = 1 -> Harbor.Abstractions.Models.RunEvidenceState
+Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunLimitKind.MaxCost = 3 -> Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunLimitKind.MaxOutputBytes = 4 -> Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunLimitKind.MaxSteps = 1 -> Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunLimitKind.MaxTokens = 2 -> Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunLimitKind.Timeout = 0 -> Harbor.Abstractions.Models.RunLimitKind
+Harbor.Abstractions.Models.RunOutcome
+Harbor.Abstractions.Models.RunOutcome.<Clone>$() -> Harbor.Abstractions.Models.RunOutcome!
+Harbor.Abstractions.Models.RunOutcome.Deconstruct(out Harbor.Abstractions.Models.Identifiers.RunId! RunId, out string! SessionId, out Harbor.Abstractions.Models.RunStopReason StopReason, out System.DateTimeOffset? StartedAt, out System.DateTimeOffset? FinishedAt, out System.Collections.Generic.IReadOnlyList<string!>! MessageIds, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallLink!>! ToolCalls, out string? ErrorMessage, out Harbor.Abstractions.Models.RunVerificationRecord? Verification, out Harbor.Abstractions.Models.RunLimitKind? Limit) -> void
+Harbor.Abstractions.Models.RunOutcome.Equals(Harbor.Abstractions.Models.RunOutcome? other) -> bool
+Harbor.Abstractions.Models.RunOutcome.ErrorMessage.get -> string?
+Harbor.Abstractions.Models.RunOutcome.ErrorMessage.init -> void
+Harbor.Abstractions.Models.RunOutcome.FinishedAt.get -> System.DateTimeOffset?
+Harbor.Abstractions.Models.RunOutcome.FinishedAt.init -> void
+Harbor.Abstractions.Models.RunOutcome.Limit.get -> Harbor.Abstractions.Models.RunLimitKind?
+Harbor.Abstractions.Models.RunOutcome.Limit.init -> void
+Harbor.Abstractions.Models.RunOutcome.MessageIds.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Models.RunOutcome.MessageIds.init -> void
+Harbor.Abstractions.Models.RunOutcome.RunId.get -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.RunOutcome.RunId.init -> void
+Harbor.Abstractions.Models.RunOutcome.RunOutcome(Harbor.Abstractions.Models.Identifiers.RunId! RunId, string! SessionId, Harbor.Abstractions.Models.RunStopReason StopReason, System.DateTimeOffset? StartedAt, System.DateTimeOffset? FinishedAt, System.Collections.Generic.IReadOnlyList<string!>! MessageIds, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallLink!>! ToolCalls, string? ErrorMessage = null, Harbor.Abstractions.Models.RunVerificationRecord? Verification = null, Harbor.Abstractions.Models.RunLimitKind? Limit = null) -> void
+Harbor.Abstractions.Models.RunOutcome.SessionId.get -> string!
+Harbor.Abstractions.Models.RunOutcome.SessionId.init -> void
+Harbor.Abstractions.Models.RunOutcome.StartedAt.get -> System.DateTimeOffset?
+Harbor.Abstractions.Models.RunOutcome.StartedAt.init -> void
+Harbor.Abstractions.Models.RunOutcome.StopReason.get -> Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunOutcome.StopReason.init -> void
+Harbor.Abstractions.Models.RunOutcome.ToolCalls.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallLink!>!
+Harbor.Abstractions.Models.RunOutcome.ToolCalls.init -> void
+Harbor.Abstractions.Models.RunOutcome.Verification.get -> Harbor.Abstractions.Models.RunVerificationRecord?
+Harbor.Abstractions.Models.RunOutcome.Verification.init -> void
+Harbor.Abstractions.Models.RunRecoveryPolicy
+Harbor.Abstractions.Models.RunRetryLink
+Harbor.Abstractions.Models.RunRetryLink.<Clone>$() -> Harbor.Abstractions.Models.RunRetryLink!
+Harbor.Abstractions.Models.RunRetryLink.Deconstruct(out Harbor.Abstractions.Models.Identifiers.RunId! NewRunId, out Harbor.Abstractions.Models.Identifiers.RunId! ParentRunId, out string? ResumedFromMessageId) -> void
+Harbor.Abstractions.Models.RunRetryLink.Equals(Harbor.Abstractions.Models.RunRetryLink? other) -> bool
+Harbor.Abstractions.Models.RunRetryLink.NewRunId.get -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.RunRetryLink.NewRunId.init -> void
+Harbor.Abstractions.Models.RunRetryLink.ParentRunId.get -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.RunRetryLink.ParentRunId.init -> void
+Harbor.Abstractions.Models.RunRetryLink.ResumedFromMessageId.get -> string?
+Harbor.Abstractions.Models.RunRetryLink.ResumedFromMessageId.init -> void
+Harbor.Abstractions.Models.RunRetryLink.RunRetryLink(Harbor.Abstractions.Models.Identifiers.RunId! NewRunId, Harbor.Abstractions.Models.Identifiers.RunId! ParentRunId, string? ResumedFromMessageId) -> void
+Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunStopReason.Failed = 1 -> Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunStopReason.LimitExceeded = 3 -> Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunStopReason.Stopped = 2 -> Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunStopReason.Succeeded = 0 -> Harbor.Abstractions.Models.RunStopReason
+Harbor.Abstractions.Models.RunTermination
+Harbor.Abstractions.Models.RunTermination.InProgress = 2 -> Harbor.Abstractions.Models.RunTermination
+Harbor.Abstractions.Models.RunTermination.Interrupted = 1 -> Harbor.Abstractions.Models.RunTermination
+Harbor.Abstractions.Models.RunTermination.Terminal = 0 -> Harbor.Abstractions.Models.RunTermination
+Harbor.Abstractions.Models.RunVerification
+Harbor.Abstractions.Models.RunVerification.Deconstruct(out Harbor.Abstractions.Models.RunVerificationVerdict? Verdict, out Harbor.Abstractions.Models.RunEvidenceState Evidence) -> void
+Harbor.Abstractions.Models.RunVerification.Describe() -> string!
+Harbor.Abstractions.Models.RunVerification.Equals(Harbor.Abstractions.Models.RunVerification other) -> bool
+Harbor.Abstractions.Models.RunVerification.Evidence.get -> Harbor.Abstractions.Models.RunEvidenceState
+Harbor.Abstractions.Models.RunVerification.Evidence.init -> void
+Harbor.Abstractions.Models.RunVerification.IsUnknown.get -> bool
+Harbor.Abstractions.Models.RunVerification.IsVerified.get -> bool
+Harbor.Abstractions.Models.RunVerification.RunVerification() -> void
+Harbor.Abstractions.Models.RunVerification.RunVerification(Harbor.Abstractions.Models.RunVerificationVerdict? Verdict, Harbor.Abstractions.Models.RunEvidenceState Evidence) -> void
+Harbor.Abstractions.Models.RunVerification.Verdict.get -> Harbor.Abstractions.Models.RunVerificationVerdict?
+Harbor.Abstractions.Models.RunVerification.Verdict.init -> void
+Harbor.Abstractions.Models.RunVerificationRecord
+Harbor.Abstractions.Models.RunVerificationRecord.<Clone>$() -> Harbor.Abstractions.Models.RunVerificationRecord!
+Harbor.Abstractions.Models.RunVerificationRecord.Artifacts.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.RunArtifact!>!
+Harbor.Abstractions.Models.RunVerificationRecord.BaseRevision.get -> string!
+Harbor.Abstractions.Models.RunVerificationRecord.Checks.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.RunCheck!>!
+Harbor.Abstractions.Models.RunVerificationRecord.Contract.get -> Harbor.Abstractions.Models.WorkspaceContract!
+Harbor.Abstractions.Models.RunVerificationRecord.Equals(Harbor.Abstractions.Models.RunVerificationRecord? other) -> bool
+Harbor.Abstractions.Models.RunVerificationRecord.Evidence.get -> Harbor.Abstractions.Models.RunEvidenceState
+Harbor.Abstractions.Models.RunVerificationRecord.NotVerified.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.NotVerifiedEntry!>!
+Harbor.Abstractions.Models.RunVerificationRecord.RecordedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Models.RunVerificationRecord.Summary.get -> string!
+Harbor.Abstractions.Models.RunVerificationRecord.Verification.get -> Harbor.Abstractions.Models.RunVerification
+Harbor.Abstractions.Models.RunVerificationRecord.WithArtifact(Harbor.Abstractions.Models.RunArtifact! artifact) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.RunVerificationRecord!>
+Harbor.Abstractions.Models.RunVerificationRecord.WithCheck(Harbor.Abstractions.Models.RunCheck! check) -> Harbor.Abstractions.Models.RunVerificationRecord!
+Harbor.Abstractions.Models.RunVerificationRecord.WithNotVerified(string! what, string! reason) -> Harbor.Abstractions.Models.RunVerificationRecord!
+Harbor.Abstractions.Models.RunVerificationRecord.WithUnreadableEvidence(string! reason) -> Harbor.Abstractions.Models.RunVerificationRecord!
+Harbor.Abstractions.Models.RunVerificationVerdict
+Harbor.Abstractions.Models.RunVerificationVerdict.NotVerified = 0 -> Harbor.Abstractions.Models.RunVerificationVerdict
+Harbor.Abstractions.Models.RunVerificationVerdict.VerificationFailed = 2 -> Harbor.Abstractions.Models.RunVerificationVerdict
+Harbor.Abstractions.Models.RunVerificationVerdict.Verified = 1 -> Harbor.Abstractions.Models.RunVerificationVerdict
+Harbor.Abstractions.Models.Session
+Harbor.Abstractions.Models.Session.<Clone>$() -> Harbor.Abstractions.Models.Session!
+Harbor.Abstractions.Models.Session.Agent.get -> string!
+Harbor.Abstractions.Models.Session.Agent.init -> void
+Harbor.Abstractions.Models.Session.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Models.Session.CreatedAt.init -> void
+Harbor.Abstractions.Models.Session.Deconstruct(out string! Id, out string! ProjectId, out string! Directory, out string! Title, out string! Agent, out string! Model, out string! ProviderId, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset UpdatedAt, out Harbor.Abstractions.Models.SessionMetadata! Metadata, out string? ParentSessionId, out Harbor.Abstractions.Models.SessionStatus Status, out string? GitBranch, out bool GitIsDirty, out Harbor.Abstractions.Models.SessionKind Kind) -> void
+Harbor.Abstractions.Models.Session.Directory.get -> string!
+Harbor.Abstractions.Models.Session.Directory.init -> void
+Harbor.Abstractions.Models.Session.Equals(Harbor.Abstractions.Models.Session? other) -> bool
+Harbor.Abstractions.Models.Session.GitBranch.get -> string?
+Harbor.Abstractions.Models.Session.GitBranch.init -> void
+Harbor.Abstractions.Models.Session.GitIsDirty.get -> bool
+Harbor.Abstractions.Models.Session.GitIsDirty.init -> void
+Harbor.Abstractions.Models.Session.Id.get -> string!
+Harbor.Abstractions.Models.Session.Id.init -> void
+Harbor.Abstractions.Models.Session.Kind.get -> Harbor.Abstractions.Models.SessionKind
+Harbor.Abstractions.Models.Session.Kind.init -> void
+Harbor.Abstractions.Models.Session.Metadata.get -> Harbor.Abstractions.Models.SessionMetadata!
+Harbor.Abstractions.Models.Session.Metadata.init -> void
+Harbor.Abstractions.Models.Session.Model.get -> string!
+Harbor.Abstractions.Models.Session.Model.init -> void
+Harbor.Abstractions.Models.Session.ParentSessionId.get -> string?
+Harbor.Abstractions.Models.Session.ParentSessionId.init -> void
+Harbor.Abstractions.Models.Session.ProjectId.get -> string!
+Harbor.Abstractions.Models.Session.ProjectId.init -> void
+Harbor.Abstractions.Models.Session.ProviderId.get -> string!
+Harbor.Abstractions.Models.Session.ProviderId.init -> void
+Harbor.Abstractions.Models.Session.Session(string! Id, string! ProjectId, string! Directory, string! Title, string! Agent, string! Model, string! ProviderId, System.DateTimeOffset CreatedAt, System.DateTimeOffset UpdatedAt, Harbor.Abstractions.Models.SessionMetadata! Metadata, string? ParentSessionId = null, Harbor.Abstractions.Models.SessionStatus Status = Harbor.Abstractions.Models.SessionStatus.Idle, string? GitBranch = null, bool GitIsDirty = false, Harbor.Abstractions.Models.SessionKind Kind = Harbor.Abstractions.Models.SessionKind.User) -> void
+Harbor.Abstractions.Models.Session.Status.get -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.Session.Status.init -> void
+Harbor.Abstractions.Models.Session.Title.get -> string!
+Harbor.Abstractions.Models.Session.Title.init -> void
+Harbor.Abstractions.Models.Session.UpdatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Models.Session.UpdatedAt.init -> void
+Harbor.Abstractions.Models.SessionKind
+Harbor.Abstractions.Models.SessionKind.Subagent = 1 -> Harbor.Abstractions.Models.SessionKind
+Harbor.Abstractions.Models.SessionKind.User = 0 -> Harbor.Abstractions.Models.SessionKind
+Harbor.Abstractions.Models.SessionKindExtensions
+Harbor.Abstractions.Models.SessionMetadata
+Harbor.Abstractions.Models.SessionMetadata.<Clone>$() -> Harbor.Abstractions.Models.SessionMetadata!
+Harbor.Abstractions.Models.SessionMetadata.AddExternalCost(Harbor.Abstractions.Models.Usage! usage, decimal childCost, bool childCostKnown) -> Harbor.Abstractions.Models.SessionMetadata!
+Harbor.Abstractions.Models.SessionMetadata.AddUsage(Harbor.Abstractions.Models.Usage! usage, Harbor.Abstractions.Models.Pricing! pricing) -> Harbor.Abstractions.Models.SessionMetadata!
+Harbor.Abstractions.Models.SessionMetadata.Cost.get -> decimal
+Harbor.Abstractions.Models.SessionMetadata.Cost.init -> void
+Harbor.Abstractions.Models.SessionMetadata.Deconstruct(out decimal Cost, out int TokensInput, out int TokensOutput, out int TokensReasoning, out int TokensCacheRead, out int TokensCacheWrite, out int MessageCount, out System.TimeSpan? TimeCompacting, out bool IsCostKnown) -> void
+Harbor.Abstractions.Models.SessionMetadata.Equals(Harbor.Abstractions.Models.SessionMetadata? other) -> bool
+Harbor.Abstractions.Models.SessionMetadata.IsCostKnown.get -> bool
+Harbor.Abstractions.Models.SessionMetadata.IsCostKnown.init -> void
+Harbor.Abstractions.Models.SessionMetadata.MessageCount.get -> int
+Harbor.Abstractions.Models.SessionMetadata.MessageCount.init -> void
+Harbor.Abstractions.Models.SessionMetadata.SessionMetadata(decimal Cost, int TokensInput, int TokensOutput, int TokensReasoning, int TokensCacheRead, int TokensCacheWrite, int MessageCount, System.TimeSpan? TimeCompacting, bool IsCostKnown = true) -> void
+Harbor.Abstractions.Models.SessionMetadata.TimeCompacting.get -> System.TimeSpan?
+Harbor.Abstractions.Models.SessionMetadata.TimeCompacting.init -> void
+Harbor.Abstractions.Models.SessionMetadata.TokensCacheRead.get -> int
+Harbor.Abstractions.Models.SessionMetadata.TokensCacheRead.init -> void
+Harbor.Abstractions.Models.SessionMetadata.TokensCacheWrite.get -> int
+Harbor.Abstractions.Models.SessionMetadata.TokensCacheWrite.init -> void
+Harbor.Abstractions.Models.SessionMetadata.TokensInput.get -> int
+Harbor.Abstractions.Models.SessionMetadata.TokensInput.init -> void
+Harbor.Abstractions.Models.SessionMetadata.TokensOutput.get -> int
+Harbor.Abstractions.Models.SessionMetadata.TokensOutput.init -> void
+Harbor.Abstractions.Models.SessionMetadata.TokensReasoning.get -> int
+Harbor.Abstractions.Models.SessionMetadata.TokensReasoning.init -> void
+Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.SessionStatus.Aborted = 4 -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.SessionStatus.Done = 2 -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.SessionStatus.Error = 3 -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.SessionStatus.Idle = 0 -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.SessionStatus.Working = 1 -> Harbor.Abstractions.Models.SessionStatus
+Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.Aborted = 5 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.ContentFilter = 3 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.Error = 4 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.Length = 1 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.Stop = 0 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReason.ToolUse = 2 -> Harbor.Abstractions.Models.StopReason
+Harbor.Abstractions.Models.StopReasonJsonConverter
+Harbor.Abstractions.Models.StopReasonJsonConverter.StopReasonJsonConverter() -> void
+Harbor.Abstractions.Models.StopReasonTable
+Harbor.Abstractions.Models.TextPart
+Harbor.Abstractions.Models.TextPart.Deconstruct(out string! Text) -> void
+Harbor.Abstractions.Models.TextPart.Equals(Harbor.Abstractions.Models.TextPart? other) -> bool
+Harbor.Abstractions.Models.TextPart.Text.get -> string!
+Harbor.Abstractions.Models.TextPart.Text.init -> void
+Harbor.Abstractions.Models.TextPart.TextPart(string! Text) -> void
+Harbor.Abstractions.Models.ThinkingPart
+Harbor.Abstractions.Models.ThinkingPart.Deconstruct(out string! Text) -> void
+Harbor.Abstractions.Models.ThinkingPart.Equals(Harbor.Abstractions.Models.ThinkingPart? other) -> bool
+Harbor.Abstractions.Models.ThinkingPart.Text.get -> string!
+Harbor.Abstractions.Models.ThinkingPart.Text.init -> void
+Harbor.Abstractions.Models.ThinkingPart.ThinkingPart(string! Text) -> void
+Harbor.Abstractions.Models.ToolCallCompletion
+Harbor.Abstractions.Models.ToolCallCompletion.Abandoned = 2 -> Harbor.Abstractions.Models.ToolCallCompletion
+Harbor.Abstractions.Models.ToolCallCompletion.Completed = 0 -> Harbor.Abstractions.Models.ToolCallCompletion
+Harbor.Abstractions.Models.ToolCallCompletion.Failed = 1 -> Harbor.Abstractions.Models.ToolCallCompletion
+Harbor.Abstractions.Models.ToolCallLink
+Harbor.Abstractions.Models.ToolCallLink.<Clone>$() -> Harbor.Abstractions.Models.ToolCallLink!
+Harbor.Abstractions.Models.ToolCallLink.Completion.get -> Harbor.Abstractions.Models.ToolCallCompletion
+Harbor.Abstractions.Models.ToolCallLink.Completion.init -> void
+Harbor.Abstractions.Models.ToolCallLink.Deconstruct(out string! ToolCallId, out string! ToolName, out bool IsError, out Harbor.Abstractions.Models.ToolCallCompletion Completion) -> void
+Harbor.Abstractions.Models.ToolCallLink.Equals(Harbor.Abstractions.Models.ToolCallLink? other) -> bool
+Harbor.Abstractions.Models.ToolCallLink.IsError.get -> bool
+Harbor.Abstractions.Models.ToolCallLink.IsError.init -> void
+Harbor.Abstractions.Models.ToolCallLink.ToolCallId.get -> string!
+Harbor.Abstractions.Models.ToolCallLink.ToolCallId.init -> void
+Harbor.Abstractions.Models.ToolCallLink.ToolCallLink(string! ToolCallId, string! ToolName, bool IsError, Harbor.Abstractions.Models.ToolCallCompletion Completion = Harbor.Abstractions.Models.ToolCallCompletion.Completed) -> void
+Harbor.Abstractions.Models.ToolCallLink.ToolName.get -> string!
+Harbor.Abstractions.Models.ToolCallLink.ToolName.init -> void
+Harbor.Abstractions.Models.ToolCallPart
+Harbor.Abstractions.Models.ToolCallPart.Args.get -> System.Text.Json.JsonElement
+Harbor.Abstractions.Models.ToolCallPart.Args.init -> void
+Harbor.Abstractions.Models.ToolCallPart.Deconstruct(out string! Id, out string! ToolName, out System.Text.Json.JsonElement Args) -> void
+Harbor.Abstractions.Models.ToolCallPart.Equals(Harbor.Abstractions.Models.ToolCallPart? other) -> bool
+Harbor.Abstractions.Models.ToolCallPart.Id.get -> string!
+Harbor.Abstractions.Models.ToolCallPart.Id.init -> void
+Harbor.Abstractions.Models.ToolCallPart.ToolCallPart(string! Id, string! ToolName, System.Text.Json.JsonElement Args) -> void
+Harbor.Abstractions.Models.ToolCallPart.ToolName.get -> string!
+Harbor.Abstractions.Models.ToolCallPart.ToolName.init -> void
+Harbor.Abstractions.Models.ToolChoice
+Harbor.Abstractions.Models.ToolChoice.Auto
+Harbor.Abstractions.Models.ToolChoice.Auto.Auto() -> void
+Harbor.Abstractions.Models.ToolChoice.Auto.Equals(Harbor.Abstractions.Models.ToolChoice.Auto? other) -> bool
+Harbor.Abstractions.Models.ToolChoice.None
+Harbor.Abstractions.Models.ToolChoice.None.Equals(Harbor.Abstractions.Models.ToolChoice.None? other) -> bool
+Harbor.Abstractions.Models.ToolChoice.None.None() -> void
+Harbor.Abstractions.Models.ToolChoice.Required
+Harbor.Abstractions.Models.ToolChoice.Required.Equals(Harbor.Abstractions.Models.ToolChoice.Required? other) -> bool
+Harbor.Abstractions.Models.ToolChoice.Required.Required() -> void
+Harbor.Abstractions.Models.ToolChoice.Specific
+Harbor.Abstractions.Models.ToolChoice.Specific.Deconstruct(out string! ToolName) -> void
+Harbor.Abstractions.Models.ToolChoice.Specific.Equals(Harbor.Abstractions.Models.ToolChoice.Specific? other) -> bool
+Harbor.Abstractions.Models.ToolChoice.Specific.Specific(string! ToolName) -> void
+Harbor.Abstractions.Models.ToolChoice.Specific.ToolName.get -> string!
+Harbor.Abstractions.Models.ToolChoice.Specific.ToolName.init -> void
+Harbor.Abstractions.Models.ToolChoice.ToolChoice() -> void
+Harbor.Abstractions.Models.ToolChoice.ToolChoice(Harbor.Abstractions.Models.ToolChoice! original) -> void
+Harbor.Abstractions.Models.ToolResult
+Harbor.Abstractions.Models.ToolResult.<Clone>$() -> Harbor.Abstractions.Models.ToolResult!
+Harbor.Abstractions.Models.ToolResult.Attachments.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.FileAttachment!>?
+Harbor.Abstractions.Models.ToolResult.Attachments.init -> void
+Harbor.Abstractions.Models.ToolResult.Equals(Harbor.Abstractions.Models.ToolResult? other) -> bool
+Harbor.Abstractions.Models.ToolResult.IsError.get -> bool
+Harbor.Abstractions.Models.ToolResult.IsError.init -> void
+Harbor.Abstractions.Models.ToolResult.Metadata.get -> object?
+Harbor.Abstractions.Models.ToolResult.Metadata.init -> void
+Harbor.Abstractions.Models.ToolResult.Output.get -> string!
+Harbor.Abstractions.Models.ToolResult.Output.init -> void
+Harbor.Abstractions.Models.ToolResult.ToolResult(string! Output, bool IsError, object? Metadata = null, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.FileAttachment!>? Attachments = null) -> void
+Harbor.Abstractions.Models.ToolResultEntry
+Harbor.Abstractions.Models.ToolResultEntry.<Clone>$() -> Harbor.Abstractions.Models.ToolResultEntry!
+Harbor.Abstractions.Models.ToolResultEntry.Equals(Harbor.Abstractions.Models.ToolResultEntry? other) -> bool
+Harbor.Abstractions.Models.ToolResultEntry.IsError.get -> bool
+Harbor.Abstractions.Models.ToolResultEntry.IsError.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.Metadata.get -> object?
+Harbor.Abstractions.Models.ToolResultEntry.Metadata.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.Output.get -> string!
+Harbor.Abstractions.Models.ToolResultEntry.Output.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.ToolCallId.get -> string!
+Harbor.Abstractions.Models.ToolResultEntry.ToolCallId.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.ToolName.get -> string!
+Harbor.Abstractions.Models.ToolResultEntry.ToolName.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.ToolResultEntry(string! ToolCallId, string! ToolName, string! Output, bool IsError, object? Metadata = null) -> void
+Harbor.Abstractions.Models.ToolResultMessage
+Harbor.Abstractions.Models.ToolResultMessage.Deconstruct(out string! Id, out string! SessionId, out System.DateTimeOffset CreatedAt, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultEntry!>! Results, out string? ParentId) -> void
+Harbor.Abstractions.Models.ToolResultMessage.Equals(Harbor.Abstractions.Models.ToolResultMessage? other) -> bool
+Harbor.Abstractions.Models.ToolResultMessage.Results.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultEntry!>!
+Harbor.Abstractions.Models.ToolResultMessage.Results.init -> void
+Harbor.Abstractions.Models.ToolResultMessage.ToolResultMessage(string! Id, string! SessionId, System.DateTimeOffset CreatedAt, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolResultEntry!>! Results, string? ParentId = null) -> void
+Harbor.Abstractions.Models.UnfinishedRunDetector
+Harbor.Abstractions.Models.UnfinishedRunReport
+Harbor.Abstractions.Models.UnfinishedRunReport.<Clone>$() -> Harbor.Abstractions.Models.UnfinishedRunReport!
+Harbor.Abstractions.Models.UnfinishedRunReport.Boundary.get -> Harbor.Abstractions.Models.RecoveryBoundary
+Harbor.Abstractions.Models.UnfinishedRunReport.Boundary.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.ConfirmedToolCallCount.get -> int
+Harbor.Abstractions.Models.UnfinishedRunReport.ConfirmedToolCallCount.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.Deconstruct(out Harbor.Abstractions.Models.Identifiers.RunId! RunId, out string! SessionId, out Harbor.Abstractions.Models.RunTermination Termination, out Harbor.Abstractions.Models.LastConfirmedState! LastConfirmed, out Harbor.Abstractions.Models.RecoveryBoundary Boundary, out string? InFlightToolName, out string? InFlightToolCallId, out string? PendingModel, out int ConfirmedToolCallCount) -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.Equals(Harbor.Abstractions.Models.UnfinishedRunReport? other) -> bool
+Harbor.Abstractions.Models.UnfinishedRunReport.InFlightToolCallId.get -> string?
+Harbor.Abstractions.Models.UnfinishedRunReport.InFlightToolCallId.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.InFlightToolName.get -> string?
+Harbor.Abstractions.Models.UnfinishedRunReport.InFlightToolName.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.LastConfirmed.get -> Harbor.Abstractions.Models.LastConfirmedState!
+Harbor.Abstractions.Models.UnfinishedRunReport.LastConfirmed.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.PendingModel.get -> string?
+Harbor.Abstractions.Models.UnfinishedRunReport.PendingModel.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.RunId.get -> Harbor.Abstractions.Models.Identifiers.RunId!
+Harbor.Abstractions.Models.UnfinishedRunReport.RunId.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.SessionId.get -> string!
+Harbor.Abstractions.Models.UnfinishedRunReport.SessionId.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.Termination.get -> Harbor.Abstractions.Models.RunTermination
+Harbor.Abstractions.Models.UnfinishedRunReport.Termination.init -> void
+Harbor.Abstractions.Models.UnfinishedRunReport.UnfinishedRunReport(Harbor.Abstractions.Models.Identifiers.RunId! RunId, string! SessionId, Harbor.Abstractions.Models.RunTermination Termination, Harbor.Abstractions.Models.LastConfirmedState! LastConfirmed, Harbor.Abstractions.Models.RecoveryBoundary Boundary, string? InFlightToolName = null, string? InFlightToolCallId = null, string? PendingModel = null, int ConfirmedToolCallCount = 0) -> void
+Harbor.Abstractions.Models.UnresolvedToolCall
+Harbor.Abstractions.Models.Usage
+Harbor.Abstractions.Models.Usage.<Clone>$() -> Harbor.Abstractions.Models.Usage!
+Harbor.Abstractions.Models.Usage.CacheReadTokens.get -> int?
+Harbor.Abstractions.Models.Usage.CacheReadTokens.init -> void
+Harbor.Abstractions.Models.Usage.CacheWriteTokens.get -> int?
+Harbor.Abstractions.Models.Usage.CacheWriteTokens.init -> void
+Harbor.Abstractions.Models.Usage.Deconstruct(out int InputTokens, out int OutputTokens, out int? ReasoningTokens, out int? CacheReadTokens, out int? CacheWriteTokens) -> void
+Harbor.Abstractions.Models.Usage.Equals(Harbor.Abstractions.Models.Usage? other) -> bool
+Harbor.Abstractions.Models.Usage.InputTokens.get -> int
+Harbor.Abstractions.Models.Usage.InputTokens.init -> void
+Harbor.Abstractions.Models.Usage.OutputTokens.get -> int
+Harbor.Abstractions.Models.Usage.OutputTokens.init -> void
+Harbor.Abstractions.Models.Usage.ReasoningTokens.get -> int?
+Harbor.Abstractions.Models.Usage.ReasoningTokens.init -> void
+Harbor.Abstractions.Models.Usage.Usage(int InputTokens, int OutputTokens, int? ReasoningTokens = null, int? CacheReadTokens = null, int? CacheWriteTokens = null) -> void
+Harbor.Abstractions.Models.UsdCell
+Harbor.Abstractions.Models.UserMessage
+Harbor.Abstractions.Models.UserMessage.Agent.get -> string!
+Harbor.Abstractions.Models.UserMessage.Agent.init -> void
+Harbor.Abstractions.Models.UserMessage.Attachments.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ImageAttachment!>?
+Harbor.Abstractions.Models.UserMessage.Attachments.init -> void
+Harbor.Abstractions.Models.UserMessage.Content.get -> string!
+Harbor.Abstractions.Models.UserMessage.Content.init -> void
+Harbor.Abstractions.Models.UserMessage.Deconstruct(out string! Id, out string! SessionId, out System.DateTimeOffset CreatedAt, out string! Content, out string! Agent, out string! Model, out string? ParentId, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ImageAttachment!>? Attachments) -> void
+Harbor.Abstractions.Models.UserMessage.Equals(Harbor.Abstractions.Models.UserMessage? other) -> bool
+Harbor.Abstractions.Models.UserMessage.HasAttachments.get -> bool
+Harbor.Abstractions.Models.UserMessage.Model.get -> string!
+Harbor.Abstractions.Models.UserMessage.Model.init -> void
+Harbor.Abstractions.Models.UserMessage.UserMessage(string! Id, string! SessionId, System.DateTimeOffset CreatedAt, string! Content, string! Agent, string! Model, string? ParentId = null, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ImageAttachment!>? Attachments = null) -> void
+Harbor.Abstractions.Models.WorkspaceContract
+Harbor.Abstractions.Models.WorkspaceContract.<Clone>$() -> Harbor.Abstractions.Models.WorkspaceContract!
+Harbor.Abstractions.Models.WorkspaceContract.BaseBranch.get -> string?
+Harbor.Abstractions.Models.WorkspaceContract.BaseBranch.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.BaseRevision.get -> string!
+Harbor.Abstractions.Models.WorkspaceContract.BaseRevision.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.Deconstruct(out string! RepoRoot, out string! BaseRevision, out string? BaseBranch, out System.Collections.Generic.IReadOnlyList<string!>! TrackedDirt, out bool UntrackedPresent, out Harbor.Abstractions.Models.WorkspaceIsolation Isolation, out Harbor.Abstractions.Models.WorkspaceLimits! Limits) -> void
+Harbor.Abstractions.Models.WorkspaceContract.Equals(Harbor.Abstractions.Models.WorkspaceContract? other) -> bool
+Harbor.Abstractions.Models.WorkspaceContract.Isolation.get -> Harbor.Abstractions.Models.WorkspaceIsolation
+Harbor.Abstractions.Models.WorkspaceContract.Isolation.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.Limits.get -> Harbor.Abstractions.Models.WorkspaceLimits!
+Harbor.Abstractions.Models.WorkspaceContract.Limits.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.RepoRoot.get -> string!
+Harbor.Abstractions.Models.WorkspaceContract.RepoRoot.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.TrackedDirt.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Models.WorkspaceContract.TrackedDirt.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.UntrackedPresent.get -> bool
+Harbor.Abstractions.Models.WorkspaceContract.UntrackedPresent.init -> void
+Harbor.Abstractions.Models.WorkspaceContract.WorkspaceContract(string! RepoRoot, string! BaseRevision, string? BaseBranch, System.Collections.Generic.IReadOnlyList<string!>! TrackedDirt, bool UntrackedPresent, Harbor.Abstractions.Models.WorkspaceIsolation Isolation, Harbor.Abstractions.Models.WorkspaceLimits! Limits) -> void
+Harbor.Abstractions.Models.WorkspaceIsolation
+Harbor.Abstractions.Models.WorkspaceIsolation.Copy = 0 -> Harbor.Abstractions.Models.WorkspaceIsolation
+Harbor.Abstractions.Models.WorkspaceIsolation.Worktree = 1 -> Harbor.Abstractions.Models.WorkspaceIsolation
+Harbor.Abstractions.Models.WorkspaceLimits
+Harbor.Abstractions.Models.WorkspaceLimits.<Clone>$() -> Harbor.Abstractions.Models.WorkspaceLimits!
+Harbor.Abstractions.Models.WorkspaceLimits.Deconstruct(out int TimeoutSeconds, out int MaxSteps) -> void
+Harbor.Abstractions.Models.WorkspaceLimits.Equals(Harbor.Abstractions.Models.WorkspaceLimits? other) -> bool
+Harbor.Abstractions.Models.WorkspaceLimits.MaxSteps.get -> int
+Harbor.Abstractions.Models.WorkspaceLimits.MaxSteps.init -> void
+Harbor.Abstractions.Models.WorkspaceLimits.TimeoutSeconds.get -> int
+Harbor.Abstractions.Models.WorkspaceLimits.TimeoutSeconds.init -> void
+Harbor.Abstractions.Models.WorkspaceLimits.WorkspaceLimits(int TimeoutSeconds = 600, int MaxSteps = 50) -> void
+Harbor.Abstractions.Permissions.BashArgMatcher
+Harbor.Abstractions.Permissions.BashSafetyPolicy
+Harbor.Abstractions.Permissions.BashSafetyPolicy.AppliesTo(string! permission) -> bool
+Harbor.Abstractions.Permissions.BashSafetyPolicy.BashSafetyPolicy() -> void
+Harbor.Abstractions.Permissions.BashSafetyPolicy.BashSafetyPolicy(System.Collections.Generic.IEnumerable<string!>! tools) -> void
+Harbor.Abstractions.Permissions.BashSafetyPolicy.GetExtraDenyTargets(string! argPath) -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Permissions.BashSafetyPolicy.PreEvaluate(string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction?
+Harbor.Abstractions.Permissions.BashSafetyPolicy.SuppressAllow(string! rulePattern, string! argPath) -> bool
+Harbor.Abstractions.Permissions.BoundedPatternRegexCache
+Harbor.Abstractions.Permissions.BoundedPatternRegexCache.BoundedPatternRegexCache(int capacity = 512) -> void
+Harbor.Abstractions.Permissions.BoundedPatternRegexCache.Count.get -> int
+Harbor.Abstractions.Permissions.BoundedPatternRegexCache.GetOrAdd(string! pattern) -> System.Text.RegularExpressions.Regex!
+Harbor.Abstractions.Permissions.BuiltinToolSafetyProfiles
+Harbor.Abstractions.Permissions.IArgSafetyPolicy
+Harbor.Abstractions.Permissions.IArgSafetyPolicy.AppliesTo(string! permission) -> bool
+Harbor.Abstractions.Permissions.IArgSafetyPolicy.GetExtraDenyTargets(string! argPath) -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Permissions.IArgSafetyPolicy.PreEvaluate(string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction?
+Harbor.Abstractions.Permissions.IArgSafetyPolicy.SuppressAllow(string! rulePattern, string! argPath) -> bool
+Harbor.Abstractions.Permissions.IPatternRegexCache
+Harbor.Abstractions.Permissions.IPatternRegexCache.Count.get -> int
+Harbor.Abstractions.Permissions.IPatternRegexCache.GetOrAdd(string! pattern) -> System.Text.RegularExpressions.Regex!
+Harbor.Abstractions.Permissions.IPermissionService
+Harbor.Abstractions.Permissions.IPermissionService.AskUserAsync(Harbor.Abstractions.Permissions.PermissionRequest! request, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Permissions.PermissionResponse!>>!
+Harbor.Abstractions.Permissions.IPermissionService.CheckAsync(string! agentName, string! toolName, System.Text.Json.JsonElement args, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken), string? invocationId = null, int generation = 1) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Permissions.PermissionResponse!>>!
+Harbor.Abstractions.Permissions.IPermissionService.GetRuleset(string! agentName) -> Harbor.Abstractions.Permissions.PermissionRuleset!
+Harbor.Abstractions.Permissions.IPermissionService.SaveAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.AppliesTo(string! permission) -> bool
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.GetExtraDenyTargets(string! argPath) -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.PathGuardSafetyPolicy() -> void
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.PathGuardSafetyPolicy(System.Collections.Generic.IEnumerable<string!>! tools) -> void
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.PreEvaluate(string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction?
+Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.SuppressAllow(string! rulePattern, string! argPath) -> bool
+Harbor.Abstractions.Permissions.PeerSupervisionRole
+Harbor.Abstractions.Permissions.PeerSupervisionRole.Direct = 2 -> Harbor.Abstractions.Permissions.PeerSupervisionRole
+Harbor.Abstractions.Permissions.PeerSupervisionRole.None = 0 -> Harbor.Abstractions.Permissions.PeerSupervisionRole
+Harbor.Abstractions.Permissions.PeerSupervisionRole.Observe = 1 -> Harbor.Abstractions.Permissions.PeerSupervisionRole
+Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionAction.Allow = 0 -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionAction.Ask = 1 -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionAction.Deny = 2 -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionRequest
+Harbor.Abstractions.Permissions.PermissionRequest.<Clone>$() -> Harbor.Abstractions.Permissions.PermissionRequest!
+Harbor.Abstractions.Permissions.PermissionRequest.AlwaysOptions.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Permissions.PermissionRequest.AlwaysOptions.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.Args.get -> System.Text.Json.JsonElement
+Harbor.Abstractions.Permissions.PermissionRequest.Args.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.Deconstruct(out string! Permission, out string! Pattern, out System.Text.Json.JsonElement Args, out System.Collections.Generic.IReadOnlyList<string!>! AlwaysOptions, out string? InvocationId, out int Generation) -> void
+Harbor.Abstractions.Permissions.PermissionRequest.Equals(Harbor.Abstractions.Permissions.PermissionRequest? other) -> bool
+Harbor.Abstractions.Permissions.PermissionRequest.Generation.get -> int
+Harbor.Abstractions.Permissions.PermissionRequest.Generation.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.InvocationId.get -> string?
+Harbor.Abstractions.Permissions.PermissionRequest.InvocationId.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.Pattern.get -> string!
+Harbor.Abstractions.Permissions.PermissionRequest.Pattern.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.Permission.get -> string!
+Harbor.Abstractions.Permissions.PermissionRequest.Permission.init -> void
+Harbor.Abstractions.Permissions.PermissionRequest.PermissionRequest(string! Permission, string! Pattern, System.Text.Json.JsonElement Args, System.Collections.Generic.IReadOnlyList<string!>! AlwaysOptions, string? InvocationId = null, int Generation = 1) -> void
+Harbor.Abstractions.Permissions.PermissionResponse
+Harbor.Abstractions.Permissions.PermissionResponse.<Clone>$() -> Harbor.Abstractions.Permissions.PermissionResponse!
+Harbor.Abstractions.Permissions.PermissionResponse.Action.get -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionResponse.Action.init -> void
+Harbor.Abstractions.Permissions.PermissionResponse.Deconstruct(out Harbor.Abstractions.Permissions.PermissionAction Action, out bool PersistDecision) -> void
+Harbor.Abstractions.Permissions.PermissionResponse.Equals(Harbor.Abstractions.Permissions.PermissionResponse? other) -> bool
+Harbor.Abstractions.Permissions.PermissionResponse.PermissionResponse(Harbor.Abstractions.Permissions.PermissionAction Action, bool PersistDecision) -> void
+Harbor.Abstractions.Permissions.PermissionResponse.PersistDecision.get -> bool
+Harbor.Abstractions.Permissions.PermissionResponse.PersistDecision.init -> void
+Harbor.Abstractions.Permissions.PermissionRule
+Harbor.Abstractions.Permissions.PermissionRule.<Clone>$() -> Harbor.Abstractions.Permissions.PermissionRule!
+Harbor.Abstractions.Permissions.PermissionRule.Action.get -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionRule.Action.init -> void
+Harbor.Abstractions.Permissions.PermissionRule.Deconstruct(out string! Permission, out string! Pattern, out Harbor.Abstractions.Permissions.PermissionAction Action) -> void
+Harbor.Abstractions.Permissions.PermissionRule.Equals(Harbor.Abstractions.Permissions.PermissionRule? other) -> bool
+Harbor.Abstractions.Permissions.PermissionRule.MatchesPattern(string! argPath) -> bool
+Harbor.Abstractions.Permissions.PermissionRule.MatchesPermission(string! permission) -> bool
+Harbor.Abstractions.Permissions.PermissionRule.Pattern.get -> string!
+Harbor.Abstractions.Permissions.PermissionRule.Pattern.init -> void
+Harbor.Abstractions.Permissions.PermissionRule.Permission.get -> string!
+Harbor.Abstractions.Permissions.PermissionRule.Permission.init -> void
+Harbor.Abstractions.Permissions.PermissionRule.PermissionRule(string! Permission, string! Pattern, Harbor.Abstractions.Permissions.PermissionAction Action) -> void
+Harbor.Abstractions.Permissions.PermissionRuleset
+Harbor.Abstractions.Permissions.PermissionRuleset.<Clone>$() -> Harbor.Abstractions.Permissions.PermissionRuleset!
+Harbor.Abstractions.Permissions.PermissionRuleset.Equals(Harbor.Abstractions.Permissions.PermissionRuleset? other) -> bool
+Harbor.Abstractions.Permissions.PermissionRuleset.Evaluate(string! permission, string! argPath) -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionRuleset.Evaluate(string! permission, string! argPath, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>? policies) -> Harbor.Abstractions.Permissions.PermissionAction
+Harbor.Abstractions.Permissions.PermissionRuleset.Merge(Harbor.Abstractions.Permissions.PermissionRuleset! other) -> Harbor.Abstractions.Permissions.PermissionRuleset!
+Harbor.Abstractions.Permissions.PermissionRuleset.PermissionRuleset(System.Collections.Generic.IEnumerable<Harbor.Abstractions.Permissions.PermissionRule!>! rules, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>? safetyPolicies = null) -> void
+Harbor.Abstractions.Permissions.PermissionRuleset.Rules.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.PermissionRule!>!
+Harbor.Abstractions.Permissions.PermissionRuleset.SafetyPolicies.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>!
+Harbor.Abstractions.Permissions.ToolArgKind
+Harbor.Abstractions.Permissions.ToolArgKind.Command = 2 -> Harbor.Abstractions.Permissions.ToolArgKind
+Harbor.Abstractions.Permissions.ToolArgKind.Opaque = 0 -> Harbor.Abstractions.Permissions.ToolArgKind
+Harbor.Abstractions.Permissions.ToolArgKind.Path = 1 -> Harbor.Abstractions.Permissions.ToolArgKind
+Harbor.Abstractions.Permissions.ToolCategories
+Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolCategory.Exec = 3 -> Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolCategory.Mcp = 4 -> Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolCategory.Network = 2 -> Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolCategory.Read = 0 -> Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolCategory.Write = 1 -> Harbor.Abstractions.Permissions.ToolCategory
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.<Clone>$() -> Harbor.Abstractions.Permissions.ToolSafetyDeclaration!
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Category.get -> Harbor.Abstractions.Permissions.ToolCategory?
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Category.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Deconstruct(out string! ToolName, out Harbor.Abstractions.Permissions.ToolSafetyProfile! Profile) -> void
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Equals(Harbor.Abstractions.Permissions.ToolSafetyDeclaration? other) -> bool
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.PeerSupervision.get -> Harbor.Abstractions.Permissions.PeerSupervisionRole
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.PeerSupervision.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Profile.get -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Profile.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.ToolName.get -> string!
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.ToolName.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyDeclaration.ToolSafetyDeclaration(string! ToolName, Harbor.Abstractions.Permissions.ToolSafetyProfile! Profile) -> void
+Harbor.Abstractions.Permissions.ToolSafetyPolicies
+Harbor.Abstractions.Permissions.ToolSafetyProfile
+Harbor.Abstractions.Permissions.ToolSafetyProfile.<Clone>$() -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+Harbor.Abstractions.Permissions.ToolSafetyProfile.ArgKind.get -> Harbor.Abstractions.Permissions.ToolArgKind
+Harbor.Abstractions.Permissions.ToolSafetyProfile.ArgKind.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyProfile.ArgumentName.get -> string?
+Harbor.Abstractions.Permissions.ToolSafetyProfile.ArgumentName.init -> void
+Harbor.Abstractions.Permissions.ToolSafetyProfile.Deconstruct(out Harbor.Abstractions.Permissions.ToolArgKind ArgKind, out string? ArgumentName) -> void
+Harbor.Abstractions.Permissions.ToolSafetyProfile.Equals(Harbor.Abstractions.Permissions.ToolSafetyProfile? other) -> bool
+Harbor.Abstractions.Permissions.ToolSafetyProfile.ToolSafetyProfile(Harbor.Abstractions.Permissions.ToolArgKind ArgKind, string? ArgumentName) -> void
+Harbor.Abstractions.Sessions.SessionLogEntry
+Harbor.Abstractions.Sessions.SessionLogEntry.<Clone>$() -> Harbor.Abstractions.Sessions.SessionLogEntry!
+Harbor.Abstractions.Sessions.SessionLogEntry.AnchorId.get -> string?
+Harbor.Abstractions.Sessions.SessionLogEntry.AnchorId.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.Equals(Harbor.Abstractions.Sessions.SessionLogEntry? other) -> bool
+Harbor.Abstractions.Sessions.SessionLogEntry.Id.get -> string!
+Harbor.Abstractions.Sessions.SessionLogEntry.Id.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.Kind.get -> Harbor.Abstractions.Sessions.SessionLogEntryKind
+Harbor.Abstractions.Sessions.SessionLogEntry.Kind.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.Message.get -> Harbor.Abstractions.Models.AgentMessage?
+Harbor.Abstractions.Sessions.SessionLogEntry.Message.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.OccurredAt.get -> System.DateTimeOffset?
+Harbor.Abstractions.Sessions.SessionLogEntry.OccurredAt.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.Position.get -> int
+Harbor.Abstractions.Sessions.SessionLogEntry.Position.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.RemovedCount.get -> int
+Harbor.Abstractions.Sessions.SessionLogEntry.RemovedCount.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.SessionLogEntry() -> void
+Harbor.Abstractions.Sessions.SessionLogEntry.State.get -> Harbor.Abstractions.Sessions.SessionLogEntryState?
+Harbor.Abstractions.Sessions.SessionLogEntry.State.init -> void
+Harbor.Abstractions.Sessions.SessionLogEntryKind
+Harbor.Abstractions.Sessions.SessionLogEntryKind.Message = 0 -> Harbor.Abstractions.Sessions.SessionLogEntryKind
+Harbor.Abstractions.Sessions.SessionLogEntryKind.Rewind = 1 -> Harbor.Abstractions.Sessions.SessionLogEntryKind
+Harbor.Abstractions.Sessions.SessionLogEntryState
+Harbor.Abstractions.Sessions.SessionLogEntryState.Current = 0 -> Harbor.Abstractions.Sessions.SessionLogEntryState
+Harbor.Abstractions.Sessions.SessionLogEntryState.LogOnly = 2 -> Harbor.Abstractions.Sessions.SessionLogEntryState
+Harbor.Abstractions.Sessions.SessionLogEntryState.Shadowed = 1 -> Harbor.Abstractions.Sessions.SessionLogEntryState
+Harbor.Abstractions.Sessions.SessionLogFold
+Harbor.Abstractions.Sessions.SessionLogGuard
+Harbor.Abstractions.Sessions.SessionSurface
+Harbor.Abstractions.Sessions.SessionSurface.<Clone>$() -> Harbor.Abstractions.Sessions.SessionSurface!
+Harbor.Abstractions.Sessions.SessionSurface.Current.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.SessionSurface.Current.init -> void
+Harbor.Abstractions.Sessions.SessionSurface.Entries.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>!
+Harbor.Abstractions.Sessions.SessionSurface.Entries.init -> void
+Harbor.Abstractions.Sessions.SessionSurface.Equals(Harbor.Abstractions.Sessions.SessionSurface? other) -> bool
+Harbor.Abstractions.Sessions.SessionSurface.LogOnly.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>!
+Harbor.Abstractions.Sessions.SessionSurface.LogOnly.init -> void
+Harbor.Abstractions.Sessions.SessionSurface.SessionSurface() -> void
+Harbor.Abstractions.Sessions.SessionSurface.Shadowed.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>!
+Harbor.Abstractions.Sessions.SessionSurface.Shadowed.init -> void
+Harbor.Abstractions.Sessions.SessionSurface.Warnings.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Sessions.SessionSurface.Warnings.init -> void
+abstract Harbor.Abstractions.Events.AgentEvent.<Clone>$() -> Harbor.Abstractions.Events.AgentEvent!
+abstract Harbor.Abstractions.Events.LlmEvent.<Clone>$() -> Harbor.Abstractions.Events.LlmEvent!
+abstract Harbor.Abstractions.Models.AgentMessage.<Clone>$() -> Harbor.Abstractions.Models.AgentMessage!
+abstract Harbor.Abstractions.Models.AgentMessage.Role.get -> string!
+abstract Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.Visit(Harbor.Abstractions.Models.AssistantMessage! message) -> TResult
+abstract Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.Visit(Harbor.Abstractions.Models.ToolResultMessage! message) -> TResult
+abstract Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.Visit(Harbor.Abstractions.Models.UserMessage! message) -> TResult
+abstract Harbor.Abstractions.Models.ContentPart.<Clone>$() -> Harbor.Abstractions.Models.ContentPart!
+abstract Harbor.Abstractions.Models.ContentPart.Type.get -> string!
+abstract Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Visit(Harbor.Abstractions.Models.FilePart! part) -> TResult
+abstract Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Visit(Harbor.Abstractions.Models.TextPart! part) -> TResult
+abstract Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Visit(Harbor.Abstractions.Models.ThinkingPart! part) -> TResult
+abstract Harbor.Abstractions.Models.ContentPartVisitor<TResult>.Visit(Harbor.Abstractions.Models.ToolCallPart! part) -> TResult
+abstract Harbor.Abstractions.Models.ToolChoice.<Clone>$() -> Harbor.Abstractions.Models.ToolChoice!
+const Harbor.Abstractions.Env.HarborEnv.CellForgeWindows = "HARBOR_CELLFORGE_WINDOWS" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Demo = "HARBOR_DEMO" -> string!
+const Harbor.Abstractions.Env.HarborEnv.DemoStepMs = "HARBOR_DEMO_STEP_MS" -> string!
+const Harbor.Abstractions.Env.HarborEnv.DemoTui = "HARBOR_DEMO_TUI" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Diffplex = "HARBOR_DIFFPLEX" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Home = "HARBOR_HOME" -> string!
+const Harbor.Abstractions.Env.HarborEnv.InlineImage = "HARBOR_INLINE_IMAGE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.IpcPipe = "HARBOR_IPC_PIPE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.LegacySetup = "HARBOR_LEGACY_SETUP" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Listen = "HARBOR_LISTEN" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Locale = "HARBOR_LOCALE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.LogLevel = "HARBOR_LOGLEVEL" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Mascot = "HARBOR_MASCOT" -> string!
+const Harbor.Abstractions.Env.HarborEnv.MascotMode = "HARBOR_MASCOT_MODE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.McpConfig = "HARBOR_MCP_CONFIG" -> string!
+const Harbor.Abstractions.Env.HarborEnv.McpOAuthToken = "HARBOR_MCP_OAUTH_TOKEN" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Mode = "HARBOR_MODE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Model = "HARBOR_MODEL" -> string!
+const Harbor.Abstractions.Env.HarborEnv.NoApprover = "HARBOR_NO_APPROVER" -> string!
+const Harbor.Abstractions.Env.HarborEnv.NoAutotitle = "HARBOR_NO_AUTOTITLE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Osc777 = "HARBOR_OSC777" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Port = "HARBOR_PORT" -> string!
+const Harbor.Abstractions.Env.HarborEnv.ProjectPlugins = "HARBOR_PROJECT_PLUGINS" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Shell = "HARBOR_SHELL" -> string!
+const Harbor.Abstractions.Env.HarborEnv.SkillFreshness = "HARBOR_SKILL_FRESHNESS" -> string!
+const Harbor.Abstractions.Env.HarborEnv.SkipOnboarding = "HARBOR_SKIP_ONBOARDING" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Storage = "HARBOR_STORAGE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TelemetryExport = "HARBOR_TELEMETRY_EXPORT" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TelemetryExportMaxBufferBytes = "HARBOR_TELEMETRY_MAX_BUFFER_BYTES" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TelemetryExportMaxRecordBytes = "HARBOR_TELEMETRY_MAX_RECORD_BYTES" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TelemetryExportPath = "HARBOR_TELEMETRY_EXPORT_PATH" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Theme = "HARBOR_THEME" -> string!
+const Harbor.Abstractions.Env.HarborEnv.ThemeFile = "HARBOR_THEME_FILE" -> string!
+const Harbor.Abstractions.Env.HarborEnv.ThemesDir = "HARBOR_THEMES_DIR" -> string!
+const Harbor.Abstractions.Env.HarborEnv.Tui = "HARBOR_TUI" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TuiNoBuiltinPanels = "HARBOR_TUI_NO_BUILTIN_PANELS" -> string!
+const Harbor.Abstractions.Env.HarborEnv.TuiRuntimeSwap = "HARBOR_TUI_RUNTIME_SWAP" -> string!
+const Harbor.Abstractions.Env.HarborEnv.WithAllProviders = "HARBOR_WITH_ALL_PROVIDERS" -> string!
+const Harbor.Abstractions.Events.ProviderErrors.MaxProviderErrorBodyChars = 1000 -> int
+const Harbor.Abstractions.Extensions.StringTruncation.Ellipsis = "…" -> string!
+const Harbor.Abstractions.Models.ContextUsage.DangerThreshold = 0.85 -> double
+const Harbor.Abstractions.Models.ContextUsage.WarnThreshold = 0.5 -> double
+const Harbor.Abstractions.Models.Identifiers.AgentName.Fallback = "code" -> string!
+const Harbor.Abstractions.Models.RunBudgetLabels.BilledCost = "billed cost" -> string!
+const Harbor.Abstractions.Models.RunBudgetLabels.EstimatedCost = "estimated cost (not billed)" -> string!
+const Harbor.Abstractions.Models.RunRecoveryPolicy.NoExactlyOnceDisclaimer = "Exactly-once execution cannot be guaranteed for shell, network, or file-write tools: an automatic retry could execute the same side effect twice." -> string!
+const Harbor.Abstractions.Models.SessionKindExtensions.SubagentTitlePrefix = "task(" -> string!
+const Harbor.Abstractions.Models.ToolCallLink.AbandonedOutputMarker = "abandoned after accepted-stop" -> string!
+const Harbor.Abstractions.Models.UnresolvedToolCall.NotStartedCode = "TOOL_NOT_STARTED" -> string!
+const Harbor.Abstractions.Models.UnresolvedToolCall.OutcomeUnknownCode = "TOOL_OUTCOME_UNKNOWN" -> string!
+const Harbor.Abstractions.Models.UsdCell.Unpriced = "—" -> string!
+const Harbor.Abstractions.Permissions.BoundedPatternRegexCache.DefaultCapacity = 512 -> int
+override Harbor.Abstractions.Events.AgentEndEvent.<Clone>$() -> Harbor.Abstractions.Events.AgentEndEvent!
+override Harbor.Abstractions.Events.AgentEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.AgentEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.AgentEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.AgentErrorEvent.<Clone>$() -> Harbor.Abstractions.Events.AgentErrorEvent!
+override Harbor.Abstractions.Events.AgentErrorEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.AgentErrorEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.AgentErrorEvent.ToString() -> string!
+override Harbor.Abstractions.Events.AgentEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.AgentEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.AgentEvent.ToString() -> string!
+override Harbor.Abstractions.Events.AgentStartEvent.<Clone>$() -> Harbor.Abstractions.Events.AgentStartEvent!
+override Harbor.Abstractions.Events.AgentStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.AgentStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.AgentStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.CompactionCompletedEvent.<Clone>$() -> Harbor.Abstractions.Events.CompactionCompletedEvent!
+override Harbor.Abstractions.Events.CompactionCompletedEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.CompactionCompletedEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.CompactionCompletedEvent.ToString() -> string!
+override Harbor.Abstractions.Events.CompactionFailedEvent.<Clone>$() -> Harbor.Abstractions.Events.CompactionFailedEvent!
+override Harbor.Abstractions.Events.CompactionFailedEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.CompactionFailedEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.CompactionFailedEvent.ToString() -> string!
+override Harbor.Abstractions.Events.CompactionStartedEvent.<Clone>$() -> Harbor.Abstractions.Events.CompactionStartedEvent!
+override Harbor.Abstractions.Events.CompactionStartedEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.CompactionStartedEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.CompactionStartedEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ErrorEvent.<Clone>$() -> Harbor.Abstractions.Events.ErrorEvent!
+override Harbor.Abstractions.Events.ErrorEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ErrorEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ErrorEvent.ToString() -> string!
+override Harbor.Abstractions.Events.FinishEvent.<Clone>$() -> Harbor.Abstractions.Events.FinishEvent!
+override Harbor.Abstractions.Events.FinishEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.FinishEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.FinishEvent.ToString() -> string!
+override Harbor.Abstractions.Events.LlmEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.LlmEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.LlmEvent.ToString() -> string!
+override Harbor.Abstractions.Events.MessageEndEvent.<Clone>$() -> Harbor.Abstractions.Events.MessageEndEvent!
+override Harbor.Abstractions.Events.MessageEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.MessageEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.MessageEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.MessageStartEvent.<Clone>$() -> Harbor.Abstractions.Events.MessageStartEvent!
+override Harbor.Abstractions.Events.MessageStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.MessageStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.MessageStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.MessageUpdateEvent.<Clone>$() -> Harbor.Abstractions.Events.MessageUpdateEvent!
+override Harbor.Abstractions.Events.MessageUpdateEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.MessageUpdateEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.MessageUpdateEvent.ToString() -> string!
+override Harbor.Abstractions.Events.PluginBlockedEvent.<Clone>$() -> Harbor.Abstractions.Events.PluginBlockedEvent!
+override Harbor.Abstractions.Events.PluginBlockedEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.PluginBlockedEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.PluginBlockedEvent.ToString() -> string!
+override Harbor.Abstractions.Events.SessionChangedEvent.<Clone>$() -> Harbor.Abstractions.Events.SessionChangedEvent!
+override Harbor.Abstractions.Events.SessionChangedEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.SessionChangedEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.SessionChangedEvent.ToString() -> string!
+override Harbor.Abstractions.Events.SessionStatsEvent.<Clone>$() -> Harbor.Abstractions.Events.SessionStatsEvent!
+override Harbor.Abstractions.Events.SessionStatsEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.SessionStatsEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.SessionStatsEvent.ToString() -> string!
+override Harbor.Abstractions.Events.StepFinishEvent.<Clone>$() -> Harbor.Abstractions.Events.StepFinishEvent!
+override Harbor.Abstractions.Events.StepFinishEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.StepFinishEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.StepFinishEvent.ToString() -> string!
+override Harbor.Abstractions.Events.StepStartEvent.<Clone>$() -> Harbor.Abstractions.Events.StepStartEvent!
+override Harbor.Abstractions.Events.StepStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.StepStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.StepStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.TextDeltaEvent.<Clone>$() -> Harbor.Abstractions.Events.TextDeltaEvent!
+override Harbor.Abstractions.Events.TextDeltaEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.TextDeltaEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.TextDeltaEvent.ToString() -> string!
+override Harbor.Abstractions.Events.TextEndEvent.<Clone>$() -> Harbor.Abstractions.Events.TextEndEvent!
+override Harbor.Abstractions.Events.TextEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.TextEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.TextEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.TextStartEvent.<Clone>$() -> Harbor.Abstractions.Events.TextStartEvent!
+override Harbor.Abstractions.Events.TextStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.TextStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.TextStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ThinkingDeltaEvent.<Clone>$() -> Harbor.Abstractions.Events.ThinkingDeltaEvent!
+override Harbor.Abstractions.Events.ThinkingDeltaEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ThinkingDeltaEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ThinkingDeltaEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ThinkingEndEvent.<Clone>$() -> Harbor.Abstractions.Events.ThinkingEndEvent!
+override Harbor.Abstractions.Events.ThinkingEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ThinkingEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ThinkingEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ThinkingStartEvent.<Clone>$() -> Harbor.Abstractions.Events.ThinkingStartEvent!
+override Harbor.Abstractions.Events.ThinkingStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ThinkingStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ThinkingStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolCallDeltaEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolCallDeltaEvent!
+override Harbor.Abstractions.Events.ToolCallDeltaEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolCallDeltaEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolCallDeltaEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolCallEndEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolCallEndEvent!
+override Harbor.Abstractions.Events.ToolCallEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolCallEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolCallEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolCallStartEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolCallStartEvent!
+override Harbor.Abstractions.Events.ToolCallStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolCallStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolCallStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolExecutionEndEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolExecutionEndEvent!
+override Harbor.Abstractions.Events.ToolExecutionEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolExecutionEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolExecutionEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolExecutionStartEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolExecutionStartEvent!
+override Harbor.Abstractions.Events.ToolExecutionStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolExecutionStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolExecutionStartEvent.ToString() -> string!
+override Harbor.Abstractions.Events.ToolExecutionUpdateEvent.<Clone>$() -> Harbor.Abstractions.Events.ToolExecutionUpdateEvent!
+override Harbor.Abstractions.Events.ToolExecutionUpdateEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.ToolExecutionUpdateEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.ToolExecutionUpdateEvent.ToString() -> string!
+override Harbor.Abstractions.Events.TurnEndEvent.<Clone>$() -> Harbor.Abstractions.Events.TurnEndEvent!
+override Harbor.Abstractions.Events.TurnEndEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.TurnEndEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.TurnEndEvent.ToString() -> string!
+override Harbor.Abstractions.Events.TurnStartEvent.<Clone>$() -> Harbor.Abstractions.Events.TurnStartEvent!
+override Harbor.Abstractions.Events.TurnStartEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Events.TurnStartEvent.GetHashCode() -> int
+override Harbor.Abstractions.Events.TurnStartEvent.ToString() -> string!
+override Harbor.Abstractions.Models.AgentMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.AgentMessage.GetHashCode() -> int
+override Harbor.Abstractions.Models.AgentMessage.ToString() -> string!
+override Harbor.Abstractions.Models.AssistantMessage.<Clone>$() -> Harbor.Abstractions.Models.AssistantMessage!
+override Harbor.Abstractions.Models.AssistantMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.AssistantMessage.GetHashCode() -> int
+override Harbor.Abstractions.Models.AssistantMessage.Role.get -> string!
+override Harbor.Abstractions.Models.AssistantMessage.ToString() -> string!
+override Harbor.Abstractions.Models.ChatLine.GetHashCode() -> int
+override Harbor.Abstractions.Models.ContentPart.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ContentPart.GetHashCode() -> int
+override Harbor.Abstractions.Models.ContentPart.ToString() -> string!
+override Harbor.Abstractions.Models.DiagnosticIssue.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.DiagnosticIssue.GetHashCode() -> int
+override Harbor.Abstractions.Models.DiagnosticIssue.ToString() -> string!
+override Harbor.Abstractions.Models.FileAttachment.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.FileAttachment.GetHashCode() -> int
+override Harbor.Abstractions.Models.FileAttachment.ToString() -> string!
+override Harbor.Abstractions.Models.FilePart.<Clone>$() -> Harbor.Abstractions.Models.FilePart!
+override Harbor.Abstractions.Models.FilePart.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.FilePart.GetHashCode() -> int
+override Harbor.Abstractions.Models.FilePart.ToString() -> string!
+override Harbor.Abstractions.Models.FilePart.Type.get -> string!
+override Harbor.Abstractions.Models.Identifiers.AgentName.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.AgentName.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.AgentName.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.MessageId.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.MessageId.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.MessageId.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.ModelRef.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.ModelRef.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.ModelRef.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.ProviderId.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.ProviderId.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.ProviderId.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.RunId.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.RunId.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.RunId.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.SessionId.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.SessionId.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.SessionId.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.ToolCallId.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.ToolCallId.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.ToolCallId.ToString() -> string!
+override Harbor.Abstractions.Models.Identifiers.ToolName.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Identifiers.ToolName.GetHashCode() -> int
+override Harbor.Abstractions.Models.Identifiers.ToolName.ToString() -> string!
+override Harbor.Abstractions.Models.ImageAttachment.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ImageAttachment.GetHashCode() -> int
+override Harbor.Abstractions.Models.ImageAttachment.ToString() -> string!
+override Harbor.Abstractions.Models.JsonElementMemoryPackFormatter.Deserialize(ref MemoryPack.MemoryPackReader reader, scoped ref System.Text.Json.JsonElement value) -> void
+override Harbor.Abstractions.Models.JsonElementMemoryPackFormatter.Serialize<TBufferWriter>(ref MemoryPack.MemoryPackWriter<TBufferWriter> writer, scoped ref System.Text.Json.JsonElement value) -> void
+override Harbor.Abstractions.Models.JsonStringConverter<T>.Read(ref System.Text.Json.Utf8JsonReader reader, System.Type! typeToConvert, System.Text.Json.JsonSerializerOptions! options) -> T
+override Harbor.Abstractions.Models.JsonStringConverter<T>.Write(System.Text.Json.Utf8JsonWriter! writer, T value, System.Text.Json.JsonSerializerOptions! options) -> void
+override Harbor.Abstractions.Models.LastConfirmedState.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.LastConfirmedState.GetHashCode() -> int
+override Harbor.Abstractions.Models.LastConfirmedState.ToString() -> string!
+override Harbor.Abstractions.Models.ModelInfo.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ModelInfo.GetHashCode() -> int
+override Harbor.Abstractions.Models.ModelInfo.ToString() -> string!
+override Harbor.Abstractions.Models.NotVerifiedEntry.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.NotVerifiedEntry.GetHashCode() -> int
+override Harbor.Abstractions.Models.NotVerifiedEntry.ToString() -> string!
+override Harbor.Abstractions.Models.Pricing.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Pricing.GetHashCode() -> int
+override Harbor.Abstractions.Models.Pricing.ToString() -> string!
+override Harbor.Abstractions.Models.RecoveryDecision.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RecoveryDecision.GetHashCode() -> int
+override Harbor.Abstractions.Models.RecoveryDecision.ToString() -> string!
+override Harbor.Abstractions.Models.RunArtifact.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunArtifact.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunArtifact.ToString() -> string!
+override Harbor.Abstractions.Models.RunBudget.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunBudget.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunBudget.ToString() -> string!
+override Harbor.Abstractions.Models.RunBudgetCaps.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunBudgetCaps.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunBudgetCaps.ToString() -> string!
+override Harbor.Abstractions.Models.RunCandidate.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunCandidate.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunCandidate.ToString() -> string!
+override Harbor.Abstractions.Models.RunCheck.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunCheck.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunCheck.ToString() -> string!
+override Harbor.Abstractions.Models.RunOutcome.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunOutcome.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunOutcome.ToString() -> string!
+override Harbor.Abstractions.Models.RunRetryLink.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunRetryLink.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunRetryLink.ToString() -> string!
+override Harbor.Abstractions.Models.RunVerification.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunVerificationRecord.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.RunVerificationRecord.GetHashCode() -> int
+override Harbor.Abstractions.Models.RunVerificationRecord.ToString() -> string!
+override Harbor.Abstractions.Models.Session.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Session.GetHashCode() -> int
+override Harbor.Abstractions.Models.Session.ToString() -> string!
+override Harbor.Abstractions.Models.SessionMetadata.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.SessionMetadata.GetHashCode() -> int
+override Harbor.Abstractions.Models.SessionMetadata.ToString() -> string!
+override Harbor.Abstractions.Models.StopReasonJsonConverter.Read(ref System.Text.Json.Utf8JsonReader reader, System.Type! typeToConvert, System.Text.Json.JsonSerializerOptions! options) -> Harbor.Abstractions.Models.StopReason
+override Harbor.Abstractions.Models.TextPart.<Clone>$() -> Harbor.Abstractions.Models.TextPart!
+override Harbor.Abstractions.Models.TextPart.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.TextPart.GetHashCode() -> int
+override Harbor.Abstractions.Models.TextPart.ToString() -> string!
+override Harbor.Abstractions.Models.TextPart.Type.get -> string!
+override Harbor.Abstractions.Models.ThinkingPart.<Clone>$() -> Harbor.Abstractions.Models.ThinkingPart!
+override Harbor.Abstractions.Models.ThinkingPart.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ThinkingPart.GetHashCode() -> int
+override Harbor.Abstractions.Models.ThinkingPart.ToString() -> string!
+override Harbor.Abstractions.Models.ThinkingPart.Type.get -> string!
+override Harbor.Abstractions.Models.ToolCallLink.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolCallLink.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolCallLink.ToString() -> string!
+override Harbor.Abstractions.Models.ToolCallPart.<Clone>$() -> Harbor.Abstractions.Models.ToolCallPart!
+override Harbor.Abstractions.Models.ToolCallPart.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolCallPart.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolCallPart.ToString() -> string!
+override Harbor.Abstractions.Models.ToolCallPart.Type.get -> string!
+override Harbor.Abstractions.Models.ToolChoice.Auto.<Clone>$() -> Harbor.Abstractions.Models.ToolChoice.Auto!
+override Harbor.Abstractions.Models.ToolChoice.Auto.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolChoice.Auto.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolChoice.Auto.ToString() -> string!
+override Harbor.Abstractions.Models.ToolChoice.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolChoice.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolChoice.None.<Clone>$() -> Harbor.Abstractions.Models.ToolChoice.None!
+override Harbor.Abstractions.Models.ToolChoice.None.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolChoice.None.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolChoice.None.ToString() -> string!
+override Harbor.Abstractions.Models.ToolChoice.Required.<Clone>$() -> Harbor.Abstractions.Models.ToolChoice.Required!
+override Harbor.Abstractions.Models.ToolChoice.Required.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolChoice.Required.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolChoice.Required.ToString() -> string!
+override Harbor.Abstractions.Models.ToolChoice.Specific.<Clone>$() -> Harbor.Abstractions.Models.ToolChoice.Specific!
+override Harbor.Abstractions.Models.ToolChoice.Specific.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolChoice.Specific.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolChoice.Specific.ToString() -> string!
+override Harbor.Abstractions.Models.ToolChoice.ToString() -> string!
+override Harbor.Abstractions.Models.ToolResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolResult.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolResult.ToString() -> string!
+override Harbor.Abstractions.Models.ToolResultEntry.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolResultEntry.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolResultEntry.ToString() -> string!
+override Harbor.Abstractions.Models.ToolResultMessage.<Clone>$() -> Harbor.Abstractions.Models.ToolResultMessage!
+override Harbor.Abstractions.Models.ToolResultMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolResultMessage.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolResultMessage.Role.get -> string!
+override Harbor.Abstractions.Models.ToolResultMessage.ToString() -> string!
+override Harbor.Abstractions.Models.UnfinishedRunReport.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.UnfinishedRunReport.GetHashCode() -> int
+override Harbor.Abstractions.Models.UnfinishedRunReport.ToString() -> string!
+override Harbor.Abstractions.Models.Usage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.Usage.GetHashCode() -> int
+override Harbor.Abstractions.Models.Usage.ToString() -> string!
+override Harbor.Abstractions.Models.UserMessage.<Clone>$() -> Harbor.Abstractions.Models.UserMessage!
+override Harbor.Abstractions.Models.UserMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.UserMessage.GetHashCode() -> int
+override Harbor.Abstractions.Models.UserMessage.Role.get -> string!
+override Harbor.Abstractions.Models.UserMessage.ToString() -> string!
+override Harbor.Abstractions.Models.WorkspaceContract.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.WorkspaceContract.GetHashCode() -> int
+override Harbor.Abstractions.Models.WorkspaceContract.ToString() -> string!
+override Harbor.Abstractions.Models.WorkspaceLimits.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.WorkspaceLimits.GetHashCode() -> int
+override Harbor.Abstractions.Models.WorkspaceLimits.ToString() -> string!
+override Harbor.Abstractions.Permissions.PermissionRequest.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.PermissionRequest.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.PermissionRequest.ToString() -> string!
+override Harbor.Abstractions.Permissions.PermissionResponse.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.PermissionResponse.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.PermissionResponse.ToString() -> string!
+override Harbor.Abstractions.Permissions.PermissionRule.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.PermissionRule.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.PermissionRule.ToString() -> string!
+override Harbor.Abstractions.Permissions.PermissionRuleset.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.PermissionRuleset.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.PermissionRuleset.ToString() -> string!
+override Harbor.Abstractions.Permissions.ToolSafetyDeclaration.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.ToolSafetyDeclaration.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.ToolSafetyDeclaration.ToString() -> string!
+override Harbor.Abstractions.Permissions.ToolSafetyProfile.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.ToolSafetyProfile.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.ToolSafetyProfile.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionLogEntry.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionLogEntry.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionLogEntry.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionSurface.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionSurface.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionSurface.ToString() -> string!
+override sealed Harbor.Abstractions.Events.AgentEndEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.AgentErrorEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.AgentStartEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.CompactionCompletedEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.CompactionFailedEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.CompactionStartedEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ErrorEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.FinishEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.MessageEndEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.MessageStartEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.MessageUpdateEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.PluginBlockedEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.SessionChangedEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.SessionStatsEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.StepFinishEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.StepStartEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.TextDeltaEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.TextEndEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.TextStartEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ThinkingDeltaEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ThinkingEndEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ThinkingStartEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolCallDeltaEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolCallEndEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolCallStartEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolExecutionEndEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolExecutionStartEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.ToolExecutionUpdateEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.TurnEndEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Events.TurnStartEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+override sealed Harbor.Abstractions.Models.AssistantMessage.Equals(Harbor.Abstractions.Models.AgentMessage? other) -> bool
+override sealed Harbor.Abstractions.Models.FilePart.Equals(Harbor.Abstractions.Models.ContentPart? other) -> bool
+override sealed Harbor.Abstractions.Models.TextPart.Equals(Harbor.Abstractions.Models.ContentPart? other) -> bool
+override sealed Harbor.Abstractions.Models.ThinkingPart.Equals(Harbor.Abstractions.Models.ContentPart? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolCallPart.Equals(Harbor.Abstractions.Models.ContentPart? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolChoice.Auto.Equals(Harbor.Abstractions.Models.ToolChoice? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolChoice.None.Equals(Harbor.Abstractions.Models.ToolChoice? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolChoice.Required.Equals(Harbor.Abstractions.Models.ToolChoice? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolChoice.Specific.Equals(Harbor.Abstractions.Models.ToolChoice? other) -> bool
+override sealed Harbor.Abstractions.Models.ToolResultMessage.Equals(Harbor.Abstractions.Models.AgentMessage? other) -> bool
+override sealed Harbor.Abstractions.Models.UserMessage.Equals(Harbor.Abstractions.Models.AgentMessage? other) -> bool
+static Harbor.Abstractions.Env.HarborEnv.Get(string! variable) -> string?
+static Harbor.Abstractions.Env.HarborEnv.TryGet(string! variable, out string? value) -> bool
+static Harbor.Abstractions.Events.AgentEndEvent.operator !=(Harbor.Abstractions.Events.AgentEndEvent? left, Harbor.Abstractions.Events.AgentEndEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentEndEvent.operator ==(Harbor.Abstractions.Events.AgentEndEvent? left, Harbor.Abstractions.Events.AgentEndEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentErrorEvent.operator !=(Harbor.Abstractions.Events.AgentErrorEvent? left, Harbor.Abstractions.Events.AgentErrorEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentErrorEvent.operator ==(Harbor.Abstractions.Events.AgentErrorEvent? left, Harbor.Abstractions.Events.AgentErrorEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentEvent.operator !=(Harbor.Abstractions.Events.AgentEvent? left, Harbor.Abstractions.Events.AgentEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentEvent.operator ==(Harbor.Abstractions.Events.AgentEvent? left, Harbor.Abstractions.Events.AgentEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentStartEvent.operator !=(Harbor.Abstractions.Events.AgentStartEvent? left, Harbor.Abstractions.Events.AgentStartEvent? right) -> bool
+static Harbor.Abstractions.Events.AgentStartEvent.operator ==(Harbor.Abstractions.Events.AgentStartEvent? left, Harbor.Abstractions.Events.AgentStartEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionCompletedEvent.operator !=(Harbor.Abstractions.Events.CompactionCompletedEvent? left, Harbor.Abstractions.Events.CompactionCompletedEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionCompletedEvent.operator ==(Harbor.Abstractions.Events.CompactionCompletedEvent? left, Harbor.Abstractions.Events.CompactionCompletedEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionFailedEvent.operator !=(Harbor.Abstractions.Events.CompactionFailedEvent? left, Harbor.Abstractions.Events.CompactionFailedEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionFailedEvent.operator ==(Harbor.Abstractions.Events.CompactionFailedEvent? left, Harbor.Abstractions.Events.CompactionFailedEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionStartedEvent.operator !=(Harbor.Abstractions.Events.CompactionStartedEvent? left, Harbor.Abstractions.Events.CompactionStartedEvent? right) -> bool
+static Harbor.Abstractions.Events.CompactionStartedEvent.operator ==(Harbor.Abstractions.Events.CompactionStartedEvent? left, Harbor.Abstractions.Events.CompactionStartedEvent? right) -> bool
+static Harbor.Abstractions.Events.ErrorEvent.operator !=(Harbor.Abstractions.Events.ErrorEvent? left, Harbor.Abstractions.Events.ErrorEvent? right) -> bool
+static Harbor.Abstractions.Events.ErrorEvent.operator ==(Harbor.Abstractions.Events.ErrorEvent? left, Harbor.Abstractions.Events.ErrorEvent? right) -> bool
+static Harbor.Abstractions.Events.FinishEvent.operator !=(Harbor.Abstractions.Events.FinishEvent? left, Harbor.Abstractions.Events.FinishEvent? right) -> bool
+static Harbor.Abstractions.Events.FinishEvent.operator ==(Harbor.Abstractions.Events.FinishEvent? left, Harbor.Abstractions.Events.FinishEvent? right) -> bool
+static Harbor.Abstractions.Events.LlmEvent.operator !=(Harbor.Abstractions.Events.LlmEvent? left, Harbor.Abstractions.Events.LlmEvent? right) -> bool
+static Harbor.Abstractions.Events.LlmEvent.operator ==(Harbor.Abstractions.Events.LlmEvent? left, Harbor.Abstractions.Events.LlmEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageEndEvent.operator !=(Harbor.Abstractions.Events.MessageEndEvent? left, Harbor.Abstractions.Events.MessageEndEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageEndEvent.operator ==(Harbor.Abstractions.Events.MessageEndEvent? left, Harbor.Abstractions.Events.MessageEndEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageStartEvent.operator !=(Harbor.Abstractions.Events.MessageStartEvent? left, Harbor.Abstractions.Events.MessageStartEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageStartEvent.operator ==(Harbor.Abstractions.Events.MessageStartEvent? left, Harbor.Abstractions.Events.MessageStartEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageUpdateEvent.operator !=(Harbor.Abstractions.Events.MessageUpdateEvent? left, Harbor.Abstractions.Events.MessageUpdateEvent? right) -> bool
+static Harbor.Abstractions.Events.MessageUpdateEvent.operator ==(Harbor.Abstractions.Events.MessageUpdateEvent? left, Harbor.Abstractions.Events.MessageUpdateEvent? right) -> bool
+static Harbor.Abstractions.Events.PluginBlockedEvent.operator !=(Harbor.Abstractions.Events.PluginBlockedEvent? left, Harbor.Abstractions.Events.PluginBlockedEvent? right) -> bool
+static Harbor.Abstractions.Events.PluginBlockedEvent.operator ==(Harbor.Abstractions.Events.PluginBlockedEvent? left, Harbor.Abstractions.Events.PluginBlockedEvent? right) -> bool
+static Harbor.Abstractions.Events.ProviderErrors.BuildProviderErrorMessage(string! apiErrorLabel, int statusCode, string! errorBody) -> string!
+static Harbor.Abstractions.Events.ProviderErrors.FromException(System.Exception! ex, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.FromStatus(System.Net.HttpStatusCode status) -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.IsTransient(Harbor.Abstractions.Events.ProviderErrorKind kind) -> bool
+static Harbor.Abstractions.Events.ProviderErrors.TruncateErrorBody(string! body) -> string!
+static Harbor.Abstractions.Events.SessionChangedEvent.operator !=(Harbor.Abstractions.Events.SessionChangedEvent? left, Harbor.Abstractions.Events.SessionChangedEvent? right) -> bool
+static Harbor.Abstractions.Events.SessionChangedEvent.operator ==(Harbor.Abstractions.Events.SessionChangedEvent? left, Harbor.Abstractions.Events.SessionChangedEvent? right) -> bool
+static Harbor.Abstractions.Events.SessionStatsEvent.operator !=(Harbor.Abstractions.Events.SessionStatsEvent? left, Harbor.Abstractions.Events.SessionStatsEvent? right) -> bool
+static Harbor.Abstractions.Events.SessionStatsEvent.operator ==(Harbor.Abstractions.Events.SessionStatsEvent? left, Harbor.Abstractions.Events.SessionStatsEvent? right) -> bool
+static Harbor.Abstractions.Events.StepFinishEvent.operator !=(Harbor.Abstractions.Events.StepFinishEvent? left, Harbor.Abstractions.Events.StepFinishEvent? right) -> bool
+static Harbor.Abstractions.Events.StepFinishEvent.operator ==(Harbor.Abstractions.Events.StepFinishEvent? left, Harbor.Abstractions.Events.StepFinishEvent? right) -> bool
+static Harbor.Abstractions.Events.StepStartEvent.operator !=(Harbor.Abstractions.Events.StepStartEvent? left, Harbor.Abstractions.Events.StepStartEvent? right) -> bool
+static Harbor.Abstractions.Events.StepStartEvent.operator ==(Harbor.Abstractions.Events.StepStartEvent? left, Harbor.Abstractions.Events.StepStartEvent? right) -> bool
+static Harbor.Abstractions.Events.TextDeltaEvent.operator !=(Harbor.Abstractions.Events.TextDeltaEvent? left, Harbor.Abstractions.Events.TextDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.TextDeltaEvent.operator ==(Harbor.Abstractions.Events.TextDeltaEvent? left, Harbor.Abstractions.Events.TextDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.TextEndEvent.operator !=(Harbor.Abstractions.Events.TextEndEvent? left, Harbor.Abstractions.Events.TextEndEvent? right) -> bool
+static Harbor.Abstractions.Events.TextEndEvent.operator ==(Harbor.Abstractions.Events.TextEndEvent? left, Harbor.Abstractions.Events.TextEndEvent? right) -> bool
+static Harbor.Abstractions.Events.TextStartEvent.operator !=(Harbor.Abstractions.Events.TextStartEvent? left, Harbor.Abstractions.Events.TextStartEvent? right) -> bool
+static Harbor.Abstractions.Events.TextStartEvent.operator ==(Harbor.Abstractions.Events.TextStartEvent? left, Harbor.Abstractions.Events.TextStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingDeltaEvent.operator !=(Harbor.Abstractions.Events.ThinkingDeltaEvent? left, Harbor.Abstractions.Events.ThinkingDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingDeltaEvent.operator ==(Harbor.Abstractions.Events.ThinkingDeltaEvent? left, Harbor.Abstractions.Events.ThinkingDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingEndEvent.operator !=(Harbor.Abstractions.Events.ThinkingEndEvent? left, Harbor.Abstractions.Events.ThinkingEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingEndEvent.operator ==(Harbor.Abstractions.Events.ThinkingEndEvent? left, Harbor.Abstractions.Events.ThinkingEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingStartEvent.operator !=(Harbor.Abstractions.Events.ThinkingStartEvent? left, Harbor.Abstractions.Events.ThinkingStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ThinkingStartEvent.operator ==(Harbor.Abstractions.Events.ThinkingStartEvent? left, Harbor.Abstractions.Events.ThinkingStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallDeltaEvent.operator !=(Harbor.Abstractions.Events.ToolCallDeltaEvent? left, Harbor.Abstractions.Events.ToolCallDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallDeltaEvent.operator ==(Harbor.Abstractions.Events.ToolCallDeltaEvent? left, Harbor.Abstractions.Events.ToolCallDeltaEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallEndEvent.Create(string! id, string! toolName, System.Text.Json.JsonElement args) -> Harbor.Abstractions.Events.ToolCallEndEvent!
+static Harbor.Abstractions.Events.ToolCallEndEvent.operator !=(Harbor.Abstractions.Events.ToolCallEndEvent? left, Harbor.Abstractions.Events.ToolCallEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallEndEvent.operator ==(Harbor.Abstractions.Events.ToolCallEndEvent? left, Harbor.Abstractions.Events.ToolCallEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallStartEvent.operator !=(Harbor.Abstractions.Events.ToolCallStartEvent? left, Harbor.Abstractions.Events.ToolCallStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolCallStartEvent.operator ==(Harbor.Abstractions.Events.ToolCallStartEvent? left, Harbor.Abstractions.Events.ToolCallStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionEndEvent.operator !=(Harbor.Abstractions.Events.ToolExecutionEndEvent? left, Harbor.Abstractions.Events.ToolExecutionEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionEndEvent.operator ==(Harbor.Abstractions.Events.ToolExecutionEndEvent? left, Harbor.Abstractions.Events.ToolExecutionEndEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionStartEvent.Create(string! toolCallId, string! toolName, System.Text.Json.JsonElement args, string? glyph = null) -> Harbor.Abstractions.Events.ToolExecutionStartEvent!
+static Harbor.Abstractions.Events.ToolExecutionStartEvent.operator !=(Harbor.Abstractions.Events.ToolExecutionStartEvent? left, Harbor.Abstractions.Events.ToolExecutionStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionStartEvent.operator ==(Harbor.Abstractions.Events.ToolExecutionStartEvent? left, Harbor.Abstractions.Events.ToolExecutionStartEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionUpdateEvent.operator !=(Harbor.Abstractions.Events.ToolExecutionUpdateEvent? left, Harbor.Abstractions.Events.ToolExecutionUpdateEvent? right) -> bool
+static Harbor.Abstractions.Events.ToolExecutionUpdateEvent.operator ==(Harbor.Abstractions.Events.ToolExecutionUpdateEvent? left, Harbor.Abstractions.Events.ToolExecutionUpdateEvent? right) -> bool
+static Harbor.Abstractions.Events.TurnEndEvent.operator !=(Harbor.Abstractions.Events.TurnEndEvent? left, Harbor.Abstractions.Events.TurnEndEvent? right) -> bool
+static Harbor.Abstractions.Events.TurnEndEvent.operator ==(Harbor.Abstractions.Events.TurnEndEvent? left, Harbor.Abstractions.Events.TurnEndEvent? right) -> bool
+static Harbor.Abstractions.Events.TurnStartEvent.operator !=(Harbor.Abstractions.Events.TurnStartEvent? left, Harbor.Abstractions.Events.TurnStartEvent? right) -> bool
+static Harbor.Abstractions.Events.TurnStartEvent.operator ==(Harbor.Abstractions.Events.TurnStartEvent? left, Harbor.Abstractions.Events.TurnStartEvent? right) -> bool
+static Harbor.Abstractions.Extensions.StringTruncation.Truncate(this string? text, int max) -> string!
+static Harbor.Abstractions.Extensions.StringTruncation.Truncate(this string? text, int max, string! suffix) -> string!
+static Harbor.Abstractions.Extensions.StringTruncation.TruncateWithDropCount(this string? text, int max, string! separator = "\n", string? detail = null) -> string!
+static Harbor.Abstractions.Models.AgentMessage.operator !=(Harbor.Abstractions.Models.AgentMessage? left, Harbor.Abstractions.Models.AgentMessage? right) -> bool
+static Harbor.Abstractions.Models.AgentMessage.operator ==(Harbor.Abstractions.Models.AgentMessage? left, Harbor.Abstractions.Models.AgentMessage? right) -> bool
+static Harbor.Abstractions.Models.AssistantMessage.Empty(string! sessionId, string! model) -> Harbor.Abstractions.Models.AssistantMessage!
+static Harbor.Abstractions.Models.AssistantMessage.operator !=(Harbor.Abstractions.Models.AssistantMessage? left, Harbor.Abstractions.Models.AssistantMessage? right) -> bool
+static Harbor.Abstractions.Models.AssistantMessage.operator ==(Harbor.Abstractions.Models.AssistantMessage? left, Harbor.Abstractions.Models.AssistantMessage? right) -> bool
+static Harbor.Abstractions.Models.ChatLine.operator !=(Harbor.Abstractions.Models.ChatLine left, Harbor.Abstractions.Models.ChatLine right) -> bool
+static Harbor.Abstractions.Models.ChatLine.operator ==(Harbor.Abstractions.Models.ChatLine left, Harbor.Abstractions.Models.ChatLine right) -> bool
+static Harbor.Abstractions.Models.ContentPart.operator !=(Harbor.Abstractions.Models.ContentPart? left, Harbor.Abstractions.Models.ContentPart? right) -> bool
+static Harbor.Abstractions.Models.ContentPart.operator ==(Harbor.Abstractions.Models.ContentPart? left, Harbor.Abstractions.Models.ContentPart? right) -> bool
+static Harbor.Abstractions.Models.ContextUsage.DisplayedInputTokens(long contextTokens, long sessionTotalInputTokens) -> long
+static Harbor.Abstractions.Models.ContextUsage.PercentUsed(long tokensIn, long tokensOut, long contextWindow) -> int
+static Harbor.Abstractions.Models.ContextUsage.PercentUsed(long usedTokens, long contextWindow) -> int
+static Harbor.Abstractions.Models.ContextUsage.RatioUsed(long tokensIn, long tokensOut, long contextWindow) -> double
+static Harbor.Abstractions.Models.ContextUsage.RatioUsed(long usedTokens, long contextWindow) -> double
+static Harbor.Abstractions.Models.DiagnosticIssue.operator !=(Harbor.Abstractions.Models.DiagnosticIssue? left, Harbor.Abstractions.Models.DiagnosticIssue? right) -> bool
+static Harbor.Abstractions.Models.DiagnosticIssue.operator ==(Harbor.Abstractions.Models.DiagnosticIssue? left, Harbor.Abstractions.Models.DiagnosticIssue? right) -> bool
+static Harbor.Abstractions.Models.FileAttachment.operator !=(Harbor.Abstractions.Models.FileAttachment? left, Harbor.Abstractions.Models.FileAttachment? right) -> bool
+static Harbor.Abstractions.Models.FileAttachment.operator ==(Harbor.Abstractions.Models.FileAttachment? left, Harbor.Abstractions.Models.FileAttachment? right) -> bool
+static Harbor.Abstractions.Models.FilePart.operator !=(Harbor.Abstractions.Models.FilePart? left, Harbor.Abstractions.Models.FilePart? right) -> bool
+static Harbor.Abstractions.Models.FilePart.operator ==(Harbor.Abstractions.Models.FilePart? left, Harbor.Abstractions.Models.FilePart? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.AgentName.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.AgentName!
+static Harbor.Abstractions.Models.Identifiers.AgentName.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.AgentName!>
+static Harbor.Abstractions.Models.Identifiers.AgentName.implicit operator string!(Harbor.Abstractions.Models.Identifiers.AgentName! name) -> string!
+static Harbor.Abstractions.Models.Identifiers.AgentName.operator !=(Harbor.Abstractions.Models.Identifiers.AgentName? left, Harbor.Abstractions.Models.Identifiers.AgentName? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.AgentName.operator ==(Harbor.Abstractions.Models.Identifiers.AgentName? left, Harbor.Abstractions.Models.Identifiers.AgentName? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.MessageId.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.MessageId!
+static Harbor.Abstractions.Models.Identifiers.MessageId.New() -> Harbor.Abstractions.Models.Identifiers.MessageId!
+static Harbor.Abstractions.Models.Identifiers.MessageId.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.MessageId!>
+static Harbor.Abstractions.Models.Identifiers.MessageId.implicit operator string!(Harbor.Abstractions.Models.Identifiers.MessageId! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.MessageId.operator !=(Harbor.Abstractions.Models.Identifiers.MessageId? left, Harbor.Abstractions.Models.Identifiers.MessageId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.MessageId.operator ==(Harbor.Abstractions.Models.Identifiers.MessageId? left, Harbor.Abstractions.Models.Identifiers.MessageId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ModelRef.Create(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, string! modelId) -> Harbor.Abstractions.Models.Identifiers.ModelRef!
+static Harbor.Abstractions.Models.Identifiers.ModelRef.Qualify(string? providerId, string? modelId) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.ModelRef!>
+static Harbor.Abstractions.Models.Identifiers.ModelRef.TryParse(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.ModelRef!>
+static Harbor.Abstractions.Models.Identifiers.ModelRef.implicit operator string!(Harbor.Abstractions.Models.Identifiers.ModelRef! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.ModelRef.operator !=(Harbor.Abstractions.Models.Identifiers.ModelRef? left, Harbor.Abstractions.Models.Identifiers.ModelRef? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ModelRef.operator ==(Harbor.Abstractions.Models.Identifiers.ModelRef? left, Harbor.Abstractions.Models.Identifiers.ModelRef? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ProviderId.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.ProviderId!
+static Harbor.Abstractions.Models.Identifiers.ProviderId.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.ProviderId!>
+static Harbor.Abstractions.Models.Identifiers.ProviderId.implicit operator string!(Harbor.Abstractions.Models.Identifiers.ProviderId! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.ProviderId.operator !=(Harbor.Abstractions.Models.Identifiers.ProviderId? left, Harbor.Abstractions.Models.Identifiers.ProviderId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ProviderId.operator ==(Harbor.Abstractions.Models.Identifiers.ProviderId? left, Harbor.Abstractions.Models.Identifiers.ProviderId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.RunId.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.RunId!
+static Harbor.Abstractions.Models.Identifiers.RunId.New() -> Harbor.Abstractions.Models.Identifiers.RunId!
+static Harbor.Abstractions.Models.Identifiers.RunId.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.RunId!>
+static Harbor.Abstractions.Models.Identifiers.RunId.implicit operator string!(Harbor.Abstractions.Models.Identifiers.RunId! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.RunId.operator !=(Harbor.Abstractions.Models.Identifiers.RunId? left, Harbor.Abstractions.Models.Identifiers.RunId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.RunId.operator ==(Harbor.Abstractions.Models.Identifiers.RunId? left, Harbor.Abstractions.Models.Identifiers.RunId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.SessionId.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.SessionId!
+static Harbor.Abstractions.Models.Identifiers.SessionId.New() -> Harbor.Abstractions.Models.Identifiers.SessionId!
+static Harbor.Abstractions.Models.Identifiers.SessionId.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.SessionId!>
+static Harbor.Abstractions.Models.Identifiers.SessionId.implicit operator string!(Harbor.Abstractions.Models.Identifiers.SessionId! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.SessionId.operator !=(Harbor.Abstractions.Models.Identifiers.SessionId? left, Harbor.Abstractions.Models.Identifiers.SessionId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.SessionId.operator ==(Harbor.Abstractions.Models.Identifiers.SessionId? left, Harbor.Abstractions.Models.Identifiers.SessionId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ToolCallId.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.ToolCallId!
+static Harbor.Abstractions.Models.Identifiers.ToolCallId.New() -> Harbor.Abstractions.Models.Identifiers.ToolCallId!
+static Harbor.Abstractions.Models.Identifiers.ToolCallId.implicit operator string!(Harbor.Abstractions.Models.Identifiers.ToolCallId! id) -> string!
+static Harbor.Abstractions.Models.Identifiers.ToolCallId.operator !=(Harbor.Abstractions.Models.Identifiers.ToolCallId? left, Harbor.Abstractions.Models.Identifiers.ToolCallId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ToolCallId.operator ==(Harbor.Abstractions.Models.Identifiers.ToolCallId? left, Harbor.Abstractions.Models.Identifiers.ToolCallId? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ToolName.Create(string! value) -> Harbor.Abstractions.Models.Identifiers.ToolName!
+static Harbor.Abstractions.Models.Identifiers.ToolName.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Identifiers.ToolName!>
+static Harbor.Abstractions.Models.Identifiers.ToolName.implicit operator string!(Harbor.Abstractions.Models.Identifiers.ToolName! name) -> string!
+static Harbor.Abstractions.Models.Identifiers.ToolName.operator !=(Harbor.Abstractions.Models.Identifiers.ToolName? left, Harbor.Abstractions.Models.Identifiers.ToolName? right) -> bool
+static Harbor.Abstractions.Models.Identifiers.ToolName.operator ==(Harbor.Abstractions.Models.Identifiers.ToolName? left, Harbor.Abstractions.Models.Identifiers.ToolName? right) -> bool
+static Harbor.Abstractions.Models.ImageAttachment.operator !=(Harbor.Abstractions.Models.ImageAttachment? left, Harbor.Abstractions.Models.ImageAttachment? right) -> bool
+static Harbor.Abstractions.Models.ImageAttachment.operator ==(Harbor.Abstractions.Models.ImageAttachment? left, Harbor.Abstractions.Models.ImageAttachment? right) -> bool
+static Harbor.Abstractions.Models.JsonElementMemoryPackFormatter.EnsureRegistered() -> void
+static Harbor.Abstractions.Models.LastConfirmedState.operator !=(Harbor.Abstractions.Models.LastConfirmedState? left, Harbor.Abstractions.Models.LastConfirmedState? right) -> bool
+static Harbor.Abstractions.Models.LastConfirmedState.operator ==(Harbor.Abstractions.Models.LastConfirmedState? left, Harbor.Abstractions.Models.LastConfirmedState? right) -> bool
+static Harbor.Abstractions.Models.ModelInfo.operator !=(Harbor.Abstractions.Models.ModelInfo? left, Harbor.Abstractions.Models.ModelInfo? right) -> bool
+static Harbor.Abstractions.Models.ModelInfo.operator ==(Harbor.Abstractions.Models.ModelInfo? left, Harbor.Abstractions.Models.ModelInfo? right) -> bool
+static Harbor.Abstractions.Models.NotVerifiedEntry.operator !=(Harbor.Abstractions.Models.NotVerifiedEntry? left, Harbor.Abstractions.Models.NotVerifiedEntry? right) -> bool
+static Harbor.Abstractions.Models.NotVerifiedEntry.operator ==(Harbor.Abstractions.Models.NotVerifiedEntry? left, Harbor.Abstractions.Models.NotVerifiedEntry? right) -> bool
+static Harbor.Abstractions.Models.Pricing.Unknown.get -> Harbor.Abstractions.Models.Pricing!
+static Harbor.Abstractions.Models.Pricing.operator !=(Harbor.Abstractions.Models.Pricing? left, Harbor.Abstractions.Models.Pricing? right) -> bool
+static Harbor.Abstractions.Models.Pricing.operator ==(Harbor.Abstractions.Models.Pricing? left, Harbor.Abstractions.Models.Pricing? right) -> bool
+static Harbor.Abstractions.Models.RecoveryDecision.operator !=(Harbor.Abstractions.Models.RecoveryDecision? left, Harbor.Abstractions.Models.RecoveryDecision? right) -> bool
+static Harbor.Abstractions.Models.RecoveryDecision.operator ==(Harbor.Abstractions.Models.RecoveryDecision? left, Harbor.Abstractions.Models.RecoveryDecision? right) -> bool
+static Harbor.Abstractions.Models.RunArtifact.Create(string! path, Harbor.Abstractions.Models.RunArtifactKind kind) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.RunArtifact!>
+static Harbor.Abstractions.Models.RunArtifact.operator !=(Harbor.Abstractions.Models.RunArtifact? left, Harbor.Abstractions.Models.RunArtifact? right) -> bool
+static Harbor.Abstractions.Models.RunArtifact.operator ==(Harbor.Abstractions.Models.RunArtifact? left, Harbor.Abstractions.Models.RunArtifact? right) -> bool
+static Harbor.Abstractions.Models.RunBudget.operator !=(Harbor.Abstractions.Models.RunBudget? left, Harbor.Abstractions.Models.RunBudget? right) -> bool
+static Harbor.Abstractions.Models.RunBudget.operator ==(Harbor.Abstractions.Models.RunBudget? left, Harbor.Abstractions.Models.RunBudget? right) -> bool
+static Harbor.Abstractions.Models.RunBudgetCaps.operator !=(Harbor.Abstractions.Models.RunBudgetCaps? left, Harbor.Abstractions.Models.RunBudgetCaps? right) -> bool
+static Harbor.Abstractions.Models.RunBudgetCaps.operator ==(Harbor.Abstractions.Models.RunBudgetCaps? left, Harbor.Abstractions.Models.RunBudgetCaps? right) -> bool
+static Harbor.Abstractions.Models.RunCandidate.operator !=(Harbor.Abstractions.Models.RunCandidate? left, Harbor.Abstractions.Models.RunCandidate? right) -> bool
+static Harbor.Abstractions.Models.RunCandidate.operator ==(Harbor.Abstractions.Models.RunCandidate? left, Harbor.Abstractions.Models.RunCandidate? right) -> bool
+static Harbor.Abstractions.Models.RunCheck.DidNotRun(string! command, string! reason, string! revision, string! environment, System.TimeSpan duration) -> Harbor.Abstractions.Models.RunCheck!
+static Harbor.Abstractions.Models.RunCheck.Failed(string! command, int exitCode, string! revision, string! environment, System.TimeSpan duration) -> Harbor.Abstractions.Models.RunCheck!
+static Harbor.Abstractions.Models.RunCheck.Passed(string! command, int exitCode, string! revision, string! environment, System.TimeSpan duration) -> Harbor.Abstractions.Models.RunCheck!
+static Harbor.Abstractions.Models.RunCheck.operator !=(Harbor.Abstractions.Models.RunCheck? left, Harbor.Abstractions.Models.RunCheck? right) -> bool
+static Harbor.Abstractions.Models.RunCheck.operator ==(Harbor.Abstractions.Models.RunCheck? left, Harbor.Abstractions.Models.RunCheck? right) -> bool
+static Harbor.Abstractions.Models.RunOutcome.Reconstruct(Harbor.Abstractions.Models.Identifiers.RunId! runId, string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Events.AgentEndEvent! end, Harbor.Abstractions.Events.AgentErrorEvent? error = null, Harbor.Abstractions.Models.RunVerificationRecord? verification = null) -> Harbor.Abstractions.Models.RunOutcome!
+static Harbor.Abstractions.Models.RunOutcome.Reconstruct(Harbor.Abstractions.Models.Identifiers.RunId! runId, string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, bool cancelled = false, string? errorMessage = null, Harbor.Abstractions.Models.RunLimitKind? limit = null, Harbor.Abstractions.Models.RunVerificationRecord? verification = null) -> Harbor.Abstractions.Models.RunOutcome!
+static Harbor.Abstractions.Models.RunOutcome.operator !=(Harbor.Abstractions.Models.RunOutcome? left, Harbor.Abstractions.Models.RunOutcome? right) -> bool
+static Harbor.Abstractions.Models.RunOutcome.operator ==(Harbor.Abstractions.Models.RunOutcome? left, Harbor.Abstractions.Models.RunOutcome? right) -> bool
+static Harbor.Abstractions.Models.RunRecoveryPolicy.Evaluate(Harbor.Abstractions.Models.UnfinishedRunReport! report) -> Harbor.Abstractions.Models.RecoveryDecision!
+static Harbor.Abstractions.Models.RunRetryLink.operator !=(Harbor.Abstractions.Models.RunRetryLink? left, Harbor.Abstractions.Models.RunRetryLink? right) -> bool
+static Harbor.Abstractions.Models.RunRetryLink.operator ==(Harbor.Abstractions.Models.RunRetryLink? left, Harbor.Abstractions.Models.RunRetryLink? right) -> bool
+static Harbor.Abstractions.Models.RunVerification.operator !=(Harbor.Abstractions.Models.RunVerification left, Harbor.Abstractions.Models.RunVerification right) -> bool
+static Harbor.Abstractions.Models.RunVerification.operator ==(Harbor.Abstractions.Models.RunVerification left, Harbor.Abstractions.Models.RunVerification right) -> bool
+static Harbor.Abstractions.Models.RunVerificationRecord.Pin(Harbor.Abstractions.Models.WorkspaceContract! contract, System.DateTimeOffset recordedAt) -> Harbor.Abstractions.Models.RunVerificationRecord!
+static Harbor.Abstractions.Models.RunVerificationRecord.operator !=(Harbor.Abstractions.Models.RunVerificationRecord? left, Harbor.Abstractions.Models.RunVerificationRecord? right) -> bool
+static Harbor.Abstractions.Models.RunVerificationRecord.operator ==(Harbor.Abstractions.Models.RunVerificationRecord? left, Harbor.Abstractions.Models.RunVerificationRecord? right) -> bool
+static Harbor.Abstractions.Models.Session.Create(string! directory, string! agentName, string! providerId, string! modelId, string? title = null) -> Harbor.Abstractions.Models.Session!
+static Harbor.Abstractions.Models.Session.ProjectIdFor(string! directory) -> string!
+static Harbor.Abstractions.Models.Session.Rehydrate(string! id, string! projectId, string! directory, string! title, string! agent, string! model, string! providerId, System.DateTimeOffset createdAt, System.DateTimeOffset updatedAt, Harbor.Abstractions.Models.SessionMetadata! metadata, string? parentSessionId = null, Harbor.Abstractions.Models.SessionStatus status = Harbor.Abstractions.Models.SessionStatus.Idle, string? gitBranch = null, bool gitIsDirty = false, Harbor.Abstractions.Models.SessionKind kind = Harbor.Abstractions.Models.SessionKind.User) -> Harbor.Abstractions.Models.Session!
+static Harbor.Abstractions.Models.Session.operator !=(Harbor.Abstractions.Models.Session? left, Harbor.Abstractions.Models.Session? right) -> bool
+static Harbor.Abstractions.Models.Session.operator ==(Harbor.Abstractions.Models.Session? left, Harbor.Abstractions.Models.Session? right) -> bool
+static Harbor.Abstractions.Models.SessionKindExtensions.IsSubagent(this Harbor.Abstractions.Models.Session! session) -> bool
+static Harbor.Abstractions.Models.SessionMetadata.Empty.get -> Harbor.Abstractions.Models.SessionMetadata!
+static Harbor.Abstractions.Models.SessionMetadata.operator !=(Harbor.Abstractions.Models.SessionMetadata? left, Harbor.Abstractions.Models.SessionMetadata? right) -> bool
+static Harbor.Abstractions.Models.SessionMetadata.operator ==(Harbor.Abstractions.Models.SessionMetadata? left, Harbor.Abstractions.Models.SessionMetadata? right) -> bool
+static Harbor.Abstractions.Models.StopReasonJsonConverter.Parse(string? finishReason) -> Harbor.Abstractions.Models.StopReason
+static Harbor.Abstractions.Models.StopReasonTable.TryParseSpan(System.ReadOnlySpan<byte> span, out Harbor.Abstractions.Models.StopReason reason) -> bool
+static Harbor.Abstractions.Models.TextPart.operator !=(Harbor.Abstractions.Models.TextPart? left, Harbor.Abstractions.Models.TextPart? right) -> bool
+static Harbor.Abstractions.Models.TextPart.operator ==(Harbor.Abstractions.Models.TextPart? left, Harbor.Abstractions.Models.TextPart? right) -> bool
+static Harbor.Abstractions.Models.ThinkingPart.operator !=(Harbor.Abstractions.Models.ThinkingPart? left, Harbor.Abstractions.Models.ThinkingPart? right) -> bool
+static Harbor.Abstractions.Models.ThinkingPart.operator ==(Harbor.Abstractions.Models.ThinkingPart? left, Harbor.Abstractions.Models.ThinkingPart? right) -> bool
+static Harbor.Abstractions.Models.ToolCallLink.operator !=(Harbor.Abstractions.Models.ToolCallLink? left, Harbor.Abstractions.Models.ToolCallLink? right) -> bool
+static Harbor.Abstractions.Models.ToolCallLink.operator ==(Harbor.Abstractions.Models.ToolCallLink? left, Harbor.Abstractions.Models.ToolCallLink? right) -> bool
+static Harbor.Abstractions.Models.ToolCallPart.Create(string! id, string! toolName, System.Text.Json.JsonElement args) -> Harbor.Abstractions.Models.ToolCallPart!
+static Harbor.Abstractions.Models.ToolCallPart.operator !=(Harbor.Abstractions.Models.ToolCallPart? left, Harbor.Abstractions.Models.ToolCallPart? right) -> bool
+static Harbor.Abstractions.Models.ToolCallPart.operator ==(Harbor.Abstractions.Models.ToolCallPart? left, Harbor.Abstractions.Models.ToolCallPart? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Auto.operator !=(Harbor.Abstractions.Models.ToolChoice.Auto? left, Harbor.Abstractions.Models.ToolChoice.Auto? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Auto.operator ==(Harbor.Abstractions.Models.ToolChoice.Auto? left, Harbor.Abstractions.Models.ToolChoice.Auto? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.None.operator !=(Harbor.Abstractions.Models.ToolChoice.None? left, Harbor.Abstractions.Models.ToolChoice.None? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.None.operator ==(Harbor.Abstractions.Models.ToolChoice.None? left, Harbor.Abstractions.Models.ToolChoice.None? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Required.operator !=(Harbor.Abstractions.Models.ToolChoice.Required? left, Harbor.Abstractions.Models.ToolChoice.Required? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Required.operator ==(Harbor.Abstractions.Models.ToolChoice.Required? left, Harbor.Abstractions.Models.ToolChoice.Required? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Specific.operator !=(Harbor.Abstractions.Models.ToolChoice.Specific? left, Harbor.Abstractions.Models.ToolChoice.Specific? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.Specific.operator ==(Harbor.Abstractions.Models.ToolChoice.Specific? left, Harbor.Abstractions.Models.ToolChoice.Specific? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.operator !=(Harbor.Abstractions.Models.ToolChoice? left, Harbor.Abstractions.Models.ToolChoice? right) -> bool
+static Harbor.Abstractions.Models.ToolChoice.operator ==(Harbor.Abstractions.Models.ToolChoice? left, Harbor.Abstractions.Models.ToolChoice? right) -> bool
+static Harbor.Abstractions.Models.ToolResult.Error(string! output, object? metadata = null) -> Harbor.Abstractions.Models.ToolResult!
+static Harbor.Abstractions.Models.ToolResult.Success(string! output, object? metadata = null) -> Harbor.Abstractions.Models.ToolResult!
+static Harbor.Abstractions.Models.ToolResult.operator !=(Harbor.Abstractions.Models.ToolResult? left, Harbor.Abstractions.Models.ToolResult? right) -> bool
+static Harbor.Abstractions.Models.ToolResult.operator ==(Harbor.Abstractions.Models.ToolResult? left, Harbor.Abstractions.Models.ToolResult? right) -> bool
+static Harbor.Abstractions.Models.ToolResultEntry.From(string! toolCallId, string! toolName, Harbor.Abstractions.Models.ToolResult! result) -> Harbor.Abstractions.Models.ToolResultEntry!
+static Harbor.Abstractions.Models.ToolResultEntry.operator !=(Harbor.Abstractions.Models.ToolResultEntry? left, Harbor.Abstractions.Models.ToolResultEntry? right) -> bool
+static Harbor.Abstractions.Models.ToolResultEntry.operator ==(Harbor.Abstractions.Models.ToolResultEntry? left, Harbor.Abstractions.Models.ToolResultEntry? right) -> bool
+static Harbor.Abstractions.Models.ToolResultMessage.operator !=(Harbor.Abstractions.Models.ToolResultMessage? left, Harbor.Abstractions.Models.ToolResultMessage? right) -> bool
+static Harbor.Abstractions.Models.ToolResultMessage.operator ==(Harbor.Abstractions.Models.ToolResultMessage? left, Harbor.Abstractions.Models.ToolResultMessage? right) -> bool
+static Harbor.Abstractions.Models.UnfinishedRunDetector.Classify(bool hasTerminalEvent, bool isLive) -> Harbor.Abstractions.Models.RunTermination
+static Harbor.Abstractions.Models.UnfinishedRunDetector.ConfirmByReadBack(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! observed, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! reread) -> System.Func<string!, bool>!
+static Harbor.Abstractions.Models.UnfinishedRunDetector.ConfirmLastState(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! observed, System.Func<string!, bool>? isConfirmedByReadBack) -> Harbor.Abstractions.Models.LastConfirmedState!
+static Harbor.Abstractions.Models.UnfinishedRunDetector.CreateRetry(Harbor.Abstractions.Models.UnfinishedRunReport! parent) -> Harbor.Abstractions.Models.RunRetryLink!
+static Harbor.Abstractions.Models.UnfinishedRunDetector.Detect(Harbor.Abstractions.Models.Identifiers.RunId! runId, string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! observed, bool hasTerminalEvent, bool isLive, bool hasRunMarker, System.Func<string!, bool>? isConfirmedByReadBack) -> Harbor.Abstractions.Models.UnfinishedRunReport?
+static Harbor.Abstractions.Models.UnfinishedRunDetector.Fingerprint(Harbor.Abstractions.Models.AgentMessage! message) -> string!
+static Harbor.Abstractions.Models.UnfinishedRunDetector.SelectCandidates(System.Collections.Generic.IEnumerable<Harbor.Abstractions.Models.RunCandidate!>! runs) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.RunCandidate!>!
+static Harbor.Abstractions.Models.UnfinishedRunReport.operator !=(Harbor.Abstractions.Models.UnfinishedRunReport? left, Harbor.Abstractions.Models.UnfinishedRunReport? right) -> bool
+static Harbor.Abstractions.Models.UnfinishedRunReport.operator ==(Harbor.Abstractions.Models.UnfinishedRunReport? left, Harbor.Abstractions.Models.UnfinishedRunReport? right) -> bool
+static Harbor.Abstractions.Models.Usage.operator !=(Harbor.Abstractions.Models.Usage? left, Harbor.Abstractions.Models.Usage? right) -> bool
+static Harbor.Abstractions.Models.Usage.operator ==(Harbor.Abstractions.Models.Usage? left, Harbor.Abstractions.Models.Usage? right) -> bool
+static Harbor.Abstractions.Models.UsdCell.ToUsd(decimal costUsd) -> string!
+static Harbor.Abstractions.Models.UserMessage.operator !=(Harbor.Abstractions.Models.UserMessage? left, Harbor.Abstractions.Models.UserMessage? right) -> bool
+static Harbor.Abstractions.Models.UserMessage.operator ==(Harbor.Abstractions.Models.UserMessage? left, Harbor.Abstractions.Models.UserMessage? right) -> bool
+static Harbor.Abstractions.Models.WorkspaceContract.operator !=(Harbor.Abstractions.Models.WorkspaceContract? left, Harbor.Abstractions.Models.WorkspaceContract? right) -> bool
+static Harbor.Abstractions.Models.WorkspaceContract.operator ==(Harbor.Abstractions.Models.WorkspaceContract? left, Harbor.Abstractions.Models.WorkspaceContract? right) -> bool
+static Harbor.Abstractions.Models.WorkspaceLimits.operator !=(Harbor.Abstractions.Models.WorkspaceLimits? left, Harbor.Abstractions.Models.WorkspaceLimits? right) -> bool
+static Harbor.Abstractions.Models.WorkspaceLimits.operator ==(Harbor.Abstractions.Models.WorkspaceLimits? left, Harbor.Abstractions.Models.WorkspaceLimits? right) -> bool
+static Harbor.Abstractions.Permissions.BashArgMatcher.GetDenyMatchTargets(string! command) -> System.Collections.Generic.IReadOnlyList<string!>!
+static Harbor.Abstractions.Permissions.BashArgMatcher.HasShellMetacharacters(string! command) -> bool
+static Harbor.Abstractions.Permissions.BashArgMatcher.IsAllowedByPrefixRule(string! pattern, string! command) -> bool
+static Harbor.Abstractions.Permissions.BashArgMatcher.IsDestructiveCommand(string! command) -> bool
+static Harbor.Abstractions.Permissions.BashArgMatcher.SplitArgv(string! command) -> System.Collections.Generic.IReadOnlyList<string!>!
+static Harbor.Abstractions.Permissions.BuiltinToolSafetyProfiles.All.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.ToolSafetyDeclaration!>!
+static Harbor.Abstractions.Permissions.BuiltinToolSafetyProfiles.TryGet(string! toolName, out Harbor.Abstractions.Permissions.ToolSafetyProfile! profile) -> bool
+static Harbor.Abstractions.Permissions.PermissionRequest.Create(string! permission, string! pattern, System.Text.Json.JsonElement args, System.Collections.Generic.IReadOnlyList<string!>! alwaysOptions, string? invocationId = null, int generation = 1) -> Harbor.Abstractions.Permissions.PermissionRequest!
+static Harbor.Abstractions.Permissions.PermissionRequest.operator !=(Harbor.Abstractions.Permissions.PermissionRequest? left, Harbor.Abstractions.Permissions.PermissionRequest? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionRequest.operator ==(Harbor.Abstractions.Permissions.PermissionRequest? left, Harbor.Abstractions.Permissions.PermissionRequest? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionResponse.operator !=(Harbor.Abstractions.Permissions.PermissionResponse? left, Harbor.Abstractions.Permissions.PermissionResponse? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionResponse.operator ==(Harbor.Abstractions.Permissions.PermissionResponse? left, Harbor.Abstractions.Permissions.PermissionResponse? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionRule.RegexCacheProvider.get -> Harbor.Abstractions.Permissions.IPatternRegexCache!
+static Harbor.Abstractions.Permissions.PermissionRule.RegexCacheProvider.set -> void
+static Harbor.Abstractions.Permissions.PermissionRule.operator !=(Harbor.Abstractions.Permissions.PermissionRule? left, Harbor.Abstractions.Permissions.PermissionRule? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionRule.operator ==(Harbor.Abstractions.Permissions.PermissionRule? left, Harbor.Abstractions.Permissions.PermissionRule? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionRuleset.Default.get -> Harbor.Abstractions.Permissions.PermissionRuleset!
+static Harbor.Abstractions.Permissions.PermissionRuleset.DefaultSafetyPolicies.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>!
+static Harbor.Abstractions.Permissions.PermissionRuleset.Empty.get -> Harbor.Abstractions.Permissions.PermissionRuleset!
+static Harbor.Abstractions.Permissions.PermissionRuleset.operator !=(Harbor.Abstractions.Permissions.PermissionRuleset? left, Harbor.Abstractions.Permissions.PermissionRuleset? right) -> bool
+static Harbor.Abstractions.Permissions.PermissionRuleset.operator ==(Harbor.Abstractions.Permissions.PermissionRuleset? left, Harbor.Abstractions.Permissions.PermissionRuleset? right) -> bool
+static Harbor.Abstractions.Permissions.ToolCategories.CategoryMatches(string! rulePermission, string! toolName) -> bool
+static Harbor.Abstractions.Permissions.ToolCategories.TryClassify(string! toolName, out Harbor.Abstractions.Permissions.ToolCategory category) -> bool
+static Harbor.Abstractions.Permissions.ToolSafetyDeclaration.operator !=(Harbor.Abstractions.Permissions.ToolSafetyDeclaration? left, Harbor.Abstractions.Permissions.ToolSafetyDeclaration? right) -> bool
+static Harbor.Abstractions.Permissions.ToolSafetyDeclaration.operator ==(Harbor.Abstractions.Permissions.ToolSafetyDeclaration? left, Harbor.Abstractions.Permissions.ToolSafetyDeclaration? right) -> bool
+static Harbor.Abstractions.Permissions.ToolSafetyPolicies.Build(System.Collections.Generic.IEnumerable<Harbor.Abstractions.Permissions.ToolSafetyDeclaration!>! declarations) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>!
+static Harbor.Abstractions.Permissions.ToolSafetyProfile.Command(string! argumentName = "command") -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+static Harbor.Abstractions.Permissions.ToolSafetyProfile.Opaque.get -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+static Harbor.Abstractions.Permissions.ToolSafetyProfile.Path(string! argumentName = "path") -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+static Harbor.Abstractions.Permissions.ToolSafetyProfile.operator !=(Harbor.Abstractions.Permissions.ToolSafetyProfile? left, Harbor.Abstractions.Permissions.ToolSafetyProfile? right) -> bool
+static Harbor.Abstractions.Permissions.ToolSafetyProfile.operator ==(Harbor.Abstractions.Permissions.ToolSafetyProfile? left, Harbor.Abstractions.Permissions.ToolSafetyProfile? right) -> bool
+static Harbor.Abstractions.Sessions.SessionLogEntry.operator !=(Harbor.Abstractions.Sessions.SessionLogEntry? left, Harbor.Abstractions.Sessions.SessionLogEntry? right) -> bool
+static Harbor.Abstractions.Sessions.SessionLogEntry.operator ==(Harbor.Abstractions.Sessions.SessionLogEntry? left, Harbor.Abstractions.Sessions.SessionLogEntry? right) -> bool
+static Harbor.Abstractions.Sessions.SessionLogFold.Fold(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>! log) -> Harbor.Abstractions.Sessions.SessionSurface!
+static Harbor.Abstractions.Sessions.SessionLogGuard.FindLostRecords(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>! before, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>! after) -> System.Collections.Generic.IReadOnlyList<string!>!
+static Harbor.Abstractions.Sessions.SessionLogGuard.Fingerprint(Harbor.Abstractions.Models.AgentMessage! message) -> string!
+static Harbor.Abstractions.Sessions.SessionLogGuard.IsLossless(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>! before, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>! after) -> bool
+static Harbor.Abstractions.Sessions.SessionSurface.operator !=(Harbor.Abstractions.Sessions.SessionSurface? left, Harbor.Abstractions.Sessions.SessionSurface? right) -> bool
+static Harbor.Abstractions.Sessions.SessionSurface.operator ==(Harbor.Abstractions.Sessions.SessionSurface? left, Harbor.Abstractions.Sessions.SessionSurface? right) -> bool
+static readonly Harbor.Abstractions.Permissions.BashSafetyPolicy.Instance -> Harbor.Abstractions.Permissions.BashSafetyPolicy!
+static readonly Harbor.Abstractions.Permissions.PathGuardSafetyPolicy.Instance -> Harbor.Abstractions.Permissions.PathGuardSafetyPolicy!
+virtual Harbor.Abstractions.Events.AgentEvent.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Events.AgentEvent.Equals(Harbor.Abstractions.Events.AgentEvent? other) -> bool
+virtual Harbor.Abstractions.Events.AgentEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Harbor.Abstractions.Events.LlmEvent.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Events.LlmEvent.Equals(Harbor.Abstractions.Events.LlmEvent? other) -> bool
+virtual Harbor.Abstractions.Events.LlmEvent.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Harbor.Abstractions.Models.AgentMessage.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Models.AgentMessage.Equals(Harbor.Abstractions.Models.AgentMessage? other) -> bool
+virtual Harbor.Abstractions.Models.AgentMessage.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Harbor.Abstractions.Models.AgentMessageVisitor<TResult>.VisitUnknown(Harbor.Abstractions.Models.AgentMessage! message) -> TResult
+virtual Harbor.Abstractions.Models.ContentPart.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Models.ContentPart.Equals(Harbor.Abstractions.Models.ContentPart? other) -> bool
+virtual Harbor.Abstractions.Models.ContentPart.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Harbor.Abstractions.Models.ContentPartVisitor<TResult>.VisitUnknown(Harbor.Abstractions.Models.ContentPart! part) -> TResult
+virtual Harbor.Abstractions.Models.ToolChoice.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Models.ToolChoice.Equals(Harbor.Abstractions.Models.ToolChoice? other) -> bool
+virtual Harbor.Abstractions.Models.ToolChoice.PrintMembers(System.Text.StringBuilder! builder) -> bool
+~override Harbor.Abstractions.Models.ChatLine.Equals(object obj) -> bool
+~override Harbor.Abstractions.Models.ChatLine.ToString() -> string
+~override Harbor.Abstractions.Models.RunVerification.Equals(object obj) -> bool
+~override Harbor.Abstractions.Models.RunVerification.ToString() -> string

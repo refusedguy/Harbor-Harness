@@ -3,8 +3,8 @@
 
 Stdlib only — no pip, no network, no dotnet. It lives in `tools/` next to
 check-md-links.py / md-lint.py / check-doc-cites.py / check-doc-facts.py /
-check-abstractions-contract.py / check-public-api.py, and it asks a question
-none of them asks:
+check-abstractions-contract.py / check-public-api-resign.py, and it asks a
+question none of them asks:
 
   check-md-links.py             does the link resolve?
   md-lint.py                    is the file shaped the way the repo says it is?
@@ -12,7 +12,8 @@ none of them asks:
   check-doc-facts.py            does a COUNT a document states still equal the
                                 count of tracked files it is counting?
   check-abstractions-contract.py is every <PackageReference> load-bearing?
-  check-public-api.py           is the public surface still the reviewed one?
+  check-public-api-resign.py    is every change to the frozen public surface
+                                re-signed in the commit that made it?
   THIS ONE                     is a test body a copy of another test body?
 
 WHY THIS FILE EXISTS (issue #1778, the mandatory tail of epic #1808)
@@ -274,7 +275,8 @@ EXCLUDED_DIRS = ("bin", "obj")
 EXCLUDED_PATHS = ("tests/Harbor.Architecture.Tests",)
 
 # The committed baseline. Same directory as the gate, so a PR that edits
-# either one lands in the same diff — the discipline check-public-api.py has.
+# either one lands in the same diff — the discipline
+# check-public-api-resign.py has.
 BASELINE_NAME = "test-dup-baseline.json"
 
 # A body must carry at least this many code lines to count as a duplicate.

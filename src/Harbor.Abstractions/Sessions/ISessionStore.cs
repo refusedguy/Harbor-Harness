@@ -2,11 +2,14 @@ using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 namespace Harbor.Abstractions.Sessions;
 // The default bodies of the #1784 members are written as ONE-LINE blocks on
-// purpose. The public-API snapshot scanner (tools/check-public-api-abstractions.py)
-// reads an interface body line by line, and a default body split across lines is
-// read as an extra member — the frozen baseline then grows a row that says
-// nothing. One line per member keeps the baseline a record of the contract
-// rather than of the formatting.
+// purpose. That was a workaround for the line-based public-API scanner
+// (tools/check-public-api-abstractions.py, deleted in #1845): it read an
+// interface body line by line, and a default body split across lines was
+// read as an extra member, so the frozen baseline grew a row that said
+// nothing. The scanner is gone — the surface is read off the compiler's
+// symbol table now — but the one-line shape stays, because a member per
+// line is what a reader of a contract wants to see, and the comment is kept
+// honest rather than left to describe a tool that is not in the tree.
 /// <summary>
 ///     Storage abstraction for sessions (Repository pattern, GOF).
 ///     Implementations: JSONL (default), SQLite (opt), Postgres (future plugin).

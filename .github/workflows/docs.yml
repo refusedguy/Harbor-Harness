@@ -105,11 +105,12 @@ on:
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
-      # #428 (first slice). `check-public-api.py` diffs the contract surface
-      # against its committed baseline: a PR that edits the gate or the
-      # baseline must run it.
-      - 'tools/check-public-api.py'
-      - 'src/Harbor.Abstractions.Contracts/PublicAPI.Baseline.txt'
+      # #1845. `check-public-api-resign.py` is the surviving half of the
+      # public-API freeze: it reads the PR's commit history, so a PR that
+      # edits the gate itself must run it. The other half — the freeze
+      # itself — is a compile-time gate in the ci.yml build job and needs no
+      # trigger here.
+      - 'tools/check-public-api-resign.py'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -166,11 +167,9 @@ on:
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
-      # #428 (first slice). Same trigger as above: the public-API snapshot
-      # reads the same sources plus its baseline, so a PR touching any of
-      # the three runs it.
-      - 'tools/check-public-api.py'
-      - 'src/Harbor.Abstractions.Contracts/PublicAPI.Baseline.txt'
+      # #1845. Same trigger as above: the re-signing gate reads the commit
+      # history, so a PR that edits the gate runs its self-test.
+      - 'tools/check-public-api-resign.py'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -239,14 +238,19 @@ jobs:
       # non-vacuity proof: one undocumented member fails, naming it.
       - name: XML-doc coverage gate fails on an undocumented member
         run: python3 tools/check-xml-doc-coverage.py --self-test
-      # #428 (first slice). The seventh gate is the only one that diffs the
-      # frozen contract surface against a committed baseline. Its self-test
-      # carries the load-bearing non-vacuity pair — an added member fails
-      # naming it, a removed baseline row fails naming it — plus the shapes
-      # that made a draft of this gate wrong (public members of an internal
-      # type counted as API, a re-wrapped signature read as a change).
-      - name: Public-API snapshot gate fails on an unreviewed change
-        run: python3 tools/check-public-api.py --self-test
+      # #428 / #1845. The public-API freeze used to be a python text scan
+      # with its own --self-test here. The scan is gone: the freeze is a
+      # COMPILE-time gate now (Microsoft.CodeAnalysis.PublicApiAnalyzers,
+      # RS0016/RS0017), and its non-vacuity proof is a CI job that builds a
+      # throwaway project against the real analyzer — see
+      # tools/public-api-nonvacuity.sh and the ci.yml `public-api` job.
+      #
+      # What is left in python is the re-signing half — the rule that a
+      # change to the frozen surface is re-signed in the SAME COMMIT — which
+      # the compiler cannot see because it sees one tree, not a history. Its
+      # self-test is here, with the other gates that have one.
+      - name: Re-signing gate fails on an unreviewed change
+        run: python3 tools/check-public-api-resign.py --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
       # body. Its failure path is tested here for the same reason as the
@@ -595,32 +599,20 @@ jobs:
       - name: Check XML-doc coverage of the frozen contract assembly
         run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
 
-  # #428 (first slice). Public-API snapshot gate for the frozen contract
-  # assembly.
+  # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #
-  # The baseline `src/Harbor.Abstractions.Contracts/PublicAPI.Baseline.txt`
-  # is the reviewed surface: 491 effectively-public types/members as
-  # `Qualified.Type :: normalized declaration`, with no file paths and no
-  # line numbers, so moves and re-wraps do not fail the gate. Any added,
-  # removed or re-signed member fails it — additions regenerate the baseline
-  # in the same diff (`--update`, reviewed), removals/re-signs are breaking
-  # and need a major bump + CHANGELOG entry decided outside this gate.
+  # The public-API freeze of the contract assembly was a python text scan
+  # with its own job here. It is now a COMPILE-time gate:
+  # Microsoft.CodeAnalysis.PublicApiAnalyzers reports RS0016/RS0017 while
+  # Harbor.Abstractions.Contracts compiles, so the freeze fails the build
+  # job in ci.yml and needs no runner of its own. The analyzer's baseline
+  # lives next to the code it describes
+  # (src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt).
   #
-  # The floor is a ratchet, like the ones above. Measured on this tree: 491
-  # members. It is set AT that value, not below: a floor with slack cannot
-  # tell "the surface got smaller" from "the matcher stopped matching". The
-  # non-vacuity proof is the gate's own --self-test (added/removed member
-  # each fail naming it), run in the `selftest` job above.
-  publicapi:
-    name: public-api snapshot
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check the frozen contract surface against its baseline
-        run: python3 tools/check-public-api.py --min-members 491
+  # What is left of the old gate is the half the compiler cannot see — the
+  # re-signing pairing, which is about a commit and not about a tree — and
+  # it runs in the ci.yml `public-api` job together with the compile gate's
+  # non-vacuity proof.
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #

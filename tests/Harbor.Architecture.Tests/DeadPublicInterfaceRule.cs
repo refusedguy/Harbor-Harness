@@ -7,7 +7,7 @@
 // The audit in #1831 measured 124 public interfaces and found three of them,
 // `IHarborIdeClient`, `ITuiRenderBackend` and `IRenderEngine`, carrying 22
 // public members with ZERO implementors and ZERO real consumers. Two of the
-// three were frozen in `src/Harbor.Abstractions/PublicAPI.Baseline.txt`, so the
+// three were frozen in `src/Harbor.Abstractions/PublicAPI.Shipped.txt`, so the
 // public-API gate was protecting a contract nobody implemented and nobody
 // called. A gate that keeps a dead promise alive is worse than no gate,
 // because it makes the promise look maintained.

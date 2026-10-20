@@ -1,0 +1,1270 @@
+#nullable enable
+Harbor.Abstractions.Agents.AgentDefinition
+Harbor.Abstractions.Agents.AgentDefinition.<Clone>$() -> Harbor.Abstractions.Agents.AgentDefinition!
+Harbor.Abstractions.Agents.AgentDefinition.AgentDefinition(Harbor.Abstractions.Models.Identifiers.AgentName! Name, string! DisplayName, string! Description, string! Model, string! ProviderId, Harbor.Abstractions.Permissions.PermissionRuleset! Permission, int MaxSteps = 50, decimal? Temperature = null, Harbor.Abstractions.Models.ReasoningEffort? ReasoningEffort = null, string? SystemPromptAppend = null, bool IsSubAgent = false, bool Hidden = false, int? ToolTimeoutSeconds = null, Harbor.Abstractions.Models.RunBudgetCaps? Budget = null) -> void
+Harbor.Abstractions.Agents.AgentDefinition.Budget.get -> Harbor.Abstractions.Models.RunBudgetCaps?
+Harbor.Abstractions.Agents.AgentDefinition.Budget.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Deconstruct(out Harbor.Abstractions.Models.Identifiers.AgentName! Name, out string! DisplayName, out string! Description, out string! Model, out string! ProviderId, out Harbor.Abstractions.Permissions.PermissionRuleset! Permission, out int MaxSteps, out decimal? Temperature, out Harbor.Abstractions.Models.ReasoningEffort? ReasoningEffort, out string? SystemPromptAppend, out bool IsSubAgent, out bool Hidden, out int? ToolTimeoutSeconds, out Harbor.Abstractions.Models.RunBudgetCaps? Budget) -> void
+Harbor.Abstractions.Agents.AgentDefinition.Description.get -> string!
+Harbor.Abstractions.Agents.AgentDefinition.Description.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.DisplayName.get -> string!
+Harbor.Abstractions.Agents.AgentDefinition.DisplayName.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Equals(Harbor.Abstractions.Agents.AgentDefinition? other) -> bool
+Harbor.Abstractions.Agents.AgentDefinition.Hidden.get -> bool
+Harbor.Abstractions.Agents.AgentDefinition.Hidden.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.IsSubAgent.get -> bool
+Harbor.Abstractions.Agents.AgentDefinition.IsSubAgent.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.MaxSteps.get -> int
+Harbor.Abstractions.Agents.AgentDefinition.MaxSteps.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Model.get -> string!
+Harbor.Abstractions.Agents.AgentDefinition.Model.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Name.get -> Harbor.Abstractions.Models.Identifiers.AgentName!
+Harbor.Abstractions.Agents.AgentDefinition.Name.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Permission.get -> Harbor.Abstractions.Permissions.PermissionRuleset!
+Harbor.Abstractions.Agents.AgentDefinition.Permission.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.ProviderId.get -> string!
+Harbor.Abstractions.Agents.AgentDefinition.ProviderId.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.ReasoningEffort.get -> Harbor.Abstractions.Models.ReasoningEffort?
+Harbor.Abstractions.Agents.AgentDefinition.ReasoningEffort.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.SystemPromptAppend.get -> string?
+Harbor.Abstractions.Agents.AgentDefinition.SystemPromptAppend.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.Temperature.get -> decimal?
+Harbor.Abstractions.Agents.AgentDefinition.Temperature.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.ToolTimeoutSeconds.get -> int?
+Harbor.Abstractions.Agents.AgentDefinition.ToolTimeoutSeconds.init -> void
+Harbor.Abstractions.Agents.AgentDefinition.WithModel(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+Harbor.Abstractions.Agents.AgentDefinition.WithPermission(Harbor.Abstractions.Permissions.PermissionRuleset! permission) -> Harbor.Abstractions.Agents.AgentDefinition!
+Harbor.Abstractions.Agents.AgentRegistryResolve
+Harbor.Abstractions.Agents.AgentState
+Harbor.Abstractions.Agents.AgentState.<Clone>$() -> Harbor.Abstractions.Agents.AgentState!
+Harbor.Abstractions.Agents.AgentState.Agent.get -> Harbor.Abstractions.Agents.AgentDefinition!
+Harbor.Abstractions.Agents.AgentState.Agent.init -> void
+Harbor.Abstractions.Agents.AgentState.AgentState(string! SessionId, Harbor.Abstractions.Agents.AgentDefinition! Agent, bool IsRunning, int CurrentTurn, System.DateTimeOffset? StartedAt, System.DateTimeOffset? LastActivityAt) -> void
+Harbor.Abstractions.Agents.AgentState.CurrentTurn.get -> int
+Harbor.Abstractions.Agents.AgentState.CurrentTurn.init -> void
+Harbor.Abstractions.Agents.AgentState.Deconstruct(out string! SessionId, out Harbor.Abstractions.Agents.AgentDefinition! Agent, out bool IsRunning, out int CurrentTurn, out System.DateTimeOffset? StartedAt, out System.DateTimeOffset? LastActivityAt) -> void
+Harbor.Abstractions.Agents.AgentState.Equals(Harbor.Abstractions.Agents.AgentState? other) -> bool
+Harbor.Abstractions.Agents.AgentState.IsRunning.get -> bool
+Harbor.Abstractions.Agents.AgentState.IsRunning.init -> void
+Harbor.Abstractions.Agents.AgentState.LastActivityAt.get -> System.DateTimeOffset?
+Harbor.Abstractions.Agents.AgentState.LastActivityAt.init -> void
+Harbor.Abstractions.Agents.AgentState.SessionId.get -> string!
+Harbor.Abstractions.Agents.AgentState.SessionId.init -> void
+Harbor.Abstractions.Agents.AgentState.StartedAt.get -> System.DateTimeOffset?
+Harbor.Abstractions.Agents.AgentState.StartedAt.init -> void
+Harbor.Abstractions.Agents.AgentStateProbe
+Harbor.Abstractions.Agents.BackgroundTaskCompletion
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.<Clone>$() -> Harbor.Abstractions.Agents.BackgroundTaskCompletion!
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.AgentName.get -> string!
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.AgentName.init -> void
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.BackgroundTaskCompletion(string! Id, string! AgentName, CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.SubAgentRunResult!> Result) -> void
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Deconstruct(out string! Id, out string! AgentName, out CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.SubAgentRunResult!> Result) -> void
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Equals(Harbor.Abstractions.Agents.BackgroundTaskCompletion? other) -> bool
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Id.get -> string!
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Id.init -> void
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Result.get -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.SubAgentRunResult!>
+Harbor.Abstractions.Agents.BackgroundTaskCompletion.Result.init -> void
+Harbor.Abstractions.Agents.IAgent
+Harbor.Abstractions.Agents.IAgent.Initialize(Harbor.Abstractions.Models.Session! session, Harbor.Abstractions.Agents.AgentDefinition! agent) -> void
+Harbor.Abstractions.Agents.IAgent.PromptAsync(Harbor.Abstractions.Models.UserMessage! message, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Agents.IAgent.State.get -> CSharpFunctionalExtensions.Maybe<Harbor.Abstractions.Agents.AgentState!>
+Harbor.Abstractions.Agents.IAgent.Steer(Harbor.Abstractions.Models.AgentMessage! message) -> void
+Harbor.Abstractions.Agents.IAgent.Subscribe(System.Func<Harbor.Abstractions.Events.AgentEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! listener) -> System.IDisposable!
+Harbor.Abstractions.Agents.IAgentLoop
+Harbor.Abstractions.Agents.IAgentLoop.RunAsync(Harbor.Abstractions.Sessions.ISessionContext! session, Harbor.Abstractions.Agents.AgentDefinition! agent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Agents.IAgentRegistry
+Harbor.Abstractions.Agents.IAgentRegistry.GetAgent(Harbor.Abstractions.Models.Identifiers.AgentName! name) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.AgentDefinition!>
+Harbor.Abstractions.Agents.IAgentRegistry.GetAllAgents() -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Agents.AgentDefinition!>!
+Harbor.Abstractions.Agents.IAgentRegistry.Register(Harbor.Abstractions.Agents.AgentDefinition! agent) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Agents.IAgentRegistry.Unregister(Harbor.Abstractions.Models.Identifiers.AgentName! name) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Agents.IAgentRegistryBuilder
+Harbor.Abstractions.Agents.IAgentRegistryBuilder.AddAgent(Harbor.Abstractions.Agents.AgentDefinition! agent) -> void
+Harbor.Abstractions.Agents.IAgentRunner
+Harbor.Abstractions.Agents.IAgentRunner.AbortToken.get -> System.Threading.CancellationToken
+Harbor.Abstractions.Agents.IAgentRunner.PromptAsync(string! text, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Agents.IAgentRunner.RequestAbort() -> void
+Harbor.Abstractions.Agents.IAgentRunner.ResetAbortSource() -> void
+Harbor.Abstractions.Agents.IAgentRunner.WaitForIdleAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.CancelSession(string! sessionId) -> int
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.DrainCompletedAsync(string! sessionId) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Agents.BackgroundTaskCompletion!>!>!
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.MaxBackgroundTasks.get -> int
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.PendingCount.get -> int
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.Start(string! agentName, string! sessionId, System.Func<System.Threading.CancellationToken, System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.SubAgentRunResult!>>!>! run, System.Threading.CancellationToken ct) -> CSharpFunctionalExtensions.Result<string!>
+Harbor.Abstractions.Agents.IBackgroundTaskRegistry.WaitForIdleAsync(string? sessionId = null, System.TimeSpan? timeout = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<bool>!
+Harbor.Abstractions.Agents.ISubAgentRunner
+Harbor.Abstractions.Agents.ISubAgentRunner.CanSpawn.get -> bool
+Harbor.Abstractions.Agents.ISubAgentRunner.RunAsync(Harbor.Abstractions.Agents.AgentDefinition! agent, Harbor.Abstractions.Agents.SubAgentRunRequest! request, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.SubAgentRunResult!>>!
+Harbor.Abstractions.Agents.SubAgentFailureFormat
+Harbor.Abstractions.Agents.SubAgentResumeHint
+Harbor.Abstractions.Agents.SubAgentResumeHint.<Clone>$() -> Harbor.Abstractions.Agents.SubAgentResumeHint!
+Harbor.Abstractions.Agents.SubAgentResumeHint.AgentName.get -> string!
+Harbor.Abstractions.Agents.SubAgentResumeHint.AgentName.init -> void
+Harbor.Abstractions.Agents.SubAgentResumeHint.Deconstruct(out string! SessionId, out string! AgentName) -> void
+Harbor.Abstractions.Agents.SubAgentResumeHint.Equals(Harbor.Abstractions.Agents.SubAgentResumeHint? other) -> bool
+Harbor.Abstractions.Agents.SubAgentResumeHint.SessionId.get -> string!
+Harbor.Abstractions.Agents.SubAgentResumeHint.SessionId.init -> void
+Harbor.Abstractions.Agents.SubAgentResumeHint.SubAgentResumeHint(string! SessionId, string! AgentName) -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest
+Harbor.Abstractions.Agents.SubAgentRunRequest.<Clone>$() -> Harbor.Abstractions.Agents.SubAgentRunRequest!
+Harbor.Abstractions.Agents.SubAgentRunRequest.Deconstruct(out string! Prompt, out string? ParentSessionId, out string? WorkingDirectory, out string? ParentMessageId) -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest.Equals(Harbor.Abstractions.Agents.SubAgentRunRequest? other) -> bool
+Harbor.Abstractions.Agents.SubAgentRunRequest.ParentMessageId.get -> string?
+Harbor.Abstractions.Agents.SubAgentRunRequest.ParentMessageId.init -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest.ParentSessionId.get -> string?
+Harbor.Abstractions.Agents.SubAgentRunRequest.ParentSessionId.init -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest.Prompt.get -> string!
+Harbor.Abstractions.Agents.SubAgentRunRequest.Prompt.init -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest.SubAgentRunRequest(string! Prompt, string? ParentSessionId = null, string? WorkingDirectory = null, string? ParentMessageId = null) -> void
+Harbor.Abstractions.Agents.SubAgentRunRequest.WorkingDirectory.get -> string?
+Harbor.Abstractions.Agents.SubAgentRunRequest.WorkingDirectory.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult
+Harbor.Abstractions.Agents.SubAgentRunResult.<Clone>$() -> Harbor.Abstractions.Agents.SubAgentRunResult!
+Harbor.Abstractions.Agents.SubAgentRunResult.AgentName.get -> string!
+Harbor.Abstractions.Agents.SubAgentRunResult.AgentName.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.ChildUsage.get -> Harbor.Abstractions.Models.Usage?
+Harbor.Abstractions.Agents.SubAgentRunResult.ChildUsage.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.Deconstruct(out string! SessionId, out string! AgentName, out string! FinalOutput, out int NewMessages, out Harbor.Abstractions.Models.Usage? ChildUsage) -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.Equals(Harbor.Abstractions.Agents.SubAgentRunResult? other) -> bool
+Harbor.Abstractions.Agents.SubAgentRunResult.FinalOutput.get -> string!
+Harbor.Abstractions.Agents.SubAgentRunResult.FinalOutput.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.HasUsage.get -> bool
+Harbor.Abstractions.Agents.SubAgentRunResult.NewMessages.get -> int
+Harbor.Abstractions.Agents.SubAgentRunResult.NewMessages.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.SessionId.get -> string!
+Harbor.Abstractions.Agents.SubAgentRunResult.SessionId.init -> void
+Harbor.Abstractions.Agents.SubAgentRunResult.SubAgentRunResult(string! SessionId, string! AgentName, string! FinalOutput, int NewMessages, Harbor.Abstractions.Models.Usage? ChildUsage = null) -> void
+Harbor.Abstractions.Events.EventBusSinkKind
+Harbor.Abstractions.Events.EventBusSinkKind.Mandatory = 1 -> Harbor.Abstractions.Events.EventBusSinkKind
+Harbor.Abstractions.Events.EventBusSinkKind.Optional = 0 -> Harbor.Abstractions.Events.EventBusSinkKind
+Harbor.Abstractions.Events.IEventBus
+Harbor.Abstractions.Events.IEventBus.GetScrollback(int maxEvents) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Events.AgentEvent!>!
+Harbor.Abstractions.Events.IEventBus.PublishAsync(Harbor.Abstractions.Events.AgentEvent! event, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Events.IEventBus.Subscribe(System.Func<Harbor.Abstractions.Events.AgentEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
+Harbor.Abstractions.Events.IEventBus.Subscribe<TEvent>(System.Func<TEvent!, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask>! handler) -> System.IDisposable!
+Harbor.Abstractions.Events.IEventBusMiddleware
+Harbor.Abstractions.Events.IEventBusMiddleware.Name.get -> string!
+Harbor.Abstractions.Events.IEventBusMiddleware.ProcessAsync(ref Harbor.Abstractions.Events.AgentEvent! event, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
+Harbor.Abstractions.Events.IEventBusMiddleware.SinkKind.get -> Harbor.Abstractions.Events.EventBusSinkKind
+Harbor.Abstractions.Events.IEventBusQueueMetrics
+Harbor.Abstractions.Events.IEventBusQueueMetrics.DispatchDurationPercentile(double quantile) -> System.TimeSpan
+Harbor.Abstractions.Events.IEventBusQueueMetrics.DispatchSampleCapacity.get -> int
+Harbor.Abstractions.Events.IEventBusQueueMetrics.DispatchSampleCount.get -> int
+Harbor.Abstractions.Events.IEventBusQueueMetrics.InflightPublishCount.get -> long
+Harbor.Abstractions.Events.IEventBusQueueMetrics.MaxDispatchDuration.get -> System.TimeSpan
+Harbor.Abstractions.Events.IEventBusQueueMetrics.OldestPendingAge.get -> System.TimeSpan
+Harbor.Abstractions.Events.IEventBusQueueMetrics.PublishedCount.get -> long
+Harbor.Abstractions.Events.IEventSubscriber
+Harbor.Abstractions.Events.IEventSubscriber.SendAsync(Harbor.Abstractions.Events.AgentEvent! event, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Filesystem.DirectoryEntry
+Harbor.Abstractions.Filesystem.DirectoryEntry.<Clone>$() -> Harbor.Abstractions.Filesystem.DirectoryEntry!
+Harbor.Abstractions.Filesystem.DirectoryEntry.Deconstruct(out string! Name, out string! FullPath, out bool IsDirectory, out bool IsHidden) -> void
+Harbor.Abstractions.Filesystem.DirectoryEntry.DirectoryEntry(string! Name, string! FullPath, bool IsDirectory, bool IsHidden) -> void
+Harbor.Abstractions.Filesystem.DirectoryEntry.Equals(Harbor.Abstractions.Filesystem.DirectoryEntry? other) -> bool
+Harbor.Abstractions.Filesystem.DirectoryEntry.FullPath.get -> string!
+Harbor.Abstractions.Filesystem.DirectoryEntry.FullPath.init -> void
+Harbor.Abstractions.Filesystem.DirectoryEntry.IsDirectory.get -> bool
+Harbor.Abstractions.Filesystem.DirectoryEntry.IsDirectory.init -> void
+Harbor.Abstractions.Filesystem.DirectoryEntry.IsHidden.get -> bool
+Harbor.Abstractions.Filesystem.DirectoryEntry.IsHidden.init -> void
+Harbor.Abstractions.Filesystem.DirectoryEntry.Name.get -> string!
+Harbor.Abstractions.Filesystem.DirectoryEntry.Name.init -> void
+Harbor.Abstractions.Filesystem.DirectoryListing
+Harbor.Abstractions.Filesystem.DirectoryListing.<Clone>$() -> Harbor.Abstractions.Filesystem.DirectoryListing!
+Harbor.Abstractions.Filesystem.DirectoryListing.Deconstruct(out string! Directory, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Filesystem.DirectoryEntry!>! Entries, out bool Truncated, out int TotalCount) -> void
+Harbor.Abstractions.Filesystem.DirectoryListing.Directory.get -> string!
+Harbor.Abstractions.Filesystem.DirectoryListing.Directory.init -> void
+Harbor.Abstractions.Filesystem.DirectoryListing.DirectoryListing(string! Directory, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Filesystem.DirectoryEntry!>! Entries, bool Truncated = false, int TotalCount = 0) -> void
+Harbor.Abstractions.Filesystem.DirectoryListing.Entries.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Filesystem.DirectoryEntry!>!
+Harbor.Abstractions.Filesystem.DirectoryListing.Entries.init -> void
+Harbor.Abstractions.Filesystem.DirectoryListing.Equals(Harbor.Abstractions.Filesystem.DirectoryListing? other) -> bool
+Harbor.Abstractions.Filesystem.DirectoryListing.TotalCount.get -> int
+Harbor.Abstractions.Filesystem.DirectoryListing.TotalCount.init -> void
+Harbor.Abstractions.Filesystem.DirectoryListing.Truncated.get -> bool
+Harbor.Abstractions.Filesystem.DirectoryListing.Truncated.init -> void
+Harbor.Abstractions.Filesystem.HarborPaths
+Harbor.Abstractions.Filesystem.IDirectoryLister
+Harbor.Abstractions.Filesystem.IDirectoryLister.ListAsync(string! directory, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Filesystem.DirectoryListing!>>!
+Harbor.Abstractions.Filesystem.IFileTreePolicy
+Harbor.Abstractions.Filesystem.IFileTreePolicy.IconFor(string! fileName) -> string!
+Harbor.Abstractions.Filesystem.IFileTreePolicy.IsIgnoredDirectory(string! name) -> bool
+Harbor.Abstractions.Filesystem.ITextFileStore
+Harbor.Abstractions.Filesystem.ITextFileStore.ExistsAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<bool>>!
+Harbor.Abstractions.Filesystem.ITextFileStore.ReadAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Filesystem.ITextFileStore.WriteAsync(string! path, string! contents, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Git.GitWorkspaceStatus
+Harbor.Abstractions.Git.GitWorkspaceStatus.<Clone>$() -> Harbor.Abstractions.Git.GitWorkspaceStatus!
+Harbor.Abstractions.Git.GitWorkspaceStatus.Branch.get -> string?
+Harbor.Abstractions.Git.GitWorkspaceStatus.Branch.init -> void
+Harbor.Abstractions.Git.GitWorkspaceStatus.Deconstruct(out string? Branch, out bool IsDirty, out int DirtyFileCount, out string? LastCommitRelative) -> void
+Harbor.Abstractions.Git.GitWorkspaceStatus.DirtyFileCount.get -> int
+Harbor.Abstractions.Git.GitWorkspaceStatus.DirtyFileCount.init -> void
+Harbor.Abstractions.Git.GitWorkspaceStatus.Equals(Harbor.Abstractions.Git.GitWorkspaceStatus? other) -> bool
+Harbor.Abstractions.Git.GitWorkspaceStatus.GitWorkspaceStatus(string? Branch, bool IsDirty, int DirtyFileCount, string? LastCommitRelative) -> void
+Harbor.Abstractions.Git.GitWorkspaceStatus.IsDirty.get -> bool
+Harbor.Abstractions.Git.GitWorkspaceStatus.IsDirty.init -> void
+Harbor.Abstractions.Git.GitWorkspaceStatus.LastCommitRelative.get -> string?
+Harbor.Abstractions.Git.GitWorkspaceStatus.LastCommitRelative.init -> void
+Harbor.Abstractions.Git.GitWorktreeInfo
+Harbor.Abstractions.Git.GitWorktreeInfo.<Clone>$() -> Harbor.Abstractions.Git.GitWorktreeInfo!
+Harbor.Abstractions.Git.GitWorktreeInfo.Branch.get -> string?
+Harbor.Abstractions.Git.GitWorktreeInfo.Branch.init -> void
+Harbor.Abstractions.Git.GitWorktreeInfo.Deconstruct(out string! Path, out string? Branch, out bool IsBare) -> void
+Harbor.Abstractions.Git.GitWorktreeInfo.Equals(Harbor.Abstractions.Git.GitWorktreeInfo? other) -> bool
+Harbor.Abstractions.Git.GitWorktreeInfo.GitWorktreeInfo(string! Path, string? Branch, bool IsBare) -> void
+Harbor.Abstractions.Git.GitWorktreeInfo.IsBare.get -> bool
+Harbor.Abstractions.Git.GitWorktreeInfo.IsBare.init -> void
+Harbor.Abstractions.Git.GitWorktreeInfo.Path.get -> string!
+Harbor.Abstractions.Git.GitWorktreeInfo.Path.init -> void
+Harbor.Abstractions.Git.IGitQuery
+Harbor.Abstractions.Git.IGitQuery.GetStatus(string! directory, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> Harbor.Abstractions.Git.GitWorkspaceStatus!
+Harbor.Abstractions.Git.IGitQuery.ListWorktrees(string! directory, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Git.GitWorktreeInfo!>!
+Harbor.Abstractions.Ide.IHarborIdeClient
+Harbor.Abstractions.Ide.IHarborIdeClient.GetBranchAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.GetCurrentFileAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<CSharpFunctionalExtensions.Maybe<string!>>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.GetDiffAsync(bool includeStaged = true, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.GetGitRootAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.GetOpenFilesAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<string!>!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.GetWorkspaceRootAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.ReadFileAsync(string! path, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.ReadRangeInFileAsync(string! path, int startLine, int endLine, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.RunCommandAsync(string! command, string? workingDir = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Ide.ProcessResult!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.StartProcessAsync(string! command, string? workingDir = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Ide.IProcessHandle!>>!
+Harbor.Abstractions.Ide.IHarborIdeClient.WriteFileAsync(string! path, string! content, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Ide.IProcessHandle
+Harbor.Abstractions.Ide.IProcessHandle.ProcessId.get -> int
+Harbor.Abstractions.Ide.IProcessHandle.SignalAsync(Harbor.Abstractions.Ide.ProcessSignal signal, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Ide.IProcessHandle.WaitAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Harbor.Abstractions.Ide.ProcessResult!>!
+Harbor.Abstractions.Ide.ProcessResult
+Harbor.Abstractions.Ide.ProcessResult.<Clone>$() -> Harbor.Abstractions.Ide.ProcessResult!
+Harbor.Abstractions.Ide.ProcessResult.Deconstruct(out int ExitCode, out string! Stdout, out string! Stderr) -> void
+Harbor.Abstractions.Ide.ProcessResult.Equals(Harbor.Abstractions.Ide.ProcessResult? other) -> bool
+Harbor.Abstractions.Ide.ProcessResult.ExitCode.get -> int
+Harbor.Abstractions.Ide.ProcessResult.ExitCode.init -> void
+Harbor.Abstractions.Ide.ProcessResult.ProcessResult(int ExitCode, string! Stdout, string! Stderr) -> void
+Harbor.Abstractions.Ide.ProcessResult.Stderr.get -> string!
+Harbor.Abstractions.Ide.ProcessResult.Stderr.init -> void
+Harbor.Abstractions.Ide.ProcessResult.Stdout.get -> string!
+Harbor.Abstractions.Ide.ProcessResult.Stdout.init -> void
+Harbor.Abstractions.Ide.ProcessSignal
+Harbor.Abstractions.Ide.ProcessSignal.Interrupt = 0 -> Harbor.Abstractions.Ide.ProcessSignal
+Harbor.Abstractions.Ide.ProcessSignal.Kill = 2 -> Harbor.Abstractions.Ide.ProcessSignal
+Harbor.Abstractions.Ide.ProcessSignal.Terminate = 1 -> Harbor.Abstractions.Ide.ProcessSignal
+Harbor.Abstractions.Lsp.ILspService
+Harbor.Abstractions.Lsp.ILspService.CloseFileAsync(string! filePath) -> System.Threading.Tasks.ValueTask
+Harbor.Abstractions.Lsp.ILspService.DiagnosticsChanged -> System.EventHandler<Harbor.Abstractions.Lsp.LspDiagnosticsChangedEventArgs!>?
+Harbor.Abstractions.Lsp.ILspService.FindDefinitionAsync(string! filePath, int line, int column, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Harbor.Abstractions.Lsp.LspLocation?>
+Harbor.Abstractions.Lsp.ILspService.FindReferencesAsync(string! filePath, int line, int column, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Lsp.LspLocation!>!>
+Harbor.Abstractions.Lsp.ILspService.GetDiagnosticsAsync(string! filePath, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Lsp.LspDiagnostic!>!>
+Harbor.Abstractions.Lsp.ILspService.NotifyChangeAsync(string! filePath, string! newText, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Harbor.Abstractions.Lsp.ILspService.OpenFileAsync(string! filePath, string! text, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+Harbor.Abstractions.Lsp.ILspService.SupportsFile(string! filePath) -> bool
+Harbor.Abstractions.Lsp.LspDiagnostic
+Harbor.Abstractions.Lsp.LspDiagnostic.<Clone>$() -> Harbor.Abstractions.Lsp.LspDiagnostic!
+Harbor.Abstractions.Lsp.LspDiagnostic.Column.get -> int
+Harbor.Abstractions.Lsp.LspDiagnostic.Column.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Deconstruct(out string! FilePath, out int Line, out int Column, out int EndLine, out int EndColumn, out Harbor.Abstractions.Lsp.LspSeverity Severity, out string! Source, out string! Message) -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.EndColumn.get -> int
+Harbor.Abstractions.Lsp.LspDiagnostic.EndColumn.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.EndLine.get -> int
+Harbor.Abstractions.Lsp.LspDiagnostic.EndLine.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Equals(Harbor.Abstractions.Lsp.LspDiagnostic? other) -> bool
+Harbor.Abstractions.Lsp.LspDiagnostic.FilePath.get -> string!
+Harbor.Abstractions.Lsp.LspDiagnostic.FilePath.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Line.get -> int
+Harbor.Abstractions.Lsp.LspDiagnostic.Line.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.LspDiagnostic(string! FilePath, int Line, int Column, int EndLine, int EndColumn, Harbor.Abstractions.Lsp.LspSeverity Severity, string! Source, string! Message) -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Message.get -> string!
+Harbor.Abstractions.Lsp.LspDiagnostic.Message.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Severity.get -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspDiagnostic.Severity.init -> void
+Harbor.Abstractions.Lsp.LspDiagnostic.Source.get -> string!
+Harbor.Abstractions.Lsp.LspDiagnostic.Source.init -> void
+Harbor.Abstractions.Lsp.LspDiagnosticsChangedEventArgs
+Harbor.Abstractions.Lsp.LspDiagnosticsChangedEventArgs.FilePath.get -> string!
+Harbor.Abstractions.Lsp.LspDiagnosticsChangedEventArgs.LspDiagnosticsChangedEventArgs(string! filePath) -> void
+Harbor.Abstractions.Lsp.LspLocation
+Harbor.Abstractions.Lsp.LspLocation.<Clone>$() -> Harbor.Abstractions.Lsp.LspLocation!
+Harbor.Abstractions.Lsp.LspLocation.Column.get -> int
+Harbor.Abstractions.Lsp.LspLocation.Column.init -> void
+Harbor.Abstractions.Lsp.LspLocation.Deconstruct(out string! FilePath, out int Line, out int Column) -> void
+Harbor.Abstractions.Lsp.LspLocation.Equals(Harbor.Abstractions.Lsp.LspLocation? other) -> bool
+Harbor.Abstractions.Lsp.LspLocation.FilePath.get -> string!
+Harbor.Abstractions.Lsp.LspLocation.FilePath.init -> void
+Harbor.Abstractions.Lsp.LspLocation.Line.get -> int
+Harbor.Abstractions.Lsp.LspLocation.Line.init -> void
+Harbor.Abstractions.Lsp.LspLocation.LspLocation(string! FilePath, int Line, int Column) -> void
+Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspSeverity.Error = 1 -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspSeverity.Hint = 4 -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspSeverity.Information = 3 -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspSeverity.None = 0 -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Lsp.LspSeverity.Warning = 2 -> Harbor.Abstractions.Lsp.LspSeverity
+Harbor.Abstractions.Notifications.INotificationProcessRunner
+Harbor.Abstractions.Notifications.INotificationProcessRunner.Run(string! fileName, System.Collections.Generic.IReadOnlyList<string!>! arguments, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> void
+Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.ApprovalDecisionDisposition.Accepted = 0 -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.ApprovalDecisionDisposition.AlreadyCancelled = 2 -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.ApprovalDecisionDisposition.AlreadyDecided = 1 -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.ApprovalDecisionDisposition.StaleGate = 3 -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.ApprovalResolution
+Harbor.Abstractions.Permissions.ApprovalResolution.<Clone>$() -> Harbor.Abstractions.Permissions.ApprovalResolution!
+Harbor.Abstractions.Permissions.ApprovalResolution.ApprovalResolution(bool Approved, bool PersistDecision) -> void
+Harbor.Abstractions.Permissions.ApprovalResolution.Approved.get -> bool
+Harbor.Abstractions.Permissions.ApprovalResolution.Approved.init -> void
+Harbor.Abstractions.Permissions.ApprovalResolution.Deconstruct(out bool Approved, out bool PersistDecision) -> void
+Harbor.Abstractions.Permissions.ApprovalResolution.Equals(Harbor.Abstractions.Permissions.ApprovalResolution? other) -> bool
+Harbor.Abstractions.Permissions.ApprovalResolution.PersistDecision.get -> bool
+Harbor.Abstractions.Permissions.ApprovalResolution.PersistDecision.init -> void
+Harbor.Abstractions.Permissions.IApprovalCoordinator
+Harbor.Abstractions.Permissions.IApprovalCoordinator.BeginApprovalScope() -> long
+Harbor.Abstractions.Permissions.IApprovalCoordinator.CompleteInvocation(string! invocationId) -> void
+Harbor.Abstractions.Permissions.IApprovalCoordinator.DecideApproval(string! gateId, Harbor.Abstractions.Permissions.ApprovalResolution! decision) -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.IApprovalCoordinator.DecideApproval(string! gateId, string! invocationId, int generation, Harbor.Abstractions.Permissions.ApprovalResolution! decision) -> Harbor.Abstractions.Permissions.ApprovalDecisionDisposition
+Harbor.Abstractions.Permissions.IApprovalCoordinator.RegisterGate(string! gateId) -> void
+Harbor.Abstractions.Permissions.IApprovalCoordinator.RegisterGate(string! gateId, string! invocationId, int generation) -> void
+Harbor.Abstractions.Permissions.IApprovalCoordinator.RequestCancel(Harbor.Abstractions.Agents.IAgentRunner! agent) -> void
+Harbor.Abstractions.Permissions.IApprovalCoordinator.TryCommitApproval(long scope, string! invocationId, int generation) -> bool
+Harbor.Abstractions.Permissions.IApprovalCoordinator.WaitForDecisionAsync(string! gateId, System.Threading.CancellationToken ct) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Permissions.ApprovalResolution!>>!
+Harbor.Abstractions.Plugins.IAgentPlugin
+Harbor.Abstractions.Plugins.IAgentPlugin.RegisterAgents(Harbor.Abstractions.Agents.IAgentRegistryBuilder! builder) -> void
+Harbor.Abstractions.Plugins.IPlugin
+Harbor.Abstractions.Plugins.IPlugin.Description.get -> string!
+Harbor.Abstractions.Plugins.IPlugin.Initialize(Harbor.Abstractions.Plugins.PluginContext! context) -> void
+Harbor.Abstractions.Plugins.IPlugin.Name.get -> string!
+Harbor.Abstractions.Plugins.IPlugin.RequiredHarborVersion.get -> System.Version!
+Harbor.Abstractions.Plugins.IPlugin.ShutdownAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Plugins.IPlugin.Version.get -> System.Version!
+Harbor.Abstractions.Plugins.IPluginHost
+Harbor.Abstractions.Plugins.IPluginHost.LoadPlugin(string! path) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Plugins.IPluginHost.LoadedPlugins.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Plugins.IPlugin!>!
+Harbor.Abstractions.Plugins.IPluginHost.ShutdownAllAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Plugins.IPluginHost.UnloadPlugin(string! name) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Plugins.IProviderPlugin
+Harbor.Abstractions.Plugins.IProviderPlugin.RegisterProviders(Harbor.Abstractions.Providers.IProviderRegistryBuilder! builder) -> void
+Harbor.Abstractions.Plugins.IToolPlugin
+Harbor.Abstractions.Plugins.IToolPlugin.RegisterTools(Harbor.Abstractions.Tools.IToolRegistryBuilder! builder) -> void
+Harbor.Abstractions.Plugins.PluginContext
+Harbor.Abstractions.Plugins.PluginContext.Configuration.get -> Microsoft.Extensions.Configuration.IConfiguration!
+Harbor.Abstractions.Plugins.PluginContext.Configuration.init -> void
+Harbor.Abstractions.Plugins.PluginContext.CreateLogger<T>() -> Microsoft.Extensions.Logging.ILogger<T>!
+Harbor.Abstractions.Plugins.PluginContext.DataDirectory.get -> string!
+Harbor.Abstractions.Plugins.PluginContext.DataDirectory.init -> void
+Harbor.Abstractions.Plugins.PluginContext.EventBus.get -> Harbor.Abstractions.Events.IEventBus!
+Harbor.Abstractions.Plugins.PluginContext.EventBus.init -> void
+Harbor.Abstractions.Plugins.PluginContext.HarborVersion.get -> System.Version!
+Harbor.Abstractions.Plugins.PluginContext.HarborVersion.init -> void
+Harbor.Abstractions.Plugins.PluginContext.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory!
+Harbor.Abstractions.Plugins.PluginContext.LoggerFactory.init -> void
+Harbor.Abstractions.Plugins.PluginContext.PluginContext() -> void
+Harbor.Abstractions.Plugins.PluginContext.PluginDirectory.get -> string!
+Harbor.Abstractions.Plugins.PluginContext.PluginDirectory.init -> void
+Harbor.Abstractions.Plugins.PluginContext.Services.get -> Microsoft.Extensions.DependencyInjection.IServiceCollection!
+Harbor.Abstractions.Plugins.PluginContext.Services.init -> void
+Harbor.Abstractions.Providers.IAuthResolver
+Harbor.Abstractions.Providers.IAuthResolver.ResolveApiKeyAsync(string! providerId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Providers.ILlmClient
+Harbor.Abstractions.Providers.ILlmClient.GetModelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ModelInfo!>!>>!
+Harbor.Abstractions.Providers.ILlmClient.ProviderId.get -> Harbor.Abstractions.Models.Identifiers.ProviderId!
+Harbor.Abstractions.Providers.ILlmClient.StreamAsync(Harbor.Abstractions.Providers.LlmRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Harbor.Abstractions.Events.LlmEvent!>!
+Harbor.Abstractions.Providers.IProviderFactory
+Harbor.Abstractions.Providers.IProviderFactory.CreateClient(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> Harbor.Abstractions.Providers.ILlmClient!
+Harbor.Abstractions.Providers.IProviderFactory.ProviderId.get -> Harbor.Abstractions.Models.Identifiers.ProviderId!
+Harbor.Abstractions.Providers.IProviderHealthCheck
+Harbor.Abstractions.Providers.IProviderHealthCheck.CheckAsync(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ProviderHealth>>!
+Harbor.Abstractions.Providers.IProviderRegistry
+Harbor.Abstractions.Providers.IProviderRegistry.GetAllModelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ModelInfo!>!>>!
+Harbor.Abstractions.Providers.IProviderRegistry.GetClient(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient!>
+Harbor.Abstractions.Providers.IProviderRegistry.GetModelsCachedAsync(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ModelInfo!>!>>!
+Harbor.Abstractions.Providers.IProviderRegistry.GetRegisteredProviderIds() -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.Identifiers.ProviderId!>!
+Harbor.Abstractions.Providers.IProviderRegistry.Register(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Func<Harbor.Abstractions.Providers.ILlmClient!>! factory) -> void
+Harbor.Abstractions.Providers.IProviderRegistry.Unregister(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Providers.IProviderRegistryBuilder
+Harbor.Abstractions.Providers.IProviderRegistryBuilder.AddProvider(Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Func<Harbor.Abstractions.Providers.ILlmClient!>! factory) -> void
+Harbor.Abstractions.Providers.IProviderRegistryBuilder.AddProvider(Harbor.Abstractions.Providers.IProviderFactory! factory) -> void
+Harbor.Abstractions.Providers.IProviderRegistryBuilder.AddProvider(System.Func<Harbor.Abstractions.Providers.ILlmClient!>! factory) -> void
+Harbor.Abstractions.Providers.IProviderRegistryBuilder.AddProvider(string! providerId, System.Func<Harbor.Abstractions.Providers.ILlmClient!>! factory) -> void
+Harbor.Abstractions.Providers.LlmAssistantMessage
+Harbor.Abstractions.Providers.LlmAssistantMessage.Content.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>!
+Harbor.Abstractions.Providers.LlmAssistantMessage.Content.init -> void
+Harbor.Abstractions.Providers.LlmAssistantMessage.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>! Content, out string? StopReason) -> void
+Harbor.Abstractions.Providers.LlmAssistantMessage.Equals(Harbor.Abstractions.Providers.LlmAssistantMessage? other) -> bool
+Harbor.Abstractions.Providers.LlmAssistantMessage.LlmAssistantMessage(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>! Content, string? StopReason = null) -> void
+Harbor.Abstractions.Providers.LlmAssistantMessage.StopReason.get -> string?
+Harbor.Abstractions.Providers.LlmAssistantMessage.StopReason.init -> void
+Harbor.Abstractions.Providers.LlmContentBlock
+Harbor.Abstractions.Providers.LlmContentBlock.LlmContentBlock() -> void
+Harbor.Abstractions.Providers.LlmContentBlock.LlmContentBlock(Harbor.Abstractions.Providers.LlmContentBlock! original) -> void
+Harbor.Abstractions.Providers.LlmImageBlock
+Harbor.Abstractions.Providers.LlmImageBlock.Data.get -> byte[]!
+Harbor.Abstractions.Providers.LlmImageBlock.Data.init -> void
+Harbor.Abstractions.Providers.LlmImageBlock.Deconstruct(out string! MimeType, out byte[]! Data) -> void
+Harbor.Abstractions.Providers.LlmImageBlock.Equals(Harbor.Abstractions.Providers.LlmImageBlock? other) -> bool
+Harbor.Abstractions.Providers.LlmImageBlock.LlmImageBlock(string! MimeType, byte[]! Data) -> void
+Harbor.Abstractions.Providers.LlmImageBlock.MimeType.get -> string!
+Harbor.Abstractions.Providers.LlmImageBlock.MimeType.init -> void
+Harbor.Abstractions.Providers.LlmMessage
+Harbor.Abstractions.Providers.LlmMessage.LlmMessage() -> void
+Harbor.Abstractions.Providers.LlmMessage.LlmMessage(Harbor.Abstractions.Providers.LlmMessage! original) -> void
+Harbor.Abstractions.Providers.LlmRequest
+Harbor.Abstractions.Providers.LlmRequest.<Clone>$() -> Harbor.Abstractions.Providers.LlmRequest!
+Harbor.Abstractions.Providers.LlmRequest.CacheStrategy.get -> Harbor.Abstractions.Models.CacheStrategy
+Harbor.Abstractions.Providers.LlmRequest.CacheStrategy.init -> void
+Harbor.Abstractions.Providers.LlmRequest.Deconstruct(out string! Model, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>! Messages, out string! SystemPrompt, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>! Tools, out Harbor.Abstractions.Models.ToolChoice? ToolChoice, out int? MaxOutputTokens, out decimal? Temperature, out decimal? TopP, out int? TopK, out Harbor.Abstractions.Models.ReasoningEffort? ReasoningEffort, out Harbor.Abstractions.Models.CacheStrategy CacheStrategy, out System.Collections.Generic.IReadOnlyDictionary<string!, string!>? ExtraHeaders, out string? SessionAffinity) -> void
+Harbor.Abstractions.Providers.LlmRequest.Equals(Harbor.Abstractions.Providers.LlmRequest? other) -> bool
+Harbor.Abstractions.Providers.LlmRequest.ExtraHeaders.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>?
+Harbor.Abstractions.Providers.LlmRequest.ExtraHeaders.init -> void
+Harbor.Abstractions.Providers.LlmRequest.LlmRequest(string! Model, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>! Messages, string! SystemPrompt, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>! Tools, Harbor.Abstractions.Models.ToolChoice? ToolChoice = null, int? MaxOutputTokens = null, decimal? Temperature = null, decimal? TopP = null, int? TopK = null, Harbor.Abstractions.Models.ReasoningEffort? ReasoningEffort = null, Harbor.Abstractions.Models.CacheStrategy CacheStrategy = Harbor.Abstractions.Models.CacheStrategy.None, System.Collections.Generic.IReadOnlyDictionary<string!, string!>? ExtraHeaders = null, string? SessionAffinity = null) -> void
+Harbor.Abstractions.Providers.LlmRequest.MaxOutputTokens.get -> int?
+Harbor.Abstractions.Providers.LlmRequest.MaxOutputTokens.init -> void
+Harbor.Abstractions.Providers.LlmRequest.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>!
+Harbor.Abstractions.Providers.LlmRequest.Messages.init -> void
+Harbor.Abstractions.Providers.LlmRequest.Model.get -> string!
+Harbor.Abstractions.Providers.LlmRequest.Model.init -> void
+Harbor.Abstractions.Providers.LlmRequest.ReasoningEffort.get -> Harbor.Abstractions.Models.ReasoningEffort?
+Harbor.Abstractions.Providers.LlmRequest.ReasoningEffort.init -> void
+Harbor.Abstractions.Providers.LlmRequest.SessionAffinity.get -> string?
+Harbor.Abstractions.Providers.LlmRequest.SessionAffinity.init -> void
+Harbor.Abstractions.Providers.LlmRequest.SystemPrompt.get -> string!
+Harbor.Abstractions.Providers.LlmRequest.SystemPrompt.init -> void
+Harbor.Abstractions.Providers.LlmRequest.Temperature.get -> decimal?
+Harbor.Abstractions.Providers.LlmRequest.Temperature.init -> void
+Harbor.Abstractions.Providers.LlmRequest.ToolChoice.get -> Harbor.Abstractions.Models.ToolChoice?
+Harbor.Abstractions.Providers.LlmRequest.ToolChoice.init -> void
+Harbor.Abstractions.Providers.LlmRequest.Tools.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>!
+Harbor.Abstractions.Providers.LlmRequest.Tools.init -> void
+Harbor.Abstractions.Providers.LlmRequest.TopK.get -> int?
+Harbor.Abstractions.Providers.LlmRequest.TopK.init -> void
+Harbor.Abstractions.Providers.LlmRequest.TopP.get -> decimal?
+Harbor.Abstractions.Providers.LlmRequest.TopP.init -> void
+Harbor.Abstractions.Providers.LlmRequestBuilder
+Harbor.Abstractions.Providers.LlmRequestBuilder.Build() -> Harbor.Abstractions.Providers.LlmRequest!
+Harbor.Abstractions.Providers.LlmRequestBuilder.LlmRequestBuilder(string! model, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>! messages, string! systemPrompt, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>! tools) -> void
+Harbor.Abstractions.Providers.LlmRequestBuilder.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>!
+Harbor.Abstractions.Providers.LlmRequestBuilder.Model.get -> string!
+Harbor.Abstractions.Providers.LlmRequestBuilder.SystemPrompt.get -> string!
+Harbor.Abstractions.Providers.LlmRequestBuilder.Tools.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithCacheStrategy(Harbor.Abstractions.Models.CacheStrategy cacheStrategy) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithExtraHeaders(System.Collections.Generic.IReadOnlyDictionary<string!, string!>? extraHeaders) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithMaxOutputTokens(int? maxOutputTokens) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithReasoningEffort(Harbor.Abstractions.Models.ReasoningEffort? reasoningEffort) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithSessionAffinity(string? sessionAffinity) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithTemperature(decimal? temperature) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithToolChoice(Harbor.Abstractions.Models.ToolChoice? toolChoice) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithTopK(int? topK) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmRequestBuilder.WithTopP(decimal? topP) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+Harbor.Abstractions.Providers.LlmTextBlock
+Harbor.Abstractions.Providers.LlmTextBlock.Deconstruct(out string! Text) -> void
+Harbor.Abstractions.Providers.LlmTextBlock.Equals(Harbor.Abstractions.Providers.LlmTextBlock? other) -> bool
+Harbor.Abstractions.Providers.LlmTextBlock.LlmTextBlock(string! Text) -> void
+Harbor.Abstractions.Providers.LlmTextBlock.Text.get -> string!
+Harbor.Abstractions.Providers.LlmTextBlock.Text.init -> void
+Harbor.Abstractions.Providers.LlmThinkingBlock
+Harbor.Abstractions.Providers.LlmThinkingBlock.Deconstruct(out string! Text) -> void
+Harbor.Abstractions.Providers.LlmThinkingBlock.Equals(Harbor.Abstractions.Providers.LlmThinkingBlock? other) -> bool
+Harbor.Abstractions.Providers.LlmThinkingBlock.LlmThinkingBlock(string! Text) -> void
+Harbor.Abstractions.Providers.LlmThinkingBlock.Text.get -> string!
+Harbor.Abstractions.Providers.LlmThinkingBlock.Text.init -> void
+Harbor.Abstractions.Providers.LlmToolCallBlock
+Harbor.Abstractions.Providers.LlmToolCallBlock.Arguments.get -> System.Text.Json.JsonElement
+Harbor.Abstractions.Providers.LlmToolCallBlock.Arguments.init -> void
+Harbor.Abstractions.Providers.LlmToolCallBlock.Deconstruct(out string! Id, out string! Name, out System.Text.Json.JsonElement Arguments) -> void
+Harbor.Abstractions.Providers.LlmToolCallBlock.Equals(Harbor.Abstractions.Providers.LlmToolCallBlock? other) -> bool
+Harbor.Abstractions.Providers.LlmToolCallBlock.Id.get -> string!
+Harbor.Abstractions.Providers.LlmToolCallBlock.Id.init -> void
+Harbor.Abstractions.Providers.LlmToolCallBlock.LlmToolCallBlock(string! Id, string! Name, System.Text.Json.JsonElement Arguments) -> void
+Harbor.Abstractions.Providers.LlmToolCallBlock.Name.get -> string!
+Harbor.Abstractions.Providers.LlmToolCallBlock.Name.init -> void
+Harbor.Abstractions.Providers.LlmToolResultBlock
+Harbor.Abstractions.Providers.LlmToolResultBlock.Content.get -> string!
+Harbor.Abstractions.Providers.LlmToolResultBlock.Content.init -> void
+Harbor.Abstractions.Providers.LlmToolResultBlock.Deconstruct(out string! ToolUseId, out string! Content, out bool IsError) -> void
+Harbor.Abstractions.Providers.LlmToolResultBlock.Equals(Harbor.Abstractions.Providers.LlmToolResultBlock? other) -> bool
+Harbor.Abstractions.Providers.LlmToolResultBlock.IsError.get -> bool
+Harbor.Abstractions.Providers.LlmToolResultBlock.IsError.init -> void
+Harbor.Abstractions.Providers.LlmToolResultBlock.LlmToolResultBlock(string! ToolUseId, string! Content, bool IsError) -> void
+Harbor.Abstractions.Providers.LlmToolResultBlock.ToolUseId.get -> string!
+Harbor.Abstractions.Providers.LlmToolResultBlock.ToolUseId.init -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage
+Harbor.Abstractions.Providers.LlmToolResultMessage.Deconstruct(out string! ToolCallId, out string! ToolName, out string! Output, out bool IsError) -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage.Equals(Harbor.Abstractions.Providers.LlmToolResultMessage? other) -> bool
+Harbor.Abstractions.Providers.LlmToolResultMessage.IsError.get -> bool
+Harbor.Abstractions.Providers.LlmToolResultMessage.IsError.init -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage.LlmToolResultMessage(string! ToolCallId, string! ToolName, string! Output, bool IsError) -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage.Output.get -> string!
+Harbor.Abstractions.Providers.LlmToolResultMessage.Output.init -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage.ToolCallId.get -> string!
+Harbor.Abstractions.Providers.LlmToolResultMessage.ToolCallId.init -> void
+Harbor.Abstractions.Providers.LlmToolResultMessage.ToolName.get -> string!
+Harbor.Abstractions.Providers.LlmToolResultMessage.ToolName.init -> void
+Harbor.Abstractions.Providers.LlmUserMessage
+Harbor.Abstractions.Providers.LlmUserMessage.Content.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>!
+Harbor.Abstractions.Providers.LlmUserMessage.Content.init -> void
+Harbor.Abstractions.Providers.LlmUserMessage.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>! Content) -> void
+Harbor.Abstractions.Providers.LlmUserMessage.Equals(Harbor.Abstractions.Providers.LlmUserMessage? other) -> bool
+Harbor.Abstractions.Providers.LlmUserMessage.LlmUserMessage(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmContentBlock!>! Content) -> void
+Harbor.Abstractions.Providers.ProviderHealth
+Harbor.Abstractions.Providers.ProviderHealth.Deconstruct(out int LatencyMs, out int ModelsCount) -> void
+Harbor.Abstractions.Providers.ProviderHealth.Equals(Harbor.Abstractions.Providers.ProviderHealth other) -> bool
+Harbor.Abstractions.Providers.ProviderHealth.LatencyMs.get -> int
+Harbor.Abstractions.Providers.ProviderHealth.LatencyMs.init -> void
+Harbor.Abstractions.Providers.ProviderHealth.ModelsCount.get -> int
+Harbor.Abstractions.Providers.ProviderHealth.ModelsCount.init -> void
+Harbor.Abstractions.Providers.ProviderHealth.ProviderHealth() -> void
+Harbor.Abstractions.Providers.ProviderHealth.ProviderHealth(int LatencyMs, int ModelsCount) -> void
+Harbor.Abstractions.Providers.ProviderRegistryResolve
+Harbor.Abstractions.Providers.ToolDefinition
+Harbor.Abstractions.Providers.ToolDefinition.<Clone>$() -> Harbor.Abstractions.Providers.ToolDefinition!
+Harbor.Abstractions.Providers.ToolDefinition.Deconstruct(out string! Name, out string! Description, out System.Text.Json.JsonDocument! InputSchema) -> void
+Harbor.Abstractions.Providers.ToolDefinition.Description.get -> string!
+Harbor.Abstractions.Providers.ToolDefinition.Description.init -> void
+Harbor.Abstractions.Providers.ToolDefinition.Equals(Harbor.Abstractions.Providers.ToolDefinition? other) -> bool
+Harbor.Abstractions.Providers.ToolDefinition.InputSchema.get -> System.Text.Json.JsonDocument!
+Harbor.Abstractions.Providers.ToolDefinition.InputSchema.init -> void
+Harbor.Abstractions.Providers.ToolDefinition.Name.get -> string!
+Harbor.Abstractions.Providers.ToolDefinition.Name.init -> void
+Harbor.Abstractions.Providers.ToolDefinition.ToolDefinition(string! Name, string! Description, System.Text.Json.JsonDocument! InputSchema) -> void
+Harbor.Abstractions.Resilience.TransientFailurePolicy
+Harbor.Abstractions.Results.ResultErrors
+Harbor.Abstractions.Sessions.CompactionResult
+Harbor.Abstractions.Sessions.CompactionResult.<Clone>$() -> Harbor.Abstractions.Sessions.CompactionResult!
+Harbor.Abstractions.Sessions.CompactionResult.CompactionResult(string! Summary, int PrunedMessageCount, int TokensSaved, System.TimeSpan Duration, Harbor.Abstractions.Models.AgentMessage! SummaryMessage) -> void
+Harbor.Abstractions.Sessions.CompactionResult.Deconstruct(out string! Summary, out int PrunedMessageCount, out int TokensSaved, out System.TimeSpan Duration, out Harbor.Abstractions.Models.AgentMessage! SummaryMessage) -> void
+Harbor.Abstractions.Sessions.CompactionResult.Duration.get -> System.TimeSpan
+Harbor.Abstractions.Sessions.CompactionResult.Duration.init -> void
+Harbor.Abstractions.Sessions.CompactionResult.Equals(Harbor.Abstractions.Sessions.CompactionResult? other) -> bool
+Harbor.Abstractions.Sessions.CompactionResult.PrunedMessageCount.get -> int
+Harbor.Abstractions.Sessions.CompactionResult.PrunedMessageCount.init -> void
+Harbor.Abstractions.Sessions.CompactionResult.Summary.get -> string!
+Harbor.Abstractions.Sessions.CompactionResult.Summary.init -> void
+Harbor.Abstractions.Sessions.CompactionResult.SummaryMessage.get -> Harbor.Abstractions.Models.AgentMessage!
+Harbor.Abstractions.Sessions.CompactionResult.SummaryMessage.init -> void
+Harbor.Abstractions.Sessions.CompactionResult.TokensSaved.get -> int
+Harbor.Abstractions.Sessions.CompactionResult.TokensSaved.init -> void
+Harbor.Abstractions.Sessions.ContextFile
+Harbor.Abstractions.Sessions.ContextFile.<Clone>$() -> Harbor.Abstractions.Sessions.ContextFile!
+Harbor.Abstractions.Sessions.ContextFile.Content.get -> string!
+Harbor.Abstractions.Sessions.ContextFile.Content.init -> void
+Harbor.Abstractions.Sessions.ContextFile.ContextFile(string! Path, string! Content) -> void
+Harbor.Abstractions.Sessions.ContextFile.Deconstruct(out string! Path, out string! Content) -> void
+Harbor.Abstractions.Sessions.ContextFile.Equals(Harbor.Abstractions.Sessions.ContextFile? other) -> bool
+Harbor.Abstractions.Sessions.ContextFile.Path.get -> string!
+Harbor.Abstractions.Sessions.ContextFile.Path.init -> void
+Harbor.Abstractions.Sessions.HeuristicTokenEstimator
+Harbor.Abstractions.Sessions.HeuristicTokenEstimator.Estimate(string! text) -> int
+Harbor.Abstractions.Sessions.HeuristicTokenEstimator.EstimateMessage(Harbor.Abstractions.Models.AgentMessage! message) -> int
+Harbor.Abstractions.Sessions.HeuristicTokenEstimator.EstimateMessages(System.Collections.Generic.IEnumerable<Harbor.Abstractions.Models.AgentMessage!>! messages) -> int
+Harbor.Abstractions.Sessions.HeuristicTokenEstimator.HeuristicTokenEstimator() -> void
+Harbor.Abstractions.Sessions.ICompactionService
+Harbor.Abstractions.Sessions.ICompactionService.CompactAsync(string! sessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Models.ModelInfo! model, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.CompactionResult!>>!
+Harbor.Abstractions.Sessions.ICompactionService.ShouldCompact(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Models.ModelInfo! model) -> bool
+Harbor.Abstractions.Sessions.ICompactionView
+Harbor.Abstractions.Sessions.ICompactionView.MaterializeCompactedView(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.ICompactionView.TruncateToFit(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Models.ModelInfo! model, Harbor.Abstractions.Sessions.ITokenTracker! tokenTracker, int reserveTokens = 16384) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.ICompactionView.TruncateToFitStrict(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Models.ModelInfo! model, Harbor.Abstractions.Sessions.ITokenTracker! tokenTracker, int reserveTokens = 16384) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.ISessionCheckpointStore
+Harbor.Abstractions.Sessions.ISessionCheckpointStore.CreateCheckpointAsync(string! sessionId, string! messageId, string? label = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionCheckpoint!>>!
+Harbor.Abstractions.Sessions.ISessionCheckpointStore.ListCheckpointsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCheckpoint!>!>>!
+Harbor.Abstractions.Sessions.ISessionCheckpointStore.RewindToCheckpointAsync(string! sessionId, string! checkpointId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionRewindOutcome!>>!
+Harbor.Abstractions.Sessions.ISessionContext
+Harbor.Abstractions.Sessions.ISessionContext.AppendMessageAsync(Harbor.Abstractions.Models.AgentMessage! message, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Sessions.ISessionContext.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.ISessionContext.Session.get -> Harbor.Abstractions.Models.Session!
+Harbor.Abstractions.Sessions.ISessionContext.SteeringQueue.get -> System.Threading.Channels.Channel<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.ISessionContext.UpdateStatsAsync(Harbor.Abstractions.Models.Usage! usage, Harbor.Abstractions.Models.Pricing! pricing, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+Harbor.Abstractions.Sessions.ISessionPorter
+Harbor.Abstractions.Sessions.ISessionPorter.ExportAsync(Harbor.Abstractions.Sessions.ISessionStore! store, string! sessionId, System.IO.TextWriter! output, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionPorter.ImportAsync(Harbor.Abstractions.Sessions.ISessionStore! store, System.IO.TextReader! input, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Sessions.ISessionQuery
+Harbor.Abstractions.Sessions.ISessionQuery.QueryAsync(Harbor.Abstractions.Sessions.SessionQueryOptions! options, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionQueryResult!>>!
+Harbor.Abstractions.Sessions.ISessionStore
+Harbor.Abstractions.Sessions.ISessionStore.AppendMessageAsync(string! sessionId, Harbor.Abstractions.Models.AgentMessage! message, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionStore.CreateAsync(string! directory, string! agentName, string! providerId, string! modelId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Session!>>!
+Harbor.Abstractions.Sessions.ISessionStore.DeleteAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionStore.DeleteMessagesAfterAsync(string! sessionId, string! messageId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<int>>!
+Harbor.Abstractions.Sessions.ISessionStore.GetAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.Session!>>!
+Harbor.Abstractions.Sessions.ISessionStore.GetMessagesAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!>>!
+Harbor.Abstractions.Sessions.ISessionStore.GetSessionLogAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionLogEntry!>!>>!
+Harbor.Abstractions.Sessions.ISessionStore.GetStatsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.SessionMetadata!>>!
+Harbor.Abstractions.Sessions.ISessionStore.ListAsync(string? projectId = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.Session!>!>>!
+Harbor.Abstractions.Sessions.ISessionStore.PurgeMessagesAfterAsync(string! sessionId, string! messageId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<int>>!
+Harbor.Abstractions.Sessions.ISessionStore.RewindMessagesAfterAsync(string! sessionId, string! messageId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<int>>!
+Harbor.Abstractions.Sessions.ISessionStore.UpdateAsync(Harbor.Abstractions.Models.Session! session, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionStore.UpdateMessageAsync(string! sessionId, Harbor.Abstractions.Models.AgentMessage! message, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISessionStore.UpdateStatsAsync(string! sessionId, Harbor.Abstractions.Models.SessionMetadata! metadata, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ISkillProvider
+Harbor.Abstractions.Sessions.ISkillProvider.GetSkills(string! workingDirectory) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SkillDescriptor!>!
+Harbor.Abstractions.Sessions.ISkillProvider.ReadSkill(string! workingDirectory, string! name) -> string?
+Harbor.Abstractions.Sessions.ISystemPromptBuilder
+Harbor.Abstractions.Sessions.ISystemPromptBuilder.BuildAsync(Harbor.Abstractions.Sessions.SystemPromptContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<string!>!
+Harbor.Abstractions.Sessions.ITokenEstimator
+Harbor.Abstractions.Sessions.ITokenEstimator.Estimate(string! text) -> int
+Harbor.Abstractions.Sessions.ITokenEstimator.EstimateMessage(Harbor.Abstractions.Models.AgentMessage! message) -> int
+Harbor.Abstractions.Sessions.ITokenEstimator.EstimateMessages(System.Collections.Generic.IEnumerable<Harbor.Abstractions.Models.AgentMessage!>! messages) -> int
+Harbor.Abstractions.Sessions.ITokenTracker
+Harbor.Abstractions.Sessions.ITokenTracker.Estimate(string! text) -> int
+Harbor.Abstractions.Sessions.ITokenTracker.EstimateMessage(Harbor.Abstractions.Models.AgentMessage! message) -> int
+Harbor.Abstractions.Sessions.ITokenTracker.EstimateTokens(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages) -> int
+Harbor.Abstractions.Sessions.ITokenTracker.GetStats() -> Harbor.Abstractions.Sessions.TokenStats!
+Harbor.Abstractions.Sessions.ITokenTracker.RecordAppendedMessage(Harbor.Abstractions.Models.AgentMessage! message) -> void
+Harbor.Abstractions.Sessions.ITokenTracker.RecordTurnUsage(Harbor.Abstractions.Models.Usage! usage) -> void
+Harbor.Abstractions.Sessions.ITokenTracker.RecordUpdatedMessage(Harbor.Abstractions.Models.AgentMessage! message) -> void
+Harbor.Abstractions.Sessions.ITokenTracker.ShouldCompact(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages, Harbor.Abstractions.Models.ModelInfo! model) -> bool
+Harbor.Abstractions.Sessions.SessionCheckpoint
+Harbor.Abstractions.Sessions.SessionCheckpoint.<Clone>$() -> Harbor.Abstractions.Sessions.SessionCheckpoint!
+Harbor.Abstractions.Sessions.SessionCheckpoint.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.SessionCheckpoint.CreatedAt.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.Deconstruct(out string! Id, out string! SessionId, out string! MessageId, out int MessageIndex, out System.DateTimeOffset CreatedAt, out string? Label, out string? RewindOf, out int Removed) -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.Equals(Harbor.Abstractions.Sessions.SessionCheckpoint? other) -> bool
+Harbor.Abstractions.Sessions.SessionCheckpoint.Id.get -> string!
+Harbor.Abstractions.Sessions.SessionCheckpoint.Id.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.IsRewindTrail.get -> bool
+Harbor.Abstractions.Sessions.SessionCheckpoint.Label.get -> string?
+Harbor.Abstractions.Sessions.SessionCheckpoint.Label.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.MessageId.get -> string!
+Harbor.Abstractions.Sessions.SessionCheckpoint.MessageId.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.MessageIndex.get -> int
+Harbor.Abstractions.Sessions.SessionCheckpoint.MessageIndex.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.Removed.get -> int
+Harbor.Abstractions.Sessions.SessionCheckpoint.Removed.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.RewindOf.get -> string?
+Harbor.Abstractions.Sessions.SessionCheckpoint.RewindOf.init -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.SessionCheckpoint(string! Id, string! SessionId, string! MessageId, int MessageIndex, System.DateTimeOffset CreatedAt, string? Label, string? RewindOf = null, int Removed = 0) -> void
+Harbor.Abstractions.Sessions.SessionCheckpoint.SessionId.get -> string!
+Harbor.Abstractions.Sessions.SessionCheckpoint.SessionId.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit
+Harbor.Abstractions.Sessions.SessionQueryHit.<Clone>$() -> Harbor.Abstractions.Sessions.SessionQueryHit!
+Harbor.Abstractions.Sessions.SessionQueryHit.Deconstruct(out Harbor.Abstractions.Sessions.SessionRecordKind Kind, out string! SessionId, out string! RecordId, out System.DateTimeOffset Timestamp, out string! Text, out double Score, out int MatchPosition, out string? Role, out string? EventType) -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Equals(Harbor.Abstractions.Sessions.SessionQueryHit? other) -> bool
+Harbor.Abstractions.Sessions.SessionQueryHit.EventType.get -> string?
+Harbor.Abstractions.Sessions.SessionQueryHit.EventType.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Kind.get -> Harbor.Abstractions.Sessions.SessionRecordKind
+Harbor.Abstractions.Sessions.SessionQueryHit.Kind.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.MatchPosition.get -> int
+Harbor.Abstractions.Sessions.SessionQueryHit.MatchPosition.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.RecordId.get -> string!
+Harbor.Abstractions.Sessions.SessionQueryHit.RecordId.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Role.get -> string?
+Harbor.Abstractions.Sessions.SessionQueryHit.Role.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Score.get -> double
+Harbor.Abstractions.Sessions.SessionQueryHit.Score.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.SessionId.get -> string!
+Harbor.Abstractions.Sessions.SessionQueryHit.SessionId.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.SessionQueryHit(Harbor.Abstractions.Sessions.SessionRecordKind Kind, string! SessionId, string! RecordId, System.DateTimeOffset Timestamp, string! Text, double Score, int MatchPosition, string? Role = null, string? EventType = null) -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Text.get -> string!
+Harbor.Abstractions.Sessions.SessionQueryHit.Text.init -> void
+Harbor.Abstractions.Sessions.SessionQueryHit.Timestamp.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.SessionQueryHit.Timestamp.init -> void
+Harbor.Abstractions.Sessions.SessionQueryMode
+Harbor.Abstractions.Sessions.SessionQueryMode.FullText = 0 -> Harbor.Abstractions.Sessions.SessionQueryMode
+Harbor.Abstractions.Sessions.SessionQueryMode.Literal = 1 -> Harbor.Abstractions.Sessions.SessionQueryMode
+Harbor.Abstractions.Sessions.SessionQueryOptions
+Harbor.Abstractions.Sessions.SessionQueryOptions.<Clone>$() -> Harbor.Abstractions.Sessions.SessionQueryOptions!
+Harbor.Abstractions.Sessions.SessionQueryOptions.Equals(Harbor.Abstractions.Sessions.SessionQueryOptions? other) -> bool
+Harbor.Abstractions.Sessions.SessionQueryOptions.EventTypes.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Sessions.SessionQueryOptions.EventTypes.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Limit.get -> int
+Harbor.Abstractions.Sessions.SessionQueryOptions.Limit.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Offset.get -> int
+Harbor.Abstractions.Sessions.SessionQueryOptions.Offset.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Rank.get -> Harbor.Abstractions.Sessions.SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryOptions.Rank.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.RecordKinds.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRecordKind>?
+Harbor.Abstractions.Sessions.SessionQueryOptions.RecordKinds.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Roles.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Sessions.SessionQueryOptions.Roles.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.SessionIds.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Sessions.SessionQueryOptions.SessionIds.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.SessionQueryOptions() -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Text.get -> string?
+Harbor.Abstractions.Sessions.SessionQueryOptions.Text.init -> void
+Harbor.Abstractions.Sessions.SessionQueryOptions.Validate() -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Sessions.SessionQueryOptions.Window.get -> Harbor.Abstractions.Sessions.SessionQueryWindow?
+Harbor.Abstractions.Sessions.SessionQueryOptions.Window.init -> void
+Harbor.Abstractions.Sessions.SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryRank.NewestFirst = 2 -> Harbor.Abstractions.Sessions.SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryRank.OldestFirst = 1 -> Harbor.Abstractions.Sessions.SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryRank.Relevance = 0 -> Harbor.Abstractions.Sessions.SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryResult
+Harbor.Abstractions.Sessions.SessionQueryResult.<Clone>$() -> Harbor.Abstractions.Sessions.SessionQueryResult!
+Harbor.Abstractions.Sessions.SessionQueryResult.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionQueryHit!>! Hits, out int TotalMatches, out bool Truncated, out Harbor.Abstractions.Sessions.SessionQueryMode Mode, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRecordKind>! SupportedKinds) -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.Equals(Harbor.Abstractions.Sessions.SessionQueryResult? other) -> bool
+Harbor.Abstractions.Sessions.SessionQueryResult.Hits.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionQueryHit!>!
+Harbor.Abstractions.Sessions.SessionQueryResult.Hits.init -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.Mode.get -> Harbor.Abstractions.Sessions.SessionQueryMode
+Harbor.Abstractions.Sessions.SessionQueryResult.Mode.init -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.SessionQueryResult(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionQueryHit!>! Hits, int TotalMatches, bool Truncated, Harbor.Abstractions.Sessions.SessionQueryMode Mode, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRecordKind>! SupportedKinds) -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.SupportedKinds.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRecordKind>!
+Harbor.Abstractions.Sessions.SessionQueryResult.SupportedKinds.init -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.TotalMatches.get -> int
+Harbor.Abstractions.Sessions.SessionQueryResult.TotalMatches.init -> void
+Harbor.Abstractions.Sessions.SessionQueryResult.Truncated.get -> bool
+Harbor.Abstractions.Sessions.SessionQueryResult.Truncated.init -> void
+Harbor.Abstractions.Sessions.SessionQueryWindow
+Harbor.Abstractions.Sessions.SessionQueryWindow.<Clone>$() -> Harbor.Abstractions.Sessions.SessionQueryWindow!
+Harbor.Abstractions.Sessions.SessionQueryWindow.Contains(System.DateTimeOffset instant) -> bool
+Harbor.Abstractions.Sessions.SessionQueryWindow.Deconstruct(out System.DateTimeOffset? From, out System.DateTimeOffset? To) -> void
+Harbor.Abstractions.Sessions.SessionQueryWindow.Equals(Harbor.Abstractions.Sessions.SessionQueryWindow? other) -> bool
+Harbor.Abstractions.Sessions.SessionQueryWindow.From.get -> System.DateTimeOffset?
+Harbor.Abstractions.Sessions.SessionQueryWindow.From.init -> void
+Harbor.Abstractions.Sessions.SessionQueryWindow.IsEmpty.get -> bool
+Harbor.Abstractions.Sessions.SessionQueryWindow.SessionQueryWindow(System.DateTimeOffset? From, System.DateTimeOffset? To) -> void
+Harbor.Abstractions.Sessions.SessionQueryWindow.To.get -> System.DateTimeOffset?
+Harbor.Abstractions.Sessions.SessionQueryWindow.To.init -> void
+Harbor.Abstractions.Sessions.SessionRecordKind
+Harbor.Abstractions.Sessions.SessionRecordKind.Event = 2 -> Harbor.Abstractions.Sessions.SessionRecordKind
+Harbor.Abstractions.Sessions.SessionRecordKind.Message = 1 -> Harbor.Abstractions.Sessions.SessionRecordKind
+Harbor.Abstractions.Sessions.SessionRecordKind.Session = 0 -> Harbor.Abstractions.Sessions.SessionRecordKind
+Harbor.Abstractions.Sessions.SessionRewindOutcome
+Harbor.Abstractions.Sessions.SessionRewindOutcome.<Clone>$() -> Harbor.Abstractions.Sessions.SessionRewindOutcome!
+Harbor.Abstractions.Sessions.SessionRewindOutcome.CheckpointId.get -> string!
+Harbor.Abstractions.Sessions.SessionRewindOutcome.CheckpointId.init -> void
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Deconstruct(out string! CheckpointId, out string! MessageId, out int Removed, out int Remaining) -> void
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Equals(Harbor.Abstractions.Sessions.SessionRewindOutcome? other) -> bool
+Harbor.Abstractions.Sessions.SessionRewindOutcome.MessageId.get -> string!
+Harbor.Abstractions.Sessions.SessionRewindOutcome.MessageId.init -> void
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Remaining.get -> int
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Remaining.init -> void
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Removed.get -> int
+Harbor.Abstractions.Sessions.SessionRewindOutcome.Removed.init -> void
+Harbor.Abstractions.Sessions.SessionRewindOutcome.SessionRewindOutcome(string! CheckpointId, string! MessageId, int Removed, int Remaining) -> void
+Harbor.Abstractions.Sessions.SkillDescriptor
+Harbor.Abstractions.Sessions.SkillDescriptor.<Clone>$() -> Harbor.Abstractions.Sessions.SkillDescriptor!
+Harbor.Abstractions.Sessions.SkillDescriptor.Deconstruct(out string! Name, out string! Description, out string! FilePath) -> void
+Harbor.Abstractions.Sessions.SkillDescriptor.Description.get -> string!
+Harbor.Abstractions.Sessions.SkillDescriptor.Description.init -> void
+Harbor.Abstractions.Sessions.SkillDescriptor.Equals(Harbor.Abstractions.Sessions.SkillDescriptor? other) -> bool
+Harbor.Abstractions.Sessions.SkillDescriptor.FilePath.get -> string!
+Harbor.Abstractions.Sessions.SkillDescriptor.FilePath.init -> void
+Harbor.Abstractions.Sessions.SkillDescriptor.Name.get -> string!
+Harbor.Abstractions.Sessions.SkillDescriptor.Name.init -> void
+Harbor.Abstractions.Sessions.SkillDescriptor.SkillDescriptor(string! Name, string! Description, string! FilePath) -> void
+Harbor.Abstractions.Sessions.SystemPromptContext
+Harbor.Abstractions.Sessions.SystemPromptContext.<Clone>$() -> Harbor.Abstractions.Sessions.SystemPromptContext!
+Harbor.Abstractions.Sessions.SystemPromptContext.Agent.get -> Harbor.Abstractions.Agents.AgentDefinition!
+Harbor.Abstractions.Sessions.SystemPromptContext.Agent.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.ContextFiles.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.ContextFile!>!
+Harbor.Abstractions.Sessions.SystemPromptContext.ContextFiles.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.Deconstruct(out Harbor.Abstractions.Agents.AgentDefinition! Agent, out Harbor.Abstractions.Models.ModelInfo! Model, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>! Tools, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.ContextFile!>! ContextFiles, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SkillDescriptor!>! Skills, out string? McpInstructions, out string! WorkingDirectory) -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.Equals(Harbor.Abstractions.Sessions.SystemPromptContext? other) -> bool
+Harbor.Abstractions.Sessions.SystemPromptContext.McpInstructions.get -> string?
+Harbor.Abstractions.Sessions.SystemPromptContext.McpInstructions.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.Model.get -> Harbor.Abstractions.Models.ModelInfo!
+Harbor.Abstractions.Sessions.SystemPromptContext.Model.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.Skills.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SkillDescriptor!>!
+Harbor.Abstractions.Sessions.SystemPromptContext.Skills.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.SystemPromptContext(Harbor.Abstractions.Agents.AgentDefinition! Agent, Harbor.Abstractions.Models.ModelInfo! Model, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>! Tools, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.ContextFile!>! ContextFiles, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SkillDescriptor!>! Skills, string? McpInstructions, string! WorkingDirectory) -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.Tools.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>!
+Harbor.Abstractions.Sessions.SystemPromptContext.Tools.init -> void
+Harbor.Abstractions.Sessions.SystemPromptContext.WorkingDirectory.get -> string!
+Harbor.Abstractions.Sessions.SystemPromptContext.WorkingDirectory.init -> void
+Harbor.Abstractions.Sessions.TokenStats
+Harbor.Abstractions.Sessions.TokenStats.<Clone>$() -> Harbor.Abstractions.Sessions.TokenStats!
+Harbor.Abstractions.Sessions.TokenStats.Deconstruct(out int TotalInputTokens, out int TotalOutputTokens, out int? TotalReasoningTokens, out int? TotalCacheReadTokens, out int? TotalCacheWriteTokens) -> void
+Harbor.Abstractions.Sessions.TokenStats.Equals(Harbor.Abstractions.Sessions.TokenStats? other) -> bool
+Harbor.Abstractions.Sessions.TokenStats.TokenStats(int TotalInputTokens, int TotalOutputTokens, int? TotalReasoningTokens, int? TotalCacheReadTokens, int? TotalCacheWriteTokens) -> void
+Harbor.Abstractions.Sessions.TokenStats.TotalCacheReadTokens.get -> int?
+Harbor.Abstractions.Sessions.TokenStats.TotalCacheReadTokens.init -> void
+Harbor.Abstractions.Sessions.TokenStats.TotalCacheWriteTokens.get -> int?
+Harbor.Abstractions.Sessions.TokenStats.TotalCacheWriteTokens.init -> void
+Harbor.Abstractions.Sessions.TokenStats.TotalInputTokens.get -> int
+Harbor.Abstractions.Sessions.TokenStats.TotalInputTokens.init -> void
+Harbor.Abstractions.Sessions.TokenStats.TotalOutputTokens.get -> int
+Harbor.Abstractions.Sessions.TokenStats.TotalOutputTokens.init -> void
+Harbor.Abstractions.Sessions.TokenStats.TotalReasoningTokens.get -> int?
+Harbor.Abstractions.Sessions.TokenStats.TotalReasoningTokens.init -> void
+Harbor.Abstractions.Terminal.ITerminalPane
+Harbor.Abstractions.Terminal.ITerminalPane.OutputClosed -> System.EventHandler?
+Harbor.Abstractions.Terminal.ITerminalPane.OutputReceived -> System.EventHandler<Harbor.Abstractions.Terminal.TerminalOutputEventArgs!>?
+Harbor.Abstractions.Terminal.ITerminalPane.Pid.get -> int
+Harbor.Abstractions.Terminal.ITerminalPane.WriteLine(string! line) -> void
+Harbor.Abstractions.Terminal.ITerminalPaneLauncher
+Harbor.Abstractions.Terminal.ITerminalPaneLauncher.Launch(Harbor.Abstractions.Terminal.TerminalPaneRequest! request, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Terminal.ITerminalPane!>
+Harbor.Abstractions.Terminal.TerminalOutputEventArgs
+Harbor.Abstractions.Terminal.TerminalOutputEventArgs.Data.get -> byte[]!
+Harbor.Abstractions.Terminal.TerminalOutputEventArgs.TerminalOutputEventArgs(byte[]! data) -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest
+Harbor.Abstractions.Terminal.TerminalPaneRequest.<Clone>$() -> Harbor.Abstractions.Terminal.TerminalPaneRequest!
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Args.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Args.init -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Cols.get -> int
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Cols.init -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Deconstruct(out string! Shell, out System.Collections.Generic.IReadOnlyList<string!>! Args, out string! WorkingDirectory, out int Cols, out int Rows) -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Equals(Harbor.Abstractions.Terminal.TerminalPaneRequest? other) -> bool
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Rows.get -> int
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Rows.init -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Shell.get -> string!
+Harbor.Abstractions.Terminal.TerminalPaneRequest.Shell.init -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.TerminalPaneRequest(string! Shell, System.Collections.Generic.IReadOnlyList<string!>! Args, string! WorkingDirectory, int Cols = 120, int Rows = 32) -> void
+Harbor.Abstractions.Terminal.TerminalPaneRequest.WorkingDirectory.get -> string!
+Harbor.Abstractions.Terminal.TerminalPaneRequest.WorkingDirectory.init -> void
+Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.ExecutionMode.Parallel = 0 -> Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.ExecutionMode.Sequential = 1 -> Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.IMcpRegistry
+Harbor.Abstractions.Tools.IMcpRegistry.GetInstructions() -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.McpServerInstructions!>!
+Harbor.Abstractions.Tools.IMcpRegistry.GetServerNames() -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Tools.IMcpRegistry.InvokeAsync(string! server, string! method, System.Text.Json.JsonElement args, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Tools.IMcpRegistry.Register(string! name, string! stdioCommand) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Tools.IMcpRegistry.Unregister(string! name) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Tools.ITool
+Harbor.Abstractions.Tools.ITool.Description.get -> string!
+Harbor.Abstractions.Tools.ITool.DisplayName.get -> string!
+Harbor.Abstractions.Tools.ITool.ExecuteAsync(System.Text.Json.JsonElement args, Harbor.Abstractions.Tools.ToolContext! context, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Harbor.Abstractions.Models.ToolResult!>!
+Harbor.Abstractions.Tools.ITool.ExecutionMode.get -> Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.ITool.Glyph.get -> string!
+Harbor.Abstractions.Tools.ITool.Name.get -> Harbor.Abstractions.Models.Identifiers.ToolName!
+Harbor.Abstractions.Tools.ITool.ParameterSchema.get -> System.Text.Json.JsonDocument!
+Harbor.Abstractions.Tools.ITool.PromptGuidelines.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Tools.ITool.PromptSnippet.get -> string?
+Harbor.Abstractions.Tools.ITool.SafetyProfile.get -> Harbor.Abstractions.Permissions.ToolSafetyProfile!
+Harbor.Abstractions.Tools.ITool.ValidateArguments(System.Text.Json.JsonElement args) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Tools.IToolFactory
+Harbor.Abstractions.Tools.IToolFactory.CreateTool(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> Harbor.Abstractions.Tools.ITool!
+Harbor.Abstractions.Tools.IToolRegistry
+Harbor.Abstractions.Tools.IToolRegistry.GetAllTools() -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>!
+Harbor.Abstractions.Tools.IToolRegistry.GetTool(Harbor.Abstractions.Models.Identifiers.ToolName! name) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Tools.ITool!>
+Harbor.Abstractions.Tools.IToolRegistry.Register(Harbor.Abstractions.Tools.ITool! tool) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Tools.IToolRegistry.ResolveTools(string! agentName, Harbor.Abstractions.Permissions.PermissionRuleset? sessionPermission = null) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>!
+Harbor.Abstractions.Tools.IToolRegistry.SafetyPolicies.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Permissions.IArgSafetyPolicy!>!
+Harbor.Abstractions.Tools.IToolRegistry.Unregister(Harbor.Abstractions.Models.Identifiers.ToolName! name) -> CSharpFunctionalExtensions.Result
+Harbor.Abstractions.Tools.IToolRegistryBuilder
+Harbor.Abstractions.Tools.IToolRegistryBuilder.AddTool(Harbor.Abstractions.Tools.ITool! tool) -> void
+Harbor.Abstractions.Tools.IToolRegistryBuilder.AddTool(Harbor.Abstractions.Tools.IToolFactory! factory) -> void
+Harbor.Abstractions.Tools.IToolRegistryBuilder.AddTool(System.Func<Harbor.Abstractions.Tools.ITool!>! factory) -> void
+Harbor.Abstractions.Tools.IToolRegistryBuilder.AddTool(System.Func<Microsoft.Extensions.Logging.ILoggerFactory!, Harbor.Abstractions.Tools.ITool!>! factory) -> void
+Harbor.Abstractions.Tools.IToolRegistryBuilder.AddTool<T>() -> void
+Harbor.Abstractions.Tools.IToolSource
+Harbor.Abstractions.Tools.IToolSource.GetAllTools() -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>!
+Harbor.Abstractions.Tools.IToolSource.GetTool(Harbor.Abstractions.Models.Identifiers.ToolName! name) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Tools.ITool!>
+Harbor.Abstractions.Tools.IToolSource.ResolveTools(string! agentName, Harbor.Abstractions.Permissions.PermissionRuleset? sessionPermission = null) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Tools.ToolDescriptor!>!
+Harbor.Abstractions.Tools.JsonArgValidator
+Harbor.Abstractions.Tools.JsonArgs
+Harbor.Abstractions.Tools.McpServerInstructions
+Harbor.Abstractions.Tools.McpServerInstructions.<Clone>$() -> Harbor.Abstractions.Tools.McpServerInstructions!
+Harbor.Abstractions.Tools.McpServerInstructions.Deconstruct(out string! ServerName, out string! Instructions) -> void
+Harbor.Abstractions.Tools.McpServerInstructions.Equals(Harbor.Abstractions.Tools.McpServerInstructions? other) -> bool
+Harbor.Abstractions.Tools.McpServerInstructions.Instructions.get -> string!
+Harbor.Abstractions.Tools.McpServerInstructions.Instructions.init -> void
+Harbor.Abstractions.Tools.McpServerInstructions.McpServerInstructions(string! ServerName, string! Instructions) -> void
+Harbor.Abstractions.Tools.McpServerInstructions.ServerName.get -> string!
+Harbor.Abstractions.Tools.McpServerInstructions.ServerName.init -> void
+Harbor.Abstractions.Tools.MimeTypes
+Harbor.Abstractions.Tools.TaskFireAndForget
+Harbor.Abstractions.Tools.ToolContext
+Harbor.Abstractions.Tools.ToolContext.<Clone>$() -> Harbor.Abstractions.Tools.ToolContext!
+Harbor.Abstractions.Tools.ToolContext.Abort.get -> System.Threading.CancellationToken
+Harbor.Abstractions.Tools.ToolContext.Abort.init -> void
+Harbor.Abstractions.Tools.ToolContext.Agent.get -> string!
+Harbor.Abstractions.Tools.ToolContext.Agent.init -> void
+Harbor.Abstractions.Tools.ToolContext.Ask.get -> System.Func<Harbor.Abstractions.Permissions.PermissionRequest!, System.Threading.CancellationToken, System.Threading.Tasks.Task<Harbor.Abstractions.Permissions.PermissionResponse!>!>!
+Harbor.Abstractions.Tools.ToolContext.Ask.init -> void
+Harbor.Abstractions.Tools.ToolContext.CallId.get -> string?
+Harbor.Abstractions.Tools.ToolContext.CallId.init -> void
+Harbor.Abstractions.Tools.ToolContext.Deconstruct(out string! SessionId, out string! MessageId, out string? CallId, out string! Agent, out System.Threading.CancellationToken Abort, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, out System.Func<Harbor.Abstractions.Tools.ToolProgressUpdate!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! ReportProgress, out System.Func<Harbor.Abstractions.Permissions.PermissionRequest!, System.Threading.CancellationToken, System.Threading.Tasks.Task<Harbor.Abstractions.Permissions.PermissionResponse!>!>! Ask, out string? WorkingDirectory) -> void
+Harbor.Abstractions.Tools.ToolContext.Equals(Harbor.Abstractions.Tools.ToolContext? other) -> bool
+Harbor.Abstractions.Tools.ToolContext.MessageId.get -> string!
+Harbor.Abstractions.Tools.ToolContext.MessageId.init -> void
+Harbor.Abstractions.Tools.ToolContext.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Tools.ToolContext.Messages.init -> void
+Harbor.Abstractions.Tools.ToolContext.ReportProgress.get -> System.Func<Harbor.Abstractions.Tools.ToolProgressUpdate!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>!
+Harbor.Abstractions.Tools.ToolContext.ReportProgress.init -> void
+Harbor.Abstractions.Tools.ToolContext.SessionId.get -> string!
+Harbor.Abstractions.Tools.ToolContext.SessionId.init -> void
+Harbor.Abstractions.Tools.ToolContext.ToolContext(string! SessionId, string! MessageId, string? CallId, string! Agent, System.Threading.CancellationToken Abort, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, System.Func<Harbor.Abstractions.Tools.ToolProgressUpdate!, System.Threading.CancellationToken, System.Threading.Tasks.Task!>! ReportProgress, System.Func<Harbor.Abstractions.Permissions.PermissionRequest!, System.Threading.CancellationToken, System.Threading.Tasks.Task<Harbor.Abstractions.Permissions.PermissionResponse!>!>! Ask, string? WorkingDirectory = null) -> void
+Harbor.Abstractions.Tools.ToolContext.WorkingDirectory.get -> string?
+Harbor.Abstractions.Tools.ToolContext.WorkingDirectory.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor
+Harbor.Abstractions.Tools.ToolDescriptor.<Clone>$() -> Harbor.Abstractions.Tools.ToolDescriptor!
+Harbor.Abstractions.Tools.ToolDescriptor.Deconstruct(out Harbor.Abstractions.Models.Identifiers.ToolName! Name, out string! DisplayName, out string! Description, out System.Text.Json.JsonDocument! Schema, out Harbor.Abstractions.Tools.ExecutionMode ExecutionMode, out string? PromptSnippet, out System.Collections.Generic.IReadOnlyList<string!>! PromptGuidelines) -> void
+Harbor.Abstractions.Tools.ToolDescriptor.Description.get -> string!
+Harbor.Abstractions.Tools.ToolDescriptor.Description.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.DisplayName.get -> string!
+Harbor.Abstractions.Tools.ToolDescriptor.DisplayName.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.Equals(Harbor.Abstractions.Tools.ToolDescriptor? other) -> bool
+Harbor.Abstractions.Tools.ToolDescriptor.ExecutionMode.get -> Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.ToolDescriptor.ExecutionMode.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.Name.get -> Harbor.Abstractions.Models.Identifiers.ToolName!
+Harbor.Abstractions.Tools.ToolDescriptor.Name.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.PromptGuidelines.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Tools.ToolDescriptor.PromptGuidelines.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.PromptSnippet.get -> string?
+Harbor.Abstractions.Tools.ToolDescriptor.PromptSnippet.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.Schema.get -> System.Text.Json.JsonDocument!
+Harbor.Abstractions.Tools.ToolDescriptor.Schema.init -> void
+Harbor.Abstractions.Tools.ToolDescriptor.ToolDescriptor(Harbor.Abstractions.Models.Identifiers.ToolName! Name, string! DisplayName, string! Description, System.Text.Json.JsonDocument! Schema, Harbor.Abstractions.Tools.ExecutionMode ExecutionMode, string? PromptSnippet, System.Collections.Generic.IReadOnlyList<string!>! PromptGuidelines) -> void
+Harbor.Abstractions.Tools.ToolErrors
+Harbor.Abstractions.Tools.ToolGlyphs
+Harbor.Abstractions.Tools.ToolInfoAttribute
+Harbor.Abstractions.Tools.ToolInfoAttribute.Description.get -> string!
+Harbor.Abstractions.Tools.ToolInfoAttribute.DisplayName.get -> string!
+Harbor.Abstractions.Tools.ToolInfoAttribute.ExecutionMode.get -> Harbor.Abstractions.Tools.ExecutionMode
+Harbor.Abstractions.Tools.ToolInfoAttribute.ExecutionMode.set -> void
+Harbor.Abstractions.Tools.ToolInfoAttribute.Glyph.get -> string!
+Harbor.Abstractions.Tools.ToolInfoAttribute.Glyph.set -> void
+Harbor.Abstractions.Tools.ToolInfoAttribute.Name.get -> string!
+Harbor.Abstractions.Tools.ToolInfoAttribute.PromptGuidelines.get -> string![]!
+Harbor.Abstractions.Tools.ToolInfoAttribute.PromptGuidelines.set -> void
+Harbor.Abstractions.Tools.ToolInfoAttribute.PromptSnippet.get -> string?
+Harbor.Abstractions.Tools.ToolInfoAttribute.PromptSnippet.set -> void
+Harbor.Abstractions.Tools.ToolInfoAttribute.ToolInfoAttribute(string! name, string! displayName, string! description) -> void
+Harbor.Abstractions.Tools.ToolPaths
+Harbor.Abstractions.Tools.ToolProgressUpdate
+Harbor.Abstractions.Tools.ToolProgressUpdate.<Clone>$() -> Harbor.Abstractions.Tools.ToolProgressUpdate!
+Harbor.Abstractions.Tools.ToolProgressUpdate.Deconstruct(out string? Status, out int? PercentComplete, out object? PartialResult) -> void
+Harbor.Abstractions.Tools.ToolProgressUpdate.Equals(Harbor.Abstractions.Tools.ToolProgressUpdate? other) -> bool
+Harbor.Abstractions.Tools.ToolProgressUpdate.PartialResult.get -> object?
+Harbor.Abstractions.Tools.ToolProgressUpdate.PartialResult.init -> void
+Harbor.Abstractions.Tools.ToolProgressUpdate.PercentComplete.get -> int?
+Harbor.Abstractions.Tools.ToolProgressUpdate.PercentComplete.init -> void
+Harbor.Abstractions.Tools.ToolProgressUpdate.Status.get -> string?
+Harbor.Abstractions.Tools.ToolProgressUpdate.Status.init -> void
+Harbor.Abstractions.Tools.ToolProgressUpdate.ToolProgressUpdate(string? Status = null, int? PercentComplete = null, object? PartialResult = null) -> void
+Harbor.Abstractions.Tui.ICommandContext
+Harbor.Abstractions.Tui.ICommandContext.Agent.get -> Harbor.Abstractions.Agents.IAgent!
+Harbor.Abstractions.Tui.ICommandContext.Output.get -> System.Action<string!>!
+Harbor.Abstractions.Tui.ICommandContext.Prompt.get -> System.Func<string!, System.Threading.Tasks.Task<string!>!>!
+Harbor.Abstractions.Tui.ICommandContext.Providers.get -> Harbor.Abstractions.Providers.IProviderRegistry!
+Harbor.Abstractions.Tui.ICommandContext.Session.get -> Harbor.Abstractions.Sessions.ISessionContext!
+Harbor.Abstractions.Tui.ICommandContext.Tools.get -> Harbor.Abstractions.Tools.IToolRegistry!
+Harbor.Abstractions.Tui.ISlashCommand
+Harbor.Abstractions.Tui.ISlashCommand.Aliases.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Tui.ISlashCommand.ArgSuggestions.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Tui.ISlashCommand.Description.get -> string!
+Harbor.Abstractions.Tui.ISlashCommand.ExecuteAsync(System.Collections.Generic.IReadOnlyList<string!>! args, Harbor.Abstractions.Tui.ICommandContext! context, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Tui.ISlashCommand.Name.get -> string!
+Harbor.Abstractions.Tui.ISlashCommand.Usage.get -> string!
+Harbor.Abstractions.Tui.KeyPress
+Harbor.Abstractions.Tui.KeyPress.<Clone>$() -> Harbor.Abstractions.Tui.KeyPress!
+Harbor.Abstractions.Tui.KeyPress.Character.get -> char
+Harbor.Abstractions.Tui.KeyPress.Character.init -> void
+Harbor.Abstractions.Tui.KeyPress.Deconstruct(out System.ConsoleKey Key, out char Character, out System.ConsoleModifiers Modifiers) -> void
+Harbor.Abstractions.Tui.KeyPress.Equals(Harbor.Abstractions.Tui.KeyPress? other) -> bool
+Harbor.Abstractions.Tui.KeyPress.Key.get -> System.ConsoleKey
+Harbor.Abstractions.Tui.KeyPress.Key.init -> void
+Harbor.Abstractions.Tui.KeyPress.KeyPress(System.ConsoleKey Key, char Character, System.ConsoleModifiers Modifiers) -> void
+Harbor.Abstractions.Tui.KeyPress.Modifiers.get -> System.ConsoleModifiers
+Harbor.Abstractions.Tui.KeyPress.Modifiers.init -> void
+Harbor.Abstractions.Tui.QrMatrix
+abstract Harbor.Abstractions.Providers.LlmContentBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmContentBlock!
+abstract Harbor.Abstractions.Providers.LlmContentBlock.Type.get -> string!
+abstract Harbor.Abstractions.Providers.LlmMessage.<Clone>$() -> Harbor.Abstractions.Providers.LlmMessage!
+abstract Harbor.Abstractions.Providers.LlmMessage.Role.get -> string!
+const Harbor.Abstractions.Agents.SubAgentFailureFormat.ResumeMarker = "[resume-session:" -> string!
+const Harbor.Abstractions.Filesystem.HarborPaths.HarborHomeVariable = "HARBOR_HOME" -> string!
+const Harbor.Abstractions.Resilience.TransientFailurePolicy.DefaultMaxAttempts = 3 -> int
+const Harbor.Abstractions.Sessions.ICompactionView.DefaultReserveTokens = 16384 -> int
+const Harbor.Abstractions.Sessions.SessionQueryOptions.MaxLimit = 1000 -> int
+const Harbor.Abstractions.Sessions.SessionQueryOptions.MinLimit = 1 -> int
+const Harbor.Abstractions.Tools.ToolGlyphs.Default = "🔧" -> string!
+override Harbor.Abstractions.Agents.AgentDefinition.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.AgentDefinition.GetHashCode() -> int
+override Harbor.Abstractions.Agents.AgentDefinition.ToString() -> string!
+override Harbor.Abstractions.Agents.AgentState.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.AgentState.GetHashCode() -> int
+override Harbor.Abstractions.Agents.AgentState.ToString() -> string!
+override Harbor.Abstractions.Agents.BackgroundTaskCompletion.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.BackgroundTaskCompletion.GetHashCode() -> int
+override Harbor.Abstractions.Agents.BackgroundTaskCompletion.ToString() -> string!
+override Harbor.Abstractions.Agents.SubAgentResumeHint.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.SubAgentResumeHint.GetHashCode() -> int
+override Harbor.Abstractions.Agents.SubAgentResumeHint.ToString() -> string!
+override Harbor.Abstractions.Agents.SubAgentRunRequest.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.SubAgentRunRequest.GetHashCode() -> int
+override Harbor.Abstractions.Agents.SubAgentRunRequest.ToString() -> string!
+override Harbor.Abstractions.Agents.SubAgentRunResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Agents.SubAgentRunResult.GetHashCode() -> int
+override Harbor.Abstractions.Agents.SubAgentRunResult.ToString() -> string!
+override Harbor.Abstractions.Filesystem.DirectoryEntry.Equals(object? obj) -> bool
+override Harbor.Abstractions.Filesystem.DirectoryEntry.GetHashCode() -> int
+override Harbor.Abstractions.Filesystem.DirectoryEntry.ToString() -> string!
+override Harbor.Abstractions.Filesystem.DirectoryListing.Equals(object? obj) -> bool
+override Harbor.Abstractions.Filesystem.DirectoryListing.GetHashCode() -> int
+override Harbor.Abstractions.Filesystem.DirectoryListing.ToString() -> string!
+override Harbor.Abstractions.Git.GitWorkspaceStatus.Equals(object? obj) -> bool
+override Harbor.Abstractions.Git.GitWorkspaceStatus.GetHashCode() -> int
+override Harbor.Abstractions.Git.GitWorkspaceStatus.ToString() -> string!
+override Harbor.Abstractions.Git.GitWorktreeInfo.Equals(object? obj) -> bool
+override Harbor.Abstractions.Git.GitWorktreeInfo.GetHashCode() -> int
+override Harbor.Abstractions.Git.GitWorktreeInfo.ToString() -> string!
+override Harbor.Abstractions.Ide.ProcessResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Ide.ProcessResult.GetHashCode() -> int
+override Harbor.Abstractions.Ide.ProcessResult.ToString() -> string!
+override Harbor.Abstractions.Lsp.LspDiagnostic.Equals(object? obj) -> bool
+override Harbor.Abstractions.Lsp.LspDiagnostic.GetHashCode() -> int
+override Harbor.Abstractions.Lsp.LspDiagnostic.ToString() -> string!
+override Harbor.Abstractions.Lsp.LspLocation.Equals(object? obj) -> bool
+override Harbor.Abstractions.Lsp.LspLocation.GetHashCode() -> int
+override Harbor.Abstractions.Lsp.LspLocation.ToString() -> string!
+override Harbor.Abstractions.Permissions.ApprovalResolution.Equals(object? obj) -> bool
+override Harbor.Abstractions.Permissions.ApprovalResolution.GetHashCode() -> int
+override Harbor.Abstractions.Permissions.ApprovalResolution.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmAssistantMessage.<Clone>$() -> Harbor.Abstractions.Providers.LlmAssistantMessage!
+override Harbor.Abstractions.Providers.LlmAssistantMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmAssistantMessage.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmAssistantMessage.Role.get -> string!
+override Harbor.Abstractions.Providers.LlmAssistantMessage.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmContentBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmContentBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmContentBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmImageBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmImageBlock!
+override Harbor.Abstractions.Providers.LlmImageBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmImageBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmImageBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmImageBlock.Type.get -> string!
+override Harbor.Abstractions.Providers.LlmMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmMessage.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmMessage.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmRequest.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmRequest.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmRequest.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmTextBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmTextBlock!
+override Harbor.Abstractions.Providers.LlmTextBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmTextBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmTextBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmTextBlock.Type.get -> string!
+override Harbor.Abstractions.Providers.LlmThinkingBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmThinkingBlock!
+override Harbor.Abstractions.Providers.LlmThinkingBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmThinkingBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmThinkingBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmThinkingBlock.Type.get -> string!
+override Harbor.Abstractions.Providers.LlmToolCallBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmToolCallBlock!
+override Harbor.Abstractions.Providers.LlmToolCallBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmToolCallBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmToolCallBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmToolCallBlock.Type.get -> string!
+override Harbor.Abstractions.Providers.LlmToolResultBlock.<Clone>$() -> Harbor.Abstractions.Providers.LlmToolResultBlock!
+override Harbor.Abstractions.Providers.LlmToolResultBlock.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmToolResultBlock.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmToolResultBlock.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmToolResultBlock.Type.get -> string!
+override Harbor.Abstractions.Providers.LlmToolResultMessage.<Clone>$() -> Harbor.Abstractions.Providers.LlmToolResultMessage!
+override Harbor.Abstractions.Providers.LlmToolResultMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmToolResultMessage.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmToolResultMessage.Role.get -> string!
+override Harbor.Abstractions.Providers.LlmToolResultMessage.ToString() -> string!
+override Harbor.Abstractions.Providers.LlmUserMessage.<Clone>$() -> Harbor.Abstractions.Providers.LlmUserMessage!
+override Harbor.Abstractions.Providers.LlmUserMessage.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.LlmUserMessage.GetHashCode() -> int
+override Harbor.Abstractions.Providers.LlmUserMessage.Role.get -> string!
+override Harbor.Abstractions.Providers.LlmUserMessage.ToString() -> string!
+override Harbor.Abstractions.Providers.ProviderHealth.GetHashCode() -> int
+override Harbor.Abstractions.Providers.ToolDefinition.Equals(object? obj) -> bool
+override Harbor.Abstractions.Providers.ToolDefinition.GetHashCode() -> int
+override Harbor.Abstractions.Providers.ToolDefinition.ToString() -> string!
+override Harbor.Abstractions.Sessions.CompactionResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.CompactionResult.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.CompactionResult.ToString() -> string!
+override Harbor.Abstractions.Sessions.ContextFile.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.ContextFile.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.ContextFile.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionCheckpoint.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionCheckpoint.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionCheckpoint.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionQueryHit.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionQueryHit.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionQueryHit.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionQueryOptions.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionQueryOptions.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionQueryOptions.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionQueryResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionQueryResult.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionQueryResult.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionQueryWindow.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionQueryWindow.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionQueryWindow.ToString() -> string!
+override Harbor.Abstractions.Sessions.SessionRewindOutcome.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionRewindOutcome.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionRewindOutcome.ToString() -> string!
+override Harbor.Abstractions.Sessions.SkillDescriptor.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SkillDescriptor.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SkillDescriptor.ToString() -> string!
+override Harbor.Abstractions.Sessions.SystemPromptContext.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SystemPromptContext.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SystemPromptContext.ToString() -> string!
+override Harbor.Abstractions.Sessions.TokenStats.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.TokenStats.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.TokenStats.ToString() -> string!
+override Harbor.Abstractions.Terminal.TerminalPaneRequest.Equals(object? obj) -> bool
+override Harbor.Abstractions.Terminal.TerminalPaneRequest.GetHashCode() -> int
+override Harbor.Abstractions.Terminal.TerminalPaneRequest.ToString() -> string!
+override Harbor.Abstractions.Tools.McpServerInstructions.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tools.McpServerInstructions.GetHashCode() -> int
+override Harbor.Abstractions.Tools.McpServerInstructions.ToString() -> string!
+override Harbor.Abstractions.Tools.ToolContext.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tools.ToolContext.GetHashCode() -> int
+override Harbor.Abstractions.Tools.ToolContext.ToString() -> string!
+override Harbor.Abstractions.Tools.ToolDescriptor.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tools.ToolDescriptor.GetHashCode() -> int
+override Harbor.Abstractions.Tools.ToolDescriptor.ToString() -> string!
+override Harbor.Abstractions.Tools.ToolProgressUpdate.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tools.ToolProgressUpdate.GetHashCode() -> int
+override Harbor.Abstractions.Tools.ToolProgressUpdate.ToString() -> string!
+override Harbor.Abstractions.Tui.KeyPress.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tui.KeyPress.GetHashCode() -> int
+override Harbor.Abstractions.Tui.KeyPress.ToString() -> string!
+override sealed Harbor.Abstractions.Providers.LlmAssistantMessage.Equals(Harbor.Abstractions.Providers.LlmMessage? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmImageBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmTextBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmThinkingBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmToolCallBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmToolResultBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmToolResultMessage.Equals(Harbor.Abstractions.Providers.LlmMessage? other) -> bool
+override sealed Harbor.Abstractions.Providers.LlmUserMessage.Equals(Harbor.Abstractions.Providers.LlmMessage? other) -> bool
+readonly Harbor.Abstractions.Providers.IProviderHealthCheck.DefaultTimeout -> System.TimeSpan
+static Harbor.Abstractions.Agents.AgentDefinition.ArchitectDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.AskDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.CodeDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.DebugDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.ExploreDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.OrchestratorDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.PlanDefault(string! model, string! providerId) -> Harbor.Abstractions.Agents.AgentDefinition!
+static Harbor.Abstractions.Agents.AgentDefinition.operator !=(Harbor.Abstractions.Agents.AgentDefinition? left, Harbor.Abstractions.Agents.AgentDefinition? right) -> bool
+static Harbor.Abstractions.Agents.AgentDefinition.operator ==(Harbor.Abstractions.Agents.AgentDefinition? left, Harbor.Abstractions.Agents.AgentDefinition? right) -> bool
+static Harbor.Abstractions.Agents.AgentRegistryResolve.ResolveAgent(this Harbor.Abstractions.Agents.IAgentRegistry! agents, string? agentName) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Agents.AgentDefinition!>
+static Harbor.Abstractions.Agents.AgentState.Idle(string! sessionId, Harbor.Abstractions.Agents.AgentDefinition! agent) -> Harbor.Abstractions.Agents.AgentState!
+static Harbor.Abstractions.Agents.AgentState.operator !=(Harbor.Abstractions.Agents.AgentState? left, Harbor.Abstractions.Agents.AgentState? right) -> bool
+static Harbor.Abstractions.Agents.AgentState.operator ==(Harbor.Abstractions.Agents.AgentState? left, Harbor.Abstractions.Agents.AgentState? right) -> bool
+static Harbor.Abstractions.Agents.AgentStateProbe.IsRunning(this Harbor.Abstractions.Agents.IAgent! agent) -> bool
+static Harbor.Abstractions.Agents.BackgroundTaskCompletion.operator !=(Harbor.Abstractions.Agents.BackgroundTaskCompletion? left, Harbor.Abstractions.Agents.BackgroundTaskCompletion? right) -> bool
+static Harbor.Abstractions.Agents.BackgroundTaskCompletion.operator ==(Harbor.Abstractions.Agents.BackgroundTaskCompletion? left, Harbor.Abstractions.Agents.BackgroundTaskCompletion? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> Harbor.Abstractions.Agents.SubAgentResumeHint?
+static Harbor.Abstractions.Agents.SubAgentFailureFormat.WithResumeTrailer(string! message, string! sessionId) -> string!
+static Harbor.Abstractions.Agents.SubAgentResumeHint.operator !=(Harbor.Abstractions.Agents.SubAgentResumeHint? left, Harbor.Abstractions.Agents.SubAgentResumeHint? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentResumeHint.operator ==(Harbor.Abstractions.Agents.SubAgentResumeHint? left, Harbor.Abstractions.Agents.SubAgentResumeHint? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentRunRequest.operator !=(Harbor.Abstractions.Agents.SubAgentRunRequest? left, Harbor.Abstractions.Agents.SubAgentRunRequest? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentRunRequest.operator ==(Harbor.Abstractions.Agents.SubAgentRunRequest? left, Harbor.Abstractions.Agents.SubAgentRunRequest? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentRunResult.operator !=(Harbor.Abstractions.Agents.SubAgentRunResult? left, Harbor.Abstractions.Agents.SubAgentRunResult? right) -> bool
+static Harbor.Abstractions.Agents.SubAgentRunResult.operator ==(Harbor.Abstractions.Agents.SubAgentRunResult? left, Harbor.Abstractions.Agents.SubAgentRunResult? right) -> bool
+static Harbor.Abstractions.Filesystem.DirectoryEntry.operator !=(Harbor.Abstractions.Filesystem.DirectoryEntry? left, Harbor.Abstractions.Filesystem.DirectoryEntry? right) -> bool
+static Harbor.Abstractions.Filesystem.DirectoryEntry.operator ==(Harbor.Abstractions.Filesystem.DirectoryEntry? left, Harbor.Abstractions.Filesystem.DirectoryEntry? right) -> bool
+static Harbor.Abstractions.Filesystem.DirectoryListing.Empty(string! directory) -> Harbor.Abstractions.Filesystem.DirectoryListing!
+static Harbor.Abstractions.Filesystem.DirectoryListing.operator !=(Harbor.Abstractions.Filesystem.DirectoryListing? left, Harbor.Abstractions.Filesystem.DirectoryListing? right) -> bool
+static Harbor.Abstractions.Filesystem.DirectoryListing.operator ==(Harbor.Abstractions.Filesystem.DirectoryListing? left, Harbor.Abstractions.Filesystem.DirectoryListing? right) -> bool
+static Harbor.Abstractions.Filesystem.HarborPaths.GetHarborHome() -> string!
+static Harbor.Abstractions.Git.GitWorkspaceStatus.None.get -> Harbor.Abstractions.Git.GitWorkspaceStatus!
+static Harbor.Abstractions.Git.GitWorkspaceStatus.operator !=(Harbor.Abstractions.Git.GitWorkspaceStatus? left, Harbor.Abstractions.Git.GitWorkspaceStatus? right) -> bool
+static Harbor.Abstractions.Git.GitWorkspaceStatus.operator ==(Harbor.Abstractions.Git.GitWorkspaceStatus? left, Harbor.Abstractions.Git.GitWorkspaceStatus? right) -> bool
+static Harbor.Abstractions.Git.GitWorktreeInfo.operator !=(Harbor.Abstractions.Git.GitWorktreeInfo? left, Harbor.Abstractions.Git.GitWorktreeInfo? right) -> bool
+static Harbor.Abstractions.Git.GitWorktreeInfo.operator ==(Harbor.Abstractions.Git.GitWorktreeInfo? left, Harbor.Abstractions.Git.GitWorktreeInfo? right) -> bool
+static Harbor.Abstractions.Ide.ProcessResult.operator !=(Harbor.Abstractions.Ide.ProcessResult? left, Harbor.Abstractions.Ide.ProcessResult? right) -> bool
+static Harbor.Abstractions.Ide.ProcessResult.operator ==(Harbor.Abstractions.Ide.ProcessResult? left, Harbor.Abstractions.Ide.ProcessResult? right) -> bool
+static Harbor.Abstractions.Lsp.LspDiagnostic.operator !=(Harbor.Abstractions.Lsp.LspDiagnostic? left, Harbor.Abstractions.Lsp.LspDiagnostic? right) -> bool
+static Harbor.Abstractions.Lsp.LspDiagnostic.operator ==(Harbor.Abstractions.Lsp.LspDiagnostic? left, Harbor.Abstractions.Lsp.LspDiagnostic? right) -> bool
+static Harbor.Abstractions.Lsp.LspLocation.operator !=(Harbor.Abstractions.Lsp.LspLocation? left, Harbor.Abstractions.Lsp.LspLocation? right) -> bool
+static Harbor.Abstractions.Lsp.LspLocation.operator ==(Harbor.Abstractions.Lsp.LspLocation? left, Harbor.Abstractions.Lsp.LspLocation? right) -> bool
+static Harbor.Abstractions.Permissions.ApprovalResolution.operator !=(Harbor.Abstractions.Permissions.ApprovalResolution? left, Harbor.Abstractions.Permissions.ApprovalResolution? right) -> bool
+static Harbor.Abstractions.Permissions.ApprovalResolution.operator ==(Harbor.Abstractions.Permissions.ApprovalResolution? left, Harbor.Abstractions.Permissions.ApprovalResolution? right) -> bool
+static Harbor.Abstractions.Providers.LlmAssistantMessage.operator !=(Harbor.Abstractions.Providers.LlmAssistantMessage? left, Harbor.Abstractions.Providers.LlmAssistantMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmAssistantMessage.operator ==(Harbor.Abstractions.Providers.LlmAssistantMessage? left, Harbor.Abstractions.Providers.LlmAssistantMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmContentBlock.operator !=(Harbor.Abstractions.Providers.LlmContentBlock? left, Harbor.Abstractions.Providers.LlmContentBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmContentBlock.operator ==(Harbor.Abstractions.Providers.LlmContentBlock? left, Harbor.Abstractions.Providers.LlmContentBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmImageBlock.operator !=(Harbor.Abstractions.Providers.LlmImageBlock? left, Harbor.Abstractions.Providers.LlmImageBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmImageBlock.operator ==(Harbor.Abstractions.Providers.LlmImageBlock? left, Harbor.Abstractions.Providers.LlmImageBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmMessage.operator !=(Harbor.Abstractions.Providers.LlmMessage? left, Harbor.Abstractions.Providers.LlmMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmMessage.operator ==(Harbor.Abstractions.Providers.LlmMessage? left, Harbor.Abstractions.Providers.LlmMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmRequest.operator !=(Harbor.Abstractions.Providers.LlmRequest? left, Harbor.Abstractions.Providers.LlmRequest? right) -> bool
+static Harbor.Abstractions.Providers.LlmRequest.operator ==(Harbor.Abstractions.Providers.LlmRequest? left, Harbor.Abstractions.Providers.LlmRequest? right) -> bool
+static Harbor.Abstractions.Providers.LlmRequestBuilder.ForSummary(string! model, string! prompt, string! systemPrompt, int maxOutputTokens) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+static Harbor.Abstractions.Providers.LlmRequestBuilder.ForTurn(string! model, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.LlmMessage!>! messages, string! systemPrompt, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Providers.ToolDefinition!>! tools, int? maxOutputTokens, decimal? temperature, Harbor.Abstractions.Models.ReasoningEffort? reasoningEffort) -> Harbor.Abstractions.Providers.LlmRequestBuilder!
+static Harbor.Abstractions.Providers.LlmTextBlock.operator !=(Harbor.Abstractions.Providers.LlmTextBlock? left, Harbor.Abstractions.Providers.LlmTextBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmTextBlock.operator ==(Harbor.Abstractions.Providers.LlmTextBlock? left, Harbor.Abstractions.Providers.LlmTextBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmThinkingBlock.operator !=(Harbor.Abstractions.Providers.LlmThinkingBlock? left, Harbor.Abstractions.Providers.LlmThinkingBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmThinkingBlock.operator ==(Harbor.Abstractions.Providers.LlmThinkingBlock? left, Harbor.Abstractions.Providers.LlmThinkingBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolCallBlock.operator !=(Harbor.Abstractions.Providers.LlmToolCallBlock? left, Harbor.Abstractions.Providers.LlmToolCallBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolCallBlock.operator ==(Harbor.Abstractions.Providers.LlmToolCallBlock? left, Harbor.Abstractions.Providers.LlmToolCallBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolResultBlock.operator !=(Harbor.Abstractions.Providers.LlmToolResultBlock? left, Harbor.Abstractions.Providers.LlmToolResultBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolResultBlock.operator ==(Harbor.Abstractions.Providers.LlmToolResultBlock? left, Harbor.Abstractions.Providers.LlmToolResultBlock? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolResultMessage.operator !=(Harbor.Abstractions.Providers.LlmToolResultMessage? left, Harbor.Abstractions.Providers.LlmToolResultMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmToolResultMessage.operator ==(Harbor.Abstractions.Providers.LlmToolResultMessage? left, Harbor.Abstractions.Providers.LlmToolResultMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmUserMessage.Text(string! text) -> Harbor.Abstractions.Providers.LlmUserMessage!
+static Harbor.Abstractions.Providers.LlmUserMessage.operator !=(Harbor.Abstractions.Providers.LlmUserMessage? left, Harbor.Abstractions.Providers.LlmUserMessage? right) -> bool
+static Harbor.Abstractions.Providers.LlmUserMessage.operator ==(Harbor.Abstractions.Providers.LlmUserMessage? left, Harbor.Abstractions.Providers.LlmUserMessage? right) -> bool
+static Harbor.Abstractions.Providers.ProviderHealth.operator !=(Harbor.Abstractions.Providers.ProviderHealth left, Harbor.Abstractions.Providers.ProviderHealth right) -> bool
+static Harbor.Abstractions.Providers.ProviderHealth.operator ==(Harbor.Abstractions.Providers.ProviderHealth left, Harbor.Abstractions.Providers.ProviderHealth right) -> bool
+static Harbor.Abstractions.Providers.ProviderRegistryResolve.ResolveClient(this Harbor.Abstractions.Providers.IProviderRegistry! registry, string? providerId) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient!>
+static Harbor.Abstractions.Providers.ToolDefinition.operator !=(Harbor.Abstractions.Providers.ToolDefinition? left, Harbor.Abstractions.Providers.ToolDefinition? right) -> bool
+static Harbor.Abstractions.Providers.ToolDefinition.operator ==(Harbor.Abstractions.Providers.ToolDefinition? left, Harbor.Abstractions.Providers.ToolDefinition? right) -> bool
+static Harbor.Abstractions.Resilience.TransientFailurePolicy.BackoffDelay(int failedAttempt) -> System.TimeSpan
+static Harbor.Abstractions.Resilience.TransientFailurePolicy.ShouldRetry(System.Exception! error) -> bool
+static Harbor.Abstractions.Results.ResultErrors.Message(System.Exception! ex) -> string!
+static Harbor.Abstractions.Sessions.CompactionResult.operator !=(Harbor.Abstractions.Sessions.CompactionResult? left, Harbor.Abstractions.Sessions.CompactionResult? right) -> bool
+static Harbor.Abstractions.Sessions.CompactionResult.operator ==(Harbor.Abstractions.Sessions.CompactionResult? left, Harbor.Abstractions.Sessions.CompactionResult? right) -> bool
+static Harbor.Abstractions.Sessions.ContextFile.operator !=(Harbor.Abstractions.Sessions.ContextFile? left, Harbor.Abstractions.Sessions.ContextFile? right) -> bool
+static Harbor.Abstractions.Sessions.ContextFile.operator ==(Harbor.Abstractions.Sessions.ContextFile? left, Harbor.Abstractions.Sessions.ContextFile? right) -> bool
+static Harbor.Abstractions.Sessions.SessionCheckpoint.operator !=(Harbor.Abstractions.Sessions.SessionCheckpoint? left, Harbor.Abstractions.Sessions.SessionCheckpoint? right) -> bool
+static Harbor.Abstractions.Sessions.SessionCheckpoint.operator ==(Harbor.Abstractions.Sessions.SessionCheckpoint? left, Harbor.Abstractions.Sessions.SessionCheckpoint? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryHit.operator !=(Harbor.Abstractions.Sessions.SessionQueryHit? left, Harbor.Abstractions.Sessions.SessionQueryHit? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryHit.operator ==(Harbor.Abstractions.Sessions.SessionQueryHit? left, Harbor.Abstractions.Sessions.SessionQueryHit? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryOptions.operator !=(Harbor.Abstractions.Sessions.SessionQueryOptions? left, Harbor.Abstractions.Sessions.SessionQueryOptions? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryOptions.operator ==(Harbor.Abstractions.Sessions.SessionQueryOptions? left, Harbor.Abstractions.Sessions.SessionQueryOptions? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryResult.operator !=(Harbor.Abstractions.Sessions.SessionQueryResult? left, Harbor.Abstractions.Sessions.SessionQueryResult? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryResult.operator ==(Harbor.Abstractions.Sessions.SessionQueryResult? left, Harbor.Abstractions.Sessions.SessionQueryResult? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryWindow.Unbounded.get -> Harbor.Abstractions.Sessions.SessionQueryWindow!
+static Harbor.Abstractions.Sessions.SessionQueryWindow.operator !=(Harbor.Abstractions.Sessions.SessionQueryWindow? left, Harbor.Abstractions.Sessions.SessionQueryWindow? right) -> bool
+static Harbor.Abstractions.Sessions.SessionQueryWindow.operator ==(Harbor.Abstractions.Sessions.SessionQueryWindow? left, Harbor.Abstractions.Sessions.SessionQueryWindow? right) -> bool
+static Harbor.Abstractions.Sessions.SessionRewindOutcome.operator !=(Harbor.Abstractions.Sessions.SessionRewindOutcome? left, Harbor.Abstractions.Sessions.SessionRewindOutcome? right) -> bool
+static Harbor.Abstractions.Sessions.SessionRewindOutcome.operator ==(Harbor.Abstractions.Sessions.SessionRewindOutcome? left, Harbor.Abstractions.Sessions.SessionRewindOutcome? right) -> bool
+static Harbor.Abstractions.Sessions.SkillDescriptor.operator !=(Harbor.Abstractions.Sessions.SkillDescriptor? left, Harbor.Abstractions.Sessions.SkillDescriptor? right) -> bool
+static Harbor.Abstractions.Sessions.SkillDescriptor.operator ==(Harbor.Abstractions.Sessions.SkillDescriptor? left, Harbor.Abstractions.Sessions.SkillDescriptor? right) -> bool
+static Harbor.Abstractions.Sessions.SystemPromptContext.operator !=(Harbor.Abstractions.Sessions.SystemPromptContext? left, Harbor.Abstractions.Sessions.SystemPromptContext? right) -> bool
+static Harbor.Abstractions.Sessions.SystemPromptContext.operator ==(Harbor.Abstractions.Sessions.SystemPromptContext? left, Harbor.Abstractions.Sessions.SystemPromptContext? right) -> bool
+static Harbor.Abstractions.Sessions.TokenStats.operator !=(Harbor.Abstractions.Sessions.TokenStats? left, Harbor.Abstractions.Sessions.TokenStats? right) -> bool
+static Harbor.Abstractions.Sessions.TokenStats.operator ==(Harbor.Abstractions.Sessions.TokenStats? left, Harbor.Abstractions.Sessions.TokenStats? right) -> bool
+static Harbor.Abstractions.Terminal.TerminalPaneRequest.InteractiveShell(string! workingDirectory, string! shellExecutable) -> Harbor.Abstractions.Terminal.TerminalPaneRequest!
+static Harbor.Abstractions.Terminal.TerminalPaneRequest.operator !=(Harbor.Abstractions.Terminal.TerminalPaneRequest? left, Harbor.Abstractions.Terminal.TerminalPaneRequest? right) -> bool
+static Harbor.Abstractions.Terminal.TerminalPaneRequest.operator ==(Harbor.Abstractions.Terminal.TerminalPaneRequest? left, Harbor.Abstractions.Terminal.TerminalPaneRequest? right) -> bool
+static Harbor.Abstractions.Tools.JsonArgValidator.HasNonEmptyArray(System.Text.Json.JsonElement args, string! name) -> bool
+static Harbor.Abstractions.Tools.JsonArgValidator.HasString(System.Text.Json.JsonElement args, string! name) -> bool
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalBool(System.Text.Json.JsonElement args, string! name, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalEnum(System.Text.Json.JsonElement args, string! name, System.Collections.Generic.IReadOnlyCollection<string!>! valid, string! invalidMessage, System.StringComparison comparison = System.StringComparison.Ordinal) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalIntAtLeast(System.Text.Json.JsonElement args, string! name, int min, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalIntInRange(System.Text.Json.JsonElement args, string! name, int min, int max, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalNumber(System.Text.Json.JsonElement args, string! name, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.OptionalObject(System.Text.Json.JsonElement args, string! name, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredBool(System.Text.Json.JsonElement args, string! name, string! missingMessage) -> CSharpFunctionalExtensions.Result<bool>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredEnum(System.Text.Json.JsonElement args, string! name, string! missingMessage, System.Collections.Generic.IReadOnlyCollection<string!>! valid, System.Func<string!, string!>! unknownMessage, System.StringComparison comparison = System.StringComparison.Ordinal) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredInt(System.Text.Json.JsonElement args, string! name, string! missingMessage) -> CSharpFunctionalExtensions.Result<int>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredNonBlankString(System.Text.Json.JsonElement args, string! name, string! missingMessage, string! blankMessage) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredNonEmptyString(System.Text.Json.JsonElement args, string! name, string! missingMessage) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredNumber(System.Text.Json.JsonElement args, string! name, string! message) -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredPath(System.Text.Json.JsonElement args, string! name = "path", string! missingMessage = "Missing or empty 'path'.") -> CSharpFunctionalExtensions.Result
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredString(System.Text.Json.JsonElement args, string! name, string! missingMessage) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.JsonArgValidator.RequiredStringPresent(System.Text.Json.JsonElement args, string! name, string! missingMessage) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.JsonArgs.GetBool(System.Text.Json.JsonElement args, string! name) -> bool
+static Harbor.Abstractions.Tools.JsonArgs.GetBoolOrNull(System.Text.Json.JsonElement args, string! name) -> bool?
+static Harbor.Abstractions.Tools.JsonArgs.GetClampedInt(System.Text.Json.JsonElement args, string! name, int min, int max, int defaultValue) -> int
+static Harbor.Abstractions.Tools.JsonArgs.GetFirstString(System.Text.Json.JsonElement args, params string![]! names) -> string?
+static Harbor.Abstractions.Tools.JsonArgs.GetInt(System.Text.Json.JsonElement args, string! name) -> int?
+static Harbor.Abstractions.Tools.JsonArgs.GetObject(System.Text.Json.JsonElement args, string! name) -> System.Text.Json.JsonElement
+static Harbor.Abstractions.Tools.JsonArgs.GetString(System.Text.Json.JsonElement args, string! name) -> string?
+static Harbor.Abstractions.Tools.JsonArgs.RequireInt(System.Text.Json.JsonElement args, string! name) -> CSharpFunctionalExtensions.Result<int>
+static Harbor.Abstractions.Tools.JsonArgs.RequireString(System.Text.Json.JsonElement args, string! name) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.McpServerInstructions.operator !=(Harbor.Abstractions.Tools.McpServerInstructions? left, Harbor.Abstractions.Tools.McpServerInstructions? right) -> bool
+static Harbor.Abstractions.Tools.McpServerInstructions.operator ==(Harbor.Abstractions.Tools.McpServerInstructions? left, Harbor.Abstractions.Tools.McpServerInstructions? right) -> bool
+static Harbor.Abstractions.Tools.MimeTypes.IsAudio(string? mime) -> bool
+static Harbor.Abstractions.Tools.MimeTypes.IsImage(string? mime) -> bool
+static Harbor.Abstractions.Tools.MimeTypes.IsVideo(string? mime) -> bool
+static Harbor.Abstractions.Tools.TaskFireAndForget.Forget(System.Threading.Tasks.Task! task, System.Action<System.Exception!>? onError = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> void
+static Harbor.Abstractions.Tools.ToolContext.operator !=(Harbor.Abstractions.Tools.ToolContext? left, Harbor.Abstractions.Tools.ToolContext? right) -> bool
+static Harbor.Abstractions.Tools.ToolContext.operator ==(Harbor.Abstractions.Tools.ToolContext? left, Harbor.Abstractions.Tools.ToolContext? right) -> bool
+static Harbor.Abstractions.Tools.ToolDescriptor.operator !=(Harbor.Abstractions.Tools.ToolDescriptor? left, Harbor.Abstractions.Tools.ToolDescriptor? right) -> bool
+static Harbor.Abstractions.Tools.ToolDescriptor.operator ==(Harbor.Abstractions.Tools.ToolDescriptor? left, Harbor.Abstractions.Tools.ToolDescriptor? right) -> bool
+static Harbor.Abstractions.Tools.ToolErrors.Handler(string! tool, System.Threading.CancellationToken ct, System.TimeSpan? timeout = null, string? failurePrefix = null) -> System.Func<System.Exception!, string!>!
+static Harbor.Abstractions.Tools.ToolErrors.KillQuietly(System.Diagnostics.Process! process, Microsoft.Extensions.Logging.ILogger? logger = null) -> void
+static Harbor.Abstractions.Tools.ToolPaths.Resolve(string! rawPath) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.ToolPaths.ResolveAgainst(string? baseDirectory, string! rawPath) -> CSharpFunctionalExtensions.Result<string!>
+static Harbor.Abstractions.Tools.ToolProgressUpdate.operator !=(Harbor.Abstractions.Tools.ToolProgressUpdate? left, Harbor.Abstractions.Tools.ToolProgressUpdate? right) -> bool
+static Harbor.Abstractions.Tools.ToolProgressUpdate.operator ==(Harbor.Abstractions.Tools.ToolProgressUpdate? left, Harbor.Abstractions.Tools.ToolProgressUpdate? right) -> bool
+static Harbor.Abstractions.Tui.KeyPress.operator !=(Harbor.Abstractions.Tui.KeyPress? left, Harbor.Abstractions.Tui.KeyPress? right) -> bool
+static Harbor.Abstractions.Tui.KeyPress.operator ==(Harbor.Abstractions.Tui.KeyPress? left, Harbor.Abstractions.Tui.KeyPress? right) -> bool
+static Harbor.Abstractions.Tui.QrMatrix.Encode(string! text) -> bool[,]!
+static readonly Harbor.Abstractions.Resilience.TransientFailurePolicy.DefaultFirstRetryDelay -> System.TimeSpan
+virtual Harbor.Abstractions.Providers.LlmContentBlock.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Providers.LlmContentBlock.Equals(Harbor.Abstractions.Providers.LlmContentBlock? other) -> bool
+virtual Harbor.Abstractions.Providers.LlmContentBlock.PrintMembers(System.Text.StringBuilder! builder) -> bool
+virtual Harbor.Abstractions.Providers.LlmMessage.EqualityContract.get -> System.Type!
+virtual Harbor.Abstractions.Providers.LlmMessage.Equals(Harbor.Abstractions.Providers.LlmMessage? other) -> bool
+virtual Harbor.Abstractions.Providers.LlmMessage.PrintMembers(System.Text.StringBuilder! builder) -> bool
+~override Harbor.Abstractions.Providers.ProviderHealth.Equals(object obj) -> bool
+~override Harbor.Abstractions.Providers.ProviderHealth.ToString() -> string
