@@ -48,7 +48,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     /// <param name="label">Optional human label.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The recorded checkpoint, or failure if the message is not found.</returns>
-    private async Task<Result<SessionCheckpoint>> CaptureCheckpointAsync(
+    internal async Task<Result<SessionCheckpoint>> CaptureCheckpointAsync(
         string sessionId, string sessionFile, string messageId, string? label, CancellationToken ct)
     {
         var messagesResult = await GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
@@ -81,7 +81,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         var memento = new SessionCheckpointMemento(
             Guid.NewGuid().ToString("N"), messageId, index, DateTimeOffset.UtcNow, label);
 
-        var appended = await AppendCheckpointEntryAsync(
+        var appended = await _checkpoints.AppendCheckpointEntryAsync(
                 sessionId, sessionFile, SessionCheckpointMapperKit.ToRow(memento), ct)
             .ConfigureAwait(false);
         if (appended.IsFailure)
@@ -110,7 +110,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     /// <param name="checkpointId">Id of the checkpoint to restore.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>How many messages were dropped and how many remain.</returns>
-    private async Task<Result<SessionRewindOutcome>> RestoreCheckpointAsync(
+    internal async Task<Result<SessionRewindOutcome>> RestoreCheckpointAsync(
         string sessionId, string sessionFile, string checkpointId, CancellationToken ct)
     {
         var listed = await ListCheckpointsAsync(sessionId, ct).ConfigureAwait(false);
@@ -144,7 +144,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         int removed = truncated.Value;
 #pragma warning restore CFE0001
 
-        var trailed = await AppendCheckpointEntryAsync(
+        var trailed = await _checkpoints.AppendCheckpointEntryAsync(
                 sessionId, sessionFile,
                 SessionCheckpointMapperKit.ToTrailRow(memento, removed, DateTimeOffset.UtcNow), ct)
             .ConfigureAwait(false);
