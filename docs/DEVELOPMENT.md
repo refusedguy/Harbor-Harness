@@ -173,7 +173,7 @@ policy is not a paragraph a reviewer has to remember.
 
 ```bash
 ./tools/check-gate-policy.py --self-test   # each rule still fires
-./tools/check-gate-policy.py --min-gates 23
+./tools/check-gate-policy.py --min-gates 27
 ```
 
 A new `tools/check-*.py` needs the "why python" line in its header, a row in

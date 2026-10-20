@@ -153,6 +153,15 @@ STEP_RE = re.compile(r"^      - ")
 # A `tools/<name>.py` mention.
 TOOL_RE = re.compile(r"tools/([A-Za-z0-9_.\-]+\.py)")
 
+# The INVOCATION, as opposed to a mention. A step can name a tool in a
+# message without running it — ci.yml's shard step says, in an echo, that
+# "tools/ci-shard-slices.py checks the two lists" — and counting that as an
+# invocation would put a job in the table that does not exist. An invocation
+# is a `python3` that is followed by the tool.
+INVOKE_RE = re.compile(
+    r"python3(?:\s+-[^\s]+)*\s+tools/([A-Za-z0-9_.\-]+\.py)"
+)
+
 # A subprocess call that would pull the SDK into a gate.
 DOTNET_CALL_RE = re.compile(
     r"(?:subprocess\.(?:run|call|check_call|check_output|Popen)"
@@ -322,16 +331,17 @@ def parse_workflow(text: str) -> tuple[list[str], list[Invocation]]:
             step = []
             return
         command = step_command("\n".join(step))
-        if "python3" in command:
-            for match in TOOL_RE.finditer(command):
-                invocations.append(
-                    Invocation(
-                        workflow="",
-                        job=job,
-                        script=match.group(1),
-                        args=command[match.end():].strip(),
-                    )
+        matches = list(INVOKE_RE.finditer(command))
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(command)
+            invocations.append(
+                Invocation(
+                    workflow="",
+                    job=job,
+                    script=match.group(1),
+                    args=command[match.end():end].strip(),
                 )
+            )
         step = []
 
     for line in text.splitlines():
@@ -454,15 +464,30 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
             continue
         documented[script] = {key: unquote(value) for key, value in row.items()}
 
-    # Every script CI runs is in the table.
-    for script in sorted(invoked):
-        path = f"tools/{script}"
-        if path not in documented:
-            places = sorted({f"{i.workflow} · {i.job}" for i in invoked[script]})
+    # Every script CI runs is in the table, and every python script in
+    # tools/ is one of the two: run by CI, or listed as a tool that is not.
+    # A script that is neither is a script nobody runs and nobody reviews.
+    tools_dir = os.path.join(repo, "tools")
+    names = sorted(name for name in os.listdir(tools_dir)
+                   if name.endswith(".py")) if os.path.isdir(tools_dir) else []
+    for name in names:
+        path = f"tools/{name}"
+        if path in documented:
+            continue
+        if name in invoked:
+            places = sorted({f"{i.workflow} · {i.job}" for i in invoked[name]})
             findings.append(Finding(
                 "POLICY-SCRIPT-UNDOCUMENTED",
                 f"{path} is run by CI ({', '.join(places)}) and is not in the "
                 f"table in {TABLE_DOC}",
+                path,
+            ))
+        else:
+            findings.append(Finding(
+                "POLICY-SCRIPT-UNDOCUMENTED",
+                f"{path} is a python tool in tools/ that no workflow runs, and "
+                f"the table does not list it — either wire it up or say in the "
+                f"table that it is a tool a human runs",
                 path,
             ))
 
