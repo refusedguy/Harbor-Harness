@@ -63,6 +63,7 @@ WHAT IT IS NOT
 Usage:
   ./tools/test-census.py TestResults/core                       # markdown
   ./tools/test-census.py TestResults --format csv > census.csv   # sortable
+  ./tools/test-census.py TestResults --format csv | sort -t, -k5 -nr | head -30
   ./tools/test-census.py TestResults --summary "$GITHUB_STEP_SUMMARY"
   ./tools/test-census.py TestResults --top 40                    # slowest tests
   ./tools/test-census.py TestResults --self-test                # offline
