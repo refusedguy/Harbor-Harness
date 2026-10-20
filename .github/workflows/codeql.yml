@@ -7,17 +7,33 @@
 # leaks in commits.
 name: codeql
 
+# The pull_request trigger was removed (owner decision, 2026-10-20).
+#
+# A PR's merge commit and the push to dev carry the same content, so the
+# mainline scan sees exactly what a PR-lane scan would have seen, one step
+# later. What the PR lane cost, measured over the last 24 h: 11.5
+# runner-minutes per attempt (mean of 17 runs) and an 11-minute hold on a
+# runner slot, in a pool whose queueing is our real bottleneck. At 20 open
+# PRs that is 20 slots held for 11 minutes each. No ruleset is enforced on
+# dev/master, so the PR-lane result gated nothing: it was advice, not a
+# check.
+#
+# The mainline scan is therefore the security gate: every push to dev and
+# to master is scanned, and the weekly cron covers the branches that did
+# not move.
+#
+# To restore the early warning, re-add exactly this block:
+#   pull_request:
+#     branches: [master, dev]
+#     paths:
+#       - "src/**"
+#       - "apps/**"
+#       - ".github/workflows/codeql.yml"
 on:
   push:
     branches: [master, dev]
-  pull_request:
-    branches: [master, dev]
-    paths:
-      - "src/**"
-      - "apps/**"
-      - ".github/workflows/codeql.yml"
   schedule:
-    - cron: "17 3 * * 1" # Mondays 03:17 UTC — off-peak
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC, off-peak
 
 # The other PR-triggered workflows all carry a `concurrency` group with
 # cancel-in-progress; this one did not, so a superseded CodeQL run kept
