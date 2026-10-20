@@ -87,15 +87,49 @@ public sealed class LspClient : IAsyncDisposable
     ///     Sends a request and awaits the server's result. The returned
     ///     <see cref="JsonElement"/> is a clone — valid after the frame is freed.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>The pending entry is registered BEFORE the frame goes out</b>
+    ///         (#1885). The frame is on the pipe as soon as the write returns,
+    ///         and the reader loop can pick the answer up before this method
+    ///         reaches the line that registers the waiter — the answer is
+    ///         delivered while the writer is still inside
+    ///         <see cref="WriteFrameAsync" />. Registering afterwards dropped
+    ///         that answer on the floor: the reader found no entry for the id
+    ///         and discarded the frame, and the requester then waited for a
+    ///         reply that had already been thrown away. The wait was unbounded,
+    ///         so a lost answer was a HUNG session rather than a failed one.
+    ///     </para>
+    ///     <para>
+    ///         The window is narrow in a warm process and wide in a slow one
+    ///         (instrumented, contended, cold), which is why this read as a
+    ///         flake and not as a break. <c>MessagePackRpcClient</c> in the IPC
+    ///         client registers its waiter in the same order and keeps the same
+    ///         "the request never made it to the wire" cleanup; this method
+    ///         now matches it.
+    ///     </para>
+    /// </remarks>
     public async Task<JsonElement?> SendRequestAsync(string method, object? parameters, CancellationToken ct = default)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
 
         int id = Interlocked.Increment(ref _nextId);
-        await WriteFrameAsync(BuildFrame("2.0", id, method, parameters), ct).ConfigureAwait(false);
-
         var tcs = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Register FIRST: the answer can arrive before the write returns.
         _pending[id] = tcs;
+
+        try
+        {
+            await WriteFrameAsync(BuildFrame("2.0", id, method, parameters), ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The request never made it to the wire — no answer can arrive, so
+            // the entry must not linger (same discipline as MessagePackRpcClient).
+            _ = _pending.TryRemove(id, out _);
+            throw;
+        }
 
         try
         {
@@ -220,7 +254,61 @@ public sealed class LspClient : IAsyncDisposable
         }
 
         LspClientLog.ReadLoopExited(_logger);
-        Disconnected?.Invoke(this, EventArgs.Empty);
+        RaiseDisconnected();
+    }
+
+    /// <summary>
+    ///     Dispatch a server notification to every subscriber, one at a time.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A subscriber that throws must not take the READ LOOP down with
+    ///         it. The loop that reads the child's stdout is the only thing
+    ///         keeping that child from blocking on a full pipe, so a fault in a
+    ///         notification handler is contained here: the loop keeps draining,
+    ///         the other subscribers still run, and the fault is logged.
+    ///     </para>
+    ///     <para>
+    ///         The same isolation applies to <see cref="Disconnected" />: a
+    ///         throwing subscriber there would otherwise stop the subscribers
+    ///         after it from running — including the one that kills a child
+    ///         whose pipe is no longer being drained.
+    ///     </para>
+    /// </remarks>
+    private void RaiseServerNotification(LspNotificationEventArgs args)
+    {
+        EventHandler<LspNotificationEventArgs>? handlers = ServerNotification;
+        if (handlers is null) return;
+
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler<LspNotificationEventArgs>)handler)(this, args);
+            }
+            catch (Exception ex)
+            {
+                LspClientLog.SubscriberFaulted(_logger, ex);
+            }
+        }
+    }
+
+    private void RaiseDisconnected()
+    {
+        EventHandler? handlers = Disconnected;
+        if (handlers is null) return;
+
+        foreach (Delegate handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                ((EventHandler)handler)(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                LspClientLog.SubscriberFaulted(_logger, ex);
+            }
+        }
     }
 
     private void HandleFrame(JsonElement root)
@@ -229,7 +317,7 @@ public sealed class LspClient : IAsyncDisposable
         if (root.TryGetProperty("method", out JsonElement methodEl) && methodEl.ValueKind == JsonValueKind.String)
         {
             JsonElement paramsElement = root.TryGetProperty("params", out JsonElement p) ? p.Clone() : default;
-            ServerNotification?.Invoke(this, new LspNotificationEventArgs(methodEl.GetString()!, paramsElement));
+            RaiseServerNotification(new LspNotificationEventArgs(methodEl.GetString()!, paramsElement));
             return;
         }
 
@@ -396,6 +484,9 @@ internal static partial class LspClientLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "LSP read loop exited")]
     public static partial void ReadLoopExited(ILogger logger);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "LSP event subscriber faulted; contained, the read loop keeps draining")]
+    public static partial void SubscriberFaulted(ILogger logger, Exception ex);
 }
 
 /// <summary>The language server answered a request with a JSON-RPC error.</summary>

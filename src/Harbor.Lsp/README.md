@@ -49,10 +49,12 @@ Supporting types:
   Static presets (`TypeScript`, `Python`, `Go`, `Rust`, `CSharp`, `Clangd`,
   `Java`, `Html`, `Css`, `Json`, `Lua`) and the `Builtin` list.
 - `LspServerSession` — one live server process. `StartAsync` spawns it and
-  completes the `initialize` handshake within `InitializeTimeout` (15s,
-  `LspServerSession.cs:17`); then `OpenAsync`/`ChangeAsync`/`CloseAsync`,
+  completes the `initialize` handshake within `InitializeTimeout` (15s);
+  then `OpenAsync`/`ChangeAsync`/`CloseAsync`,
   `FindDefinitionAsync`/`FindReferencesAsync`, `GetDiagnostics(filePath)`, and
   the `DiagnosticsChanged` event. `FileUri`/`FromUri` convert paths.
+  Every operation is bounded by `DefaultRequestTimeout` (15s) and reports a
+  stalled server as a `Result.Failure`, never as a wait that never ends.
 - `LspClient` — the raw JSON-RPC transport over a pair of streams:
   `Start()`, `SendRequestAsync`, `SendNotificationAsync`, plus
   `ServerNotification` and `Disconnected` events. `LspRequestException` is the
@@ -137,6 +139,14 @@ any other project. Enforced by `tests/Harbor.Architecture.Tests`.
   definition.
 - Failure handling uses ROP boundaries (`Result`) rather than exceptions for
   expected server errors; `LspRequestException` is reserved for transport faults.
+- **A session operation cannot wait forever.** `OpenAsync`, `ChangeAsync`,
+  `CloseAsync`, `FindDefinitionAsync` and `FindReferencesAsync` run under
+  `DefaultRequestTimeout` (15s, per session, overridable through
+  `StartAsync(..., requestTimeout)`) and return `Result.Failure` with a
+  `request-timeout` reason when the server does not answer. The caller's
+  `CancellationToken` still wins over the deadline and travels on unchanged.
+  `LspManager` keeps its own 15s lookup ceiling, so the public
+  `ILspService` surface is unchanged.
 
 ## See also
 

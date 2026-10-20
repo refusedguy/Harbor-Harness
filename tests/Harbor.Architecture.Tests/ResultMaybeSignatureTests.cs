@@ -73,7 +73,8 @@ public class ResultMaybeSignatureTests
     ///     <para>
     ///     Unwrapping a <c>Maybe&lt;T&gt;</c> back to a nullable reference is
     ///     <c>m.HasValue ? m.Value : null</c> — the pattern
-    ///     <c>src/Harbor.Lsp/LspServerSession.cs:229</c> already uses. Do
+    ///     <c>src/Harbor.Lsp/LspManager.cs</c> already uses, in
+    ///     <c>FindDefinitionAsync</c>. Do
     ///     <b>not</b> reach for <c>.AsNullable()</c>: in 3.7.0 it is declared
     ///     <c>AsNullable&lt;T&gt;(ref Maybe&lt;T&gt;) where T : struct</c>, so it does
     ///     not apply to a reference-type <c>T</c> at all and the build rejects it
