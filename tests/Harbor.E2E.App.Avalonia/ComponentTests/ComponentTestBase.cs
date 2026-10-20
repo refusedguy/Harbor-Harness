@@ -31,7 +31,11 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///     <para>
 ///         <b>Concurrency:</b> the driver mutates <c>$HOME</c> and shares the
 ///         process-wide Avalonia <c>Application</c> singleton, so derived
-///         classes MUST be tagged <c>[NotInParallel]</c>.
+///         classes MUST be tagged <c>[NotInParallel]</c>. The project runs as
+///         several PROCESSES in CI (see <c>e2e-shards.json</c>): the key keeps
+///         the classes of one shard in turn inside that shard's process, and
+///         the process boundary is what lets two shards run side by side at
+///         all.
 ///     </para>
 /// </remarks>
 public abstract class ComponentTestBase
@@ -41,10 +45,22 @@ public abstract class ComponentTestBase
     ///     see the latest run. Distinct from <c>test-screenshots/</c> and
     ///     <c>test-screenshots-comp/</c> used by other suites.
     /// </summary>
-    protected static readonly string ScreenshotDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".harbor",
-        "test-screenshots-comp-ct");
+    /// <remarks>
+    ///     <para>
+    ///         In a sharded run (CI runs this project as several processes -
+    ///         see <c>e2e-shards.json</c>) the root is this process's OWN
+    ///         directory, and each class takes a sub-directory of it. That
+    ///         matters because the per-class directory is DELETED on init:
+    ///         with a shared root, one process's init would remove the frames
+    ///         another process had just written. See <see cref="E2eShardPaths" />.
+    ///     </para>
+    /// </remarks>
+    protected static readonly string ScreenshotDir = E2eShardPaths.Screenshots(
+        "component-ct",
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".harbor",
+            "test-screenshots-comp-ct"));
 
     /// <summary>Root folder holding one sub-directory per test class.</summary>
     protected static readonly string ScreenshotRoot = ScreenshotDir;
@@ -80,9 +96,13 @@ public abstract class ComponentTestBase
         }
         Directory.CreateDirectory(shotDir);
 
+        // The shard suffix keeps this class's temp HOME distinct per PROCESS.
+        // Inside one process the owner key alone is enough (each class has its
+        // own key), but two processes that ran the same class would otherwise
+        // share - and delete - one temp HOME.
         string tempHome = Path.Combine(
             Path.GetTempPath(),
-            $"harbor-avalonia-ct-{ownerKey.ToLowerInvariant()}");
+            $"harbor-avalonia-ct-{ownerKey.ToLowerInvariant()}{E2eShardPaths.ProcessSuffix}");
         if (Directory.Exists(tempHome))
         {
             Directory.Delete(tempHome, recursive: true);

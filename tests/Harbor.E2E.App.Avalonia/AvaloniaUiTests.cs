@@ -59,8 +59,18 @@ public sealed class AvaloniaUiTests
     ///     <c>docs/screenshots/</c> so screenshots persist after the test run
     ///     and are available for review / CI artifact upload.
     /// </summary>
-    private static readonly string ScreenshotDir = Path.Combine(
-        E2EHelpers.FindRepoRoot(), "docs", "screenshots");
+    /// <remarks>
+    ///     <para>
+    ///         When the suite runs as ONE process (a local run) this is the
+    ///         repo's <c>docs/screenshots/</c>, unchanged. When it runs as
+    ///         several shards (CI), each process gets a directory of its own:
+    ///         the delete below would otherwise remove the frames another
+    ///         shard had just written. See <see cref="E2eShardPaths" />.
+    ///     </para>
+    /// </remarks>
+    private static readonly string ScreenshotDir = E2eShardPaths.Screenshots(
+        "avalonia-ui",
+        Path.Combine(E2EHelpers.FindRepoRoot(), "docs", "screenshots"));
 
     /// <summary>Per-class temp HOME so each test run starts with an empty <c>~/.harbor</c>.</summary>
     private static readonly string TempHome = Path.Combine(
@@ -93,6 +103,10 @@ public sealed class AvaloniaUiTests
         // Wipe only our own screenshot files so stale frames from a previous
         // run don't confuse review, but leave any manually-added or non-test
         // files intact (docs/screenshots/ may contain baseline/reference images).
+        //
+        // The scope of the delete is this class's OWN directory: in a sharded
+        // run that directory belongs to this process alone, so the wipe can
+        // never remove a frame another shard wrote.
         if (_driver is null)
         {
             if (Directory.Exists(ScreenshotDir))

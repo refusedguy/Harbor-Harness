@@ -1213,7 +1213,13 @@ jobs:
           if [ "${{ matrix.guard }}" = "true" ]; then
             guard="--minimum-expected-tests 1"
           fi
-          trx_dir="TestResults/${{ matrix.shard }}"
+          # The TRX has to land under the WORKSPACE, not under the assembly's
+          # own bin directory: the upload step globs `TestResults/**/*.trx`
+          # from the workspace root, and a relative --results-directory is
+          # resolved against the assembly directory by the test platform -
+          # so a relative path put every TRX where the glob could not see
+          # it, and the shard uploaded no results at all.
+          trx_dir="$GITHUB_WORKSPACE/TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
@@ -1227,6 +1233,24 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
+            elif [ "$p" = "Harbor.E2E.App.Avalonia" ]; then
+              # The headless Avalonia suite runs as ONE PROCESS PER SHARD, not
+              # as one process for the whole project. The Avalonia Application,
+              # the $HOME the driver sets and the pinned Harbor home are all
+              # process-wide, so two classes cannot drive one window in one
+              # process; a second PROCESS can. The shard list is
+              # tests/Harbor.E2E.App.Avalonia/e2e-shards.json, and the runner
+              # fails loudly when a shard's filter drops a class (a filter that
+              # silently drops tests is worse than the serialisation this
+              # removes).
+              if python3 tools/run-e2e-avalonia-shards.py \
+                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                status="pass"
+              else
+                status="FAIL"
+                rc=1
+              fi
+            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
             elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else

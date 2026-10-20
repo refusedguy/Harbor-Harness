@@ -138,10 +138,27 @@ public sealed class SettingsTests : ComponentTestBase
     ///     Cancel: changes to Theme are reverted to the persisted value (dark)
     ///     without saving.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This test was skipped because it was order-dependent under
+    ///         full-suite scheduling: "orphaned dispatcher continuations from
+    ///         previously-initialized hosts mutate <c>Application.Current</c>
+    ///         state between this test's mutation and its Cancel revert
+    ///         (themeBefore flips dark-light nondeterministically).
+    ///         Deterministic fix requires process-per-class isolation".
+    ///     </para>
+    ///     <para>
+    ///         That isolation is what this project's shard plan provides: the
+    ///         class runs in a PROCESS OF ITS OWN (see
+    ///         <c>e2e-shards.json</c> - it is the one class the plan gives a
+    ///         dedicated shard to), so there is no previously-initialised host
+    ///         in the process to leave a continuation behind. The rest of the
+    ///         project runs in the OTHER shards, in parallel with this one.
+    ///     </para>
+    /// </remarks>
     [Test]
     [Category("E2E")]
     [Category("Component")]
-    [Skip("Order-dependent under full-suite scheduling: orphaned dispatcher continuations from previously-initialized hosts mutate Application.Current state between this test's mutation and its Cancel revert (themeBefore flips dark↔light nondeterministically). Deterministic fix requires process-per-class isolation — sprint 6. Solo class run is green.")]
     public async Task Settings_Cancel_RevertsChanges()
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
