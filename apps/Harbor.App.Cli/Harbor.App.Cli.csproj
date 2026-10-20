@@ -272,6 +272,8 @@
          assemblies (Harbor.Application use cases + Harbor.Registries impls);
          reference the real owners directly. -->
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1624: the CLI binds the moved session-context types (prompt builder, workspace probes, session fork). -->
+    <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <!-- #1616: the verified-change verbs (run accept/check/change/report/reject, run task)
          bind the extracted Harbor.ChangeTracking assembly directly. Application does not
          reference it (the direction is ChangeTracking -> Application), so the edge is

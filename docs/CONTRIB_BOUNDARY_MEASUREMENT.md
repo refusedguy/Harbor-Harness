@@ -122,7 +122,7 @@ imports `Harbor.Hosting.Configuration`. **CS0246**, twice per project.
 
 This is a missing *edge*, not a moved type, and it is legal to add: the product
 desktop app `apps/Harbor.App.Avalonia` references `src/Harbor.Hosting` at
-`apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj:91` and constructs the same
+`apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj:95` and constructs the same
 two types. Both constructor signatures still match the call sites, so nothing
 downstream of the reference has drifted.
 

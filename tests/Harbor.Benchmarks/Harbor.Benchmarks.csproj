@@ -38,6 +38,8 @@
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
     <!-- #1623: AgentLoop/RunBudget/StreamingCoalescer benchmarks moved with the agent runtime. -->
     <ProjectReference Include="..\..\src\Harbor.AgentRuntime\Harbor.AgentRuntime.csproj"/>
+    <!-- #1624: binds the moved session-context types directly. -->
+    <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Abstractions\Harbor.Ipc.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ipc.Server\Harbor.Ipc.Server.csproj"/>

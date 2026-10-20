@@ -9,18 +9,27 @@ holds all pure use cases. Depends on `Harbor.Abstractions` + `Harbor.Extensions`
 ## Done
 
 - [x] `AgentLoop` (Chain-of-Responsibility turn loop) - extracted from the old Harbor.Core project
+      (moved to `Harbor.AgentRuntime` by #1623)
 - [x] `DefaultAgent` - stateful IAgent wrapping AgentLoop
+      (moved to `Harbor.AgentRuntime` by #1623)
 - [x] `CompactionService` - anchored-summary compaction
+      (moved to `Harbor.SessionContext` by #1624)
 - [x] `SystemPromptBuilder` - assembles system prompt (identity + tools + agents + MCP + skills)
       plus `CachingSystemPromptBuilder` memoizing decorator (`Sessions/CachingSystemPromptBuilder.cs:31`)
+      (moved to `Harbor.SessionContext` by #1624)
 - [x] `MessageConverter` - domain `AgentMessage` <-> LLM `LlmMessage`
+      (moved to `Harbor.SessionContext` by #1624)
 - [x] Migration out of Harbor.Core complete (the empty facade was deleted in #451)
 - [x] Onboarding: live model catalog during first-run wizard via
       `ProviderPresets` + provider health probes (PROD-UI-0;
       `Configuration/ProviderPresets.cs:11`, `Providers/ProviderHealthCheck.cs:13`)
 - [x] `IProviderHealthCheck` contract implementation (`Providers/ProviderHealthCheck.cs`)
 - [x] Central retry policy helpers for 429/5xx (`Resilience/RetryPolicyExtensions.cs:17`)
+      (the implementations moved to `Harbor.AgentRuntime` by #1623; the contracts
+      `IRetryPolicy` / `RetryOptions` / `IToolRetryDecider` / `IRetryAfterHint`
+      stay here — the session-context cohort reads them)
 - [x] `TokenTracker` / `WorkspaceContextSource` session helpers (`Sessions/`)
+      (moved to `Harbor.SessionContext` by #1624)
 - [x] AGENTLOOP-DECOMP: `ToolDispatcher` extracted from the loop — parallel dispatch,
       sequential fan-out for `ExecutionMode.Sequential` tools, permission gating, per-call
       timeouts (`Agents/ToolDispatcher.cs`, seam `Agents/IToolDispatcher.cs`, DI in CoreModule)

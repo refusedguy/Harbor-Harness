@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
+    <!-- #1624: binds the moved session-context types directly. -->
+    <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
     <!-- WorkspaceMaterializerTests drives BashTool/WriteTool inside a
          materialized worktree; nothing else in this closure ships Tools.Builtin,

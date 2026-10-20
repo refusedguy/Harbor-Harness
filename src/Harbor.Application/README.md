@@ -8,21 +8,22 @@ LLM turns, tool invocations, compaction events, and permission checks.
 
 | File                               | Responsibility                                                                                                          |
 |------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| `Agents/AgentLoop.cs`              | The Chain-of-Responsibility turn loop: prompt → LLM stream → tool execution → compaction → repeat. Turn orchestration only — delegates streaming buffering and tool dispatch to its collaborators below. |
-| `Agents/ToolDispatcher.cs`         | `IToolDispatcher` impl — executes a turn's tool calls: sequential fan-out when any tool declares `ExecutionMode.Sequential`, parallel otherwise; permission-gated, per-call timeout from the agent definition. |
-| `Agents/StreamingCoalescer.cs`     | Streaming-buffer coalescing: accumulates text/thinking/tool-call deltas between raw LLM events and published message updates.           |
-| `Agents/DefaultAgent.cs`           | Stateful `IAgent` implementation that wraps `AgentLoop` with steering, follow-up, and event-bus plumbing.               |
-| `Sessions/CompactionService.cs`    | Anchored-summary compaction: when a session approaches the context window, summarize the head and keep a recent tail.   |
-| `Sessions/SystemPromptBuilder.cs`  | Assembles the system prompt: identity + tool policy + constraints + env + agent + tools + MCP + skills + context files. |
-| `Sessions/MessageConverter.cs`     | Adapter from domain `AgentMessage`s to LLM-specific `LlmMessage`s.                                                      |
-| `Sessions/CachingSystemPromptBuilder.cs` | Memoizing decorator over `ISystemPromptBuilder` — re-assembles the prompt only when inputs change.                    |
-| `Sessions/TokenTracker.cs`         | `ITokenTracker` impl — per-turn usage aggregation (`TokenStats`) plus a running token estimate that keeps `ShouldCompact` O(1).   |
-| `Sessions/WorkspaceContextSource.cs` | Injects workspace context files into the system prompt.                                                                |
+| `Sessions/WorkspaceContextService.cs` | The injectable `IWorkspaceContextSource` — discovers the workspace context files (`AGENTS.md`, `CLAUDE.md`) and the skills the prompt renders. |
+| `Sessions/WorkspacePaths.cs`       | `IWorkspacePaths` — the run-directory layout (`$HARBOR_HOME/runs/<runId>`), extracted from the workspace-materializer hub (#1610). |
 | `Providers/ProviderHealthCheck.cs` | `IProviderHealthCheck` — probes provider endpoints before onboarding/picking a model.                                   |
-| `Resilience/RetryPolicy.cs`        | `IRetryPolicy` impl — retries only transient failures (HTTP 408/429/5xx, network, provider timeouts) with capped exponential backoff (`BaseDelay · 2^(attempt−1)` + optional jitter); fatal errors propagate immediately. |
-| `Resilience/RetryPolicyExtensions.cs` | Central retry policy helpers for transient provider errors — `ExecuteSafeAsync` adapts exception-based retries onto the `Result<T>` railway. |
 | `Telemetry/`                       | Usage telemetry plumbing consumed by the app hosts.                                                                      |
 | `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (the provider picker catalogue, projected from `providers/*.json` by `Configuration/ProviderPresetCatalog.cs` — one declaration per provider, #580).    |
+| `Skills/`                          | `SkillFreshnessSeeder` + `SkillUpdater` — the skill-lifecycle side of the workspace context.                             |
+| `FrontMatter.cs`                   | The single front-matter field reader shared by the skill seeder and the workspace-context service (#1580).              |
+
+Two cohorts that used to live here have their own assemblies, with their
+namespaces kept verbatim so no consumer had to rewrite a `using`:
+
+| Cohort | Assembly | Moved by |
+|---|---|---|
+| `Agents/*`, `Agents/Pipeline/*`, `Resilience/` (implementations) | [`Harbor.AgentRuntime`](../Harbor.AgentRuntime) | #1623 |
+| `Sessions/*` (compaction, prompt assembly, token tracking, workspace probes, session fork), `Skills/SkillProvider.cs` | [`Harbor.SessionContext`](../Harbor.SessionContext) | #1624 |
+
 
 ## Why this project exists
 
@@ -68,18 +69,26 @@ no longer needs a `using` rewrite: the old `Harbor.Core` facade that once
 re-exported them was deleted in #451. The `Harbor.Application.Permissions`
 namespace is the #1615 extraction — the same namespace now lives in the
 sibling `Harbor.Permissions` assembly; `PermissionConfigStoreAdapter`
-implements that subdomain's seam on the Application side.
+implements that subdomain's seam on the Application side. The
+`Harbor.Application.Agents` / `.Resilience` namespaces are the #1623
+extraction (`Harbor.AgentRuntime`), and `Harbor.Application.Sessions` /
+`Harbor.Application.Skills` are the #1624 extraction
+(`Harbor.SessionContext`) — in both cases the namespace is unchanged and the
+types simply live in the sibling assembly now, so a consumer needs the new
+`ProjectReference` and no `using` edit.
 
 ## Performance intent
 
-* `AgentLoop` coalesces streaming deltas in a pooled `StringBuilder` rented from
-  `Harbor.Extensions.StringBuilderPool` (a `ConcurrentBag` pool in this solution)
-  to keep per-delta allocations O(n) instead of O(n²). This bullet used to credit
+* `Harbor.AgentRuntime`'s `AgentLoop` coalesces streaming deltas in a pooled
+  `StringBuilder` rented from `Harbor.Extensions.StringBuilderPool` (a
+  `ConcurrentBag` pool in this solution) to keep per-delta allocations O(n)
+  instead of O(n²). This bullet used to credit
   `CommunityToolkit.HighPerformance` for the pooling; it never provided it, and
   the phantom dependency has been removed from this `.csproj`.
-* `CompactionService` uses index-based cut-points (no `List<T>` slices)
-  and pooled buffers for the summarization prompt.
-* `SystemPromptBuilder` rents a pooled `StringBuilder` per call.
+* `Harbor.SessionContext`'s `CompactionService` uses index-based cut-points (no
+  `List<T>` slices) and pooled buffers for the summarization prompt.
+* `Harbor.SessionContext`'s `SystemPromptBuilder` rents a pooled
+  `StringBuilder` per call.
 * ZLinq drop-in source generator (`ZLinq.DropInGenerator`) emits
   zero-allocation LINQ extension methods; `System.Linq` is removed from
   the implicit-usings list so every LINQ call site resolves to ZLinq's
@@ -90,5 +99,9 @@ implements that subdomain's seam on the Application side.
 * [`Harbor.Registries`](../Harbor.Registries) — concrete registry impls
   (AgentRegistry, ToolRegistry, ProviderRegistry, InMemoryEventBus,
   InMemoryMcpRegistry).
+* [`Harbor.AgentRuntime`](../Harbor.AgentRuntime) — the agent loop
+  (`AgentLoop`, `TurnRunner`, `ToolDispatcher`, pipeline behaviors).
+* [`Harbor.SessionContext`](../Harbor.SessionContext) — the session context
+  (compaction, prompt assembly, token tracking, workspace probes, session fork).
 * [`docs/ARCHITECTURE_LAYERS.md`](../../docs/ARCHITECTURE_LAYERS.md) —
   the canonical layering matrix and design rationale.

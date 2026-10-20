@@ -22,6 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1624: the run records (IsolatedWorkspace / RunManifest / RunState) moved with the session-context cohort. -->
+    <ProjectReference Include="..\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
   </ItemGroup>
 

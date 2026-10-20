@@ -118,7 +118,7 @@ in this sprint** with 0 build errors and all tests passing. The remaining
 | 4 | CT-001 | Correctness | high | `Harbor.Storage.Jsonl/JsonlSessionStore.cs:139-167` (`AppendMessageAsync`, `CreateAsync`, `DeleteAsync`) | `CancellationToken` parameter accepted but never observed — `File.AppendAllText` / `File.Delete` are not CT-aware and there is no `ct.ThrowIfCancellationRequested()` guard |
 | 5 | IPC-001 | Performance | medium | `Harbor.Ipc.Abstractions/Protocol/WireCodec.cs:118-156` (`WriteFrameAsync`, `ReadFrameAsync`) | `new byte[length]` per frame + `Stream.ReadAsync` loop — no `ArrayPool<byte>`, no `PipeReader` despite the comment claiming it |
 | 6 | DI-001 | Architecture | medium | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:337,560,581` | Three `BuildServiceProvider()` calls during composition — anti-pattern (DI016 suppressed); causes `ServiceProvider` churn |
-| 7 | SOLID-002 | Architecture | medium | `Harbor.Application/Sessions/CompactionService.cs:89-99` | `ReserveTokens` / `KeepRecentTokens` / `TailTurns` are mutable `public int` properties — runtime config drift, not injected via `IOptions<CompactionOptions>` |
+| 7 | SOLID-002 | Architecture | medium | `Harbor.SessionContext/Sessions/CompactionService.cs:89-99` | `ReserveTokens` / `KeepRecentTokens` / `TailTurns` are mutable `public int` properties — runtime config drift, not injected via `IOptions<CompactionOptions>` |
 | 8 | IPC-002 | Concurrency | medium | `Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:124-128` (`OnEventAsync`) | Holds `_clientsLock` to snapshot the client list on every event publish — serialises every publish against `Register`/`Unregister` |
 | 9 | PERF-002 | Performance | medium | `Harbor.Providers.OpenAiCompatible/OpenAiCompatibleLlmClient.cs:144` (`BuildRequest`) | `Dictionary<string,object?>` + anonymous types + reflection-based `JsonSerializer.Serialize(payload)` per request — not AOT-friendly |
 | 10 | ARCH-001 | Architecture | low | `Harbor.Ipc.Server/Protocol/RequestDispatcher.cs:65-82` | 13-case `switch` on `HarborRequest` — adding a request requires editing the dispatcher; no handler-registry |
@@ -251,7 +251,7 @@ independently testable.
 
 #### SOLID-002 — `CompactionService` mutable config properties (medium)
 
-**Where:** `src/Harbor.Application/Sessions/CompactionService.cs:89-99`.
+**Where:** `src/Harbor.SessionContext/Sessions/CompactionService.cs:89-99`.
 
 ```csharp
 public int ReserveTokens { get; set; } = 16384;
@@ -671,7 +671,7 @@ private SemaphoreSlim GetLock(string sessionId) =>
 
 #### CONCURRENCY-004 — `DefaultAgent._listenersLock` snapshot on every event (open, low-impact)
 
-**Where:** `src/Harbor.Application/Agents/DefaultAgent.cs:60-86`.
+**Where:** `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:60-86`.
 
 The agent's event-bus subscription handler snapshots `_listeners` into a
 fresh `Func<...>[]` array under `_listenersLock` on every published event.
@@ -1041,7 +1041,7 @@ deprecation, schedule removal for v0.5, no audit action needed.
 
 #### MISSING-001 — No `ITokenEstimator` cache for repeated `EstimateMessage` calls
 
-**Where:** `src/Harbor.Application/Sessions/CompactionService.cs:104, 170, 222`.
+**Where:** `src/Harbor.SessionContext/Sessions/CompactionService.cs:104, 170, 222`.
 
 `CompactionService.FindCutPoint` calls
 `_tokenEstimator.EstimateMessage(messages[i])` for every message in the
@@ -1883,9 +1883,9 @@ documented with implementation sketches in §3.
 
 - `src/Harbor.Application/Agents/AgentLoop.cs` — 682 lines, God-class
   (SOLID-001), streaming coalescing, tool dispatch.
-- `src/Harbor.Application/Agents/DefaultAgent.cs` — agent state machine,
+- `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs` — agent state machine,
   steering/follow-up channels, `_listenersLock` (CONCURRENCY-004).
-- `src/Harbor.Application/Sessions/CompactionService.cs` —
+- `src/Harbor.SessionContext/Sessions/CompactionService.cs` —
   `ReserveTokens` / `KeepRecentTokens` / `TailTurns` mutable setters
   (SOLID-002).
 - `src/Harbor.Application/Permissions/PermissionService.cs` —

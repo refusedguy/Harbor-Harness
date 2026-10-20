@@ -314,19 +314,19 @@ public sealed class TokenTrackingRatchet
             + "provider reported no usage. Same counting role the row already needed "
             + "(ITokenEstimator in TargetSlices already lists this file), not a new one",
             false),
-        new("src/Harbor.Application/Sessions/CompactionPolicy.cs", ["EstimateMessage"],
+        new("src/Harbor.SessionContext/Sessions/CompactionPolicy.cs", ["EstimateMessage"],
             "sizes the kept tail of a truncation: the cut walks the history backwards "
             + "adding EstimateMessage until the budget is spent. Added by #472, which moved "
             + "TruncateToFit / TruncateToFitStrict here out of CompactionService — this row "
             + "is the ratchet catching that move rather than the move sneaking past it", false),
-        new("src/Harbor.Application/Sessions/CompactionView.cs", [],
+        new("src/Harbor.SessionContext/Sessions/CompactionView.cs", [],
             "the seam's forwarder (#1612): hands the tracker to the CompactionPolicy statics, calls no member itself", true),
-        new("src/Harbor.Application/Sessions/CompactionService.cs",
+        new("src/Harbor.SessionContext/Sessions/CompactionService.cs",
             ["Estimate", "EstimateMessage", "ShouldCompact"],
             "counts text and history and asks the tracker for the budget verdict "
             + "(#1106: ShouldCompact delegates instead of scanning past the O(1) "
             + "cache); never records", false),
-        new("src/Harbor.Application/Sessions/TokenTracker.cs", ["Estimate", "EstimateMessage"],
+        new("src/Harbor.SessionContext/Sessions/TokenTracker.cs", ["Estimate", "EstimateMessage"],
             "the sole implementor. KNOWN OVER-ATTRIBUTION: these two are its own delegations "
             + "to the ITokenEstimator it holds, not calls on the aggregate — a "
             + "receiver-agnostic scan cannot tell them apart. Over-attribution can only make "
@@ -349,8 +349,8 @@ public sealed class TokenTrackingRatchet
         [
             "src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs",
             "src/Harbor.AgentRuntime/Agents/TurnRunner.cs",
-            "src/Harbor.Application/Sessions/CompactionPolicy.cs",
-            "src/Harbor.Application/Sessions/CompactionService.cs",
+            "src/Harbor.SessionContext/Sessions/CompactionPolicy.cs",
+            "src/Harbor.SessionContext/Sessions/CompactionService.cs",
         ]),
         new("IUsageRecorder", ["RecordAppendedMessage", "RecordTurnUsage", "RecordUpdatedMessage"],
         [
@@ -360,7 +360,7 @@ public sealed class TokenTrackingRatchet
         ]),
         new("ICompactionHeuristic", ["ShouldCompact"],
         ["src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs",
-         "src/Harbor.Application/Sessions/CompactionService.cs"]),
+         "src/Harbor.SessionContext/Sessions/CompactionService.cs"]),
         // ReplLifecycle is NOT a row here even though it is a real GetStats consumer: it
         // reaches the aggregate through the host's Tokens property and never names the
         // type, so the scan cannot see it. See the header — a bounded, documented gap.
@@ -606,7 +606,7 @@ public sealed class TokenTrackingRatchet
                    + "naming the aggregate, delete the row from BaselineHolders deliberately "
                    + "rather than letting a ratchet quietly stop watching it");
 
-        await Assert.That(measured["src/Harbor.Application/Sessions/CompactionService.cs"].ToList())
+        await Assert.That(measured["src/Harbor.SessionContext/Sessions/CompactionService.cs"].ToList())
             .IsEquivalentTo(new[] { "Estimate", "EstimateMessage", "ShouldCompact" })
             .Because("this is the detector proving it fires on real code — three real member calls "
                    + "in a real product file, found by the same receiver-agnostic pattern the "

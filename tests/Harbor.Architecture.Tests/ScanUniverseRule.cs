@@ -364,14 +364,26 @@ public sealed class ScanUniverseRule
     ///     tree. The format is <c>tree=count</c>, ordinal-sorted.
     /// </summary>
     /// <remarks>
-    ///     This is the half that has never been written down anywhere. The inventory is not
-    ///     merely polluted with its own instrument; it also cannot see whole projects that
-    ///     really do reference product code, which is why a rule built on it once
-    ///     accused the instrument and, in the same breath, could not see five other real
-    ///     referrers of the assembly it was grading.
+    ///     <para>
+    ///         This is the half that has never been written down anywhere. The inventory is not
+    ///         merely polluted with its own instrument; it also cannot see whole projects that
+    ///         really do reference product code, which is why a rule built on it once
+    ///         accused the instrument and, in the same breath, could not see five other real
+    ///         referrers of the assembly it was grading.
+    ///     </para>
+    ///     <para>
+    ///         #1624 moved <c>tests=33</c> to <c>tests=34</c>: the session-context cohort
+    ///         extraction gave <c>tests/Harbor.App.Cli.Tests</c> its FIRST direct
+    ///         <c>src/</c> <c>ProjectReference</c> (it binds the moved
+    ///         <c>MessageConverter</c> type, so the reference is explicit rather than
+    ///         inherited through <c>apps/Harbor.App.Cli</c>). Until then it reached product
+    ///         code only through the app, and the tree it belongs to was invisible to this
+    ///         count. Nothing else moved: the new tree is the same project, now declared
+    ///         directly.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=14", "samples=5", "tests=33", "tools=1"];
+        ["apps=2", "contrib=14", "samples=5", "tests=34", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

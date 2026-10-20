@@ -285,7 +285,7 @@ public sealed class ChildProcessPipeDrainRules
     ///     alongside stdout in its <c>GitOutput</c> record — the shape #884's fix
     ///     converges on.
     /// </summary>
-    private const string DrainedPrecedentFile = "src/Harbor.Application/Sessions/WorkspaceInspector.cs";
+    private const string DrainedPrecedentFile = "src/Harbor.SessionContext/Sessions/WorkspaceInspector.cs";
 
     /// <summary>
     ///     The real hand-off #897 predicted: a psi built in <c>McpRegistry</c> and

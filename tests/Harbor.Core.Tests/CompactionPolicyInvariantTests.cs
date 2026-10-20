@@ -19,11 +19,11 @@
 // The four rules, each quoted from the code that claims it
 // ---------------------------------------------------------
 //   1. NEITHER TRUNCATION MAY OPEN THE KEPT SLICE ON AN ORPHAN TOOL RESULT.
-//      CompactionPolicy.cs:60-62 ("The cut point never lands on a ToolResultMessage:
+//      src/Harbor.SessionContext/Sessions/CompactionPolicy.cs:60-62 ("The cut point never lands on a ToolResultMessage:
 //      orphan tool results whose assistant tool_call was dropped would be rejected by
 //      providers") and :149-150 (the same claim in TruncateToFitStrict).
 //   2. TruncateToFitStrict ALWAYS REDUCES STRICTLY ABOVE THE KEEP FLOOR.
-//      CompactionPolicy.cs:146-148 ("Whenever total > 4 the target is strictly below
+//      src/Harbor.SessionContext/Sessions/CompactionPolicy.cs:146-148 ("Whenever total > 4 the target is strictly below
 //      total, so reduction is guaranteed even when the whole history would trivially
 //      fit"). 4 is a real threshold in the code, not one invented here: it is
 //      `MinimumKeptMessages` at :170.
@@ -34,7 +34,7 @@
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
-//      CompactionPolicy.cs:230-232 ("when no summary exists, or the anchor id cannot be
+//      src/Harbor.SessionContext/Sessions/CompactionPolicy.cs:230-232 ("when no summary exists, or the anchor id cannot be
 //      resolved, the input instance is returned unchanged rather than risking silent
 //      history loss"). Silent history loss is the worst outcome this subsystem has.
 //

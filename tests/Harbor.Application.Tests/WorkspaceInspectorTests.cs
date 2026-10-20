@@ -134,7 +134,7 @@ public class WorkspaceInspectorTests
         // file. Scoped to this file on purpose: the tree still has cold-path
         // builders (TableBlock, OnboardingFlow, ...), each pooled on its own
         // issue slice rather than under one absolute ban.
-        string path = FindRepoFile(Path.Combine("src", "Harbor.Application", "Sessions", "WorkspaceInspector.cs"));
+        string path = FindRepoFile(Path.Combine("src", "Harbor.SessionContext", "Sessions", "WorkspaceInspector.cs"));
         string source = await File.ReadAllTextAsync(path);
         await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
         await Assert.That(source.Contains("new StringBuilder")).IsFalse();

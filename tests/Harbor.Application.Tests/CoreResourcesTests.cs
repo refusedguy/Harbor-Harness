@@ -9,8 +9,14 @@ public class CoreResourcesTests
     // PermissionService moved to the Harbor.Permissions assembly, but
     // CoreResources stayed here (#1623 then moved its consumer AgentLoop to
     // Harbor.AgentRuntime, so the anchor binds CompactionPolicy instead — its
-    // static member footprint is the stable Application surface).
-    private static readonly Type CoreResourcesType = typeof(Harbor.Application.Sessions.CompactionPolicy).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
+    // static member footprint is the stable Application surface). #1624 then
+    // moved CompactionPolicy to the session-context cohort, so the anchor
+    // binds IRetryPolicy: the retry CONTRACTS are the vocabulary
+    // Harbor.Application owns for the rest of the plan-A split (the loop's
+    // implementations in Harbor.AgentRuntime and the session-context cohort
+    // both read them), which makes them the most durable Application type
+    // the tree has.
+    private static readonly Type CoreResourcesType = typeof(Harbor.Application.Resilience.IRetryPolicy).Assembly.GetType("Harbor.Application.Resources.CoreResources")!;
     private static readonly MethodInfo GetLogMethod = CoreResourcesType.GetMethod("GetLog", BindingFlags.Public | BindingFlags.Static)!;
     private static readonly MethodInfo GetErrorMethod = CoreResourcesType.GetMethod("GetError", BindingFlags.Public | BindingFlags.Static)!;
 

@@ -2,7 +2,7 @@ namespace Harbor.Application;
 
 /// <summary>
 ///     Single parsing point for the front-matter field reads shared by
-///     <see cref="Harbor.Application.Sessions.WorkspaceContextSource" /> and
+///     <c>Harbor.Application.Sessions.WorkspaceContextSource</c> and
 ///     <see cref="Harbor.Application.Skills.SkillFreshnessSeeder" />: the
 ///     <c>line.TrimStart() → StartsWith("name:", OrdinalIgnoreCase) →
 ///     trimmed[prefix.Length..].Trim() → empty → null</c> chain used to live

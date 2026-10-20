@@ -66,9 +66,13 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  APPLICATION (use cases, orchestration)                         │
-│  - Harbor.Application (AgentLoop, Sessions, Agents,             │
-│  - Harbor.Application (AgentLoop, Sessions, Agents,             │
-│                        Configuration)                           │
+│  - Harbor.Application (config, permissions, resources, skills,    │
+│                        filesystem + git probes)                   │
+│  - Harbor.AgentRuntime (agent loop: AgentLoop, TurnRunner,       │
+│    ToolDispatcher, pipeline behaviors; #1623 extraction)         │
+│  - Harbor.SessionContext (compaction, prompt assembly, token     │
+│    tracker, workspace probes, session fork; #1624 extraction)   │
+│  - Harbor.ChangeTracking (verified-change pipeline, #1616)        │
 │  - Harbor.Hooks (user-hook runner, #1613 extraction)           │
 │  - Harbor.Permissions (PermissionService, ApprovalCoordinator,  │
 │    path policies; seam IPermissionConfigStore over config.json) │
