@@ -12,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Harbor.App.Avalonia;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.Views;
 using Harbor.App.Avalonia.Views.Board;
@@ -102,9 +103,7 @@ public class ViewInflationTests
         // its first suspension, and report green without having checked anything
         // (#972, #766). Inflation is synchronous, so the work belongs inside a
         // synchronous dispatch and the assertion outside it.
-        Views.ChatView? view = null;
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() => view = new Views.ChatView()), CancellationToken.None);
+        Views.ChatView? view = await AvaloniaSession.RunAsync(() => new Views.ChatView());
 
         await Assert.That(view).IsNotNull();
     }
@@ -152,9 +151,7 @@ public class ViewInflationTests
         // HeadlessUnitTestSession AND run inflation on its UI thread.
         // Assertion outside the dispatch: see ChatView_Inflates above, and
         // AvaloniaDispatchAsyncVoidRule for why the shape is banned (#972, #766).
-        Views.SettingsView? view = null;
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() => view = new Views.SettingsView()), CancellationToken.None);
+        Views.SettingsView? view = await AvaloniaSession.RunAsync(() => new Views.SettingsView());
 
         await Assert.That(view).IsNotNull();
     }
@@ -207,20 +204,18 @@ public class ViewInflationTests
         // the call site drops, losing everything after the first await (#972).
         // The work here is synchronous, so the Action overload is spelled
         // explicitly.
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-
-        Exception? thrown = null;
-        await session.Dispatch((System.Action)(() =>
+        var thrown = await AvaloniaSession.RunAsync(() =>
         {
             try
             {
                 _ = new SessionCardView();
+                return (Exception?)null;
             }
             catch (Exception ex)
             {
-                thrown = ex;
+                return ex;
             }
-        }), CancellationToken.None);
+        });
 
         await Assert.That(thrown).IsNull()
             .Because(
@@ -265,33 +260,42 @@ public class ViewInflationTests
 
             var host = AppHost.BuildAsync(Array.Empty<string>()).GetAwaiter().GetResult();
 
-            await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-            Window? window = null;
             // Synchronous dispatch, assertion outside: the body below never awaits,
             // so `async` bought nothing except the async-void binding that
             // `Dispatch(Action)` forces (#972, #766 — see
             // AvaloniaDispatchAsyncVoidRule).
-            await session.Dispatch((System.Action)(() =>
+            //
+            // And the session has to stay OPEN across the assertions: closing it
+            // shuts the application down, and a window that has been shut down is
+            // no longer visible — so `window.IsVisible` below would read false on a
+            // tree that was fine. `RunWithSessionAsync` is the one helper entry
+            // point that keeps the session open for its whole callback, and it is
+            // used here precisely because this site's lifetime differs.
+            await AvaloniaSession.RunWithSessionAsync(async scope =>
             {
-                App.Services = host.Services;
-                App.Host = host;
+                Window? window = null;
+                await scope.DispatchAsync(() =>
+                {
+                    App.Services = host.Services;
+                    App.Host = host;
 
-                var lifetime = new ClassicDesktopStyleApplicationLifetime();
-                AppBuilder.Configure<App>()
-                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
-                    .UseSkia()
-                    .SetupWithLifetime(lifetime);
+                    var lifetime = new ClassicDesktopStyleApplicationLifetime();
+                    AppBuilder.Configure<App>()
+                        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
+                        .UseSkia()
+                        .SetupWithLifetime(lifetime);
 
-                window = lifetime.MainWindow
-                    ?? throw new InvalidOperationException("MainWindow was not created by App.OnFrameworkInitializationCompleted");
-                window.Show();
-                window.UpdateLayout();
-                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-            }), CancellationToken.None);
+                    window = lifetime.MainWindow
+                        ?? throw new InvalidOperationException("MainWindow was not created by App.OnFrameworkInitializationCompleted");
+                    window.Show();
+                    window.UpdateLayout();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                });
 
-            await Assert.That(window.IsVisible).IsTrue();
-            await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.ActivityRailView))).IsNotNull();
-            await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.StatusBarView))).IsNotNull();
+                await Assert.That(window.IsVisible).IsTrue();
+                await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.ActivityRailView))).IsNotNull();
+                await Assert.That(FindDescendantOfType(window, typeof(Views.Shell.StatusBarView))).IsNotNull();
+            });
         }
         finally
         {

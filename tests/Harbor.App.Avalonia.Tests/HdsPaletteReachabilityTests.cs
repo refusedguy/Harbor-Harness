@@ -15,7 +15,7 @@
 // The service's half is the guard's `The_Startup_Apply_Path_Consults_The_Palette_Index`;
 // this file covers the half that is testable without a window.
 
-using Avalonia.Headless;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.Themes;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Services;
@@ -47,22 +47,15 @@ public class HdsPaletteReachabilityTests
         // checks could not fail the test (#972, #766; see
         // AvaloniaDispatchAsyncVoidRule). The view-model work is synchronous, so
         // it belongs in a synchronous dispatch and the checks outside it.
-        string? selected = null;
-        string? persisted = null;
-        List<string> applied = [];
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var (selected, persisted, applied) = await AvaloniaSession.RunAsync(() =>
         {
             var applier = new RecordingThemeApplier();
             var vm = new ThemeSettingsViewModel(applier, applier) { Theme = "system" };
 
             vm.ApplyHdsThemeCommand.Execute("Vapor");
 
-            selected = vm.SelectedPalette;
-            persisted = vm.PersistedTheme;
-            applied = applier.AppliedPalettes;
-        }), CancellationToken.None);
+            return (vm.SelectedPalette, vm.PersistedTheme, applier.AppliedPalettes);
+        });
 
         await Assert.That(selected).IsEqualTo("Vapor");
         await Assert.That(persisted).IsEqualTo("Vapor");
@@ -83,18 +76,15 @@ public class HdsPaletteReachabilityTests
         // Picking_A_Palette_Is_What_Settings_Persists. The per-palette loop runs on
         // the UI thread (it drives the view-model's command) and RECORDS what it
         // saw; the checks are made here, where a failure can land.
-        int offered = -1;
         int expectedPalettes = HdsThemeCatalog.PaletteNames.Count;
-        var mismatches = new List<string>();
-        int variantCalls = -1;
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var (offered, mismatches, variantCalls) = await AvaloniaSession.RunAsync(() =>
         {
             var applier = new RecordingThemeApplier();
             var vm = new ThemeSettingsViewModel(applier, applier);
 
-            offered = vm.AvailableThemes.Count;
+            int offeredCount = vm.AvailableThemes.Count;
+            var paletteMismatches = new List<string>();
 
             foreach (HdsThemePreview palette in vm.AvailableThemes)
             {
@@ -102,22 +92,22 @@ public class HdsPaletteReachabilityTests
 
                 if (vm.SelectedPalette != palette.Name)
                 {
-                    mismatches.Add(palette.Name + ": SelectedPalette was " + (vm.SelectedPalette ?? "(null)"));
+                    paletteMismatches.Add(palette.Name + ": SelectedPalette was " + (vm.SelectedPalette ?? "(null)"));
                 }
 
                 if (vm.PersistedTheme != palette.Name)
                 {
-                    mismatches.Add(palette.Name + ": PersistedTheme was " + vm.PersistedTheme);
+                    paletteMismatches.Add(palette.Name + ": PersistedTheme was " + vm.PersistedTheme);
                 }
 
                 if (!applier.AppliedPalettes.Contains(palette.Name))
                 {
-                    mismatches.Add(palette.Name + ": never applied");
+                    paletteMismatches.Add(palette.Name + ": never applied");
                 }
 
                 if (applier.LastVariant != palette.IsDark)
                 {
-                    mismatches.Add(palette.Name + ": variant was " + applier.LastVariant);
+                    paletteMismatches.Add(palette.Name + ": variant was " + applier.LastVariant);
                 }
             }
 
@@ -125,8 +115,10 @@ public class HdsPaletteReachabilityTests
             // — the variant is read off the palette, never off a list of which
             // palettes are dark, so this count is also the count of palettes the
             // view-model could name at all.
-            variantCalls = applier.VariantCalls;
-        }), CancellationToken.None);
+            int variantCallCount = applier.VariantCalls;
+
+            return (offeredCount, paletteMismatches, variantCallCount);
+        });
 
         await Assert.That(offered).IsEqualTo(expectedPalettes);
         await Assert.That(string.Join(" | ", mismatches))
@@ -149,25 +141,17 @@ public class HdsPaletteReachabilityTests
     [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task A_Restored_Palette_Name_Comes_Back_As_The_Palette()
     {
-        string? selected = null;
-        string? persisted = null;
-        string? theme = null;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var (selected, persisted, theme) = await AvaloniaSession.RunAsync(() =>
         {
             var applier = new RecordingThemeApplier();
             var vm = new ThemeSettingsViewModel(applier, applier) { Theme = "system" };
 
             vm.Restore("HarborDesignTokens");
 
-            selected = vm.SelectedPalette;
-            persisted = vm.PersistedTheme;
-
             // The variant selector still lists variants, so it is left where the
             // user had it rather than pointed at a name it does not contain.
-            theme = vm.Theme;
-        }), CancellationToken.None);
+            return (vm.SelectedPalette, vm.PersistedTheme, vm.Theme);
+        });
 
         await Assert.That(selected).IsEqualTo("HarborDesignTokens");
         await Assert.That(persisted).IsEqualTo("HarborDesignTokens");
@@ -183,22 +167,15 @@ public class HdsPaletteReachabilityTests
     [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task Restoring_A_Variant_Is_Not_Mistaken_For_A_Palette()
     {
-        string? selected = null;
-        string? theme = null;
-        string? persisted = null;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var (selected, theme, persisted) = await AvaloniaSession.RunAsync(() =>
         {
             var applier = new RecordingThemeApplier();
             var vm = new ThemeSettingsViewModel(applier, applier);
 
             vm.Restore("light");
 
-            selected = vm.SelectedPalette;
-            theme = vm.Theme;
-            persisted = vm.PersistedTheme;
-        }), CancellationToken.None);
+            return (vm.SelectedPalette, vm.Theme, vm.PersistedTheme);
+        });
 
         await Assert.That(selected).IsNull();
         await Assert.That(theme).IsEqualTo("light");
@@ -226,24 +203,15 @@ public class HdsPaletteReachabilityTests
     [Retry(3)] // Retention(#1087): headless-Avalonia palette-swap flake (SetInheritanceParent class); rerun, not fix.
     public async Task An_Unknown_Palette_Name_Applies_Nothing()
     {
-        int appliedCount = -1;
-        int variantCalls = -1;
-        string? selected = null;
-        string? persisted = null;
-
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(global::Harbor.App.Avalonia.App));
-        await session.Dispatch((System.Action)(() =>
+        var (appliedCount, variantCalls, selected, persisted) = await AvaloniaSession.RunAsync(() =>
         {
             var applier = new RecordingThemeApplier();
             var vm = new ThemeSettingsViewModel(applier, applier) { Theme = "dark" };
 
             vm.ApplyHdsThemeCommand.Execute("NoSuchPalette");
 
-            appliedCount = applier.AppliedPalettes.Count;
-            variantCalls = applier.VariantCalls;
-            selected = vm.SelectedPalette;
-            persisted = vm.PersistedTheme;
-        }), CancellationToken.None);
+            return (applier.AppliedPalettes.Count, applier.VariantCalls, vm.SelectedPalette, vm.PersistedTheme);
+        });
 
         await Assert.That(appliedCount).IsEqualTo(0);
         await Assert.That(variantCalls).IsEqualTo(0);

@@ -76,8 +76,8 @@
 
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Avalonia.Headless;
 using Harbor.App.Avalonia;
+using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.Themes;
 using TUnit;
 using TUnit.Assertions;
@@ -160,17 +160,19 @@ public class ThemeTokenResolvabilityTests
     public async Task Every_Theme_Key_A_View_Asks_For_Resolves_At_Runtime()
     {
         var asked = AskedMarkupResourceKeys();
-        List<string> unresolved = [];
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var unresolved = await AvaloniaSession.RunAsync(() =>
         {
+            var missing = new List<string>();
+
             foreach ((string key, IReadOnlyList<string> sites) in asked)
             {
                 if (!TryResolve(key))
-                    unresolved.Add($"{key} — asked at {string.Join("; ", sites)}, resolves to nothing");
+                    missing.Add($"{key} — asked at {string.Join("; ", sites)}, resolves to nothing");
             }
-        }), CancellationToken.None);
+
+            return missing;
+        });
 
         foreach (string violation in unresolved)
             Console.WriteLine(violation);
@@ -204,17 +206,19 @@ public class ThemeTokenResolvabilityTests
     public async Task Every_Theme_Key_App_Csharp_Names_Resolves_At_Runtime()
     {
         var asked = TokenShapedKeysInCSharp();
-        List<string> unresolved = [];
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var unresolved = await AvaloniaSession.RunAsync(() =>
         {
+            var missing = new List<string>();
+
             foreach ((string key, IReadOnlyList<string> sites) in asked)
             {
                 if (!TryResolve(key))
-                    unresolved.Add($"{key} — named at {string.Join("; ", sites)}, resolves to nothing");
+                    missing.Add($"{key} — named at {string.Join("; ", sites)}, resolves to nothing");
             }
-        }), CancellationToken.None);
+
+            return missing;
+        });
 
         foreach (string violation in unresolved)
             Console.WriteLine(violation);
@@ -327,16 +331,16 @@ public class ThemeTokenResolvabilityTests
     public async Task Every_Declared_Hds_Token_Resolves_Under_Every_Shipped_Palette()
     {
         var keys = DeclaredThemeTokenNames();
-        List<string> unresolved = [];
 
-        await using var session = HeadlessUnitTestSession.StartNew(typeof(App));
-        await session.Dispatch((System.Action)(() =>
+        var unresolved = await AvaloniaSession.RunAsync(() =>
         {
+            var missing = new List<string>();
+
             var app = global::Avalonia.Application.Current;
             if (app is null)
             {
-                unresolved.Add("Application.Current is null — the headless harness did not start");
-                return;
+                missing.Add("Application.Current is null — the headless harness did not start");
+                return missing;
             }
 
             foreach (string palette in HdsThemeCatalog.PaletteNames)
@@ -346,10 +350,12 @@ public class ThemeTokenResolvabilityTests
                 foreach (string key in keys)
                 {
                     if (!app.TryGetResource(key, null, out object? value) || value is null)
-                        unresolved.Add($"{key}: declared in Themes/Hds, but does not resolve under {palette}");
+                        missing.Add($"{key}: declared in Themes/Hds, but does not resolve under {palette}");
                 }
             }
-        }), CancellationToken.None);
+
+            return missing;
+        });
 
         foreach (string violation in unresolved)
             Console.WriteLine(violation);
