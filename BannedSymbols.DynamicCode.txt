@@ -1,0 +1,72 @@
+// Banned APIs — dynamic code (issue #1844, convention #626).
+//
+// THE CONVENTION
+// --------------
+// No shipped product file outside the `src/Harbor.Plugins.*` family loads an
+// assembly or emits IL at run time. An assembly loaded or IL emitted at run
+// time is invisible to NativeAOT, is in no `<ProjectReference>`, and cannot be
+// audited by reading the csproj — which is why the ban used to be a
+// hand-written regex over the source text and is now a compiler rule.
+//
+// This file IS that rule. It is wired in /Directory.Build.props as an
+// `<AdditionalFiles>` entry and is enforced by the RS0030 diagnostic of
+// `Microsoft.CodeAnalysis.BannedApiAnalyzers` (already referenced
+// solution-wide). The plugin family is exempt because the exemption is
+// expressed BY THE TOOL: the ban file is not added to the plugin projects'
+// `AdditionalFiles` at all, so the compiler never sees it there. There is no
+// pragma and no comment standing in for the exemption.
+//
+// COMMENTS USE `//`, NOT `#`, AND THAT IS NOT A STYLE CHOICE
+// -------------------------------------------------------
+// The analyzer strips a `//` comment and skips the line. A `#` line is NOT a
+// comment to it: the line is read as a ban entry, its ID is unparseable, and it
+// is skipped — but only AFTER it has joined the duplicate check. Two `#`
+// lines with the same text are therefore a duplicate entry, and the analyzer
+// reports RS0031 on the second one. The sibling file `BannedSymbols.txt`
+// carries the fingerprint of that lesson: its `#` separator lines each end in
+// a unique `<NN>` suffix. Here the comment syntax does the work instead.
+//
+// FORMAT
+// ------
+// One documentation-comment ID per line, optionally followed by `;<reason>`.
+// `//` starts a comment. The analyzer reads files named `BannedSymbols.txt` or
+// `BannedSymbols.*.txt` — this file is the second kind.
+//
+// AN ID WITH NO PARAMETER LIST MATCHES ONLY THE PARAMETERLESS OVERLOAD
+// --------------------------------------------------------------------
+// `M:System.Reflection.Assembly.Load` on its own matches NOTHING: every
+// `Assembly.Load` overload takes an argument, and Roslyn's ID resolver
+// requires the parameter count to match exactly. That is why every overload
+// below is listed explicitly, and why
+// `tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs` fails when the
+// list stops covering the public surface of the framework.
+//
+// `AppDomain.DefineDynamicAssembly` IS NOT LISTED, ON PURPOSE
+// ----------------------------------------------------------
+// It was the .NET Framework spelling of "manufacture an assembly at run time".
+// In .NET 10 it is not part of the public API — the compiler rejects the call
+// with CS1061, so the ban has nothing left to catch — and the live spelling,
+// `System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly`, sits in the
+// `System.Reflection.Emit` namespace, which the namespace ban below already
+// covers. A ban entry for an API that does not exist would resolve to no
+// symbol at all: inert configuration that reads like live policy.
+//
+// Loading an assembly at run time.
+// ---------------------------------------------------------------------------
+M:System.Reflection.Assembly.Load(System.Byte[]);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.Load(System.Byte[],System.Byte[]);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.Load(System.Reflection.AssemblyName);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.Load(System.String);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.LoadFrom(System.String);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.LoadFrom(System.String,System.Byte[],System.Configuration.Assemblies.AssemblyHashAlgorithm);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+M:System.Reflection.Assembly.LoadFile(System.String);An assembly loaded at run time is in no ProjectReference and invisible to NativeAOT.
+//
+// The load side of the same door: an isolated, unloadable load context.
+// ---------------------------------------------------------------------------
+T:System.Runtime.Loader.AssemblyLoadContext;A load context is the load side of dynamic code, and only the plugin family may open it.
+//
+// The emission side: every type in the namespace that manufactures IL.
+// ---------------------------------------------------------------------------
+N:System.Reflection.Emit;The System.Reflection.Emit namespace is the manufacture-code side of dynamic code.
+T:System.Reflection.Emit.TypeBuilder;TypeBuilder manufactures a type at run time, which the compiler never saw.
+T:System.Reflection.Emit.DynamicMethod;DynamicMethod manufactures a method at run time, which the compiler never saw.

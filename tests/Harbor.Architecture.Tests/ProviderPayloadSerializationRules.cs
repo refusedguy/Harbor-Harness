@@ -70,8 +70,8 @@
 //
 // Widening the scan to every project in `src/` would fire on the
 // `JsonSerializerContext` users that are already correct, and a ban that fires
-// on correct code gets suppressed wholesale — which is the failure mode
-// `ReflectionConventionRule` documents at length and the reason it deliberately
+// on correct code gets suppressed wholesale — which is the failure mode the
+// dynamic-code convention documents at length and the reason it deliberately
 // did NOT ban string-based member access. This scope is the perimeter the issue
 // actually describes, and it is small enough to read in full.
 //

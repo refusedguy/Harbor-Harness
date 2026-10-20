@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### #1844 — the dynamic-code ban is the compiler's rule, not a regex's
+
+**`src/Harbor.Plugins.*` may load code at run time; nothing else may. The compiler says so now.**
+
+- `BannedSymbols.DynamicCode.txt` (new) — the ban as a list of documentation-comment IDs, read by the `RS0030` diagnostic of `Microsoft.CodeAnalysis.BannedApiAnalyzers`, which was already referenced solution-wide. **No new package.**
+- The ban: `Assembly.Load` / `LoadFrom` / `LoadFile` (all seven public overloads, each with its parameter list), `System.Runtime.Loader.AssemblyLoadContext`, the `System.Reflection.Emit` namespace, `TypeBuilder`, `DynamicMethod`.
+- The plugin exception is expressed **by the tool**: the ban file is not added to the plugin projects' `<AdditionalFiles>`, so the compiler never sees the rule there. The predicate is a project-name prefix in one property, `HarborDynamicCodeBanExemptProjectNamePrefix`.
+- `tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs` keeps the convention, the reason, and the proof that the compiler-side configuration is live: the build's own analyzer is run in-process over planted source (a synthetic violation must be reported, a JSON key must not be), the ban list is checked for dead entries and for coverage of the framework's public surface, and the plugin family's real code is shown to trip the ban only when the ban file is applied. The text matcher survives only as the oracle of the #1729 pilot's differential, and gates nothing.
+- `tests/Harbor.Architecture.Tests/PluginAllowance.cs` (new) — the plugin allowance table, shared with the trim-safety rules (#414), so the fact has one home.
+- Two corrections to the issue's premises, both verified against Roslyn's own sources: an ID with no parameter list matches only the **parameterless** overload, so `M:System.Reflection.Assembly.Load` on its own bans nothing; and `AppDomain.DefineDynamicAssembly` is **not public API in .NET 10**, so it is covered by the `System.Reflection.Emit` namespace ban rather than by a dead entry of its own.
+
 ### #1831 - мёртвая публичная поверхность: удалено, зарезервировано, защищено гвардом
 
 **22 публичных члена, которые охранял public-API-гейт, но которыми не пользовался никто. Два интерфейса удалены, четыре оставлены как явная резервация под отложенное продуктовое решение, новый гвард не даёт мёртвой поверхности вернуться.**

@@ -514,7 +514,7 @@ public sealed class PresentationCapabilityRules
     // RuleTable_And_Baseline_Are_WellFormed rejects a row carrying only the
     // former. The check itself is deliberately NOT re-written here: it is
     // `ExemptionReason.RowsWithoutAReason`, shared with the plugin allowance in
-    // ReflectionConventionRule and the matrix exceptions in EnforcerIntegrityTests.
+    // PluginAllowance and the matrix exceptions in EnforcerIntegrityTests.
     // ---------------------------------------------------------------------
 
     private static readonly Dictionary<string, Dictionary<string, ExemptionReason.Row>> KnownViolations
