@@ -559,12 +559,20 @@ jobs:
         with:
           submodules: recursive
 
+      # The shards run the binaries the build job already produced (the
+      # "Download build outputs" step below), so nothing here restores into
+      # the default global-packages folder and the NuGet cache it would save
+      # is always empty. actions/setup-dotnet's post step throws
+      # ("Cache folder path is retrieved for .NET CLI but doesn't exist on
+      # disk") when that folder was never created, and the cache key changes
+      # with every Directory.Packages.props edit, so the first run after a
+      # pin change restores nothing and fails the job in its post step — the
+      # shard's own tests had already passed. Same fix as the codeql job
+      # (#1244): keep the SDK install, drop the cache.
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
 
       - name: Download build outputs
         uses: actions/download-artifact@v7
