@@ -146,13 +146,18 @@ for vision-capable hosts. Obvious binary content (NUL bytes) is rejected up fron
 - `read` is preferred over `bash cat` because line numbers survive the model's
   edit-and-write-back cycle: when you later `edit` and the model reports an error like
   "context line did not match at file line 47", you already know the line.
+- The last line of the output is the file's **version token**
+  (`[file-version: sha256:0123456789abcdef]`): the first 16 hex characters of the
+  SHA-256 digest of the file's bytes. Hand it back to `write`/`edit` as
+  `expectedVersion` and a file that changed under you is rejected instead of
+  overwritten (see [#1757](#file-freshness-cas)).
 
 ---
 
 ### `write`
 
-**Description.** Creates or overwrites a file. Creates parent directories on demand. Atomic
-write (temp file + rename).
+**Description.** Creates or overwrites a file. Creates parent directories on demand. The
+content is written as UTF-8 without a BOM.
 
 **Args schema.**
 
@@ -160,8 +165,10 @@ write (temp file + rename).
 {
   "type": "object",
   "properties": {
-    "path":    { "type": "string", "description": "File path" },
-    "content": { "type": "string", "description": "Full new content" }
+    "path":       { "type": "string",  "description": "File path" },
+    "content":    { "type": "string",  "description": "Full new content" },
+    "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" },
+    "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The write is rejected when the file changed on disk since" }
   },
   "required": ["path", "content"]
 }
@@ -178,6 +185,9 @@ write (temp file + rename).
 
 // 3. Write to a deep path — parent dirs auto-created
 {"path": "reports/2024/01/audit.md", "content": "..."}
+
+// 4. Guarded overwrite — rejected if the file changed since the read
+{"path": "README.md", "content": "# Harbor\n...", "expectedVersion": "sha256:0123456789abcdef"}
 ```
 
 **Permissions.** Allow under `src/*`, Ask elsewhere. Never silently overwrite files outside
@@ -190,6 +200,8 @@ the project source tree without confirmation.
   is what you'll want for the user's permission prompt.
 - For partial edits use `edit` (single replacement) or `patch` (multi-hunk diff) — both
   preserve unchanged lines and produce a preview.
+- The result reports the version of what was written
+  (`[file-version: sha256:…]`), so a follow-up write can reuse it without re-reading.
 
 ---
 
@@ -207,9 +219,11 @@ the project source tree without confirmation.
     "path":        { "type": "string",  "description": "File path" },
     "oldString":   { "type": "string",  "description": "Exact text to find" },
     "newString":   { "type": "string",  "description": "Replacement text" },
-    "replaceAll":  { "type": "boolean", "description": "Replace all occurrences (default false)" }
+    "replaceAll":  { "type": "boolean", "description": "Replace all occurrences (default false)" },
+    "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The edit is rejected when the file changed on disk since" },
+    "edits":       { "type": "array",   "description": "Multiple edits applied in order" }
   },
-  "required": ["path", "oldString", "newString"]
+  "required": ["path"]
 }
 ```
 
@@ -224,6 +238,10 @@ the project source tree without confirmation.
 
 // 3. Bulk replace
 {"path": "docs/old.md", "oldString": "Harbor v0.3", "newString": "Harbor v0.4", "replaceAll": true}
+
+// 4. Guarded edit — rejected if the file changed since the read
+{"path": "src/Agent.cs", "oldString": "var x = 1;", "newString": "var x = 2;",
+ "expectedVersion": "sha256:0123456789abcdef"}
 ```
 
 **Permissions.** Allow `src/*`, Deny `*.env` and `*.env.*`, Ask elsewhere.
@@ -235,6 +253,34 @@ the project source tree without confirmation.
   this is the single most reliable way to avoid the "multiple occurrences" error.
 - `oldString` must match exactly including leading whitespace.
 - For >3 hunks or multi-file changes prefer `patch` (see below).
+
+---
+
+### File freshness (CAS)
+
+`read`, `write` and `edit` speak a **version token**: `sha256:` plus the first 16 hex
+characters of the SHA-256 digest of the file's raw bytes.
+
+- `read` reports the token of the file it read — the last line of the output is
+  `[file-version: sha256:0123456789abcdef]` (also in `ToolResult.Metadata.fileVersion`).
+- `write` / `edit` accept the token back as `expectedVersion`. If the file's bytes changed
+  since the model observed them, the call is **rejected**: the tool result names the
+  version the model held, the version on disk now, and tells the model to re-read and
+  re-apply. The file is left exactly as the other writer left it.
+- `write` / `edit` also report the token of what they just wrote, so a model can chain
+  writes (write → write → edit) without re-reading in between.
+
+**Why a content hash and not mtime+size.** A timestamp is not a fact about the content:
+`touch`, a `tar -x` that preserves mtimes, and filesystems with coarse timestamp
+granularity all report "unchanged" for a file that changed — and a hash of the bytes has
+neither failure mode. The price is one sequential read of the file, which `read`/`edit`
+already pay for the file they are touching, and which `write` pays only when a version is
+actually asserted.
+
+**What is not enforced yet.** The token is optional: a call without `expectedVersion`
+behaves exactly as it did before. The mandatory "read the file before you write it" gate
+needs a per-session record of what was observed — a seam that does not exist in Harbor
+today (see #1757 for where it would go).
 
 ---
 

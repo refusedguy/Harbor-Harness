@@ -20,8 +20,8 @@ Infrastructure — concrete `ITool` implementations. References `Harbor.Abstract
 | Tool      | Class           | Description                                                                |
 |-----------|-----------------|----------------------------------------------------------------------------|
 | `read`    | `ReadTool`      | Read a file's contents (with line numbers, optional offset/limit).         |
-| `write`   | `WriteTool`     | Write/overwrite a file (creates parent dirs).                              |
-| `edit`    | `EditTool`      | String-replace within a file (atomic, with old/new preview).               |
+| `write`   | `WriteTool`     | Write/overwrite a file (creates parent dirs); CAS-guarded.                 |
+| `edit`    | `EditTool`      | String-replace within a file (atomic, with old/new preview); CAS-guarded. |
 | `bash`    | `BashTool`      | Run a shell command (with timeout, working dir, env vars, output cap).     |
 | `glob`    | `GlobTool`      | Find files matching a glob pattern (uses `FileSystemGlobbing`).            |
 | `grep`    | `GrepTool`      | Search file contents (regex, file-type filter, multiline mode).            |
@@ -97,6 +97,26 @@ in `PermissionRuleset.Default`
 - `bash`: allow-listed safe prefixes (`ls *`, `git log *`, ...), ask by default
 - `webfetch`, `mcp`: ask by default
 - `task`: allow always (the tool itself errors until sub-agents land)
+
+## File freshness (compare-and-swap)
+
+`read`, `write` and `edit` speak a version token (`Tools/FileVersion.cs`): `sha256:` plus
+the first 16 hex characters of the SHA-256 digest of the file's raw bytes.
+
+- `read` reports the token of the file it read (`[file-version: sha256:…]` at the end of
+  the output, also in `ToolResult.Metadata.fileVersion`).
+- `write` / `edit` accept the token back as `expectedVersion` and refuse to touch a file
+  whose bytes moved on since — the write is rejected with a diagnostic that names both
+  versions and tells the model to re-read and retry. `write` / `edit` also report the
+  token of what they just wrote, so a model can chain writes without re-reading.
+- The token is optional. Without it the tools behave exactly as before (#1757) — the
+  mandatory "read before write" gate needs a per-session record of what was observed,
+  which this assembly has no home for yet.
+
+The digest covers the BYTES, not the decoded text, and not mtime+size: a timestamp is not
+a fact about the content (`touch`, a `tar -x` that preserves mtimes, or a filesystem with
+coarse timestamp granularity all report "unchanged" for a file that changed). The price is
+one sequential read of the file, which `read`/`edit` already pay for the file they touch.
 
 ## Known limitations
 
