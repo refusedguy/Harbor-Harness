@@ -577,19 +577,44 @@ jobs:
       #    runtime: a test project resolves from its own <Project>.deps.json
       #    + <Project>.runtimeconfig.json, both in the same output
       #    directory, and NEITHER mentions project.assets.json (checked in
-      #    the artifact itself). The `!` exclusion below drops every
-      #    satellite whose assembly name does not start with "Harbor.".
+      #    the artifact itself). The per-project globs below therefore name
+      #    the satellite file explicitly (`*/Harbor.*.resources.dll`) instead
+      #    of globbing the culture directories and excluding afterwards.
       #
       # 2. IT IS SPLIT PER CONSUMER. A test project's output directory is
       #    self-contained: the project's own DLL, every project reference
       #    copied local, its deps/runtimeconfig JSON, and the native assets
       #    under runtimes/linux-x64/native/ (libSkiaSharp.so, libe_sqlite3.so
-      #    — the Avalonia and SQLite native libraries, 129 files here, all
+      #    — the Avalonia and SQLite native libraries, 89 .so files here, all
       #    kept). So a shard needs only its own projects' directories. The
       #    one cross-directory dependency in the whole repo is CliDriver
       #    (tests/Harbor.E2E.Framework/CliDriver.cs), which spawns
       #    apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll — so
       #    the e2e slice carries the CLI's own output directory too.
+      #
+      # Two mechanics of the upload action, both measured on a first attempt
+      # that got both of them wrong (the artifact came out 4x too big and
+      # rooted one directory too high):
+      #
+      #   * `*.*` DOES NOT MEAN "every file in the directory". @actions/glob
+      #     adds an implicit `/**` to a pattern that does not end in `**`, so
+      #     a pattern that matches a DIRECTORY drags in everything under it.
+      #     `tests/<P>/bin/Release/net10.0/*` therefore pulled in EVERY
+      #     runtime's native assets (win-arm64, osx-x64, android-arm64,
+      #     browser-wasm, …: 533 files, 555 MiB raw) — dead weight on a
+      #     linux-x64 runner. The globs below name the three file kinds
+      #     explicitly instead: the top-level files, the linux-x64 natives,
+      #     and Harbor's own satellite.
+      #   * THE ARTIFACT ROOT IS THE LEAST COMMON ANCESTOR of the glob
+      #     search paths (upload-artifact v7, src/shared/search.ts). A slice
+      #     that only lists tests/** is therefore rooted at tests/, and the
+      #     shard would extract its files to <workspace>/<Project>/… instead
+      #     of <workspace>/tests/<Project>/… — the DLLs would not be where
+      #     the shard looks for them. `Harbor.slnx` in every slice's list
+      #     pins the root at the workspace root: it is the file this repo
+      #     already uses as its root marker (HarborAppLocator, the
+      #     architecture rules), and one root-level path is enough to move
+      #     the LCA up to the workspace.
       #
       # `solution-binaries` is KEPT as the combined artifact the `coverage`
       # job downloads (core + platform — the two shard lists coverage runs).
@@ -615,19 +640,43 @@ jobs:
         with:
           name: solution-binaries-core
           path: |
-            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/**
-            tests/Harbor.Config.Tests/bin/Release/net10.0/**
-            tests/Harbor.Domain.Tests/bin/Release/net10.0/**
-            tests/Harbor.Application.Tests/bin/Release/net10.0/**
-            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/**
-            tests/Harbor.Core.Tests/bin/Release/net10.0/**
-            tests/Harbor.Registries.Tests/bin/Release/net10.0/**
-            tests/Harbor.Hosting.Tests/bin/Release/net10.0/**
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/**
-            tests/Harbor.Lsp.Tests/bin/Release/net10.0/**
-            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/**
-            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            Harbor.slnx
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Config.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Config.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Config.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Application.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Application.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Application.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Core.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Core.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Core.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -638,16 +687,34 @@ jobs:
         with:
           name: solution-binaries-platform
           path: |
-            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/**
-            tests/Harbor.Storage.Tests/bin/Release/net10.0/**
-            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/**
-            tests/Harbor.Providers.Tests/bin/Release/net10.0/**
-            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/**
-            tests/Harbor.Ipc.Tests/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            Harbor.slnx
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -658,15 +725,31 @@ jobs:
         with:
           name: solution-binaries-ui
           path: |
-            tests/Harbor.Tui.Tests/bin/Release/net10.0/**
-            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/**
-            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/**
-            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/**
-            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/**
-            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/**
-            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/**
-            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            Harbor.slnx
+            tests/Harbor.Tui.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -677,16 +760,28 @@ jobs:
         with:
           name: solution-binaries-e2e
           path: |
-            tests/Harbor.E2E.Cli/bin/Release/net10.0/**
-            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/**
-            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/**
-            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/**
-            tests/Harbor.LoadTests/bin/Release/net10.0/**
-            # CliDriver spawns the CLI from the CLI's own output directory
-            # (apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll),
-            # not from the test's copy of it.
-            apps/Harbor.App.Cli/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            # The CLI's own output directory: CliDriver spawns
+            # apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll —
+            # not the e2e test's copy of it.
+            Harbor.slnx
+            tests/Harbor.E2E.Cli/bin/Release/net10.0/*.*
+            tests/Harbor.E2E.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/*.*
+            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.LoadTests/bin/Release/net10.0/*.*
+            tests/Harbor.LoadTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.LoadTests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            apps/Harbor.App.Cli/bin/Release/net10.0/*.*
+            apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -697,8 +792,10 @@ jobs:
         with:
           name: solution-binaries-perf
           path: |
-            tests/Harbor.Tui.PerfTests/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            Harbor.slnx
+            tests/Harbor.Tui.PerfTests/bin/Release/net10.0/*.*
+            tests/Harbor.Tui.PerfTests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tui.PerfTests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -709,32 +806,75 @@ jobs:
         with:
           name: solution-binaries
           path: |
-            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/**
-            tests/Harbor.Config.Tests/bin/Release/net10.0/**
-            tests/Harbor.Domain.Tests/bin/Release/net10.0/**
-            tests/Harbor.Application.Tests/bin/Release/net10.0/**
-            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/**
-            tests/Harbor.Core.Tests/bin/Release/net10.0/**
-            tests/Harbor.Registries.Tests/bin/Release/net10.0/**
-            tests/Harbor.Hosting.Tests/bin/Release/net10.0/**
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/**
-            tests/Harbor.Lsp.Tests/bin/Release/net10.0/**
-            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/**
-            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/**
-            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/**
-            tests/Harbor.Storage.Tests/bin/Release/net10.0/**
-            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/**
-            tests/Harbor.Providers.Tests/bin/Release/net10.0/**
-            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/**
-            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/**
-            tests/Harbor.Ipc.Tests/bin/Release/net10.0/**
-            !**/*/[!H]*.resources.dll
+            Harbor.slnx
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Config.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Config.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Config.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Application.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Application.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Application.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Core.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Core.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Core.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
           if-no-files-found: error
+
 
   test:
     needs: [changes, build]
