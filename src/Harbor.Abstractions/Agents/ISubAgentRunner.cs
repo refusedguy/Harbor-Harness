@@ -101,32 +101,78 @@ public static class SubAgentFailureFormat
 
     /// <summary>
     ///     Extract the resume hint from a failure message produced by
-    ///     <see cref="WithResumeTrailer" />, or <see langword="null" /> when
-    ///     the message carries no resumable session (e.g. validation or
-    ///     nesting-guard failures that never spawned one).
+    ///     <see cref="WithResumeTrailer" />.
     /// </summary>
-    public static SubAgentResumeHint? TryExtractResumeHint(string error, string agentName)
+    /// <param name="error">The failure message to read the trailer from.</param>
+    /// <param name="agentName">Name of the sub-agent definition that failed.</param>
+    /// <returns>
+    ///     The hint the message carries, or <see cref="Maybe{T}.None" /> when the
+    ///     message carries no resumable session (e.g. validation or
+    ///     nesting-guard failures that never spawned one).
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         The absence IS the answer, never a failure. A message that is
+    ///         empty, carries no marker, carries a truncated trailer or carries
+    ///         a malformed id simply has no resumable session in it — there is
+    ///         no error to report, only a hint that is not there. That is why
+    ///         the result is a <see cref="Maybe{T}" /> and not a
+    ///         <see cref="Result{T}" />.
+    ///     </para>
+    /// </remarks>
+    public static Maybe<SubAgentResumeHint> TryExtractResumeHint(string error, string agentName) =>
+        TryExtractSessionId(error).Map(id => new SubAgentResumeHint(id, agentName));
+
+    /// <summary>
+    ///     The session id carried by the resume trailer, when the message carries
+    ///     a well-formed one.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Every guard of the chain asks the same question — "is there a
+    ///         session id in here?" — and every one of them answers "no":
+    ///     </para>
+    ///     <list type="number">
+    ///         <item>no error text at all → there is nothing to read;</item>
+    ///         <item>no <see cref="ResumeMarker" /> in the text → it is not a trailer;</item>
+    ///         <item>the trailer has no closing <c>]</c> → it was cut off;</item>
+    ///         <item>the id between the brackets is empty → there is no id;</item>
+    ///         <item>the id carries whitespace or a bracket → it is not an id.</item>
+    ///     </list>
+    /// </remarks>
+    private static Maybe<string> TryExtractSessionId(string error) =>
+        Maybe.From(error)
+            .Where(e => e.Length > 0)
+            .Bind(e =>
+            {
+                int marker = e.LastIndexOf(ResumeMarker, StringComparison.Ordinal);
+                if (marker < 0)
+                    return Maybe<string>.None;
+
+                int idStart = marker + ResumeMarker.Length;
+                int idEnd = e.IndexOf(']', idStart);
+                // idEnd == -1 (the trailer has no closing bracket) and
+                // idEnd == idStart (the id between the brackets is empty) are
+                // the same absence: there is no id to take.
+                return idEnd > idStart
+                    ? Maybe.From(e.Substring(idStart, idEnd - idStart))
+                    : Maybe<string>.None;
+            })
+            .Where(IsWellFormedSessionId);
+
+    /// <summary>
+    ///     Whether the extracted id is a plain session id: no whitespace and no
+    ///     bracket — the two characters the trailer's own syntax uses.
+    /// </summary>
+    private static bool IsWellFormedSessionId(string id)
     {
-        if (string.IsNullOrEmpty(error))
-            return null;
-        int marker = error.LastIndexOf(ResumeMarker, StringComparison.Ordinal);
-        if (marker < 0)
-            return null;
-        int idStart = marker + ResumeMarker.Length;
-        int idEnd = error.IndexOf(']', idStart);
-        if (idEnd <= idStart)
-            return null;
-        string sessionId = error.Substring(idStart, idEnd - idStart);
-        if (sessionId.Length == 0)
-            return null;
-        for (int i = 0; i < sessionId.Length; i++)
+        foreach (char c in id)
         {
-            char c = sessionId[i];
             if (char.IsWhiteSpace(c) || c is '[' or ']')
-                return null;
+                return false;
         }
 
-        return new SubAgentResumeHint(sessionId, agentName);
+        return true;
     }
 }
 

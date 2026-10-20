@@ -1,2 +1,4 @@
 #nullable enable
 Harbor.Abstractions.Sessions.ISessionStore.GetTranscriptAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionTranscript!>>!
+*REMOVED*static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> Harbor.Abstractions.Agents.SubAgentResumeHint?
+static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> CSharpFunctionalExtensions.Maybe<Harbor.Abstractions.Agents.SubAgentResumeHint!>
