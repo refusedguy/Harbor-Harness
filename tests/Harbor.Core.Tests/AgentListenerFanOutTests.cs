@@ -140,14 +140,11 @@ public sealed class AgentListenerFanOutTests
         var logger = new CapturingLogger<DefaultAgent>();
         using DefaultAgent agent = NewAgent(bus, logger, session);
         agent.Initialize(session, TestAgents.AllowAll());
-        var calls = 0;
         var survivors = new List<AgentEvent>();
 
-        using IDisposable faulty = agent.Subscribe((_, _) =>
-        {
-            calls++;
-            return throw new InvalidOperationException("listener blew up");
-        });
+        // The throw expression is the lambda's whole body: the listener fails on
+        // every event it is given, which is what makes it a failing listener.
+        using IDisposable faulty = agent.Subscribe((_, _) => throw new InvalidOperationException("listener blew up"));
         using IDisposable healthy = agent.Subscribe((evt, _) =>
         {
             survivors.Add(evt);
@@ -161,15 +158,13 @@ public sealed class AgentListenerFanOutTests
             .Because(
                 "A listener that throws must not break delivery to the rest: the healthy listener saw "
                 + "both events. That was the registry's promise and it is still the agent's.");
-        await Assert.That(calls).IsEqualTo(2)
-            .Because(
-                "The failing listener STAYS subscribed. The bus alone evicts a subscriber whose handler "
-                + "throws, so the agent's wrapper catches the exception first — otherwise a listener that "
-                + "had one bad day would silently stop receiving events.");
         await Assert.That(logger.Errors.Count).IsEqualTo(2)
             .Because(
-                "Each failure is logged as an error, one line per failed delivery, with the exception "
-                + "attached by the BCL [LoggerMessage] delegate.");
+                "One error line per failed delivery, and TWO of them: the second publish reached the "
+                + "failing listener again, so it STAYS subscribed. The bus alone evicts a subscriber "
+                + "whose handler throws, so the agent's wrapper catches the exception first — otherwise "
+                + "a listener that had one bad day would silently stop receiving events. The exception "
+                + "rides along with the line, attached by the BCL [LoggerMessage] delegate.");
         await Assert.That(logger.Contains("Listener failed")).IsTrue()
             .Because(
                 "The log line keeps the shape the deleted registry produced (\"Listener failed: "
@@ -229,11 +224,10 @@ public sealed class AgentListenerFanOutTests
         var bus = new InMemoryEventBus();
         using DefaultAgent agent = NewAgent(bus);
 
-        Assert.Throws<ArgumentNullException>(() => { agent.Subscribe(null!); })
-            .Because(
-                "A null listener is a programming error, and the boundary is where it belongs. The "
-                + "registry this replaced accepted the null and failed later, inside the dispatch "
-                + "loop, as a logged NullReferenceException.");
+        // A null listener is a programming error, and the boundary is where it belongs.
+        // The registry this replaced accepted the null and failed later, inside the
+        // dispatch loop, as a logged NullReferenceException.
+        Assert.Throws<ArgumentNullException>(() => { agent.Subscribe(null!); });
     }
 
     /// <summary>An agent loop that never runs — the fan-out tests publish on the bus directly.</summary>
