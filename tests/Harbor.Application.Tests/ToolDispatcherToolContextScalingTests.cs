@@ -36,6 +36,14 @@ namespace Harbor.Application.Tests;
 ///         Absolute columns print for info only. Linux-only (GC accounting
 ///         varies by OS).
 ///     </para>
+///     <para>
+///         This is a second gate next to
+///         <c>ToolDispatcherResolveOnceTests.ExecuteAsync_DoubledBatch_StaysWithinGrowthLimit</c>
+///         (label <c>dispatcher-dispatch-scaling</c>) on purpose: that one
+///         dispatches a no-op tool, so it never enters the callback this
+///         slice rebuilt. The tool here reports progress twice per call, so
+///         every measured call goes through the rebuilt progress callback.
+///     </para>
 /// </summary>
 [NotInParallel("dispatcher-scale")]
 public class ToolDispatcherToolContextScalingTests
