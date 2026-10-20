@@ -305,10 +305,7 @@ public class ThemeResourceResolutionTests
             return missing;
         });
 
-        foreach (string wrong in unresolved)
-            Console.WriteLine(wrong);
-
-        await Assert.That(unresolved).IsEmpty();
+        await GuardViolations.ReportAsync(unresolved);
     }
 
     /// <summary>
@@ -379,10 +376,7 @@ public class ThemeResourceResolutionTests
             return painted;
         });
 
-        foreach (string wrong in wrongBrush)
-            Console.WriteLine(wrong);
-
-        await Assert.That(wrongBrush).IsEmpty();
+        await GuardViolations.ReportAsync(wrongBrush);
     }
 
     /// <summary>
@@ -408,6 +402,9 @@ public class ThemeResourceResolutionTests
     [Test]
     public async Task No_App_Source_Reaches_A_Theme_Key_Through_The_Top_Level_Indexer()
     {
+        await Assert.That(AppCSharpFiles().Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: with no app source file to scan it proves nothing");
+
         List<string> violations = AppCSharpFiles()
             .SelectMany(file => File.ReadAllLines(file)
                 .Select((text, index) => (text, line: index + 1))
@@ -416,13 +413,11 @@ public class ThemeResourceResolutionTests
                     .Select(_ => $"{Path.GetRelativePath(FindRepoRoot(), file).Replace('\\', '/')}:{entry.line}")))
             .ToList();
 
-        foreach (string violation in violations)
-            Console.WriteLine(
-                $"{violation}: Application.Current.Resources[key] reads the TOP-LEVEL dictionary only — it does "
-                + "not search MergedDictionaries, so a theme key declared in Themes/Hds/*.axaml resolves to null. "
-                + "Use Application.Current.TryGetResource(key, null, out var v) instead (see #948).");
-
-        await Assert.That(violations).IsEmpty();
+        await GuardViolations.ReportAsync(
+            violations,
+            "Application.Current.Resources[key] reads the TOP-LEVEL dictionary only — it does not search "
+            + "MergedDictionaries, so a theme key declared in Themes/Hds/*.axaml resolves to null. "
+            + "Use Application.Current.TryGetResource(key, null, out var v) instead (see #948).");
     }
 
     private static readonly System.Text.RegularExpressions.Regex IndexerLookup =

@@ -29,14 +29,21 @@ internal static class GuardViolations
     ///     nothing to report; throws a single <c>AssertionException</c> naming
     ///     all of them when there is.
     /// </summary>
-    internal static async Task ReportAsync(IReadOnlyList<string> violations)
+    /// <param name="violations">The violators to report.</param>
+    /// <param name="reason">
+    ///     The guard's own rationale, appended to every violator's reason. It
+    ///     used to hang off the single "the set must be empty" assertion; with
+    ///     one assertion per violator it has to travel with each of them or it
+    ///     is lost.
+    /// </param>
+    internal static async Task ReportAsync(IReadOnlyList<string> violations, string? reason = null)
     {
         using var scope = Assert.Multiple();
 
         foreach (string violation in violations)
         {
             await Assert.That(violations.Count).IsEqualTo(0)
-                .Because(violation);
+                .Because(reason is null ? violation : $"{violation}: {reason}");
         }
     }
 }
