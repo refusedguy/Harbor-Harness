@@ -223,12 +223,21 @@ public sealed class SharedSourceTreeSnapshotTests
                 continue;
             }
 
-            await Assert.That(file.Text).IsEqualTo(raw).Because(
-                $"the snapshot's raw view of {path} must be the file's bytes, unchanged: a rule "
-                + "that used to read this file must still see the same text.");
+            // Compared with string.Equals and reported as an INDEX, not as
+            // two multi-kilobyte strings handed to an assertion: the
+            // comparison is the check, and the message has to name the line
+            // that differs, not reprint the file.
+            if (!string.Equals(file.Text, raw, StringComparison.Ordinal))
+            {
+                await Assert.That(FirstDifference(file.Text, raw)).IsEqualTo(-1).Because(
+                    $"the snapshot's raw view of {path} must be the file's bytes, unchanged: a rule "
+                    + "that used to read this file must still see the same text.");
+            }
 
-            await Assert.That(string.Join("\n", file.StrippedNewlineLines))
-                .IsEqualTo(SourceScan.StripComments(raw))
+            // The panel/overlay rule splits the comment-stripped text on '\n'.
+            string[] expectedNewline = SourceScan.StripComments(raw).Split('\n');
+            await Assert.That(FirstDifference(expectedNewline, file.StrippedNewlineLines))
+                .IsEqualTo(-1)
                 .Because(
                     $"the panel/overlay rule splits the comment-stripped text on '\\n', so the "
                     + $"snapshot's line view of {path} must be that text split the same way. A "
@@ -240,13 +249,53 @@ public sealed class SharedSourceTreeSnapshotTests
             string[] legacyLines = File.ReadAllLines(path);
             string[] legacyCode = SourceScan.StripComments(string.Join('\n', legacyLines)).Split('\n');
 
-            await Assert.That(string.Join("\n", file.StrippedReadLineLines))
-                .IsEqualTo(string.Join("\n", legacyCode))
+            await Assert.That(FirstDifference(legacyCode, file.StrippedReadLineLines))
+                .IsEqualTo(-1)
                 .Because(
                     $"the process-environment rule indexes the lines as File.ReadAllLines "
                     + $"produced them, so the snapshot's ReadLine-shaped view of {path} must be "
                     + "the same array — including the absence of a trailing empty line.");
         }
+    }
+
+    /// <summary>
+    ///     The index of the first line that differs, or <c>-1</c> when the two
+    ///     line arrays are the same.
+    /// </summary>
+    /// <param name="expected">The lines the rule used to compute.</param>
+    /// <param name="actual">The lines the snapshot hands it.</param>
+    private static int FirstDifference(IReadOnlyList<string> expected, IReadOnlyList<string> actual)
+    {
+        int shared = Math.Min(expected.Count, actual.Count);
+        for (int i = 0; i < shared; i++)
+        {
+            if (!string.Equals(expected[i], actual[i], StringComparison.Ordinal))
+            {
+                return i;
+            }
+        }
+
+        return expected.Count == actual.Count ? -1 : shared;
+    }
+
+    /// <summary>
+    ///     The index of the first character that differs, or <c>-1</c> when the
+    ///     two texts are the same.
+    /// </summary>
+    /// <param name="expected">The text the rule used to read.</param>
+    /// <param name="actual">The text the snapshot hands it.</param>
+    private static int FirstDifference(string expected, string actual)
+    {
+        int shared = Math.Min(expected.Length, actual.Length);
+        for (int i = 0; i < shared; i++)
+        {
+            if (expected[i] != actual[i])
+            {
+                return i;
+            }
+        }
+
+        return expected.Length == actual.Length ? -1 : shared;
     }
 
     /// <summary>
