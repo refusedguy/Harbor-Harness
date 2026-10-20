@@ -2,7 +2,7 @@
 #
 # WHY THIS FILE EXISTS (issue #915)
 #
-#   `contrib/` holds 279 tracked files (164 `.cs`, 26 `.csproj`) and no workflow
+#   `contrib/` holds 286 tracked files (165 `.cs`, 27 `.csproj`) and no workflow
 #   builds any of them. `Harbor.slnx` does not reference it, and neither
 #   `Harbor.Samples.slnx` nor `contrib/Contrib.slnx` is named anywhere under
 #   `.github/`. So the question "what would it cost to connect `contrib/` to the
@@ -68,8 +68,20 @@
 #   here would be held to a *looser* standard than the `build` job holds `src/`.
 #   That asymmetry is real and is itself part of the price.
 #
-#   The walk is over every `contrib/**/*.csproj` on disk (26), not over the 22
-#   active in `Contrib.slnx`, so the four that the solution excludes are still
+#   `not built (needs the vendored submodule)` — the project references the
+#   vendored nickprotop/ConsoleEx tree, which lives in `contrib/external/` as a
+#   git submodule. This job does not check it out, so the project cannot be
+#   built here, and a FAIL row would measure the missing checkout rather than
+#   the code. The row says so instead of pretending the project is broken.
+#   The decision is the repo's, not this file's: ADR-019 moved the renderer and
+#   the vendored tree into `contrib/` with the terms "unmaintained, not
+#   compiled by CI", and
+#   `contrib/tui/Harbor.Tui.NickConsoleEx/README.md` spells out the two
+#   commands that build it locally. Fetching the submodule here would also put
+#   third-party source back on the CI path the move took it off.
+#
+#   The walk is over every `contrib/**/*.csproj` on disk (27), not over the 22
+#   active in `Contrib.slnx`, so the five that the solution excludes are still
 #   measured. They report `skipped (windows TFM)` or, if that changes, a result
 #   nobody is currently looking at.
 name: contrib-dryrun
@@ -99,9 +111,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: nothing under `external/` is involved in a
-      # contrib build, and the docs gate already records that a dotnet job here
-      # would be the first thing to need it.
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019) and this job does not build the one contrib project
+      # that needs it — that project reports itself as "not built (needs the
+      # vendored submodule)" in the table below. The one dotnet job in the
+      # repository that would have needed it is gone with the move.
       - uses: actions/checkout@v7
 
       - name: Setup .NET 10
@@ -130,7 +144,7 @@ jobs:
           } >> "$summary"
 
           : > /tmp/opencode-contrib-status.tsv
-          total=0; pass=0; fail=0; skip=0
+          total=0; pass=0; fail=0; skip=0; skip_win=0; skip_sub=0
 
           # Sorted so two runs of the same commit produce the same table.
           while IFS= read -r proj; do
@@ -147,10 +161,22 @@ jobs:
               *-windows*)
                 printf '%s\t%s\tskipped (windows TFM)\t-\n' "$name" "$tfm" \
                   >> /tmp/opencode-contrib-status.tsv
-                skip=$((skip + 1))
+                skip=$((skip + 1)); skip_win=$((skip_win + 1))
                 continue
                 ;;
             esac
+
+            # A project that references the vendored nickprotop/ConsoleEx tree
+            # cannot be built here: that tree is a git submodule, and this job
+            # does not check it out (see the ADR-019 note in this file's
+            # header). It gets its own row instead of a FAIL that would
+            # measure the missing checkout rather than the code.
+            if grep -qE 'external[/\\]ConsoleEx' "$proj"; then
+              printf '%s\t%s\tnot built (needs the vendored submodule)\t-\n' \
+                "$name" "$tfm" >> /tmp/opencode-contrib-status.tsv
+              skip=$((skip + 1)); skip_sub=$((skip_sub + 1))
+              continue
+            fi
 
             echo "::group::build $name"
             log="/tmp/opencode-contrib-build.log"
@@ -181,7 +207,7 @@ jobs:
 
           {
             echo
-            echo "**$total projects: $pass pass, $fail FAIL, $skip skipped (windows TFM).**"
+            echo "**$total projects: $pass pass, $fail FAIL, $skip skipped ($skip_win windows TFM, $skip_sub need the vendored submodule).**"
             echo
             echo "Full logs: the \`contrib-dryrun\` job log for this run."
           } >> "$summary"

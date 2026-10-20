@@ -14,7 +14,7 @@
 #   This workflow asks the one question the static lane cannot: does the
 #   full `docfx build` — metadata over the two contract assemblies plus the
 #   markdown content — succeed. Pattern matches the proven lane in
-#   `external/ConsoleEx/.github/workflows/docs.yml`
+#   `contrib/external/ConsoleEx/.github/workflows/docs.yml`
 #   (`dotnet tool install -g docfx`, then `docfx` on the manifest).
 #
 # WHAT RUNS HERE

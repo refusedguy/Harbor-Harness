@@ -40,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Check model key (graceful skip)
         id: key
