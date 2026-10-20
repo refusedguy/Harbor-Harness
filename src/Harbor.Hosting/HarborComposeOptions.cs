@@ -146,6 +146,33 @@ public sealed class HarborComposeOptions
     /// <summary>Hook invoked right after the configuration module ran (e.g. override ctx.Common).</summary>
     public Action<HarborCompositionContext>? AfterConfiguration { get; init; }
 
+    /// <summary>
+    ///     Where the visible telemetry sink writes (#1741/#1742).
+    ///     <see cref="TelemetryExportTarget.None" /> — the default — means the
+    ///     process instruments telemetry and exports nothing: a test run or a
+    ///     normal session stays quiet until a host asks for output.
+    ///     <para>
+    ///         The environment overrides this: <c>HARBOR_TELEMETRY_EXPORT</c>
+    ///         (<c>none</c> | <c>console</c> | <c>file</c>) wins over the value
+    ///         set here, so an operator can turn the sink on for one run
+    ///         without touching the host.
+    ///     </para>
+    /// </summary>
+    public TelemetryExportTarget TelemetryExport { get; init; } = TelemetryExportTarget.None;
+
+    /// <summary>
+    ///     File the <c>file</c> telemetry sink appends to. Defaults to
+    ///     <c>&lt;HarborDir&gt;/logs/telemetry.txt</c> when the target is
+    ///     <see cref="TelemetryExportTarget.File" /> and no path is given.
+    /// </summary>
+    public string? TelemetryExportPath { get; init; }
+
+    /// <summary>Cap on one exported telemetry record, in bytes. Overridden by <c>HARBOR_TELEMETRY_MAX_RECORD_BYTES</c>.</summary>
+    public int? TelemetryExportMaxRecordBytes { get; init; }
+
+    /// <summary>Cap on the bytes the telemetry sink holds. Overridden by <c>HARBOR_TELEMETRY_MAX_BUFFER_BYTES</c>.</summary>
+    public int? TelemetryExportMaxBufferBytes { get; init; }
+
     /// <summary>Full CLI preset: jsonl storage by default, env overrides apply at runtime.</summary>
     public static HarborComposeOptions CliDefault() => new()
     {

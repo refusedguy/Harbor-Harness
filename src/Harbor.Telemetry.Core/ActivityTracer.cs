@@ -107,4 +107,16 @@ public static class TelemetryTagNames
     public const string EventBusPublishInflight = "eventbus.publish.inflight";
     public const string EventBusPublishCount = "eventbus.publish.count";
     public const string DispatchQuantile = "dispatch.quantile";
+
+    // The visible export sink (TelemetryTextExporter) — its own counters live
+    // on the same canonical meter, so an external collector sees the export's
+    // health next to the telemetry it exported. The prefix is what keeps the
+    // sink from observing its own counters and feeding them back into itself.
+    public const string ExportInstrumentPrefix = "telemetry.export.";
+    public const string ExportRecords = "telemetry.export.records";
+    public const string ExportBytes = "telemetry.export.bytes";
+    public const string ExportDropped = "telemetry.export.dropped";
+    public const string ExportDroppedBytes = "telemetry.export.dropped.bytes";
+    public const string ExportTruncated = "telemetry.export.truncated";
+    public const string ExportTruncatedBytes = "telemetry.export.truncated.bytes";
 }
