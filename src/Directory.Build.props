@@ -43,7 +43,12 @@
     implementation; the arch suite's rule is the gate (#1852).
   -->
 
-  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+  <!-- Imported by RELATIVE path, not by the GetPathOfFileAbove function: the
+       project-file analyzer (#1857) can only follow an import it can resolve on
+       disk, and a property function is not resolvable to it, so the properties
+       pinned in the root props (NuGetAuditMode, NuGetAuditLevel) look unset and
+       the rules that read them fire. Same shape as tests/ and apps/. -->
+  <Import Project="../Directory.Build.props"/>
 
   <ItemGroup>
     <!--
