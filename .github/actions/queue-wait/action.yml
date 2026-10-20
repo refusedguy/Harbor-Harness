@@ -1,0 +1,217 @@
+# Queue-wait measurement (issue #1782, step 4).
+#
+# WHAT THIS IS
+# ------------
+# The single biggest cost in a PR run is NOT the work — it is the WAIT for a
+# runner. Measured on run 39389070999 (43 min 08 s of PR wall time): the sum of
+# every job's own duration was 1,630 s, and 1,331 s of the 2,588 s wall had
+# ZERO jobs running. The waits were 248 s before the first job, 455 s between
+# the `changes` job finishing and the `build` job starting, and up to 1,019 s
+# before the tail jobs. None of that was visible anywhere: the Actions UI shows
+# a job's duration, not the time it spent queued.
+#
+# Issue #1782 lists "log the queue wait" as step 4 and it is still unlanded.
+# This action lands it: every job that reports a number about itself also
+# reports how long it waited for a runner, in the SAME job summary, so the
+# number is read where the rest of the job's numbers are read.
+#
+# WHAT IT PRINTS
+# --------------
+#   | metric                                          | value |
+#   | run created -> first job started               |  248 s |
+#   | `changes` done -> `build` started (fan-out)    |  455 s |
+#   | `build` done -> THIS job started (queue_wait_s)|  156 s |
+#   | this job's own wall time so far                 |  101 s |
+#   | jobs already running when this one started      |  4 of 9|
+#
+# The third row is THE number issue #1782 asks for: `queue_wait_s =
+# startedAt(this job) - completedAt(build)`. The first two rows are the
+# waits BEFORE the build, which the same issue does not cover and which were
+# the largest of all on the measured run.
+#
+# HOW THE NUMBERS ARE OBTAINED
+# -----------------------------
+# From the Actions REST API: `GET /repos/{owner}/{repo}/actions/runs/{run_id}
+# /jobs`. That endpoint reports each job's `started_at` and `completed_at` —
+# the queued-vs-running split the UI hides — and it reports the BUILD job's
+# `completed_at`, which is the fan-out point every dependent job waits for.
+# One call, ~0.3 s, no extra runner.
+#
+# FAIL-OPEN BY CONSTRUCTION
+# -------------------------
+# A measurement must never be able to fail a build. If the API call fails
+# (no `actions: read` permission, a transient 5xx, a rate limit), the action
+# writes ONE line saying so and exits 0. The same contract as
+# tools/test-measurements.py: reporting is not a gate.
+name: queue-wait
+description: Report this job's runner-queue wait into the job summary (issue #1782 step 4).
+
+inputs:
+  job-name:
+    description: >
+      The job's display name as the Actions API reports it — "build",
+      "test (core)", "aot-publish". Optional: when empty, the action matches
+      the current job by its GITHUB_JOB id and falls back to "the job that is
+      running now".
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Measure the runner-queue wait
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_API_URL: ${{ github.api_url }}
+        GH_REPO: ${{ github.repository }}
+        GH_RUN_ID: ${{ github.run_id }}
+        GH_JOB_ID: ${{ github.job }}
+        JOB_NAME: ${{ inputs.job-name }}
+      run: |
+        set -uo pipefail
+        python3 - <<'PY' || true
+        import json
+        import os
+        import sys
+        import urllib.error
+        import urllib.request
+        from datetime import datetime, timezone
+
+        def ts(value):
+            if not value:
+                return None
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+        def fmt(seconds):
+            if seconds is None:
+                return "n/a"
+            return f"{int(round(seconds))} s"
+
+        api = os.environ.get("GH_API_URL", "https://api.github.com").rstrip("/")
+        repo = os.environ.get("GH_REPO", "")
+        run_id = os.environ.get("GH_RUN_ID", "")
+        token = os.environ.get("GH_TOKEN", "")
+        want = (os.environ.get("JOB_NAME") or "").strip()
+        job_id = (os.environ.get("GH_JOB_ID") or "").strip()
+
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+
+        def emit(text):
+            if summary:
+                with open(summary, "a", encoding="utf-8") as fh:
+                    fh.write(text.rstrip() + "\n")
+            print(text)
+
+        if not repo or not run_id:
+            emit("### Runner-queue wait (#1782 step 4)\n\n_not measured: no run context._")
+            sys.exit(0)
+
+        url = f"{api}/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.load(response)
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError) as exc:
+            # Fail-open: a measurement must never be able to fail a build.
+            emit(
+                "### Runner-queue wait (#1782 step 4)\n\n"
+                f"_not measured: the Actions API call failed ({exc.__class__.__name__})._"
+            )
+            sys.exit(0)
+
+        jobs = payload.get("jobs") or []
+        if not jobs:
+            emit("### Runner-queue wait (#1782 step 4)\n\n_not measured: the run reports no jobs._")
+            sys.exit(0)
+
+        def by_name(name):
+            for job in jobs:
+                if job.get("name") == name:
+                    return job
+            return None
+
+        # The current job: by display name when given, else by job id, else the
+        # one that is running right now and has no completion time.
+        current = by_name(want) if want else None
+        if current is None and job_id:
+            for job in jobs:
+                if str(job.get("id")) == job_id:
+                    current = job
+                    break
+        if current is None:
+            running = [j for j in jobs if j.get("started_at") and not j.get("completed_at")]
+            current = running[0] if running else None
+        if current is None:
+            emit("### Runner-queue wait (#1782 step 4)\n\n_not measured: this job is not in the run's job list._")
+            sys.exit(0)
+
+        build = by_name("build")
+        changes = by_name("changes")
+        now = datetime.now(timezone.utc)
+
+        started = ts(current.get("started_at"))
+        completed = ts(current.get("completed_at"))
+        own = (completed or now) - started if started else None
+
+        build_done = ts(build.get("completed_at")) if build else None
+        build_started = ts(build.get("started_at")) if build else None
+        changes_done = ts(changes.get("completed_at")) if changes else None
+
+        queue_wait = (started - build_done).total_seconds() if (started and build_done) else None
+        pre_build = (build_started - changes_done).total_seconds() if (build_started and changes_done) else None
+
+        run_created = None
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(
+                    f"{api}/repos/{repo}/actions/runs/{run_id}",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                ),
+                timeout=20,
+            ) as response:
+                run_created = ts(json.load(response).get("created_at"))
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+            run_created = None
+
+        first_started = None
+        for job in jobs:
+            candidate = ts(job.get("started_at"))
+            if candidate and (first_started is None or candidate < first_started):
+                first_started = candidate
+        pre_first = (first_started - run_created).total_seconds() if (first_started and run_created) else None
+
+        already = 0
+        if started:
+            for job in jobs:
+                other = ts(job.get("started_at"))
+                if other and other <= started:
+                    already += 1
+
+        lines = [
+            "### Runner-queue wait (#1782 step 4)",
+            "",
+            "| metric | value |",
+            "|---|---|",
+            f"| run created -> first job started | {fmt(pre_first)} |",
+            f"| `changes` done -> `build` started (pre-build fan-out) | {fmt(pre_build)} |",
+            f"| `build` done -> **this job** started (`queue_wait_s`) | {fmt(queue_wait)} |",
+            f"| this job's own wall time | {fmt(own.total_seconds() if own else None)} |",
+            f"| jobs already started when this one started | {already} of {len(jobs)} |",
+            "",
+            f"_job: `{current.get('name')}` — queue wait is the time this job spent queued "
+            f"for a runner after `build` finished. It is the number issue #1782 step 4 asks for._",
+        ]
+        emit("\n".join(lines))
+        PY

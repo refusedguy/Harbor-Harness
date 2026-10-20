@@ -15,27 +15,31 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `b9f3c83c` and on the tree this branch carries, which
-adds the string-switch gate and the rewrites it replays:
+Measured on this branch (one commit on `dev` at `10c4bf6a`), the tree the
+table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 37 files, 28 364 lines |
-| of them, the `check-*.py` family | 19 files, 20 277 lines |
-| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
+| python tools in `tools/` | 37 files, 28 376 lines |
+| of them, the `check-*.py` family | 19 files, 20 306 lines |
+| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
 | gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 5 reporters, 6 helpers, 2 libraries |
+| reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
 | tools with a self-test | 27 |
 | tools with a ratchet | 14 |
 | tools with a floor | 16 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
-| gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
+| gates in a workflow that runs a script that is not in the tree | 0 |
 
 The last two rows are the two gaps this policy closed on the way in, and both
 were found by the checker rather than by reading: the checker was run against
-the tree before the table was written, and it named them.
+the tree before the table was written, and it named them. The last row is now
+0: `ci.yml`'s `public-api` job runs `tools/check-public-api-resign.py` and
+`tools/public-api-nonvacuity.sh`, both of which are in the tree (the job that
+used to name the removed `check-public-api-abstractions.py` is the `public-api
+freeze` one, and it was re-wired).
 
 Two more gaps, found the same way and worth naming.
 
@@ -238,7 +242,7 @@ The modes are:
 
 | Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|
-| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
 | `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-abstractions-contract.py` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
 | `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
@@ -266,12 +270,12 @@ The modes are:
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
-| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml | measure | reporter | — | — | — |
+| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, nightly.yml | measure, measurement | reporter | — | — | — |
 | `tools/measure-project-graph.py` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, evaluation-cost.yml | build, measurement | reporter | `--self-test` | — | — |
+| `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, nightly.yml | build, measurement | reporter | `--self-test` | — | — |
 | `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
 | `tools/normalize-mtimes.py` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
-| `tools/pack-validate.py` | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | build, selftest | gate | `--selftest` | — | — |
+| `tools/pack-validate.py` | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | pack, selftest | gate | `--selftest` | — | — |
 | `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 | `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |

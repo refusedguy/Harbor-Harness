@@ -15,6 +15,14 @@ WHY THIS FILE EXISTS
   uploads one artifact per consumer, and each shard's artifact carries
   only that shard's projects' output directories.
 
+  The combined `solution-binaries` artifact that used to serve the
+  `coverage` job is GONE: the coverage job moved to the nightly lane
+  (.github/workflows/nightly.yml), where it builds the tree it measures
+  rather than downloading it — a workflow cannot consume another
+  workflow's artifacts. Which projects a CI run NAMES is still checked,
+  by the test-project completeness gate (tools/check-test-projects.py),
+  which reads the coverage list from the nightly workflow.
+
   That turns one list into two. The shard's project list lives in the
   `test` job's matrix; the slice's project list lives in the build job's
   upload step. They are the same list, written twice, 200 lines apart in
@@ -36,9 +44,7 @@ WHAT IT CHECKS
   1. Every project in a shard's `projects:` list appears in that shard's
      slice (the upload step named `solution-binaries-<shard>`, or the one
      the shard's `artifact:` key names).
-  2. The combined artifact `solution-binaries` — the one the `coverage`
-     job downloads — carries every project the coverage job runs.
-  3. The slices that run the CLI carry the CLI's own output directory
+  2. The slices that run the CLI carry the CLI's own output directory
      (`apps/Harbor.App.Cli/bin/Release/net10.0/`). Two test helpers
      start the CLI from THERE, not from the test project's copy of the
      assembly: tests/Harbor.E2E.Framework/CliDriver.cs (the e2e shard)
@@ -170,16 +176,6 @@ REQUIRED_KINDS = {"files", "native:x64", "satellite"}
 ARM_REQUIRED_KINDS = {"native:arm64"}
 
 
-def read_coverage_projects(text: str) -> list[str]:
-    """The projects the `coverage` job runs (its own hard-coded loop)."""
-    match = re.search(r"for p in \\\n(.*?); do", text, re.S)
-    if not match:
-        return []
-    return [line.strip().rstrip("\\").strip()
-            for line in match.group(1).splitlines()
-            if line.strip().startswith("Harbor.")]
-
-
 def main() -> int:
     if not WORKFLOW.is_file():
         print(f"::error::workflow not found: {WORKFLOW}")
@@ -188,7 +184,6 @@ def main() -> int:
 
     shards = read_shard_lists(text)
     slices = read_slices(text)
-    coverage = read_coverage_projects(text)
 
     if not shards:
         print("::error::no shard lists found in the `test` job's matrix — "
@@ -256,17 +251,6 @@ def main() -> int:
                         f"the `{artifact}` slice does not carry {sorted(missing_kinds)} for "
                         f"`{project}` — the shard would fail with 'Missing …dll'")
 
-    combined = slices.get("solution-binaries")
-    if combined is None:
-        problems.append("the combined `solution-binaries` upload step is missing")
-    else:
-        for project in coverage:
-            base = f"tests/{project}/bin/Release/net10.0"
-            if base not in combined:
-                problems.append(
-                    f"`{project}` is run by the `coverage` job but is not in the combined "
-                    f"`solution-binaries` slice — coverage would report it as missing")
-
     for artifact in CLI_CONSUMING_SLICES:
         carried = slices.get(artifact)
         if carried is None:
@@ -292,8 +276,7 @@ def main() -> int:
             print(f"  - {problem}")
         return 1
 
-    print(f"ok: {len(shards)} shards, {len(slices)} slices, "
-          f"{len(coverage)} coverage projects — every one of them carried")
+    print(f"ok: {len(shards)} shards, {len(slices)} slices — every one of them carried")
     return 0
 
 

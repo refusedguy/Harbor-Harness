@@ -262,6 +262,12 @@ TESTS_DIR = "tests"
 TESTS_PROPS = os.path.join(TESTS_DIR, "Directory.Build.props")
 CI_WORKFLOW = os.path.join(".github", "workflows", "ci.yml")
 OS_WORKFLOW = os.path.join(".github", "workflows", "test-os.yml")
+# The nightly lane. The coverage LIST lives there: the coverage job left the
+# pull-request path (it now runs on pushes to dev/master and on the
+# schedule), and the list moved with it. The list is the same list — WHICH
+# projects a CI run names is this gate's question; WHERE the job that names
+# them is scheduled is the workflow's business.
+NIGHTLY_WORKFLOW = os.path.join(".github", "workflows", "nightly.yml")
 NUKE_TEST_TARGET = os.path.join(
     "build", "_build", "Targets", "TestTarget.cs"
 )
@@ -919,11 +925,22 @@ def collect_lists(root):
                 )
 
         coverage_job = jobs.get("coverage")
+        coverage_file = CI_WORKFLOW
+        if coverage_job is None:
+            # The coverage LIST can live in another workflow file. It moved
+            # to nightly.yml when the coverage job left the pull-request
+            # path, and the list moved with it.
+            nightly_text = read(os.path.join(root, NIGHTLY_WORKFLOW))
+            if nightly_text:
+                nightly_job = workflow_jobs(nightly_text).get("coverage")
+                if nightly_job is not None:
+                    coverage_job = nightly_job
+                    coverage_file = NIGHTLY_WORKFLOW
         if coverage_job is None:
             notes.append(
-                f"{CI_WORKFLOW} has no `coverage` job. A list that moves to "
-                "another workflow file has to be added to the table in this "
-                "file."
+                f"{CI_WORKFLOW} and {NIGHTLY_WORKFLOW} have no `coverage` job. "
+                "A list that moves to another workflow file has to be added to "
+                "the table in this file."
             )
         else:
             # The list is a shell `for p in` loop today. A matrix-shaped
@@ -936,7 +953,7 @@ def collect_lists(root):
                     tokens.extend(block)
             add(
                 "ci:coverage",
-                CI_WORKFLOW,
+                coverage_file,
                 "coverage",
                 tokens,
                 job_condition(coverage_job),

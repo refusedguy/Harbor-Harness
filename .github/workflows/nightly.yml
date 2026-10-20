@@ -1,0 +1,624 @@
+# The nightly lane — what the PR lane does not do.
+#
+# WHY THIS IS A SEPARATE WORKFLOW FILE
+# -------------------------------------
+# GitHub triggers are WORKFLOW-level: the `on:` block is shared by every job
+# in a file, so a job cannot be moved off `pull_request` from inside it. The
+# same argument that moved the OS matrix into test-os.yml (#1787) moves the
+# coverage collection, the analyzer inventory and the build measurement in
+# here: they are EXPENSIVE and they are not PR gates.
+#
+# WHAT IS IN HERE
+# ---------------
+#   coverage    — the report-only coverage collection (issue #99), moved out
+#                 of ci.yml. It used to run on every pull request, re-running
+#                 20 of the 43 test projects to produce a number with no
+#                 threshold (issue #1783). Measured on run 39389070999: 236 s
+#                 of job time, 185 s of it the collect step, +40 % over the
+#                 uninstrumented run of the same projects — and it was the
+#                 LAST job to finish, so it WAS the PR wall.
+#   measurement — the MSBuild binary log and what it says about the build
+#                 (issue #1801 asks for the analyzer profile; this is the
+#                 answer), plus the two probes that turn #1929's hypothesis
+#                 into a measurement.
+#
+# WHEN IT RUNS
+# ------------
+#   push: [dev, master]  — a merge landed. This is where the expensive work
+#                          is allowed to happen.
+#   schedule              — "17 */2 * * *", the cron the repo already has
+#                          (test-os.yml). The `gate` job below skips a
+#                          scheduled run when dev's newest commit is younger
+#                          than an hour, because the push-run that merge
+#                          triggered already covered that commit.
+#   workflow_dispatch     — the owner's manual lever.
+#
+# A NOTE ON WHAT THE COVERAGE NUMBER IS
+# --------------------------------------
+# It is REPORT-ONLY, and it stays report-only: no thresholds, no
+# fail-on-numbers (issue #99 explicitly defers a global percentage gate),
+# per-project test failures are recorded and never fatal, and the scope is
+# stated in the summary so the number is never misread as whole-repo
+# coverage. What changed is WHERE it runs: on every merge into dev/master
+# and on the nightly schedule, not on every pull request.
+#
+# WHY THE COVERAGE JOB BUILDS THE TREE ITSELF
+# --------------------------------------------
+# The build-output slices (#1928) are per-CONSUMER artifacts of one build:
+# each shard's slice carries that shard's projects' output directories. A
+# workflow cannot consume another workflow's artifacts — the only way is a
+# cross-run API lookup of the other run's id, which is a coupling this
+# repository has nowhere else and which fails for a reason (the other run
+# was cancelled) that has nothing to do with the coverage. So the coverage
+# job builds the tree it measures.
+#
+# That build is not wasted: it is the zero-warning Release build (the same
+# one ci.yml's `build` job runs) and its log is the analyzer inventory's
+# source. What the nightly lane does NOT duplicate is the architecture
+# gate: #1928's build lane runs it on every push to dev/master already
+# (the job-level `HarborArchGate` env var), so here it is switched on only
+# for the SCHEDULE, where ci.yml does not run at all.
+#
+# NOTE on running tests: do NOT use `dotnet test` in this repo. Every job
+# below runs test projects as plain executables:
+# `dotnet exec tests/<Name>/bin/Release/net10.0/<Name>.dll`.
+name: nightly
+
+on:
+  push:
+    branches: [dev, master]
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_GENERATE_ASPNET_CERTIFICATE: false
+  NUGET_CERT_REVOCATION_MODE: offline
+  MSBuildEnableWorkloadResolver: false
+  DOTNET_gcServer: 1
+
+jobs:
+  # ── the dedupe gate ────────────────────────────────────────────────────────
+  #
+  # The owner's rule: «не надо запускать дубликаты билдов/тестов в деве, если
+  # было влитие в течение часа» — do not run duplicate builds/tests in dev if
+  # there was a merge within the hour. The same rule, and the same
+  # implementation, as test-os.yml's `gate` job.
+  #
+  # FAIL-OPEN by construction: `proceed` starts true and is only ever set to
+  # false when the age of dev's newest commit is KNOWN to be inside the
+  # window. If the checkout or the git command fails, the gate proceeds and
+  # says so in the log. For push and workflow_dispatch events the gate ALWAYS
+  # proceeds: only the schedule can be a duplicate.
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: Check out dev (the branch the work happens on)
+        if: github.event_name == 'schedule'
+        uses: actions/checkout@v7
+        with:
+          ref: dev
+          fetch-depth: 1
+
+      - name: Decide whether this run duplicates a push-run
+        id: decide
+        shell: bash
+        run: |
+          set -uo pipefail
+          proceed=true
+          reason="event '${{ github.event_name }}' is not a scheduled run — the dedupe does not apply"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            now=$(date +%s)
+            head_ts=$(git log -1 --format=%ct 2>/dev/null || true)
+            if ! printf '%s' "${head_ts:-}" | grep -Eq '^[0-9]+$'; then
+              reason="could not determine dev's newest commit age — proceeding (fail-open)"
+              echo "::warning::$reason"
+            else
+              age=$((now - head_ts))
+              if [ "$age" -lt 3600 ]; then
+                proceed=false
+                reason="dev's newest commit is ${age}s old (< 3600s) — a merge landed within the hour and the push-run already covered it"
+              else
+                reason="dev's newest commit is ${age}s old (>= 3600s) — no merge in the last hour, the safety net is due"
+              fi
+              echo "$reason"
+            fi
+          fi
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      # The runner-wait measurement, in the job summary (#1782 step 4). This
+      # is the FIRST job of the nightly run, so its own wait IS the "run
+      # created -> first job started" number.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: gate
+
+  # ── coverage: report-only, and the analyzer inventory ─────────────────────
+  #
+  # One job, two measurements, one build:
+  #
+  #   * the coverage number (issue #99) — the 20 core+platform unit suites
+  #     under the MTP CodeCoverage extension, per-project line rates in the
+  #     job summary + raw cobertura.xml artifacts (30-day retention feeds the
+  #     "month of green reports" baseline for a future diff-threshold);
+  #   * the analyzer inventory of the test projects, read out of the SAME
+  #     build's log.
+  #
+  # The analyzer set is MEASURED, not gated, and the reason is measured too:
+  # the test projects carry 223 DISTINCT analyzer diagnostics (run
+  # 39389070999's build log, deduplicated by file+line+id) — Sonar's
+  # test-code rules above all — while src/ + apps/ are warning-free because
+  # TreatWarningsAsErrors is on there. Turning the test tree's analyzers into
+  # errors would therefore be RED on day one, and a gate that is red on day
+  # one is not a gate. Publishing the count makes the noise visible and
+  # measurable, which is the precondition for a baseline (the same shape as
+  # .github/aot-warning-baseline.txt) — and that baseline is a follow-up, not
+  # something this workflow can invent.
+  #
+  # Report-only contract for the coverage (do NOT "fix" into a gate):
+  #   - NO thresholds, NO fail-on-numbers. A global percentage gate is
+  #     explicitly deferred (legacy areas would fail day one — see #99).
+  #   - Per-project test failures are RECORDED, never fatal: the `test` job
+  #     stays the gate. Instrumentation must not block PRs on flakes.
+  # Excluded suites: ui (Avalonia-headless flakes amplify under
+  # instrumentation), e2e/load (slow, need display). Scope is stated in the
+  # summary so numbers are never misread as whole-repo coverage.
+  coverage:
+    needs: [gate]
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # The architecture gate as a build-time gate — for the SCHEDULE only.
+      # On a push to dev/master, ci.yml's build job already runs it (#1928's
+      # job-level env var), so running it here as well would pay for the
+      # same 68 s twice per merge. The schedule is the case ci.yml does not
+      # cover at all, and it is exactly the case the gate exists for: a dev
+      # that did not move.
+      HarborArchGate: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # No `submodules: recursive`: the vendored ConsoleEx submodule left
+          # the product (ADR-019) and nothing in the build graph references it.
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push run checks out what was pushed.
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The same pinned SDK as ci.yml's build job (global.json asks for
+          # 10.0.402 with rollForward=latestPatch, which forbids the SDK
+          # from leaving the 10.0.4xx feature band).
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      - name: Build the tree the coverage runs against
+        run: |
+          # pipefail is load-bearing: `... | tee build.log` reports tee's
+          # exit code, so without it a FAILED build would leave this job
+          # green.
+          set -o pipefail
+          bash build/build.sh Compile --configuration Release 2>&1 | tee build.log
+
+      - name: Publish the analyzer inventory of the test projects
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          import os
+          from collections import defaultdict
+
+          # One warning line looks like:
+          #   /path/to/file.cs(12,34): warning S5443: message [ProjectName]
+          # The same warning is printed twice by MSBuild (once inline, once
+          # in the build summary), so the lines are DEDUPLICATED by
+          # (file, line, column, id) before counting: the number has to be a
+          # number of distinct diagnostics, not a number of printed lines.
+          pattern = re.compile(
+              r"^(?P<file>[^:\n]+\.(?:cs|vb|fs)):?\s*"
+              r"\((?P<line>\d+),(?P<col>\d+)\):\s*"
+              r"warning\s+(?P<id>[A-Za-z]+\d+):"
+          )
+          per_project = defaultdict(set)
+          ids = defaultdict(set)
+          try:
+              with open("build.log", encoding="utf-8", errors="replace") as fh:
+                  for raw in fh:
+                      match = pattern.match(raw.strip())
+                      if not match:
+                          continue
+                      tail = raw.rstrip().rsplit("[", 1)
+                      project = tail[1].rstrip("]\n ") if len(tail) == 2 else "?"
+                      key = (match.group("file"), match.group("line"),
+                             match.group("col"), match.group("id"))
+                      per_project[project].add(key)
+                      ids[project].add(match.group("id"))
+          except OSError as exc:
+              print(f"::warning::could not read build.log: {exc}")
+
+          total = sum(len(v) for v in per_project.values())
+          lines = [
+              "## Analyzer inventory (report-only)",
+              "",
+              "_Distinct analyzer diagnostics per project, from this build. The "
+              "analyzers run on every build (they are referenced solution-wide); "
+              "what this lane adds is the COUNT, which is what a future "
+              "baseline needs._",
+              "",
+              "| project | distinct diagnostics | ids |",
+              "|---|---|---|",
+          ]
+          for project in sorted(per_project, key=lambda p: (-len(per_project[p]), p)):
+              codes = ", ".join(sorted(ids[project]))
+              lines.append(f"| {project} | {len(per_project[project])} | {codes} |")
+          lines += ["", f"**Total distinct analyzer diagnostics: {total}**"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          print(f"analyzer inventory: {total} distinct diagnostics across {len(per_project)} projects")
+          PY
+
+      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
+      # integration tests self-skip (same note as in ci.yml's `test` job).
+      - name: Ensure ripgrep installed
+        run: |
+          if ! command -v rg &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+          fi
+          rg --version | head -1
+
+      # Per-project failures are recorded in Coverage/status.tsv, never fatal
+      # (final `exit 0` is intentional — report-only, see job comment).
+      - name: Collect coverage (core + platform unit suites)
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p Coverage
+          : > Coverage/status.tsv
+          for p in \
+            Harbor.Abstractions.Tests \
+            Harbor.Config.Tests \
+            Harbor.Domain.Tests \
+            Harbor.Application.Tests \
+            Harbor.ChangeTracking.Tests \
+            Harbor.Core.Tests \
+            Harbor.Registries.Tests \
+            Harbor.Hosting.Tests \
+            Harbor.Architecture.Tests \
+            Harbor.Lsp.Tests \
+            Harbor.Telemetry.Tests \
+            Harbor.Tools.Builtin.Tests \
+            Harbor.Storage.Tests \
+            Harbor.Storage.Jsonl.Tests \
+            Harbor.Providers.Tests \
+            Harbor.Transport.Remote.Tests \
+            Harbor.Plugins.Abstractions.Tests \
+            Harbor.Plugins.Runtime.Tests \
+            Harbor.Plugins.Host.Tests \
+            Harbor.Ipc.Tests; do
+            echo "::group::coverage $p"
+            dll="tests/$p/bin/Release/net10.0/$p.dll"
+            if [ ! -f "$dll" ]; then
+              echo "Missing $dll — did the build produce it?"
+              printf '%s\tmissing\n' "$p" >> Coverage/status.tsv
+            elif dotnet exec "$dll" --minimum-expected-tests 1 \
+                --coverage \
+                --coverage-output "$GITHUB_WORKSPACE/Coverage/$p.cobertura.xml" \
+                --coverage-output-format cobertura; then
+              printf '%s\tpass\n' "$p" >> Coverage/status.tsv
+            else
+              printf '%s\tFAIL\n' "$p" >> Coverage/status.tsv
+            fi
+            echo "::endgroup::"
+          done
+          exit 0
+
+      # Summarize whatever cobertura files exist (explicit outputs + fallback
+      # sweep of TestResults in case the extension places files elsewhere).
+      # Pure stdlib python — no ReportGenerator/coverlet dependency.
+      # No thresholds here: numbers are informational only (issue #99).
+      - name: Publish coverage summary (report-only, no thresholds)
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+
+          cov_dir = os.path.join(os.environ["GITHUB_WORKSPACE"], "Coverage")
+          files = {os.path.basename(f): f for f in glob.glob(os.path.join(cov_dir, "*.cobertura.xml"))}
+          for f in glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "TestResults", "**", "*.cobertura.xml"), recursive=True):
+              files.setdefault("TestResults/" + os.path.basename(f), f)
+
+          status = {}
+          try:
+              with open(os.path.join(cov_dir, "status.tsv")) as fh:
+                  for line in fh:
+                      name, _, st = line.rstrip("\n").partition("\t")
+                      status[name.strip()] = st.strip()
+          except OSError:
+              pass
+
+          lines = ["## Coverage (report-only, issue #99)", "",
+                   "_No thresholds — informational only. Scope: core + platform unit",
+                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
+                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
+                   "not whole-repo coverage._", "",
+                   "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
+          total_valid = total_covered = 0
+          for name in sorted(files):
+              try:
+                  root = ET.parse(files[name]).getroot()
+                  valid = int(float(root.get("lines-valid", 0)))
+                  covered = int(float(root.get("lines-covered", 0)))
+                  rate = float(root.get("line-rate", 0.0)) * 100.0
+                  cell = f"{rate:.1f}%"
+                  detail = f"{covered}/{valid}"
+                  total_valid += valid
+                  total_covered += covered
+              except Exception as ex:
+                  cell = "n/a (unparsable)"
+                  detail = str(ex)[:60]
+              st = status.get(name.removesuffix(".cobertura.xml"), "?")
+              short = name.removesuffix(".cobertura.xml")
+              lines.append(f"| {short} | {st} | {cell} | {detail} |")
+          if total_valid:
+              lines += ["",
+                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
+                        f"({total_covered}/{total_valid} lines)**"]
+          else:
+              lines += ["", "**No cobertura files produced — check the collect step log.**"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write("\n".join(lines) + "\n")
+          PY
+
+      - name: Upload cobertura reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-cobertura
+          path: "Coverage/*.cobertura.xml"
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: coverage
+
+  # ── the build measurement: the periodic vCPU falsification ───────────────
+  #
+  # Issue #1929 asks a falsifiable question: is the CI build limited by the
+  # runner's 4 vCPU, or by the shape of the project dependency graph? The
+  # one-off harness for it is `.github/workflows/meas-build-vcpu.yml`
+  # (dev's, on its own branch); this job is its PERIODIC counterpart: the
+  # same two arms, on the schedule and on every merge into dev/master, so
+  # the answer is a trend rather than a single reading.
+  #
+  # The two arms, and the instrument, are dev's:
+  #
+  #   arm A (baseline)  -p:MaxCpuCount=0     what CI runs (all cores)
+  #   arm C (serial)    -maxcpucount:1       the canonical MSBuild SWITCH
+  #
+  # The SWITCH, not the property, and that is a measured fact, not a
+  # preference: `-p:MaxCpuCount=1` is INERT (MSBuild reads `-maxcpucount` as
+  # a switch; the `MaxCpuCount` property appears in no MSBuild target and in
+  # no global-property lookup), and the property arm measured a wall ratio
+  # of 1.08 against the baseline — indistinguishable from not changing
+  # anything. The repository's own CompileTarget passes the property, so it
+  # is a no-op there too.
+  #
+  # THE ARCHITECTURE GATE IS OFF HERE, and it has to be: it is a
+  # single-process run of the architecture test suite (29..39 % of the wall,
+  # 79..154 s of a 253..409 s build), so it is serial in every arm and
+  # dilutes the ratio by a fixed amount. The nightly job switches it off,
+  # which is the right shape for a compile-phase measurement.
+  #
+  # The instrument is `tools/measure-build-cpu.py` (dev's): it runs the
+  # command, samples /proc/stat once a second, and writes the wall time,
+  # the CPU utilisation (average and peak busy cores, and how long the
+  # machine sat at 3.5+), MSBuild's own task aggregates (the `Csc` work, the
+  # `Exec` gate) and the project timeline (how many projects were in flight
+  # over time — the "was the graph ever able to keep four compilers busy?"
+  # question, measured instead of modelled). `tools/aggregate-build-vcpu.py`
+  # turns the per-run JSONs into the ratio table.
+  #
+  # It is a MEASUREMENT, never a gate: the job cannot fail the build, and
+  # it is not on the PR path. The binary log is deliberately NOT taken:
+  # MSBuild warns that the binary logger "can experience measurable
+  # overhead" on large builds, and the artifact budget of this repository is
+  # 500 MB in total.
+  measurement:
+    needs: [gate]
+    if: >-
+      needs.gate.outputs.proceed == 'true' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # The architecture gate is OUT of a compile-phase measurement: it is
+      # serial in every arm and would dilute the ratio.
+      HarborArchGate: 'false'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # No `submodules: recursive`: the vendored ConsoleEx submodule left
+          # the product (ADR-019) and nothing in the build graph references it.
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push run checks out what was pushed.
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The exact SDK global.json asks for — the same one the build job
+          # installs, so the numbers are comparable with the CI compile.
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # The environment the numbers belong to. The runner image is recorded
+      # because `ubuntu-latest` moves (issue #1919: Ubuntu 26.04 in November
+      # 2026) and a CPU-utilisation number without the image it was measured
+      # on is a number without a denominator.
+      - name: Record the environment
+        shell: bash
+        run: |
+          mkdir -p analysis
+          {
+            echo "nproc=$(nproc)"
+            echo "dotnet_sdk=$(dotnet --version)"
+            echo "dotnet_sdks=$(dotnet --list-sdks | tr '\n' ' ')"
+            echo "runner_image=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "kernel=$(uname -sr)"
+            echo "os=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
+            echo "utc=$(date -u +%FT%TZ)"
+          } | tee analysis/environment.txt
+
+      - name: Restore
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          dotnet restore Harbor.slnx -v minimal
+          rc=$?
+          end=$(date +%s)
+          echo "restore_seconds=$((end - start))" >> "$GITHUB_ENV"
+          echo "restore_rc=$rc" >> "$GITHUB_ENV"
+          exit $rc
+
+      # ARM A — the baseline: all cores, exactly what CI compiles with.
+      #
+      # `-v:m` (normal verbosity) is not decoration: MSBuild prints the
+      # "is building" line only there, and the project timeline — the number
+      # of projects in flight over time — is read out of it.
+      - name: Arm A — the all-cores compile (the baseline)
+        run: |
+          set -uo pipefail
+          python3 tools/measure-build-cpu.py --label a-prop0-r1 --out-dir meas -- \
+            dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -v:m -clp:PerformanceSummary || true
+
+      # The tree is cleaned between the arms, so the second one is a
+      # from-scratch build like the first: an incremental build would compile
+      # nothing and the ratio would be meaningless.
+      - name: Clean (so the serial arm is a from-scratch build)
+        run: |
+          set -uo pipefail
+          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1 || true
+          echo "clean_rc=$?" >> "$GITHUB_ENV"
+
+      # ARM C — the strictly serial compile. The SWITCH (`-maxcpucount:1`),
+      # not the property: the property is inert, and the switch is the
+      # control that keeps the experiment honest.
+      - name: Arm C — the strictly serial compile
+        run: |
+          set -uo pipefail
+          python3 tools/measure-build-cpu.py --label c-m1-r1 --out-dir meas -- \
+            dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -maxcpucount:1 -v:m -clp:PerformanceSummary || true
+
+      # The ratio table, and the reading it implies. The aggregator prints
+      # the wall range, the CPU utilisation, the compiler work and the
+      # ratio against the baseline arm.
+      - name: Publish the ratio and the CPU utilisation
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            echo "## Build measurement (the periodic vCPU falsification)"
+            echo
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| restore wall time | ${restore_seconds:-n/a} s |"
+            echo "| nproc | $(nproc) |"
+            echo "| dotnet SDK | $(dotnet --version) |"
+            echo "| runner image | ${ImageOS:-unknown} (${ImageVersion:-unknown}) |"
+            echo "| kernel | $(uname -sr) |"
+            echo
+            python3 tools/aggregate-build-vcpu.py meas --baseline a-prop0 || true
+            echo
+            echo "_The ratio is the number that adjudicates #1929: ~4 means the"
+            echo "build is core-bound (more cores would help), ~2-2.5 means"
+            echo "half-serialised, ~1 means the dependency chain is the"
+            echo "constraint. The architecture gate is off, so the wall is the"
+            echo "compile alone._"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The project-EVALUATION cost of each compile (#1919). This is the
+      # instrument that used to live in .github/workflows/evaluation-cost.yml
+      # — a manual workflow that could not be dispatched at all, because
+      # GitHub will not dispatch a workflow that does not exist on the
+      # default branch. It reads the performance summary the compile printed
+      # (-clp:PerformanceSummary) and the wall time.
+      #
+      # The measure tool prefixes every log line with the elapsed seconds, so
+      # the raw console log is reconstructed before the summary is read out
+      # of it: the summary rows are "   12 ms  Scope  3 calls", and the
+      # parser reads them from the start of the line.
+      - name: Publish the project-evaluation cost
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          args=()
+          for label in a-prop0-r1 c-m1-r1; do
+            raw="meas/${label}.log"
+            [ -f "$raw" ] || continue
+            clean="analysis/${label}.log"
+            sed -E 's/^[0-9]+\.[0-9]+ \| //' "$raw" > "$clean"
+            wall=$(python3 -c "import json,sys;print(int(json.load(open('meas/${label}.json'))['wall_seconds']))" 2>/dev/null || echo 0)
+            args+=(--run "${label}:${clean}:${wall}")
+          done
+          if [ ${#args[@]} -gt 0 ]; then
+            python3 tools/msbuild-evaluation-cost.py "${args[@]}" --summary "$GITHUB_STEP_SUMMARY" || true
+          fi
+
+      - name: Upload the measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-measurement
+          path: |
+            meas/*.json
+            meas/*.log
+            analysis/environment.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: measurement

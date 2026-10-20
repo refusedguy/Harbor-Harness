@@ -1,17 +1,28 @@
 # Harbor CI — build + test the whole solution.
 #
 # Structure:
+#   changes  — the path filter every other job reads: `dotnet` (does the tree
+#              need compiling?), `ui` (the renderer perf gate), `packages` (the
+#              test/sample package-set gate, #1882), `deps` (did the dependency
+#              graph move? — the advisory scan) and `aot` (can the NativeAOT
+#              publish break?).
 #   build    — Release build of Harbor.slnx (zero-warning gate, documentation
 #              warnings included since #701, + the embedded
-#              HarborArchitectureGate) and a CLI smoke run.
+#              HarborArchitectureGate — OFF on the pull-request path since
+#              #1928, ON everywhere else) and a CLI smoke run. It publishes
+#              one build-output artifact PER CONSUMER (#1928): a slice per
+#              test shard, one for the renderer perf gate, and `pack-inputs`
+#              for the pack job.
 #   test     — shard matrix: explicit test-project lists per shard, run
 #              SEQUENTIALLY inside each shard (cross-module parallelism
 #              amplifies the known Avalonia-headless and perf-ceiling flakes
-#              that reproduce under a solution-wide `dotnet test`).
-#   coverage — report-only coverage collection (issue #99): core + platform
-#              suites under the MTP CodeCoverage extension, per-project line
-#              rates in the job summary + raw cobertura.xml artifacts.
-#              NEVER gates (no thresholds, exit 0 by design).
+#              that reproduce under a solution-wide `dotnet test`). Each shard
+#              downloads only its own slice.
+#   pack     — the NuGet packaging, OUT of `build` and in PARALLEL with the
+#              test shards: `dotnet pack`, the package validation, the
+#              determinism gate (two packs of the same tree, compared
+#              entry-by-entry), the clean-room smoke-install, the NuGet
+#              package artifact and the transitive advisory report.
 #   aot-publish — NativeAOT publish of Harbor.App.Cli (issue #413): the tree is
 #              published with HarborWithAot=true, the trim/AOT diagnostics are
 #              compared against .github/aot-warning-baseline.txt, and the
@@ -19,7 +30,35 @@
 #              pass criterion is NOT "zero IL2026 warnings" — it is publish
 #              green + inventory matches the committed rows + the artifact runs.
 #              See docs/AOT_PUBLISH.md.
+#              It runs on EVERY push to dev/master (the release guarantee) and
+#              on a pull request ONLY when the `aot` filter says the AOT
+#              surface moved — see the job header for what "the AOT surface"
+#              is and for what a reviewer must watch in its absence.
 #   publish  — self-contained single-file Harbor.App.Cli (linux-x64) upload.
+#
+# WHAT IS NOT IN THIS FILE, AND WHY
+# -------------------------------
+#   coverage — the report-only coverage collection (issue #99) used to run on
+#              every pull request, re-running 20 of the 43 test projects to
+#              produce a number with no threshold (issue #1783). Measured on
+#              run 39389070999: 236 s of job time, 185 s of it the collect
+#              step, +40 % over the uninstrumented run of the same projects —
+#              and it was the LAST job to finish, so it WAS the PR wall. It
+#              now lives in .github/workflows/nightly.yml and runs on pushes
+#              to dev/master and on the nightly schedule. The number is still
+#              produced, still report-only, and still uploaded (30-day
+#              retention); it is just no longer dead weight on every PR. It
+#              stays on x64: the coverage engine has no linux-arm64 build,
+#              so it cannot follow the shards onto the arm64 pool.
+#
+#   The nightly lane (.github/workflows/nightly.yml) also carries the
+#   analyzer inventory of the test projects and the build measurement (an
+#   MSBuild binary log -> job summary, with the CPU-utilisation and
+#   parallel-efficiency probes that answer #1929).
+#
+#   Every job in this file reports its runner-queue wait in its job summary
+#   (#1782 step 4, the measurement that did not exist anywhere): the wait is
+#   the dominant term in a PR's wall time, and it is invisible in the UI.
 #
 # The windows/macOS matrix that used to live here as the `test-os` job is now
 # its own workflow, `.github/workflows/test-os.yml` (issue #1787). GitHub
@@ -85,11 +124,13 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       dotnet: ${{ steps.filter.outputs.dotnet }}
       ui: ${{ steps.filter.outputs.ui }}
       packages: ${{ steps.filter.outputs.packages }}
       deps: ${{ steps.filter.outputs.deps }}
+      aot: ${{ steps.filter.outputs.aot }}
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -112,6 +153,13 @@ jobs:
               # line above, one file over: editing the workflow that runs the
               # OS suites must set dotnet=true, or the edit lands unvalidated.
               - '.github/workflows/test-os.yml'
+              # The nightly lane (the coverage collection, the analyzer
+              # inventory and the build measurement). It is its own workflow
+              # for the same reason test-os.yml is: GitHub triggers are
+              # workflow-level, so a job cannot be moved off `pull_request`
+              # from inside this file. An edit to it must still set
+              # dotnet=true, or it lands unvalidated.
+              - '.github/workflows/nightly.yml'
               # Runs INSIDE the test job below. Without this line an
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
@@ -223,6 +271,110 @@ jobs:
             deps:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
+            # The AOT surface: what the NativeAOT publish can break. The
+            # publish recipe (-p:HarborWithAot=true) builds the CLI and the
+            # 59 projects its ProjectReference closure reaches, with the
+            # default HarborWith* flags, so the conditional references are all
+            # live (plugins, daemon, all-providers). Plus the properties that
+            # decide the publish (Directory.Build.props carries the HarborWith*
+            # defaults, Directory.Packages.props the package versions ILC sees),
+            # the SDK (global.json), the analyzers that compile into the tree,
+            # and the gate's own instrument and committed inventory.
+            #
+            # NOT merged with `deps` (the advisory scan's filter): the two
+            # answer different questions. A dependency bump can change an
+            # advisory without touching the AOT surface, and a change in the
+            # CLI's own source cannot move an advisory. Merging them would
+            # pay for the AOT publish on every package bump.
+            #
+            # REGENERATING THE LIST (when the CLI gains or loses a project
+            # reference) — one command, from the repo root:
+            #
+            #   python3 - <<'EOF'
+            #   import re, os
+            #   from pathlib import Path
+            #   def refs(p):
+            #       t = Path(p).read_text()
+            #       t = re.sub(r'<!--.*?-->', '', t, flags=re.S)
+            #       out = set()
+            #       for m in re.finditer(r'<ProjectReference\s+Include="([^"]+)"', t):
+            #           i = m.group(1).replace('\\', '/')
+            #           out.add(os.path.normpath(os.path.join(os.path.dirname(p), i))
+            #                     if i.startswith('..') else os.path.normpath(i))
+            #       return out
+            #   seen, stack = set(), ['apps/Harbor.App.Cli/Harbor.App.Cli.csproj']
+            #   while stack:
+            #       p = stack.pop()
+            #       if p in seen: continue
+            #       seen.add(p); stack.extend(r for r in refs(p) if r not in seen)
+            #   for d in sorted({os.path.dirname(p) for p in seen}): print(f"              - '{d}/**'")
+            #   EOF
+            #
+            # A project ADDED to the closure is not in this list until the
+            # list is regenerated, so a PR that adds one would not trigger
+            # the AOT job. That is the safe direction to be wrong in ONLY
+            # because the AOT job runs on EVERY push to dev/master, where the
+            # merge is the backstop.
+            aot:
+              - 'apps/Harbor.App.Cli/**'
+              - 'contrib/tui/Harbor.Tui.RazorConsole/**'
+              - 'contrib/tui/Harbor.Tui.Spectre/**'
+              - 'contrib/tui/Harbor.Tui.Spectre.Fullscreen/**'
+              - 'contrib/tui/Harbor.Tui.SpectreTui/**'
+              - 'contrib/tui/Harbor.Tui.Termina/**'
+              - 'contrib/tui/Harbor.Tui.TerminalGui/**'
+              - 'src/Harbor.Abstractions/**'
+              - 'src/Harbor.Abstractions.Contracts/**'
+              - 'src/Harbor.AgentRuntime/**'
+              - 'src/Harbor.Application/**'
+              - 'src/Harbor.ChangeTracking/**'
+              - 'src/Harbor.CodeGen/**'
+              - 'src/Harbor.DesignSystem/**'
+              - 'src/Harbor.Desktop.Abstractions/**'
+              - 'src/Harbor.Desktop.Animations/**'
+              - 'src/Harbor.Diagnostics.Abstractions/**'
+              - 'src/Harbor.Extensions/**'
+              - 'src/Harbor.Hooks/**'
+              - 'src/Harbor.Hosting/**'
+              - 'src/Harbor.Ipc.Abstractions/**'
+              - 'src/Harbor.Ipc.Client/**'
+              - 'src/Harbor.Ipc.InProcess/**'
+              - 'src/Harbor.Ipc.Server/**'
+              - 'src/Harbor.Lsp/**'
+              - 'src/Harbor.Onboarding/**'
+              - 'src/Harbor.Permissions/**'
+              - 'src/Harbor.Plugins.Abstractions/**'
+              - 'src/Harbor.Plugins.Compilation/**'
+              - 'src/Harbor.Plugins.Hosting/**'
+              - 'src/Harbor.Plugins.Instantiation/**'
+              - 'src/Harbor.Plugins.Registration/**'
+              - 'src/Harbor.Plugins.Storage/**'
+              - 'src/Harbor.PolicyConfig/**'
+              - 'src/Harbor.Providers.Anthropic/**'
+              - 'src/Harbor.Providers.Ollama/**'
+              - 'src/Harbor.Providers.OpenAI/**'
+              - 'src/Harbor.Providers.OpenAiCompatible/**'
+              - 'src/Harbor.Registries/**'
+              - 'src/Harbor.SessionContext/**'
+              - 'src/Harbor.Storage.Jsonl/**'
+              - 'src/Harbor.Storage.Memory/**'
+              - 'src/Harbor.Storage.Sqlite/**'
+              - 'src/Harbor.Telemetry.Core/**'
+              - 'src/Harbor.Terminal.Abstractions/**'
+              - 'src/Harbor.Tools.Builtin/**'
+              - 'src/Harbor.Tui.AnsiPlain/**'
+              - 'src/Harbor.Tui.CellForge/**'
+              - 'src/Harbor.Tui.CellForge.Engine/**'
+              - 'src/Harbor.Tui.CellForge.Prompts/**'
+              - 'src/Harbor.Tui.CellForge.Syntax/**'
+              - 'src/Harbor.Ui.Framework/**'
+              - 'src/Harbor.Ui.Framework.Abstractions/**'
+              - 'src/Harbor.Ui.Framework.Projection/**'
+              - 'src/Harbor.Ui.Framework.Rendering/**'
+              - 'src/Harbor.Ui.Framework.Services/**'
+              - 'src/Harbor.Ui.Framework.Sessions/**'
+              - 'src/Harbor.Ui.Framework.State/**'
+              - 'src/Harbor.Ui.Framework.ViewModels/**'
 
   # #428 / #1845. The public-API freeze of the two frozen assemblies.
   #
@@ -249,12 +401,23 @@ jobs:
   # again with `error RS0017` when the member is deleted while the baseline
   # still names it. A gate that stopped firing is indistinguishable from a
   # surface nobody changed, and this job is what tells the two apart.
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: changes
   public-api:
     name: public-api freeze
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -328,6 +491,16 @@ jobs:
   # The non-vacuity proof is the gate's own --self-test (a banned package
   # declared by a .csproj, one that arrives transitively, and one sitting
   # in an output directory each fail, naming it), run as the first step.
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: public-api freeze
   test-packages:
     name: test/sample package set
     needs: changes
@@ -336,6 +509,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -391,12 +565,23 @@ jobs:
   # It ALWAYS runs (no `needs:`), because a gate that only runs when the
   # paths it watches change is a gate that a rename can switch off. Stdlib
   # python only, no dotnet, no restore — a few seconds.
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: test/sample package set
   test-sdk-absent:
     name: no VSTest SDK in the tree
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019), and the gate excludes contrib/external/ anyway.
@@ -446,6 +631,16 @@ jobs:
   #
   # The raw log is uploaded as an artifact so that a reader can check the
   # tool's answer without re-running it.
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: no VSTest SDK in the tree
   reference-trimmer:
     name: unused references (ReferenceTrimmer)
     needs: changes
@@ -454,6 +649,7 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+      actions: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -507,6 +703,16 @@ jobs:
       - name: Gate — no unused reference outside the baseline
         if: always()
         run: python3 tools/check-reference-trimmer.py --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: unused references (ReferenceTrimmer)
 
   build:
     needs: changes
@@ -842,135 +1048,64 @@ jobs:
           bash -n packaging/deb/build-deb.sh
           bash build/build.sh list --format json > /dev/null
 
-      # NuGet pack + validation (issue #429). Steps, not a new job: no new
-      # matrix axis, same Release outputs built above. Pack warnings fail
-      # the job because Directory.Build.props sets TreatWarningsAsErrors.
-      # Publishing to nuget.org is deliberately NOT here — pack must stay
-      # green on every PR long before any release feed is configured.
-      - name: Pack NuGet libraries (Release, deterministic)
-        run: dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages
-
-      - name: Validate NuGet packages (metadata, README, lib)
-        run: python3 tools/pack-validate.py out/packages
-
-      # Payload determinism across two packs. NuGet stamps zip entry
-      # timestamps with pack wall-clock time, so two `dotnet pack` runs are
-      # never byte-identical files even under ContinuousIntegrationBuild
-      # (measured: identical sizes and CRCs, only date_time differs). The
-      # property CI pins is that every entry's bytes are identical — which
-      # still catches nondeterministic build inputs (timestamps or dates
-      # baked into dlls, generated code, nuspecs).
-      - name: Determinism — identical payloads across two packs
-        run: |
-          dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
-          python3 - <<'EOF'
-          import sys
-          import zipfile
-          from pathlib import Path
-          first, second = Path("out/packages"), Path("out/packages2")
-          bad = []
-          for pkg in sorted(first.glob("*.nupkg")):
-              other = second / pkg.name
-              if not other.exists():
-                  bad.append(f"{pkg.name}: missing from second pack")
-                  continue
-              with zipfile.ZipFile(pkg) as za, zipfile.ZipFile(other) as zb:
-                  na = {i.filename: i for i in za.infolist()}
-                  nb = {i.filename: i for i in zb.infolist()}
-                  if set(na) != set(nb):
-                      bad.append(f"{pkg.name}: entry lists differ")
-                      continue
-                  for name, ia in na.items():
-                      ib = nb[name]
-                      if ia.file_size != ib.file_size or ia.CRC != ib.CRC or za.read(name) != zb.read(name):
-                          bad.append(f"{pkg.name}: entry {name} differs")
-          if bad:
-              print(f"{len(bad)} nondeterministic entr(y/ies):")
-              print("\n".join(f"  - {b}" for b in bad))
-              sys.exit(1)
-          print("deterministic: identical payloads across two packs")
-          EOF
-
-      # Clean-room proof that the dependency graph resolves: throwaway
-      # project, local feed for Harbor.* + nuget.org for transitives.
-      - name: Smoke-install Harbor.Abstractions + one provider
-        run: |
-          VER=$(grep -o '<Version>[^<]*' Directory.Build.props | head -1 | cut -d'>' -f2)
-          rm -rf /tmp/packsmoke && dotnet new console -n packsmoke -o /tmp/packsmoke --no-restore
-          cd /tmp/packsmoke
-          cat > nuget.config <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="local" value="$GITHUB_WORKSPACE/out/packages" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-          </configuration>
-          EOF
-          dotnet add package Harbor.Abstractions --version "$VER"
-          dotnet add package Harbor.Providers.OpenAiCompatible --version "$VER"
-          dotnet build -c Release --nologo
-
-      - name: Upload NuGet packages artifact
+      # The `pack` job's OWN slice of the build output.
+      #
+      # `dotnet pack` of a SOLUTION needs more than the test shards do, and
+      # the difference is exactly what the measured failures named (the pack
+      # job's own history, in the PR body):
+      #
+      #   NU5026 "the file ... to be packed was not found on disk" for the
+      #   four samples/plugins packages — the samples' output is in no other
+      #   slice (the test shards do not need it).
+      #   MSB3030 "could not copy obj/Release/net10.0/Harbor.App.Cli.dll" —
+      #   the PackAsTool CLI package publishes the app, and the publish
+      #   resolution copies the app's INTERMEDIATE assembly.
+      #   MSB3030 "could not copy .../bin/Debug/net10.0/<X>.dll" — the Debug
+      #   path is MSBuild's fallback when the RELEASE output cannot be
+      #   resolved. It happened because the Release compile left three
+      #   projects in Debug (they had no row in the solution's configuration
+      #   table, so AssignProjectConfiguration could not map their
+      #   configuration) — MEASURED and FIXED upstream by #1934/#1921, which
+      #   gave those projects their solution rows. The Debug globs below are
+      #   therefore belt and braces: with #1934 in the tree they match
+      #   nothing, and without it they are what keeps the pack green.
+      #   MSB3030 "could not copy apps/Harbor.App.Cli/obj/Release/net10.0/
+      #   apphost" — the generated apphost is created by the build's
+      #   CreateAppHost target and the tool package's publish copies it. It
+      #   lives in the apps' INTERMEDIATE tree, so the slice carries the
+      #   apps' intermediate trees whole rather than guessing which files in
+      #   them the pack asks for.
+      #
+      # So this artifact is the pack's slice: every non-test project's output
+      # tree — the assemblies, the deps/runtimeconfig json, the XML docs, the
+      # reference assemblies and the native assets — plus the apps'
+      # intermediate trees. The test projects' outputs are NOT here: the pack
+      # does not pack them (IsPackable=false).
+      #
+      # It is a separate artifact from the per-consumer slices because the
+      # pack is a different CONSUMER: it needs the product assemblies (which
+      # no shard's slice carries — a shard's slice carries the shard's own
+      # projects' output directories, which are self-contained), not the test
+      # assemblies.
+      - name: Stash the pack inputs (the pack job's slice of the build output)
         uses: actions/upload-artifact@v7
         with:
-          name: nuget-packages
-          path: out/packages/*.nupkg
+          name: pack-inputs
+          path: |
+            Harbor.slnx
+            apps/**/bin/Release/net10.0/**
+            src/**/bin/Release/net10.0/**
+            contrib/**/bin/Release/net10.0/**
+            samples/**/bin/Release/net10.0/**
+            tools/**/bin/Release/net10.0/**
+            apps/**/bin/Debug/net10.0/**
+            src/**/bin/Debug/net10.0/**
+            contrib/**/bin/Debug/net10.0/**
+            apps/**/obj/Release/net10.0/**
+            apps/**/obj/Debug/net10.0/**
+            !**/*.pdb
+          retention-days: 1
           if-no-files-found: error
-          retention-days: 7
-
-      # Advisory report only: surfaces `dotnet package list --vulnerable`
-      # output (NU190x advisories) on every PR without failing the build.
-      # continue-on-error is intentional — see "Dependency & advisory policy"
-      # in docs/DEVELOPMENT.md. Failing on advisories is deferred (issue #25).
-      #
-      # Three changes, each with its measured size (run 39389070999, job
-      # 118518321386, step "Report vulnerable packages (non-blocking)" = 42 s):
-      #
-      #   * `--no-restore` — the noun-first `dotnet package list` RESTORES
-      #     first as of .NET 10 (learn.microsoft.com/en-us/dotnet/core/
-      #     compatibility/sdk/10.0/dotnet-package-list-restore). The restore
-      #     was 3.6 s of the 42 s ("All projects are up-to-date for
-      #     restore") and the assets it produces are already on disk: the
-      #     NUKE Compile target restored the solution 370 s earlier.
-      #   * the path filter — the scan is SKIPPED unless the dependency graph
-      #     changed (needs.changes.outputs.deps). The remaining 36.5 s is
-      #     not the restore: it is the NuGet advisory API round trip, which
-      #     is the price of the report, not of the plumbing. A code-only PR
-      #     cannot change one advisory, so it does not pay the 36.5 s.
-      #   * the guard — a report-only step that prints nothing is
-      #     indistinguishable from a clean scan. The check below fails the
-      #     STEP (the job still continues: continue-on-error) when the scan
-      #     did not complete or produced no per-project result.
-      #
-      # The noun-first spelling is the .NET 10 form; `dotnet list package`
-      # is the verb-first alias of the same command and is deprecated in
-      # favour of it. The solution is passed with --project: the noun-first
-      # command takes NO positional argument (`dotnet package list [options]`
-      # in `dotnet package list --help`), and the repo root holds two
-      # solutions, so the implicit search would fail anyway.
-      - name: Report vulnerable packages (non-blocking)
-        if: needs.changes.outputs.deps == 'true' || github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: |
-          set -uo pipefail
-          out="$(dotnet package list --project Harbor.slnx --vulnerable --include-transitive --no-restore 2>&1)"
-          status=$?
-          printf '%s\n' "$out"
-          # Guard. Both markers are locale-independent ON PURPOSE: the CLI
-          # localises its prose (the runner is en_US today, a guard that
-          # depends on that is a guard that breaks). A project name in
-          # backticks is what a per-project result line looks like, and it
-          # is what proves the scan listed something.
-          if [ "$status" -ne 0 ]; then
-            echo "::error::the advisory scan exited $status — the report above is not a complete scan"
-            exit 1
-          fi
-          if ! grep -q '`Harbor\.' <<<"$out"; then
-            echo "::error::the advisory report contains no per-project result — the report is EMPTY, not clean"
-            exit 1
-          fi
 
       - name: Upload architecture-gate log
         if: always()
@@ -980,6 +1115,17 @@ jobs:
           path: tests/Harbor.Architecture.Tests/obj/Release/net10.0/harbor-arch-gate.log
           if-no-files-found: ignore
           retention-days: 7
+
+      # The runner-queue wait, in the job summary (#1782 step 4). For THIS
+      # job the interesting number is the pre-build fan-out wait — how long
+      # the runner sat idle between the `changes` job finishing and this one
+      # starting. Measured on run 39389070999: 455 s, larger than the wait
+      # for the first test shard (156 s), and not covered by any issue yet.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: build
 
       # The build job uploads one artifact per consumer, and each shard's
       # artifact carries only that shard's projects. The shard's project
@@ -1299,101 +1445,6 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: Stash build outputs — combined (what the coverage job downloads)
-        uses: actions/upload-artifact@v7
-        with:
-          name: solution-binaries
-          path: |
-            Harbor.slnx
-            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Config.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Config.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Config.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Domain.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Domain.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Domain.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Application.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Application.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Application.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Core.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Core.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Core.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Registries.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Registries.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Registries.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Hosting.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Lsp.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Storage.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Storage.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Storage.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Providers.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Providers.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Providers.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Ipc.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Ipc.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            !**/*.pdb
-            !**/*.xml
-          retention-days: 1
-          if-no-files-found: error
-
-      # ── Save the build outputs ────────────────────────────────────────────
-      #
-      # The PULL REQUEST lane never writes. A pull request would create one
-      # entry per run (the key ends in the commit), and the repository's
-      # 10 GB cache budget would fill up with pull-request entries and evict
-      # the ones the base branch needs — that is the thrash the rule exists
-      # to prevent.
-      #
-      # dev and master push, and so does a MANUAL workflow_dispatch: that is
-      # the deliberate way to exercise the cache end to end on a branch that
-      # is not dev/master, and a manual run is rare enough not to thrash.
-      #
-      # The save happens LAST, after the build, the pack and the artifact
-      # uploads: an entry is only worth keeping if the run it came from was
-      # green.
       - name: Save the build outputs (dev/master pushes and manual runs)
         if: >-
           (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
@@ -1407,6 +1458,252 @@ jobs:
             !**/*.resources.dll
             !**/*.pdb
           key: ${{ steps.cache-key.outputs.key }}
+
+  # ── pack ───────────────────────────────────────────────────────────────────
+  #
+  # The packaging work, split out of the `build` job so that it runs IN
+  # PARALLEL with the test shards instead of in front of them.
+  #
+  # WHY IT IS A SEPARATE JOB AND NOT A STEP IN `build`
+  # ---------------------------------------------------
+  # Measured on run 39389070999, the pack group inside `build` cost 28 s of
+  # job time (pack 11 s, validation 0 s, the second pack + zip comparison
+  # 11 s, the clean-room smoke-install 6 s) plus the 60 MB NuGet artifact
+  # upload (3 s). All of it sat BETWEEN the compile and the test shards: the
+  # shards cannot start until `build` is green, so every second here is a
+  # second the PR lane does not move. Moved into a job that `needs: build`,
+  # the same work now overlaps the shards instead of delaying them.
+  #
+  # WHAT MOVED, AS ONE UNIT
+  # ------------------------
+  #   * `dotnet pack` (the NuGet packages),
+  #   * `tools/pack-validate.py` (the metadata/README/lib gate, issue #429),
+  #   * the DETERMINISM gate — the second pack and the entry-by-entry zip
+  #     comparison. The two packs MUST stay together: the gate compares two
+  #     packs of the SAME tree, so splitting them across jobs would compare
+  #     two different builds and prove nothing. Both packs run here, from the
+  #     same `pack-inputs` artifact, so the comparison stays
+  #     apples-to-apples.
+  #   * the clean-room smoke-install (a throwaway project that resolves
+  #     Harbor.Abstractions + one provider from the local feed),
+  #   * the `nuget-packages` artifact upload,
+  #   * the transitive advisory report (non-blocking, and the only transitive
+  #     advisory signal the repo produces — the NU1902/NU1903 restore
+  #     warnings cover top-level packages only). The scan keeps its
+  #     noun-first `dotnet package list --project Harbor.slnx --vulnerable
+  #     --include-transitive --no-restore`, its `deps` path filter that
+  #     skips the 36.5 s advisory-API round trip on a PR that cannot move an
+  #     advisory, and its empty-report guard; only the scan's POSITION
+  #     changes.
+  #
+  # The CHECK ITSELF IS NOT WEAKENED. The packages are still packed from the
+  # exact Release outputs the shards ran against (that is what
+  # `dotnet pack --no-build` means, and the `build` job hands over the
+  # binaries unchanged), the validation and the determinism comparison are
+  # byte-for-byte the same commands, and publishing to nuget.org is still
+  # deliberately NOT here — pack must stay green on every PR long before any
+  # release feed is configured.
+  pack:
+    needs: [changes, build]
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The same pinned SDK as the build job, for the same reason: the
+          # pack resolves the same package graph the build resolved, and a
+          # different SDK band would resolve a different graph.
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # The pack job's slice of the build output. It does NOT download the
+      # shards' slices: the pack does not need the test projects' outputs,
+      # and downloading them to pack 45 packages is the wrong trade.
+      - name: Download the pack inputs
+        uses: actions/download-artifact@v7
+        with:
+          name: pack-inputs
+
+      # THE RESTORE, AND WHY IT CANNOT BE THE BUILD JOB'S
+      # ---------------------------------------------------
+      # `dotnet pack --no-build` implies `--no-restore` (documented: "Doesn't
+      # build the project before packing. It also implicitly sets the
+      # --no-restore flag"). So the pack job owns the restore, and it CANNOT
+      # borrow the build job's.
+      #
+      # The measured failure of trying (run 39399787568): every project
+      # failed with
+      #   NETSDK1064: Package Microsoft.NET.ILLink.Tasks, version 10.0.13
+      #   was not found.
+      # The reason is the NuGet cache, not the artifacts. `setup-dotnet`'s
+      # cache is an IMMUTABLE snapshot: when the key already exists, the
+      # post-job step cannot overwrite it. The build job's restore fetched
+      # the packages the CURRENT SDK adds implicitly (Microsoft.NET.ILLink.
+      # Tasks 10.0.13, for the trimmable projects) into its own cache
+      # directory, and that delta could not be written back into the cache
+      # the pack job later reads. The pack job therefore has the assets file
+      # (which names the package) and NOT the package.
+      #
+      # So the pack job restores for itself, and the restore must be a REAL
+      # restore: the artifact carries the build job's `project.nuget.cache`,
+      # and a restore whose dgSpec hash matches that file is a no-op — and a
+      # no-op does not download the missing package. Deleting the no-op
+      # cache forces the work.
+      #
+      # Cost, measured in the build job's own restore: 109 projects restored
+      # between 09:30:01 and 09:30:11 — about ten seconds with a warm
+      # package cache. The pack job is off the critical path, so this is
+      # runner time, not PR wall time.
+      - name: Restore the package graph (the pack job's own)
+        run: |
+          find . -name project.nuget.cache -delete
+          find . -name project.assets.json -delete
+          dotnet restore Harbor.slnx -v minimal
+
+      # NuGet pack + validation (issue #429). Steps, not a new job: no new
+      # matrix axis, same Release outputs built above. Pack warnings fail
+      # the job because Directory.Build.props sets TreatWarningsAsErrors.
+      # Publishing to nuget.org is deliberately NOT here — pack must stay
+      # green on every PR long before any release feed is configured.
+      - name: Pack NuGet libraries (Release, deterministic)
+        run: dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages
+
+      - name: Validate NuGet packages (metadata, README, lib)
+        run: python3 tools/pack-validate.py out/packages
+
+      # Payload determinism across two packs. NuGet stamps zip entry
+      # timestamps with pack wall-clock time, so two `dotnet pack` runs are
+      # never byte-identical files even under ContinuousIntegrationBuild
+      # (measured: identical sizes and CRCs, only date_time differs). The
+      # property CI pins is that every entry's bytes are identical — which
+      # still catches nondeterministic build inputs (timestamps or dates
+      # baked into dlls, generated code, nuspecs).
+      - name: Determinism — identical payloads across two packs
+        run: |
+          dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages2
+          python3 - <<'EOF'
+          import sys
+          import zipfile
+          from pathlib import Path
+          first, second = Path("out/packages"), Path("out/packages2")
+          bad = []
+          for pkg in sorted(first.glob("*.nupkg")):
+              other = second / pkg.name
+              if not other.exists():
+                  bad.append(f"{pkg.name}: missing from second pack")
+                  continue
+              with zipfile.ZipFile(pkg) as za, zipfile.ZipFile(other) as zb:
+                  na = {i.filename: i for i in za.infolist()}
+                  nb = {i.filename: i for i in zb.infolist()}
+                  if set(na) != set(nb):
+                      bad.append(f"{pkg.name}: entry lists differ")
+                      continue
+                  for name, ia in na.items():
+                      ib = nb[name]
+                      if ia.file_size != ib.file_size or ia.CRC != ib.CRC or za.read(name) != zb.read(name):
+                          bad.append(f"{pkg.name}: entry {name} differs")
+          if bad:
+              print(f"{len(bad)} nondeterministic entr(y/ies):")
+              print("\n".join(f"  - {b}" for b in bad))
+              sys.exit(1)
+          print("deterministic: identical payloads across two packs")
+          EOF
+
+      # Clean-room proof that the dependency graph resolves: throwaway
+      # project, local feed for Harbor.* + nuget.org for transitives.
+      - name: Smoke-install Harbor.Abstractions + one provider
+        run: |
+          VER=$(grep -o '<Version>[^<]*' Directory.Build.props | head -1 | cut -d'>' -f2)
+          rm -rf /tmp/packsmoke && dotnet new console -n packsmoke -o /tmp/packsmoke --no-restore
+          cd /tmp/packsmoke
+          cat > nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$GITHUB_WORKSPACE/out/packages" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet add package Harbor.Abstractions --version "$VER"
+          dotnet add package Harbor.Providers.OpenAiCompatible --version "$VER"
+          dotnet build -c Release --nologo
+
+      - name: Upload NuGet packages artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: out/packages/*.nupkg
+          if-no-files-found: error
+          retention-days: 7
+
+      # Advisory report only: surfaces `dotnet package list --vulnerable`
+      # output (NU190x advisories) on every PR without failing the build.
+      # continue-on-error is intentional — see "Dependency & advisory policy"
+      # in docs/DEVELOPMENT.md. Failing on advisories is deferred (issue #25).
+      #
+      # Three changes, each with its measured size (run 39389070999, job
+      # 118518321386, step "Report vulnerable packages (non-blocking)" = 42 s):
+      #
+      #   * `--no-restore` — the noun-first `dotnet package list` RESTORES
+      #     first as of .NET 10 (learn.microsoft.com/en-us/dotnet/core/
+      #     compatibility/sdk/10.0/dotnet-package-list-restore). The restore
+      #     was 3.6 s of the 42 s ("All projects are up-to-date for
+      #     restore") and the assets it produces are already on disk: the
+      #     NUKE Compile target restored the solution 370 s earlier.
+      #   * the path filter — the scan is SKIPPED unless the dependency graph
+      #     changed (needs.changes.outputs.deps). The remaining 36.5 s is
+      #     not the restore: it is the NuGet advisory API round trip, which
+      #     is the price of the report, not of the plumbing. A code-only PR
+      #     cannot change one advisory, so it does not pay the 36.5 s.
+      #   * the guard — a report-only step that prints nothing is
+      #     indistinguishable from a clean scan. The check below fails the
+      #     STEP (the job still continues: continue-on-error) when the scan
+      #     did not complete or produced no per-project result.
+      #
+      # The noun-first spelling is the .NET 10 form; `dotnet list package`
+      # is the verb-first alias of the same command and is deprecated in
+      # favour of it. The solution is passed with --project: the noun-first
+      # command takes NO positional argument (`dotnet package list [options]`
+      # in `dotnet package list --help`), and the repo root holds two
+      # solutions, so the implicit search would fail anyway.
+      - name: Report vulnerable packages (non-blocking)
+        if: needs.changes.outputs.deps == 'true' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          out="$(dotnet package list --project Harbor.slnx --vulnerable --include-transitive --no-restore 2>&1)"
+          status=$?
+          printf '%s\n' "$out"
+          # Guard. Both markers are locale-independent ON PURPOSE: the CLI
+          # localises its prose (the runner is en_US today, a guard that
+          # depends on that is a guard that breaks). A project name in
+          # backticks is what a per-project result line looks like, and it
+          # is what proves the scan listed something.
+          if [ "$status" -ne 0 ]; then
+            echo "::error::the advisory scan exited $status — the report above is not a complete scan"
+            exit 1
+          fi
+          if ! grep -q '`Harbor\.' <<<"$out"; then
+            echo "::error::the advisory report contains no per-project result — the report is EMPTY, not clean"
+            exit 1
+          fi
+
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: pack
 
   test:
     needs: [changes, build]
@@ -1502,6 +1799,7 @@ jobs:
     permissions:
       contents: read
       checks: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -1781,168 +2079,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
-  # suites (core + platform shard lists) under the MTP CodeCoverage extension
-  # (Microsoft.Testing.Extensions.CodeCoverage ships transitively with TUnit —
-  # no new packages) and publishes per-project line coverage to the job
-  # summary + raw cobertura.xml artifacts (30-day retention feeds the "month of
-  # green reports" baseline for a future diff-threshold).
-  #
-  # Report-only contract (do NOT "fix" into a gate):
-  #   - NO thresholds, NO fail-on-numbers. A global percentage gate is
-  #     explicitly deferred (legacy areas would fail day one — see #99).
-  #   - Per-project test failures are RECORDED, never fatal: the `test` job
-  #     stays the gate. Instrumentation must not block PRs on flakes.
-  # Excluded suites: ui (Avalonia-headless flakes amplify under
-  # instrumentation), e2e/load (slow, need display). Scope is stated in the
-  # summary so numbers are never misread as whole-repo coverage.
-  coverage:
-    needs: [changes, build]
-    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
-      - uses: actions/checkout@v7
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
-
-      - name: Download build outputs
-        uses: actions/download-artifact@v7
-        with:
-          name: solution-binaries
-
-      # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
-      # integration tests self-skip (same note as in the `test` job).
-      - name: Ensure ripgrep installed
-        run: |
-          if ! command -v rg &> /dev/null; then
-            sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
-          fi
-          rg --version | head -1
-
-      # Per-project failures are recorded in Coverage/status.tsv, never fatal
-      # (final `exit 0` is intentional — report-only, see job comment).
-      - name: Collect coverage (core + platform unit suites)
-        timeout-minutes: 25
-        shell: bash
-        run: |
-          set -uo pipefail
-          mkdir -p Coverage
-          : > Coverage/status.tsv
-          for p in \
-            Harbor.Abstractions.Tests \
-            Harbor.Config.Tests \
-            Harbor.Domain.Tests \
-            Harbor.Application.Tests \
-            Harbor.ChangeTracking.Tests \
-            Harbor.Core.Tests \
-            Harbor.Registries.Tests \
-            Harbor.Hosting.Tests \
-            Harbor.Architecture.Tests \
-            Harbor.Lsp.Tests \
-            Harbor.Telemetry.Tests \
-            Harbor.Tools.Builtin.Tests \
-            Harbor.Storage.Tests \
-            Harbor.Storage.Jsonl.Tests \
-            Harbor.Providers.Tests \
-            Harbor.Transport.Remote.Tests \
-            Harbor.Plugins.Abstractions.Tests \
-            Harbor.Plugins.Runtime.Tests \
-            Harbor.Plugins.Host.Tests \
-            Harbor.Ipc.Tests; do
-            echo "::group::coverage $p"
-            dll="tests/$p/bin/Release/net10.0/$p.dll"
-            if [ ! -f "$dll" ]; then
-              echo "Missing $dll — did build artifact download fail?"
-              printf '%s\tmissing\n' "$p" >> Coverage/status.tsv
-            elif dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
-                --coverage \
-                --coverage-output "$GITHUB_WORKSPACE/Coverage/$p.cobertura.xml" \
-                --coverage-output-format cobertura; then
-              printf '%s\tpass\n' "$p" >> Coverage/status.tsv
-            else
-              printf '%s\tFAIL\n' "$p" >> Coverage/status.tsv
-            fi
-            echo "::endgroup::"
-          done
-          exit 0
-
-      # Summarize whatever cobertura files exist (explicit outputs + fallback
-      # sweep of TestResults in case the extension places files elsewhere).
-      # Pure stdlib python — no ReportGenerator/coverlet dependency.
-      # No thresholds here: numbers are informational only (issue #99).
-      - name: Publish coverage summary (report-only, no thresholds)
-        if: always()
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import glob, os, xml.etree.ElementTree as ET
-
-          cov_dir = os.path.join(os.environ["GITHUB_WORKSPACE"], "Coverage")
-          files = {os.path.basename(f): f for f in glob.glob(os.path.join(cov_dir, "*.cobertura.xml"))}
-          for f in glob.glob(os.path.join(os.environ["GITHUB_WORKSPACE"], "TestResults", "**", "*.cobertura.xml"), recursive=True):
-              files.setdefault("TestResults/" + os.path.basename(f), f)
-
-          status = {}
-          try:
-              with open(os.path.join(cov_dir, "status.tsv")) as fh:
-                  for line in fh:
-                      name, _, st = line.rstrip("\n").partition("\t")
-                      status[name.strip()] = st.strip()
-          except OSError:
-              pass
-
-          lines = ["## Coverage (report-only, issue #99)", "",
-                   "_No thresholds — informational only. Scope: core + platform unit",
-                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
-                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
-                   "not whole-repo coverage._", "",
-                   "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
-          total_valid = total_covered = 0
-          for name in sorted(files):
-              try:
-                  root = ET.parse(files[name]).getroot()
-                  valid = int(float(root.get("lines-valid", 0)))
-                  covered = int(float(root.get("lines-covered", 0)))
-                  rate = float(root.get("line-rate", 0.0)) * 100.0
-                  cell = f"{rate:.1f}%"
-                  detail = f"{covered}/{valid}"
-                  total_valid += valid
-                  total_covered += covered
-              except Exception as ex:
-                  cell = "n/a (unparsable)"
-                  detail = str(ex)[:60]
-              st = status.get(name.removesuffix(".cobertura.xml"), "?")
-              short = name.removesuffix(".cobertura.xml")
-              lines.append(f"| {short} | {st} | {cell} | {detail} |")
-          if total_valid:
-              lines += ["",
-                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
-                        f"({total_covered}/{total_valid} lines)**"]
-          else:
-              lines += ["", "**No cobertura files produced — check the collect step log.**"]
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
-              fh.write("\n".join(lines) + "\n")
-          PY
-
-      - name: Upload cobertura reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-cobertura
-          path: "Coverage/*.cobertura.xml"
-          if-no-files-found: warn
-          retention-days: 30
-
   # Task: artifact publishing — self-contained single-file CLI.
   # ── aot-publish (issue #413) ───────────────────────────────────────────────
   #
@@ -2061,15 +2197,47 @@ jobs:
   # be ignored on a fast one. `timeout-minutes` is the only time bound here and
   # it is a hang detector, not a performance gate; ILC time is reported to the
   # log so the trend is visible without being a pass criterion.
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: test (${{ matrix.shard }})
   aot-publish:
     needs: [changes, build]
-    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    # The CHECK is unchanged (same recipe, same committed inventory, same
+    # "the published binary must run" half, same aot-publish-gate.py
+    # comparison). What changed is WHEN the job is allowed to spend a
+    # runner:
+    #   * on a PUSH to dev/master it ALWAYS runs — the release guarantee, and
+    #     the backstop for a break a PR's filter could not see;
+    #   * on a PULL REQUEST it runs only when the `aot` filter says the AOT
+    #     surface moved (the CLI, the 58 projects its publish graph reaches,
+    #     Directory.Build.props, Directory.Packages.props, global.json,
+    #     analyzers/**, and the gate's own instrument and inventory).
+    #
+    # A skipped job is NOT a green job, and it does not block anything by
+    # itself: there is no branch protection on dev/master (issue #1804 is
+    # open — the API answers 404 "Branch not protected"), so NOTHING in this
+    # workflow is a required check today. A reviewer must therefore read the
+    # job list, not just the colours: on a PR where `aot-publish` is SKIPPED,
+    # the AOT signal is not in the PR at all, and the merge into dev/master
+    # is what produces it. That run is the one to look at.
+    if: >-
+      (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') &&
+      github.actor != 'dependabot[bot]' &&
+      (needs.changes.outputs.aot == 'true' || github.event_name != 'pull_request')
     runs-on: ubuntu-latest
     # Generous, because it must not be the thing that goes red: see "ON
     # WALL-CLOCK TIME" above. This is a hang detector.
     timeout-minutes: 45
     permissions:
       contents: read
+      actions: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -2284,6 +2452,16 @@ jobs:
           # it must exist.
           if-no-files-found: warn
 
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: aot-publish
+
   publish:
     needs: [changes, build]
     if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')) && needs.changes.outputs.dotnet == 'true'
@@ -2291,6 +2469,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      actions: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -2323,6 +2502,16 @@ jobs:
           path: publish/linux-x64/
           retention-days: 14
 
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: publish
+
   perf-gate:
     needs: [changes, build]
     if: (needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch') && needs.build.result == 'success' && github.actor != 'dependabot[bot]'
@@ -2331,6 +2520,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      actions: read
     env:
       HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
     steps:
@@ -2390,3 +2580,13 @@ jobs:
           path: renderer-perf-report.txt
           if-no-files-found: warn
           retention-days: 7
+
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: perf-gate

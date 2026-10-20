@@ -1398,10 +1398,12 @@ arrive as one PR per action (no grouping — majors need individual review).
 
 NuGet audit runs on every restore via the SDK default; advisories surface as
 `NU190x` build warnings (and fail `master`/tag builds through `--warnaserror`).
-CI additionally runs a non-blocking vulnerable-packages report in the `build`
+CI additionally runs a non-blocking vulnerable-packages report in the `pack`
 job (`dotnet package list --project Harbor.slnx --vulnerable
 --include-transitive --no-restore`, `continue-on-error: true`) so the
-advisory list is visible without breaking the build.
+advisory list is visible without breaking the build. The `pack` job owns the
+NuGet packaging since the lane split, and the report moved with it: it is
+no longer in front of the test shards.
 
 The report runs only when the dependency graph can have changed — the
 `changes` job's `deps` filter fires on `Directory.Packages.props` or
@@ -1409,7 +1411,10 @@ The report runs only when the dependency graph can have changed — the
 move an advisory, so it does not pay for the scan (42 s measured, of which
 36.5 s is the NuGet advisory API round trip). `--no-restore` is there
 because the noun-first `dotnet package list` restores first as of .NET 10,
-and the solution was already restored by the build step above it.
+and the `pack` job restores the solution itself before it packs (a
+`dotnet pack --no-build` implies `--no-restore`, and `setup-dotnet`'s NuGet
+cache is an immutable snapshot, so the pack job cannot borrow the build
+job's restore).
 
 The step is report-only, so it also guards itself: a scan that did not
 complete, or that produced no per-project result, is reported as an error
