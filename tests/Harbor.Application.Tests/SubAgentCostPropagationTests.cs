@@ -360,9 +360,9 @@ public class SubAgentCostPropagationTests
         string childId = store.CreatedSessions[0].Id;
         await Assert.That(result.Error).Contains($"[resume-session:{childId}]");
         var hint = SubAgentFailureFormat.TryExtractResumeHint(result.Error, "explore");
-        await Assert.That(hint).IsNotNull();
-        await Assert.That(hint!.SessionId).IsEqualTo(childId);
-        await Assert.That(hint.AgentName).IsEqualTo("explore");
+        await Assert.That(hint.HasValue).IsTrue();
+        await Assert.That(hint.Value.SessionId).IsEqualTo(childId);
+        await Assert.That(hint.Value.AgentName).IsEqualTo("explore");
     }
 
     [Test]

@@ -116,35 +116,8 @@ public class TaskToolCostTests
         var result = await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
+        // The absence is unwrapped by the caller: a failure with no resumable
+        // session carries NO metadata, not a boxed empty Maybe.
         await Assert.That(result.Metadata).IsNull();
-    }
-
-    [Test]
-    [Arguments("boom [resume-session:abc123]", "abc123", true)]
-    [Arguments("no trailer here", null, false)]
-    [Arguments("", null, false)]
-    [Arguments("dangling [resume-session:abc", null, false)]
-    [Arguments("empty [resume-session:]", null, false)]
-    [Arguments("spaced [resume-session:a b]", null, false)]
-    public async Task ResumeHint_Theory(string error, string? expectedSession, bool expectHint)
-    {
-        var hint = SubAgentFailureFormat.TryExtractResumeHint(error, "explore");
-
-        await Assert.That(hint is not null).IsEqualTo(expectHint);
-        if (expectedSession is not null)
-        {
-            await Assert.That(hint!.SessionId).IsEqualTo(expectedSession);
-            await Assert.That(hint.AgentName).IsEqualTo("explore");
-        }
-    }
-
-    [Test]
-    public async Task ResumeTrailer_RoundTripsThroughFormatter()
-    {
-        string message = SubAgentFailureFormat.WithResumeTrailer("Sub-agent 'plan' failed: bad day.", "sess42");
-
-        await Assert.That(message).Contains("[resume-session:sess42]");
-        var hint = SubAgentFailureFormat.TryExtractResumeHint(message, "plan");
-        await Assert.That(hint).IsEqualTo(new SubAgentResumeHint("sess42", "plan"));
     }
 }

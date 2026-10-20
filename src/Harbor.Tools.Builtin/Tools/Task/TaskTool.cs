@@ -173,7 +173,15 @@ public sealed partial class TaskTool : ITool
 
         return result.Match(
             run => SuccessResult(run),
-            err => ToolResult.Error(err, SubAgentFailureFormat.TryExtractResumeHint(err, agentName)));
+            err =>
+            {
+                // The hint is metadata, not part of the error text: a failure
+                // with no resumable session carries NO metadata at all, so the
+                // absence is unwrapped here instead of being boxed as an empty
+                // Maybe.
+                Maybe<SubAgentResumeHint> hint = SubAgentFailureFormat.TryExtractResumeHint(err, agentName);
+                return ToolResult.Error(err, hint.HasValue ? hint.Value : null);
+            });
     }
 
     private ToolResult SuccessResult(SubAgentRunResult run)
