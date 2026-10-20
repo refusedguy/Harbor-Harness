@@ -37,8 +37,6 @@ public class DialogSelectListNavStateTests
         return list;
     }
 
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     // Rows paint at rect.Y + index; selected rows carry Bold (Accent+Bold),
     // plain rows do not.
     private static bool IsPicked(ScreenBuffer buffer, int y) =>
@@ -96,7 +94,7 @@ public class DialogSelectListNavStateTests
         // Height 2 → 2 list rows; selection drags the viewport down.
         var buffer = new ScreenBuffer(40, 2);
         list.Paint(buffer, new Rect(0, 0, 40, 2), list.State);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("Option 19")).IsTrue();
         await Assert.That(art.Contains("Option 00")).IsFalse();
     }

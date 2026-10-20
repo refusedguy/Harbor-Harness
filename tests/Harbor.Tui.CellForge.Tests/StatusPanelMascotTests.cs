@@ -115,7 +115,7 @@ public class StatusPanelMascotTests
         var buffer = new ScreenBuffer(120, 8);
         screen.Tree.Solve(120, 8);
 
-        string first = PaintLastFrame(screen, buffer, 1);
+        string first = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.ErrorFrames[1]);
 
         // Frozen clock (#1026): 250 paints run 100 frames past the old
@@ -124,7 +124,7 @@ public class StatusPanelMascotTests
         // take milliseconds, far below the ~12 s latch" — assumed the runner
         // wins; now there is nothing to win, and a frame-keyed latch fails
         // exactly here.
-        string fast = PaintLastFrame(screen, buffer, FramesPastBudget);
+        string fast = ScreenFixtures.PaintLastFrame(screen, buffer, FramesPastBudget);
         await Assert.That(fast).Contains(AmbientMascot.ErrorFrames[(1 + FramesPastBudget) % AmbientMascot.ErrorFrames.Length]);
     }
 
@@ -138,13 +138,13 @@ public class StatusPanelMascotTests
         var buffer = new ScreenBuffer(120, 8);
         screen.Tree.Solve(120, 8);
 
-        string first = PaintLastFrame(screen, buffer, 1);
+        string first = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         await Assert.That(first).Contains(AmbientMascot.SuccessFrames[1]);
 
         // Frozen clock (#1026): same 250-frames-past-budget hold as the
         // errored phase above — the success latch is the same wall-clock
         // mechanism, and a frame-keyed latch fails exactly here.
-        string fast = PaintLastFrame(screen, buffer, FramesPastBudget);
+        string fast = ScreenFixtures.PaintLastFrame(screen, buffer, FramesPastBudget);
         await Assert.That(fast).Contains(AmbientMascot.SuccessFrames[(1 + FramesPastBudget) % AmbientMascot.SuccessFrames.Length]);
     }
 
@@ -166,22 +166,4 @@ public class StatusPanelMascotTests
         return sb.ToString();
     }
 
-    /// <summary>Paints all panels <paramref name="frames" /> times, returning only the LAST frame's art.</summary>
-    private static string PaintLastFrame(ChatScreen screen, ScreenBuffer buffer, int frames)
-    {
-        for (int i = 0; i < frames - 1; i++)
-        {
-            foreach (var panel in screen.Tree.Panels)
-            {
-                panel.Paint(buffer);
-            }
-        }
-
-        foreach (var panel in screen.Tree.Panels)
-        {
-            panel.Paint(buffer);
-        }
-
-        return GridDump.Art(buffer);
-    }
 }

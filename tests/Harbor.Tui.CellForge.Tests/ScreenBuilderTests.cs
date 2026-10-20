@@ -16,8 +16,6 @@ public class ScreenBuilderTests
         public override void Paint(ScreenBuffer buffer) { }
     }
 
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     private static async Task AssertSameRects(LayoutTree built, LayoutTree manual)
     {
         var b = built.Panels.ToDictionary(p => p.Id, p => p.Rect);
@@ -43,7 +41,7 @@ public class ScreenBuilderTests
         var buffer = new ScreenBuffer(30, 6);
         tree.Solve(30, 6);
         tree.PaintAll(buffer);
-        await Assert.That(Art(buffer).Contains("hello builder")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("hello builder")).IsTrue();
     }
 
     [Test]

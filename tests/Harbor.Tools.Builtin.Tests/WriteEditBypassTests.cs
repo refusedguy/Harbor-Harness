@@ -15,9 +15,6 @@ public class WriteEditBypassTests
         return root;
     }
 
-    private static JsonElement Args<T>(T payload) =>
-        JsonDocument.Parse(TestJson.Serialize(payload)).RootElement.Clone();
-
     [Test]
     public async Task Write_ExecuteAsync_AbsoluteTraversalPathEscapingWorkspace_IsRefused()
     {
@@ -30,7 +27,7 @@ public class WriteEditBypassTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new ToolPathContentArgs(traversalPath, "pwned")),
+                TestArgs.FromPayload(new ToolPathContentArgs(traversalPath, "pwned")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -55,7 +52,7 @@ public class WriteEditBypassTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new ToolPathEditArgs(traversalPath, "AAA", "BBB")),
+                TestArgs.FromPayload(new ToolPathEditArgs(traversalPath, "AAA", "BBB")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -82,7 +79,7 @@ public class WriteEditBypassTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new ToolPathContentArgs(linkRelativePath, "pwned")),
+                TestArgs.FromPayload(new ToolPathContentArgs(linkRelativePath, "pwned")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -110,7 +107,7 @@ public class WriteEditBypassTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new ToolPathEditArgs(linkRelativePath, "AAA", "BBB")),
+                TestArgs.FromPayload(new ToolPathEditArgs(linkRelativePath, "AAA", "BBB")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();

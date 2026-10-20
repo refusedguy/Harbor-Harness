@@ -7,8 +7,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericNavStateTests
 {
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     [Test]
     public async Task NavState_Empty_SelectsNothing()
     {
@@ -123,7 +121,7 @@ public class GenericNavStateTests
 
         var buffer = new ScreenBuffer(20, 4);
         right.Paint(buffer, new Rect(0, 0, 20, 4), left.State);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("three")).IsTrue();
         await Assert.That(art.Contains("> three")).IsTrue();
     }
@@ -139,6 +137,6 @@ public class GenericNavStateTests
 
         var buffer = new ScreenBuffer(20, 2);
         list.Paint(buffer, new Rect(0, 0, 20, 2), state);
-        await Assert.That(Art(buffer).Contains("four")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("four")).IsTrue();
     }
 }

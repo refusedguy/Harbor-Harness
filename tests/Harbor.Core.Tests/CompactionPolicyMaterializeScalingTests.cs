@@ -120,7 +120,7 @@ public class CompactionPolicyMaterializeScalingTests
         int expected = 0;
         for (int i = 0; i < 10; i++)
         {
-            history.Add(User($"gate-cycle-{i}"));
+            history.Add(MessageFixtures.User($"gate-cycle-{i}"));
             expected = history.Count;
             IReadOnlyList<AgentMessage> view = CompactionPolicy.MaterializeCompactedView(history);
             await Assert.That(view.Count).IsEqualTo(expected);
@@ -379,7 +379,7 @@ public class CompactionPolicyMaterializeScalingTests
         var pool = new AgentMessage[units];
         for (int i = 0; i < units; i++)
         {
-            pool[i] = summarized ? Assistant($"turn-{i}") : User($"turn-{i}");
+            pool[i] = summarized ? MessageFixtures.Assistant($"turn-{i}") : MessageFixtures.User($"turn-{i}");
         }
 
         return pool;
@@ -391,7 +391,7 @@ public class CompactionPolicyMaterializeScalingTests
         var history = new List<AgentMessage>(count);
         for (int i = 0; i < count; i++)
         {
-            history.Add(User($"seed-{i}"));
+            history.Add(MessageFixtures.User($"seed-{i}"));
         }
 
         return history;
@@ -408,43 +408,16 @@ public class CompactionPolicyMaterializeScalingTests
         string anchorId = string.Empty;
         for (int i = 0; i < count; i++)
         {
-            var seed = User($"seed-{i}");
+            var seed = MessageFixtures.User($"seed-{i}");
             anchorId = seed.Id;
             history.Add(seed);
         }
 
-        var summary = Summary("folded history", anchorId);
+        var summary = MessageFixtures.Summary("folded history", anchorId);
         history.Add(summary);
         return (history, summary);
     }
 
     // ---- message fixtures (same shape as the invariant tests) ---------
 
-    private static UserMessage User(string content) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        content,
-        "code",
-        "test-model");
-
-    private static AssistantMessage Assistant(string text) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model");
-
-    private static AssistantMessage Summary(string text, string? firstKeptId) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model",
-        IsSummary: true,
-        SummaryFirstKeptId: firstKeptId);
 }

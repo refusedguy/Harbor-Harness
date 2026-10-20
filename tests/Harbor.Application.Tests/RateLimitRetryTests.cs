@@ -2,13 +2,9 @@ using System.Net;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
-using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
-using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
 using Harbor.TestKit;
@@ -236,24 +232,6 @@ public class RateLimitRetryTests
 
     // ── degraded partial results ──
 
-    private static AgentLoop LoopWithClock(ScriptedLlmClient client, FakeEventBus bus, TimeProvider clock)
-    {
-        var agent = TestAgents.AllowAll();
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            new FakeToolRegistry(),
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(clock),
-            bus,
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
-    }
-
     [Test]
     public async Task RateLimitStorm_DegradesWithPartialOutput_InsteadOfTerminalDeath()
     {
@@ -263,7 +241,7 @@ public class RateLimitRetryTests
             new TextDeltaEvent("t", "partial-"),
             new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
+        var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-rate-limit-degrade-tests", "code", "test", "test-model"));
 
@@ -291,7 +269,7 @@ public class RateLimitRetryTests
         var client = new ScriptedLlmClient([
             new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
+        var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-rate-limit-fatal-tests", "code", "test", "test-model"));
 
@@ -315,16 +293,6 @@ public class RateLimitRetryTests
         }
     }
 
-    private static AgentDefinition SubAgent(string name = "explore") => new(
-        AgentName.Create(name),
-        name,
-        name,
-        "test-model",
-        "test",
-        PermissionRuleset.Empty,
-        20,
-        IsSubAgent: true);
-
     private static AssistantMessage Assistant(string text) => new(
         Guid.NewGuid().ToString("N"),
         "session-1",
@@ -346,7 +314,7 @@ public class RateLimitRetryTests
             Assistant("partial work done before the failure"));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("Partial output (degraded): partial work done before the failure");
@@ -359,7 +327,7 @@ public class RateLimitRetryTests
         var loop = new FailingLoop(CSharpFunctionalExtensions.Result.Failure("model exploded"));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go"));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("failed: model exploded");

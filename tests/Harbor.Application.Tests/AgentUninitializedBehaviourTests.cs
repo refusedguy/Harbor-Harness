@@ -68,22 +68,6 @@ public sealed class AgentUninitializedBehaviourTests
             => release.Task;
     }
 
-    /// <summary>
-    ///     Bounded poll for a condition a background run establishes asynchronously — the same
-    ///     idiom <c>CancelProtocolGenerationTests</c> uses, because a bare <c>Task.Yield()</c> is
-    ///     not a synchronisation point.
-    /// </summary>
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
-    {
-        DateTimeOffset deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
-        while (!condition() && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(5);
-        }
-
-        return condition();
-    }
-
     // ── The contract itself ──────────────────────────────────────────────────
 
     [Test]
@@ -145,7 +129,7 @@ public sealed class AgentUninitializedBehaviourTests
 
         Task<Result> run = subject.PromptAsync("hello");
 
-        await Assert.That(await WaitUntilAsync(() => subject.IsRunning())).IsTrue()
+        await Assert.That(await AsyncWaits.WaitUntilAsync(() => subject.IsRunning())).IsTrue()
             .Because("A run parked in the agent loop must be visible to every consumer that asks.");
 
         release.TrySetResult(Result.Success());

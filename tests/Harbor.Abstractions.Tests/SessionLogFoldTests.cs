@@ -27,8 +27,8 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "hello"),
-            Message(1, "m2", "world"),
+            LogEntryFixtures.Message(0, "m1", "hello"),
+            LogEntryFixtures.Message(1, "m2", "world"),
         ]);
 
         await Assert.That(surface.Current.Count).IsEqualTo(2);
@@ -46,11 +46,11 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
-            Message(1, "m2", "second"),
-            Message(2, "m3", "third"),
+            LogEntryFixtures.Message(0, "m1", "first"),
+            LogEntryFixtures.Message(1, "m2", "second"),
+            LogEntryFixtures.Message(2, "m3", "third"),
             Rewind(3, "r1", "m2"),
-            Message(4, "m4", "after the rewind"),
+            LogEntryFixtures.Message(4, "m4", "after the rewind"),
         ]);
 
         await Assert.That(surface.Current.Select(m => m.Id).ToArray())
@@ -70,7 +70,7 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
+            LogEntryFixtures.Message(0, "m1", "first"),
             Rewind(1, "r1", "m1"),
         ]);
 
@@ -90,8 +90,8 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "the original text"),
-            Message(1, "m1", "the edited text"),
+            LogEntryFixtures.Message(0, "m1", "the original text"),
+            LogEntryFixtures.Message(1, "m1", "the edited text"),
         ]);
 
         await Assert.That(surface.Current.Count).IsEqualTo(1);
@@ -110,8 +110,8 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "the original text"),
-            Message(1, "m1", "the edited text"),
+            LogEntryFixtures.Message(0, "m1", "the original text"),
+            LogEntryFixtures.Message(1, "m1", "the edited text"),
             Rewind(2, "r1", "m1"),
         ]);
 
@@ -130,8 +130,8 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
-            Message(1, "m2", "second"),
+            LogEntryFixtures.Message(0, "m1", "first"),
+            LogEntryFixtures.Message(1, "m2", "second"),
             Rewind(2, "r1", "m-does-not-exist"),
         ]);
 
@@ -150,9 +150,9 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
-            Message(1, "m2", "second"),
-            Message(2, "m3", "third"),
+            LogEntryFixtures.Message(0, "m1", "first"),
+            LogEntryFixtures.Message(1, "m2", "second"),
+            LogEntryFixtures.Message(2, "m3", "third"),
             Rewind(3, "r1", "m1"),
             Rewind(4, "r2", "m3"),
         ]);
@@ -172,9 +172,9 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
-            Message(1, "m2", "second"),
-            Message(2, "m3", "third"),
+            LogEntryFixtures.Message(0, "m1", "first"),
+            LogEntryFixtures.Message(1, "m2", "second"),
+            LogEntryFixtures.Message(2, "m3", "third"),
             Rewind(3, "r1", "m2"),
             Rewind(4, "r2", "m1"),
         ]);
@@ -194,8 +194,8 @@ public class SessionLogFoldTests
     {
         SessionSurface surface = SessionLogFold.Fold(
         [
-            Message(0, "m1", "first"),
-            Message(1, "m2", "second"),
+            LogEntryFixtures.Message(0, "m1", "first"),
+            LogEntryFixtures.Message(1, "m2", "second"),
             Rewind(2, "r1", "m1"),
         ]);
 
@@ -220,20 +220,6 @@ public class SessionLogFoldTests
         await Assert.That(surface.LogOnly).IsEmpty();
         await Assert.That(surface.Warnings).IsEmpty();
     }
-
-    private static SessionLogEntry Message(int position, string id, string content) => new()
-    {
-        Kind = SessionLogEntryKind.Message,
-        Id = id,
-        Position = position,
-        Message = new UserMessage(
-            id,
-            "s1",
-            DateTimeOffset.UnixEpoch,
-            content,
-            "code",
-            "test-model"),
-    };
 
     private static SessionLogEntry Rewind(int position, string id, string anchorId) => new()
     {

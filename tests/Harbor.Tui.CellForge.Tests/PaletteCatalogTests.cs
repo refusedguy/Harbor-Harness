@@ -55,14 +55,6 @@ public class PaletteCatalogTests
         ("QuitIcon", "*"),
     ];
 
-    private static void Type(CommandPaletteView palette, string text)
-    {
-        foreach (char c in text)
-        {
-            _ = palette.HandleKey(KeyEvent.Char(new Rune(c)));
-        }
-    }
-
     [Test]
     public async Task SlashCatalog_HasTenMirroringDesktopSource()
     {
@@ -200,25 +192,25 @@ public class PaletteCatalogTests
     {
         var palette = new CommandPaletteView();
         palette.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(palette, "sess");
+        PaletteKeys.Type(palette, "sess");
 
         await Assert.That(palette.Results.Any(r => r.Title == "/sessions")).IsTrue();
 
         var render = new CommandPaletteView();
         render.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(render, "rend");
+        PaletteKeys.Type(render, "rend");
 
         await Assert.That(render.Results.Any(r => r.Title == "/renderer")).IsTrue();
 
         var alias = new CommandPaletteView();
         alias.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(alias, "skil");
+        PaletteKeys.Type(alias, "skil");
 
         await Assert.That(alias.Results.Any(r => r.Title == "/skills")).IsTrue();
 
         var quit = new CommandPaletteView();
         quit.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(quit, "EXIT");
+        PaletteKeys.Type(quit, "EXIT");
 
         await Assert.That(quit.Results.Any(r => r.Title == "/exit")).IsTrue();
     }
@@ -228,13 +220,13 @@ public class PaletteCatalogTests
     {
         var palette = new CommandPaletteView();
         palette.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(palette, "theme");
+        PaletteKeys.Type(palette, "theme");
 
         await Assert.That(palette.Results.Any(r => r.Title.EndsWith("Toggle Theme", StringComparison.Ordinal))).IsTrue();
 
         var providers = new CommandPaletteView();
         providers.Show(CommandPaletteCatalog.GetDefaultCatalog());
-        Type(providers, "provider");
+        PaletteKeys.Type(providers, "provider");
 
         await Assert.That(providers.Results.Any(r => r.Title.EndsWith("Open Provider Browser", StringComparison.Ordinal))).IsTrue();
         await Assert.That(providers.Results.Any(r => r.Title == "/providers")).IsTrue();

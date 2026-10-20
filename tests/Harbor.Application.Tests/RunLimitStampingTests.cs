@@ -3,13 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Providers;
-using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
-using Harbor.Application.Permissions;
-using Harbor.Application.Resilience;
-using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -80,23 +74,6 @@ public class RunLimitStampingTests
         }
     ]);
 
-    private static AgentLoop Loop(ILlmClient client, ITool tool, FakeEventBus bus, AgentDefinition agent)
-    {
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            new FakeToolRegistry(tool),
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(),
-            bus,
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
-    }
-
     [Test]
     public async Task RunAsync_StepBudgetExhausted_TerminalEventNamesTheStepLimit()
     {
@@ -104,7 +81,7 @@ public class RunLimitStampingTests
         var client = AlwaysCallsATool();
         var bus = new FakeEventBus();
         var agent = Agent(MaxSteps);
-        var loop = Loop(client, counter, bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -150,7 +127,7 @@ public class RunLimitStampingTests
         ]);
         var bus = new FakeEventBus();
         var agent = Agent(MaxSteps);
-        var loop = Loop(client, counter, bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -169,7 +146,7 @@ public class RunLimitStampingTests
         var client = AlwaysCallsATool();
         var bus = new FakeEventBus();
         var agent = Agent(MaxSteps);
-        var loop = Loop(client, counter, bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();

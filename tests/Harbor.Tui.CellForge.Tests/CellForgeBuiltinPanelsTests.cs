@@ -33,17 +33,6 @@ public class CellForgeBuiltinPanelsTests
             }
         };
 
-    private static IReadOnlyList<string> Rows(object? widget) => widget switch
-    {
-        null => Array.Empty<string>(),
-        string s => s.Split('\n'),
-        IReadOnlyList<string> rows => rows,
-        IEnumerable<string> lines => lines.ToArray(),
-        _ => new[] { widget.ToString() ?? string.Empty },
-    };
-
-    private static string Joined(object? widget) => string.Join("\n", Rows(widget));
-
     private static UiStore SeededStore(string id, int size)
     {
         var store = new UiStore();
@@ -136,7 +125,7 @@ public class CellForgeBuiltinPanelsTests
     {
         foreach (var panel in AllPanels())
         {
-            var rows = Rows(panel.Build(Ctx(new UiState(), width: 10, height: 3, services: null)));
+            var rows = WidgetFixtures.Rows(panel.Build(Ctx(new UiState(), width: 10, height: 3, services: null)));
             await Assert.That(rows.Count <= 3).IsTrue();
             foreach (string line in rows)
             {
@@ -149,14 +138,14 @@ public class CellForgeBuiltinPanelsTests
     public async Task Clipping_ZeroGeometry_ReturnsEmpty()
     {
         var panel = new CellForgeHelpPanel();
-        await Assert.That(Rows(panel.Build(Ctx(new UiState(), width: 0, height: 24))).Count).IsEqualTo(0);
-        await Assert.That(Rows(panel.Build(Ctx(new UiState(), width: 80, height: 0))).Count).IsEqualTo(0);
+        await Assert.That(WidgetFixtures.Rows(panel.Build(Ctx(new UiState(), width: 0, height: 24))).Count).IsEqualTo(0);
+        await Assert.That(WidgetFixtures.Rows(panel.Build(Ctx(new UiState(), width: 80, height: 0))).Count).IsEqualTo(0);
     }
 
     [Test]
     public async Task Todo_Empty_RendersPlaceholder()
     {
-        string text = Joined(new CellForgeTodoListPanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeTodoListPanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("No todos yet.");
     }
 
@@ -165,7 +154,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var state = StateWithLines(new ChatLine(
             ChatRole.ToolResult, "[ ] Write code\n[x] Done thing\n[~] Doing other"));
-        string text = Joined(new CellForgeTodoListPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeTodoListPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("○");
         await Assert.That(text).Contains("Write code");
         await Assert.That(text).Contains("✓");
@@ -183,7 +172,7 @@ public class CellForgeBuiltinPanelsTests
     {
         var state = StateWithLines(new ChatLine(
             ChatRole.ToolResult, "[ ] " + new string('a', 60)));
-        var rows = Rows(new CellForgeTodoListPanel().Build(Ctx(state, width: 30, height: 24)));
+        var rows = WidgetFixtures.Rows(new CellForgeTodoListPanel().Build(Ctx(state, width: 30, height: 24)));
         await Assert.That(string.Join("\n", rows)).Contains("…");
         foreach (string line in rows)
         {
@@ -194,7 +183,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Diff_Empty_RendersPlaceholder()
     {
-        string text = Joined(new CellForgeDiffPreviewPanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeDiffPreviewPanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("No file edits yet.");
     }
 
@@ -204,7 +193,7 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithLines(
             new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a.cs\"}", "tc1"),
             new ChatLine(ChatRole.ToolResult, "✓ +added line\n-removed line\n context", "tc1"));
-        string text = Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("src/a.cs");
         await Assert.That(text).Contains("✓");
         await Assert.That(text).Contains("+added line");
@@ -217,7 +206,7 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithLines(
             new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a/very/deep/dir/" + file + "\"}", "tc1"),
             new ChatLine(ChatRole.ToolResult, "✓ ok", "tc1"));
-        string text = Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        string text = WidgetFixtures.Joined(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
         await Assert.That(text).Contains(file);
         await Assert.That(text).Contains("…");
     }
@@ -228,7 +217,7 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithLines(
             new ChatLine(ChatRole.Tool, "→ edit {\"path\": \"src/a.cs\"}", "tc1"),
             new ChatLine(ChatRole.ToolResult, "✓ " + new string('b', 100), "tc1"));
-        var rows = Rows(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
+        var rows = WidgetFixtures.Rows(new CellForgeDiffPreviewPanel().Build(Ctx(state, width: 40, height: 24)));
         await Assert.That(string.Join("\n", rows)).Contains("…");
         foreach (string line in rows)
         {
@@ -262,7 +251,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Diagnostics_Empty_RendersPlaceholder()
     {
-        string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeDiagnosticsPanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("No diagnostics reported.");
     }
 
@@ -276,7 +265,7 @@ public class CellForgeBuiltinPanelsTests
             new ChatLine(ChatRole.ToolResult, "✗ warning: deprecated API used"),
             new ChatLine(ChatRole.Error, "error MSB3021: could not copy"));
 
-        string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
 
         await Assert.That(text).Contains("No diagnostics reported.")
             .Because("the panel draws what the core classified. Re-deriving it from transcript text "
@@ -290,7 +279,7 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithDiagnostics(
             Issue(DiagnosticIssueSource.LanguageServer, DiagnosticIssueSeverity.Error,
                 "csharp", "src/a.cs", 3, "CS0001: something broke"));
-        string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("✗");
         await Assert.That(text).Contains("CS0001");
     }
@@ -301,7 +290,7 @@ public class CellForgeBuiltinPanelsTests
         var state = StateWithDiagnostics(
             Issue(DiagnosticIssueSource.ToolOutput, DiagnosticIssueSeverity.Warning,
                 "node", null, 0, "deprecated API used"));
-        string text = Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeDiagnosticsPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("▲");
     }
 
@@ -315,17 +304,17 @@ public class CellForgeBuiltinPanelsTests
         var panel = new CellForgeDiagnosticsPanel();
         var ctx = Ctx(state);
 
-        IReadOnlyList<string> initial = Rows(panel.Build(ctx));
+        IReadOnlyList<string> initial = WidgetFixtures.Rows(panel.Build(ctx));
         await Assert.That(initial[2]).StartsWith(">");
 
         await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
-        IReadOnlyList<string> moved = Rows(panel.Build(ctx));
+        IReadOnlyList<string> moved = WidgetFixtures.Rows(panel.Build(ctx));
         await Assert.That(moved[2]).StartsWith(" ");
         await Assert.That(moved[3]).StartsWith(">");
         await Assert.That(moved[3]).Contains("second broke");
 
         await Assert.That(panel.OnKey(UiKey.ForChar('k'), ctx)).IsTrue();
-        IReadOnlyList<string> back = Rows(panel.Build(ctx));
+        IReadOnlyList<string> back = WidgetFixtures.Rows(panel.Build(ctx));
         await Assert.That(back[2]).StartsWith(">");
     }
 
@@ -341,7 +330,7 @@ public class CellForgeBuiltinPanelsTests
         await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
         await Assert.That(panel.OnKey(UiKey.ForChar('j'), ctx)).IsTrue();
         await Assert.That(panel.OnKey(UiKey.ForChar('J'), ctx)).IsTrue();
-        IReadOnlyList<string> rows = Rows(panel.Build(ctx));
+        IReadOnlyList<string> rows = WidgetFixtures.Rows(panel.Build(ctx));
         await Assert.That(rows[2]).StartsWith(">");
         await Assert.That(rows[2]).Contains("only");
     }
@@ -364,7 +353,7 @@ public class CellForgeBuiltinPanelsTests
                 Cost = new CostSnapshot(1500, 300, 0.0042m)
             }
         };
-        string text = Joined(new CellForgeTokenBreakdownPanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeTokenBreakdownPanel().Build(Ctx(state)));
         await Assert.That(text).Contains("Token Breakdown");
         await Assert.That(text).Contains("1.5K");
         await Assert.That(text).Contains("300");
@@ -375,14 +364,14 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task TokenBreakdown_ZeroCost_RendersWithoutThrowing()
     {
-        string text = Joined(new CellForgeTokenBreakdownPanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeTokenBreakdownPanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("total");
     }
 
     [Test]
     public async Task Help_NullServices_RendersHotkeysSlashAndFallback()
     {
-        string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
+        string text = WidgetFixtures.Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
         await Assert.That(text).Contains("Alt+1..9");
         await Assert.That(text).Contains("F12");
         await Assert.That(text).Contains("/help");
@@ -392,7 +381,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Help_RendersEverySharedKeymapRow()
     {
-        string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
+        string text = WidgetFixtures.Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: null)));
         foreach (HelpKeymap.Entry hotkey in HelpKeymap.Rows)
         {
             await Assert.That(text).Contains(hotkey.Key);
@@ -419,7 +408,7 @@ public class CellForgeBuiltinPanelsTests
         var registry = new PanelRegistry();
         _ = registry.Register(new TestPanelProvider("stub-a", "Stub A", "stub"));
         var services = new PanelServices { PanelRegistry = registry };
-        string text = Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: services)));
+        string text = WidgetFixtures.Joined(new CellForgeHelpPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("stub-a");
         await Assert.That(text).DoesNotContain("(no panels)");
     }
@@ -451,7 +440,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task Logs_NullServices_RendersFallback()
     {
-        string text = Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: null)));
+        string text = WidgetFixtures.Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: null)));
         await Assert.That(text).Contains("not registered");
     }
 
@@ -459,7 +448,7 @@ public class CellForgeBuiltinPanelsTests
     public async Task Logs_EmptyBuffer_RendersPlaceholder()
     {
         var services = new PanelServices { Diagnostics = new InMemoryDiagnosticsPanel() };
-        string text = Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
+        string text = WidgetFixtures.Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("No log entries yet.");
     }
 
@@ -469,7 +458,7 @@ public class CellForgeBuiltinPanelsTests
         var diagnostics = new InMemoryDiagnosticsPanel();
         diagnostics.Log(LogLevel.Warning, "Harbor.Core.AgentLoop", "hello world");
         var services = new PanelServices { Diagnostics = diagnostics };
-        string text = Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
+        string text = WidgetFixtures.Joined(new CellForgeLogsPanel().Build(Ctx(new UiState(), services: services)));
         await Assert.That(text).Contains("WARN");
         await Assert.That(text).Contains("AgentLoop");
         await Assert.That(text).Contains("hello world");
@@ -511,7 +500,7 @@ public class CellForgeBuiltinPanelsTests
     [Test]
     public async Task FileTree_Build_RendersHeader()
     {
-        string text = Joined(new CellForgeFileTreePanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("File Tree");
     }
 
@@ -541,7 +530,7 @@ public class CellForgeBuiltinPanelsTests
         var ctx = Ctx(new UiState());
         _ = panel.OnKey(UiKey.ForChar('j'), ctx);
         _ = panel.OnKey(UiKey.ForChar('k'), ctx);
-        string text = Joined(panel.Build(ctx));
+        string text = WidgetFixtures.Joined(panel.Build(ctx));
         await Assert.That(text).Contains("File Tree");
     }
 
@@ -572,7 +561,7 @@ public class CellForgeBuiltinPanelsTests
             },
         };
 
-        string text = Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
         await Assert.That(text).Contains("alpha.txt");
     }
 
@@ -590,7 +579,7 @@ public class CellForgeBuiltinPanelsTests
             },
         };
 
-        string text = Joined(new CellForgeFileTreePanel().Build(
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(
             Ctx(state, services: new PanelServices { Store = store, FileTrees = loader })));
 
         await Assert.That(loader.Requests.Count).IsEqualTo(1);
@@ -606,7 +595,7 @@ public class CellForgeBuiltinPanelsTests
         // No IFileTreeLoader in the bag: the panel must still render, and must
         // not have quietly become a filesystem reader again.
         var store = new UiStore();
-        string text = Joined(new CellForgeFileTreePanel().Build(
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(
             Ctx(new UiState(), services: new PanelServices { Store = store })));
         await Assert.That(text).Contains("File Tree");
     }
@@ -620,8 +609,8 @@ public class CellForgeBuiltinPanelsTests
         var panel = new CellForgeFileTreePanel();
         var store = new UiStore();
         var services = new PanelServices { Store = store };
-        _ = Joined(panel.Build(Ctx(new UiState(), services: services)));
-        string second = Joined(panel.Build(Ctx(store.State, services: services)));
+        _ = WidgetFixtures.Joined(panel.Build(Ctx(new UiState(), services: services)));
+        string second = WidgetFixtures.Joined(panel.Build(Ctx(store.State, services: services)));
         await Assert.That(second).Contains("File Tree");
     }
 
@@ -648,7 +637,7 @@ public class CellForgeBuiltinPanelsTests
         var panel = new CellForgeFileTreePanel();
         var ctx = Ctx(state, services: services);
 
-        await Assert.That(Joined(panel.Build(ctx))).Contains("x");
+        await Assert.That(WidgetFixtures.Joined(panel.Build(ctx))).Contains("x");
 
         await Assert.That(panel.OnKey(UiKey.ForChar('r'), ctx)).IsTrue();
 
@@ -703,7 +692,7 @@ public class CellForgeBuiltinPanelsTests
             },
         };
 
-        string text = Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
+        string text = WidgetFixtures.Joined(new CellForgeFileTreePanel().Build(Ctx(state)));
         await Assert.That(text).DoesNotContain("ghost.txt");
     }
 

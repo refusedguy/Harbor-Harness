@@ -7,8 +7,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericTableNavStateTests
 {
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     private static GenericTable Open()
     {
         var table = new GenericTable();
@@ -82,7 +80,7 @@ public class GenericTableNavStateTests
         // Height 6 → frame 4 + 2 body rows; selection drags the viewport down.
         var buffer = new ScreenBuffer(20, 6);
         table.Paint(buffer, new Rect(0, 0, 20, 6), table.State);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("r4")).IsTrue();
         await Assert.That(art.Contains("r0")).IsFalse();
     }

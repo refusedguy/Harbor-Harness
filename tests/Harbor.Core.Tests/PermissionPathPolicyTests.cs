@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
@@ -17,22 +16,6 @@ namespace Harbor.Core.Tests;
 /// </summary>
 public class PermissionPathPolicyTests
 {
-    private static AgentDefinition AgentWithRuleset(params PermissionRule[] rules) => new(
-        AgentName.Create("code"),
-        "Code",
-        "Default coding agent.",
-        "test-model",
-        "test",
-        new PermissionRuleset(rules));
-
-    private static JsonElement Args(params (string key, string value)[] pairs)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach ((string k, string v) in pairs)
-            dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
-    }
-
     private static PermissionService CreateService(
         AgentDefinition agent,
         IEnumerable<IPathExtractionPolicy>? policies = null)
@@ -50,17 +33,17 @@ public class PermissionPathPolicyTests
     {
         // "myfilesync" never existed in the permission core: it is onboarded
         // purely by composing a policy, no PermissionService edit involved.
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("myfilesync", "safe/*", PermissionAction.Allow),
             new PermissionRule("myfilesync", "*", PermissionAction.Deny));
         var svc = CreateService(agent, DefaultPathExtractionPolicies.WithExtra(
             new PathArgExtractionPolicy(new[] { "myfilesync" })));
 
-        var allowedResult = await svc.CheckAsync("code", "myfilesync", Args(("path", "safe/file.txt")));
+        var allowedResult = await svc.CheckAsync("code", "myfilesync", TestArgs.FromPairs(("path", "safe/file.txt")));
         await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
-        var deniedResult = await svc.CheckAsync("code", "myfilesync", Args(("path", "unsafe/file.txt")));
+        var deniedResult = await svc.CheckAsync("code", "myfilesync", TestArgs.FromPairs(("path", "unsafe/file.txt")));
         await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
@@ -68,14 +51,14 @@ public class PermissionPathPolicyTests
     [Test]
     public async Task NewFileTool_OutsideWorkspace_EscalatesToDeny()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("myfilesync", "*", PermissionAction.Allow));
         var svc = CreateService(agent, DefaultPathExtractionPolicies.WithExtra(
             new PathArgExtractionPolicy(new[] { "myfilesync" })));
 
         // Absolute path outside the workspace root: Allow downgrades to Ask,
         // and with no asker configured Ask falls back to Deny.
-        var result = await svc.CheckAsync("code", "myfilesync", Args(("path", "/definitely-outside-workspace-178/probe.txt")));
+        var result = await svc.CheckAsync("code", "myfilesync", TestArgs.FromPairs(("path", "/definitely-outside-workspace-178/probe.txt")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
@@ -84,7 +67,7 @@ public class PermissionPathPolicyTests
     [Test]
     public async Task BuiltinTools_ParityWithLegacySwitch()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("read", "safe/*", PermissionAction.Allow),
             new PermissionRule("read", "*", PermissionAction.Deny),
             new PermissionRule("bash", "ls *", PermissionAction.Allow),
@@ -93,26 +76,26 @@ public class PermissionPathPolicyTests
         var svc = CreateService(agent);
 
         // Normalized path branch (former switch arm): relative inside → Allow.
-        var readOk = await svc.CheckAsync("code", "read", Args(("path", "safe/file.txt")));
+        var readOk = await svc.CheckAsync("code", "read", TestArgs.FromPairs(("path", "safe/file.txt")));
         await Assert.That(readOk.Value.Action).IsEqualTo(PermissionAction.Allow);
 
         // Traversal escapes the workspace → downgraded to Ask → Deny.
-        var readTraversal = await svc.CheckAsync("code", "read", Args(("path", "safe/../../etc/passwd")));
+        var readTraversal = await svc.CheckAsync("code", "read", TestArgs.FromPairs(("path", "safe/../../etc/passwd")));
         await Assert.That(readTraversal.Value.Action).IsEqualTo(PermissionAction.Deny);
 
         // Legacy raw branch: bash still matches on the raw command string.
-        var bashOk = await svc.CheckAsync("code", "bash", Args(("command", "ls -la /tmp")));
+        var bashOk = await svc.CheckAsync("code", "bash", TestArgs.FromPairs(("command", "ls -la /tmp")));
         await Assert.That(bashOk.Value.Action).IsEqualTo(PermissionAction.Allow);
 
         // Legacy default arm: unknown tools extract "*" and match the wildcard.
-        var unknownOk = await svc.CheckAsync("code", "task", Args());
+        var unknownOk = await svc.CheckAsync("code", "task", TestArgs.FromPairs());
         await Assert.That(unknownOk.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
     [Test]
     public async Task FirstMatchingPolicy_Wins()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("read", "safe/*", PermissionAction.Allow),
             new PermissionRule("read", "*", PermissionAction.Deny));
         var svc = CreateService(agent, DefaultPathExtractionPolicies.WithExtra(
@@ -121,7 +104,7 @@ public class PermissionPathPolicyTests
         // The custom policy is consulted before the builtins, so "read" now
         // extracts "CUSTOM" (matching neither rule) instead of the normalized
         // path that would have been allowed.
-        var result = await svc.CheckAsync("code", "read", Args(("path", "safe/file.txt")));
+        var result = await svc.CheckAsync("code", "read", TestArgs.FromPairs(("path", "safe/file.txt")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
@@ -179,11 +162,11 @@ public class PermissionPathPolicyTests
     [Arguments("lsp")]
     public async Task Allow_Everything_Rule_Is_Downgraded_For_A_Path_Outside_The_Workspace(string tool)
     {
-        var agent = AgentWithRuleset(new PermissionRule(tool, "*", PermissionAction.Allow));
+        var agent = AgentFixtures.AgentWithRuleset(new PermissionRule(tool, "*", PermissionAction.Allow));
         var svc = CreateService(agent);
 
         var outside = await svc.CheckAsync(
-            "code", tool, Args(("path", "/definitely-outside-workspace-595/probe.txt")));
+            "code", tool, TestArgs.FromPairs(("path", "/definitely-outside-workspace-595/probe.txt")));
 
         await Assert.That(outside).IsSuccessful();
         await Assert.That(outside.Value.Action).IsEqualTo(PermissionAction.Deny)
@@ -194,7 +177,7 @@ public class PermissionPathPolicyTests
 
         // A path INSIDE the workspace still matches the rule: the guard must not
         // turn every path call into a denial.
-        var inside = await svc.CheckAsync("code", tool, Args(("path", "src/inside.txt")));
+        var inside = await svc.CheckAsync("code", tool, TestArgs.FromPairs(("path", "src/inside.txt")));
         await Assert.That(inside.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -219,7 +202,7 @@ public class PermissionPathPolicyTests
             }
 
             string argumentName = declaration.Profile.ArgumentName!;
-            var args = Args((argumentName, "sentinel"));
+            var args = TestArgs.FromPairs((argumentName, "sentinel"));
 
             await Assert.That(legacy.Extract(declaration.ToolName, args, "/workspace").ArgPath)
                 .IsEqualTo("sentinel")

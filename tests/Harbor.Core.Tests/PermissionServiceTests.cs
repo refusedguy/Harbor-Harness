@@ -1,7 +1,6 @@
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Configuration;
 using Harbor.Application.Permissions;
@@ -15,22 +14,6 @@ namespace Harbor.Core.Tests;
 /// </summary>
 public class PermissionServiceTests
 {
-    private static AgentDefinition AgentWithRuleset(params PermissionRule[] rules) => new(
-        AgentName.Create("code"),
-        "Code",
-        "Default coding agent.",
-        "test-model",
-        "test",
-        new PermissionRuleset(rules));
-
-    private static JsonElement Args(params (string key, string value)[] pairs)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach ((string k, string v) in pairs)
-            dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
-    }
-
     private static (PermissionService svc, AgentRegistry registry) CreateService(
         AgentDefinition agent,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? asker = null)
@@ -44,11 +27,11 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_AllowRule_ReturnsAllow()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("read", "*", PermissionAction.Allow));
 
         var (svc, _) = CreateService(agent);
-        var args = Args(("path", "some/file.txt"));
+        var args = TestArgs.FromPairs(("path", "some/file.txt"));
 
         var result = await svc.CheckAsync("code", "read", args);
 
@@ -62,11 +45,11 @@ public class PermissionServiceTests
         // A1 security hardening: rooted paths carry no workspace-relative meaning,
         // so glob Allow rules are skipped; with no user asker configured the
         // resulting Ask escalates to Deny.
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("read", "*", PermissionAction.Allow));
 
         var (svc, _) = CreateService(agent);
-        var args = Args(("path", "/some/file.txt"));
+        var args = TestArgs.FromPairs(("path", "/some/file.txt"));
 
         var result = await svc.CheckAsync("code", "read", args);
 
@@ -77,12 +60,12 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_DenyRule_ReturnsDeny()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("edit", "*.env", PermissionAction.Deny),
             new PermissionRule("edit", "*", PermissionAction.Allow));
 
         var (svc, _) = CreateService(agent);
-        var args = Args(("path", "/repo/secrets.env"));
+        var args = TestArgs.FromPairs(("path", "/repo/secrets.env"));
 
         var result = await svc.CheckAsync("code", "edit", args);
 
@@ -93,7 +76,7 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_AskRule_DelegatesToUserAsker()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("write", "*", PermissionAction.Ask));
 
         PermissionRequest? captured = null;
@@ -105,7 +88,7 @@ public class PermissionServiceTests
         }
 
         var (svc, _) = CreateService(agent, Asker);
-        var args = Args(("path", "/repo/file.txt"));
+        var args = TestArgs.FromPairs(("path", "/repo/file.txt"));
 
         var result = await svc.CheckAsync("code", "write", args);
 
@@ -119,11 +102,11 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_AskRule_NoAskerConfigured_DefaultsToDeny()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("write", "*", PermissionAction.Ask));
 
         var (svc, _) = CreateService(agent);
-        var args = Args(("path", "/repo/file.txt"));
+        var args = TestArgs.FromPairs(("path", "/repo/file.txt"));
 
         var result = await svc.CheckAsync("code", "write", args);
 
@@ -134,14 +117,14 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_AskRule_UserAskerThrows_FallsBackToDeny()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("bash", "*", PermissionAction.Ask));
 
         Task<PermissionResponse> ThrowingAsker(PermissionRequest req, CancellationToken ct)
             => throw new InvalidOperationException("UI not available");
 
         var (svc, _) = CreateService(agent, ThrowingAsker);
-        var args = Args(("command", "rm -rf /tmp/harbor-test"));
+        var args = TestArgs.FromPairs(("command", "rm -rf /tmp/harbor-test"));
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -157,7 +140,7 @@ public class PermissionServiceTests
         // class). Expected-failure path: explicit Result.Failure with a clear
         // error — no exception, no null-carrying success.
         var (svc, _) = CreateService(
-            AgentWithRuleset(),
+            AgentFixtures.AgentWithRuleset(),
             (req, ct) => Task.FromResult<PermissionResponse>(null!));
 
         var result = await svc.AskUserAsync(
@@ -174,10 +157,10 @@ public class PermissionServiceTests
         // #1584: the null answer is a failure, so the "always" persistence
         // branch in CheckAsync (askResult.IsSuccess && .PersistDecision) must
         // never see it — no rule is recorded for the tool + argument.
-        var agent = AgentWithRuleset(new PermissionRule("write", "*", PermissionAction.Ask));
+        var agent = AgentFixtures.AgentWithRuleset(new PermissionRule("write", "*", PermissionAction.Ask));
         var (svc, _) = CreateService(agent, (req, ct) => Task.FromResult<PermissionResponse>(null!));
 
-        var result = await svc.CheckAsync("code", "write", Args(("path", "/repo/file.txt")));
+        var result = await svc.CheckAsync("code", "write", TestArgs.FromPairs(("path", "/repo/file.txt")));
 
         await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("asker returned null");
@@ -188,8 +171,8 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_UnknownAgent_ReturnsFailure()
     {
-        var (svc, _) = CreateService(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
-        var args = Args(("path", "/some/file.txt"));
+        var (svc, _) = CreateService(AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        var args = TestArgs.FromPairs(("path", "/some/file.txt"));
 
         var result = await svc.CheckAsync("nonexistent", "read", args);
 
@@ -200,17 +183,17 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_ExtractsPathForFileTools()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("edit", "safe/*", PermissionAction.Allow),
             new PermissionRule("edit", "*", PermissionAction.Deny));
 
         var (svc, _) = CreateService(agent);
 
-        var allowedResult = await svc.CheckAsync("code", "edit", Args(("path", "safe/file.txt")));
+        var allowedResult = await svc.CheckAsync("code", "edit", TestArgs.FromPairs(("path", "safe/file.txt")));
         await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
-        var deniedResult = await svc.CheckAsync("code", "edit", Args(("path", "unsafe/file.txt")));
+        var deniedResult = await svc.CheckAsync("code", "edit", TestArgs.FromPairs(("path", "unsafe/file.txt")));
         await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
@@ -218,17 +201,17 @@ public class PermissionServiceTests
     [Test]
     public async Task CheckAsync_ExtractsCommandForBashTool()
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule("bash", "ls *", PermissionAction.Allow),
             new PermissionRule("bash", "*", PermissionAction.Deny));
 
         var (svc, _) = CreateService(agent);
 
-        var allowedResult = await svc.CheckAsync("code", "bash", Args(("command", "ls -la /tmp")));
+        var allowedResult = await svc.CheckAsync("code", "bash", TestArgs.FromPairs(("command", "ls -la /tmp")));
         await Assert.That(allowedResult).IsSuccessful();
         await Assert.That(allowedResult.Value.Action).IsEqualTo(PermissionAction.Allow);
 
-        var deniedResult = await svc.CheckAsync("code", "bash", Args(("command", "rm -rf /")));
+        var deniedResult = await svc.CheckAsync("code", "bash", TestArgs.FromPairs(("command", "rm -rf /")));
         await Assert.That(deniedResult).IsSuccessful();
         await Assert.That(deniedResult.Value.Action).IsEqualTo(PermissionAction.Deny);
     }
@@ -237,10 +220,10 @@ public class PermissionServiceTests
     public async Task CheckAsync_NoMatchingRule_DefaultsToAsk()
     {
         // Empty ruleset: every action falls through to Ask in the ruleset evaluator.
-        var agent = AgentWithRuleset();
+        var agent = AgentFixtures.AgentWithRuleset();
         var (svc, _) = CreateService(agent);
 
-        var result = await svc.CheckAsync("code", "task", Args());
+        var result = await svc.CheckAsync("code", "task", TestArgs.FromPairs());
 
         await Assert.That(result).IsSuccessful();
         // No asker → Ask falls back to Deny for safety.
@@ -250,7 +233,7 @@ public class PermissionServiceTests
     [Test]
     public async Task GetRuleset_ReturnsAgentRuleset()
     {
-        var agent = AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow));
+        var agent = AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow));
         var (svc, _) = CreateService(agent);
 
         var ruleset = svc.GetRuleset("code");
@@ -261,7 +244,7 @@ public class PermissionServiceTests
     [Test]
     public async Task GetRuleset_UnknownAgent_ReturnsEmpty()
     {
-        var (svc, _) = CreateService(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        var (svc, _) = CreateService(AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
 
         var ruleset = svc.GetRuleset("nonexistent");
 
@@ -271,7 +254,7 @@ public class PermissionServiceTests
     [Test]
     public async Task AskUserAsync_NoAsker_ReturnsDeny()
     {
-        var (svc, _) = CreateService(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        var (svc, _) = CreateService(AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
 
         var result = await svc.AskUserAsync(new PermissionRequest("read", "*", JsonDocument.Parse("{}").RootElement, Array.Empty<string>()));
 
@@ -322,7 +305,7 @@ public class PermissionServiceTests
     public async Task Ctor_WithSlowConfigStore_ReturnsWithoutBlocking(CancellationToken cancellationToken)
     {
         var registry = new AgentRegistry();
-        registry.Register(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        registry.Register(AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
         var store = new GatedConfigStore(ConfigWith(new PermissionRule("read", "*", PermissionAction.Allow)));
 
         var ctorTask = Task.Run(
@@ -342,11 +325,11 @@ public class PermissionServiceTests
     public async Task CheckAsync_WaitsForBackgroundPersistedLoad(CancellationToken cancellationToken)
     {
         var registry = new AgentRegistry();
-        registry.Register(AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)));
+        registry.Register(AgentFixtures.AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)));
         var store = new GatedConfigStore(ConfigWith(new PermissionRule("bash", "make build", PermissionAction.Allow)));
         var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
 
-        var checkTask = svc.CheckAsync("code", "bash", Args(("command", "make build")), cancellationToken);
+        var checkTask = svc.CheckAsync("code", "bash", TestArgs.FromPairs(("command", "make build")), cancellationToken);
         await Task.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None).ConfigureAwait(false);
         store.Release();
         var result = await checkTask.ConfigureAwait(false);
@@ -359,7 +342,7 @@ public class PermissionServiceTests
     public async Task CreateAsync_LoadsPersistedRulesBeforeReturning()
     {
         var registry = new AgentRegistry();
-        registry.Register(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
+        registry.Register(AgentFixtures.AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
         var store = new GatedConfigStore(ConfigWith(new PermissionRule("bash", "make *", PermissionAction.Allow)));
         store.Release();
 
@@ -378,7 +361,7 @@ public class PermissionServiceTests
             Task.FromCanceled<PermissionResponse>(ct);
 
         var (svc, _) = CreateService(
-            AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
+            AgentFixtures.AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
             CancelledAsker);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -404,7 +387,7 @@ public class PermissionServiceTests
             Task.FromCanceled<PermissionResponse>(ct);
 
         var (svc, _) = CreateService(
-            AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
+            AgentFixtures.AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)),
             CancelledAsker);
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -412,7 +395,7 @@ public class PermissionServiceTests
         Exception? caught = null;
         try
         {
-            _ = await svc.CheckAsync("code", "bash", Args(("command", "make build")), cts.Token).ConfigureAwait(false);
+            _ = await svc.CheckAsync("code", "bash", TestArgs.FromPairs(("command", "make build")), cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException ex)
         {

@@ -277,7 +277,7 @@ public class DanglingToolCall1751Tests
             "a1",
             "session-1",
             DateTimeOffset.UtcNow,
-            [new ToolCallPart("call-1", "read", Args())],
+            [new ToolCallPart("call-1", "read", TestArgs.Empty())],
             StopReason.ToolUse,
             new Usage(1, 1),
             "test-model");
@@ -305,7 +305,7 @@ public class DanglingToolCall1751Tests
             "a1",
             "session-1",
             DateTimeOffset.UtcNow,
-            [new ToolCallPart("call-1", "read", Args())],
+            [new ToolCallPart("call-1", "read", TestArgs.Empty())],
             StopReason.ToolUse,
             new Usage(1, 1),
             "test-model");
@@ -325,5 +325,4 @@ public class DanglingToolCall1751Tests
         await Assert.That(closure.IsError).IsFalse();
     }
 
-    private static JsonElement Args() => JsonDocument.Parse("{}").RootElement.Clone();
 }

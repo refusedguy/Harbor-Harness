@@ -9,25 +9,25 @@
     "normalisation": "comments dropped; string literals -> S; char literals -> C; numeric literals -> N; identifiers -> I; whitespace collapsed"
   },
   "census": {
-    "files": 1003,
-    "lines": 206333,
-    "methods": 10658,
-    "test_methods": 6787
+    "files": 1037,
+    "lines": 207182,
+    "methods": 10618,
+    "test_methods": 6804
   },
   "metrics": {
-    "groups": 208,
-    "intra_file_groups": 105,
-    "cross_file_groups": 103,
-    "exact_groups": 120,
-    "duplicate_lines": 3057,
-    "group_lines": 5284,
+    "groups": 184,
+    "intra_file_groups": 103,
+    "cross_file_groups": 81,
+    "exact_groups": 98,
+    "duplicate_lines": 2694,
+    "group_lines": 4683,
     "shape_coincidences": 0,
-    "files": 1003,
-    "lines": 206333,
-    "methods": 10658,
-    "test_methods": 6787
+    "files": 1037,
+    "lines": 207182,
+    "methods": 10618,
+    "test_methods": 6804
   },
-  "blocking_duplicate_lines": 2798,
+  "blocking_duplicate_lines": 2435,
   "groups": {
     "00c25fe277a33905527cc4696dd798419f502485": {
       "members": [
@@ -155,17 +155,6 @@
       "exact": 0,
       "shape": "80cb1e2ebfdbd2564ca23cab1406b222b7f495ee"
     },
-    "0b7453335bf238923609cb6f94be7b2335344254": {
-      "members": [
-        "tests/Harbor.Application.Tests/ToolDispatcherCommitTests.cs::WaitForAsync#0",
-        "tests/Harbor.Application.Tests/ToolDispatcherRetryTests.cs::WaitForAsync#0"
-      ],
-      "count": 2,
-      "lines": 9,
-      "files": 2,
-      "exact": 2,
-      "shape": "feab177fbe6c7655092cf8c8ac8e0b1a6de5c358"
-    },
     "0d589a467ce290ddf4ed4bf2b024c2924fd9e680": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs::Painted#0",
@@ -187,7 +176,7 @@
       "lines": 7,
       "files": 1,
       "exact": 0,
-      "shape": "6556e1e928b7def8ec5c04395fecb5b775fe57e7"
+      "shape": "90ac7322354fb7f9d75b9452b063ed36d05c029c"
     },
     "0dddb42b1a4bfa32ffabfe96c18467755d18a513": {
       "members": [
@@ -198,7 +187,7 @@
       "lines": 8,
       "files": 1,
       "exact": 0,
-      "shape": "ac2a40c25b6c644804deb0096392c6cfa4b9b055"
+      "shape": "5622c360ea7b24ead0ef7788b7ade610e0dd4d1b"
     },
     "0deb0b7c4386879173bcbe29fcfe59be735a4d16": {
       "members": [
@@ -352,17 +341,6 @@
       "exact": 0,
       "shape": "42c576fcf6c1df1f9121f3f709b9050ee5f9b679"
     },
-    "14d12496ad0e3aca82ff83219ecc6c83c1ce3842": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/MascotReactionTests.cs::PaintLastFrame#0",
-        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::PaintLastFrame#0"
-      ],
-      "count": 2,
-      "lines": 12,
-      "files": 2,
-      "exact": 2,
-      "shape": "7a5102a58d4adefc4f0c58b6fe3b03efedb141d6"
-    },
     "150f3b09ea63c53bb12657f8c69dcaa1043013b4": {
       "members": [
         "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CreateService#0",
@@ -405,18 +383,7 @@
       "lines": 6,
       "files": 1,
       "exact": 2,
-      "shape": "0e064a48a26c548b8c34e4bba0ab7f17b96a96b5"
-    },
-    "16f292b78cd2774134f004b1fe0c163f6b72e323": {
-      "members": [
-        "tests/Harbor.App.Cli.Tests/GateGlowAgingTests.cs::HotTone#0",
-        "tests/Harbor.Tui.CellForge.Tests/PostFxTests.cs::HotTone#0"
-      ],
-      "count": 2,
-      "lines": 6,
-      "files": 2,
-      "exact": 2,
-      "shape": "28af19d66f8ab97477d36edc659fdf5a3c36045e"
+      "shape": "9bfa2d67f67951ee1519f49995067125a08e00e2"
     },
     "16f5de2db127a201546f46166db4d184223743e7": {
       "members": [
@@ -546,17 +513,6 @@
       "exact": 0,
       "shape": "59a02be27dc9ef1a6b9ea611c8db0f0b9d47079c"
     },
-    "20656581f326f8c03fde7ec1a97830dea4549b79": {
-      "members": [
-        "tests/Harbor.App.Cli.Tests/SessionForkRunnerTests.cs::SeedAsync#0",
-        "tests/Harbor.App.Cli.Tests/SessionSearchRunnerTests.cs::SeedAsync#0"
-      ],
-      "count": 2,
-      "lines": 11,
-      "files": 2,
-      "exact": 2,
-      "shape": "c09c7bc315bedf309764d0e7c84506514b032e43"
-    },
     "2135bb0b6551e682e0336105749e4fe59e9e3036": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Legacy_AllFixed_ExcessGoesToLast#0",
@@ -601,7 +557,7 @@
       "lines": 10,
       "files": 1,
       "exact": 2,
-      "shape": "f9d67db70d9acd550602e6f848db39ffad65e2c9"
+      "shape": "1548c8a87874f59fcdcfa3ccc7d92cde3a1f0f92"
     },
     "25c09fda88da466cde9abef0fae350f4052ab1cf": {
       "members": [
@@ -612,7 +568,7 @@
       "lines": 9,
       "files": 1,
       "exact": 0,
-      "shape": "aff0637de4ee55dd5676c3e440a7aaa97c80e029"
+      "shape": "467ff27926a64b1c1b7ae647729b8d224f90d71c"
     },
     "25dfb882cf72ced99a600351b9966c3fbba6ecf6": {
       "members": [
@@ -691,19 +647,6 @@
       "exact": 8,
       "shape": "463b9305abfec2ef47b4a208f807715085dca094"
     },
-    "2ebaaee5dcebe757be761d43376dc141c1625755": {
-      "members": [
-        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::Assistant#0",
-        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::Assistant#0",
-        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::Assistant#0",
-        "tests/Harbor.Core.Tests/CompactionTestBase.cs::Assistant#0"
-      ],
-      "count": 4,
-      "lines": 8,
-      "files": 4,
-      "exact": 4,
-      "shape": "9b27efaef0bccf00c5dafc9fffdc9228fc8c47b4"
-    },
     "32501d8e4a5775adbd0f4d17cc592aa0bbe4f4e8": {
       "members": [
         "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::AlwaysCallsATool#0",
@@ -714,17 +657,6 @@
       "files": 2,
       "exact": 2,
       "shape": "c238105d5b4e43b7190a732d9b29527425bc8194"
-    },
-    "3311b216d31826bb111f23dd94da7798bd7686af": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_ExternalState_ScrollsToSelection#0",
-        "tests/Harbor.Tui.CellForge.Tests/DialogSelectListNavStateTests.cs::List_ExternalState_ScrollsToSelection#0"
-      ],
-      "count": 2,
-      "lines": 7,
-      "files": 2,
-      "exact": 0,
-      "shape": "5089894c8d6e205c8885efb7631beab9e986f811"
     },
     "341269109fd65f8c95d23bf93634212bd7c8f329": {
       "members": [
@@ -881,17 +813,6 @@
       "files": 1,
       "exact": 2,
       "shape": "889155c75176ab8fb615c2950e0631dee9485321"
-    },
-    "4fec01030e240d2745a03be65c8770d4c9d5be79": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/SkillFreshnessStatusPillTests.cs::Find#0",
-        "tests/Harbor.Tui.CellForge.Tests/StatusProjectorPanelTests.cs::Find#0"
-      ],
-      "count": 2,
-      "lines": 8,
-      "files": 2,
-      "exact": 2,
-      "shape": "3431695633377f37188b33eb2a21da5550646f66"
     },
     "517331c11ac4e40789459b00fcfd540ab73b7174": {
       "members": [
@@ -1073,28 +994,6 @@
       "exact": 3,
       "shape": "9697ca6921d828e969a5722e0fdcc0281a80c357"
     },
-    "7238899395ade0bce9d8551ff731681aa99bf192": {
-      "members": [
-        "tests/Harbor.Application.Tests/AgentUninitializedBehaviourTests.cs::WaitUntilAsync#0",
-        "tests/Harbor.Application.Tests/WaitForIdleFaultTests.cs::WaitUntilAsync#0"
-      ],
-      "count": 2,
-      "lines": 6,
-      "files": 2,
-      "exact": 2,
-      "shape": "bfda1c2bb829de3d7e218491c7ef480a4e4ffdab"
-    },
-    "72e44894eb40e29a7ec49b753c1284ce27ed0e01": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::OpenMany#0",
-        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteViewportTests.cs::OpenMany#0"
-      ],
-      "count": 2,
-      "lines": 8,
-      "files": 2,
-      "exact": 2,
-      "shape": "1fdc412c07d9294c437c2b7a538eb42a11d014b1"
-    },
     "73b992ac4b56daa5beaafc535e4b48b982a3d6ca": {
       "members": [
         "tests/Harbor.Storage.Tests/SqliteCheckpointStoreImplSiteTests.cs::SeedAsync#0",
@@ -1126,7 +1025,7 @@
       "lines": 11,
       "files": 1,
       "exact": 2,
-      "shape": "9c30d931fab20d59a551902ea3790d9c2293c2f6"
+      "shape": "bab988c07a02ed01fd209cd85088345134a711b7"
     },
     "78f69ad43a6ac1acd36b3e3a04956a79fb76fd67": {
       "members": [
@@ -1181,19 +1080,7 @@
       "lines": 10,
       "files": 1,
       "exact": 0,
-      "shape": "719140c1260ee18a31a0a57807aa51c043fff984"
-    },
-    "7e4ae7144899ba821fd993648e1e328f2c6a6ef6": {
-      "members": [
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Error#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Running#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Success#0"
-      ],
-      "count": 3,
-      "lines": 25,
-      "files": 1,
-      "exact": 0,
-      "shape": "3bcd7391e6f52ec4f7dabc1f38e493a5e16495b3"
+      "shape": "aa6b6d43cf502dc7b3de3c0575844a992dc839fd"
     },
     "7f01a1db1fff338ee1140ffb99e29c1805c5dff9": {
       "members": [
@@ -1206,17 +1093,6 @@
       "exact": 2,
       "shape": "5bf60180a0ef631f550e547fda64bab3d825f740"
     },
-    "8072ea3a3a966c97933bd2000557629d3412594c": {
-      "members": [
-        "tests/Harbor.Application.Tests/RunBudgetTests.cs::Loop#0",
-        "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::Loop#0"
-      ],
-      "count": 2,
-      "lines": 13,
-      "files": 2,
-      "exact": 2,
-      "shape": "1a7f4f3fa9ed842f34b5ea29cb9a90003d587903"
-    },
     "81ab454a4b2cf6135b84f78cdc7817507e7ceb73": {
       "members": [
         "tests/Harbor.Ui.Framework.Tests/TabModelKeyBindingTests.cs::StoreWithTabs#0",
@@ -1227,18 +1103,6 @@
       "files": 2,
       "exact": 2,
       "shape": "be7a4f80beaacf5ed7c908abe38a2bdefb70f5a4"
-    },
-    "81e3ac85743f47b3765ed1cb6b1b2ea0094a8e5d": {
-      "members": [
-        "tests/Harbor.ChangeTracking.Tests/ChangeReportTests.cs::FindRepoFile#0",
-        "tests/Harbor.Tui.CellForge.Tests/OnboardingFlowTests.cs::FindRepoFile#0",
-        "tests/Harbor.Tui.CellForge.Tests/ToolCallBlockMapperTests.cs::FindRepoFile#0"
-      ],
-      "count": 3,
-      "lines": 9,
-      "files": 3,
-      "exact": 3,
-      "shape": "34ca55aa9d4367e6dbbf333b65aa8bcddb8bac24"
     },
     "830ad0210810c03099e73a8a41b06b181bdc54ac": {
       "members": [
@@ -1283,17 +1147,6 @@
       "files": 2,
       "exact": 0,
       "shape": "347df62109a57e0d04de337166865fda128c6890"
-    },
-    "8a89dcd2261fb474c6656a5a5f77bf75d4f78fac": {
-      "members": [
-        "tests/Harbor.Abstractions.Tests/SessionLogFoldTests.cs::Message#0",
-        "tests/Harbor.Abstractions.Tests/SessionLogGuardTests.cs::Message#0"
-      ],
-      "count": 2,
-      "lines": 13,
-      "files": 2,
-      "exact": 2,
-      "shape": "33541637fd01d93f56fe59fd9457120f354dc1c9"
     },
     "8a90023d44c97c2c5d56d8b971bd609eaaa515bc": {
       "members": [
@@ -1352,18 +1205,6 @@
       "exact": 0,
       "shape": "adf9fdf62170a6d5923cb072a947cc21ce9db1c0"
     },
-    "90758b77dd79f589aabfa44e1baebc6d1748a8ca": {
-      "members": [
-        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_NonSubAgent_ReturnsError#0",
-        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_UnknownAgent_ReturnsErrorListingAvailable#0",
-        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_ValidSubAgent_NoRunnerWired_FailsHonest#0"
-      ],
-      "count": 3,
-      "lines": 8,
-      "files": 1,
-      "exact": 2,
-      "shape": "7c48f60fc8bd1a09e8662b7cccbde968c8d53140"
-    },
     "92a1a815d62240b0db3ed3af74b9391be768881a": {
       "members": [
         "tests/Harbor.Application.Tests/ErrorRouting259Tests.cs::FatalStreamError_PublishesSingleAgentError#0",
@@ -1373,7 +1214,7 @@
       "lines": 10,
       "files": 2,
       "exact": 0,
-      "shape": "6fbeceefb7cd4339081b5dafb597fd079447e0bb"
+      "shape": "30d6d8a1097336b4c63550e9393b609f49096a89"
     },
     "93590e486a43f51a3bfb6eb529ead0118fce070a": {
       "members": [
@@ -1430,32 +1271,6 @@
       "exact": 0,
       "shape": "646fdb15ed33970f5b9db6420ae6a86f98d3d721"
     },
-    "9993fbbfcf3302c2eea3a0576f6df167f18747ef": {
-      "members": [
-        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::SubAgent#0",
-        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::SubAgent#0",
-        "tests/Harbor.Application.Tests/SubAgentCostPropagationTests.cs::SubAgent#0",
-        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::SubAgent#0",
-        "tests/Harbor.Tools.Builtin.Tests/TaskToolCostTests.cs::SubAgent#0",
-        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::SubAgent#0"
-      ],
-      "count": 6,
-      "lines": 9,
-      "files": 6,
-      "exact": 6,
-      "shape": "ab1f5fae195bf012522b9dbe1fc17372b8b52167"
-    },
-    "9aec177832a1f1a62e28debe4b627c6a5cf191d7": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs::Info#0",
-        "tests/Harbor.Tui.CellForge.Tests/JumpPaletteSuggestedTests.cs::Info#0"
-      ],
-      "count": 2,
-      "lines": 6,
-      "files": 2,
-      "exact": 2,
-      "shape": "2ec75e13a51116187a5ae51a055171bc2b5a277d"
-    },
     "9cbddaa230dd6bee17bcf8ab9f8f888b57886ae1": {
       "members": [
         "tests/Harbor.Benchmarks/StatusBarLayoutFitBenchmark.cs::BuildRow#0",
@@ -1479,17 +1294,6 @@
       "files": 1,
       "exact": 2,
       "shape": "13807f2590e7a79e7e227047f409c2c425d480a9"
-    },
-    "9e082a353bd36907146f3580a32aac208dcee69f": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs::Row#0",
-        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripUnreadTests.cs::Row#0"
-      ],
-      "count": 2,
-      "lines": 7,
-      "files": 2,
-      "exact": 2,
-      "shape": "84628ee4880ea27ecc7d3abe5c58d0d11a098536"
     },
     "a2dd3b105a57970f8e492827d8892a31c4092fbc": {
       "members": [
@@ -1728,18 +1532,6 @@
       "exact": 2,
       "shape": "d07af64038e0700e54af5e31889d221f21d07bc2"
     },
-    "b80536df3c7a4cedb6859bdb13d4379f4f50b151": {
-      "members": [
-        "tests/Harbor.Core.Tests/PermissionPathPolicyPerToolTests.cs::AgentWithRuleset#0",
-        "tests/Harbor.Core.Tests/PermissionPathPolicyTests.cs::AgentWithRuleset#0",
-        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::AgentWithRuleset#0"
-      ],
-      "count": 3,
-      "lines": 7,
-      "files": 3,
-      "exact": 3,
-      "shape": "12c4274a5ebe34104d869e0e8e3e2285dcda98ab"
-    },
     "b9129d411068c497cf7683ffd07b057042fb96f1": {
       "members": [
         "tests/Harbor.Application.Tests/ToolDispatcherResolveOnceTests.cs::Batch#0",
@@ -1795,39 +1587,6 @@
       "exact": 2,
       "shape": "26de38096601490be6e7813c486dfbadabe8f655"
     },
-    "c152640a36445c9022e1f44a13d75052d98a6491": {
-      "members": [
-        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::AssistantWithUsage#0",
-        "tests/Harbor.Application.Tests/SubAgentCostPropagationTests.cs::AssistantWithUsage#0"
-      ],
-      "count": 2,
-      "lines": 8,
-      "files": 2,
-      "exact": 2,
-      "shape": "4d15729bc1828f85d9d0de02cba011a92a6c7aee"
-    },
-    "c231de93b2c9a41351b869f4dfeeccc660c5907c": {
-      "members": [
-        "tests/Harbor.Providers.Tests/LlmClientAuthFailureTests.cs::CollectAsync#0",
-        "tests/Harbor.Providers.Tests/ProviderStreamTests.cs::CollectAsync#0"
-      ],
-      "count": 2,
-      "lines": 6,
-      "files": 2,
-      "exact": 2,
-      "shape": "2d40f0eb85ca33fba620f05fad4add4016766316"
-    },
-    "c31d1a9415df62e32b406fff7ebc0c9e8b815f0a": {
-      "members": [
-        "tests/Harbor.Tui.CellForge.Tests/CellForgeBuiltinPanelsTests.cs::Rows#0",
-        "tests/Harbor.Tui.CellForge.Tests/CellForgeSkillFreshnessPanelTests.cs::Rows#0"
-      ],
-      "count": 2,
-      "lines": 8,
-      "files": 2,
-      "exact": 2,
-      "shape": "1cafba24b0721ff456202595e8075f5b23c8b762"
-    },
     "c374ff0b85e7fa722226d1ebbb91a080a6b8f094": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/WordDiffTests.cs::DeletionWithinLine_MarksDeletedRunOnly#0",
@@ -1850,18 +1609,6 @@
       "exact": 0,
       "shape": "9c2cb998e99844dde4a992c3a5d344829f4bb4a6"
     },
-    "c798db8dd7deca44227c14f4b2191763db3e5d8c": {
-      "members": [
-        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::Summary#0",
-        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::Summary#0",
-        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::Summary#0"
-      ],
-      "count": 3,
-      "lines": 10,
-      "files": 3,
-      "exact": 3,
-      "shape": "0da826abb1d501c370851310283b9bac032ea84e"
-    },
     "c8c1d8467deaeb5027b015c079cf5ff83ffc8dac": {
       "members": [
         "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::PromptTool_ValidateArguments_Theory#0",
@@ -1872,17 +1619,6 @@
       "files": 1,
       "exact": 0,
       "shape": "2d78f03fb4af1060cd08cfdbe472498188f47e2f"
-    },
-    "c9c6acacf0333ec8606d260d0b76fce01a6aa861": {
-      "members": [
-        "tests/Harbor.Ipc.Tests/BroadcasterTurnIsolationTests.cs::CollectFramesAsync#0",
-        "tests/Harbor.Ipc.Tests/ReconnectReplayTests.cs::CollectFramesAsync#0"
-      ],
-      "count": 2,
-      "lines": 7,
-      "files": 2,
-      "exact": 2,
-      "shape": "cac9dd3336a2acc043887b296498891efd6ef71e"
     },
     "ca2637f16f84862aa7a76337e3f83d52377467b1": {
       "members": [
@@ -1896,6 +1632,17 @@
       "files": 1,
       "exact": 0,
       "shape": "67527265ff1ce6ecfdee3c34f80688b392a80b97"
+    },
+    "cadf7816f221c37ef7555469896e24f2cc8e8324": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_UnknownAgent_ReturnsErrorListingAvailable#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_ValidSubAgent_NoRunnerWired_FailsHonest#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "d82ecbbf81eaef5bfb3887efacf720a1b667d509"
     },
     "cb4c9718e2026f979781695629626bc8234dafdc": {
       "members": [
@@ -1919,6 +1666,17 @@
       "exact": 0,
       "shape": "1b98ecde3c1f2f1c1aae420e145b5c3f68af0f5d"
     },
+    "cc065b2e06927f7876df951d6b58baa47073c580": {
+      "members": [
+        "tests/Harbor.Application.Tests/Support/AgentFixtures.cs::SubAgent#0",
+        "tests/Harbor.Tools.Builtin.Tests/Support/AgentFixtures.cs::SubAgent#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "ab1f5fae195bf012522b9dbe1fc17372b8b52167"
+    },
     "cdd2af7f09aff2d6de952e3cafbf8183a4e0294e": {
       "members": [
         "tests/Harbor.Storage.Jsonl.Tests/JsonlCheckpointsTests.cs::Msg#0",
@@ -1930,17 +1688,6 @@
       "files": 3,
       "exact": 2,
       "shape": "e945d7070f4859e62e70903b46da63418e54a67a"
-    },
-    "cf08c403221ed9416a0cfa513443bda90c9f224c": {
-      "members": [
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Sparkline_Flat#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Sparkline_Ramp#0"
-      ],
-      "count": 2,
-      "lines": 20,
-      "files": 1,
-      "exact": 2,
-      "shape": "a57ce647fc28d8be5a6a24324d19f792dc16f8d0"
     },
     "d109bce049cd06aab706b3b0b6c3dd6df9a2103c": {
       "members": [
@@ -1964,7 +1711,7 @@
       "lines": 11,
       "files": 1,
       "exact": 2,
-      "shape": "0b6b5e9e1faa7bef51c85e326e6053b566bc378e"
+      "shape": "2440da2bd0ab110c48d2e3134d243f2e61f2c7a2"
     },
     "d27e08b506dd1bd0df4492a437c8cd00aab29a94": {
       "members": [
@@ -1987,20 +1734,6 @@
       "files": 1,
       "exact": 0,
       "shape": "0b3b0d3cc70432ff4407985ec1eec19e8dae52de"
-    },
-    "d2bc969881678162d1b3c9c7a7ad84a7b5bc1354": {
-      "members": [
-        "tests/Harbor.Application.Tests/CompactionViewTests.cs::Msg#0",
-        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::User#0",
-        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::User#0",
-        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::User#0",
-        "tests/Harbor.Core.Tests/CompactionTestBase.cs::User#0"
-      ],
-      "count": 5,
-      "lines": 7,
-      "files": 5,
-      "exact": 5,
-      "shape": "b0f31ade2c957d42c0b864f270caa61b49f34ce7"
     },
     "d2e824408bbc9186745a934714dea05ced924e0b": {
       "members": [
@@ -2045,7 +1778,18 @@
       "lines": 7,
       "files": 1,
       "exact": 2,
-      "shape": "c94bfb4cbe4782b22b76564ab7699519079c338b"
+      "shape": "2cf68d2fc913588c14f76df9d3ad20fcffc2f863"
+    },
+    "d73aa379af420f4181a7f4f9a6628396aac018c8": {
+      "members": [
+        "tests/Harbor.Core.Tests/CompactionTestBase.cs::Assistant#0",
+        "tests/Harbor.Core.Tests/Support/MessageFixtures.cs::Assistant#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "9b27efaef0bccf00c5dafc9fffdc9228fc8c47b4"
     },
     "d767a3134309909d277683ba0cb7039673bc6462": {
       "members": [
@@ -2089,7 +1833,7 @@
       "lines": 10,
       "files": 1,
       "exact": 0,
-      "shape": "52901f98c679ab34b6748b35476fa64991517850"
+      "shape": "a97da14de23a477ef0fce4af4e97fc452d20cc7e"
     },
     "dab6a33a784eb66563a13ec47b2cf0e53c65b2c2": {
       "members": [
@@ -2209,27 +1953,17 @@
       "exact": 2,
       "shape": "cbd5395f1eadfd1ead0eefb7b6542c4f8e10d1be"
     },
-    "e89208f10eb8e752f36e73bfe7d8ee9704b74234": {
+    "e88d930e186d31380e4244b0af1c34e8ae1a0ca5": {
       "members": [
-        "tests/Harbor.Tui.CellForge.Tests/StreamingHoldbackTests.cs::Flatten#0",
-        "tests/Harbor.Tui.CellForge.Tests/StreamingMarkdownTests.cs::Flatten#0"
+        "tests/Harbor.Application.Tests/CompactionViewTests.cs::Msg#0",
+        "tests/Harbor.Core.Tests/CompactionTestBase.cs::User#0",
+        "tests/Harbor.Core.Tests/Support/MessageFixtures.cs::User#0"
       ],
-      "count": 2,
-      "lines": 11,
-      "files": 2,
-      "exact": 2,
-      "shape": "e2579c88368e299c9d7978735534ffa4c0e83184"
-    },
-    "ea3fab546c383aecfd52947dcd8e333afeaebfa9": {
-      "members": [
-        "tests/Harbor.Application.Tests/MessageSnapshotTests.cs::UserMsg#0",
-        "tests/Harbor.Application.Tests/UserHookGatesTests.cs::UserMsg#0"
-      ],
-      "count": 2,
+      "count": 3,
       "lines": 7,
-      "files": 2,
-      "exact": 2,
-      "shape": "78c54dc47613f589488478559f21ab7c5c719cd2"
+      "files": 3,
+      "exact": 3,
+      "shape": "b0f31ade2c957d42c0b864f270caa61b49f34ce7"
     },
     "ec145c71726b113f91bb656741d3ce9f9d5a79a0": {
       "members": [
@@ -2251,7 +1985,7 @@
       "lines": 6,
       "files": 1,
       "exact": 0,
-      "shape": "1b66c6f7ccc1f321ecc171fdd301caaab7cc500c"
+      "shape": "ef46444a8cafd3bb859a72fd7277d9b64935c0a0"
     },
     "efb941d240075640a44ae26eb99a012eba01832f": {
       "members": [
@@ -2297,17 +2031,6 @@
       "files": 2,
       "exact": 2,
       "shape": "fb626370512677e837571e889621e5ac768abb06"
-    },
-    "f45f575ae69a890ef0666ae0a222f6219ff4444e": {
-      "members": [
-        "tests/Harbor.Application.Tests/ErrorRouting259Tests.cs::LoopWithClock#0",
-        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::LoopWithClock#0"
-      ],
-      "count": 2,
-      "lines": 14,
-      "files": 2,
-      "exact": 2,
-      "shape": "f2351461da8f55df98e81b4239e48695007c4432"
     },
     "f6e891c1d0cd1a3ca3f4a4ce939959452b7b49a8": {
       "members": [
@@ -2398,7 +2121,7 @@
       "lines": 26,
       "files": 1,
       "exact": 0,
-      "shape": "8a3f84e11305366ae72ad7ce9dc58e360d1d90bd"
+      "shape": "67d8c8bde9ffe53131ae55450e05be31c2a2d271"
     }
   },
   "exemptions": [

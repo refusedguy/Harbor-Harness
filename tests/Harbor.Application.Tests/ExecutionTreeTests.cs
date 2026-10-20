@@ -48,16 +48,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ExecutionTreeTests
 {
-    private static AgentDefinition SubAgent(string name = "explore") => new(
-        AgentName.Create(name),
-        name,
-        name,
-        "test-model",
-        "test",
-        PermissionRuleset.Empty,
-        20,
-        IsSubAgent: true);
-
     private static AgentDefinition LoopAgent() => new(
         AgentName.Create("code"),
         "Code",
@@ -66,15 +56,6 @@ public class ExecutionTreeTests
         "test",
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }),
         MaxSteps: 20);
-
-    private static AssistantMessage AssistantWithUsage(string text, Usage usage) => new(
-        Guid.NewGuid().ToString("N"),
-        "child",
-        DateTimeOffset.UtcNow,
-        [new TextPart(text)],
-        StopReason.Stop,
-        usage,
-        "test-model");
 
     private static TestSessionContext NewLoopSession() =>
         new(Session.Create(Harbor.TestKit.TestTempDirs.NewDirectory("harbor-407-loop"), "code", "test", "test-model"));
@@ -406,7 +387,7 @@ public class ExecutionTreeTests
         using var cts = new CancellationTokenSource();
         var loop = new CancellingLoop(
             null,
-            AssistantWithUsage("done", new Usage(100, 50)))
+            AgentFixtures.AssistantWithUsage("done", new Usage(100, 50)))
         {
             MidRun = () =>
             {
@@ -416,7 +397,7 @@ public class ExecutionTreeTests
         };
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
 
         await Assert.That(result.IsSuccess).IsTrue();
         var stats = await store.GetStatsAsync(parent.Id);
@@ -434,7 +415,7 @@ public class ExecutionTreeTests
         using var cts = new CancellationTokenSource();
         var loop = new CancellingLoop(
             Result.Failure("Agent run was cancelled."),
-            AssistantWithUsage("partial", new Usage(40, 10)))
+            AgentFixtures.AssistantWithUsage("partial", new Usage(40, 10)))
         {
             MidRun = () =>
             {
@@ -444,7 +425,7 @@ public class ExecutionTreeTests
         };
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("was cancelled");

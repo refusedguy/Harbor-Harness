@@ -211,13 +211,6 @@ public class TableBlockTests
         await Assert.That(first.EndsWith("┐")).IsTrue();
     }
 
-    private static ScreenBuffer PaintToBuffer(TableBlock block, int width = 40)
-    {
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
-        return buffer;
-    }
-
     [Test]
     public async Task Selection_DefaultsToNone()
     {
@@ -338,17 +331,17 @@ public class TableBlockTests
         var block = ParseSample();
         block.SelectRow(0);
         await Assert.That(block.ShouldHighlight).IsTrue();
-        var buffer = PaintToBuffer(block);
+        var buffer = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
         await Assert.That(buffer.Get(2, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
 
         block.HighlightSpacing = TableHighlightSpacing.Never;
         await Assert.That(block.ShouldHighlight).IsFalse();
-        var muted = PaintToBuffer(block);
+        var muted = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(muted.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
 
         var plain = ParseSample();
-        var plainBuffer = PaintToBuffer(plain);
+        var plainBuffer = ScreenFixtures.PaintToBuffer(plain);
         await Assert.That(plainBuffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
     }
 
@@ -357,7 +350,7 @@ public class TableBlockTests
     {
         var block = ParseSample();
         block.SelectCell((1, 0)); // "grace" row, "name" column
-        var buffer = PaintToBuffer(block);
+        var buffer = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(buffer.Get(2, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
         await Assert.That(buffer.Get(10, 4).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
         await Assert.That(buffer.Get(2, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();
@@ -368,7 +361,7 @@ public class TableBlockTests
     {
         var block = ParseSample();
         block.SelectColumn(1); // "age" column
-        var buffer = PaintToBuffer(block);
+        var buffer = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(buffer.Get(10, 1).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
         await Assert.That(buffer.Get(10, 3).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsTrue();
         await Assert.That(buffer.Get(2, 1).Style.Attrs.HasFlag(StyleAttr.Reverse)).IsFalse();

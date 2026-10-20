@@ -37,17 +37,6 @@ public class PanelWiringTests
     private static CellForgeTuiRenderer Create(RecordingBackend backend) =>
         new(NullLogger<CellForgeTuiRenderer>.Instance, backend);
 
-    private static ChatScreen BuildScreen() =>
-        ChatScreen.Build(new ComposerController(), new StatusViewModel(), includeSidebar: false);
-
-    private static void PaintAll(ChatScreen screen, ScreenBuffer buffer)
-    {
-        foreach (var panel in screen.Tree.Panels)
-        {
-            panel.Paint(buffer);
-        }
-    }
-
     private static CellForgeDockPanel FindDock(ChatScreen screen, string id)
     {
         foreach (var panel in screen.Tree.Panels)
@@ -121,7 +110,7 @@ public class PanelWiringTests
 
         _ = renderer.Store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
 
         ChatScreenPanelDock.AttachPanels(
@@ -133,7 +122,7 @@ public class PanelWiringTests
         await Assert.That(dock.Providers.Count).IsEqualTo(1);
 
         var buffer = new ScreenBuffer(100, 40);
-        PaintAll(screen, buffer);
+        ScreenFixtures.PaintAll(screen, buffer);
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
     }
@@ -153,7 +142,7 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
             services: null, viewportWidth: 100, viewportHeight: 40);
@@ -162,7 +151,7 @@ public class PanelWiringTests
         await Assert.That(dock.Providers.Count).IsEqualTo(1);
 
         var buffer = new ScreenBuffer(100, 40);
-        PaintAll(screen, buffer);
+        ScreenFixtures.PaintAll(screen, buffer);
         await Assert.That(GridDump.Art(buffer)).Contains("Todo List");
     }
 
@@ -181,13 +170,13 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
             services: null, viewportWidth: 100, viewportHeight: 40);
 
         var buffer = new ScreenBuffer(100, 40);
-        PaintAll(screen, buffer);
+        ScreenFixtures.PaintAll(screen, buffer);
         await Assert.That(GridDump.Art(buffer)).Contains("1.5K");
 
         // A fresh snapshot (same visible set, new numbers) refreshes the leaf
@@ -196,7 +185,7 @@ public class PanelWiringTests
         ChatScreenPanelDock.UpdatePanels(screen, owner.Registry, next, services: null);
 
         var after = new ScreenBuffer(100, 40);
-        PaintAll(screen, after);
+        ScreenFixtures.PaintAll(screen, after);
         string art = GridDump.Art(after);
         await Assert.That(art).Contains("2.5K");
         await Assert.That(art).DoesNotContain("1.5K");
@@ -303,7 +292,7 @@ public class PanelWiringTests
         _ = owner.EnsureSeeded(store);
         _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         screen.Tree.Solve(100, 40);
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
 

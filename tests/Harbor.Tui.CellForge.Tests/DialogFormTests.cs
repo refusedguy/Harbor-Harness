@@ -17,20 +17,6 @@ public class DialogFormTests
     private static readonly ConsoleKeyInfo EscKey = new('\x1b', ConsoleKey.Escape, false, false, false);
     private static readonly ConsoleKeyInfo TabKey = new('\t', ConsoleKey.Tab, false, false, false);
 
-    // DialogOverlay prompt editing only inspects Key for Enter/Backspace —
-    // any other Key value types KeyChar verbatim.
-    private static ConsoleKeyInfo CharKey(char c) => new(c, ConsoleKey.A, false, false, false);
-
-    private static ConsoleKeyInfo SpecialKey(ConsoleKey key) => new('\0', key, false, false, false);
-
-    private static void Type(DialogOverlay dialog, string text)
-    {
-        foreach (char c in text)
-        {
-            _ = dialog.HandleKey(CharKey(c));
-        }
-    }
-
     private static string PaintArt(DialogOverlay dialog, int cols = 48, int rows = 14)
     {
         var viewport = new Rect(0, 0, cols, rows);
@@ -77,11 +63,11 @@ public class DialogFormTests
 
         for (int i = 0; i < 5; i++)
         {
-            _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+            _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
         }
         await Assert.That(dialog.SelectedIndex).IsEqualTo(2);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.UpArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.UpArrow));
         await Assert.That(dialog.SelectedOption).IsEqualTo("b");
     }
 
@@ -91,13 +77,13 @@ public class DialogFormTests
         var dialog = new DialogOverlay();
         dialog.ShowSelect("T", "m", ["a", "b", "c", "d", "e", "f", "g", "h"]);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.PageDown));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.PageDown));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(5);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Home));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Home));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(0);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.End));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.End));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(7);
     }
 
@@ -106,7 +92,7 @@ public class DialogFormTests
     {
         var dialog = new DialogOverlay();
         dialog.ShowSelect("T", "m", ["a", "b"]);
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();
         await Assert.That(dialog.Visible).IsTrue();
@@ -121,7 +107,7 @@ public class DialogFormTests
     {
         var dialog = new DialogOverlay();
         dialog.ShowSelect("Pick", "Choose:", ["apple", "banana"]);
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
 
         string art = PaintArt(dialog);
 
@@ -143,7 +129,7 @@ public class DialogFormTests
 
         for (int i = 0; i < 10; i++)
         {
-            _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+            _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
         }
         string art = PaintArt(dialog, cols: 40, rows: 10);
 
@@ -158,10 +144,10 @@ public class DialogFormTests
         var dialog = new DialogOverlay();
         dialog.ShowRadio("T", "m", ["yes", "no", "maybe"]);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.LeftArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.LeftArrow));
         await Assert.That(dialog.SelectedOption).IsEqualTo("maybe");
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
         await Assert.That(dialog.SelectedOption).IsEqualTo("yes");
     }
 
@@ -171,16 +157,16 @@ public class DialogFormTests
         var dialog = new DialogOverlay();
         dialog.ShowRadio("T", "m", ["a", "b", "c"]);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(1);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.UpArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.UpArrow));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(0);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.End));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.End));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(2);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Home));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Home));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(0);
     }
 
@@ -189,7 +175,7 @@ public class DialogFormTests
     {
         var dialog = new DialogOverlay();
         dialog.ShowRadio("T", "m", ["a", "b"]);
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();
         await Assert.That(dialog.Visible).IsTrue();
@@ -219,10 +205,10 @@ public class DialogFormTests
         var dialog = new DialogOverlay();
         dialog.ShowMultiline("Notes", "Add details:");
 
-        Type(dialog, "hi");
+        Keys.Type(dialog, "hi");
         await Assert.That(dialog.Input).IsEqualTo("hi");
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Backspace));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Backspace));
         await Assert.That(dialog.Input).IsEqualTo("h");
         await Assert.That(dialog.Editor.LineCount).IsEqualTo(1);
     }
@@ -232,7 +218,7 @@ public class DialogFormTests
     {
         var dialog = new DialogOverlay();
         dialog.ShowMultiline("Notes", "Add details:");
-        Type(dialog, "draft");
+        Keys.Type(dialog, "draft");
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();
         await Assert.That(dialog.Visible).IsTrue();
@@ -261,12 +247,12 @@ public class DialogFormTests
         dialog.ShowMultiline("Notes", "Edit:", "ab\ncd");
         int end = dialog.Editor.Cursor;
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.UpArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.UpArrow));
 
         await Assert.That(dialog.Editor.Cursor < end).IsTrue();
         await Assert.That(dialog.Input).IsEqualTo("ab\ncd");
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
         await Assert.That(dialog.Editor.Cursor).IsEqualTo(end);
     }
 
@@ -277,13 +263,13 @@ public class DialogFormTests
         dialog.ShowMultiline("Notes", "Edit:", "abc");
         int end = dialog.Editor.Cursor;
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.LeftArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.LeftArrow));
         await Assert.That(dialog.Editor.Cursor).IsEqualTo(end - 1);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Home));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Home));
         await Assert.That(dialog.Editor.Cursor).IsEqualTo(0);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.End));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.End));
         await Assert.That(dialog.Editor.Cursor).IsEqualTo(end);
     }
 
@@ -318,15 +304,15 @@ public class DialogFormTests
         var dialog = new DialogOverlay();
         dialog.ShowPrompt("Auth", "Key:", "", "Next", "Cancel");
 
-        Type(dialog, "k1");
+        Keys.Type(dialog, "k1");
         await Assert.That(dialog.Input).IsEqualTo("k1");
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Backspace));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Backspace));
         await Assert.That(dialog.Input).IsEqualTo("k");
 
         // Frozen: horizontal arrows cycle button focus (multiline owns them as caret moves).
         int before = dialog.FocusedButtonIndex;
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
         await Assert.That(dialog.FocusedButtonIndex).IsEqualTo((before + 1) % dialog.Buttons.Count);
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();

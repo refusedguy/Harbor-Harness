@@ -1,8 +1,6 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Ipc.Client;
 using Harbor.Ipc.Protocol;
-using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,20 +20,6 @@ public class BroadcasterTurnIsolationTests
         AssistantMessage.Empty("session-x", "test-model");
 
     private static readonly ToolResultMessage[] NoToolResults = [];
-
-    /// <summary>Subscribe and drain until at least <paramref name="count" /> frames arrive.</summary>
-    private static async Task<List<EventFrame>> CollectFramesAsync(
-        MessagePackRpcClient client, int count, CancellationToken cancellationToken)
-    {
-        var frames = new List<EventFrame>();
-        await foreach (var frame in client.EventFrames.ReadAllAsync(cancellationToken))
-        {
-            frames.Add(frame);
-            if (frames.Count >= count) break;
-        }
-
-        return frames;
-    }
 
     [Test]
     [Timeout(60_000)]
@@ -75,7 +59,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, runA));
 
             // 2 AgentStart + 4 TurnStart + 2 TurnEnd = 8 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 8, cancellationToken);
+            List<EventFrame> frames = await FrameCollector.CollectFramesAsync(client, 8, cancellationToken);
 
             var endB = frames[6].Event as HarborEvent.TurnEnd;
             var endA = frames[7].Event as HarborEvent.TurnEnd;
@@ -122,7 +106,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, session));
 
             // 2 AgentStart + 2 TurnStart + 2 TurnEnd = 6 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 6, cancellationToken);
+            List<EventFrame> frames = await FrameCollector.CollectFramesAsync(client, 6, cancellationToken);
 
             var firstEnd = frames[2].Event as HarborEvent.TurnEnd;
             var secondEnd = frames[5].Event as HarborEvent.TurnEnd;

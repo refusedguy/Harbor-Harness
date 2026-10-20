@@ -22,7 +22,6 @@ using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;
 using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
 
-
 namespace Harbor.App.Cli.Tests;
 
 /// <summary>
@@ -114,14 +113,6 @@ public class SlashPanelsCommandTests
             ParentSessionId = parent,
         };
 
-    private static void Type(CommandPaletteView palette, string text)
-    {
-        foreach (char c in text)
-        {
-            _ = palette.HandleKey(KeyEvent.Char(new Rune(c)));
-        }
-    }
-
     [Test]
     public async Task Tree_RowsAreTitleFirst_EnterSwitches()
     {
@@ -140,7 +131,7 @@ public class SlashPanelsCommandTests
         await Assert.That(host.Palette.Results[0].Detail).Contains("aaa11111");
 
         // Filter as you type, then Enter opens the filtered session.
-        Type(host.Palette, "docs");
+        PaletteKeys.Type(host.Palette, "docs");
         await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();
@@ -249,7 +240,7 @@ public class SlashPanelsCommandTests
         await Assert.That(host.Palette.Results.Any(i => i.Title.Contains("Kilo"))).IsTrue();
 
         // A key-based provider opens the key prompt (no key saved — no disk writes).
-        Type(host.Palette, "kilocode");
+        PaletteKeys.Type(host.Palette, "kilocode");
         await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();
@@ -270,7 +261,7 @@ public class SlashPanelsCommandTests
 
         // Local providers probe straight away; with no health service the
         // panel just closes (wizard parity) — no prompt, no writes.
-        Type(host.Palette, "ollama");
+        PaletteKeys.Type(host.Palette, "ollama");
         await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();
@@ -316,7 +307,7 @@ public class SlashPanelsCommandTests
         await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);
         await Assert.That(host.Palette.Results).Count().IsEqualTo(2);
 
-        Type(host.Palette, "docs");
+        PaletteKeys.Type(host.Palette, "docs");
         await Assert.That(host.Palette.Results).Count().IsEqualTo(1);
         _ = host.Palette.HandleKey(KeyEvent.Simple(KeyCode.Enter));
         var pending = host.Palette.TakePendingCommit();

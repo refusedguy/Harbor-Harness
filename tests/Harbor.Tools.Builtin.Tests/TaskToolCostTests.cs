@@ -3,7 +3,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,26 +17,8 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </summary>
 public class TaskToolCostTests
 {
-    private static AgentDefinition SubAgent(string name) => new(
-        AgentName.Create(name),
-        name,
-        name,
-        "test-model",
-        "test",
-        PermissionRuleset.Empty,
-        20,
-        IsSubAgent: true);
-
     private static ToolContext CreateContext() =>
         TestToolContext.Create(sessionId: "session-1", messageId: "message-1", callId: "call-1");
-
-    private static JsonElement Args(params (string key, string value)[] pairs)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach ((string k, string v) in pairs)
-            dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
-    }
 
     private sealed class FakeRunner(
         Result<SubAgentRunResult> outcome,
@@ -59,7 +40,7 @@ public class TaskToolCostTests
     public async Task ExecuteAsync_Success_WithChildUsage_AppendsCostSuffix()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult(
             SessionId: "sub-1",
             AgentName: "explore",
@@ -68,7 +49,7 @@ public class TaskToolCostTests
             ChildUsage: new Usage(120, 45))));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var result = await tool.ExecuteAsync(Args(("agent", "explore"), ("prompt", "hi")), CreateContext());
+        var result = await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("2 message(s), +120↑ 45↓");
@@ -79,11 +60,11 @@ public class TaskToolCostTests
     public async Task ExecuteAsync_Success_WithoutChildUsage_KeepsLegacyShape()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "done", 2)));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var result = await tool.ExecuteAsync(Args(("agent", "explore"), ("prompt", "hi")), CreateContext());
+        var result = await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("2 message(s)]");
@@ -94,11 +75,11 @@ public class TaskToolCostTests
     public async Task ExecuteAsync_ForwardsParentMessageLinkage()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "done", 2)));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        await tool.ExecuteAsync(Args(("agent", "explore"), ("prompt", "hi")), CreateContext());
+        await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(runner.Calls.Count).IsEqualTo(1);
         await Assert.That(runner.Calls[0].Request.ParentSessionId).IsEqualTo("session-1");
@@ -109,12 +90,12 @@ public class TaskToolCostTests
     public async Task ExecuteAsync_Failure_WithResumeTrailer_AttachesHintMetadata()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Failure<SubAgentRunResult>(
             "Sub-agent 'explore' failed: model exploded. Its partial history is preserved in session sub-9. [resume-session:sub-9]"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var result = await tool.ExecuteAsync(Args(("agent", "explore"), ("prompt", "hi")), CreateContext());
+        var result = await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[resume-session:sub-9]");
@@ -128,11 +109,11 @@ public class TaskToolCostTests
     public async Task ExecuteAsync_Failure_WithoutTrailer_MetadataNull()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Failure<SubAgentRunResult>("model exploded"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var result = await tool.ExecuteAsync(Args(("agent", "explore"), ("prompt", "hi")), CreateContext());
+        var result = await tool.ExecuteAsync(TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi")), CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Metadata).IsNull();

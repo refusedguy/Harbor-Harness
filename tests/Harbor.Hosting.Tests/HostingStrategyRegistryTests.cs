@@ -3,7 +3,6 @@ using Harbor.Hosting.Rendering;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Terminal.Abstractions;
-using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.TestKit;
 using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,12 +24,6 @@ public class HostingStrategyRegistryTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-strategy-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
     private static HarborComposeOptions BaselineOptions() =>
         new() { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory", DefaultTuiRenderer = "plain" };
 
@@ -46,7 +39,7 @@ public class HostingStrategyRegistryTests
                 ArgumentException? caught = null;
                 try
                 {
-                    using var sp = Compose(BaselineOptions());
+                    using var sp = CompositionFixtures.Compose(BaselineOptions());
                 }
                 catch (ArgumentException ex)
                 {
@@ -68,13 +61,13 @@ public class HostingStrategyRegistryTests
         {
             await EnvScope.WithAsync("HARBOR_STORAGE", "MEMORY", async () =>
             {
-                using var sp = Compose(BaselineOptions());
+                using var sp = CompositionFixtures.Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
             });
 
             await EnvScope.WithAsync("HARBOR_STORAGE", "  Jsonl  ", async () =>
             {
-                using var sp = Compose(BaselineOptions());
+                using var sp = CompositionFixtures.Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<JsonlSessionStore>();
             });
         });
@@ -89,7 +82,7 @@ public class HostingStrategyRegistryTests
         {
             await EnvScope.WithAsync("HARBOR_TUI", "consoleex", async () =>
             {
-                using var sp = Compose(BaselineOptions());
+                using var sp = CompositionFixtures.Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ITuiRenderer>())
                     .IsTypeOf<Harbor.Tui.CellForge.CellForgeTuiRenderer>();
                 await Assert.That(sp.GetRequiredService<IRendererPipeline>().CurrentBackendId)
@@ -105,7 +98,7 @@ public class HostingStrategyRegistryTests
         {
             await EnvScope.WithAsync("HARBOR_TUI", "cellforge", async () =>
             {
-                using var sp = Compose(BaselineOptions());
+                using var sp = CompositionFixtures.Compose(BaselineOptions());
                 await Assert.That(sp.GetRequiredService<ITuiRenderer>())
                     .IsTypeOf<Harbor.Tui.CellForge.CellForgeTuiRenderer>();
                 await Assert.That(sp.GetRequiredService<IRendererPipeline>().CurrentBackendId)
@@ -121,7 +114,7 @@ public class HostingStrategyRegistryTests
         {
             await EnvScope.WithAsync("HARBOR_TUI", "bogus-tui-175", async () =>
             {
-                using var sp = Compose(BaselineOptions());
+                using var sp = CompositionFixtures.Compose(BaselineOptions());
                 object renderer = sp.GetRequiredService<ITuiRenderer>();
                 bool isAnsi = renderer is AnsiTuiRenderer;
                 bool isPlain = renderer is PlainTuiRenderer;
@@ -147,7 +140,7 @@ public class HostingStrategyRegistryTests
                 ArgumentException? caught = null;
                 try
                 {
-                    using var sp = Compose(BaselineOptions());
+                    using var sp = CompositionFixtures.Compose(BaselineOptions());
                 }
                 catch (ArgumentException ex)
                 {
@@ -171,13 +164,13 @@ public class HostingStrategyRegistryTests
                 {
                     await EnvScope.WithAsync("HARBOR_MODE", "ipc-server", async () =>
                     {
-                        using var sp = Compose(BaselineOptions());
+                        using var sp = CompositionFixtures.Compose(BaselineOptions());
                         await Assert.That(sp).IsNotNull();
                     });
 
                     await EnvScope.WithAsync("HARBOR_MODE", "ipc-client", async () =>
                     {
-                        using var sp = Compose(BaselineOptions());
+                        using var sp = CompositionFixtures.Compose(BaselineOptions());
                         await Assert.That(sp).IsNotNull();
                     });
                 });

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
@@ -56,16 +55,6 @@ public class ProviderStreamTests
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
-    private static async Task<List<LlmEvent>> CollectAsync(IAsyncEnumerable<LlmEvent> stream)
-    {
-        var events = new List<LlmEvent>();
-        await foreach (var evt in stream)
-        {
-            events.Add(evt);
-        }
-        return events;
-    }
-
     [Test]
     public async Task OpenAIChat_DeltaChunksWithoutIds_KeepStableToolCallId()
     {
@@ -83,7 +72,7 @@ public class ProviderStreamTests
             new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "gpt-4o", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -109,7 +98,7 @@ public class ProviderStreamTests
             new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "gpt-4o", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -137,7 +126,7 @@ public class ProviderStreamTests
             new OllamaConfig(),
             NullLogger<OllamaLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "llama3", [LlmUserMessage.Text("hello")], "", [])));
 
         await Assert.That(events.Count(e => e is FinishEvent)).IsEqualTo(1);
@@ -163,7 +152,7 @@ public class ProviderStreamTests
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         string text = string.Concat(events.OfType<TextDeltaEvent>().Select(t => t.Delta));
@@ -187,7 +176,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -213,7 +202,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         string text = string.Concat(events.OfType<TextDeltaEvent>().Select(t => t.Delta));
@@ -233,7 +222,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         var finishes = events.OfType<StepFinishEvent>().ToList();
@@ -256,7 +245,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -278,7 +267,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         var finishes = events.OfType<StepFinishEvent>().ToList();
@@ -303,7 +292,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(handler);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         var finishes = events.OfType<StepFinishEvent>().ToList();
@@ -333,7 +322,7 @@ public class ProviderStreamTests
             new TestAuthResolver(),
             NullLogger<AnthropicLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "claude-x", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -368,7 +357,7 @@ public class ProviderStreamTests
             new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "o4-mini", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -404,7 +393,7 @@ public class ProviderStreamTests
             new OllamaConfig(),
             NullLogger<OllamaLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "llama3", [LlmUserMessage.Text("hello")], "", [])));
 
         var starts = events.OfType<ToolCallStartEvent>().ToList();
@@ -427,7 +416,7 @@ public class ProviderStreamTests
 
         var client = CreateCompatClient(new StubHttpMessageHandler(_ => Sse(lines)));
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest(
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
 
         await Assert.That(events.OfType<TextDeltaEvent>().Count()).IsEqualTo(Count);

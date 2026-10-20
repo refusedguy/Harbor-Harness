@@ -40,17 +40,6 @@ public sealed class WaitForIdleFaultTests
         }
     }
 
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
-    {
-        DateTimeOffset deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
-        while (!condition() && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(5);
-        }
-
-        return condition();
-    }
-
     [Test]
     public async Task WaitForIdleAsync_FaultedRun_CompletesWithoutThrowing()
     {
@@ -63,7 +52,7 @@ public sealed class WaitForIdleFaultTests
         subject.Initialize(session, TestAgents.AllowAll());
 
         Task<Result> promptTask = subject.PromptAsync("do work");
-        await Assert.That(await WaitUntilAsync(() => subject.IsRunning())).IsTrue()
+        await Assert.That(await AsyncWaits.WaitUntilAsync(() => subject.IsRunning())).IsTrue()
             .Because("WaitForIdleAsync only observes the in-flight run, so the waiter must attach while it is running.");
 
         Task waitTask = subject.WaitForIdleAsync();

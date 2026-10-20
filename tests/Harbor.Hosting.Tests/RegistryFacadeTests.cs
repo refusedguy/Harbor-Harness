@@ -18,18 +18,10 @@ public class RegistryFacadeTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-tests", Guid.NewGuid().ToString("N"));
 
-    /// <summary>Compose the container the way <c>RegistrationCompositionTests</c> does.</summary>
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
-
     [Test]
     public async Task Facade_ComposedContainer_ResolvesRealRunner_NotForwarder()
     {
-        using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var runner = sp.GetRequiredService<ISubAgentRunner>();
 
@@ -45,7 +37,7 @@ public class RegistryFacadeTests
     [Test]
     public async Task Facade_ComposedContainer_RunnerIsSingleton()
     {
-        using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         await Assert.That(sp.GetRequiredService<ISubAgentRunner>())
             .IsSameReferenceAs(sp.GetRequiredService<ISubAgentRunner>());
@@ -57,7 +49,7 @@ public class RegistryFacadeTests
         // The desktop subset drops the task tool, but the ISubAgentRunner
         // registration stays — view-models/slash commands resolve it the same
         // way, and the facade attaches identically there.
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",

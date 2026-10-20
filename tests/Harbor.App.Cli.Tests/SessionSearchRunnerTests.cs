@@ -10,24 +10,6 @@ public class SessionSearchRunnerTests
     private readonly StringWriter _err = new();
     private readonly MemorySessionStore _store = new();
 
-    private static async Task<Harbor.Abstractions.Models.Session> SeedAsync(
-        MemorySessionStore store, string title, params AgentMessage[] messages)
-    {
-        var created = (await store.CreateAsync("/tmp", "code", "test", "test-model")).Value;
-        if (!string.IsNullOrEmpty(title))
-        {
-            created = created with { Title = title };
-            await store.UpdateAsync(created);
-        }
-
-        foreach (var message in messages)
-        {
-            await store.AppendMessageAsync(created.Id, message with { SessionId = created.Id });
-        }
-
-        return created;
-    }
-
     private static UserMessage User(string content) => new(
         Guid.NewGuid().ToString("N"), "s", DateTimeOffset.UtcNow, content, "code", "test-model");
 
@@ -52,7 +34,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task Finds_UserMessage_Match_With_Snippet()
     {
-        var session = await SeedAsync(_store, "debug session", User("cannot compile the widget today"));
+        var session = await SessionFixtures.SeedAsync(_store, "debug session", User("cannot compile the widget today"));
 
         int exit = await SearchAsync("compile");
 
@@ -67,7 +49,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task Match_Is_CaseInsensitive()
     {
-        await SeedAsync(_store, string.Empty, User("ALL CAPS PAYLOAD"));
+        await SessionFixtures.SeedAsync(_store, string.Empty, User("ALL CAPS PAYLOAD"));
 
         int exit = await SearchAsync("caps payload");
 
@@ -77,7 +59,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task Joins_Assistant_TextParts_And_Finds_Second_Part()
     {
-        await SeedAsync(_store, string.Empty, Assistant("intro text", "needle is here"));
+        await SessionFixtures.SeedAsync(_store, string.Empty, Assistant("intro text", "needle is here"));
 
         int exit = await SearchAsync("needle");
 
@@ -95,7 +77,7 @@ public class SessionSearchRunnerTests
             StopReason.Stop,
             new Usage(0, 0),
             "test-model");
-        await SeedAsync(_store, string.Empty, thinkingOnly);
+        await SessionFixtures.SeedAsync(_store, string.Empty, thinkingOnly);
 
         int exit = await SearchAsync("zebras");
 
@@ -106,7 +88,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task Searches_ToolResult_Output()
     {
-        await SeedAsync(_store, string.Empty, ToolResult("line1\nstack overflow in module x\nline3"));
+        await SessionFixtures.SeedAsync(_store, string.Empty, ToolResult("line1\nstack overflow in module x\nline3"));
 
         int exit = await SearchAsync("overflow");
 
@@ -117,8 +99,8 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task SessionFilter_Limits_Scan()
     {
-        var withMatch = await SeedAsync(_store, "has it", User("unique-marble-query"));
-        await SeedAsync(_store, "also has", User("unique-marble-query"));
+        var withMatch = await SessionFixtures.SeedAsync(_store, "has it", User("unique-marble-query"));
+        await SessionFixtures.SeedAsync(_store, "also has", User("unique-marble-query"));
 
         int exit = await SearchAsync("unique-marble-query", filter: withMatch.Id);
 
@@ -130,7 +112,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task NoMatches_Returns_One_And_Reports()
     {
-        await SeedAsync(_store, "empty-ish", User("nothing special"));
+        await SessionFixtures.SeedAsync(_store, "empty-ish", User("nothing special"));
 
         int exit = await SearchAsync("quantum-xylophone");
 

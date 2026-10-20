@@ -18,9 +18,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class SingleActivePanelTests
 {
-    private static ChatScreen BuildScreen() =>
-        ChatScreen.Build(new ComposerController(), new StatusViewModel(), includeSidebar: false);
-
     private static UiStore SeededStore(CellForgePanelRegistry owner)
     {
         var store = new UiStore(new UiState
@@ -33,14 +30,6 @@ public class SingleActivePanelTests
         });
         _ = owner.EnsureSeeded(store);
         return store;
-    }
-
-    private static void PaintAll(ChatScreen screen, ScreenBuffer buffer)
-    {
-        foreach (var panel in screen.Tree.Panels)
-        {
-            panel.Paint(buffer);
-        }
     }
 
     private static int CountDocks(ChatScreen screen)
@@ -148,7 +137,7 @@ public class SingleActivePanelTests
         _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
         _ = store.Dispatch(new AppMsg.FocusPanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
             services: null, viewportWidth: 100, viewportHeight: 40);
@@ -157,7 +146,7 @@ public class SingleActivePanelTests
         await Assert.That(HasDock(screen, CellForgeDockPanel.BottomId)).IsTrue();
 
         var buffer = new ScreenBuffer(100, 40);
-        PaintAll(screen, buffer);
+        ScreenFixtures.PaintAll(screen, buffer);
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
         await Assert.That(art).DoesNotContain("Todo List");
@@ -173,7 +162,7 @@ public class SingleActivePanelTests
         _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
         _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         ChatScreenPanelDock.AttachPanels(
             screen, owner.Registry, store.State,
             services: null, viewportWidth: 100, viewportHeight: 40);
@@ -182,7 +171,7 @@ public class SingleActivePanelTests
         await Assert.That(HasDock(screen, CellForgeDockPanel.RightId)).IsTrue();
 
         var buffer = new ScreenBuffer(100, 40);
-        PaintAll(screen, buffer);
+        ScreenFixtures.PaintAll(screen, buffer);
         string art = GridDump.Art(buffer);
         await Assert.That(art).Contains("Todo List");
         await Assert.That(art).DoesNotContain("Token Breakdown");
@@ -198,7 +187,7 @@ public class SingleActivePanelTests
         _ = store.Dispatch(new AppMsg.TogglePanel("todo-list"));
         _ = store.Dispatch(new AppMsg.TogglePanel("token-breakdown"));
 
-        var screen = BuildScreen();
+        var screen = ScreenFixtures.BuildScreen();
         screen.Tree.Solve(100, 40);
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
 

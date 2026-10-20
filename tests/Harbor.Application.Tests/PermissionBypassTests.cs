@@ -11,9 +11,6 @@ namespace Harbor.Application.Tests;
 
 public class PermissionBypassTests
 {
-    private static JsonElement Args<T>(T payload) =>
-        JsonDocument.Parse(TestJson.Serialize(payload)).RootElement.Clone();
-
     private static PermissionService CreateService(
         PermissionRuleset ruleset,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? asker = null)
@@ -41,7 +38,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_BashDestructiveCommand_IsNotAllow(string command)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolCommandArgs(command));
+        var args = TestArgs.FromPayload(new ToolCommandArgs(command));
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -55,7 +52,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_BenignBashCommand_IsAllowed(string command)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolCommandArgs(command));
+        var args = TestArgs.FromPayload(new ToolCommandArgs(command));
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -79,7 +76,7 @@ public class PermissionBypassTests
         }
 
         var svc = CreateService(PermissionRuleset.Default, CountingAsker);
-        var args = Args(new ToolCommandArgs(command));
+        var args = TestArgs.FromPayload(new ToolCommandArgs(command));
 
         var result = await svc.CheckAsync("code", "bash", args);
 
@@ -94,7 +91,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_WritePathOutsideWorkspace_IsNotAllow(string path, string content)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolPathContentArgs(path, content));
+        var args = TestArgs.FromPayload(new ToolPathContentArgs(path, content));
 
         var result = await svc.CheckAsync("code", "write", args);
 
@@ -106,7 +103,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_WriteNormalSrcPath_StillAllowed()
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolPathContentArgs("src/feature/new.ts", "ok"));
+        var args = TestArgs.FromPayload(new ToolPathContentArgs("src/feature/new.ts", "ok"));
 
         var result = await svc.CheckAsync("code", "write", args);
 
@@ -118,7 +115,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_EditTraversalPathEscapingSrc_IsNotAllow()
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolPathEditArgs("src/../../secrets.env", "a", "b"));
+        var args = TestArgs.FromPayload(new ToolPathEditArgs("src/../../secrets.env", "a", "b"));
 
         var result = await svc.CheckAsync("code", "edit", args);
 
@@ -137,7 +134,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_TraversalArgPath_IsNotAllow(string tool, string path)
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolPathArgs(path));
+        var args = TestArgs.FromPayload(new ToolPathArgs(path));
 
         var result = await svc.CheckAsync("code", tool, args);
 
@@ -149,7 +146,7 @@ public class PermissionBypassTests
     public async Task CheckAsync_RipgrepTraversalArgPath_IsNotAllow()
     {
         var svc = CreateService(PermissionRuleset.Default);
-        var args = Args(new ToolPatternPathArgs("secret", "../../etc"));
+        var args = TestArgs.FromPayload(new ToolPatternPathArgs("secret", "../../etc"));
 
         var result = await svc.CheckAsync("code", "ripgrep", args);
 

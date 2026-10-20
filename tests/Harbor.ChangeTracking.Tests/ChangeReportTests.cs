@@ -1,5 +1,5 @@
-using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -288,23 +288,9 @@ public class ChangeReportTests
         // in this file. Scoped to this file on purpose: the tree still has
         // cold-path builders (TableBlock, OnboardingFlow, ...), each pooled
         // on its own issue slice rather than under one absolute ban.
-        string path = FindRepoFile(Path.Combine("src", "Harbor.ChangeTracking", "ChangeReport.cs"));
+        string path = RepoPaths.FindFile(Path.Combine("src", "Harbor.ChangeTracking", "ChangeReport.cs"));
         string source = await File.ReadAllTextAsync(path);
         await Assert.That(source.Contains("StringBuilderPool.Rent")).IsTrue();
         await Assert.That(source.Contains("new StringBuilder")).IsFalse();
-    }
-
-    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
-    private static string FindRepoFile(string relativePath)
-    {
-        string? dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            string candidate = Path.Combine(dir, relativePath);
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        throw new FileNotFoundException($"Repo file not found: {relativePath}");
     }
 }

@@ -2,7 +2,6 @@ using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -60,19 +59,6 @@ public class StatusProjectorPanelTests
         }
 
         return sb.ToString();
-    }
-
-    private static int Find(StatusSeg[] workspace, int count, string text)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (workspace[i].Text == text)
-            {
-                return i;
-            }
-        }
-
-        return -1;
     }
 
     [Test]
@@ -162,7 +148,7 @@ public class StatusProjectorPanelTests
         var ws = new StatusSeg[12];
         int n = Build(MockState("running"), ws, retry: RetryCountdown.Line(2, 5, 4));
 
-        int idx = Find(ws, n, "retry 2/5 in 4s");
+        int idx = WidgetFixtures.Find(ws, n, "retry 2/5 in 4s");
         await Assert.That(idx >= 0).IsTrue();
         await Assert.That(ws[idx].Accent).IsEqualTo(StatusAccent.Warning);
         await Assert.That(ws[idx].FixedPriority).IsTrue();

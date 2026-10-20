@@ -11,8 +11,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericScreenTests
 {
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     [Test]
     public async Task Build_SingleNode_PaintsTitle()
     {
@@ -23,7 +21,7 @@ public class GenericScreenTests
         var buffer = new ScreenBuffer(30, 6);
         screen.Solve(30, 6);
         screen.PaintAll(buffer);
-        await Assert.That(Art(buffer).Contains("hello generic")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("hello generic")).IsTrue();
     }
 
     [Test]
@@ -41,7 +39,7 @@ public class GenericScreenTests
         var buffer = new ScreenBuffer(30, 10);
         screen.Solve(30, 10);
         screen.PaintAll(buffer);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("top pane")).IsTrue();
         await Assert.That(art.Contains("bottom pane")).IsTrue();
     }
@@ -79,7 +77,7 @@ public class GenericScreenTests
         ]);
         using var renderer = new GenericTuiRenderer(new UiStore(), screen);
         var buffer = renderer.Render(40, 8);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("neutral screen")).IsTrue();
         await Assert.That(art.Contains("row one")).IsTrue();
         await Assert.That(renderer.ShouldQuit).IsFalse();

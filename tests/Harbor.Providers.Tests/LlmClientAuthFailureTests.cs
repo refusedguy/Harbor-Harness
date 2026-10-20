@@ -1,6 +1,5 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
@@ -19,16 +18,6 @@ namespace Harbor.Providers.Tests;
 /// </summary>
 public class LlmClientAuthFailureTests
 {
-    private static async Task<List<LlmEvent>> CollectAsync(IAsyncEnumerable<LlmEvent> stream)
-    {
-        var events = new List<LlmEvent>();
-        await foreach (var evt in stream)
-        {
-            events.Add(evt);
-        }
-        return events;
-    }
-
     private static async Task AssertSingleAuthErrorAsync(List<LlmEvent> events, StubHttpMessageHandler handler)
     {
         var errors = events.OfType<ErrorEvent>().ToList();
@@ -51,7 +40,7 @@ public class LlmClientAuthFailureTests
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
 
         await AssertSingleAuthErrorAsync(events, handler);
     }
@@ -67,7 +56,7 @@ public class LlmClientAuthFailureTests
             new FailingAuthResolver(),
             NullLogger<AnthropicLlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
 
         await AssertSingleAuthErrorAsync(events, handler);
     }
@@ -83,7 +72,7 @@ public class LlmClientAuthFailureTests
             new FailingAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
-        var events = await CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
+        var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
 
         await AssertSingleAuthErrorAsync(events, handler);
     }

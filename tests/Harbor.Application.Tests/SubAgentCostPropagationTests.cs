@@ -2,7 +2,6 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.TestKit;
@@ -20,25 +19,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class SubAgentCostPropagationTests
 {
-    private static AgentDefinition SubAgent(string name = "explore") => new(
-        AgentName.Create(name),
-        name,
-        name,
-        "test-model",
-        "test",
-        PermissionRuleset.Empty,
-        20,
-        IsSubAgent: true);
-
-    private static AssistantMessage AssistantWithUsage(string text, Usage usage) => new(
-        Guid.NewGuid().ToString("N"),
-        "child",
-        DateTimeOffset.UtcNow,
-        [new TextPart(text)],
-        StopReason.Stop,
-        usage,
-        "test-model");
-
     private static AssistantMessage ParentMessage(string sessionId, string id, Usage usage) => new(
         id,
         sessionId,
@@ -268,11 +248,11 @@ public class SubAgentCostPropagationTests
         store.Seed(parent);
         var loop = new CostLoop(
             null,
-            AssistantWithUsage("first", new Usage(100, 50)),
-            AssistantWithUsage("second", new Usage(30, 20, ReasoningTokens: 7, CacheReadTokens: 11)));
+            AgentFixtures.AssistantWithUsage("first", new Usage(100, 50)),
+            AgentFixtures.AssistantWithUsage("second", new Usage(30, 20, ReasoningTokens: 7, CacheReadTokens: 11)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.ChildUsage!).IsEqualTo(new Usage(130, 70, 7, 11, null));
@@ -286,11 +266,11 @@ public class SubAgentCostPropagationTests
         var parentMsg = ParentMessage(parent.Id, "parent-msg-1", new Usage(10, 5));
         var store = new CostFakeStore();
         store.Seed(parent, parentMsg);
-        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(100, 50)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("done", new Usage(100, 50)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         var result = await runner.RunAsync(
-            SubAgent(),
+            AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -327,10 +307,10 @@ public class SubAgentCostPropagationTests
         var parent = NewParent();
         var store = new CostFakeStore();
         store.Seed(parent);
-        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(100, 50, ReasoningTokens: 3)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("done", new Usage(100, 50, ReasoningTokens: 3)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(store.UpdatedStats.Count).IsEqualTo(1);
@@ -348,10 +328,10 @@ public class SubAgentCostPropagationTests
         store.Seed(parent);
         var childUsage = new Usage(100, 50);
         var pricing = new Pricing(2m, 8m);
-        var loop = new PricingLoop(childUsage, pricing, AssistantWithUsage("done", childUsage));
+        var loop = new PricingLoop(childUsage, pricing, AgentFixtures.AssistantWithUsage("done", childUsage));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
         await Assert.That(result.IsSuccess).IsTrue();
         var stats = await store.GetStatsAsync(parent.Id);
@@ -373,7 +353,7 @@ public class SubAgentCostPropagationTests
         var loop = new CostLoop(Result.Failure("model exploded"));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
-        var result = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(store.CreatedSessions.Count).IsEqualTo(1);
@@ -394,11 +374,11 @@ public class SubAgentCostPropagationTests
         store.Seed(parent, parentMsg);
         var loop = new CostLoop(
             Result.Failure("model exploded"),
-            AssistantWithUsage("partial work", new Usage(40, 10)));
+            AgentFixtures.AssistantWithUsage("partial work", new Usage(40, 10)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         var result = await runner.RunAsync(
-            SubAgent(),
+            AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -421,11 +401,11 @@ public class SubAgentCostPropagationTests
         var parentMsg = ParentMessage(parent.Id, "parent-msg-1", new Usage(10, 5));
         var store = new CostFakeStore();
         store.Seed(parent, parentMsg);
-        var loop = new CostLoop(null, AssistantWithUsage("ok", new Usage(0, 0)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("ok", new Usage(0, 0)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         var result = await runner.RunAsync(
-            SubAgent(),
+            AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -442,12 +422,12 @@ public class SubAgentCostPropagationTests
         var parentMsg = ParentMessage(parent.Id, "parent-msg-1", new Usage(0, 0));
         var store = new CostFakeStore();
         store.Seed(parent, parentMsg);
-        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(10, 5)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("done", new Usage(10, 5)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         var tasks = new List<Task<Result<SubAgentRunResult>>>(children);
         for (int i = 0; i < children; i++)
-            tasks.Add(runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id)));
+            tasks.Add(runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id)));
         Result<SubAgentRunResult>[] outcomes = await Task.WhenAll(tasks).ConfigureAwait(false);
 
         for (int i = 0; i < outcomes.Length; i++)
@@ -499,13 +479,13 @@ public class SubAgentCostPropagationTests
         ISessionContext? parentContext = capture.Captured;
         await Assert.That(parentContext).IsNotNull();
 
-        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(100, 50)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("done", new Usage(100, 50)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         // A turn debit racing a child-cost completion: without the shared
         // gate (#1105) both fold from the same stale base and one delta is lost.
         var turn = parentContext!.UpdateStatsAsync(new Usage(7, 3), Pricing.Unknown);
-        var propagation = runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+        var propagation = runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
         await Task.WhenAll(turn, propagation);
         await Assert.That(propagation.Result.IsSuccess).IsTrue();
         var stats = await store.GetStatsAsync(parent.Id);
@@ -516,7 +496,7 @@ public class SubAgentCostPropagationTests
     [Test]
     public async Task RunAsync_ManyDistinctParents_GateStorageStaysBounded()    {
         var store = new CostFakeStore();
-        var loop = new CostLoop(null, AssistantWithUsage("done", new Usage(10, 5)));
+        var loop = new CostLoop(null, AgentFixtures.AssistantWithUsage("done", new Usage(10, 5)));
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 
         const int parents = 48;
@@ -525,7 +505,7 @@ public class SubAgentCostPropagationTests
             var parent = Session.Create(
                 Harbor.TestKit.TestTempDirs.NewDirectory("harbor-gate-" + i), "code", "test", "test-model");
             store.Seed(parent);
-            var outcome = await runner.RunAsync(SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
+            var outcome = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
             await Assert.That(outcome.IsSuccess).IsTrue();
         }
 

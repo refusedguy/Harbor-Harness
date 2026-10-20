@@ -82,7 +82,7 @@ public class DecoratorTelemetryTests : IDisposable
 
         Result<ITool> resolved = registry.GetTool(ToolName.Create("read"));
         await Assert.That(resolved.IsSuccess).IsTrue();
-        ToolResult result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
+        ToolResult result = await resolved.Value.ExecuteAsync(TestArgs.Empty(), DefaultContext());
 
         await Assert.That(result.IsError).IsFalse();
 
@@ -104,7 +104,7 @@ public class DecoratorTelemetryTests : IDisposable
             new ActivityTracer());
 
         Result<ITool> resolved = registry.GetTool(ToolName.Create("write"));
-        ToolResult result = await resolved.Value.ExecuteAsync(Args(), DefaultContext());
+        ToolResult result = await resolved.Value.ExecuteAsync(TestArgs.Empty(), DefaultContext());
 
         await Assert.That(result.IsError).IsTrue();
         Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
@@ -123,7 +123,7 @@ public class DecoratorTelemetryTests : IDisposable
 
         Result<ITool> resolved = registry.GetTool(ToolName.Create("bash"));
 
-        await Assert.That(async () => await resolved.Value.ExecuteAsync(Args(), DefaultContext()))
+        await Assert.That(async () => await resolved.Value.ExecuteAsync(TestArgs.Empty(), DefaultContext()))
             .Throws<InvalidOperationException>();
 
         Activity? span = _stoppedSpans.FirstOrDefault(a => a.DisplayName == "tool.execute");
@@ -254,8 +254,6 @@ public class DecoratorTelemetryTests : IDisposable
     }
 
     // ── Harness ──────────────────────────────────────────────────────────
-
-    private static JsonElement Args() => JsonDocument.Parse("{}").RootElement.Clone();
 
     private static ToolContext DefaultContext() =>
         TestToolContext.Create(sessionId: "session-tel-1", messageId: "assistant-tel-1", callId: "call-tel-1");

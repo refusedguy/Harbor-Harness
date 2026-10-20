@@ -24,13 +24,6 @@ public class JsonProviderDropInTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-dropin-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
-
     /// <summary>
     ///     The bundled <c>providers/</c> directory, located by walking up from the test
     ///     binary towards the repo root (same precedence the discovery path uses).
@@ -107,7 +100,7 @@ public class JsonProviderDropInTests
 
         try
         {
-            using var sp = Compose(new HarborComposeOptions { HarborDir = harborDir, DefaultStorageBackend = "memory" });
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = harborDir, DefaultStorageBackend = "memory" });
             await AssertServesModels(sp, "vllm", "dropped-in-vllm-model");
         }
         finally
@@ -145,7 +138,7 @@ public class JsonProviderDropInTests
 
         try
         {
-            using var sp = Compose(new HarborComposeOptions { HarborDir = harborDir, DefaultStorageBackend = "memory" });
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = harborDir, DefaultStorageBackend = "memory" });
             await AssertServesModels(sp, "harbor580dropin", "dropin-1");
         }
         finally

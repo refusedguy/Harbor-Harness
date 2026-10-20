@@ -318,7 +318,7 @@ public class CompactionPolicyInvariantTests
     [Test]
     public async Task MaterializeCompactedView_ReturnsTheInputWhenThereIsNothingToMaterialize()
     {
-        AgentMessage[] noSummary = [User("hello"), Assistant("hi")];
+        AgentMessage[] noSummary = [MessageFixtures.User("hello"), MessageFixtures.Assistant("hi")];
         IReadOnlyList<AgentMessage> noSummaryResult =
             CompactionPolicy.MaterializeCompactedView(noSummary);
 
@@ -330,9 +330,9 @@ public class CompactionPolicyInvariantTests
         // fail-safe arm, and the one that protects against silent history loss.
         AgentMessage[] danglingAnchor =
         [
-            User("hello"),
-            Summary("everything so far, condensed", "no-such-message-id"),
-            Assistant("later"),
+            MessageFixtures.User("hello"),
+            MessageFixtures.Summary("everything so far, condensed", "no-such-message-id"),
+            MessageFixtures.Assistant("later"),
         ];
         IReadOnlyList<AgentMessage> danglingResult =
             CompactionPolicy.MaterializeCompactedView(danglingAnchor);
@@ -359,7 +359,7 @@ public class CompactionPolicyInvariantTests
         AgentMessage[] orphan =
         [
             ToolResult("read", "the file says hello"),
-            Assistant("and then I carried on"),
+            MessageFixtures.Assistant("and then I carried on"),
         ];
 
         List<int> openings = FindOrphanOpenings(orphan);
@@ -381,9 +381,9 @@ public class CompactionPolicyInvariantTests
     {
         AgentMessage[] paired =
         [
-            Assistant("reading the file"),
+            MessageFixtures.Assistant("reading the file"),
             ToolResult("read", "the file says hello"),
-            Assistant("now writing the fix"),
+            MessageFixtures.Assistant("now writing the fix"),
         ];
 
         List<int> openings = FindOrphanOpenings(paired);
@@ -404,8 +404,8 @@ public class CompactionPolicyInvariantTests
     {
         AgentMessage[] six =
         [
-            User("a"), Assistant("b"), Assistant("c"),
-            Assistant("d"), Assistant("e"), Assistant("f"),
+            MessageFixtures.User("a"), MessageFixtures.Assistant("b"), MessageFixtures.Assistant("c"),
+            MessageFixtures.Assistant("d"), MessageFixtures.Assistant("e"), MessageFixtures.Assistant("f"),
         ];
 
         bool reduced = KeptCount(six, six.Length, "control", "control", out string why);
@@ -496,7 +496,7 @@ public class CompactionPolicyInvariantTests
         {
             var history = new List<AgentMessage>
             {
-                User("start the task"),
+                MessageFixtures.User("start the task"),
                 BigAssistantWithToolCalls(calls),
             };
             for (int i = 0; i < calls; i++)
@@ -514,7 +514,7 @@ public class CompactionPolicyInvariantTests
             "results with no assistant anywhere",
             new AgentMessage[]
             {
-                User("start the task"),
+                MessageFixtures.User("start the task"),
                 ToolResult("read", "a"),
                 ToolResult("read", "b"),
             }));
@@ -525,8 +525,8 @@ public class CompactionPolicyInvariantTests
             "small prefix, oversized assistant, 3 results",
             new AgentMessage[]
             {
-                User("start the task"),
-                Assistant("noted"),
+                MessageFixtures.User("start the task"),
+                MessageFixtures.Assistant("noted"),
                 BigAssistantWithToolCalls(3),
                 ToolResult("read", "a"),
                 ToolResult("read", "b"),
@@ -538,8 +538,8 @@ public class CompactionPolicyInvariantTests
             "entirely within budget",
             new AgentMessage[]
             {
-                User("start the task"),
-                Assistant("done"),
+                MessageFixtures.User("start the task"),
+                MessageFixtures.Assistant("done"),
                 ToolResult("read", "a"),
                 ToolResult("read", "b"),
             }));
@@ -554,23 +554,23 @@ public class CompactionPolicyInvariantTests
     /// </summary>
     private static List<(string Name, AgentMessage[] History)> SummaryAnchoredSweep()
     {
-        UserMessage first = User("start the task");
-        AgentMessage second = Assistant("reading the file");
-        AgentMessage third = Assistant("writing the fix");
+        UserMessage first = MessageFixtures.User("start the task");
+        AgentMessage second = MessageFixtures.Assistant("reading the file");
+        AgentMessage third = MessageFixtures.Assistant("writing the fix");
 
         return
         [
             ("anchor keeps a two-message tail",
             [
                 first, second, third,
-                Summary("everything so far, condensed", second.Id),
-                Assistant("and the tests pass"),
+                MessageFixtures.Summary("everything so far, condensed", second.Id),
+                MessageFixtures.Assistant("and the tests pass"),
             ]),
             ("anchor folded the entire pre-summary history",
             [
                 first, second, third,
-                Summary("everything so far, condensed", firstKeptId: null),
-                Assistant("and the tests pass"),
+                MessageFixtures.Summary("everything so far, condensed", firstKeptId: null),
+                MessageFixtures.Assistant("and the tests pass"),
             ]),
         ];
     }
@@ -602,34 +602,6 @@ public class CompactionPolicyInvariantTests
     }
 
     // ---- fixtures -------------------------------------------------------
-
-    private static UserMessage User(string content) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        content,
-        "code",
-        "test-model");
-
-    private static AssistantMessage Assistant(string text) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model");
-
-    private static AssistantMessage Summary(string text, string? firstKeptId) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model",
-        IsSummary: true,
-        SummaryFirstKeptId: firstKeptId);
 
     /// <summary>
     ///     An assistant turn that explains at length and then calls several tools. Its
