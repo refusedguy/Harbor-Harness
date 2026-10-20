@@ -59,7 +59,7 @@
 #                                               they stop running six
 #                                               times. CLOSED.
 #   SHARD-UNWIRED Harbor.E2E.App.Avalonia       PR #1946 wires the
-#                                               per-class process split.
+#                                               per-class process split. CLOSED.
 #
 #   The other two rows are not waiting on anybody: they are holes nobody
 #   has picked up yet, and the next person to touch those projects should
@@ -118,4 +118,4 @@
 # separates run in a single process.
 #
 CLAIM-CONDITIONAL | Harbor.Tui.PerfTests | The perf-gate job runs it only when the PR touches the UI paths, because the suite measures renderer throughput against a committed baseline rather than asserting correctness. | @refusedguy
-SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. PR 1946 wires it. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.TestKit.Tests -> Harbor.TestKit | The 1834 TestKit split left the reference behind: the project exercises Support and Tui directly and names none of Harbor.TestKit's types, while the reference drags 16 product assemblies in. | @refusedguy
