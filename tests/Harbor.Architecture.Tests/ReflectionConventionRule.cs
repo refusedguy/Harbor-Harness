@@ -136,7 +136,15 @@ public sealed class ReflectionConventionRule
     private const string RuleId = "REFLECTION-DYNAMIC-CODE";
 
     /// <summary>The rule as data: one shape, one prefix baseline, ten controls, a floor.</summary>
-    private static readonly ScanRule Rule = new()
+    /// <remarks>
+    ///     internal since the #1729 pilot: the pilot's differential test compares THIS
+    ///     rule's matcher against the Roslyn analyzer that is meant to replace it, and a
+    ///     differential needs the old rule's own verdict — a copy of its pattern would
+    ///     be a second implementation, not a comparison. The rule is unchanged: the
+    ///     matcher, the baseline, the controls and the discovery floor are all as they
+    ///     were, and only the visibility of the table changed.
+    /// </remarks>
+    internal static readonly ScanRule Rule = new()
     {
         Id = "ReflectionConvention",
         Trees = ["src", "apps"],
