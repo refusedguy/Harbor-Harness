@@ -15,7 +15,6 @@ namespace Harbor.ChangeTracking.Tests;
 ///     (<c>git worktree add --detach</c>); <c>Copy</c> fails closed; tools run
 ///     with the worktree as their working directory.
 /// </summary>
-[SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
 public class WorkspaceMaterializerTests : ChangeTrackingTestBase
 {

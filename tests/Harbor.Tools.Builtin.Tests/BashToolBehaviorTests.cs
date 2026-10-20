@@ -3,28 +3,15 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core.Enums;
 
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
-///     Skip unless running on Linux: these tests execute real <c>/bin/bash</c>
-///     processes and (for the orphan check) scan <c>/proc</c>.
-/// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
-internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
-{
-    public SkipWhenNotLinuxAttribute() : base(
-        "BashTool process-behaviour tests require Linux (/bin/bash + /proc).") { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(!OperatingSystem.IsLinux());
-}
-
-/// <summary>
 ///     Behavioural tests for <see cref="BashTool" /> that run real processes. Each test
 ///     is kept fast (&lt;5s): tool-level timeouts of ~1s, unique markers so concurrent
-///     runs never collide, and Linux-only guards via <see cref="SkipWhenNotLinuxAttribute" />.
+///     runs never collide, and a Linux-only gate (these tests execute real
+///     <c>/bin/bash</c> processes and, for the orphan check, scan <c>/proc</c>).
 /// </summary>
 /// <remarks>
 ///     Documented contract being pinned here (from committed BashTool):
@@ -41,6 +28,7 @@ internal sealed class SkipWhenNotLinuxAttribute : SkipAttribute
 ///       <item><c>cwd</c> overrides the working directory.</item>
 ///     </list>
 /// </remarks>
+[RunOn(OS.Linux)]
 public class BashToolBehaviorTests
 {
     // ── 1. Timeout kills the whole process tree ───────────────────────────
@@ -53,7 +41,6 @@ public class BashToolBehaviorTests
     ///     direct shell.
     /// </summary>
     [Test]
-    [SkipWhenNotLinux]
     public async Task Timeout_KillsProcessTree_NoOrphanChildSurvives()
     {
         string marker = $"kilo-orphan-{Guid.NewGuid().ToString("N")[..16]}";
@@ -82,7 +69,6 @@ public class BashToolBehaviorTests
     ///     truncation the tool applies to its combined output.
     /// </summary>
     [Test]
-    [SkipWhenNotLinux]
     public async Task OversizedStdout_CompletesWithoutError_OutputRespectsCap()
     {
         var args = JsonDocument.Parse(
@@ -105,7 +91,6 @@ public class BashToolBehaviorTests
     ///     Documents current behaviour of env merging.
     /// </summary>
     [Test]
-    [SkipWhenNotLinux]
     public async Task EnvOverride_EmptyPath_MissingBinary_FailsCleanly()
     {
         string emptyPathDir = Path.Combine(Path.GetTempPath(), "kilo-empty-path-" + Guid.NewGuid().ToString("N")[..8]);
@@ -131,7 +116,6 @@ public class BashToolBehaviorTests
 
     /// <summary>The cwd argument must become the child shell's working directory.</summary>
     [Test]
-    [SkipWhenNotLinux]
     public async Task WorkingDirectory_CwdArg_Respected()
     {
         string workDir = Path.Combine(Path.GetTempPath(), "kilo-cwd-" + Guid.NewGuid().ToString("N")[..8]);
@@ -163,7 +147,6 @@ public class BashToolBehaviorTests
     ///     content or corrupt the recycled pooled builder).
     /// </summary>
     [Test]
-    [SkipWhenNotLinux]
     public async Task StdoutAndStderr_BothCaptured_AfterHandlerDetach()
     {
         var args = JsonDocument.Parse(

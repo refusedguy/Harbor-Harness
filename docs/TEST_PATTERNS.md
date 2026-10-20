@@ -728,9 +728,68 @@ public class MyMessageTests
 | `[Timeout(ms)]` | Per-test wall-clock budget. The runner cancels the test's token when the budget elapses and fails the test as a timeout. |
 
 Every row above is a TUnit type that resolves in any test project. The one
-bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is
-`internal` to `tests/Harbor.Tools.Builtin.Tests` and resolves nowhere else —
-copying it into another project is CS0246, not a skip.
+bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is gone:
+it is the built-in `[RunOn(OS.Linux)]` now. The only `SkipAttribute` subclass
+left in the tree is `KnownFlakeAttribute`, and that one is a flake WAIVER
+(a named test that is known to fail), not a conditional skip.
+
+### Skipping a test
+
+A skip is a claim about the world, not about the code: "this cannot be
+measured here". TUnit ships the whole vocabulary, so the repository does not
+hand-write skip attributes. Every conditional skip in `tests/` is one of the
+four shapes below, and every one of them carries a REASON that lands in the
+run report (and in the per-shard skip table that CI publishes).
+
+| Shape | Use it when | Reason |
+|---|---|---|
+| `Skip.Test("...")` | the test must not run, and you know it before the body starts | required |
+| `Skip.Unless(condition, "...")` | a runtime fact decides (a tool on PATH, an env var) | required |
+| `Skip.When(condition, "...")` | the same, inverted | required |
+| `[RunOn(OS.Linux)]`, `[ExcludeOn(OS.Windows)]` | the operating system decides | the built-in reason |
+
+`Skip.Test`, `Skip.Unless` and `Skip.When` raise `SkipTestException`, and the
+runner reports the test as SKIPPED with the reason that was passed. Call them
+BEFORE any work in the test body: a skip that runs after the work started has
+already done the work.
+
+A test that is skipped because it cannot be MEASURED here (a cost gate, a
+perf threshold, an allocation budget) uses `Skip.Test(reason)`. That is the
+shape the `TestScalingGate` family already uses, and it is the shape to copy.
+
+`OS` is `TUnit.Core.Enums.OS`, so the file needs `using TUnit.Core.Enums;`.
+It is a flags enum (`Linux`, `Windows`, `MacOs`, `Browser`), which means
+`[RunOn(OS.Linux | OS.MacOs)]` reads as "either".
+
+A skip that covers a WHOLE CLASS goes into a `[Before(HookType.Class)]` hook.
+TUnit runs that hook once per class, before it constructs anything, and a
+`SkipTestException` from it marks every test in the class skipped, with the
+reason:
+
+```csharp
+public class WorkspaceInspectorTests
+{
+    [Before(HookType.Class)]
+    public static void SkipWithoutGit() => Skip.Unless(GitProbe.Available, GitProbe.SkipReason);
+
+    [Test]
+    public async Task Inspect_CleanHead_SuccessWithPinnedRevision()
+    {
+        // ...
+    }
+}
+```
+
+The hook must be `public static`: TUnit's analyzer rejects a class hook that
+is not static, not public, or that takes arguments other than a
+`ClassHookContext`. A hook declared on a BASE class covers every derived
+class, which is how the five git-backed ChangeTracking suites share one gate.
+
+The shared probes themselves live in the kit, not in the suites that use them.
+`GitProbe` is in `tests/Harbor.TestKit.Support/` (namespace `Harbor.TestKit`,
+no product assembly in its closure), and it answers once per process: the
+probe starts `git --version` and waits for it, so a suite that re-ran it per
+test would pay that cost once per test instead of once per run.
 
 ### Timeouts and cancellation
 

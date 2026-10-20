@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
+using TUnit.Core.Enums;
 
 namespace Harbor.Tools.Builtin.Tests;
 
@@ -65,7 +66,7 @@ public class WriteEditBypassTests
     }
 
     [Test]
-    [SkipWhenSymlinksUnsupported]
+    [ExcludeOn(OS.Windows | OS.Browser)]
     public async Task Write_ExecuteAsync_SymlinkInsideWorkspacePointingOutside_IsRefused()
     {
         string root = NewTempRoot();
@@ -92,7 +93,7 @@ public class WriteEditBypassTests
     }
 
     [Test]
-    [SkipWhenSymlinksUnsupported]
+    [ExcludeOn(OS.Windows | OS.Browser)]
     public async Task Edit_ExecuteAsync_SymlinkInsideWorkspacePointingOutside_IsRefusedAndLeavesFileUnchanged()
     {
         string root = NewTempRoot();
@@ -118,15 +119,4 @@ public class WriteEditBypassTests
             Directory.Delete(root, recursive: true);
         }
     }
-}
-
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false)]
-internal sealed class SkipWhenSymlinksUnsupportedAttribute : SkipAttribute
-{
-    public SkipWhenSymlinksUnsupportedAttribute() : base("Symbolic link creation is not supported on this platform.")
-    {
-    }
-
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS());
 }

@@ -15,7 +15,6 @@ namespace Harbor.ChangeTracking.Tests;
 ///     <c>Isolated -&gt; Changed -&gt; Checked -&gt; Reported</c> through the
 ///     public <c>TryAdvanceState</c> map instead of faking S3–S5.
 /// </summary>
-[SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
 public class ChangeApplierTests : ChangeTrackingTestBase
 {

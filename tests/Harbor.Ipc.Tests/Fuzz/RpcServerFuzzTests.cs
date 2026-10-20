@@ -8,25 +8,6 @@ using Microsoft.Extensions.Logging;
 namespace Harbor.Ipc.Tests.Fuzz;
 
 /// <summary>
-///     Skip unless explicitly opted in via <c>HARBOR_IPC_FUZZ=1</c>. Real-server tests
-///     spin actual named pipes / unix sockets; the project is excluded from the solution
-///     because parallel pipe tests deadlock under TUnit parallel scheduling on Linux
-///     (see Harbor.slnx comment). This attribute keeps the fuzz coverage one env var
-///     away without destabilizing default runs.
-/// </summary>
-internal sealed class SkipUnlessIpcFuzzEnabledAttribute : SkipAttribute
-{
-    public SkipUnlessIpcFuzzEnabledAttribute() : base(
-        "Real-server fuzz disabled by default (named-pipe tests deadlock under TUnit "
-        + "parallel scheduling on Linux; project excluded from solution). "
-        + "Set HARBOR_IPC_FUZZ=1 to enable.") { }
-
-    /// <inheritdoc />
-    public override Task<bool> ShouldSkip(TestRegisteredContext context)
-        => Task.FromResult(Environment.GetEnvironmentVariable("HARBOR_IPC_FUZZ") != "1");
-}
-
-/// <summary>
 ///     Server-level fuzz: blast garbage frames (zero-length keep-alives and undecodable
 ///     payloads — the two classes the committed policy skips) at a real
 ///     <see cref="MessagePackRpcServer" /> connection, then prove the same connection is
@@ -37,9 +18,18 @@ public class RpcServerFuzzTests
 {
     [Test]
     [Timeout(60_000)]
-    [SkipUnlessIpcFuzzEnabled]
     public async Task GarbageFrames_SkippedByServer_ConnectionAndServerStayAlive(CancellationToken cancellationToken)
     {
+        // Real-server fuzz is disabled by default: named-pipe tests deadlock under
+        // TUnit parallel scheduling on Linux, and the project is excluded from the
+        // solution for that reason (see Harbor.slnx comment). One env var keeps
+        // the coverage reachable without destabilizing default runs.
+        Skip.Unless(
+            Environment.GetEnvironmentVariable("HARBOR_IPC_FUZZ") == "1",
+            "Real-server fuzz disabled by default (named-pipe tests deadlock under TUnit "
+            + "parallel scheduling on Linux; project excluded from solution). "
+            + "Set HARBOR_IPC_FUZZ=1 to enable.");
+
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-fuzz");
         await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>());
