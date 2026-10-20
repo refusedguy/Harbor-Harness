@@ -37,6 +37,13 @@ public sealed class McpOAuthHandler : IDisposable
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    // #1932: the token's expiry is read through an injected clock, not
+    // through DateTimeOffset.UtcNow. TimeProvider is the BCL clock seam the
+    // product already uses (ProviderRegistry #1878, AgentLoop, ToolDispatcher,
+    // RetryPolicy, MascotDirector), so "the token expired" is observable
+    // without waiting for it to expire.
+    private readonly TimeProvider _time;
+
     /// <summary>
     ///     Construct a per-server OAuth handler.
     /// </summary>
@@ -54,13 +61,19 @@ public sealed class McpOAuthHandler : IDisposable
     ///     one plain <see cref="HttpClient" /> and owns it.
     /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="timeProvider">
+    ///     Clock source for the token's expiry (#1932). Production passes
+    ///     nothing and reads <see cref="TimeProvider.System" />; a test passes
+    ///     a manual clock so the token can be aged on demand.
+    /// </param>
     public McpOAuthHandler(
         string server,
         Uri serverUrl,
         McpOAuthConfig config,
         McpOAuthTokenCache? cache = null,
         Func<HttpClient>? httpFactory = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        TimeProvider? timeProvider = null)
     {
         _server = server;
         _serverUrl = serverUrl;
@@ -73,6 +86,7 @@ public sealed class McpOAuthHandler : IDisposable
         // changed: one per handler instead of one per call.
         _http = httpFactory is not null ? httpFactory() : new HttpClient();
         _logger = logger;
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -118,7 +132,11 @@ public sealed class McpOAuthHandler : IDisposable
         try
         {
             var cached = _cache.Load(_server);
-            if (cached is not null && !cached.IsExpired(DateTimeOffset.UtcNow))
+
+            // #1932: the expiry is read from the injected clock — the same
+            // clock the refresh below stamps the new token's expiry with, so
+            // the check and the write can never disagree about "now".
+            if (cached is not null && !cached.IsExpired(_time.GetUtcNow()))
                 return Result.Success(Maybe<string>.From(cached.AccessToken));
 
             if (cached?.RefreshToken is { Length: > 0 } refresh)
@@ -151,7 +169,8 @@ public sealed class McpOAuthHandler : IDisposable
 
         string clientId = _config.ClientId ?? "harbor-mcp";
         var result = await McpOAuthFlow.RefreshAsync(
-            _http, endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
+            _http, endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct, _time)
+            .ConfigureAwait(false);
         if (result.IsFailure)
         {
             if (_logger is not null) McpOAuthHandlerLog.RefreshFailed(_logger, _server, result.Error);
@@ -231,7 +250,7 @@ public sealed class McpOAuthHandler : IDisposable
 
             var exchanged = await McpOAuthFlow.ExchangeCodeAsync(
                 _http, endpoints.TokenEndpoint, clientId, _config.ClientSecret,
-                code, redirectUri, verifier, cancellationToken).ConfigureAwait(false);
+                code, redirectUri, verifier, cancellationToken, _time).ConfigureAwait(false);
             if (exchanged.IsFailure)
                 return Result.Failure<string>($"OAuth code exchange failed: {exchanged.Error}");
 

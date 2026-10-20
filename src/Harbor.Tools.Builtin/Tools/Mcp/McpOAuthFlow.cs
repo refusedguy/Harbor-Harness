@@ -218,6 +218,18 @@ public static class McpOAuthFlow
     }
 
     /// <summary>Exchange an authorization code for tokens (RFC6749 §4.1.3).</summary>
+    /// <param name="http">Client the token endpoint is called over.</param>
+    /// <param name="tokenEndpoint">RFC6749 token endpoint.</param>
+    /// <param name="clientId">OAuth client id.</param>
+    /// <param name="clientSecret">OAuth client secret (absent for public clients).</param>
+    /// <param name="code">Authorization code.</param>
+    /// <param name="redirectUri">Redirect URI the code was issued for.</param>
+    /// <param name="verifier">PKCE code verifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="timeProvider">
+    ///     Clock the token's expiry is stamped from (#1932). Production passes
+    ///     nothing and reads <see cref="TimeProvider.System" />.
+    /// </param>
     public static async Task<Result<McpOAuthTokens>> ExchangeCodeAsync(
         HttpClient http,
         string tokenEndpoint,
@@ -226,7 +238,8 @@ public static class McpOAuthFlow
         string code,
         string redirectUri,
         string verifier,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeProvider? timeProvider = null)
     {
         var fields = new List<KeyValuePair<string, string>>
         {
@@ -238,17 +251,28 @@ public static class McpOAuthFlow
         };
         if (!string.IsNullOrEmpty(clientSecret))
             fields.Add(new KeyValuePair<string, string>("client_secret", clientSecret));
-        return await RequestTokensAsync(http, tokenEndpoint, fields, cancellationToken).ConfigureAwait(false);
+        return await RequestTokensAsync(http, tokenEndpoint, fields, cancellationToken, timeProvider).ConfigureAwait(false);
     }
 
     /// <summary>Refresh an access token (RFC6749 §6).</summary>
+    /// <param name="http">Client the token endpoint is called over.</param>
+    /// <param name="tokenEndpoint">RFC6749 token endpoint.</param>
+    /// <param name="clientId">OAuth client id.</param>
+    /// <param name="clientSecret">OAuth client secret (absent for public clients).</param>
+    /// <param name="refreshToken">Refresh token to spend.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="timeProvider">
+    ///     Clock the token's expiry is stamped from (#1932). Production passes
+    ///     nothing and reads <see cref="TimeProvider.System" />.
+    /// </param>
     public static async Task<Result<McpOAuthTokens>> RefreshAsync(
         HttpClient http,
         string tokenEndpoint,
         string clientId,
         string? clientSecret,
         string refreshToken,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeProvider? timeProvider = null)
     {
         var fields = new List<KeyValuePair<string, string>>
         {
@@ -258,14 +282,15 @@ public static class McpOAuthFlow
         };
         if (!string.IsNullOrEmpty(clientSecret))
             fields.Add(new KeyValuePair<string, string>("client_secret", clientSecret));
-        return await RequestTokensAsync(http, tokenEndpoint, fields, cancellationToken).ConfigureAwait(false);
+        return await RequestTokensAsync(http, tokenEndpoint, fields, cancellationToken, timeProvider).ConfigureAwait(false);
     }
 
     private static async Task<Result<McpOAuthTokens>> RequestTokensAsync(
         HttpClient http,
         string tokenEndpoint,
         List<KeyValuePair<string, string>> fields,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeProvider? timeProvider)
     {
         try
         {
@@ -287,8 +312,13 @@ public static class McpOAuthFlow
             string? refresh = JsonArgs.GetString(root, "refresh_token");
             long expiresIn = root.TryGetProperty("expires_in", out var ei) && ei.ValueKind == JsonValueKind.Number
                 && ei.TryGetInt64(out long s) ? s : 3600;
+
+            // #1932: the expiry is stamped from the injected clock — the same
+            // clock the reader compares against, so an entry written here
+            // expires for that reader exactly `expires_in` later.
+            DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
             return Result.Success(new McpOAuthTokens(
-                at.GetString()!, refresh, DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, expiresIn))));
+                at.GetString()!, refresh, now.AddSeconds(Math.Max(0, expiresIn))));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
