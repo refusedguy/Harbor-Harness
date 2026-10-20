@@ -133,6 +133,22 @@ RULES
                      baseline file. The baseline is lowered by one deliberate
                      `--update` when the programme lands.
 
+TWO MODES, ONE MEASUREMENT
+
+  The default mode is the gate: it exits 1 on a finding. `--warn-only`
+  prints the same findings and exits 0. CI runs the gate in warn-only mode
+  while the removal programme (#1808 and its children) is relocating the
+  files the baseline is keyed on: the baseline matches a duplicate group by
+  its MEMBERS — the paths and names of the methods in it — so a PR that
+  splits or moves a file that holds duplicated bodies relocates the group
+  and the gate reads the relocation as new duplication. That is a
+  bookkeeping red, not a duplication red: the removal PRs lower the
+  duplicated line count while they move the files.
+
+  The mode changes the exit code and nothing else. The self-test covers
+  both: `--warn-only` must report the finding and exit 0, and the default
+  mode must report the same finding as FAIL and exit 1.
+
 BASELINE MODE — WHY NOT "FAIL ON THE WHOLE TREE"
 
   Measured on this tree: hundreds of duplicated bodies exist today (the
@@ -1834,6 +1850,50 @@ def selftest():
         str(findings),
     )
 
+    # 16. `--warn-only` must report exactly the same findings and exit 0,
+    #     while the default mode must still exit 1. A flag that changes the
+    #     exit code without changing the measurement is a knob nobody can
+    #     trust: the CI job runs in warn-only mode while the removal
+    #     programme moves the files the baseline is keyed on, and the gate
+    #     itself must stay sharp the moment warn-only is dropped.
+    import contextlib
+    import io
+
+    tmp = _fixture({"tests/Demo.Tests/AlphaTests.cs": tree_a,
+                    "tests/Demo.Tests/BetaTests.cs": tree_b})
+    saved_argv = sys.argv
+    try:
+        sys.argv = ["check-test-dup.py", "--root", tmp, "--warn-only"]
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            warn_code = main()
+        sys.argv = ["check-test-dup.py", "--root", tmp]
+        buffer2 = io.StringIO()
+        with contextlib.redirect_stdout(buffer2):
+            default_code = main()
+    finally:
+        sys.argv = saved_argv
+    check(
+        "--warn-only exits 0 on a finding",
+        warn_code == 0,
+        str(warn_code),
+    )
+    check(
+        "--warn-only still reports the finding",
+        "WARN DUP-NEW" in buffer.getvalue(),
+        buffer.getvalue(),
+    )
+    check(
+        "the default mode still exits 1 on the same finding",
+        default_code == 1,
+        str(default_code),
+    )
+    check(
+        "the default mode reports the same finding as FAIL",
+        "FAIL DUP-NEW" in buffer2.getvalue(),
+        buffer2.getvalue(),
+    )
+
     if failures:
         print(
             f"\nself-test FAILED: {len(failures)} of {len(ran)} fixture(s): "
@@ -1906,6 +1966,13 @@ def main():
              f"to count as near-copies (default {MIN_SIMILARITY})",
     )
     parser.add_argument(
+        "--warn-only",
+        action="store_true",
+        help="report the findings but exit 0: the gate keeps measuring and "
+             "stops blocking (used while the removal programme moves the "
+             "files the baseline is keyed on)",
+    )
+    parser.add_argument(
         "--self-test",
         action="store_true",
         help="run the gate against known-broken fixtures",
@@ -1974,8 +2041,9 @@ def main():
         print()
         for group in offenders:
             print(describe_group(group))
+    prefix = "WARN" if args.warn_only else "FAIL"
     for finding in findings:
-        print(f"FAIL {finding}")
+        print(f"{prefix} {finding}")
     for warning in warnings:
         print(f"warn  {warning}")
 
@@ -1983,6 +2051,13 @@ def main():
         write_artifact(args.json_out, groups, measured)
         print(f"wrote {args.json_out}")
 
+    if findings and args.warn_only:
+        print(
+            f"\n{len(findings)} finding(s) - WARN ONLY, the gate is not "
+            f"blocking (the blocking default is unchanged, this flag only "
+            f"changes the exit code)"
+        )
+        return 0
     if findings:
         print(f"\n{len(findings)} finding(s) — red")
         return 1
