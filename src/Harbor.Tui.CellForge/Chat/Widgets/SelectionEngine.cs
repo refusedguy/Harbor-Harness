@@ -137,7 +137,10 @@ public sealed class SelectionEngine
             for (int col = rect.X; col < rect.Right; col++)
             {
                 var cell = buffer.Get(col, row);
-                var style = new CellStyle(cell.Style.Fg, cell.Style.Bg, cell.Style.Attrs | StyleAttr.Reverse);
+                // #1524: the cell's style is read ONCE into a local — reading it
+                // three times rebuilt the same value three times.
+                var cellStyle = cell.Style;
+                var style = new CellStyle(cellStyle.Fg, cellStyle.Bg, cellStyle.Attrs | StyleAttr.Reverse);
                 buffer.SetStyleAt(col, row, in style);
             }
         }
