@@ -1,0 +1,36 @@
+# harbor-frame-snapshot v1
+frame 420x260
+Window bg=#FF1E1E2E
+  Panel
+    Border bg=#FF000000
+    Border bg=#FF1E1E2E
+    Panel bg=ImmutableSolidColorBrush
+    VisualLayerManager
+      ContentPresenter
+        ToastNotificationsView bg=ImmutableSolidColorBrush
+          ContentPresenter bg=ImmutableSolidColorBrush
+            ItemsControl bg=ImmutableSolidColorBrush
+              Border bg=ImmutableSolidColorBrush
+                ItemsPresenter
+                  StackPanel
+                    ContentPresenter
+                      Border bg=#FF313244
+                        StackPanel
+                          StackPanel
+                            TextBlock text="Avalonia.Media.StreamGeometry" fg=#FF89B4FA font="Inter" size=14
+                            TextBlock text="Info" fg=#FF89B4FA font="Inter" size=11
+                          TextBlock text="Info: connection established." fg=#FFCDD6F4 font="Inter" size=13
+                    ContentPresenter
+                      Border bg=#FF313244
+                        StackPanel
+                          StackPanel
+                            TextBlock text="Avalonia.Media.StreamGeometry" fg=#FFA6E3A1 font="Inter" size=14
+                            TextBlock text="Success" fg=#FFA6E3A1 font="Inter" size=11
+                          TextBlock text="Success: file saved." fg=#FFCDD6F4 font="Inter" size=13
+                    ContentPresenter
+                      Border bg=#FF313244
+                        StackPanel
+                          StackPanel
+                            TextBlock text="Avalonia.Media.StreamGeometry" fg=#FFF38BA8 font="Inter" size=14
+                            TextBlock text="Error" fg=#FFF38BA8 font="Inter" size=11
+                          TextBlock text="Error: provider returned 503." fg=#FFCDD6F4 font="Inter" size=13

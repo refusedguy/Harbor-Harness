@@ -1,0 +1,22 @@
+# harbor-frame-snapshot v1
+frame 420x140
+Window bg=#FF1E1E2E
+  Panel
+    Border bg=#FF000000
+    Border bg=#FF1E1E2E
+    Panel bg=ImmutableSolidColorBrush
+    VisualLayerManager
+      ContentPresenter
+        ToastNotificationsView bg=ImmutableSolidColorBrush
+          ContentPresenter bg=ImmutableSolidColorBrush
+            ItemsControl bg=ImmutableSolidColorBrush
+              Border bg=ImmutableSolidColorBrush
+                ItemsPresenter
+                  StackPanel
+                    ContentPresenter
+                      Border bg=#FF313244
+                        StackPanel
+                          StackPanel
+                            TextBlock text="Avalonia.Media.StreamGeometry" fg=#FF89B4FA font="Inter" size=14
+                            TextBlock text="Info" fg=#FF89B4FA font="Inter" size=11
+                          TextBlock text="Info: connection established." fg=#FFCDD6F4 font="Inter" size=13
