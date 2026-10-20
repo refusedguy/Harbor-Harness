@@ -71,7 +71,7 @@ A single `Directory.Packages.props` at the repo root declares every package vers
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <!-- ...all other packages... -->
   </ItemGroup>
@@ -110,7 +110,7 @@ Harbor has **~80 `.csproj` files** across `src/`, `apps/`, and `tests/` (plus th
 
 The `10.0.0` vs `10.0.8` drift on `Microsoft.Extensions.Logging.Abstractions` was the most dangerous: transitive dependencies (e.g. `Terminal.Gui` → `Configuration.Binder 10.0.7`, `Termina` → `Hosting.Abstractions 10.0.8`) required >= 10.0.7 or 10.0.8 minimums, and the build would have started failing on a clean restore if anyone bumped `Terminal.Gui` or `Termina` to a newer version.
 
-After CPM, all `Microsoft.Extensions.*` packages are pinned to **`10.0.10`** (the latest servicing release as of the migration), which satisfies every transitive minimum and keeps them all locked to the same version via `CentralPackageTransitivePinningEnabled`.
+After CPM, all `Microsoft.Extensions.*` packages are pinned to **`10.0.13`** (the current servicing release of the 10.0 band), which satisfies every transitive minimum and keeps them all locked to the same version via `CentralPackageTransitivePinningEnabled`.
 
 ### 2.1 Quantified benefit
 
@@ -119,7 +119,7 @@ After CPM, all `Microsoft.Extensions.*` packages are pinned to **`10.0.10`** (th
 | Total `PackageReference` declarations | ~95 across 54 .csproj files | ~95 (unchanged — still need to declare what each project consumes) |
 | Total `Version="..."` attributes | ~95 (one per PackageReference) | **0** (all in `Directory.Packages.props`) |
 | Unique packages with version declarations | 47 | 41 (CPM revealed duplicates and consolidated) |
-| Versions of `Microsoft.Extensions.Logging.Abstractions` in the repo | 2 (`10.0.0`, `10.0.8`) | **1** (`10.0.10`) |
+| Versions of `Microsoft.Extensions.Logging.Abstractions` in the repo | 2 (`10.0.0`, `10.0.8`) | **1** (`10.0.13`) |
 | Effort to upgrade `ZLinq` from 1.5.6 → 1.6.0 | Touch every `.csproj` that references it (~5 files) | **1-line change** in `Directory.Packages.props` |
 | Risk of version drift | High (already happened twice) | **Zero** (build fails if a `PackageReference` has no matching `PackageVersion`) |
 
@@ -172,8 +172,8 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 
 **Key difference from `Directory.Build.props`:** `Directory.Packages.props` is **only** evaluated during NuGet restore. It does not affect compilation or build properties. It only affects which NuGet package versions get restored.
 
-Harbor's `Directory.Packages.props` now carries **79 `<PackageVersion>` entries**
-(194 lines) — the original migration shipped 41; the desktop/UI sprint added the rest.
+Harbor's `Directory.Packages.props` now carries **78 `<PackageVersion>` entries**
+— the original migration shipped 41; the desktop/UI sprint added the rest.
 
 ### 3.4 Evaluation order
 
@@ -204,7 +204,7 @@ When you run `dotnet build src/Harbor.Application/Harbor.Application.csproj`, MS
 
 ## 4. Harbor's `Directory.Packages.props` — full annotated listing
 
-The full file lives at `Directory.Packages.props` (repo root, ~194 lines). Below is an annotated walkthrough of its structure:
+The full file lives at `Directory.Packages.props` (repo root). Below is an annotated walkthrough of its structure:
 
 ### 4.1 The header comment
 
@@ -226,31 +226,41 @@ The file opens with a 28-line comment explaining:
 - `ManagePackageVersionsCentrally=true` — the master switch. When `true`, NuGet requires every `PackageReference` to resolve its version from a `PackageVersion` entry in this file (or a parent `Directory.Packages.props`).
 - `CentralPackageTransitivePinningEnabled=true` — additionally pins transitive dependencies. If package A depends on package B v1.0, and you declare `B v2.0` in this file, NuGet will use `B v2.0` instead of `B v1.0`. Without this, NuGet would let the transitive `B v1.0` win.
 
-### 4.3 The 41 `<PackageVersion>` entries
+### 4.3 The 78 `<PackageVersion>` entries
 
-Grouped top-to-bottom (see the file for the full listing):
+Grouped top-to-bottom, in the order the file declares them (the counts are the
+file's own, recounted; the rows sum to the total at the bottom):
 
-| Group | Count | Examples |
+| Group | Count | Entries |
 |-------|-------|---------|
 | Microsoft.Extensions.* | 13 | `Logging.Abstractions`, `Logging`, `Logging.Console`, `DependencyInjection.Abstractions`, `DependencyInjection`, `Configuration.Abstractions`, `Configuration`, `Configuration.Json`, `Hosting.Abstractions`, `Hosting`, `Options`, `Http`, `FileSystemGlobbing` |
 | Microsoft.CodeAnalysis.* | 3 | `Microsoft.CodeAnalysis.CSharp` (Roslyn), `Microsoft.CodeAnalysis.NetAnalyzers`, `Microsoft.CodeAnalysis.BannedApiAnalyzers` |
 | Microsoft.Data.* | 1 | `Microsoft.Data.Sqlite` |
 | Microsoft.NET test SDK | 1 | `Microsoft.NET.Test.Sdk` |
-| TUnit + Moq + NetArchTest | 4 | `TUnit`, `TUnit.Assertions`, `Moq`, `NetArchTest.Rules` |
+| TUnit + NetArchTest | 3 | `TUnit`, `TUnit.Assertions`, `NetArchTest.Rules` |
 | BenchmarkDotNet | 1 | `BenchmarkDotNet` |
-| CommunityToolkit.* | 2 | `CommunityToolkit.Mvvm`, `CommunityToolkit.HighPerformance` |
+| CommunityToolkit.* | 1 | `CommunityToolkit.Mvvm` |
+| OpenTelemetry | 2 | `OpenTelemetry`, `OpenTelemetry.Exporter.OpenTelemetryProtocol` |
 | Spectre.* | 3 | `Spectre.Console`, `Spectre.Tui`, `Spectre.Tui.App` |
-| Alternative UI stacks | 11 | `Terminal.Gui`, `Termina`, `RazorConsole.Core`, `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`, `Avalonia.Diagnostics`, `Avalonia.AvaloniaEdit`, `Markdig`, `AvalonEdit`, `Dirkster.AvalonDock`, `LiveChartsCore.SkiaSharpView.WPF` |
+| Vendored submodule transitives | 1 | `SixLabors.ImageSharp` (lifted above the version the vendored `SharpConsoleUI` declares; see the comment in the file) |
+| Alternative UI stacks | 15 | `Terminal.Gui`, `Termina`, `RazorConsole.Core`, `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`, `Avalonia.Headless`, `Avalonia.Skia`, `Avalonia.Diagnostics`, `Avalonia.AvaloniaEdit`, `Markdig`, `AvalonEdit`, `Dirkster.AvalonDock`, `LiveChartsCore.SkiaSharpView.WPF` |
+| .NET MAUI (workload-supplied) | 6 | `Microsoft.Maui.Controls`, `Microsoft.Maui.Controls.Xaml`, `Microsoft.Maui.Essentials`, `Microsoft.Maui.Core`, `Microsoft.Maui.Resizetizer`, `Microsoft.Maui.Controls.Build.Tasks` |
 | Scripting engines | 1 | `Jint` |
-| Roslyn analyzers | 5 | `Roslynator.Analyzers`, `SonarAnalyzer.CSharp`, `AsyncFixer`, `ReflectionAnalyzers`, `Meziantou.Analyzer` |
-| Performance / collections / serialization | 5 | `ZLinq`, `ZLinq.DropInGenerator`, `NonBlocking`, `MemoryPack`, `CSharpFunctionalExtensions` |
+| Roslyn analyzers | 6 | `Roslynator.Analyzers`, `SonarAnalyzer.CSharp`, `AsyncFixer`, `ReflectionAnalyzers`, `Meziantou.Analyzer`, `CSharpFunctionalExtensions.Analyzers` |
+| Performance / collections / serialization | 6 | `ZLinq`, `ZLinq.DropInGenerator`, `NonBlocking`, `MemoryPack`, `MemoryPack.Core`, `CSharpFunctionalExtensions` |
+| MessagePack | 1 | `MessagePack` |
 | SQLite native driver | 1 | `SQLitePCLRaw.lib.e_sqlite3` |
-| Source generators | 1 | `Termina.Generators` |
-| **Total (at migration time; now 79)** | **41** | |
+| CLI parsing (sourcegen, AOT-first) | 1 | `ConsoleAppFramework` |
+| Source generators | 2 | `Termina.Generators`, `AutoCtor` |
+| NUKE build system | 1 | `Nuke.Common` |
+| DI analyzers | 3 | `DependencyInjection.Lifetime.Analyzers`, `Excubo.Analyzers.DependencyInjectionValidation`, `Excubo.Analyzers.Annotations` |
+| Serilog | 5 | `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File`, `Serilog.Sinks.Console`, `Serilog.Sinks.Async` |
+| Diff | 1 | `DiffPlex` |
+| **Total (at migration time; now 78)** | **78** | |
 
 ### 4.4 Note on `Markdig` version
 
-The current `Directory.Packages.props` pins `Markdig` to `1.3.2`. The previous per-csproj declarations used `0.38.0`. The migration to CPM consolidated to the latest stable (`1.3.2` at the time of writing). If your build fails on Markdig API changes (the 1.x release was a breaking change from 0.x), check the [Markdig release notes](https://github.com/xoofx/markdig/releases) and either:
+The current `Directory.Packages.props` pins `Markdig` to `1.4.2`. The previous per-csproj declarations used `0.38.0`. The migration to CPM consolidated to the latest stable (`1.3.2` at the time of writing); the pin has since moved to `1.4.2`, which adds the `IsAotCompatible` / `IsTrimmable` assembly metadata and a set of CommonMark conformance fixes. The strict GFM pipe-table mode that 1.4.0 introduced (`PipeTableOptions.UseGfmRules`) is opt-in and defaults to `false`, so the parsed output of the two consumers — `Harbor.Desktop.Shared` and `Harbor.App.Avalonia` — does not change unless they ask for it. If your build fails on Markdig API changes (the 1.x release was a breaking change from 0.x), check the [Markdig release notes](https://github.com/xoofx/markdig/releases) and either:
 - Downgrade `Markdig` to `0.38.0` in `Directory.Packages.props` (1-line change), or
 - Update the call sites to the new 1.x API.
 
@@ -280,7 +290,7 @@ The new `apps/Harbor.App.*` + `desktop/Harbor.Desktop.*` projects (per `docs/DES
 <PackageVersion Include="LiveChartsCore.SkiaSharpView.Blazor" Version="2.0.0-rc6" />
 
 <!-- ── Code editor + diff + fuzzy ───────────────────────────────────── -->
-<PackageVersion Include="DiffPlex" Version="1.7.2" />
+<PackageVersion Include="DiffPlex" Version="1.9.0" />
 <PackageVersion Include="FuzzySharp" Version="2.0.2" />
 <PackageVersion Include="Pty.Net" Version="0.5.81" />
 
@@ -503,8 +513,8 @@ find src tests samples apps -name '*.csproj' -exec \
 
 If the same package was declared with different versions across the repo, pick the highest version that satisfies all transitive minimums. For Harbor, this meant:
 
-- All `Microsoft.Extensions.*` packages → `10.0.10` (was variously `10.0.0`, `10.0.8`)
-- `Markdig` → `1.3.2` (was `0.38.0` everywhere — major version bump, but no call sites broke)
+- All `Microsoft.Extensions.*` packages → `10.0.13` (the migration consolidated `10.0.0` / `10.0.8` onto `10.0.10`; the pin has since moved to `10.0.13`)
+- `Markdig` → `1.4.2` (the migration moved `0.38.0` to `1.3.2`; the pin has since moved to `1.4.2`)
 
 ### 8.6 Step 6 — Restore + build + test
 
@@ -579,7 +589,7 @@ If a vulnerable transitive shows up, add it to `Directory.Packages.props` with t
 
 ### 9.4 Harbor's current transitive pinning status
 
-Harbor pins **79** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
+Harbor pins **78** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
 
 ---
 

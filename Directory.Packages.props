@@ -16,8 +16,8 @@
     2. Microsoft.CodeAnalysis.* (Roslyn, analyzers, banned-api)
     3. Microsoft.Data.*        (storage drivers)
     4. Microsoft.NET.* / test SDK
-    5. TUnit + Moq + NetArchTest (test framework + architecture rules)
-    6. CommunityToolkit.*      (MVVM, HighPerformance)
+    5. TUnit + NetArchTest     (test framework + architecture rules)
+    6. CommunityToolkit.*      (MVVM)
     7. Spectre.*               (console + TUI libraries)
     8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
     9. Jint                     (scripting engine)
@@ -41,44 +41,51 @@
   <ItemGroup>
     <!-- ── Microsoft.Extensions.* ────────────────────────────────────────── -->
     <!--
-      All Microsoft.Extensions.* packages are pinned to the latest 10.0.10
-      servicing release. Transitive dependencies (e.g. Terminal.Gui →
-      Configuration.Binder 10.0.7, Termina → Hosting.Abstractions 10.0.8)
-      require >= 10.0.7 / 10.0.8 / 10.0.9 depending on the chain; pinning
-      to 10.0.10 satisfies all transitive minimums and CentralPackageTransitivePinningEnabled
-      keeps them locked to this version.
+      All Microsoft.Extensions.* packages are pinned to the 10.0.13 servicing
+      release (published 2026-10-13) — the same band that carries the three
+      high-severity advisory fixes tracked in #1892. Transitive dependencies
+      (e.g. Terminal.Gui → Configuration.Binder 10.0.7, Termina →
+      Hosting.Abstractions 10.0.8) require >= 10.0.7 / 10.0.8 / 10.0.9
+      depending on the chain; pinning to 10.0.13 satisfies all transitive
+      minimums and CentralPackageTransitivePinningEnabled keeps them locked
+      to this version.
     -->
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.FileSystemGlobbing" Version="10.0.13" />
     <!-- ── Microsoft.CodeAnalysis.* (Roslyn + analyzers) ─────────────────── -->
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <!-- ── Microsoft.Data.* (storage drivers) ────────────────────────────── -->
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!--
+      Microsoft.Data.Sqlite 10.0.13 is the same servicing release as the
+      Microsoft.Extensions.* band above; it raises its SQLitePCLRaw transitives
+      to 2.1.13. The native library itself stays on our own pin
+      (SQLitePCLRaw.lib.e_sqlite3 3.53.3, the last stable upstream release),
+      so the native side is unchanged by this bump.
+    -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <!-- ── TUnit + Moq + NetArchTest (test framework + arch rules) ───────── -->
+    <!-- ── TUnit + NetArchTest (test framework + arch rules) ─────────────── -->
     <PackageVersion Include="TUnit" Version="1.75.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.WebSockets" Version="2.3.0" />
     <PackageVersion Include="TUnit.Assertions" Version="1.75.0" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
     <!-- ── BenchmarkDotNet ───────────────────────────────────────────────── -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <!-- ── CommunityToolkit.* (MVVM, HighPerformance) ────────────────────── -->
+    <!-- ── CommunityToolkit.* (MVVM) ─────────────────────────────────────── -->
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageVersion Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
     <!-- ── Spectre.* (console + TUI) ─────────────────────────────────────── -->
     <!--
       Spectre.Console stays at 0.54.0 — the last version with Color/Decoration
@@ -90,45 +97,75 @@
       newer release is blocked until RazorConsole publishes a build that
       targets Spectre.Console 0.55+.
     -->
-    <PackageVersion Include="OpenTelemetry" Version="1.18.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry" Version="1.20.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.0" />
     <PackageVersion Include="Spectre.Console" Version="0.54.0" />
-    <!--
-      SixLabors.ImageSharp is a transitive-only pin (no direct PackageReference
-      anywhere): Spectre.Console 0.54.0 pulls 3.1.12, which carries the
-      Oct-2026 TIFF/HistogramEqualization advisories (GHSA-j3p4-wp97-rph4 et
-      al., NU1902/NU1903 as errors via TreatWarningsAsErrors). First patched
-      release is 4.1.2; pinned to 4.1.3. CentralPackageTransitivePinningEnabled
-      (header) applies this to the transitive without a direct reference.
-      No src/ code calls ImageSharp APIs (only Spectre.Console's CanvasImage
-      path does), so the 3.x→4.x major is a resolve-level change here.
-    -->
-    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.3" />
     <PackageVersion Include="Spectre.Tui" Version="0.14.0" />
     <PackageVersion Include="Spectre.Tui.App" Version="0.14.0" />
+    <!-- ── Vendored submodule transitives ────────────────────────────────── -->
+    <!--
+      SixLabors.ImageSharp is a transitive-only pin, and it is load-bearing.
+      The source of the transitive is the vendored external/ConsoleEx
+      submodule: SharpConsoleUI.csproj declares SixLabors.ImageSharp 3.1.12
+      directly. Harbor.Tui.NickConsoleEx references that project, so
+      ImageSharp reaches Harbor's own graphs (Harbor.Hosting,
+      Harbor.App.Cli, Harbor.App.Avalonia, the test projects) as a
+      transitive of SharpConsoleUI.
+
+      Every version below 4.1.2 is inside the advisory range:
+      GHSA-j3p4-wp97-rph4, GHSA-j9gm-c75j-xc9q and GHSA-jjfr-hcj7-qf5w
+      (high) plus GHSA-wmxv-xphr-5c9g and GHSA-gwg2-r3hj-4w44 (moderate) all
+      cover ">= 1.0.0-beta0001, <= 4.1.1", and 4.1.2 is the first patched
+      release. There is no patched 3.x to fall back to: 3.2.0 is the last
+      3.x release and it is inside the range too. NU1902/NU1903 are errors
+      here (TreatWarningsAsErrors), so without this pin the restore of
+      Harbor.slnx dies. Measured on the branch that removed it: ImageSharp
+      3.1.12 came back into the graph and the restore failed with
+      NU1902/NU1903 in Harbor.Hosting, Harbor.App.Cli,
+      Harbor.Tui.NickConsoleEx and Harbor.App.Avalonia.
+
+      CentralPackageTransitivePinningEnabled (header) is the mechanism: it
+      lifts the transitive from 3.1.12 to this version in Harbor's graphs.
+      The vendored project keeps its own 3.1.12 (external/ turns CPM off),
+      which is why the advisory stays a warning there.
+
+      LICENCE: the Six Labors Split License treats a TRANSITIVE consumer as
+      Apache-2.0, and SharpConsoleUI is the only direct consumer. Do not add
+      a direct PackageReference for ImageSharp anywhere in this repo: that
+      would move us into the commercial branch of the split licence.
+    -->
+    <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.3" />
     <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
     <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
     <PackageVersion Include="Termina" Version="0.15.0" />
     <PackageVersion Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409" />
-    <!-- Avalonia 12.1.x — latest stable line (released 2026-Q3). Brings the
-         new Win32 chrome renderer (ExtendClientAreaChromeHints), fixed
-         Dispatcher.MainLoop PlatformNotSupportedException on Windows without
-         a RID, and Skia 3.x. Avalonia.AvaloniaEdit 12.0.0 is the matched
-         code-editor build. Avalonia.Diagnostics stays on 11.3.x because the
-         diagnostics inspector was not published for the 12.x line yet. -->
-    <PackageVersion Include="Avalonia" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <!-- Avalonia 12.1.x — latest stable line (12.1.4, released 2026-10-09).
+         Brings the new Win32 chrome renderer (ExtendClientAreaChromeHints),
+         fixed Dispatcher.MainLoop PlatformNotSupportedException on Windows
+         without a RID, and Skia 3.x. Avalonia.AvaloniaEdit 12.0.0 is the
+         matched code-editor build. Avalonia.Diagnostics stays on 11.3.x
+         (11.3.22) because the diagnostics inspector was not published for the
+         12.x line yet. -->
+    <PackageVersion Include="Avalonia" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.4" />
     <!-- Avalonia.Headless — in-process off-screen renderer for E2E tests with screenshot capture. -->
-    <PackageVersion Include="Avalonia.Headless" Version="12.1.0" />
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.4" />
     <!-- Avalonia.Skia — software renderer used by Avalonia.Headless when
          UseHeadlessDrawing=false. Required for CaptureRenderedFrame() to
          produce a real Bitmap we can save as PNG. -->
-    <PackageVersion Include="Avalonia.Skia" Version="12.1.0" />
-    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.18" />
+    <PackageVersion Include="Avalonia.Skia" Version="12.1.4" />
+    <PackageVersion Include="Avalonia.Diagnostics" Version="11.3.22" />
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
-    <PackageVersion Include="Markdig" Version="1.3.2" />
+    <!-- Markdig 1.4.2 — the markdown renderer for the desktop app. 1.4.2 adds
+         the IsAotCompatible/IsTrimmable assembly metadata, so the package can
+         enter a trimmed publish with the right metadata instead of a guess.
+         The new strict GFM pipe-table mode (PipeTableOptions.UseGfmRules)
+         is opt-in and defaults to false, so the parsed output of the two
+         consumers (Harbor.Desktop.Shared, Harbor.App.Avalonia) is unchanged
+         unless they ask for it. -->
+    <PackageVersion Include="Markdig" Version="1.4.2" />
     <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
     <PackageVersion Include="Dirkster.AvalonDock" Version="4.74.1" />
     <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
@@ -198,9 +235,15 @@
     <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
     <PackageVersion Include="Termina.Generators" Version="0.15.0" />
-    <!-- SG3 spike (issue 1244): ctor(ILogger) generation on 3 tools. Pinned 3.1.1,
-         not 4.0.0 — the 4.x ServiceProvider generator is out of spike scope. -->
-    <PackageVersion Include="AutoCtor" Version="3.1.1" />
+    <!-- SG3 spike (issue 1244): ctor(ILogger) generation for the 8
+         [AutoConstruct] tools in Harbor.Tools.Builtin. Pinned 4.0.2: the 4.x
+         line adds a source-generated IoC container ([ServiceProvider]) that
+         this repo does not use, and leaves the generated constructor shape
+         alone — a public constructor over the readonly fields, in declaration
+         order, which is what the tool registrations in ToolsCatalog assume.
+         Every 4.x-only diagnostic (ACTR010-ACTR030) belongs to that IoC
+         container and cannot fire without a [ServiceProvider] type. -->
+    <PackageVersion Include="AutoCtor" Version="4.0.2" />
     <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
     <!--
       NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/
@@ -226,19 +269,28 @@
     <PackageVersion Include="DependencyInjection.Lifetime.Analyzers" Version="2.18.24" />
     <PackageVersion Include="Excubo.Analyzers.DependencyInjectionValidation" Version="1.0.33" />
     <PackageVersion Include="Excubo.Analyzers.Annotations" Version="1.0.1" />
-    <!-- Serilog — structured logging with file, console, and rolling sinks -->
-    <PackageVersion Include="Serilog" Version="4.3.0" />
-    <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <!-- Serilog — structured logging with file, console, and rolling sinks.
+         Serilog.Extensions.Hosting 10.0.0 raises its Microsoft.Extensions.*
+         floors to 10.0.0, which the Microsoft.Extensions.* band above
+         (10.0.13) satisfies; its `UseSerilog`/`AddSerilog` surface is
+         unchanged from 9.0.0 (the 10.0.0 release is the .NET 10 SDK and
+         dependency refresh, not an API break). Serilog.Sinks.Console 6.1.1
+         adds {UtcTimestamp} support and keeps the existing output template
+         behaviour. -->
+    <PackageVersion Include="Serilog" Version="4.4.0" />
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
-    <PackageVersion Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageVersion Include="Serilog.Sinks.Async" Version="2.1.0" />
     <!-- ── Diff ──────────────────────────────────────────────────────────── -->
     <!--
       DiffPlex — line + word diff engine, pilot for #1236 (strictly outside
       the CellForge engine: consumed only by Harbor.Ui.Framework.State's
       DiffPlexPilot and the desktop/patch preview call sites it serves).
-      1.7.2 per docs/FEATURE_RESEARCH.md + docs/DESKTOP_APP_PLAN.md.
+      1.9.0 per docs/FEATURE_RESEARCH.md + docs/DESKTOP_APP_PLAN.md. The
+      1.7.2 -> 1.9.0 step is additive (three-way diff/merge plus a unidiff
+      renderer); nothing the pilot calls was removed.
     -->
-    <PackageVersion Include="DiffPlex" Version="1.7.2" />
+    <PackageVersion Include="DiffPlex" Version="1.9.0" />
   </ItemGroup>
 </Project>

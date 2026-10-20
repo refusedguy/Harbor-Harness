@@ -74,12 +74,16 @@ WHY THE PERIMETER IS FOUR PROJECTS AND NOT TWO (#1016 follow-up)
     A phantom that hides a satisfied BCL need is the more interesting half of this
     finding, because the code reads as if it needed the package.
 
-  `Directory.Packages.props` keeps its `PackageVersion` pin for the package even
-  though no `csproj` references it. That is deliberate and is not a phantom edge
-  in this gate's sense: a `PackageVersion` is a version catalogue entry, not a
-  declared dependency, and with `CentralPackageTransitivePinningEnabled=true` it
-  is what a transitive consumer of the package would resolve against. This gate
-  counts `<PackageReference>` elements, so the pin costs it nothing.
+  `Directory.Packages.props` used to keep a `PackageVersion` pin for the package
+  even though no `csproj` referenced it, on the theory that a `PackageVersion` is
+  a version catalogue entry rather than a declared dependency, and that with
+  `CentralPackageTransitivePinningEnabled=true` it is what a transitive consumer
+  of the package would resolve against. That reasoning needs a transitive
+  consumer to hold, and none existed: no path in the dependency graph reaches
+  the package, and `CommunityToolkit.Mvvm` 8.4.2 — which we DO use — does not
+  depend on it either, so the two graphs are disjoint and the pin protected
+  nothing. #1895 removed the pin. This gate counts `<PackageReference>`
+  elements, so the pin had cost it nothing either way.
 
 WHY THE COMPARISON IS AGAINST FILES, NOT AGAINST PROSE
 
@@ -240,8 +244,9 @@ WHAT THIS DOES NOT DO, STATED RATHER THAN IMPLIED
     here, and that is stated rather than papered over.
   * It does not read the `PackageVersion` pins in `Directory.Packages.props`, and
     a pin nothing references is not a finding: a version catalogue entry is not a
-    declared dependency, and with transitive pinning on it is what a transitive
-    consumer would resolve against.
+    declared dependency. Such a pin only means something when a transitive
+    consumer exists to resolve against it; #1895 measured that the one pin of
+    that shape left in the file had no such consumer, and removed it.
   * It does not follow a `ProjectReference` past one hop, and it does not treat a
     peer project in the same directory tree as reachable. Both limits are
     deliberate and are the subject of the two most recent fixtures.

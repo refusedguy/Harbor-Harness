@@ -467,7 +467,7 @@ Per-platform adapters (in each app):
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
     <PackageReference Include="Markdig" Version="0.38.0"/>
     <PackageReference Include="Markdown.Avalonia" Version="11.0.3-a1"/>
-    <PackageReference Include="DiffPlex" Version="1.7.2"/>
+    <PackageReference Include="DiffPlex" Version="1.9.0"/>
     <PackageReference Include="FuzzySharp" Version="2.0.2"/>
     <PackageReference Include="Pty.Net" Version="0.5.81"/>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
@@ -989,7 +989,7 @@ The current `apps/Harbor.App.Wpf/Harbor.App.Wpf.csproj` already exists and is mo
     <PackageReference Include="AvalonEdit" Version="6.3.0.90"/>
     <PackageReference Include="Dirkster.AvalonDock" Version="4.2.1"/>
     <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.0.0-rc6"/>
-    <PackageReference Include="DiffPlex" Version="1.7.2"/>
+    <PackageReference Include="DiffPlex" Version="1.9.0"/>
     <PackageReference Include="FuzzySharp" Version="2.0.2"/>
     <PackageReference Include="Notification.Wpf" Version="6.4.0"/>
     <PackageReference Include="MdXaml" Version="1.30.0"/>
@@ -1172,7 +1172,7 @@ public sealed class WpfAnimationAdapter : IAnimationAdapter
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
     <PackageReference Include="Markdig" Version="0.38.0"/>
     <PackageReference Include="LiveChartsCore.SkiaSharpView.Maui" Version="2.0.0-rc6"/>
-    <PackageReference Include="DiffPlex" Version="1.7.2"/>
+    <PackageReference Include="DiffPlex" Version="1.9.0"/>
     <PackageReference Include="FuzzySharp" Version="2.0.2"/>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0"/>
@@ -1290,7 +1290,7 @@ The existing `apps/Harbor.App.Blazor/Harbor.App.Blazor.csproj` exists and is cor
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0"/>
     <PackageReference Include="Markdig" Version="0.38.0"/>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0"/>
-    <PackageReference Include="DiffPlex" Version="1.7.2"/>
+    <PackageReference Include="DiffPlex" Version="1.9.0"/>
     <PackageReference Include="FuzzySharp" Version="2.0.2"/>
     <!-- Blazor-specific -->
     <PackageReference Include="BlazorMonaco" Version="3.2.0"/>
@@ -3392,7 +3392,7 @@ All font sizes are defined in `Typography.cs` as relative to a base size (13px).
 - **Markdig** 0.38 — https://github.com/xoofx/markdig
 - **Markdown.Avalonia** 11.0 — https://github.com/whistyun/Markdown.Avalonia
 - **MdXaml** 1.30 — https://github.com/whistyun/MdXaml
-- **DiffPlex** 1.7 — https://github.com/mmanela/diffplex
+- **DiffPlex** 1.9 — https://github.com/mmanela/diffplex
 - **FuzzySharp** 2.0 — https://github.com/JakeBayer/FuzzySharp
 - **Pty.Net** 0.5 — https://github.com/microsoft/vs-threading
 - **Dirkster.AvalonDock** 4.2 — https://github.com/Dirkster99/AvalonDock

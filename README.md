@@ -270,4 +270,4 @@ Report a vulnerability privately — see [SECURITY.md](./SECURITY.md).
 
 Architectural inspiration: [pi-agent](https://github.com/earendil-works/pi) (JSONL sessions, event protocol), [kilocode](https://github.com/kilo-org/kilocode) (permission patterns, compaction), [opencode](https://github.com/anomalyco/opencode), [crush](https://github.com/charmbracelet/crush).
 
-Libraries: CSharpFunctionalExtensions, CommunityToolkit.Mvvm, CommunityToolkit.HighPerformance, MemoryPack, NonBlocking, TUnit, Spectre.Console, Microsoft.Data.Sqlite, ZLinq.
+Libraries: CSharpFunctionalExtensions, CommunityToolkit.Mvvm, MemoryPack, NonBlocking, TUnit, Spectre.Console, Microsoft.Data.Sqlite, ZLinq.
