@@ -400,15 +400,18 @@ sits at `-1`).
 The file sits at the repository root and is the only place in this repository
 where a diagnostic severity is written down outside `.editorconfig`.
 
-#### The one place Proj0037 is scoped instead of fixed
+#### The two places Proj0037 is scoped instead of fixed
 
-`src/Harbor.CodeGen/Harbor.CodeGen.csproj` references
+`src/Harbor.CodeGen/Harbor.CodeGen.csproj` and
+`tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj` reference
 `Microsoft.CodeAnalysis.CSharp` with `PrivateAssets=all`, and the rule asks for
-`ExcludeAssets=runtime` there. It does not hold: the generator is compiled
+`ExcludeAssets=runtime` there. It does not hold: both generators are compiled
 against Roslyn 5.6.0 while the .NET 10 SDK ships an older Roslyn, and the
-local copy of the Roslyn runtime is what lets the generator load against the
-version it was compiled against. The finding is scoped at that element with
-`NoWarn="Proj0037"` and a comment, rather than silenced globally.
+local copy of the Roslyn runtime is what lets a generator load against the
+version it was compiled against. The finding is scoped at those two elements
+with `NoWarn="Proj0037"` and a comment, rather than silenced globally. The
+canonical fix (exclude the runtime asset) lands when the repository's Roslyn
+pin and the SDK's Roslyn are aligned.
 
 #### `ExcludeAssets` has to be an attribute
 

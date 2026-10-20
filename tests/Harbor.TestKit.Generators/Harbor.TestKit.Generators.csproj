@@ -26,8 +26,18 @@
       PrivateAssets=all: the analyzer runs inside the compiler, which already
       hosts Roslyn. Nothing flows to consumers, and the generated code carries
       no Roslyn dependency at run time.
+
+      Proj0037 (#1857) wants ExcludeAssets=runtime here, and the rule's premise
+      does not hold for this project — the same reason as
+      src/Harbor.CodeGen/Harbor.CodeGen.csproj: the generator is compiled
+      against Microsoft.CodeAnalysis.CSharp 5.6.0 while the .NET 10 SDK ships
+      an older Roslyn, and the local copy of the Roslyn runtime is what lets
+      it load against the version it was compiled against. The finding is
+      scoped at this element rather than silenced globally; the canonical fix
+      (ExcludeAssets=runtime) lands when the repository's Roslyn pin and the
+      SDK's Roslyn are aligned.
     -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
   </ItemGroup>
 
 </Project>
