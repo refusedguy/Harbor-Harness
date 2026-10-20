@@ -31,6 +31,52 @@
     <SelfContained>false</SelfContained>
 
     <!--
+      Every project a Release build touches must be BUILT in Release (#1921).
+
+      MSBuild's solution build does not do that on its own, and the reason is
+      worth writing down because nothing in the build output says it happened:
+
+        1. `AssignProjectConfiguration` maps every <ProjectReference> onto the
+           SOLUTION's configuration table (dotnet/msbuild,
+           src/Tasks/AssignProjectConfiguration.cs). A referenced project that is
+           not a member of the solution has no row in that table, so the mapping
+           cannot be resolved for it.
+        2. For an unresolvable reference the task sets
+           `GlobalPropertiesToRemove = "Configuration;Platform"` on the item, and
+           the MSBuild call that builds the reference honours it
+           (Microsoft.Common.CurrentVersion.targets:1850,
+           `RemoveProperties="%(...GlobalPropertiesToRemove);..."`).
+        3. The child therefore starts with NO Configuration at all, and
+           Microsoft.Common.CurrentVersion.targets:149 answers that with
+           `<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>`.
+
+      Measured on CI run 39389070999: three of the 112 projects that Release
+      build compiled produced `bin/Debug` output and no `bin/Release` output at
+      all — src/Harbor.CodeGen (the source generator that runs inside every
+      other project's compilation), external/ConsoleEx/SharpConsoleUI (the
+      vendored UI kit that ships inside the CLI) and apps/Harbor.App.Avalonia.
+      The three are exactly the projects that the solution pulls in through a
+      <ProjectReference> and that are NOT rows of Harbor.slnx; every other
+      project in the graph is a row and was built in Release.
+
+      `ShouldUnsetParentConfigurationAndPlatform` is MSBuild's own switch for
+      this. It defaults to true for a solution build
+      (Microsoft.Common.CurrentVersion.targets:1584) and that default is what
+      unsets the configuration. Set to false, a reference the solution cannot map
+      inherits the CONFIGURATION of the project that references it, so the whole
+      graph is built in the configuration the caller asked for.
+
+      The other mitigation is to make every project a row of Harbor.slnx, and
+      for src/Harbor.CodeGen and apps/Harbor.App.Avalonia that is worth doing
+      too. It cannot be the whole answer, though: a row for the vendored
+      external/ConsoleEx/SharpConsoleUI dangles whenever the submodule is not
+      checked out, and BuildGraphCoverageRule.NoSolutionRow_IsDangling fails
+      the build then. This switch covers the vendored tree, contrib/ and every
+      project added to the graph later without a row.
+    -->
+    <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
+
+    <!--
       Feature-flag defaults (see Harbor.Hosting.csproj F2.2 plumbing).
 
       The HarborWith* properties used to be defined ONLY inside apps/*.csproj,
