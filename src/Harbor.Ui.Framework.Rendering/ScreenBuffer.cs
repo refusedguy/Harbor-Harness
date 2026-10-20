@@ -14,7 +14,7 @@ namespace Harbor.Ui.Framework.Rendering;
 /// pair blanks the whole pair first so the diff repaints both halves and no
 /// glyph ghost survives.
 /// </summary>
-public sealed class ScreenBuffer
+public sealed partial class ScreenBuffer
 {
     private const ulong FnvOffset = 0xCBF2_9CE4_8422_2325UL;
     private const ulong FnvPrime = 0x0000_0100_0000_01B3UL;

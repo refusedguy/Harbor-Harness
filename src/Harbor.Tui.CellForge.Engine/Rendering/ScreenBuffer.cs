@@ -17,7 +17,7 @@ namespace Harbor.Tui.CellForge.Rendering;
 /// pair blanks the whole pair first so the diff repaints both halves and no
 /// glyph ghost survives.
 /// </summary>
-public sealed class ScreenBuffer
+public sealed partial class ScreenBuffer
 {
     private const ulong FnvOffset = 0xCBF2_9CE4_8422_2325UL;
     private const ulong FnvPrime = 0x0000_0100_0000_01B3UL;
@@ -385,29 +385,11 @@ public sealed class ScreenBuffer
         _rowHashValid[y] = true;
     }
 
-    /// <summary>
-    /// Vectorized content equality (PF1, issue #1237): same contract as the
-    /// per-cell <c>Get(x,y) != Get(x,y)</c> loop in
-    /// <see cref="DiffEngine.FrontMatches"/>, over the dense
-    /// <c>Cols*Rows</c> prefix via <see cref="CellSimd"/>.
-    /// </summary>
-    internal bool ContentEquals(ScreenBuffer other)
-    {
-        if (Cols != other.Cols || Rows != other.Rows)
-        {
-            return false;
-        }
-
-        int count = Cols * Rows;
-        if (count == 0)
-        {
-            return true;
-        }
-
-        return CellSimd.SequenceEqual(
-            _cells.AsSpan(0, count),
-            other._cells.AsSpan(0, count));
-    }
+    // #1621: `ContentEquals` moved to ScreenBufferContentEquals.cs — it is
+    // engine-only (it needs CellSimd, which the shared vocabulary has no
+    // counterpart for), and the shared twin of this file must stay a verbatim
+    // copy of the engine's. The class is `partial` so the engine-only member
+    // can live in its own file instead of inside the copied one.
 
     private void ComputeRowHash(int y)
     {
