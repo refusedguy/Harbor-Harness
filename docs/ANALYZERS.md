@@ -33,15 +33,16 @@ measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 | Package | Scope | Rule IDs |
 |---------|-------|----------|
 | `Roslynator.Analyzers` | solution-wide | RCS0xxx |
-| `SonarAnalyzer.CSharp` | solution-wide | S0xxx |
+| **`SonarAnalyzer.CSharp`** | **`tests/` only** | S0xxx (see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs)) |
 | `Microsoft.CodeAnalysis.NetAnalyzers` | solution-wide | CA0xxx |
-| `AsyncFixer` | solution-wide | AsyncFixer01–05 |
+| **`AsyncFixer`** | **`src/` + `apps/`** | AsyncFixer01–05 |
 | `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
-| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
+| **`Microsoft.CodeAnalysis.BannedApiAnalyzers`** | **`src/` + `apps/`** | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | **`Microsoft.CodeAnalysis.PublicApiAnalyzers`** | **two frozen assemblies** | **RS0016, RS0017, RS0022, RS0024–RS0027, RS0036, RS0037, RS0041, RS0048, RS0050** |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
-| **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI037** |
+| **`DependencyInjection.Lifetime.Analyzers`** | **`src/` + `apps/`** | **DI001–DI037** |
+| **`CSharpFunctionalExtensions.Analyzers`** | **`src/` + `apps/`** | **CFE0001** (see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs)) |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 | **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
@@ -50,6 +51,155 @@ set of analyzers that were looked at. The candidates that were checked and not
 taken are in [§Checked and rejected candidates](#checked-and-rejected-candidates),
 so that the next person does not spend a day of NuGet registry reads and
 GitHub API calls rediscovering that a package was abandoned in 2019.
+
+### Analyzer scope: where each family runs, and what it costs
+
+**The scope of an analyzer package is a decision, not a detail, and this
+section is the decision.** It answers three questions: what each package
+costs the build, why the scope table says what it says, and what the gate
+is that keeps the table and the tree in step.
+
+#### What a package costs
+
+An analyzer package runs inside the compiler of every project that
+references it. The cost of that is not the number of findings — it is the
+number of **analyzer classes** the package registers times the number of
+**compilations** it is referenced by.
+
+The compiler can be asked for the number. `-p:ReportAnalyzer=true` makes it
+print, for every compilation, the elapsed time per analyzer assembly; the
+numbers sum over the solution. Measured on `dev` (the Release build of
+`Harbor.slnx`, 113 compilations):
+
+| package | analyzer seconds | share |
+|---------|------------------|-------|
+| `SonarAnalyzer.CSharp` | 204.1 | 34 % |
+| `DependencyInjection.Lifetime.Analyzers` | 75.8 | 13 % |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 58.3 | 10 % |
+| `AsyncFixer` | 33.9 | 6 % |
+| `Meziantou.Analyzer` | 23.2 | 4 % |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 9.3 | 2 % |
+| `Roslynator.Analyzers` | 7.4 | 1 % |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.2 | 1 % |
+| `DotNetProjectFile.Analyzers` | 2.4 | <1 % |
+| `ReflectionAnalyzers` | 2.4 | <1 % |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 2.1 | <1 % |
+| `CSharpFunctionalExtensions.Analyzers` | 0.2 | <1 % |
+| `Excubo.Analyzers.DependencyInjectionValidation` | 0.1 | <1 % |
+| **the thirteen packages together** | **424.4** | **71 %** |
+
+The rest is the SDK's own AOT analyzer (`ILLink.RoslynAnalyzer`, 141.3 s —
+the second largest single cost in the tree, and it is **not** one of the
+packages this repository references), the source generators and TUnit.
+
+**The largest single analyzer cost in this tree is the AOT analyzer, not
+one of the nine packages the issue asked about.** It is pulled in by
+`IsAotCompatible=true` on six `src/` projects, and it is the analyzer that
+decides whether the shipped code is trim-safe. It is reported here because
+the measurement is the measurement; it is not touched by this change,
+because it is a declaration about AOT compatibility and not a package
+scope.
+
+#### The severity table does not switch the cost off
+
+This is the fact that decides the shape of the whole thing, and it is
+measured, not assumed.
+
+The compiler's report attributes **45.5 seconds of the build** to
+`Microsoft.VisualStudio.Threading.Analyzers.VSTHRD010MainThreadUsageAnalyzer`
+— and `dotnet_diagnostic.VSTHRD010.severity = none` in `.editorconfig`.
+The rule is switched off and the analyzer runs anyway, in all 62 `src/` and
+`apps/` projects: Roslyn runs the analyzer and drops the diagnostic
+afterwards, and the work is already paid.
+
+So `severity = none` is a way of **not hearing** a rule, not a way of
+**not running** it. A rule that is off still costs its analyzer's time, and
+the only lever that removes the cost is the **scope** — which projects
+reference the package at all.
+
+That is also why the `.editorconfig` table and the scope table are two
+different things, and why only the second one is a performance lever.
+
+#### Where the findings are
+
+The other half of the measurement is where the findings are, because a
+family that produces nothing in a tree cannot lose anything by not running
+there. Read out of the build log of the same run, deduplicated by
+file/line/column:
+
+| family | findings | under `tests/` | under `src/` + `apps/` |
+|--------|----------|----------------|----------------------|
+| `SonarAnalyzer.CSharp` | 324 | **324** | 0 |
+| `ReflectionAnalyzers` | 48 | **48** | 0 |
+| `Roslynator.Analyzers` | 3 | **3** | 0 |
+| `DependencyInjection.Lifetime.Analyzers` | 2 | **2** | 0 |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 4 | 4 | 0 |
+| `Microsoft.CodeAnalysis.NetAnalyzers`, `Meziantou.Analyzer`, `AsyncFixer`, `CSharpFunctionalExtensions.Analyzers`, `Microsoft.VisualStudio.Threading.Analyzers`, `Excubo…` | 0 | 0 | 0 |
+
+**Every analyzer finding in the tree is under `tests/`.** The product tree
+is analyzer-clean — and it is clean *because* the analyzers gate it
+(`TreatWarningsAsErrors=true` turns a warning there into a build error),
+so "0 findings" in the product tree means "the gate has never fired", not
+"the analyzer is silent".
+
+#### The narrowing
+
+| family | was | is | why |
+|--------|-----|-----|-----|
+| `SonarAnalyzer.CSharp` | everywhere | `tests/` | 204.1 s, the most expensive family in the tree, and all 324 of its findings are under `tests/`. The product tree has produced none since the licence decision (#2030 measured the same split a month earlier). |
+| `DependencyInjection.Lifetime.Analyzers` | everywhere | `src/` + `apps/` | The DI rules are the **composition root's** gate: DI003, DI013, DI015, DI017 and DI019 are errors, and the registrations they are about live in `src/Harbor.Hosting/Modules` and the two `apps/` roots. A test project has no registration of its own to be wrong about. |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | everywhere | `src/` + `apps/` | RS0030 is `NoWarn`ed under any project whose path contains `tests` or `samples`, so it produced **nothing** there. The dynamic-code ban and the "What NOT to do" list stay enforced exactly where they are enforced today. |
+| `CSharpFunctionalExtensions.Analyzers` | everywhere | `src/` + `apps/` | CFE0001 is `NoWarn`ed under any project whose path contains `tests` or `samples` — 174 sites, every one of them suppressed. The ROP-001 guard (a `.Value` on a failed `Result<T>`) stays where `Result<T>` is used in shipped code. |
+| `AsyncFixer` | everywhere | `src/` + `apps/` | All five of its rules are at `suggestion`, which `TreatWarningsAsErrors` does not promote: the package **cannot fail a build in any tree**, and it produced no finding in any of them. It is kept where the shipped code is. |
+
+Nothing else moved. `Roslynator.Analyzers`,
+`Microsoft.CodeAnalysis.NetAnalyzers`, `Meziantou.Analyzer`,
+`ReflectionAnalyzers`, `DotNetProjectFile.Analyzers`,
+`Microsoft.CodeAnalysis.PublicApiAnalyzers` and
+`Microsoft.VisualStudio.Threading.Analyzers` keep the scope they had, and
+the reasons are in the table above: either the family fires in the product
+tree, or it is the base layer, or its cost is below the noise of the
+measurement.
+
+#### What the narrowing costs, stated plainly
+
+**Narrowing Sonar to `tests/` removes Sonar's 447 preventive rules from the
+product tree.** The product tree produced none of them, so no finding is
+lost — but a rule that would have caught a new defect in product code will
+not catch it any more. That is a change to the build contract, and it is
+written down as one. It is one row in
+[`tools/analyzer-scope.json`](../tools/analyzer-scope.json), so it is one
+line to revert.
+
+The alternative — narrowing Sonar to the product tree instead — would have
+saved less and would have thrown away all 324 findings, which are the
+reason the package is worth its cost in the first place.
+
+#### The gate
+
+[`tools/check-analyzer-scope.py`](../tools/check-analyzer-scope.py) reads
+[`tools/analyzer-scope.json`](../tools/analyzer-scope.json) — the one
+source of truth for where every family runs — and fails when the tree says
+anything else:
+
+| rule | what it catches |
+|------|-----------------|
+| `SCOPE-DRIFT` | the trees a family runs in differ from the trees the table declares |
+| `DECLARATION-SITE` | a family is declared in a file the table does not name |
+| `NO-CONDITION` | a family is declared without the switch that turns it off |
+| `UNDECLARED-ANALYZER` | a package that looks like an analyzer is referenced and is not in the table |
+| `MISSING-PIN` | a family in the table has no `<PackageVersion>` |
+| `ORPHAN-SWITCH` | a scope file switches a property no family owns |
+| `STALE-ROW` | a family in the table is not declared anywhere |
+
+Its `--self-test` plants every shape of drift and asserts the gate names
+it, and the false-positive controls are in it too: a package that is not an
+analyzer is not reported, and a comment that names an analyzer package is
+not a declaration.
+
+Without the gate nothing would complain when a family was declared in the
+root props file again: the build stays green, the findings stay the same,
+and only the wall time grows.
 
 ### Checked and rejected candidates
 
