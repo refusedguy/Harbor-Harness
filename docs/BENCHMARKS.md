@@ -1828,24 +1828,43 @@ change), 2026-10-20:
 | `TokenCellSingleHomeRules` | 28.8 s | 28.9 s | a text scan of the product trees against three regexes — one test, so the class's parallelism is 1.00 by construction |
 | `ApprovalGateWaiterRaceRules` | 19.1 s | 38.5 s | a text scan of the whole test tree, twice |
 
-**After** — run 39418488276 (`test/1791-shared-tree-snapshot`, the same tree
-plus the change), 2026-10-20:
+**After** — two runs of the same tree plus the change, 2026-10-20: 39418488276
+and 39421786081.
 
-| class | span | sum of durations |
-|---|---:|---:|
-| `PanelKeyRouteReachabilityRule` | 58.6 s | 235.2 s |
-| `ProcessEnvIsolationRule` | **1.9 s** | **11.4 s** |
-| `PilotRoslynAnalyzerTests` | 51.4 s | 94.2 s |
-| `TokenCellSingleHomeRules` | 42.2 s | 42.2 s |
-| `ApprovalGateWaiterRaceRules` | 12.6 s | 25.2 s |
-| `SharedSourceTreeSnapshotTests` (new) | 41.1 s | 41.5 s |
+| class | span (before) | span (after) | durations (before) | durations (after) |
+|---|---:|---:|---:|---:|
+| `PanelKeyRouteReachabilityRule` | 72.9 s | 58.6 / 58.9 s | 502.8 s | 235.2 / 237.4 s |
+| `ProcessEnvIsolationRule` | 67.9 s | **1.9 / 1.4 s** | 632.2 s | **11.4 / 7.7 s** |
+| `PilotRoslynAnalyzerTests` | 66.2 s | 51.4 / 55.4 s | 169.6 s | 94.2 / 110.4 s |
+| `TokenCellSingleHomeRules` | 28.8 s | 42.2 / 39.5 s | 28.9 s | 42.2 / 39.7 s |
+| `ApprovalGateWaiterRaceRules` | 19.1 s | 12.6 / 15.1 s | 38.5 s | 25.2 / 30.4 s |
+| `SharedSourceTreeSnapshotTests` (new) | — | 41.1 / 44.1 s | — | 41.5 / 44.1 s |
 
-| project | before | after |
+| project | before (1 run) | after (2 runs) |
 |---|---:|---:|
 | tests | 987 | 993 (+6: the snapshot's own guard) |
-| sum of durations | 1 693.1 s | **712.1 s** (−58 %) |
-| project wall | 114.5 s | **70.0 s** (−39 %) |
-| parallelism | 14.8× | 10.2× |
+| sum of durations | 1 693.1 s | **712.1 / 769.4 s** (−55 to −58 %) |
+| project wall | 114.5 s | **70.0 / 72.0 s** (−37 to −39 %) |
+| parallelism | 14.8× | 10.2× / 10.7× |
+
+The two "after" runs differ by 8 % of the summed duration and 3 % of the
+wall, so the wall figure is a range and not a single number. The class that
+moves by an order of magnitude — the process-environment rule, 67.9 s →
+1.4–1.9 s — moves by more than the spread between the runs, and it moves for
+a reason a reader can check: the rule re-derived the same answer nine times
+and now derives it once.
+
+Two caveats, stated rather than buried. The "before" wall includes the
+measurement's own serial run at the end of the assembly (27.9 s); the
+"after" includes the guard's 41–44 s, which ran CONCURRENTLY with the
+classes (inside the wall), so it did not extend it — the guard's own work is
+the two comment-strips it does per file, about 2.5 s for the whole project,
+and its REPORTED duration is contention rather than work, because it ran
+alongside six other CPU-bound classes. And the classes that move UP
+(`TokenCellSingleHomeRules` 28.8 → 39.5–42.2 s) move for the same reason
+the ones that move down move: neither rule's work changed, and both are
+scheduled against a queue whose order shifted when nine test-tree parses
+stopped competing for the CPU. The total is what the suite pays.
 
 Two things follow from the phases, measured alone on the "before" tree, and
 they are the whole shape of the fix:
