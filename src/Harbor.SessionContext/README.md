@@ -12,8 +12,8 @@ run records (`IsolatedWorkspace`) — a verbatim extraction from
 `Harbor.Application` (#1624, plan A part 2/4 of the Application decomp split).
 Namespaces are unchanged (`Harbor.Application.Sessions`,
 `Harbor.Application.Skills`), so existing usings keep compiling — same
-backward-compat convention as the earlier verbatim extractions (#1464, #1475,
-#1480, #1613's Hooks move and #1623's AgentRuntime move).
+backward-compat convention as the earlier verbatim extractions
+(#1464, #1475, #1480, #1613's Hooks move and #1623's AgentRuntime move).
 
 ## Public API
 
