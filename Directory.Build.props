@@ -77,6 +77,44 @@
     <ShouldUnsetParentConfigurationAndPlatform>false</ShouldUnsetParentConfigurationAndPlatform>
 
     <!--
+      The second half of the same fix: a project reference STATES the
+      configuration it builds its child in.
+
+      The switch above makes an unmappable reference INHERIT the referencing
+      project's configuration. Inheritance is one channel, and it is not the
+      only one MSBuild uses to decide how a referenced project is built: a
+      reference can also be built through a path that does not carry the
+      parent's Configuration, and then the child falls back to
+      Microsoft.Common.CurrentVersion.targets:149 — Debug.
+
+      Measured on CI run 39407510139 (the run that carried the switch above):
+      src/Harbor.CodeGen was built TWICE — once in Release (the solution's own
+      path) and once in Debug (a second path), and the Debug build's output
+      directory is what the Release build's dependency copies were compared
+      against. The Release build was correct — no Debug-built assembly reached
+      any Release bin — but a project was still being compiled in Debug inside
+      a Release build, which is the defect #1921 is about.
+
+      `SetConfiguration` is the metadata MSBuild's own
+      Microsoft.Common.CurrentVersion.targets:2150 passes to the MSBuild call
+      that builds a referenced project, so setting it here makes the child's
+      configuration an EXPLICIT global property instead of an inherited one:
+      the child is built in the configuration of the build that asks for it,
+      whichever path asks.
+
+      The default applies to every <ProjectReference> in the repository. A
+      reference to a project that IS a row of Harbor.slnx is unaffected: the
+      solution's own configuration map overwrites this metadata for it
+      (AssignProjectConfiguration.SetMetadata), and the solution's map is the
+      authority there.
+    -->
+  <ItemDefinitionGroup>
+    <ProjectReference>
+      <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+
+    <!--
       Feature-flag defaults (see Harbor.Hosting.csproj F2.2 plumbing).
 
       The HarborWith* properties used to be defined ONLY inside apps/*.csproj,

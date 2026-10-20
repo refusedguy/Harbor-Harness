@@ -44,19 +44,39 @@
 // false in the root `Directory.Build.props`, so an unmappable reference
 // inherits the configuration of the project that references it.
 //
+// INHERITANCE IS NOT THE ONLY CHANNEL
+// -----------------------------------
+// CI run 39407510139 carried that switch, and it moved the three projects to
+// Release — but it ALSO showed that inheritance is not the only way MSBuild
+// decides how a referenced project is built: `src/Harbor.CodeGen` was still
+// built a second time, in Debug, by a path that did not carry the parent's
+// Configuration. The Release OUTPUT was correct in that run (no Debug-built
+// assembly reached any Release bin), but a project was still compiled in Debug
+// inside a Release build, which is the defect this issue is about.
+//
+// The second half of the fix therefore STATES the configuration instead of
+// inheriting it: the root `Directory.Build.props` gives every
+// `<ProjectReference>` a `SetConfiguration` of `Configuration=$(Configuration)`,
+// which is the metadata
+// Microsoft.Common.CurrentVersion.targets:2150 passes to the MSBuild call that
+// builds a referenced project. The child's configuration becomes an explicit
+// global property, so whichever path asks for the child, the child is built in
+// the configuration of the build that asks.
+//
 // WHY THIS FILE IS NOT A TABLE OF KNOWN OFFENDERS
 // ----------------------------------------------
 // The defect is a property of the BUILD GRAPH, not of three names: any project
-// that reaches the graph without a solution row inherits it, and any row-less
-// project that appears later inherits it too. So the claim here is computed
-// from the same graph CI builds — the solution's rows closed over
+// that reaches the graph without a solution row inherits the defect, and any
+// row-less project that appears later inherits it too. So the claim here is
+// computed from the same graph CI builds — the solution's rows closed over
 // `<ProjectReference>` — and the answer for each edge is read out of the
 // properties that actually decide it.
 //
 // Two claims, one file:
 //
 //   1. Every project the Release build pulls in through a `<ProjectReference>`
-//      is built in the solution's configuration. (The mechanism.)
+//      is built in the configuration of the build that asks for it. (The
+//      mechanism.)
 //   2. No Release output directory contains a copy of a project's own Debug
 //      output. (The symptom, read off the build's own artefacts rather than
 //      modelled.)
@@ -96,11 +116,11 @@
 //      the rule has no subject).
 //   2. `TheConfigurationPredicateAnswersTheDeclaredQuestion` — a positive
 //      control over a FIXED, filesystem-free table feeding the SAME predicate
-//      the live test uses. The table plants a row-less child behind an
-//      opted-out parent (must stay quiet), the same child behind a parent that
-//      did not opt out (must be reported), and a child that IS a row (must
-//      never be reported). A predicate that had quietly halved itself fails
-//      here rather than passing on the live tree.
+//      the live test uses. The table plants a row-less child behind a parent
+//      that neither states nor inherits its configuration (must be reported),
+//      the same child behind a parent that does (must stay quiet), and a child
+//      that IS a row (must never be reported). A predicate that had quietly
+//      halved itself fails here rather than passing on the live tree.
 //   3. `TheCopyPredicateAnswersTheDeclaredQuestion` — the same for the byte
 //      comparison: a Release output holding a byte-identical copy of a Debug
 //      output must be reported, and a Release output holding different bytes
@@ -120,7 +140,7 @@ using System.Security.Cryptography;
 using System.Xml.Linq;
 
 /// <summary>
-///     The MSBuild switch that decides whether a reference the solution cannot
+///     The MSBuild machinery that decides whether a reference the solution cannot
 ///     map inherits the referencing project's configuration.
 /// </summary>
 internal static class ReleaseConfigurationProbe
@@ -140,38 +160,91 @@ internal static class ReleaseConfigurationProbe
     /// </summary>
     /// <param name="Parent">The referencing project (absolute csproj path).</param>
     /// <param name="Child">The referenced project (absolute csproj path).</param>
-    internal readonly record struct Edge(string Parent, string Child);
+    /// <param name="StatesConfiguration">
+    ///     Whether the reference itself says which configuration it builds the
+    ///     child in (<c>SetConfiguration</c> metadata).
+    /// </param>
+    internal readonly record struct Edge(string Parent, string Child, bool StatesConfiguration);
 
     /// <summary>
-    ///     The effective value of <see cref="OptOutProperty" /> for a project.
+    ///     What a project's build policy says about the configuration of the
+    ///     projects it references.
+    /// </summary>
+    /// <param name="OptOut">
+    ///     The effective <see cref="OptOutProperty" /> value, or <c>null</c> when
+    ///     nothing sets it (MSBuild's own default for a solution build is
+    ///     <c>true</c>, which unsets the configuration).
+    /// </param>
+    /// <param name="StatesReferenceConfiguration">
+    ///     Whether the project's props give every <c>&lt;ProjectReference&gt;</c>
+    ///     an explicit <c>SetConfiguration</c>.
+    /// </param>
+    internal readonly record struct PropsFacts(string? OptOut, bool StatesReferenceConfiguration);
+
+    /// <summary>
+    ///     The build policy of one project: what its props chain says about the
+    ///     configuration of the projects it references.
+    /// </summary>
+    internal static PropsFacts ReadProps(string csprojPath, string root)
+    {
+        string? projectDir = Path.GetDirectoryName(csprojPath);
+        PropsFacts chain = projectDir is null
+            ? new PropsFacts(null, false)
+            : ReadPropsChain(projectDir, root);
+
+        // The project body is evaluated after Directory.Build.props, so a value
+        // set in the csproj wins over the props chain.
+        string? fromProject = ReadPropertyValue(csprojPath, OptOutProperty);
+
+        return new PropsFacts(fromProject ?? chain.OptOut, chain.StatesReferenceConfiguration);
+    }
+
+    /// <summary>
+    ///     Every <c>&lt;ProjectReference&gt;</c> a csproj declares, with the
+    ///     child's absolute path and whether the reference states the
+    ///     configuration it builds the child in.
     /// </summary>
     /// <remarks>
-    ///     <para>
-    ///         A project body is evaluated AFTER <c>Directory.Build.props</c>, so a
-    ///         value set in the csproj wins over the props chain; and the props chain
-    ///         itself is the nearest <c>Directory.Build.props</c> at or above the
-    ///         project directory, evaluated in document order with its imports of
-    ///         <c>Directory.Build.props</c> followed where they appear.
-    ///     </para>
-    ///     <para>
-    ///         A <c>Condition</c> is not consulted — the same over-approximation
-    ///         <c>BuildGraphProbe.DeclaredReferences</c> makes for
-    ///         <c>&lt;ProjectReference&gt;</c> items, and for the same reason: a
-    ///         conditional that reads <c>false</c> in the live tree still says the
-    ///         author did not want the value to be unconditional.
-    ///     </para>
+    ///     A <c>Condition</c> is not consulted — the same over-approximation
+    ///     <c>BuildGraphProbe.DeclaredReferences</c> makes, and for the same
+    ///     reason: a conditional that reads <c>false</c> in the live tree still
+    ///     says the author did not want the value to be unconditional.
     /// </remarks>
-    /// <returns>The value, or <c>null</c> when nothing sets it.</returns>
-    internal static string? EffectiveOptOut(string csprojPath, string root)
+    internal static IReadOnlyList<(string Child, bool StatesConfiguration)> DeclaredReferences(string csprojPath)
     {
-        string? fromProject = ReadPropertyValue(csprojPath, OptOutProperty);
-        if (fromProject is not null)
+        try
         {
-            return fromProject;
-        }
+            string projectDir = Path.GetDirectoryName(csprojPath)!;
+            var result = new List<(string, bool)>();
 
-        string? projectDir = Path.GetDirectoryName(csprojPath);
-        return projectDir is null ? null : ReadPropsChain(projectDir, root);
+            foreach (XElement element in XDocument.Load(csprojPath, LoadOptions.None).Descendants())
+            {
+                if (!string.Equals(element.Name.LocalName, "ProjectReference", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                string? include = element.Attribute("Include")?.Value;
+                if (string.IsNullOrWhiteSpace(include))
+                {
+                    continue;
+                }
+
+                bool states = element.Elements()
+                    .Any(e => string.Equals(e.Name.LocalName, "SetConfiguration", StringComparison.Ordinal));
+
+                string child = Path.GetFullPath(
+                    Path.Combine(projectDir, include.Replace('\\', Path.DirectorySeparatorChar)));
+
+                result.Add((child, states));
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
+        {
+            return [];
+        }
     }
 
     /// <summary>
@@ -180,23 +253,23 @@ internal static class ReleaseConfigurationProbe
     /// <remarks>
     ///     These are exactly the edges MSBuild cannot map onto the solution's
     ///     configuration table, and therefore exactly the edges whose child is
-    ///     built in its own default configuration unless something opts out of
-    ///     the unset.
+    ///     built in its own default configuration unless something says
+    ///     otherwise.
     /// </remarks>
     internal static IReadOnlyList<Edge> EdgesWithoutSolutionRow(
         IReadOnlyList<string> solutionRows,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> declaredEdges)
+        IReadOnlyDictionary<string, IReadOnlyList<(string Child, bool StatesConfiguration)>> declaredEdges)
     {
         var rows = new HashSet<string>(solutionRows, StringComparer.Ordinal);
         var result = new List<Edge>();
 
-        foreach ((string parent, IReadOnlyList<string> children) in declaredEdges)
+        foreach ((string parent, IReadOnlyList<(string Child, bool StatesConfiguration)> children) in declaredEdges)
         {
-            foreach (string child in children)
+            foreach ((string child, bool states) in children)
             {
                 if (!rows.Contains(child))
                 {
-                    result.Add(new Edge(parent, child));
+                    result.Add(new Edge(parent, child, states));
                 }
             }
         }
@@ -205,24 +278,26 @@ internal static class ReleaseConfigurationProbe
     }
 
     /// <summary>
-    ///     The unmappable edges whose parent did NOT opt out of the unset — the
-    ///     edges along which a project is built in the wrong configuration.
+    ///     The unmappable edges whose child is left to MSBuild's default
+    ///     configuration — the edges along which a project is built in the wrong
+    ///     configuration.
     /// </summary>
     /// <param name="edges">Every edge of the graph.</param>
-    /// <param name="isOptedOut">
-    ///     Answers whether a parent project inherits its configuration into the
-    ///     references it cannot map. <c>null</c> means "nothing says so", which is
-    ///     the unprotected case: MSBuild's own default is to unset.
+    /// <param name="protects">
+    ///     Answers whether the parent keeps the child's configuration pinned to
+    ///     the parent's own: either the reference STATES it, or the parent's
+    ///     props opt out of MSBuild's unset so the child INHERITS it.
     /// </param>
     internal static IReadOnlyList<Edge> UnprotectedEdges(
         IEnumerable<Edge> edges,
-        Func<string, bool?> isOptedOut)
+        Func<string, bool?> protects)
     {
         var result = new List<Edge>();
 
         foreach (Edge edge in edges)
         {
-            if (isOptedOut(edge.Parent) != true)
+            bool? inherited = protects(edge.Parent);
+            if (inherited != true && !edge.StatesConfiguration)
             {
                 result.Add(edge);
             }
@@ -304,23 +379,24 @@ internal static class ReleaseConfigurationProbe
     }
 
     /// <summary>
-    ///     The value the props chain gives a project directory, following imports
-    ///     of <c>Directory.Build.props</c> where they appear.
+    ///     The build policy the props chain gives a project directory, following
+    ///     imports of <c>Directory.Build.props</c> where they appear.
     /// </summary>
-    private static string? ReadPropsChain(string projectDir, string root) =>
+    private static PropsFacts ReadPropsChain(string projectDir, string root) =>
         EvaluateProps(
             NearestProps(projectDir, root, excludeSelf: false),
             root,
             new HashSet<string>(StringComparer.Ordinal));
 
-    private static string? EvaluateProps(string? propsPath, string root, HashSet<string> visiting)
+    private static PropsFacts EvaluateProps(string? propsPath, string root, HashSet<string> visiting)
     {
         if (propsPath is null || !visiting.Add(propsPath))
         {
-            return null;
+            return new PropsFacts(null, false);
         }
 
         string? value = null;
+        bool states = false;
 
         try
         {
@@ -341,11 +417,9 @@ internal static class ReleaseConfigurationProbe
                         // above the importing file's own directory.
                         string? parent = NearestProps(
                             Path.GetDirectoryName(propsPath)!, root, excludeSelf: true);
-                        string? importedValue = EvaluateProps(parent, root, visiting);
-                        if (importedValue is not null)
-                        {
-                            value = importedValue;
-                        }
+                        PropsFacts importedFacts = EvaluateProps(parent, root, visiting);
+                        value = importedFacts.OptOut ?? value;
+                        states = states || importedFacts.StatesReferenceConfiguration;
                     }
 
                     continue;
@@ -360,6 +434,22 @@ internal static class ReleaseConfigurationProbe
                             value = property.Value.Trim();
                         }
                     }
+
+                    continue;
+                }
+
+                if (string.Equals(element.Name.LocalName, "ItemDefinitionGroup", StringComparison.Ordinal))
+                {
+                    foreach (XElement definition in element.Elements())
+                    {
+                        if (!string.Equals(definition.Name.LocalName, "ProjectReference", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        states = states || definition.Elements().Any(
+                            e => string.Equals(e.Name.LocalName, "SetConfiguration", StringComparison.Ordinal));
+                    }
                 }
             }
         }
@@ -370,7 +460,7 @@ internal static class ReleaseConfigurationProbe
         }
 
         visiting.Remove(propsPath);
-        return value;
+        return new PropsFacts(value, states);
     }
 
     /// <summary>
@@ -411,9 +501,9 @@ internal static class ReleaseConfigurationProbe
 
 /// <summary>
 ///     Asserts that every project a Release build pulls in is built in the
-///     solution's configuration, and that no Debug-built assembly reaches a
-///     Release output directory. See the file header for the measurement, the
-///     mechanism and the non-vacuity argument.
+///     configuration of the build that asks for it, and that no Debug-built
+///     assembly reaches a Release output directory. See the file header for the
+///     measurement, the mechanism and the non-vacuity argument.
 /// </summary>
 public sealed class ReleaseBuildConfigurationRule
 {
@@ -443,13 +533,23 @@ public sealed class ReleaseBuildConfigurationRule
         IReadOnlyList<string> disk = BuildGraphProbe.DiskCsprojs(root);
         IReadOnlyList<string> rows = BuildGraphProbe.SolutionRows(root, Path.Combine(root, "Harbor.slnx"));
 
-        var edges = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var edges = new Dictionary<string, IReadOnlyList<(string Child, bool StatesConfiguration)>>(
+            StringComparer.Ordinal);
+
+        // The same graph in the shape BuildGraphProbe.Closure walks: the paths
+        // only, without the metadata this rule reads off each edge.
+        var paths = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+
         foreach (string project in disk)
         {
-            edges[project] = BuildGraphProbe.DeclaredReferences(project);
+            IReadOnlyList<(string Child, bool StatesConfiguration)> references =
+                ReleaseConfigurationProbe.DeclaredReferences(project);
+
+            edges[project] = references;
+            paths[project] = [.. references.Select(r => r.Child)];
         }
 
-        IReadOnlyList<string> closure = [.. BuildGraphProbe.Closure(rows, edges)];
+        IReadOnlyList<string> closure = [.. BuildGraphProbe.Closure(rows, paths)];
 
         // The perimeter: an edge is ours when the PARENT is a project this
         // repository owns. The vendored tree's internal edges are not.
@@ -464,7 +564,7 @@ public sealed class ReleaseBuildConfigurationRule
         [
             .. ReleaseConfigurationProbe.UnprotectedEdges(
                 unmapped,
-                parent => IsOptedOut(parent, root)),
+                parent => Protects(parent, root)),
         ];
 
         (IReadOnlyList<string> debugOutputs, IReadOnlyList<string> copies, int considered) =
@@ -482,13 +582,28 @@ public sealed class ReleaseBuildConfigurationRule
     }
 
     /// <summary>
-    ///     Does this parent project inherit its configuration into the references
-    ///     the solution cannot map?
+    ///     Does this parent keep the configuration of the projects it references
+    ///     pinned to its own?
     /// </summary>
-    private static bool? IsOptedOut(string parentCsproj, string root)
+    /// <remarks>
+    ///     Two ways, and the fix for #1921 uses both: the parent's props opt out
+    ///     of MSBuild's unset (so an unmappable reference INHERITS the parent's
+    ///     configuration), and the repository's props give every reference an
+    ///     explicit <c>SetConfiguration</c> (so the child's configuration is
+    ///     STATED rather than inherited, whichever path builds it).
+    /// </remarks>
+    private static bool? Protects(string parentCsproj, string root)
     {
-        string? value = ReleaseConfigurationProbe.EffectiveOptOut(parentCsproj, root);
-        return value is null ? null : string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+        ReleaseConfigurationProbe.PropsFacts facts = ReleaseConfigurationProbe.ReadProps(parentCsproj, root);
+
+        if (facts.StatesReferenceConfiguration)
+        {
+            return true;
+        }
+
+        return facts.OptOut is null
+            ? null
+            : string.Equals(facts.OptOut, "false", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -499,16 +614,21 @@ public sealed class ReleaseBuildConfigurationRule
         IReadOnlyList<string> closure,
         string root)
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // The assembly each project of the closure produces.
+        var ownNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (string project in closure)
         {
             string projectDir = Path.GetFileName(Path.GetDirectoryName(project) ?? string.Empty);
-            names.Add(RepoPaths.ReadAssemblyName(project, projectDir));
+            ownNames[project] = RepoPaths.ReadAssemblyName(project, projectDir);
         }
 
-        // 1. What the graph's own projects produced under bin/Debug. The same
-        //    file appears once per dependent that copied it, so the blobs are
-        //    deduplicated by content — the comparison below is on bytes anyway.
+        var names = new HashSet<string>(ownNames.Values, StringComparer.OrdinalIgnoreCase);
+
+        // 1. What the graph's own projects produced under bin/Debug — THEIR OWN
+        //    assembly only. A Debug output directory also holds COPIES of the
+        //    project's dependencies (built in Release, and therefore byte-identical
+        //    to the copies in every Release bin), and those are not a Debug build
+        //    of anything: comparing them would report the fixed tree as broken.
         var debugOutputs = new List<(string Name, byte[] Bytes)>();
         var debugPaths = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -523,9 +643,16 @@ public sealed class ReleaseBuildConfigurationRule
                 continue;
             }
 
-            foreach (string file in Directory.EnumerateFiles(debugRoot, "*.dll", SearchOption.AllDirectories))
+            string assemblyName = ownNames[project];
+            string ownFile = assemblyName + ".dll";
+
+            foreach (string file in Directory.EnumerateFiles(debugRoot, ownFile, SearchOption.AllDirectories))
             {
-                if (!names.Contains(Path.GetFileNameWithoutExtension(file)))
+                // obj/ref/<tfm>/ holds the REFERENCE assembly, which is a
+                // different file from the one the build ships.
+                if (file.Contains(
+                        $"{Path.DirectorySeparatorChar}ref{Path.DirectorySeparatorChar}",
+                        StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -614,11 +741,11 @@ public sealed class ReleaseBuildConfigurationRule
 
     /// <summary>
     ///     Every project the Release build pulls in through a
-    ///     <c>&lt;ProjectReference&gt;</c> must be built in the solution's
-    ///     configuration.
+    ///     <c>&lt;ProjectReference&gt;</c> must be built in the configuration of
+    ///     the build that asks for it.
     /// </summary>
     [Test]
-    public async Task EveryProjectTheReleaseBuildPullsIn_IsBuiltInTheSolutionConfiguration()
+    public async Task EveryProjectTheReleaseBuildPullsIn_IsBuiltInTheSolutionsConfiguration()
     {
         await Assert.That(RepoPaths.RepoRoot).IsNotNull()
             .Because("this rule walks a checkout; outside one the graph is empty and every assertion "
@@ -627,19 +754,22 @@ public sealed class ReleaseBuildConfigurationRule
         GraphReport report = Report.Value;
         IReadOnlyList<ReleaseConfigurationProbe.Edge> unprotected = report.UnprotectedEdges;
 
-        await Assert.That(string.Join(" | ", Describe(unprotected)))
+        await Assert.That(Join(unprotected))
             .IsEqualTo(string.Empty)
             .Because(
-                "these edges point at a project that is not a row of Harbor.slnx, from a parent that did "
-                + "not opt out of MSBuild's unset. MSBuild cannot map such a reference onto the "
-                + "solution's configuration table, so it removes Configuration and Platform from the "
-                + "child's global properties (dotnet/msbuild AssignProjectConfiguration.cs; "
+                "these edges point at a project that is not a row of Harbor.slnx, and nothing keeps the "
+                + "child's configuration pinned to the configuration of the build that asks for it: the "
+                + "reference does not state one, and the parent does not opt out of MSBuild's unset. "
+                + "MSBuild cannot map such a reference onto the solution's configuration table, so it "
+                + "removes Configuration and Platform from the child's global properties "
+                + "(dotnet/msbuild AssignProjectConfiguration.cs; "
                 + "Microsoft.Common.CurrentVersion.targets:1850) and the child then falls back to "
-                + "Microsoft.Common.CurrentVersion.targets:149 — Debug. The child is therefore built "
-                + "in Debug inside a Release build, and its Debug output is what the dependents' "
-                + "Release bin directories receive. The fix is the parent's effective "
-                + "ShouldUnsetParentConfigurationAndPlatform = false, which makes the child inherit "
-                + "the configuration of the project that references it. Unprotected ("
+                + "Microsoft.Common.CurrentVersion.targets:149 — " + ReleaseConfigurationProbe.DefaultConfiguration
+                + ". The child is therefore built in Debug inside a Release build, and its Debug output "
+                + "is what the dependents' Release bin directories receive. The fix is the parent's "
+                + "effective ShouldUnsetParentConfigurationAndPlatform = false (the child INHERITS the "
+                + "parent's configuration) plus a SetConfiguration on every reference (the child's "
+                + "configuration is STATED, whichever path builds it). Unprotected ("
                 + unprotected.Count + "): " + Describe(unprotected)
                 + " | walked " + report.DiskCsprojCount + " csproj, " + report.SolutionRowCount
                 + " solution rows, " + report.ClosureCount + " projects in the closure, "
@@ -659,7 +789,7 @@ public sealed class ReleaseBuildConfigurationRule
         GraphReport report = Report.Value;
         IReadOnlyList<string> copies = report.DebugCopiesInReleaseOutputs;
 
-        await Assert.That(string.Join(" | ", copies))
+        await Assert.That(Join(copies))
             .IsEqualTo(string.Empty)
             .Because(
                 "these files sit in a bin/Release directory and are byte-identical to a project's own "
@@ -717,42 +847,48 @@ public sealed class ReleaseBuildConfigurationRule
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The table plants the three cases that matter: a row-less child behind
-    ///         an opted-out parent (must stay quiet — this is the fixed tree), the
-    ///         same child behind a parent that did not opt out (must be reported —
-    ///         this is the defect), and a child that IS a row (must never be
-    ///         reported — the solution's own mapping decides that one).
+    ///         The table plants the three cases that matter: a row-less child
+    ///         behind a parent that neither states nor inherits the configuration
+    ///         (must be reported — this is the defect), the same child behind a
+    ///         parent that does (must stay quiet — this is the fixed tree), and a
+    ///         child that IS a row (must never be reported — the solution's own
+    ///         mapping decides that one).
     ///     </para>
     ///     <para>
     ///         A predicate that had quietly halved itself — one that stopped
-    ///         looking at edges, or that stopped asking whether the parent opted
-    ///         out — produces a different answer on this table, and that difference
-    ///         is what the assertion below measures.
+    ///         looking at edges, or that stopped asking whether the parent keeps
+    ///         the configuration pinned — produces a different answer on this
+    ///         table, and that difference is what the assertion below measures.
     ///     </para>
     /// </remarks>
     [Test]
     public async Task TheConfigurationPredicateAnswersTheDeclaredQuestion()
     {
         const string row = "/synthetic/src/Harbor.Row/Harbor.Row.csproj";
+        const string inherit = "/synthetic/src/Harbor.Inherit/Harbor.Inherit.csproj";
         const string strict = "/synthetic/src/Harbor.Strict/Harbor.Strict.csproj";
         const string mapped = "/synthetic/src/Harbor.Mapped/Harbor.Mapped.csproj";
         const string unmapped = "/synthetic/src/Harbor.Unmapped/Harbor.Unmapped.csproj";
 
         IReadOnlyList<string> rows = [row, mapped];
 
-        var edges = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+        // `Harbor.Row` STATES the configuration of the child it references;
+        // `Harbor.Inherit` neither states nor inherits but opts out of MSBuild's
+        // unset, so the child inherits; `Harbor.Strict` does neither; and
+        // `Harbor.Mapped` is a row of the solution, so the solution's own
+        // mapping decides its configuration.
+        var edges = new Dictionary<string, IReadOnlyList<(string Child, bool StatesConfiguration)>>(
+            StringComparer.Ordinal)
         {
-            [row] = [unmapped],
-            [strict] = [unmapped],
+            [row] = [(unmapped, true)],
+            [inherit] = [(unmapped, false)],
+            [strict] = [(unmapped, false)],
             [mapped] = [],
         };
 
-        // `Harbor.Row` opted out; `Harbor.Strict` did not; `Harbor.Mapped` is a
-        // row of the solution, so the solution's own mapping decides its
-        // configuration and no opt-out is needed.
-        bool? OptedOut(string parent) => parent switch
+        bool? ParentProtects(string parent) => parent switch
         {
-            row => true,
+            inherit => true,
             strict => false,
             _ => null,
         };
@@ -761,12 +897,12 @@ public sealed class ReleaseBuildConfigurationRule
             ReleaseConfigurationProbe.EdgesWithoutSolutionRow(rows, edges);
 
         IReadOnlyList<ReleaseConfigurationProbe.Edge> unprotected =
-            ReleaseConfigurationProbe.UnprotectedEdges(unmappedEdges, OptedOut);
+            ReleaseConfigurationProbe.UnprotectedEdges(unmappedEdges, ParentProtects);
 
         await Assert.That(string.Join(" | ", unmappedEdges.Select(e => e.Child)))
-            .IsEqualTo(unmapped + " | " + unmapped)
+            .IsEqualTo(unmapped + " | " + unmapped + " | " + unmapped)
             .Because(
-                "the two edges into the row-less child are the edges MSBuild cannot map, and they are "
+                "the three edges into the row-less child are the edges MSBuild cannot map, and they are "
                 + "the whole expected answer. The edge into Harbor.Mapped must NOT be here: a project "
                 + "that IS a row of the solution is configured by the solution's own mapping and is "
                 + "never at risk. Live: "
@@ -775,10 +911,11 @@ public sealed class ReleaseBuildConfigurationRule
         await Assert.That(string.Join(" | ", unprotected.Select(e => e.Parent)))
             .IsEqualTo(strict)
             .Because(
-                "only the parent that did not opt out is reported. If Harbor.Strict is missing, the "
-                + "predicate stopped asking whether the parent opted out and every row-less edge would "
-                + "be reported; if Harbor.Row is here too, the opt-out is being ignored and the fixed "
-                + "tree would fail. Live: "
+                "only the parent that neither states nor inherits the configuration is reported. If "
+                + "Harbor.Strict is missing, the predicate stopped asking whether the parent keeps the "
+                + "configuration pinned and every row-less edge would be reported; if Harbor.Row or "
+                + "Harbor.Inherit is here too, the stated and the inherited configuration are being "
+                + "ignored and the fixed tree would fail. Live: "
                 + (unprotected.Count == 0 ? "(none)" : string.Join(" | ", unprotected.Select(e => e.Parent))));
     }
 
@@ -789,7 +926,7 @@ public sealed class ReleaseBuildConfigurationRule
     [Test]
     public async Task TheCopyPredicateAnswersTheDeclaredQuestion()
     {
-        byte[] debugBytes = [0x44, 0x65, 0x62, 0x75, 0x67];       // "Debug"
+        byte[] debugBytes = [0x44, 0x65, 0x62, 0x75, 0x67];             // "Debug"
         byte[] releaseBytes = [0x52, 0x65, 0x6C, 0x65, 0x61, 0x73, 0x65]; // "Release"
 
         IReadOnlyList<(string Name, byte[] Bytes)> debugOutputs =
@@ -841,6 +978,18 @@ public sealed class ReleaseBuildConfigurationRule
     // =====================================================================
     // 3. Helpers.
     // =====================================================================
+
+    /// <summary>
+    ///     The reported items as one string — the empty string when there are
+    ///     none, so an assertion can compare against it.
+    /// </summary>
+    private static string Join(IReadOnlyList<ReleaseConfigurationProbe.Edge> edges) =>
+        edges.Count == 0
+            ? string.Empty
+            : string.Join(" | ", edges.Select(e => $"{Relative(e.Parent)} -> {Relative(e.Child)}"));
+
+    private static string Join(IReadOnlyList<string> items) =>
+        items.Count == 0 ? string.Empty : string.Join(" | ", items);
 
     private static string Describe(IReadOnlyList<ReleaseConfigurationProbe.Edge> edges) =>
         edges.Count == 0
