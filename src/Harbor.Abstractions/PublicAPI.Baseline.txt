@@ -287,6 +287,8 @@ Harbor.Abstractions.Sessions.ISessionContext :: public interface ISessionContext
 Harbor.Abstractions.Sessions.ISessionPorter :: public Task<Result<string>> ImportAsync(ISessionStore store, TextReader input, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionPorter :: public Task<Result> ExportAsync(ISessionStore store, string sessionId, TextWriter output, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionPorter :: public interface ISessionPorter
+Harbor.Abstractions.Sessions.ISessionQuery :: public Task<Result<SessionQueryResult>> QueryAsync(SessionQueryOptions options, CancellationToken ct = default)
+Harbor.Abstractions.Sessions.ISessionQuery :: public interface ISessionQuery
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
@@ -319,6 +321,36 @@ Harbor.Abstractions.Sessions.ITokenTracker :: void RecordTurnUsage(Usage usage)
 Harbor.Abstractions.Sessions.ITokenTracker :: void RecordUpdatedMessage(AgentMessage message)
 Harbor.Abstractions.Sessions.SessionCheckpoint :: public bool IsRewindTrail
 Harbor.Abstractions.Sessions.SessionCheckpoint :: public sealed record SessionCheckpoint(string Id, string SessionId, string MessageId, int MessageIndex, DateTimeOffset CreatedAt, string? Label, string? RewindOf = null, int Removed = 0)
+Harbor.Abstractions.Sessions.SessionQueryHit :: public sealed record SessionQueryHit(SessionRecordKind Kind, string SessionId, string RecordId, DateTimeOffset Timestamp, string Text, double Score, int MatchPosition, string? Role = null, string? EventType = null)
+Harbor.Abstractions.Sessions.SessionQueryMode :: FullText = 0
+Harbor.Abstractions.Sessions.SessionQueryMode :: Literal = 1
+Harbor.Abstractions.Sessions.SessionQueryMode :: public enum SessionQueryMode
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public IReadOnlyList<SessionRecordKind>? RecordKinds
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public IReadOnlyList<string>? EventTypes
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public IReadOnlyList<string>? Roles
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public IReadOnlyList<string>? SessionIds
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public Result Validate()
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public SessionQueryRank Rank
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public SessionQueryWindow? Window
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public const int MaxLimit = 1000
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public const int MinLimit = 1
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public int Limit
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public int Offset
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public sealed record SessionQueryOptions
+Harbor.Abstractions.Sessions.SessionQueryOptions :: public string? Text
+Harbor.Abstractions.Sessions.SessionQueryRank :: NewestFirst = 2
+Harbor.Abstractions.Sessions.SessionQueryRank :: OldestFirst = 1
+Harbor.Abstractions.Sessions.SessionQueryRank :: Relevance = 0
+Harbor.Abstractions.Sessions.SessionQueryRank :: public enum SessionQueryRank
+Harbor.Abstractions.Sessions.SessionQueryResult :: public sealed record SessionQueryResult(IReadOnlyList<SessionQueryHit> Hits, int TotalMatches, bool Truncated, SessionQueryMode Mode, IReadOnlyList<SessionRecordKind> SupportedKinds)
+Harbor.Abstractions.Sessions.SessionQueryWindow :: public bool Contains(DateTimeOffset instant)
+Harbor.Abstractions.Sessions.SessionQueryWindow :: public bool IsEmpty
+Harbor.Abstractions.Sessions.SessionQueryWindow :: public sealed record SessionQueryWindow(DateTimeOffset? From, DateTimeOffset? To)
+Harbor.Abstractions.Sessions.SessionQueryWindow :: public static SessionQueryWindow Unbounded
+Harbor.Abstractions.Sessions.SessionRecordKind :: Event = 2
+Harbor.Abstractions.Sessions.SessionRecordKind :: Message = 1
+Harbor.Abstractions.Sessions.SessionRecordKind :: Session = 0
+Harbor.Abstractions.Sessions.SessionRecordKind :: public enum SessionRecordKind
 Harbor.Abstractions.Sessions.SessionRewindOutcome :: public sealed record SessionRewindOutcome(string CheckpointId, string MessageId, int Removed, int Remaining)
 Harbor.Abstractions.Sessions.SkillDescriptor :: public sealed record SkillDescriptor(string Name, string Description, string FilePath)
 Harbor.Abstractions.Sessions.SystemPromptContext :: public sealed record SystemPromptContext(AgentDefinition Agent, ModelInfo Model, IReadOnlyList<ToolDescriptor> Tools, IReadOnlyList<ContextFile> ContextFiles, IReadOnlyList<SkillDescriptor> Skills, string? McpInstructions, string WorkingDirectory)
