@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      Build-time only. This project is a Roslyn component: it is consumed as an
+      ANALYZER by Harbor.TestKit (OutputItemType=Analyzer) and never as a runtime
+      library. It ships no code to any consumer.
+    -->
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <IsRoslynComponentPackage>true</IsRoslynComponentPackage>
+    <RoslynComponent>Harbor.TestKit.Generators</RoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <Description>Roslyn source generator that emits concrete test doubles for the interfaces Harbor.TestKit opts into (issue #1769).</Description>
+    <!--
+      RS1041 (nullability of the generator's own surface) and S1944 (the
+      "initialize a field to its default" pattern the emitted code uses) are
+      suppressed for the same reason src/Harbor.CodeGen suppresses them.
+    -->
+    <NoWarn>$(NoWarn);RS1041;S1944</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      PrivateAssets=all: the analyzer runs inside the compiler, which already
+      hosts Roslyn. Nothing flows to consumers, and the generated code carries
+      no Roslyn dependency at run time.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
+  </ItemGroup>
+
+</Project>

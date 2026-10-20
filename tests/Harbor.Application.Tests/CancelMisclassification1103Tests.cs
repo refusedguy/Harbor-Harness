@@ -17,6 +17,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System.Threading.Channels;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
+
+// #1769: the tool double is generated — the fake only declares what it needs.
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -243,24 +247,18 @@ public class CancelMisclassification1103Tests
     }
 
     /// <summary>Probe tool: records whether the gate ever let it execute.</summary>
-    private sealed class GateProbeTool : ITool
+    private sealed class GateProbeTool : FakeToolBase
     {
         public bool Executed;
 
-        public ToolName Name => ToolName.Create("gateprobe");
+        public GateProbeTool()
+        {
+            Name = ToolName.Create("gateprobe");
+            DisplayName = "GateProbe";
+            Description = "Probe.";
+        }
 
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "GateProbe";
-        public string Description => "Probe.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
+        public override Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
         {
             Executed = true;
             return Task.FromResult(ToolResult.Success("probe"));

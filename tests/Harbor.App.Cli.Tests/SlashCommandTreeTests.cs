@@ -9,6 +9,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.TestKit;
+// #1769: the store double is generated (a concrete class per interface) — the
+// hand-written member-by-member fake is gone.
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore;
+
 
 namespace Harbor.App.Cli.Tests;
 
@@ -18,39 +22,26 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashCommandTreeTests
 {
-    private sealed class FakeStore : ISessionStore
+    /// <summary>
+    ///     The store the tree flow reads. The members the flow does NOT touch
+    ///     keep the generated default — a loud "not configured" failure — so the
+    ///     fake declares only what the tree flow actually reads.
+    /// </summary>
+    private sealed class FakeStore : FakeSessionStoreBase
     {
         public readonly Dictionary<string, Session> Sessions = [];
 
+        public FakeStore() => DeleteAsyncResult = Result.Success();
+
         public void Add(Session session) => Sessions[session.Id] = session;
 
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
+        public override Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
             Task.FromResult(Result.Success<IReadOnlyList<Session>>([.. Sessions.Values]));
 
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
+        public override Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
             Task.FromResult(Sessions.TryGetValue(sessionId, out var s)
                 ? Result.Success(s)
                 : Result.Failure<Session>($"Session '{sessionId}' not found."));
-
-        // Unused by the tree flow — fail loudly if the runner starts touching them.
-        public Task<Result<Session>> CreateAsync(
-            string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /tree tests.");
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) => Task.FromResult(Result.Success());
     }
 
     private static Session Make(string id, string title, DateTimeOffset createdAt, string? parent = null) =>

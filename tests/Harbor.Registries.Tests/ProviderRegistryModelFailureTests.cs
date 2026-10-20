@@ -6,6 +6,9 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
+// #1769: the LLM double is generated — the fake only declares what it needs.
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+
 
 namespace Harbor.Registries.Tests;
 
@@ -17,32 +20,20 @@ namespace Harbor.Registries.Tests;
 /// </summary>
 public class ProviderRegistryModelFailureTests
 {
-    private sealed class StubCatalogClient : ILlmClient
+    private sealed class StubCatalogClient : FakeLlmClientBase
     {
-        private readonly Result<IReadOnlyList<ModelInfo>> _modelsResult;
-
         public StubCatalogClient(ProviderId providerId, Result<IReadOnlyList<ModelInfo>> modelsResult)
         {
             ProviderId = providerId;
-            _modelsResult = modelsResult;
+            GetModelsAsyncResult = modelsResult;
         }
-
-        public ProviderId ProviderId { get; }
 
         public int ModelCalls { get; private set; }
 
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+        public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
         {
             ModelCalls++;
-            return Task.FromResult(_modelsResult);
+            return Task.FromResult(GetModelsAsyncResult);
         }
     }
 
@@ -50,7 +41,7 @@ public class ProviderRegistryModelFailureTests
     ///     A client whose model fetch never returns a result — it throws. Used by
     ///     the #588 tests to reach the fan-out's two catch blocks.
     /// </summary>
-    private sealed class ThrowingCatalogClient : ILlmClient
+    private sealed class ThrowingCatalogClient : FakeLlmClientBase
     {
         private readonly Func<Exception> _throw;
 
@@ -60,17 +51,7 @@ public class ProviderRegistryModelFailureTests
             _throw = throwFactory;
         }
 
-        public ProviderId ProviderId { get; }
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+        public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
             => throw _throw();
     }
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -8,6 +7,12 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries.Providers;
 using Harbor.Registries.Tools;
+
+// #1769: the doubles are generated (a concrete class per interface), so the
+// hand-written member-by-member fakes are gone.
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+
 namespace Harbor.Core.Tests;
 public class RegistryTests
 {
@@ -74,50 +79,22 @@ public class RegistryTests
     }
 }
 
-internal sealed class TestTool : ITool
+internal sealed class TestTool : FakeToolBase
 {
-
     public TestTool(string name, string description)
     {
         Name = ToolName.Create(name);
         DisplayName = name;
         Description = description;
+        ExecuteAsyncValue = ToolResult.Success("test output");
     }
-    public ToolName Name { get; }
-
-    /// <inheritdoc />
-    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    public string DisplayName { get; }
-    public string Description { get; }
-    public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("{}");
-    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-    public string? PromptSnippet => null;
-    public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-    public Task<ToolResult> ExecuteAsync(
-        JsonElement args,
-        ToolContext context,
-        CancellationToken cancellationToken = default) => Task.FromResult(ToolResult.Success("test output"));
 }
 
-internal sealed class TestLlmClient : ILlmClient
+internal sealed class TestLlmClient : FakeLlmClientBase
 {
-
     public TestLlmClient(string id)
     {
         ProviderId = ProviderId.Create(id);
-    }
-    public ProviderId ProviderId { get; }
-
-    public IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        CancellationToken cancellationToken = default) => AsyncEnumerable.Empty<LlmEvent>();
-
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(
-        CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(
-            Array.Empty<ModelInfo>()));
+        GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([]);
     }
 }

@@ -6,6 +6,9 @@ using Harbor.Abstractions.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
+// #1769: the LLM double is generated — the fake only declares what it needs.
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+
 
 namespace Harbor.Registries.Tests;
 
@@ -44,32 +47,20 @@ public class ProviderRegistryCatalogCacheTests
         public override DateTimeOffset GetUtcNow() => _now;
     }
 
-    private sealed class CountingCatalogClient : ILlmClient
+    private sealed class CountingCatalogClient : FakeLlmClientBase
     {
-        private readonly Result<IReadOnlyList<ModelInfo>> _modelsResult;
-
         public CountingCatalogClient(ProviderId providerId, Result<IReadOnlyList<ModelInfo>> modelsResult)
         {
             ProviderId = providerId;
-            _modelsResult = modelsResult;
+            GetModelsAsyncResult = modelsResult;
         }
-
-        public ProviderId ProviderId { get; }
 
         public int ModelCalls { get; private set; }
 
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+        public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
         {
             ModelCalls++;
-            return Task.FromResult(_modelsResult);
+            return Task.FromResult(GetModelsAsyncResult);
         }
     }
 

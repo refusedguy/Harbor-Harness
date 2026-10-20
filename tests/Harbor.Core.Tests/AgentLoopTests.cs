@@ -14,6 +14,9 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
+// #1769: the LLM double is generated — the fake only declares what it needs.
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+
 using Harbor.Registries.Agents;
 using Harbor.Registries.Providers;
 using Harbor.Registries.Tools;
@@ -365,18 +368,18 @@ public class AgentLoopTests
     ///     <see cref="StreamAsync" /> call. <see cref="GetModelsAsync" /> always returns
     ///     <see cref="TestModel" />.
     /// </summary>
-    private sealed class MockLlmClient : ILlmClient
+    private sealed class MockLlmClient : FakeLlmClientBase
     {
         private readonly LlmEvent[] _events;
 
         public MockLlmClient(params LlmEvent[] events)
         {
             _events = events;
+            ProviderId = ProviderId.Create("test");
+            GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([TestModel]);
         }
 
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+        public override async IAsyncEnumerable<LlmEvent> StreamAsync(
             LlmRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -386,9 +389,6 @@ public class AgentLoopTests
                 await Task.Yield();
             }
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel }));
     }
 
 }

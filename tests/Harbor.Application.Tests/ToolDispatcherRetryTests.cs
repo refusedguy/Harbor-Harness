@@ -11,6 +11,9 @@ using Harbor.Application.Resilience;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+// #1769: the permission double is generated — the fake only declares what it needs.
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService;
+
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
@@ -22,21 +25,15 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ToolDispatcherRetryTests
 {
-    private sealed class AllowPermissions : IPermissionService
+    private sealed class AllowPermissions : FakePermissionServiceBase
     {
-        public Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args, CancellationToken ct = default,
-            string? invocationId = null, int generation = 1) =>
-            Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
-
-        public Task<Result<PermissionResponse>> AskUserAsync(
-            PermissionRequest request, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Deny, false)));
-
-        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
-
-        public Task<Result> SaveAsync(CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
+        public AllowPermissions()
+        {
+            CheckAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Allow, false));
+            AskUserAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Deny, false));
+            GetRulesetValue = PermissionRuleset.Empty;
+            SaveAsyncResult = Result.Success();
+        }
     }
 
     private sealed class FixedDecider(Func<Exception, bool> retryable) : IToolRetryDecider

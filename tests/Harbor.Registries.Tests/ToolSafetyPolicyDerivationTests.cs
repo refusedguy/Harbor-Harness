@@ -7,6 +7,9 @@ using System.Text.Json;
 using TUnit.Assertions;
 using Harbor.Registries.Tools;
 
+// #1769: the tool double is generated — the fake only declares what it needs.
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
+
 namespace Harbor.Registries.Tests;
 
 /// <summary>
@@ -37,66 +40,44 @@ public class ToolSafetyPolicyDerivationTests
     ///     A path-taking write tool invented for this test. It exists in no list
     ///     anywhere in the repository — that is the point.
     /// </summary>
-    private sealed class SyntheticPathWriteTool : ITool
+    private sealed class SyntheticPathWriteTool : FakeToolBase
     {
-        public ToolName Name => ToolName.Create("synthetic_unsafe");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-        public string DisplayName => "Synthetic Path Write";
-
-        public string Description => "Writes a file. Invented to prove the guard is derived.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-            {
-              "type": "object",
-              "properties": {
-                "path":    { "type": "string", "description": "File to write" },
-                "content": { "type": "string", "description": "File content" }
-              },
-              "required": ["path", "content"]
-            }
-            """);
-
-        public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("written"));
+        public SyntheticPathWriteTool()
+        {
+            Name = ToolName.Create("synthetic_unsafe");
+            SafetyProfile = ToolSafetyProfile.Path();
+            DisplayName = "Synthetic Path Write";
+            Description = "Writes a file. Invented to prove the guard is derived.";
+            ParameterSchema = JsonDocument.Parse("""
+                {
+                  "type": "object",
+                  "properties": {
+                    "path":    { "type": "string", "description": "File to write" },
+                    "content": { "type": "string", "description": "File content" }
+                  },
+                  "required": ["path", "content"]
+                }
+                """);
+            ExecutionMode = ExecutionMode.Sequential;
+            ExecuteAsyncValue = ToolResult.Success("written");
+        }
     }
 
     /// <summary>A tool that declares no path argument — the explicit opt-out.</summary>
-    private sealed class SyntheticOpaqueTool : ITool
+    private sealed class SyntheticOpaqueTool : FakeToolBase
     {
-        public ToolName Name => ToolName.Create("synthetic_opaque");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Synthetic Opaque";
-
-        public string Description => "Takes a name, not a path.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-            { "type": "object", "properties": { "name": { "type": "string" } } }
-            """);
-
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("ok"));
+        public SyntheticOpaqueTool()
+        {
+            Name = ToolName.Create("synthetic_opaque");
+            SafetyProfile = ToolSafetyProfile.Opaque;
+            DisplayName = "Synthetic Opaque";
+            Description = "Takes a name, not a path.";
+            ParameterSchema = JsonDocument.Parse("""
+                { "type": "object", "properties": { "name": { "type": "string" } } }
+                """);
+            ExecutionMode = ExecutionMode.Parallel;
+            ExecuteAsyncValue = ToolResult.Success("ok");
+        }
     }
 
     private static PermissionRuleset AnchoredSrcAllow() => new(
@@ -222,31 +203,20 @@ public class ToolSafetyPolicyDerivationTests
             .Because("a command is not a path; the traversal guard must not fire on it");
     }
 
-    private sealed class SyntheticShellTool : ITool
+    private sealed class SyntheticShellTool : FakeToolBase
     {
-        public ToolName Name => ToolName.Create("synthetic_shell");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
-
-        public string DisplayName => "Synthetic Shell";
-
-        public string Description => "Runs a command. Invented to prove Command routing.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
-            { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
-            """);
-
-        public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("ok"));
+        public SyntheticShellTool()
+        {
+            Name = ToolName.Create("synthetic_shell");
+            SafetyProfile = ToolSafetyProfile.Command();
+            DisplayName = "Synthetic Shell";
+            Description = "Runs a command. Invented to prove Command routing.";
+            ParameterSchema = JsonDocument.Parse("""
+                { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
+                """);
+            ExecutionMode = ExecutionMode.Sequential;
+            ExecuteAsyncValue = ToolResult.Success("ok");
+        }
     }
 
     // ── Fail loud, or the derived set is worthless ────────────────────────

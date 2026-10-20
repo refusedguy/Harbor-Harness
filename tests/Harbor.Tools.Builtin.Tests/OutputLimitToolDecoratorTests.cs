@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 namespace Harbor.Tools.Builtin.Tests;
 
@@ -141,27 +142,32 @@ public class OutputLimitToolDecoratorTests
     private static JsonElement EmptyArgs() =>
         JsonDocument.Parse("""{}""").RootElement;
 
-    private sealed class FakeLimitTool : ITool
+    /// <summary>
+    ///     The scripted inner tool. <c>ITool</c> is re-listed in the base list
+    ///     because the double OVERRIDES two default interface members (the glyph
+    ///     and the validation verdict) — the decorator forwards both, so the
+    ///     double has to answer with its own.
+    /// </summary>
+    private sealed class FakeLimitTool : FakeToolBase, ITool
     {
         public ToolResult Result { get; set; } = ToolResult.Success(string.Empty);
 
         public Result Validation { get; set; } = global::CSharpFunctionalExtensions.Result.Success();
 
-        public ToolName Name => ToolName.Create("fakelimit");
+        public FakeLimitTool()
+        {
+            Name = ToolName.Create("fakelimit");
+            DisplayName = "Fake Limit";
+            Description = "Scripted inner tool for the decorator seam.";
+            PromptSnippet = "fakelimit: scripted";
+            PromptGuidelines = ["scripted"];
+        }
 
-        public string DisplayName => "Fake Limit";
         public string Glyph => "🧪";
-        public string Description => "Scripted inner tool for the decorator seam.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-        public string? PromptSnippet => "fakelimit: scripted";
-        public IReadOnlyList<string> PromptGuidelines { get; } = ["scripted"];
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
 
         public Result ValidateArguments(JsonElement args) => Validation;
 
-        public Task<ToolResult> ExecuteAsync(
+        public override Task<ToolResult> ExecuteAsync(
             JsonElement args,
             ToolContext context,
             CancellationToken ct = default)

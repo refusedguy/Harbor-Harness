@@ -6,10 +6,12 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.Json;
 using TUnit.Assertions;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Tools;
+
+// #1769: the tool double is generated — the fake only declares what it needs.
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool;
 
 namespace Harbor.Registries.Tests;
 
@@ -171,24 +173,15 @@ public class PermissionRulesetTests
 
 public class ToolRegistryTests
 {
-    private sealed class StubTool : ITool
+    private sealed class StubTool : FakeToolBase
     {
-        public ToolName Name => ToolName.Create("stub_tool");
-
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Stub Tool";
-        public string Description => "A stub tool for testing.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema => JsonDocument.Parse("""{"type":"object"}""");
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("stub"));
+        public StubTool()
+        {
+            Name = ToolName.Create("stub_tool");
+            DisplayName = "Stub Tool";
+            Description = "A stub tool for testing.";
+            ExecuteAsyncValue = ToolResult.Success("stub");
+        }
     }
 
     [Test]
