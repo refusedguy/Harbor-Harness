@@ -94,8 +94,11 @@ public class ReadmeCoverageTests
         ("Harbor.Storage.Jsonl", new[] { "what", "wiring", "limits" }),
         ("Harbor.Storage.Memory", new[] { "what", "wiring", "limits" }),
         ("Harbor.Storage.Sqlite", new[] { "what", "wiring", "limits" }),
-        ("Harbor.Telemetry.Core", new[] { "wiring" }),
-        ("Harbor.Telemetry.Otlp", new[] { "wiring" }),
+        // #1741/#1742: both telemetry READMEs gained the "wiring" section —
+        // the visible sink's activation knobs (HARBOR_TELEMETRY_EXPORT and
+        // friends) and the OTLP exporter's deliberate absence from the
+        // product graph. The ratchet says: a section the README has since
+        // gained must leave this list.
         ("Harbor.Terminal.Abstractions", new[] { "wiring" }),
         ("Harbor.Tools.Builtin", new[] { "what", "wiring" }),
         ("Harbor.Tui.CellForge", new[] { "deps", "limits" }),

@@ -15,4 +15,14 @@
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- #1741/#1742: the visible export sink logs through ILogger<T> and
+         publishes its own counters. The package was already flowing in
+         transitively (Harbor.Abstractions carries it); naming it here makes
+         the dependency explicit and gives this project the LoggerMessage
+         source generator it uses for the drop/write diagnostics. Still no
+         OTEL SDK, still no reflection, still AOT-safe. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+  </ItemGroup>
+
 </Project>

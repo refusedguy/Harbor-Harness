@@ -55,6 +55,23 @@ public static class HarborEnv
     /// <summary>Skips the first-run onboarding wizard when set (any non-empty value).</summary>
     public const string SkipOnboarding = "HARBOR_SKIP_ONBOARDING";
 
+    // --- Telemetry ----------------------------------------------------------
+
+    /// <summary>
+    ///     Turns the visible telemetry sink on: <c>none</c> (default, no
+    ///     output), <c>console</c> or <c>file</c>.
+    /// </summary>
+    public const string TelemetryExport = "HARBOR_TELEMETRY_EXPORT";
+
+    /// <summary>File the <c>file</c> telemetry sink appends to.</summary>
+    public const string TelemetryExportPath = "HARBOR_TELEMETRY_EXPORT_PATH";
+
+    /// <summary>Cap on one exported telemetry record, in bytes.</summary>
+    public const string TelemetryExportMaxRecordBytes = "HARBOR_TELEMETRY_MAX_RECORD_BYTES";
+
+    /// <summary>Cap on the bytes the telemetry sink holds before it starts dropping.</summary>
+    public const string TelemetryExportMaxBufferBytes = "HARBOR_TELEMETRY_MAX_BUFFER_BYTES";
+
     // --- IPC / daemon ------------------------------------------------------
 
     /// <summary>Named pipe / UDS socket name for the daemon connection (default <c>harbor-ipc</c>).</summary>
