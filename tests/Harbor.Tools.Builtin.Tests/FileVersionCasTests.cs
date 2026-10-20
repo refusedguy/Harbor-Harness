@@ -32,7 +32,7 @@ public class FileVersionCasTests
 
             var tool = new ReadTool(NullLogger<ReadTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file }),
+                Args(new ToolPathArgs(file)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -61,7 +61,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", version)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -90,7 +90,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", version)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsTrue();
@@ -121,7 +121,7 @@ public class FileVersionCasTests
             await File.WriteAllTextAsync(file, "changed by somebody else");
 
             var rejected = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = stale }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", stale)),
                 ctx);
             await Assert.That(rejected.IsError).IsTrue();
 
@@ -130,7 +130,7 @@ public class FileVersionCasTests
             await Assert.That(fresh == stale).IsFalse();
 
             var retried = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = fresh }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", fresh)),
                 ctx);
 
             await Assert.That(retried.IsError).IsFalse();
@@ -156,7 +156,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", version)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsTrue();
@@ -179,7 +179,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model" }),
+                Args(new ToolPathContentArgs(file, "written by the model")),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -201,7 +201,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model" }),
+                Args(new ToolPathContentArgs(file, "written by the model")),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -222,7 +222,7 @@ public class FileVersionCasTests
     public async Task Write_ValidateArguments_MalformedExpectedVersion_Fails()
     {
         var tool = new WriteTool(NullLogger<WriteTool>.Instance);
-        var args = Args(new { path = "/tmp/x.txt", content = "x", expectedVersion = "not-a-token" });
+        var args = Args(new ToolPathContentVersionArgs("/tmp/x.txt", "x", "not-a-token"));
 
         var result = tool.ValidateArguments(args);
 
@@ -240,7 +240,7 @@ public class FileVersionCasTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = "not-a-token" }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", "not-a-token")),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsTrue();
@@ -265,7 +265,7 @@ public class FileVersionCasTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, oldString = "World", newString = "Harbor", expectedVersion = version }),
+                Args(new ToolPathEditVersionArgs(file, "World", "Harbor", version)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -291,7 +291,7 @@ public class FileVersionCasTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, oldString = "World", newString = "Harbor", expectedVersion = version }),
+                Args(new ToolPathEditVersionArgs(file, "World", "Harbor", version)),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsTrue();
@@ -321,7 +321,7 @@ public class FileVersionCasTests
             await File.WriteAllTextAsync(file, "Hello, Somebody Else!");
 
             var rejected = await tool.ExecuteAsync(
-                Args(new { path = file, oldString = "World", newString = "Harbor", expectedVersion = stale }),
+                Args(new ToolPathEditVersionArgs(file, "World", "Harbor", stale)),
                 ctx);
             await Assert.That(rejected.IsError).IsTrue();
 
@@ -329,7 +329,7 @@ public class FileVersionCasTests
             await Assert.That(fresh == stale).IsFalse();
 
             var retried = await tool.ExecuteAsync(
-                Args(new { path = file, oldString = "Somebody Else", newString = "Harbor", expectedVersion = fresh }),
+                Args(new ToolPathEditVersionArgs(file, "Somebody Else", "Harbor", fresh)),
                 ctx);
 
             await Assert.That(retried.IsError).IsFalse();
@@ -352,7 +352,7 @@ public class FileVersionCasTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, oldString = "World", newString = "Harbor" }),
+                Args(new ToolPathEditArgs(file, "World", "Harbor")),
                 TestAgents.CreateToolContext());
 
             await Assert.That(result.IsError).IsFalse();
@@ -384,12 +384,12 @@ public class FileVersionCasTests
             // A write to a DIFFERENT file does not disturb this one's version.
             string other = Path.Combine(root, "b.txt");
             var otherWrite = await tool.ExecuteAsync(
-                Args(new { path = other, content = "unrelated" }),
+                Args(new ToolPathContentArgs(other, "unrelated")),
                 ctx);
             await Assert.That(otherWrite.IsError).IsFalse();
 
             var result = await tool.ExecuteAsync(
-                Args(new { path = file, content = "written by the model", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "written by the model", version)),
                 ctx);
 
             await Assert.That(result.IsError).IsFalse();
@@ -416,13 +416,13 @@ public class FileVersionCasTests
             string version = await ReadVersionAsync(file);
 
             var first = await tool.ExecuteAsync(
-                Args(new { path = file, content = "first write", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "first write", version)),
                 ctx);
             await Assert.That(first.IsError).IsFalse();
 
             // The file moved on (by the write above), so the old version is stale.
             var second = await tool.ExecuteAsync(
-                Args(new { path = file, content = "second write", expectedVersion = version }),
+                Args(new ToolPathContentVersionArgs(file, "second write", version)),
                 ctx);
 
             await Assert.That(second.IsError).IsTrue();
@@ -439,7 +439,7 @@ public class FileVersionCasTests
     {
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
         var result = await tool.ExecuteAsync(
-            Args(new { path }),
+            Args(new ToolPathArgs(path)),
             TestAgents.CreateToolContext());
 
         await Assert.That(result.IsError).IsFalse();
@@ -459,8 +459,8 @@ public class FileVersionCasTests
         return output.Substring(start + VersionMarker.Length, end - start - VersionMarker.Length);
     }
 
-    private static JsonElement Args(object payload) =>
-        JsonDocument.Parse(JsonSerializer.Serialize(payload)).RootElement.Clone();
+    private static JsonElement Args<T>(T payload) =>
+        JsonDocument.Parse(TestJson.Serialize(payload)).RootElement.Clone();
 
     private static string NewTempRoot()
     {

@@ -21,6 +21,7 @@ using Microsoft.Extensions.Hosting;
 using TUnit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.App.Avalonia.Tests;
 
@@ -189,16 +190,16 @@ public class ViewInflationTests
         Directory.CreateDirectory(harborDir);
         await File.WriteAllTextAsync(
             Path.Combine(harborDir, "config.json"),
-            JsonSerializer.Serialize(new
-            {
-                configVersion = "1",
-                onboardingCompleted = true,
-                storageBackend = "memory",
-                logLevel = "warning",
-                defaultProvider = "ollama",
-                defaultModel = "qwen2.5-coder:7b",
-                defaultAgent = "code"
-            }));
+            JsonSerializer.Serialize(
+                new AppConfigDocument(
+                    "1",
+                    true,
+                    "memory",
+                    "warning",
+                    "ollama",
+                    "qwen2.5-coder:7b",
+                    "code"),
+                TestJsonContext.Default.AppConfigDocument));
 
         var originalHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         try

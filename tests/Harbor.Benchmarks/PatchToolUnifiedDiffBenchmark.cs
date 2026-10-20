@@ -4,6 +4,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -74,7 +75,8 @@ public class PatchToolUnifiedDiffBenchmark
     public async Task<string> ApplyPatch()
     {
         var args = System.Text.Json.JsonDocument.Parse(
-            System.Text.Json.JsonSerializer.Serialize(new { path = _tempFilePath, patch = _patch })).RootElement.Clone();
+            System.Text.Json.JsonSerializer.Serialize(
+                new ToolPathPatchArgs(_tempFilePath, _patch), TestJsonContext.Default.ToolPathPatchArgs)).RootElement.Clone();
         var ctx = new ToolContext(
             SessionId: "session-1",
             MessageId: "msg-1",

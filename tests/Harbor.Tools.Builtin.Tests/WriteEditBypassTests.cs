@@ -15,8 +15,8 @@ public class WriteEditBypassTests
         return root;
     }
 
-    private static JsonElement Args(object payload) =>
-        JsonDocument.Parse(JsonSerializer.Serialize(payload)).RootElement.Clone();
+    private static JsonElement Args<T>(T payload) =>
+        JsonDocument.Parse(TestJson.Serialize(payload)).RootElement.Clone();
 
     [Test]
     public async Task Write_ExecuteAsync_AbsoluteTraversalPathEscapingWorkspace_IsRefused()
@@ -30,7 +30,7 @@ public class WriteEditBypassTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = traversalPath, content = "pwned" }),
+                Args(new ToolPathContentArgs(traversalPath, "pwned")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -55,7 +55,7 @@ public class WriteEditBypassTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = traversalPath, oldString = "AAA", newString = "BBB" }),
+                Args(new ToolPathEditArgs(traversalPath, "AAA", "BBB")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -82,7 +82,7 @@ public class WriteEditBypassTests
 
             var tool = new WriteTool(NullLogger<WriteTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = linkRelativePath, content = "pwned" }),
+                Args(new ToolPathContentArgs(linkRelativePath, "pwned")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
@@ -110,7 +110,7 @@ public class WriteEditBypassTests
 
             var tool = new EditTool(NullLogger<EditTool>.Instance);
             var result = await tool.ExecuteAsync(
-                Args(new { path = linkRelativePath, oldString = "AAA", newString = "BBB" }),
+                Args(new ToolPathEditArgs(linkRelativePath, "AAA", "BBB")),
                 TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();

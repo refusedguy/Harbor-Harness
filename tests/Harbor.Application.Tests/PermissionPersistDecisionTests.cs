@@ -12,8 +12,8 @@ namespace Harbor.Application.Tests;
 
 public class PermissionPersistDecisionTests
 {
-    private static JsonElement Args(object payload) =>
-        JsonDocument.Parse(JsonSerializer.Serialize(payload)).RootElement.Clone();
+    private static JsonElement Args<T>(T payload) =>
+        JsonDocument.Parse(TestJson.Serialize(payload)).RootElement.Clone();
 
     private static PermissionService CreateService(
         PermissionRuleset ruleset,
@@ -46,8 +46,8 @@ public class PermissionPersistDecisionTests
             new PermissionRuleset(new PermissionRule[] { new("write", "*", PermissionAction.Ask) }),
             Asker);
 
-        var first = await svc.CheckAsync("code", "write", Args(new { path = "/repo/file.txt" }));
-        var second = await svc.CheckAsync("code", "write", Args(new { path = "/repo/file.txt" }));
+        var first = await svc.CheckAsync("code", "write", Args(new ToolPathArgs("/repo/file.txt")));
+        var second = await svc.CheckAsync("code", "write", Args(new ToolPathArgs("/repo/file.txt")));
 
         await Assert.That(first.Value.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(second.Value.Action).IsEqualTo(PermissionAction.Allow);
@@ -70,8 +70,8 @@ public class PermissionPersistDecisionTests
             new PermissionRuleset(new PermissionRule[] { new("write", "*", PermissionAction.Ask) }),
             Asker);
 
-        var first = await svc.CheckAsync("code", "write", Args(new { path = "/repo/one.txt" }));
-        var second = await svc.CheckAsync("code", "write", Args(new { path = "/repo/two.txt" }));
+        var first = await svc.CheckAsync("code", "write", Args(new ToolPathArgs("/repo/one.txt")));
+        var second = await svc.CheckAsync("code", "write", Args(new ToolPathArgs("/repo/two.txt")));
 
         await Assert.That(first.Value.Action).IsEqualTo(PermissionAction.Allow);
         await Assert.That(second.Value.Action).IsEqualTo(PermissionAction.Allow);
@@ -92,7 +92,7 @@ public class PermissionPersistDecisionTests
             new PermissionRuleset(new PermissionRule[] { new("bash", "*", PermissionAction.Ask) }),
             Asker);
 
-        var args = Args(new { command = "make build" });
+        var args = Args(new ToolCommandArgs("make build"));
         var first = await svc.CheckAsync("code", "bash", args);
         var second = await svc.CheckAsync("code", "bash", args);
 

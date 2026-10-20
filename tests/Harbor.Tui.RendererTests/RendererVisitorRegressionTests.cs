@@ -10,6 +10,7 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 /// <summary>
 ///     Visitor-registry regression for issue #185: the per-renderer
@@ -41,7 +42,9 @@ public class RendererVisitorRegressionTests
     private static AssistantMessage Partial(string id) => AssistantMessage.Empty("s1", id);
 
     private static JsonElement Args() =>
-        JsonSerializer.SerializeToElement(new { path = "README.md", limit = 10 });
+        JsonSerializer.SerializeToElement(
+            new ToolPathLimitArgs("README.md", 10),
+            TestJsonContext.Default.ToolPathLimitArgs);
 
     private static IEnumerable<AgentEvent> FullSweep()
     {

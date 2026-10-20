@@ -139,20 +139,26 @@ public class RecordingReplayTests : IAsyncDisposable
 
     private static async Task<string> PostCompletionAsync(HttpClient client, Uri baseUri, string model)
     {
-        var body = new { model, messages = new[] { new { role = "user", content = "hi" } } };
+        var body = new ChatCompletionRequestBody(model, new[] { new ChatCompletionMessage("user", "hi") });
         using var response = await client.PostAsync(
             new Uri(baseUri, "/chat/completions"),
-            new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+            new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(body, ChatCompletionJsonContext.Default.ChatCompletionRequestBody),
+                Encoding.UTF8,
+                "application/json"));
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
 
     private static async Task<string> PostRawExpect500Async(HttpClient client, Uri baseUri, string model)
     {
-        var body = new { model, messages = new[] { new { role = "user", content = "hi" } } };
+        var body = new ChatCompletionRequestBody(model, new[] { new ChatCompletionMessage("user", "hi") });
         using var response = await client.PostAsync(
             new Uri(baseUri, "/chat/completions"),
-            new StringContent(System.Text.Json.JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+            new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(body, ChatCompletionJsonContext.Default.ChatCompletionRequestBody),
+                Encoding.UTF8,
+                "application/json"));
         await Assert.That((int)response.StatusCode).IsEqualTo(500);
         return await response.Content.ReadAsStringAsync();
     }

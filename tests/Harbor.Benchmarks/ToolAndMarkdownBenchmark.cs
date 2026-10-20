@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BenchmarkDotNet.Attributes;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 
@@ -40,13 +41,18 @@ public class ToolArgsJsonBenchmark
         _smallJson = """{"input":"x"}""";
 
         // Medium ~1 KB: object with a ~1 KB string value.
-        _mediumJson = JsonSerializer.Serialize(new { input = new string('a', 1024) });
+        _mediumJson = JsonSerializer.Serialize(
+            new ToolInputArgs(new string('a', 1024)), TestJsonContext.Default.ToolInputArgs);
 
         // Large ~4 KB: array of tool_calls with args.
-        var calls = new object[8];
+        var calls = new ToolCallEnvelope[8];
         for (int i = 0; i < 8; i++)
-            calls[i] = new { id = $"call_{i:D3}", name = "read", arguments = new { path = $"/tmp/file_{i}.txt", limit = 100, offset = i * 10 } };
-        _largeJson = JsonSerializer.Serialize(new { tool_calls = calls });
+            calls[i] = new ToolCallEnvelope(
+                $"call_{i:D3}",
+                "read",
+                new ToolCallArgumentsEnvelope($"/tmp/file_{i}.txt", 100, i * 10));
+        _largeJson = JsonSerializer.Serialize(
+            new ToolCallsEnvelope(calls), BenchmarkJsonContext.Default.ToolCallsEnvelope);
     }
 
     [Benchmark(Description = "JsonDocument.Parse small (~14 B) + Clone")]

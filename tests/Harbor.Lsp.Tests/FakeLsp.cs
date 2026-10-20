@@ -232,7 +232,7 @@ public sealed class FakeLspServer : IAsyncDisposable
 
     private static Task WriteFrameAsync(object message, MemPipeStream output, CancellationToken ct)
     {
-        string body = JsonSerializer.Serialize(message, JsonOptions);
+        string body = JsonSerializer.Serialize(message, LspJsonContext.Default.DictionaryStringObject);
         byte[] bodyBytes = Encoding.UTF8.GetBytes(body);
         byte[] headerBytes = Encoding.ASCII.GetBytes($"Content-Length: {bodyBytes.Length}\r\n\r\n");
         return PipeWriteAsync(output, headerBytes, bodyBytes, ct);
@@ -244,11 +244,6 @@ public sealed class FakeLspServer : IAsyncDisposable
         await output.WriteAsync(body, ct).ConfigureAwait(false);
         await output.FlushAsync(ct).ConfigureAwait(false);
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public async ValueTask DisposeAsync()
     {

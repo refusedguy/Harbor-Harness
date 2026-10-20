@@ -49,7 +49,8 @@ public class BashDenyEndToEndTests
         // Serialize properly: interpolated Windows paths (C:\Users\…) into a
         // raw JSON string literal produce invalid \U escapes and blow up
         // JsonDocument.Parse on windows-latest.
-        JsonDocument.Parse(JsonSerializer.Serialize(new { command })).RootElement.Clone();
+        JsonDocument.Parse(JsonSerializer.Serialize(
+            new ToolCommandArgs(command), TestJsonContext.Default.ToolCommandArgs)).RootElement.Clone();
 
     /// <summary>Mirror of ToolDispatcher's decision gate: check → refuse-or-execute.</summary>
     private static async Task<ToolResult> DispatchLike(

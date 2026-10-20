@@ -84,6 +84,12 @@ on:
       # measures.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
+      # compares the result against its committed exceptions file, so a PR
+      # that edits the gate or the exceptions must run it — and so must a PR
+      # that edits the tree it measures.
+      - 'tools/check-test-json-reflection.py'
+      - 'tools/test-json-reflection-exceptions.txt'
       # #1823. `check-test-projects.py` reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
       # touches any of the three has to run it: a new test project (its
@@ -151,6 +157,12 @@ on:
       # the baseline — must run it.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
+      # compares the result against its committed exceptions file, so a PR
+      # that edits the gate or the exceptions must run it — and so must a PR
+      # that edits the tree it measures.
+      - 'tools/check-test-json-reflection.py'
+      - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
       # the three must run it.
@@ -283,6 +295,14 @@ jobs:
         run: python3 tools/test-measurements.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
+      # #1822. The tenth gate is the only one that asks whether a test
+      # serializes through the SOURCE-GENERATED path or the reflection one.
+      # Its failure path is tested here for the same reason as the others: a
+      # rule edited until it matches nothing is indistinguishable from a rule
+      # that found nothing, and the load-bearing fixture is the planted
+      # reflection call — the gate MUST fail on it.
+      - name: Reflection-JSON gate fails on a planted reflection call
+        run: python3 tools/check-test-json-reflection.py --self-test
 
   links:
     name: internal links
@@ -490,6 +510,31 @@ jobs:
           name: test-dup-groups
           path: test-dup-groups.json
           retention-days: 7
+
+  # #1822. Tenth question, and the only one about the SERIALIZER the test
+  # tree uses: does every `JsonSerializer` call under `tests/` name a
+  # source-generated type info, or does it take the reflection resolver?
+  #
+  # The product side of System.Text.Json already rides source generation
+  # (21 contexts under `src/`). The test side did not: 62 calls were taking
+  # the reflection path, and a reflection call in a test is a test that can
+  # stay green while the product is broken — a misspelled member name
+  # compiles, serializes to a DIFFERENT key, and the assertion checks the
+  # wrong field.
+  #
+  # The gate is BLOCKING (unlike the duplication measurement above, which is
+  # `--warn-only` while its removal programme is in flight): the exceptions
+  # file is a ratchet with five rows, and it can only shrink.
+  reflection-json:
+    name: reflection JSON
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that no test serializes through the reflection resolver
+        run: python3 tools/check-test-json-reflection.py
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually

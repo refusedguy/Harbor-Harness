@@ -50,13 +50,20 @@ public class McpOAuthTests : IDisposable
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(Json(new { }));
+            Task.FromResult(Json(new McpOAuthEmptyResponse()));
     }
 
-    private static HttpResponseMessage Json(object payload, HttpStatusCode status = HttpStatusCode.OK) =>
+    private static HttpResponseMessage Json<T>(T payload, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status)
         {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            Content = new StringContent(
+                JsonSerializer.Serialize(
+                    payload,
+                    McpOAuthJsonContext.Default.GetTypeInfo(typeof(T))
+                        ?? throw new InvalidOperationException(
+                            $"{typeof(T).Name} is not registered in {nameof(McpOAuthJsonContext)}.")),
+                Encoding.UTF8,
+                "application/json")
         };
 
     private static HttpClient StubClient(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
@@ -88,7 +95,7 @@ public class McpOAuthTests : IDisposable
     public async Task Flow_DiscoverAsync_PrefersExplicitEndpoints_NoHttp()
     {
         bool called = false;
-        using var http = StubClient(_ => { called = true; return Json(new { }); });
+        using var http = StubClient(_ => { called = true; return Json(new McpOAuthEmptyResponse()); });
         var cfg = new McpOAuthConfig { AuthorizationEndpoint = "https://x/auth", TokenEndpoint = "https://x/token" };
 
         var endpoints = await McpOAuthFlow.DiscoverAsync(http, new Uri("https://mcp.example.com/mcp"), cfg);
@@ -102,7 +109,7 @@ public class McpOAuthTests : IDisposable
     public async Task Flow_DiscoverAsync_ReadsWellKnownMetadata()
     {
         using var http = StubClient(req => req.RequestUri!.AbsolutePath.Contains(".well-known")
-            ? Json(new { authorization_endpoint = "https://x/auth", token_endpoint = "https://x/token" })
+            ? Json(new McpOAuthServerMetadataResponse("https://x/auth", "https://x/token"))
             : new HttpResponseMessage(HttpStatusCode.NotFound));
 
         var endpoints = await McpOAuthFlow.DiscoverAsync(
@@ -137,7 +144,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Flow_ExchangeCodeAsync_ReturnsTokens()
     {
-        using var http = StubClient(_ => Json(new { access_token = "at", refresh_token = "rt", expires_in = 100 }));
+        using var http = StubClient(_ => Json(new McpOAuthTokenWithRefreshResponse("at", "rt", 100)));
         var result = await McpOAuthFlow.ExchangeCodeAsync(
             http, "https://x/token", "cid", null, "code", "http://127.0.0.1:9/callback", "verifier");
 
@@ -149,7 +156,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Flow_ExchangeCodeAsync_ErrorStatus_ReturnsFailure()
     {
-        using var http = StubClient(_ => Json(new { error = "bad" }, HttpStatusCode.BadRequest));
+        using var http = StubClient(_ => Json(new McpOAuthErrorResponse("bad"), HttpStatusCode.BadRequest));
         var result = await McpOAuthFlow.ExchangeCodeAsync(
             http, "https://x/token", "cid", null, "code", "http://127.0.0.1:9/callback", "verifier");
 
@@ -164,7 +171,7 @@ public class McpOAuthTests : IDisposable
         {
             string body = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             grant = body;
-            return Json(new { access_token = "at2", expires_in = 50 });
+            return Json(new McpOAuthTokenResponse("at2", 50));
         });
         var result = await McpOAuthFlow.RefreshAsync(http, "https://x/token", "cid", null, "rt");
 
@@ -223,11 +230,13 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("cached", null, DateTimeOffset.UtcNow.AddHours(1)));
+        // The dead first handler that used to sit here is gone — upstream
+        // removed it; it shadowed the handler this test actually uses.
         int requests = 0;
         using var http = StubClient(_ =>
         {
             requests++;
-            return Json(new { });
+            return Json(new McpOAuthEmptyResponse());
         });
         using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache, () => http);
@@ -259,7 +268,7 @@ public class McpOAuthTests : IDisposable
     public async Task Handler_ReusesOneClient_AcrossCalls()
     {
         int factoryCalls = 0;
-        using var http = StubClient(_ => Json(new { access_token = "fresh", expires_in = 3600 }));
+        using var http = StubClient(_ => Json(new McpOAuthTokenResponse("fresh", 3600)));
         var cache = new McpOAuthTokenCache(_root);
 
         using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
@@ -335,7 +344,7 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
-        using var http = StubClient(_ => Json(new { access_token = "fresh", expires_in = 3600 }));
+        using var http = StubClient(_ => Json(new McpOAuthTokenResponse("fresh", 3600)));
         using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             cache, () => http);
@@ -359,7 +368,7 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
-        using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
+        using var http = StubClient(_ => Json(new McpOAuthErrorResponse("invalid_grant"), HttpStatusCode.BadRequest));
         using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             cache, () => http);
@@ -420,7 +429,7 @@ public class McpOAuthTests : IDisposable
         // 3. a rejected grant
         var staleCache = new McpOAuthTokenCache(_root);
         staleCache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
-        using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
+        using var http = StubClient(_ => Json(new McpOAuthErrorResponse("invalid_grant"), HttpStatusCode.BadRequest));
         using var stale = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             staleCache, () => http);
@@ -460,7 +469,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Flow_RegisterClientResult_Reject_ReturnsNullSuccess()
     {
-        using var http = StubClient(_ => Json(new { error = "rejected" }, HttpStatusCode.BadRequest));
+        using var http = StubClient(_ => Json(new McpOAuthErrorResponse("rejected"), HttpStatusCode.BadRequest));
         var result = await McpOAuthFlow.RegisterClientResultAsync(
             http, "https://x/register", "http://127.0.0.1:9/callback", ["a"]);
 

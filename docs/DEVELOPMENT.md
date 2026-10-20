@@ -113,6 +113,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
+| `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 
 Three things make this a real gate rather than decoration:
 
@@ -188,6 +189,49 @@ an edit is not new duplication. The baseline only ever goes **down**: as
 issues #1769–#1777 land, `--update` lowers it, and the floor tightens with
 it. Zones other programmes own are exempted explicitly, with a reason and an
 expiry date, and an expired exemption fails the gate.
+
+## Reflection-JSON gate — issue 1822
+
+`tools/check-test-json-reflection.py` answers one question about every
+`JsonSerializer` call under `tests/`: **does it name a source-generated type
+info, or does it take the reflection resolver?**
+
+```bash
+./tools/check-test-json-reflection.py --report     # the census, exit 0
+./tools/check-test-json-reflection.py --self-test  # prove the gate still fails on a planted call
+./tools/check-test-json-reflection.py             # the gate itself, exit 1 on a violation
+```
+
+**Why it exists.** The product side of System.Text.Json already rides source
+generation — 21 `JsonSerializerContext`s live under `src/` (#1565, #1779). The
+TEST side did not: 62 calls in `tests/` took the reflection resolver, while
+22 sibling calls in the same files already rode `JsonlCodecContext.Default.*`,
+`RemoteJsonContext.Default.*` or `McpJsonSerializerContext.Default.*`.
+
+The cost is not only CPU. A reflection call is **not checked at compile
+time**: a misspelled member name compiles, serializes to a DIFFERENT key, and
+the test then asserts on the wrong field and stays green. A source-generated
+context names the type and its members, so the compiler sees them. That is
+the false-green class this gate exists to close.
+
+**How it decides.** The scan reads `tests/**/*.cs` (minus `bin/`, `obj/` and
+`tests/Harbor.Architecture.Tests/`, which is programme #1724's zone), strips
+comments and string literals, and keeps every `JsonSerializer.Serialize`,
+`Deserialize`, `SerializeToElement` and `SerializeToUtf8Bytes` call. A call
+passes when its arguments mention `…Context.Default`, `…Context.Options`,
+`…Context.JsonOptions` or `GetTypeInfo(` — the four shapes a source-generated
+type info takes in this tree.
+
+**Exceptions are named, justified, and never silent.**
+`tools/test-json-reflection-exceptions.txt` holds one exception per line:
+
+```
+<path relative to the repo root> | <text that must appear in the call> | <reason>
+```
+
+The file is a **ratchet**: an exception the tree no longer produces fails the
+gate (`EXCEPTION-STALE`), so a closed hole cannot stay blessed. It can only
+shrink.
 
 ## Package-set checks (test and sample projects)
 

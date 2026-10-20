@@ -40,7 +40,7 @@ public class TaskToolTests
         var dict = new Dictionary<string, object?>();
         foreach ((string k, string v) in pairs)
             dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict)).RootElement.Clone();
+        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
     }
 
     [Test]

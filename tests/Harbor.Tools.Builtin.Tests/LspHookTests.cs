@@ -31,7 +31,7 @@ public class LspHookTests : IDisposable
         var tool = new ReadTool(NullLogger<ReadTool>.Instance, lsp);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
@@ -46,7 +46,7 @@ public class LspHookTests : IDisposable
         var tool = new ReadTool(NullLogger<ReadTool>.Instance, lsp);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
@@ -61,7 +61,7 @@ public class LspHookTests : IDisposable
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)}}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
@@ -78,7 +78,7 @@ public class LspHookTests : IDisposable
         var tool = new EditTool(NullLogger<EditTool>.Instance, lsp);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"class C\",\"newString\":\"class C2\"}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)},\"oldString\":\"class C\",\"newString\":\"class C2\"}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
@@ -96,7 +96,7 @@ public class LspHookTests : IDisposable
         var tool = new EditTool(NullLogger<EditTool>.Instance, lsp);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"class D\",\"newString\":\"class D2\"}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)},\"oldString\":\"class D\",\"newString\":\"class D2\"}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
@@ -112,7 +112,7 @@ public class LspHookTests : IDisposable
         var tool = new EditTool(NullLogger<EditTool>.Instance, lsp);
 
         var result = await tool.ExecuteAsync(
-            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path)},\"oldString\":\"a\",\"newString\":\"b\"}}").RootElement,
+            JsonDocument.Parse($"{{\"path\":{JsonSerializer.Serialize(path, TestJsonContext.Default.String)},\"oldString\":\"a\",\"newString\":\"b\"}}").RootElement,
             TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();

@@ -29,6 +29,9 @@
          Harbor.Tui.CellForge.Engine only, which this project already has,
          so the reference adds no product assembly. -->
     <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
+    <!-- #1822: the shared source-generated JSON context. The sibling reaches
+         Harbor.Abstractions only, so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.Notifications\Harbor.Tui.Notifications.csproj"/>
   </ItemGroup>
