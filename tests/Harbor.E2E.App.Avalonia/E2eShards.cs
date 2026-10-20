@@ -52,23 +52,34 @@ namespace Harbor.E2E.App.Avalonia;
 ///         39192015051, per-class sums of the TRX durations), not by class
 ///         count: the two heaviest classes alone are half the project's time,
 ///         so an even split by class would be a 4:1 split by cost. Re-balance
-///         this table when a class is added or a class's cost moves — and
-///         <see cref="E2eShardsTests" /> fails the build if a class is left
-///         out of both shards.
+///         this table when a class is added or a class's cost moves, and add
+///         the new class to the shard it belongs to — a class in neither
+///         shard is a class CI stops running.
+///     </para>
+///     <para>
+///         <b>Why there is no test here that checks this table.</b> The first
+///         version of this file shipped with one, and it was removed: a new
+///         test class in this project is an UNKEYED test, so it runs in
+///         TUnit's parallel bucket alongside this project's keyed chain, and
+///         that reshuffles the order of the classes below — and this suite is
+///         order-fragile by documentation (the <c>SettingsTests</c> skip names
+///         "orphaned dispatcher continuations from previously-initialized
+///         hosts" and says the deterministic fix "requires process-per-class
+///         isolation — sprint 6"). The guard test moved
+///         <c>Chat_ShowToolCallCard</c> from the sixth slot of its class to
+///         the second on two consecutive CI runs, and the test failed there
+///         both times. A guard that is worth that much fragility is not worth
+///         having, and the check belongs in the arch-rule slot (#1724), where
+///         it can read the tree without adding a test to it.
 ///     </para>
 ///     <para>
 ///         <b>The order inside a class is not stable.</b> Two runs of the
 ///         same tree execute this project's tests in the same order, but a
-///         change to any test's DURATION moves that order — TUnit schedules
-///         a class's tests by an estimate, so shortening one test reshuffles
-///         the rest. This suite is order-fragile by documentation (the
-///         <c>SettingsTests</c> skip names "orphaned dispatcher continuations
-///         from previously-initialized hosts" and says the deterministic fix
-///         "requires process-per-class isolation — sprint 6"), so a shard
-///         split is a real-isolation change and not only a scheduling one:
-///         watch the sharded run for the same class of failure, and prefer
-///         one process per class over two processes per project once the
-///         sprint-6 isolation lands.
+///         change to any test's DURATION — or one more concurrent test —
+///         moves that order, and a shard split moves it too. Watch the
+///         sharded run for the same class of failure, and prefer one process
+///         per class over two processes per project once the sprint-6
+///         isolation lands.
 ///     </para>
 /// </remarks>
 public static class E2eShards
