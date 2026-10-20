@@ -10,6 +10,8 @@ using System.Text.Json;
 using TUnit.Assertions;
 using Harbor.Registries.Events;
 
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
 namespace Harbor.Registries.Tests;
 
 /// <summary>
@@ -122,26 +124,16 @@ public class ToolRegistryAllocationTests
 {
     private static readonly JsonDocument SharedSchema = JsonDocument.Parse("""{"type":"object"}""");
 
-    private sealed class CachedSchemaStubTool : ITool
+    private sealed class CachedSchemaStubTool : FakeToolBase
     {
-        public CachedSchemaStubTool(string name) => Name = ToolName.Create(name);
-
-        public ToolName Name { get; }
-
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => Name.Value;
-        public string Description => "Allocation-budget stub (schema parsed once).";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema => SharedSchema;
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("stub"));
+        public CachedSchemaStubTool(string name)
+        {
+            Name = ToolName.Create(name);
+            DisplayName = Name.Value;
+            Description = "Allocation-budget stub (schema parsed once).";
+            ParameterSchema = SharedSchema;
+            ExecuteAsyncValue = ToolResult.Success("stub");
+        }
     }
 
     private static ToolRegistry CreateFrozenRegistry(params string[] names)

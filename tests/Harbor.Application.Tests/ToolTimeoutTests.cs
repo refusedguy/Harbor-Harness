@@ -10,6 +10,9 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Tests.Fakes;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
 using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
@@ -28,22 +31,16 @@ namespace Harbor.Application.Tests;
 public class ToolTimeoutTests
 {
     /// <summary>Tool whose ExecuteAsync never completes unless cancelled.</summary>
-    private sealed class HangingTool : ITool
+    private sealed class HangingTool : FakeToolBase
     {
-        public ToolName Name => ToolName.Create("hang");
+        public HangingTool()
+        {
+            Name = ToolName.Create("hang");
+            DisplayName = "Hang";
+            Description = "Never returns.";
+        }
 
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Hang";
-        public string Description => "Never returns.";
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public async Task<ToolResult> ExecuteAsync(
+        public override async Task<ToolResult> ExecuteAsync(
             JsonElement args,
             ToolContext context,
             CancellationToken cancellationToken = default)

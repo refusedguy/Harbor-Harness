@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      The guard for issue #1769. It drives the generator IN-PROCESS (Roslyn
+      driver) over a synthetic compilation, and it exercises the doubles the
+      generator emitted into Harbor.TestKit.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"/>
+    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Roslyn at RUN time: the guard runs the generator in-process. The generator
+      project keeps its own copy PrivateAssets=all (it is build-time only); this
+      one is a test-time dependency of a test project that ships nothing.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+    <PackageReference Include="TUnit"/>
+    <PackageReference Include="TUnit.Assertions"/>
+  </ItemGroup>
+
+</Project>

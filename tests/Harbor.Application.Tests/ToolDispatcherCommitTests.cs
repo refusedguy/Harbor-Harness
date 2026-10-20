@@ -8,6 +8,9 @@ using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -63,27 +66,20 @@ public class ToolDispatcherCommitTests
             Task.FromResult(Result.Success());
     }
 
-    private sealed class SpyTool : ITool
+    private sealed class SpyTool : FakeToolBase
     {
         private int _executions;
         public int Executions => Volatile.Read(ref _executions);
         public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public ToolName Name => ToolName.Create("counter");
+        public SpyTool()
+        {
+            Name = ToolName.Create("counter");
+            DisplayName = "Counter";
+            Description = "Counts starts for the commit barrier.";
+        }
 
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Counter";
-        public string Description => "Counts starts for the commit barrier.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken ct = default)
+        public override async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _executions);
             Entered.TrySetResult(true);

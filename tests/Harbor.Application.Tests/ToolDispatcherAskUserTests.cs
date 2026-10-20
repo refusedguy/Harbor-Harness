@@ -9,7 +9,12 @@ using Harbor.Application.Agents;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
+
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
 
 namespace Harbor.Application.Tests;
 
@@ -20,42 +25,29 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ToolDispatcherAskUserTests
 {
-    private sealed class AllowCheckFailAskPermissions : IPermissionService
+    private sealed class AllowCheckFailAskPermissions : FakePermissionServiceBase
     {
-        public Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args, CancellationToken ct = default,
-            string? invocationId = null, int generation = 1) =>
-            Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
-
-        public Task<Result<PermissionResponse>> AskUserAsync(
-            PermissionRequest request, CancellationToken ct = default) =>
-            Task.FromResult(Result.Failure<PermissionResponse>("ask subsystem down"));
-
-        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
-
-        public Task<Result> SaveAsync(CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
+        public AllowCheckFailAskPermissions()
+        {
+            CheckAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Allow, false));
+            AskUserAsyncResult = Result.Failure<PermissionResponse>("ask subsystem down");
+            GetRulesetValue = PermissionRuleset.Empty;
+            SaveAsyncResult = Result.Success();
+        }
     }
 
-    private sealed class AskEchoTool : ITool
+    private sealed class AskEchoTool : FakeToolBase
     {
         public string? ObservedAction;
 
-        public ToolName Name => ToolName.Create("askecho");
+        public AskEchoTool()
+        {
+            Name = ToolName.Create("askecho");
+            DisplayName = "AskEcho";
+            Description = "Echoes the Ask verdict back as output.";
+        }
 
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "AskEcho";
-        public string Description => "Echoes the Ask verdict back as output.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken ct = default)
+        public override async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken ct = default)
         {
             PermissionResponse response = await context.Ask(
                 new PermissionRequest("read", "*", args, Array.Empty<string>()), ct).ConfigureAwait(false);

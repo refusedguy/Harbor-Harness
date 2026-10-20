@@ -9,6 +9,8 @@ using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.TestKit;
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent; // #1769: generated double
+
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -278,35 +280,27 @@ public class LineReplExitWordTests
     }
 
     /// <summary>Records what the REPL forwarded to the agent.</summary>
-    private sealed class RecordingAgent : IAgent
+    private sealed class RecordingAgent : FakeAgentBase
     {
         private readonly CancellationTokenSource _abortSource = new();
 
         public List<string> Prompts { get; } = [];
 
-        public CancellationToken AbortToken => _abortSource.Token;
+        public override CancellationToken AbortToken => _abortSource.Token;
 
-        public void RequestAbort() => _abortSource.Cancel();
+        public override void RequestAbort() => _abortSource.Cancel();
 
-        public Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
+        public override Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
 
-        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
+        public override IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
 
-        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
+        public override Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
             Task.FromResult(Record(message.Content));
 
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
+        public override Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Record(text));
 
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-        public void ResetAbortSource() { }
-
-        public void Initialize(Session session, AgentDefinition agent) { }
-
-        public void Steer(AgentMessage message) { }
-
-        public void Dispose() => _abortSource.Dispose();
+        public override void Dispose() => _abortSource.Dispose();
 
         private Result Record(string text)
         {

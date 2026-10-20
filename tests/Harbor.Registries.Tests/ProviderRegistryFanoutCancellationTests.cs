@@ -5,6 +5,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+
 
 namespace Harbor.Registries.Tests;
 
@@ -19,45 +21,20 @@ namespace Harbor.Registries.Tests;
 /// </summary>
 public class ProviderRegistryFanoutCancellationTests
 {
-    private sealed class StubCatalogClient : ILlmClient
+    private sealed class StubCatalogClient : FakeLlmClientBase
     {
-        private readonly Result<IReadOnlyList<ModelInfo>> _modelsResult;
-
         public StubCatalogClient(ProviderId providerId, Result<IReadOnlyList<ModelInfo>> modelsResult)
         {
             ProviderId = providerId;
-            _modelsResult = modelsResult;
+            GetModelsAsyncResult = modelsResult;
         }
-
-        public ProviderId ProviderId { get; }
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(_modelsResult);
     }
 
-    private sealed class CancellingCatalogClient : ILlmClient
+    private sealed class CancellingCatalogClient : FakeLlmClientBase
     {
         public CancellingCatalogClient(ProviderId providerId) => ProviderId = providerId;
 
-        public ProviderId ProviderId { get; }
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            await Task.CompletedTask;
-            yield break;
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
             Task.FromCanceled<Result<IReadOnlyList<ModelInfo>>>(cancellationToken);
     }
 

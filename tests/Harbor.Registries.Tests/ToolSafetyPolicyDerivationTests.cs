@@ -7,6 +7,8 @@ using System.Text.Json;
 using TUnit.Assertions;
 using Harbor.Registries.Tools;
 
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
 namespace Harbor.Registries.Tests;
 
 /// <summary>
@@ -34,20 +36,38 @@ namespace Harbor.Registries.Tests;
 public class ToolSafetyPolicyDerivationTests
 {
     /// <summary>
+    ///     The synthetic tools differ only in what they DECLARE, so they share
+    ///     one shape: the generated double carries the interface, this carries
+    ///     the declaration each tool makes.
+    /// </summary>
+    private abstract class SyntheticTool : FakeToolBase
+    {
+        protected SyntheticTool(
+            string name,
+            ToolSafetyProfile profile,
+            string displayName,
+            string description,
+            string schema,
+            ExecutionMode mode,
+            string output)
+        {
+            Name = ToolName.Create(name);
+            SafetyProfile = profile;
+            DisplayName = displayName;
+            Description = description;
+            ParameterSchema = JsonDocument.Parse(schema);
+            ExecutionMode = mode;
+            ExecuteAsyncValue = ToolResult.Success(output);
+        }
+    }
+
+    /// <summary>
     ///     A path-taking write tool invented for this test. It exists in no list
     ///     anywhere in the repository — that is the point.
     /// </summary>
-    private sealed class SyntheticPathWriteTool : ITool
+    private sealed class SyntheticPathWriteTool : SyntheticTool
     {
-        public ToolName Name => ToolName.Create("synthetic_unsafe");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-        public string DisplayName => "Synthetic Path Write";
-
-        public string Description => "Writes a file. Invented to prove the guard is derived.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
+        private const string Schema = """
             {
               "type": "object",
               "properties": {
@@ -56,47 +76,23 @@ public class ToolSafetyPolicyDerivationTests
               },
               "required": ["path", "content"]
             }
-            """);
+            """;
 
-        public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("written"));
+        public SyntheticPathWriteTool() : base("synthetic_unsafe", ToolSafetyProfile.Path(), "Synthetic Path Write", "Writes a file. Invented to prove the guard is derived.", Schema, ExecutionMode.Sequential, "written")
+        {
+        }
     }
 
     /// <summary>A tool that declares no path argument — the explicit opt-out.</summary>
-    private sealed class SyntheticOpaqueTool : ITool
+    private sealed class SyntheticOpaqueTool : SyntheticTool
     {
-        public ToolName Name => ToolName.Create("synthetic_opaque");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Synthetic Opaque";
-
-        public string Description => "Takes a name, not a path.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
+        private const string Schema = """
             { "type": "object", "properties": { "name": { "type": "string" } } }
-            """);
+            """;
 
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("ok"));
+        public SyntheticOpaqueTool() : base("synthetic_opaque", ToolSafetyProfile.Opaque, "Synthetic Opaque", "Takes a name, not a path.", Schema, ExecutionMode.Parallel, "ok")
+        {
+        }
     }
 
     private static PermissionRuleset AnchoredSrcAllow() => new(
@@ -222,31 +218,15 @@ public class ToolSafetyPolicyDerivationTests
             .Because("a command is not a path; the traversal guard must not fire on it");
     }
 
-    private sealed class SyntheticShellTool : ITool
+    private sealed class SyntheticShellTool : SyntheticTool
     {
-        public ToolName Name => ToolName.Create("synthetic_shell");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
-
-        public string DisplayName => "Synthetic Shell";
-
-        public string Description => "Runs a command. Invented to prove Command routing.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
+        private const string Schema = """
             { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
-            """);
+            """;
 
-        public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
-            JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("ok"));
+        public SyntheticShellTool() : base("synthetic_shell", ToolSafetyProfile.Command(), "Synthetic Shell", "Runs a command. Invented to prove Command routing.", Schema, ExecutionMode.Sequential, "ok")
+        {
+        }
     }
 
     // ── Fail loud, or the derived set is worthless ────────────────────────

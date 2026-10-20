@@ -14,6 +14,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 using TUnit.Assertions;
 
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
+
+
 namespace Harbor.Application.Tests;
 
 /// <summary>
@@ -106,31 +109,20 @@ public class AcceptedCancellationHoldsTests
     }
 
     /// <summary>Tool that ignores its token entirely (the "stuck call" shape).</summary>
-    private sealed class TokenIgnoringTool : ITool
+    private sealed class TokenIgnoringTool : FakeToolBase
     {
         private int _calls;
 
+        public TokenIgnoringTool()
+        {
+            Name = ToolName.Create("stubborn");
+            DisplayName = "Stubborn";
+            Description = "Ignores cancellation.";
+        }
+
         public int Calls => Volatile.Read(ref _calls);
 
-        public ToolName Name => ToolName.Create("stubborn");
-
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => "Stubborn";
-
-        public string Description => "Ignores cancellation.";
-
-        public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""{"type":"object"}""");
-
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-
-        public string? PromptSnippet => null;
-
-        public IReadOnlyList<string> PromptGuidelines => [];
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(
+        public override Task<ToolResult> ExecuteAsync(
             JsonElement args,
             ToolContext context,
             CancellationToken cancellationToken = default)

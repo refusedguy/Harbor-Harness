@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Result = CSharpFunctionalExtensions.Result;
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
+
 
 namespace Harbor.Tools.Builtin.Tests;
 
@@ -170,44 +172,19 @@ public class ToolDependencyInjectionTests
     }
 
     /// <summary>Minimal store answering exactly the one call <c>SkillTool</c> makes.</summary>
-    private sealed class SingleSessionStore : ISessionStore
+    /// <summary>
+    ///     A store with exactly one session. Every member the test does NOT
+    ///     exercise keeps the generated default — a loud "not configured"
+    ///     failure — instead of a hand-written throw.
+    /// </summary>
+    private sealed class SingleSessionStore : FakeSessionStoreBase
     {
         private readonly Session _session;
 
-        public SingleSessionStore(string directory) =>
+        public SingleSessionStore(string directory)
+        {
             _session = Session.Create(directory, "code", "kilocode", "kilo-auto", "s1");
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(_session));
-
-        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
+            GetAsyncResult = Result.Success(_session);
+        }
     }
 }

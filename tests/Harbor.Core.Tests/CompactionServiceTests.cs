@@ -10,6 +10,8 @@ using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Providers;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="CompactionService" />: the <see cref="CompactionService.ShouldCompact" />
@@ -517,20 +519,20 @@ public class CompactionServiceTests
     ///     Mock client that records the summarization request so prompt-cap
     ///     tests can assert on the pasted head slice.
     /// </summary>
-    private sealed class CapturingSummaryClient : ILlmClient
+    private sealed class CapturingSummaryClient : FakeLlmClientBase
     {
         private readonly string _summary;
 
         public CapturingSummaryClient(string summary)
         {
             _summary = summary;
+            ProviderId = ProviderId.Create("test");
+            GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([SmallModel]);
         }
 
         public LlmRequest? LastRequest { get; private set; }
 
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+        public override async IAsyncEnumerable<LlmEvent> StreamAsync(
             LlmRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -539,27 +541,24 @@ public class CompactionServiceTests
             await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { SmallModel }));
     }
 
     /// <summary>
     ///     Mock client that returns the supplied summary text as a single
     ///     <see cref="TextDeltaEvent" /> followed by a <see cref="StepFinishEvent" />.
     /// </summary>
-    private sealed class SummaryLlmClient : ILlmClient
+    private sealed class SummaryLlmClient : FakeLlmClientBase
     {
         private readonly string _summary;
 
         public SummaryLlmClient(string summary)
         {
             _summary = summary;
+            ProviderId = ProviderId.Create("test");
+            GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([SmallModel]);
         }
 
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+        public override async IAsyncEnumerable<LlmEvent> StreamAsync(
             LlmRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
@@ -567,8 +566,5 @@ public class CompactionServiceTests
             await Task.Delay(1, cancellationToken).ConfigureAwait(false);
             yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { SmallModel }));
     }
 }

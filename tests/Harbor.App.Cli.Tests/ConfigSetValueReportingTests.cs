@@ -76,6 +76,10 @@ using Harbor.Abstractions.Providers;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
 using Harbor.TestKit;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
+
+using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry; // #1769: generated double
+
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -476,42 +480,26 @@ public class ConfigSetValueReportingTests
     }
 
     /// <summary>Nothing here touches permissions; fail loudly if that changes.</summary>
-    private sealed class UnusedPermissionService : IPermissionService
+    private sealed class UnusedPermissionService : FakePermissionServiceBase
     {
-        public Task<Result> SaveAsync(CancellationToken ct = default) => Task.FromResult(Result.Success());
-
-        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
-
-        public Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args,
-            CancellationToken ct = default, string? invocationId = null, int generation = 1)
-            => throw new NotSupportedException("Not exercised by the config-set tests.");
-
-        public Task<Result<PermissionResponse>> AskUserAsync(
-            PermissionRequest request, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the config-set tests.");
+        public UnusedPermissionService()
+        {
+            SaveAsyncResult = Result.Success();
+            GetRulesetValue = PermissionRuleset.Empty;
+        }
     }
 
     /// <summary>Knows no providers and reaches no network.</summary>
-    private sealed class OfflineProviderRegistry : IProviderRegistry
+    private sealed class OfflineProviderRegistry : FakeProviderRegistryBase
     {
-        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [];
-
-        public Result<ILlmClient> GetClient(ProviderId providerId)
-            => Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(
-            ProviderId providerId, CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-
-        public void Register(ProviderId providerId, Func<ILlmClient> factory)
+        public OfflineProviderRegistry()
         {
+            GetAllModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([]);
+            GetModelsCachedAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([]);
+            UnregisterResult = Result.Failure("OfflineProviderRegistry does not support unregister.");
         }
 
-        public Result Unregister(ProviderId providerId)
-            => Result.Failure("OfflineProviderRegistry does not support unregister.");
+        public override Result<ILlmClient> GetClient(ProviderId providerId)
+            => Result.Failure<ILlmClient>($"Provider '{providerId}' is not registered.");
     }
 }

@@ -13,6 +13,10 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
+using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry; // #1769: generated double
+
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent; // #1769: generated double
+
 
 namespace Harbor.App.Cli.Tests;
 
@@ -116,32 +120,23 @@ public class SlashCommandDispatcherExitTests
         public void Dispose() { }
     }
 
-    private sealed class FakeAgent : IAgent
+    private sealed class FakeAgent : FakeAgentBase
     {
         private readonly CancellationTokenSource _abortSource = new();
-        public CancellationToken AbortToken => _abortSource.Token;
-        public void RequestAbort() => _abortSource.Cancel();
 
-        public Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
+        public override CancellationToken AbortToken => _abortSource.Token;
 
-        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
+        public override void RequestAbort() => _abortSource.Cancel();
 
-        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
+        public override Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
+
+        public override IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
+
+        public override Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
 
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
+        public override Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
-
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-        public void ResetAbortSource() { }
-
-        public void Initialize(Session session, AgentDefinition agent) { }
-
-        public void Steer(AgentMessage message) { }
-
-
-        public void Dispose() { }
 
         private sealed class NopDisposable : IDisposable
         {
@@ -149,21 +144,16 @@ public class SlashCommandDispatcherExitTests
         }
     }
 
-    private sealed class FakeProviderRegistry : IProviderRegistry
+    private sealed class FakeProviderRegistry : FakeProviderRegistryBase
     {
-        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => Array.Empty<ProviderId>();
+        public FakeProviderRegistry()
+        {
+            GetAllModelsAsyncResult = Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests.");
+            GetModelsCachedAsyncResult = Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests.");
+            UnregisterResult = Result.Failure("Unregistration is not supported in tests.");
+        }
 
-        public Result<ILlmClient> GetClient(ProviderId providerId) =>
+        public override Result<ILlmClient> GetClient(ProviderId providerId) =>
             Result.Failure<ILlmClient>("No providers registered in tests.");
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests."));
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result.Failure<IReadOnlyList<ModelInfo>>("No providers registered in tests."));
-
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
-
-        public Result Unregister(ProviderId providerId) => Result.Failure("Unregistration is not supported in tests.");
     }
 }

@@ -3,6 +3,8 @@ using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
+
 namespace Harbor.Application.Tests.Fakes;
 
 public sealed class FakeSessionStore(Session session) : ISessionStore
@@ -118,15 +120,21 @@ public sealed class FakeSessionStore(Session session) : ISessionStore
     }
 }
 
-public sealed class FakeAgentLoop(Result? runOutcome = null) : IAgentLoop
+/// <summary>
+///     The agent-loop double (issue #1769): the generated base carries the
+///     interface, this subclass only carries the counter the tests read.
+/// </summary>
+public sealed class FakeAgentLoop : FakeAgentLoopBase
 {
     private int _runs;
 
+    public FakeAgentLoop(Result? runOutcome = null) => RunAsyncResult = runOutcome ?? Result.Success();
+
     public int Runs => Volatile.Read(ref _runs);
 
-    public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+    public override Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
     {
         Interlocked.Increment(ref _runs);
-        return Task.FromResult(runOutcome ?? Result.Success());
+        return Task.FromResult(RunAsyncResult);
     }
 }

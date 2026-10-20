@@ -59,6 +59,9 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
+
 
 namespace Harbor.App.Cli.Tests;
 
@@ -398,45 +401,20 @@ public class SlashCommandFailureSurfacesTests
     }
 
     /// <summary>
-    ///     Members the failure tests do not exercise fail loudly rather than
-    ///     returning an empty success, so a command that starts calling one shows
-    ///     up as a test failure instead of as a mysteriously blank list.
+    ///     The store baseline. The members the failure tests do not exercise stay
+    ///     at the generated default — a loud "not configured" failure, not an
+    ///     empty success — so a command that starts calling one shows up as a
+    ///     test failure instead of as a mysteriously blank list. The two the
+    ///     tests do read are declared here.
     /// </summary>
-    private abstract class StoreBase : ISessionStore
+    private abstract class StoreBase : FakeSessionStoreBase
     {
         /// <summary>Succeeds with nothing — the "you have no sessions" baseline.</summary>
-        public virtual Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+        public override Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
             => Task.FromResult(Result.Success<IReadOnlyList<Session>>([]));
 
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+        public override Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
             => Task.FromResult(Result.Failure<Session>($"Session '{sessionId}' not found."));
-
-        public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
-
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /sessions failure tests.");
     }
 
     /// <summary>Config store whose every read and write fails.</summary>
@@ -503,40 +481,26 @@ public class SlashCommandFailureSurfacesTests
     }
 
     /// <summary>Permission service whose persist always fails.</summary>
-    private sealed class FailingPermissionService : IPermissionService
+    private sealed class FailingPermissionService : FakePermissionServiceBase
     {
-        public Task<Result> SaveAsync(CancellationToken ct = default)
-            => Task.FromResult(Result.Failure(PermissionsError));
-
-        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
-
-        public Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args,
-            CancellationToken ct = default, string? invocationId = null, int generation = 1)
-            => throw new NotSupportedException("Not exercised by the /permissions failure tests.");
-
-        public Task<Result<PermissionResponse>> AskUserAsync(PermissionRequest request, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /permissions failure tests.");
+        public FailingPermissionService()
+        {
+            SaveAsyncResult = Result.Failure(PermissionsError);
+            GetRulesetValue = PermissionRuleset.Empty;
+        }
     }
 
     /// <summary>
     ///     Permission service that persists in memory, so the success-path test
     ///     never writes the developer's real config file.
     /// </summary>
-    private sealed class WorkingPermissionService : IPermissionService
+    private sealed class WorkingPermissionService : FakePermissionServiceBase
     {
-        public Task<Result> SaveAsync(CancellationToken ct = default)
-            => Task.FromResult(Result.Success());
-
-        public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
-
-        public Task<Result<PermissionResponse>> CheckAsync(
-            string agentName, string toolName, JsonElement args,
-            CancellationToken ct = default, string? invocationId = null, int generation = 1)
-            => throw new NotSupportedException("Not exercised by the /permissions failure tests.");
-
-        public Task<Result<PermissionResponse>> AskUserAsync(PermissionRequest request, CancellationToken ct = default)
-            => throw new NotSupportedException("Not exercised by the /permissions failure tests.");
+        public WorkingPermissionService()
+        {
+            SaveAsyncResult = Result.Success();
+            GetRulesetValue = PermissionRuleset.Empty;
+        }
     }
 
     /// <summary>Captures log entries so a test can assert on them.</summary>

@@ -4,8 +4,9 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Registries.Tools;
-using System.Text.Json;
 using TUnit.Assertions;
+
+using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
 namespace Harbor.Registries.Tests;
 
@@ -16,26 +17,15 @@ namespace Harbor.Registries.Tests;
 /// </summary>
 public class ToolRegistrySnapshotTests
 {
-    private sealed class NamedStubTool : ITool
+    private sealed class NamedStubTool : FakeToolBase
     {
-        public NamedStubTool(string name) => Name = ToolName.Create(name);
-
-        public ToolName Name { get; }
-
-        /// <inheritdoc />
-        public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-        public string DisplayName => Name.Value;
-        public string Description => "Snapshot test stub.";
-        public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
-        public string? PromptSnippet => null;
-        public IReadOnlyList<string> PromptGuidelines => [];
-        public JsonDocument ParameterSchema => JsonDocument.Parse("""{"type":"object"}""");
-
-        public Result ValidateArguments(JsonElement args) => Result.Success();
-
-        public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken = default)
-            => Task.FromResult(ToolResult.Success("stub"));
+        public NamedStubTool(string name)
+        {
+            Name = ToolName.Create(name);
+            DisplayName = Name.Value;
+            Description = "Snapshot test stub.";
+            ExecuteAsyncValue = ToolResult.Success("stub");
+        }
     }
 
     private sealed class StubSource : IToolSource

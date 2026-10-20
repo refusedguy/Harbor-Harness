@@ -57,6 +57,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      #1769: the test-double generator runs over THIS project as an analyzer
+      and emits the Harbor.TestKit.Generated.Fake* classes — a concrete class per
+      opted-in interface, never a proxy. It is build-time only: the generator
+      assembly is not referenced (ReferenceOutputAssembly=false) and nothing of
+      it reaches a consumer.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="TUnit"/>

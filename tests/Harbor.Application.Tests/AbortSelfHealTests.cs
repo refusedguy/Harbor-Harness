@@ -6,6 +6,8 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
+
 using Harbor.Application.Agents;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -22,13 +24,13 @@ namespace Harbor.Application.Tests;
 public class AbortSelfHealTests
 {
     /// <summary>Mirrors AgentLoop's contract: refuses to run on an already-cancelled token.</summary>
-    private sealed class TokenObservingLoop : IAgentLoop
+    private sealed class TokenObservingLoop : FakeAgentLoopBase
     {
         private int _runs;
 
         public int Runs => Volatile.Read(ref _runs);
 
-        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        public override Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             Interlocked.Increment(ref _runs);
             return Task.FromResult(ct.IsCancellationRequested

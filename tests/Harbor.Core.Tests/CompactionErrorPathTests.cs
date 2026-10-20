@@ -8,6 +8,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 namespace Harbor.Core.Tests;
 
@@ -59,36 +60,30 @@ public class CompactionErrorPathTests : CompactionTestBase
     }
 
     /// <summary>Streams nothing at all — no deltas, no error, no finish.</summary>
-    private sealed class SilentLlmClient : ILlmClient
+    private sealed class SilentLlmClient : FakeLlmClientBase
     {
-        public ProviderId ProviderId => ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public SilentLlmClient()
         {
-            await Task.Yield();
-            yield break;
+            ProviderId = ProviderId.Create("test");
+            GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([TestModel()]);
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel() }));
     }
 
     /// <summary>Hangs until cancelled — mirrors a real in-flight summarisation.</summary>
-    private sealed class HangingLlmClient : ILlmClient
+    private sealed class HangingLlmClient : FakeLlmClientBase
     {
-        public ProviderId ProviderId => ProviderId.Create("test");
+        public HangingLlmClient()
+        {
+            ProviderId = ProviderId.Create("test");
+            GetModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([TestModel()]);
+        }
 
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
+        public override async IAsyncEnumerable<LlmEvent> StreamAsync(
             LlmRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.Delay(Timeout.Infinite, cancellationToken).ConfigureAwait(false);
             yield break;
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel() }));
     }
 }

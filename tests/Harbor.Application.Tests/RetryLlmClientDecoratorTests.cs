@@ -5,6 +5,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Resilience;
 using TUnit.Assertions;
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
+
 
 namespace Harbor.Application.Tests;
 
@@ -272,25 +274,24 @@ public class RetryLlmClientDecoratorTests
     ///     makes <c>Calls</c> the exact attempt counter the assertions above
     ///     pin.
     /// </summary>
-    private sealed class ScriptedLlmClient : ILlmClient
+    private sealed class ScriptedLlmClient : FakeLlmClientBase
     {
         private readonly List<IAsyncEnumerable<LlmEvent>> _scripts;
 
         public ScriptedLlmClient(params IAsyncEnumerable<LlmEvent>[] scripts)
         {
             _scripts = scripts.ToList();
+            ProviderId = ProviderId.Create("fake");
         }
 
         public int Calls { get; private set; }
 
         public Result<IReadOnlyList<ModelInfo>>? ModelsResult { get; set; }
 
-        public ProviderId ProviderId { get; } = ProviderId.Create("fake");
-
-        public IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default) =>
+        public override IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default) =>
             _scripts[Calls++];
 
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
+        public override Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(ModelsResult ?? Result.Success<IReadOnlyList<ModelInfo>>([]));
     }
 }

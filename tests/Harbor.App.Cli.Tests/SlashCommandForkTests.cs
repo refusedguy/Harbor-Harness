@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.TestKit;
+using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
+
 
 namespace Harbor.App.Cli.Tests;
 
@@ -18,12 +20,18 @@ namespace Harbor.App.Cli.Tests;
 /// </summary>
 public class SlashCommandForkTests
 {
-    private sealed class FakeStore : ISessionStore
+    /// <summary>
+    ///     The store the fork flow writes through. The members the flow does NOT
+    ///     touch keep the generated default — a loud "not configured" failure.
+    /// </summary>
+    private sealed class FakeStore : FakeSessionStoreBase
     {
         public readonly Dictionary<string, Session> Sessions = [];
         public readonly Dictionary<string, List<AgentMessage>> Messages = [];
 
-        public Task<Result<Session>> CreateAsync(
+        public FakeStore() => DeleteAsyncResult = Result.Success();
+
+        public override Task<Result<Session>> CreateAsync(
             string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
         {
             var session = Session.Create(directory, agentName, providerId, modelId);
@@ -32,17 +40,17 @@ public class SlashCommandForkTests
             return Task.FromResult(Result.Success(session));
         }
 
-        public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
+        public override Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
             => Task.FromResult(Sessions.TryGetValue(sessionId, out var s)
                 ? Result.Success(s)
                 : Result.Failure<Session>($"Session '{sessionId}' not found."));
 
-        public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+        public override Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
             => Task.FromResult(Messages.TryGetValue(sessionId, out var list)
                 ? Result.Success<IReadOnlyList<AgentMessage>>([.. list])
                 : Result.Failure<IReadOnlyList<AgentMessage>>($"Session '{sessionId}' not found."));
 
-        public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+        public override Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
         {
             if (!Messages.TryGetValue(sessionId, out var list))
                 return Task.FromResult(Result.Failure($"Session '{sessionId}' not found."));
@@ -50,23 +58,10 @@ public class SlashCommandForkTests
             return Task.FromResult(Result.Success());
         }
 
-        public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
+        public override Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
             => Task.FromResult(Sessions.ContainsKey(session.Id)
                 ? Result.Success()
                 : Result.Failure("store rejected update"));
-
-        // Unused by the fork flow — fail loudly if the runner starts touching them.
-        public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default) =>
-            throw new NotSupportedException("Not exercised by /fork tests.");
-        public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) => Task.FromResult(Result.Success());
     }
 
     [Test]
