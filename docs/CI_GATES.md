@@ -249,12 +249,13 @@ The modes are:
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 37` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 38` |
 | `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
 | `tools/check-result-chains.py` | the chain candidates among the `if (x.IsFailure)` guard sites in `src/` and `apps/` — the census issue #1558 is measured against, and a ratchet on it | docs.yml | result-chains, selftest | gate | `--self-test` | `tools/result-chains-baseline.json` | — |
+| `tools/check-shard-balance.py` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/check-reference-trimmer.py` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
 | `tools/check-string-switch.py` | does a `switch` compare a string literal, and is every ladder that is still there named with a reason | docs.yml | selftest, stringswitch | gate | `--self-test` | `tools/string-switch-exceptions.txt` | `--min-labels 280` |
 | `tools/string-switch-rewrites.py` | shared data for the string-switch gate: the reviewed rewrites its `--apply` mode replays, so the change is reproducible and its effect measured rather than asserted | — | — | library | — | — | — |
@@ -331,7 +332,7 @@ Run it:
 
 ```bash
 ./tools/check-gate-policy.py --self-test
-./tools/check-gate-policy.py --min-gates 37
+./tools/check-gate-policy.py --min-gates 38
 ```
 
 Its own `--self-test` plants one defect per rule in a synthetic tree and

@@ -1919,6 +1919,79 @@ analyzer over 61 product compilations, 76.89 s). A spike can price itself
 against those. The Debug half of the axis and the "dependencies discovered"
 half are still open, and §6.5 says so instead of leaving them implied.
 
+### 6.1.1 The shard balance: the architecture suite gets a shard of its own (#1781) ✅ measured in CI
+
+**The problem, measured on the current tree.** The `test` job's shard matrix
+was laid out by MODULE, and the pull request waits for the MAXIMUM shard
+(#1929 measured that the wall is `max(shards)`, not their sum), so the layout
+decided the wall. Three consecutive runs on `dev` (the arm64 pool, the pool
+issue #1952 moved the shards to), read from the `Run shard <shard>` step of
+each job:
+
+| run | tree | `core` | `ui` | `platform` | `e2e` | max/min |
+|---|---|---:|---:|---:|---:|---:|
+| [39504714459](https://github.com/refusedguy/Harbor-Harness/actions/runs/39504714459) | `b9f3c83c`, 2026-10-20 | **143 s** | 62 s | 35 s | 24 s | **5.96×** |
+| [39500486942](https://github.com/refusedguy/Harbor-Harness/actions/runs/39500486942) | `d56aef9f`, 2026-10-20 | **144 s** | 55 s | 35 s | 30 s | 4.80× |
+| [39500372206](https://github.com/refusedguy/Harbor-Harness/actions/runs/39500372206) | `90bba174`, 2026-10-20 | **147 s** | 62 s | 34 s | 26 s | 5.65× |
+
+The binding shard is `core`, and it is one project: of its 143 s,
+`Harbor.Architecture.Tests` is 91 s, and the thirteen projects next to it cost
+36.8 s together. The per-project durations of the first run, read from the
+runner's own "Test run summary" block:
+
+| project | `core` shard | reported | project | other shard | reported |
+|---|---|---:|---|---|---:|
+| `Harbor.Architecture.Tests` | core | **91.01 s** | `Harbor.Tui.CellForge.PtyTests` | ui | 34.84 s |
+| `Harbor.Core.Tests` | core | 7.27 s | `Harbor.Tui.CellForge.Tests` | ui | 7.06 s |
+| `Harbor.Application.Tests` | core | 7.23 s | `Harbor.Ui.Framework.Tests` | ui | 5.75 s |
+| `Harbor.ChangeTracking.Tests` | core | 5.39 s | `Harbor.Ipc.Tests` | platform | 5.09 s |
+| `Harbor.Abstractions.Tests` | core | 4.54 s | `Harbor.Plugins.Runtime.Tests` | platform | 4.93 s |
+| `Harbor.Domain.Tests` | core | 2.48 s | `Harbor.Storage.Jsonl.Tests` | platform | 4.87 s |
+| the other eight | core | 9.84 s | `Harbor.E2E.App.Avalonia` | e2e | 14.70 s |
+
+**What changed.** `Harbor.Architecture.Tests` got a shard of its own (`arch`),
+and the other thirteen projects stayed in `core`. The suite is NOT cut into
+pieces: it already runs about fourteen lanes at once (§6.1, the parallelism
+factor of 14.24), its wall is set by its slowest single test, and splitting
+one project across jobs is a different change with a different risk. The
+project is also not referenced by any other test project, so its 1 094 tests
+run once and not once per referencing shard.
+
+**What that buys, computed from the measured per-project costs** (the table
+above, plus the overhead the shard spends on the projects rather than in them:
+0.6 s per project, measured at 0.56-0.66 s in all four shards, and 2.0 s per
+shard for the first project's JIT warm-up, measured at 0.6-6.5 s). The costs
+live in [`tools/shard-costs.json`](../tools/shard-costs.json), which is the
+input of the gate below:
+
+| shard | projects | measured | wall before | wall after |
+|---|---:|---:|---:|---:|
+| `arch` | 1 | 91.0 s | (inside `core`) | **93.6 s** |
+| `core` | 13 | 36.8 s | 138.2 s | 46.6 s |
+| `ui` | 8 | 53.6 s | 60.4 s | 60.4 s |
+| `platform` | 9 | 28.6 s | 36.0 s | 36.0 s |
+| `e2e` | 6 | 21.4 s | 27.0 s | 27.0 s |
+
+The heaviest shard falls from 138.2 s to 93.6 s on the model's own walls
+(143 s measured), and the skew from 5.11× to 3.46× (5.96× measured). The
+wall of the heaviest shard is now the architecture suite's own wall, which is
+a cost with an owner (the tree scan and the analyzer compile behind it)
+rather than a layout accident.
+
+**What the gate is, and why it is not a timing gate.** `tools/check-shard-balance.py`
+reads the shard lists out of their one source (`tools/ci-project-lists.json`,
+issue #1800) and the recorded cost of every project
+out of `tools/shard-costs.json`, computes what each shard would cost, and
+fails when the heaviest and the lightest are more than 4× apart. It measures
+NO time: the house policy says a gate that measures time is a benchmark,
+because a threshold on a live wall clock reddens on a slow runner (a runner's
+own speed moved a shard by 2× between the runs above) and a gate that reddens
+on a slow runner gets switched off. What the gate judges is the LAYOUT, by a
+recorded measurement, and the recorded measurement carries the run id, the
+commit and the date it came from. Its self-test plants a runaway shard, a
+project in two shards and a stale cost, and asserts that each of them fails
+the gate.
+
 ### 6.2 Test execution
 
 > `dotnet test` is not used in this repo — run test projects as plain

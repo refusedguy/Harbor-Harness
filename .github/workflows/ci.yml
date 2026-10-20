@@ -1282,10 +1282,6 @@ jobs:
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.Hosting.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
-            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Lsp.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
@@ -1445,6 +1441,30 @@ jobs:
             apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
             apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-arm64/native/*
             apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      # The `arch` shard's slice (issue #1781). One project, and the project
+      # that owns the longest wall in the suite: the architecture suite, which
+      # loads every Harbor assembly to check the layering rules.
+      #
+      # The slice carries the project's own output directory and nothing else:
+      # a test project's output directory is self-contained, so a shard needs
+      # only its own projects' directories. The native assets come in both
+      # RIDs because the shard runs on the arm64 pool (issue #1919) and the
+      # build is RID-agnostic.
+      - name: Stash build outputs — arch shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-arch
+          path: |
+            Harbor.slnx
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -1822,7 +1842,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [core, platform, ui, e2e]
+        shard: [core, platform, ui, e2e, arch]
         include:
           - shard: core
             runner: ubuntu-24.04-arm
@@ -1838,7 +1858,6 @@ jobs:
               Harbor.Core.Tests
               Harbor.Registries.Tests
               Harbor.Hosting.Tests
-              Harbor.Architecture.Tests
               Harbor.Lsp.Tests
               Harbor.Terminal.Pty.Tests
               Harbor.Telemetry.Tests
@@ -1899,6 +1918,48 @@ jobs:
               Harbor.App.Cli.Tests
               Harbor.LoadTests
               Harbor.E2E.Framework.Tests
+          - shard: arch
+            runner: ubuntu-24.04-arm
+            # The same guard as the four above: the suite discovers 1 094
+            # tests, so it is nowhere near the zero the flag exists to catch,
+            # and a suite that discovered nothing must not read as green.
+            guard: true
+            # ── THE ARCHITECTURE SUITE GETS A SHARD OF ITS OWN (issue #1781) ──
+            #
+            # The shard matrix was laid out by MODULE, and the layout came out
+            # 5.96x skewed. Measured on dev@b9f3c83c (run 39504714459), the
+            # `Run shard <shard>` steps were:
+            #
+            #   core      143 s   of which Harbor.Architecture.Tests is 91 s
+            #   ui         62 s
+            #   platform   35 s
+            #   e2e        24 s
+            #
+            # The pull request waits for the MAXIMUM shard, not the sum
+            # (issue #1929 measured that), so the whole run waited 143 s for a
+            # shard that was ONE project plus thirteen that together cost 37 s.
+            #
+            # The architecture suite is the long pole because it is the long
+            # pole everywhere it runs: it compiles 61 product assemblies to
+            # check the layering rules (docs/BENCHMARKS.md §6.1, 76.9 s of
+            # analyzer work on one run) and it runs about fourteen lanes at
+            # once, so its own wall is set by its slowest single test. It is
+            # NOT cut into pieces here: the cost is in one project, and
+            # splitting a project across jobs is a different change with a
+            # different risk.
+            #
+            # What this buys, on the measured per-project costs of the same run
+            # (tools/shard-costs.json): the `arch` shard costs 93.6 s and the
+            # `core` shard 46.6 s, where `core` used to cost 138.2 s. The
+            # heaviest shard falls from 143 s (measured) to 93.6 s (computed
+            # from the same per-project costs), and the skew from 5.96x
+            # (measured) to 3.46x (computed).
+            #
+            # The gate that keeps it that way is tools/check-shard-balance.py,
+            # which reads these lists and the recorded costs and fails when the
+            # shards drift apart again.
+            projects: >-
+              Harbor.Architecture.Tests
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.

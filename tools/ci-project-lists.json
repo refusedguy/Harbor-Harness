@@ -34,12 +34,17 @@
         "Harbor.Core.Tests",
         "Harbor.Registries.Tests",
         "Harbor.Hosting.Tests",
-        "Harbor.Architecture.Tests",
         "Harbor.Lsp.Tests",
         "Harbor.Terminal.Pty.Tests",
         "Harbor.Telemetry.Tests",
         "Harbor.TestKit.Generators.Tests",
         "Harbor.TestKit.Tests"
+      ],
+      "cli": false
+    },
+    "arch": {
+      "projects": [
+        "Harbor.Architecture.Tests"
       ],
       "cli": false
     },
@@ -85,7 +90,8 @@
   "coverage": {
     "from": [
       "core",
-      "platform"
+      "platform",
+      "arch"
     ],
     "exclude": [
       {
