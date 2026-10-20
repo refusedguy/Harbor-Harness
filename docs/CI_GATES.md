@@ -13,6 +13,28 @@ reads the table, the scripts in `tools/` and the workflow files, and fails when
 they disagree. A policy that only says "remember to update the table" decays
 into a table that describes a repository which no longer exists.
 
+## The measured picture
+
+Measured on `dev` at `c077befa`, the tree this policy landed on:
+
+| | |
+|---|---|
+| python tools in `tools/` | 21 files, 18 807 lines |
+| of them, the `check-*.py` family | 11 files, 14 788 lines; 10 files and 13 793 lines before this policy added its own checker |
+| workflows that run a python tool | 4: `ci.yml`, `docs.yml`, `demo.yml`, `test-os.yml` |
+| gates that block a build | 15 |
+| gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
+| reporters, helpers, libraries | 3 reporters, 1 helper, 1 library |
+| tools with a self-test | 18 |
+| tools with a ratchet | 8 |
+| tools with a floor | 11 |
+| tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
+| gates in a workflow that runs a script that is not in the tree | 1 (`ci.yml`'s `public-api-abstractions` job, left behind by the #1845 squash) |
+
+The last two rows are the two gaps this policy closed on the way in, and both
+were found by the checker rather than by reading: the checker was run against
+the tree before the table was written, and it named them.
+
 ## Why the gates are python
 
 The reason is not speed. All the python gates together take seconds, and
@@ -164,10 +186,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` that CI runs, with the question it answers,
-where it runs, whether it blocks a build, whether it has a self-test, the
-ratchet it holds, and the floors CI passes it. The table is checked by
-`tools/check-gate-policy.py`, which fails when it stops describing the tree.
+Every python tool in `tools/` that CI runs (20 of the 21 python files in the
+directory; the 21st, `md_gate.py`, is imported by two of them and is listed
+because a tool that is not listed is a tool nobody reviews), with the question
+it answers, where it runs, whether it blocks a build, whether it has a
+self-test, the ratchet it holds, and the floors CI passes it. The table is
+checked by `tools/check-gate-policy.py`, which fails when it stops describing
+the tree.
 
 The modes are:
 
