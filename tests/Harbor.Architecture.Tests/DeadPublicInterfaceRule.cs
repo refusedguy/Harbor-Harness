@@ -40,8 +40,8 @@
 // comment is invisible to every tool that reads the file, so the reason is lost
 // the moment the next person reformats it. The rows below therefore carry:
 //   * the full type name, the thing being excused;
-//   * the REASON, as a value, long enough to be an argument (the shared
-//     `ExemptionReason` check enforces the floor);
+//   * the REASON, as a value, long enough to be an argument. The shared
+//     `ExemptionReason` check enforces the floor.
 //   * the tracking issue, in its own column, so a URL is never mistaken for a
 //     reason.
 //
