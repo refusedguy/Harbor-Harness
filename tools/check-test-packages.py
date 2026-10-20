@@ -244,6 +244,25 @@ _PACKAGE_REF = re.compile(
 # entries name types and methods and do not name a package.
 _NAMESPACE_BAN = re.compile(r"^N:([^;\s]+)")
 
+# The restore inputs, and the property that turns them on (#1857).
+#
+# `RestorePackagesWithLockFile` makes NuGet WRITE a `packages.lock.json`
+# next to every project; `RestoreLockedMode` makes the restore FAIL when
+# that file is out of date. The property is repo-wide or it is nothing:
+# one project with a lock file and one without is two different restore
+# behaviours in one tree, and a lock file nobody regenerates rots into a
+# red build for everybody else.
+LOCK_FILE_NAME = "packages.lock.json"
+_WANTS_LOCK_FILE = re.compile(
+    r"<RestorePackagesWithLockFile>\s*true\s*</RestorePackagesWithLockFile>", re.I
+)
+_LOCKED_MODE = re.compile(r"<RestoreLockedMode>\s*true\s*</RestoreLockedMode>", re.I)
+
+# The directories whose projects are NOT restored by CI, and therefore do
+# not take part in the all-or-nothing question: contrib/ is unmaintained and
+# not compiled by CI, and a `bin/` or `obj/` project is build output.
+_NOT_RESTORED = ("contrib",)
+
 
 class Finding:
     def __init__(self, rule, project, message, subject=None):
@@ -306,6 +325,146 @@ def scope_projects(root):
                         os.path.relpath(full, root).replace(os.sep, "/")
                     )
     return sorted(found)
+
+
+# ---------------------------------------------------------------------------
+# The restore inputs: all-or-nothing (#1857)
+# ---------------------------------------------------------------------------
+
+
+def all_projects(root):
+    """Every `.csproj` CI restores, repository-relative.
+
+    The index (`git ls-files`) for the reason `scope_projects` states, with
+    the same walk fallback for a throwaway fixture tree. `contrib/` is
+    excluded: it is unmaintained and not compiled by CI, so a lock file
+    there would say nothing about the tree that ships.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--", "*.csproj"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        tracked = sorted(
+            line for line in proc.stdout.splitlines() if line.endswith(".csproj")
+        )
+        if tracked:
+            return [p for p in tracked if p.split("/")[0] not in _NOT_RESTORED]
+    except (OSError, subprocess.CalledProcessError):
+        pass
+
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames if d not in ("bin", "obj", ".git")
+        ]
+        for name in filenames:
+            if not name.endswith(".csproj"):
+                continue
+            relative = os.path.relpath(
+                os.path.join(dirpath, name), root
+            ).replace(os.sep, "/")
+            if relative.split("/")[0] in _NOT_RESTORED:
+                continue
+            found.append(relative)
+    return sorted(found)
+
+
+def restore_input_findings(root):
+    """Is the tree's restore input all-or-nothing?
+
+    The property `RestorePackagesWithLockFile` is repo-wide or it is
+    nothing, and a lock file without it is a file NuGet never reads. The
+    four states that are not "every project, or none" are reported here,
+    because each of them is a tree where two projects restore differently
+    from each other, and the failure surfaces in somebody else's PR, not
+    in the one that caused it.
+    """
+    projects = all_projects(root)
+    owners = [
+        p for p in projects
+        if os.path.exists(os.path.join(root, os.path.dirname(p), LOCK_FILE_NAME))
+    ]
+
+    wants_lock_file = False
+    locked_mode = False
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames if d not in ("bin", "obj", ".git")
+            and d.split("/")[0] not in _NOT_RESTORED
+        ]
+        for name in filenames:
+            if not name.endswith((".props", ".targets", ".csproj")):
+                continue
+            body = read(os.path.join(dirpath, name))
+            if _WANTS_LOCK_FILE.search(body):
+                wants_lock_file = True
+            if _LOCKED_MODE.search(body):
+                locked_mode = True
+
+    findings = []
+    if owners and not wants_lock_file:
+        findings.append(
+            Finding(
+                "RESTORE-INPUTS-UNENFORCED",
+                LOCK_FILE_NAME,
+                f"{len(owners)} project(s) carry a {LOCK_FILE_NAME} but "
+                "nothing sets RestorePackagesWithLockFile, so NuGet never "
+                "writes it, never checks it, and the restore ignores it. "
+                "The file rots silently until somebody sets the property.",
+            )
+        )
+    if wants_lock_file and not owners:
+        findings.append(
+            Finding(
+                "RESTORE-INPUTS-UNWRITTEN",
+                "RestorePackagesWithLockFile",
+                "RestorePackagesWithLockFile is set but no project has a "
+                f"{LOCK_FILE_NAME}: every restore writes one, so the tree "
+                "is dirty after every restore and the lock file is not a "
+                "record of anything.",
+            )
+        )
+    if locked_mode and not wants_lock_file:
+        findings.append(
+            Finding(
+                "RESTORE-LOCKED-WITHOUT-FILES",
+                "RestoreLockedMode",
+                "RestoreLockedMode is set but RestorePackagesWithLockFile is "
+                f"not: the restore demands a {LOCK_FILE_NAME} that is never "
+                "written, and fails.",
+            )
+        )
+
+    # Half-migrated, per scope: the first path segment is the scope, so a
+    # lock file under src/ says nothing about tests/, and a tree that
+    # migrates one scope at a time is reported once per scope.
+    scopes = {}
+    for project in projects:
+        scopes.setdefault(project.split("/")[0], []).append(project)
+    for scope, members in sorted(scopes.items()):
+        with_lock = [
+            p for p in members
+            if os.path.exists(os.path.join(root, os.path.dirname(p), LOCK_FILE_NAME))
+        ]
+        if with_lock and len(with_lock) != len(members):
+            missing = sorted(set(members) - set(with_lock))
+            findings.append(
+                Finding(
+                    "RESTORE-INPUTS-PARTIAL",
+                    f"{scope}/",
+                    f"{len(with_lock)} of {len(members)} project(s) under "
+                    f"{scope}/ carry a {LOCK_FILE_NAME} and "
+                    f"{len(missing)} do not: the tree is half-migrated, so "
+                    "two projects in the same scope restore differently. "
+                    f"Without: {', '.join(missing[:5])}"
+                    + (" ..." if len(missing) > 5 else ""),
+                )
+            )
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -554,6 +713,13 @@ def analyse(root, allow_missing_assets=False, output_only=False):
     exceptions, exception_findings = parse_exceptions(root)
     census["exceptions"] = exceptions
     findings.extend(exception_findings)
+
+    # The restore inputs are what produce the package set this gate reads,
+    # so the question "is the tree half-migrated to lock files" belongs
+    # here (#1857). It is answered for the WHOLE tree, not for the scope
+    # directories: a lock file under src/ and none under tests/ is one
+    # tree with two restore behaviours.
+    findings.extend(restore_input_findings(root))
 
     projects = scope_projects(root)
     if not projects:
@@ -997,6 +1163,56 @@ def selftest():
     root = base_fixture()
     _, found = analyse(root)
     check("a clean tree stays green", not found, str(found))
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 7a. The restore inputs are all-or-nothing (#1857). A tree where one
+    #     project of a scope carries a lock file and another does not is
+    #     the half-migrated tree, and it is reported: two projects in the
+    #     same scope would restore differently from each other.
+    root = base_fixture(
+        {
+            "src/One/One.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+            "src/One/packages.lock.json": '{"version": 1}',
+            "src/Two/Two.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+        }
+    )
+    _, found = analyse(root)
+    check(
+        "a half-migrated tree is reported",
+        any(f.rule == "RESTORE-INPUTS-PARTIAL" for f in found),
+        shown(found),
+    )
+    check(
+        "a lock file nobody regenerates is reported",
+        any(f.rule == "RESTORE-INPUTS-UNENFORCED" for f in found),
+        shown(found),
+    )
+    shutil.rmtree(root, ignore_errors=True)
+
+    # 7b. The property set and the lock files committed together is the
+    #     green case: every project of the scope has one, and the property
+    #     that writes them is set. A gate that only knows how to fail is
+    #     not a gate.
+    root = base_fixture(
+        {
+            "Directory.Build.props": (
+                "<Project><PropertyGroup>"
+                "<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>"
+                "</PropertyGroup></Project>"
+            ),
+            "src/One/One.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+            "src/One/packages.lock.json": '{"version": 1}',
+            "src/Two/Two.csproj": "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+            "src/Two/packages.lock.json": '{"version": 1}',
+        }
+    )
+    _, found = analyse(root)
+    check(
+        "a fully migrated tree is green",
+        not any(f.rule.startswith("RESTORE-INPUTS") for f in found)
+        and not any(f.rule == "RESTORE-LOCKED-WITHOUT-FILES" for f in found),
+        shown(found),
+    )
     shutil.rmtree(root, ignore_errors=True)
 
     # 8. A project with NO resolved graph is BLIND, never green. "I could

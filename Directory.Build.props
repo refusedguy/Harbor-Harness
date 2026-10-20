@@ -165,19 +165,46 @@
     <!--
       NuGet audit — pinned, not inherited (#1857).
 
-      The SDK default is `NuGetAuditMode=direct` (direct dependencies only) and
-      `NuGetAuditLevel=low`. Both defaults are the wrong shape for this
-      repository: Directory.Packages.props turns on
-      `CentralPackageTransitivePinningEnabled` and pins the transitive versions
-      of SixLabors.ImageSharp and MessagePack on purpose, so a transitive
-      advisory is Harbor's subject and not the SDK's business to decide.
-      Leaving the mode at the default would let a vulnerable transitive
-      through the gate, which is exactly the class this repository has already
-      had to reason about (NU1902/NU1903 for MessagePack and ImageSharp).
+      This file is the one that governs the whole solution: src/, tests/,
+      apps/, samples/ and tools/ all import it (apps/, tests/ and src/ do it
+      by RELATIVE path, because the project-file analyzer can only follow an
+      import it can resolve on disk, see src/Directory.Build.props). The two
+      places it does NOT reach are build/ (the NUKE tool, which declares
+      that it does not inherit solution-wide strictness) and contrib/ (not
+      built by CI). Both are noted here so the claim "the audit is pinned
+      repository-wide" is not read as covering them.
 
-      `all` audits direct AND transitive dependencies; `moderate` is the
-      smallest level that still reports the advisories the audit exists for.
-      Both are pinned here so the SDK default cannot change the gate under us.
+      WHAT THE SDK DEFAULT ACTUALLY IS, and the previous version of this
+      comment got it wrong, which is why it is written out now.
+      NuGet 7.0 (the .NET 10 SDK) changed the default of `NuGetAuditMode`:
+      it now defaults to `all` for a project that targets `net10.0` or
+      higher, and to `direct` below that. Harbor targets net10.0, so the
+      SDK default on this repository is ALREADY `all`. `direct`, what an
+      earlier version of this comment called the default, is the pre-NuGet-7.0
+      (.NET 8/9 SDK) behaviour, and is still the default for a project below
+      net10.0. The pin is therefore NOT what turns the audit on today. What
+      it does is make the gate a property of the repository instead of a
+      property of the SDK: a reader who deletes these two lines because they
+      "look redundant" removes the guarantee, and a future SDK that changes
+      the default again cannot narrow the gate under us.
+
+      `NuGetAuditLevel` is the other half, and the SDK default there is
+      `low`, which reports EVERY advisory: NU1901 (low), NU1902 (moderate),
+      NU1903 (high), NU1904 (critical). This repository pins `moderate`, so
+      NU1902/NU1903/NU1904 are reported and NU1901 is not. That is a
+      deliberate narrowing, not an accident: a low-severity advisory in a
+      transitive package this repository does not control would, under the
+      zero-warning gate (TreatWarningsAsErrors=true), break every build in
+      the repository the day the advisory is published. The severities
+      this repository has actually had to act on are the moderate and high
+      ones (the MessagePack and ImageSharp advisories, NU1902/NU1903, whose
+      per-project suppressions #1911 removed).
+
+      The mode is `all` because Directory.Packages.props turns on
+      `CentralPackageTransitivePinningEnabled` and pins the transitive
+      versions of SixLabors.ImageSharp and MessagePack on purpose: a
+      transitive advisory is Harbor's subject, not the SDK's business to
+      decide.
     -->
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>moderate</NuGetAuditLevel>

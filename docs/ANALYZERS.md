@@ -617,8 +617,26 @@ and the `.resx` files — and reports on them. The package ships 193 rules
 | ID | Title | Why it is an error |
 |----|-------|--------------------|
 | **Proj0037** | Exclude runtime when all assets are private | A `PrivateAssets=all` package has no runtime assembly; without `ExcludeAssets=runtime` the IDE offers a type the program cannot load. Fixed at 26 `PackageReference` sites, one `ExcludeAssets` line each, plus one scoped `NoWarn` (see below). |
-| **Proj0040** | Run NuGet security audits on transitive dependencies too | The SDK default is `direct`. Harbor pins transitive versions on purpose (`CentralPackageTransitivePinningEnabled`), so a transitive advisory is Harbor's subject. Fixed by pinning `NuGetAuditMode=all` in `Directory.Build.props`. |
-| **Proj0041** | NuGet audit level must be at least moderate | The SDK default is `low`. Fixed by pinning `NuGetAuditLevel=moderate` in `Directory.Build.props`. |
+| **Proj0040** | Run NuGet security audits on transitive dependencies too | The SDK default is `direct` **below net10.0**; NuGet 7.0 (the .NET 10 SDK) made `all` the default for a project that targets `net10.0` or higher, so on this tree the SDK default is already `all` and the pin is what keeps it there. Harbor pins transitive versions on purpose (`CentralPackageTransitivePinningEnabled`), so a transitive advisory is Harbor's subject. Fixed by pinning `NuGetAuditMode=all` in `Directory.Build.props`. |
+| **Proj0041** | NuGet audit level must be at least moderate | The SDK default is `low`, which reports EVERY advisory: NU1901 (low), NU1902 (moderate), NU1903 (high), NU1904 (critical). The pin to `moderate` keeps NU1902/NU1903/NU1904 live and drops NU1901. That is a deliberate narrowing, because under `TreatWarningsAsErrors=true` a low-severity advisory in a transitive package this repository does not control would break every build the day it is published, and the severities this repository has actually had to act on are the moderate and high ones (the MessagePack and ImageSharp advisories, whose per-project `NU1902;NU1903` suppressions #1911 removed). Fixed by pinning `NuGetAuditLevel=moderate` in `Directory.Build.props`. |
+
+**The SDK default the two pins are written against, and where it changed.**
+NuGet 7.0 (the .NET 10 SDK) changed the default of `NuGetAuditMode`: it is
+`all` for a project that targets `net10.0` or higher, and `direct` below
+that. Harbor targets `net10.0`, so the effective default on this repository
+is `all` and the pin of `all` is not what turns the audit on. It is what
+makes the gate a property of the repository instead of a property of the SDK.
+The rule's own documentation still carries the pre-NuGet-7.0 wording ("by
+default … only direct dependencies are taken into consideration"), which is
+where the earlier version of this table got the default wrong.
+
+**What Proj0041 actually enforces.** The rule's title says the level "must be
+at least moderate", and its shipped implementation tests
+`level > Moderate`, so it reports `high` and `critical`, the two values that
+narrow the coverage below the moderate floor, and it does NOT report a
+missing or `low` level. `moderate` and `low` both pass it. The pin to
+`moderate` is the floor the rule names, and the one value that keeps the
+advisories this repository has had to act on inside the gate.
 
 **One rule is demoted because it contradicts this repository:**
 
@@ -630,8 +648,17 @@ and the `.resx` files — and reports on them. The package ships 193 rules
 
 | ID | Title | Severity | Why |
 |----|-------|----------|-----|
-| Proj0043 | Use lock files | suggestion | 157 `PackageReference`s times a lock file is a large diff that has to be reconciled with dependabot first. Not adopted silently. |
-| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. |
+| Proj0043 | Use lock files | suggestion | **Decided on 2026-10-20 (#1857): not adopted, and the tree stays all-or-nothing.** The measured reason is in `docs/CENTRAL_PACKAGE_MANAGEMENT.md` §14: the restore is already reproducible (196 packages in the graph, 0 of the 68 version ranges floating or open at the bottom), so a lock file would add a detector rather than a fix, at the cost of one file per project that every dependabot PR has to reconcile. The rule stays visible so the question is not forgotten. |
+| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. `RestoreLockedMode` without lock files is a restore that fails, which is why `tools/check-test-packages.py` reports that state (`RESTORE-LOCKED-WITHOUT-FILES`) rather than letting it reach CI. |
+
+**The gate that keeps the lock-file decision honest** is
+`tools/check-test-packages.py` (the `test-packages` CI job). It reports four
+states the tree must never be in: a lock file nobody regenerates
+(`RESTORE-INPUTS-UNENFORCED`), the property set with no lock file
+(`RESTORE-INPUTS-UNWRITTEN`), locked mode without lock files
+(`RESTORE-LOCKED-WITHOUT-FILES`), and a scope where some projects carry a
+lock file and others do not (`RESTORE-INPUTS-PARTIAL`). Its `--self-test`
+carries a fixture for each, so the gate is known to bite.
 
 **Everything else is off, family by family, with the reason written next to it**
 in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig).
