@@ -6,10 +6,14 @@
 //   Reflection is allowed in tests. It is forbidden in shipped product code,
 //   except in the `src/Harbor.Plugins.*` family, which needs it deliberately.
 //
-// Until this file it existed only as an emergent property of the `ReflectionAnalyzers`
-// (REFL*) diagnostics plus the zero-warning bar. A contributor had no way to tell it
-// from an accident, which means the next person to add `Assembly.Load` somewhere new
-// has no reason to know it is the thing the whole codebase is built to avoid.
+// Until this file it existed only as an emergent property of the zero-warning
+// bar. The `ReflectionAnalyzers` (REFL*) diagnostics did not contribute to it:
+// all 46 of their rules are member-by-member rules about reflection lookups,
+// and not one of them is about dynamic code — measured in #1905 by reading the
+// ids, titles and strings out of the shipped analyzer assembly. A contributor
+// had no way to tell it from an accident, which means the next person to add
+// `Assembly.Load` somewhere new has no reason to know it is the thing the whole
+// codebase is built to avoid.
 //
 // WHY THESE FOUR CONSTRUCTS, AND WHY NOT THE OTHERS
 // --------------------------------------------------

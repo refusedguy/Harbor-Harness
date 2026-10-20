@@ -533,8 +533,10 @@ as `DiSeverityDemotionRules.PathScopedSection_NamesEveryRuleItSets` requires.
 
 > The two `.editorconfig` lines that used to configure `REL0001` / `REL0002`
 > configured ids that do not exist in the package — they were dead
-> configuration, and the real rules have always run at their default
-> severity. See #1905.
+> configuration, and the real rules ran at their default severity, unrecorded,
+> for as long as the package was in the tree. They are configured now, one row
+> per id, with a reason each. See #1905.
+
 ### Version baseline, and what a version move may change
 
 The families in the table above are the ones a version move has been
@@ -1716,7 +1718,11 @@ every pre-existing finding into a red build on the day the package lands.
 A severity written anywhere else reaches nothing. That is not a style rule:
 the two `.editorconfig` lines that used to configure `REL0001` and `REL0002`
 configured ids that do not exist in the package, so they configured nothing at
-all, and the rules they were meant to silence had always been running.
+all, and the rules they were meant to silence had always been running — at
+their shipped severity, in every project, unrecorded. Every id the package
+reports on a C# tree has a row in the tree-wide section now, and every id
+with a tolerated finding has one more in the path-scoped section that covers
+it.
 
 ### The row format
 
