@@ -1029,6 +1029,13 @@ Scope and enforcement:
   failing CI on those would train people to ignore the rule. Be aware this is
   `NoWarn`, not a severity downgrade: nothing about the rule is visible in test
   builds, so review is the only backstop there.
+- **Package set** — RS0030 reads source code, so it says nothing about a
+  package that drags a banned assembly into a test project's `bin/`.
+  `tools/check-test-packages.py` is that gate: it reads the resolved package
+  graph of every test and sample project and fails on a banned package, direct
+  or transitive, and the named exceptions live in
+  `tools/test-package-exceptions.txt`. `AGENTS.md` §"What NOT to do" #2 states
+  the scope of the ban.
 
 **Adding an exemption.** A legacy call site that cannot be fixed yet carries
 `#pragma warning disable RS0030 // <reason>` and is catalogued by class in

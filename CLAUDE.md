@@ -699,7 +699,8 @@ while (start < span.Length)
 - Use `Channel<T>` for producer-consumer (see `OpenAiCompatibleLlmClient`).
 
 ### JSON
-- `System.Text.Json` only. No Newtonsoft.
+- `System.Text.Json` only. No Newtonsoft. Scope of the ban (our own use vs. a
+  foreign package's transitive dependency): `AGENTS.md` §"What NOT to do" #2.
 - Source-gen `JsonSerializerContext` for AOT-compatibility (planned).
 - `JsonPropertyName` attributes for snake_case JSON properties on internal records.
 
