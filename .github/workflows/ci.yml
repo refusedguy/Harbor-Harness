@@ -703,6 +703,35 @@ jobs:
       # that #1946 closes. The check is a property of the test platform, not
       # of the image, so proving it here proves it for the test job too.
 
+      - name: The zero-test guard can go red (issue #1795)
+        shell: bash
+        run: |
+          set -uo pipefail
+          dll="tests/Harbor.Abstractions.Tests/bin/Release/net10.0/Harbor.Abstractions.Tests.dll"
+          if [ ! -f "$dll" ]; then
+            echo "::error::missing $dll — the guard check would be vacuous"
+            exit 1
+          fi
+          set +e
+          dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
+            --treenode-filter "/*/*/NoSuchClassForTheGuardCheck/*" > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 8 ] && [ "$rc" -ne 9 ]; then
+            echo "::error::the zero-test guard is vacuous: a run that discovered no test exited $rc (expected 8 or 9)"
+            exit 1
+          fi
+          echo "the zero-test guard is not vacuous: an empty run exits $rc"
+
+      # #1882. The issue's question, asked of the tree that was just built:
+      # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
+      # project? The `test/sample package set` job below answers the same
+      # question from the resolved package graph, without a build; this step
+      # answers it from the output the build actually produced, which is
+      # where a banned package really lands. The two are separate
+      # mechanisms: a file can reach an output directory without being a
+      # package in the graph.
+
       # #1882. The issue's question, asked of the tree that was just built:
       # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
       # project? The `test/sample package set` job below answers the same
@@ -1554,6 +1583,26 @@ jobs:
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
+
+      # #1884: the CENSUS, next to the measurements above. The step above
+      # renders the tests that PRINTED something, so it sees ~75 of the ~8 400
+      # tests in a run: it is a measurement table, not a census. A baseline
+      # (how many tests does this suite have, what does this project cost)
+      # needs EVERY result, printed or not, and that is what this step
+      # renders: per project, the DISCOVERED count (not the passed count),
+      # the sum of the per-test durations, the wall the runner measured, and
+      # the parallelism factor that says whether the project is one serial
+      # chain. It is the table `docs/BENCHMARKS.md` §6 quotes, produced on
+      # every run instead of once by hand.
+      #
+      # Reporting only, never a gate: the script exits 0 on a missing or
+      # corrupt TRX set, and it prints its own one-line summary to the log.
+      - name: Report the test census (issue #1884)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-census.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --top 15
 
       - name: Publish Test Results
         if: always()
