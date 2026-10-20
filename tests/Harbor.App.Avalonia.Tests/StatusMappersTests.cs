@@ -223,11 +223,15 @@ public class StatusMappersTests
 
     // ── CostToUsd ──────────────────────────────────────────────────
 
+    // The cost is a double because `decimal` is NOT an attribute parameter
+    // type (CS0182). The cast back is exact for these four values: a
+    // double-to-decimal conversion rounds to 15 significant digits, and
+    // 0, -1.5, 0.0123 and 12.5 all survive that unchanged.
     [Test]
-    [Arguments(0m, "$0.0000", DisplayName = "CostToUsd_Zero_ReturnsZeroUsd")]
-    [Arguments(-1.5m, "$0.0000", DisplayName = "CostToUsd_Negative_ReturnsZeroUsd")]
-    [Arguments(0.0123m, "$0.0123", DisplayName = "CostToUsd_SmallCost_ReturnsFourDecimal")]
-    [Arguments(12.5m, "$12.5000", DisplayName = "CostToUsd_LargeCost_ReturnsFourDecimal")]
-    public async Task CostToUsd_ReturnsUsdText(decimal costUsd, string expectedText) =>
-        await Assert.That(StatusMappers.CostToUsd(costUsd)).IsEqualTo(expectedText);
+    [Arguments(0d, "$0.0000", DisplayName = "CostToUsd_Zero_ReturnsZeroUsd")]
+    [Arguments(-1.5d, "$0.0000", DisplayName = "CostToUsd_Negative_ReturnsZeroUsd")]
+    [Arguments(0.0123d, "$0.0123", DisplayName = "CostToUsd_SmallCost_ReturnsFourDecimal")]
+    [Arguments(12.5d, "$12.5000", DisplayName = "CostToUsd_LargeCost_ReturnsFourDecimal")]
+    public async Task CostToUsd_ReturnsUsdText(double costUsd, string expectedText) =>
+        await Assert.That(StatusMappers.CostToUsd((decimal)costUsd)).IsEqualTo(expectedText);
 }
