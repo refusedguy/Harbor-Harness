@@ -8,6 +8,14 @@ using Harbor.Abstractions.Tools;
 using Harbor.Abstractions.Tui;
 using Harbor.App.Cli.Commands;
 using Harbor.Application.Configuration;
+// #1769: the provider-registry double is generated (a concrete class per
+// interface) — the hand-written member-by-member fake is gone.
+using FakeProviderRegistryBase = Harbor.TestKit.Generated.FakeProviderRegistry;
+
+// #1769: the agent double is generated (a concrete class per interface) — the
+// hand-written member-by-member fake is gone.
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent;
+
 
 namespace Harbor.App.Cli.Tests;
 /// <summary>
@@ -158,53 +166,49 @@ public class ModelCommandRebindTests
             Task.FromResult(Result.Failure<string>("not set"));
     }
 
-    private sealed class FakeProviders : IProviderRegistry
+    private sealed class FakeProviders : FakeProviderRegistryBase
     {
-        public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [];
-        public Result<ILlmClient> GetClient(ProviderId providerId) =>
+        public FakeProviders()
+        {
+            GetAllModelsAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([]);
+            GetModelsCachedAsyncResult = Result.Success<IReadOnlyList<ModelInfo>>([]);
+            UnregisterResult = Result.Failure("n/a");
+        }
+
+        public override Result<ILlmClient> GetClient(ProviderId providerId) =>
             Result.Failure<ILlmClient>("not registered");
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([]));
-        public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
-        public Result Unregister(ProviderId providerId) => Result.Failure("n/a");
     }
 
     /// <summary>Records every Initialize call; otherwise a pass-through shell.</summary>
-    private sealed class FakeAgent(AgentDefinition initialDef) : IAgent
+    private sealed class FakeAgent : FakeAgentBase
     {
-        public List<(Session Session, AgentDefinition Definition)> InitializeCalls { get; } = [];
-
-        // #559: Maybe-shaped, like the interface.
-        public Maybe<AgentState> State { get; private set; } = Maybe.From(AgentState.Idle("sess-1", initialDef));
-
-        public CancellationToken AbortToken => _abortSource.Token;
-        public void RequestAbort() => _abortSource.Cancel();
         private readonly CancellationTokenSource _abortSource = new();
 
-        public void Initialize(Session session, AgentDefinition agent)
+        public FakeAgent(AgentDefinition initialDef) =>
+            State = Maybe.From(AgentState.Idle("sess-1", initialDef));
+
+        public List<(Session Session, AgentDefinition Definition)> InitializeCalls { get; } = [];
+
+        public override CancellationToken AbortToken => _abortSource.Token;
+
+        public override void RequestAbort() => _abortSource.Cancel();
+
+        public override void Initialize(Session session, AgentDefinition agent)
         {
             InitializeCalls.Add((session, agent));
             State = Maybe.From(AgentState.Idle(session.Id, agent));
         }
 
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
+        public override Task<Result> PromptAsync(string text, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
 
-        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
+        public override Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
 
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-
-        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
+        public override IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
             new DummySubscription();
 
-        public void Steer(AgentMessage message) { }
-
-        public void ResetAbortSource() { }
-
-        public void Dispose() => _abortSource.Dispose();
+        public override void Dispose() => _abortSource.Dispose();
 
         private sealed class DummySubscription : IDisposable
         {

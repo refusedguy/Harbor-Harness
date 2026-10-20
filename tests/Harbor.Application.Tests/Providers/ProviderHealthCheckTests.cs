@@ -4,6 +4,10 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Providers;
+// #1769: the LLM double is generated (a concrete class per interface) — the
+// hand-written member-by-member fake is gone.
+using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient;
+
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests.Providers;
@@ -154,29 +158,20 @@ public class ProviderHealthCheckTests
                 : Result.Success();
     }
 
-    private sealed class FakeClient(Result<IReadOnlyList<ModelInfo>> outcome) : ILlmClient
+    private sealed class FakeClient : FakeLlmClientBase
     {
-        public ProviderId ProviderId { get; } = ProviderId.TryCreate("fake").Value;
-
-        public IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default)
+        public FakeClient(Result<IReadOnlyList<ModelInfo>> outcome)
         {
-            async IAsyncEnumerable<LlmEvent> Empty()
-            {
-                await Task.CompletedTask;
-                yield break;
-            }
-            return Empty();
+            ProviderId = ProviderId.TryCreate("fake").Value;
+            GetModelsAsyncResult = outcome;
         }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(outcome);
     }
 
-    private sealed class HangingClient : ILlmClient
+    private sealed class HangingClient : FakeLlmClientBase
     {
-        public ProviderId ProviderId { get; } = ProviderId.TryCreate("hanging").Value;
+        public HangingClient() => ProviderId = ProviderId.TryCreate("hanging").Value;
 
-        public IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default)
+        public override IAsyncEnumerable<LlmEvent> StreamAsync(LlmRequest request, CancellationToken cancellationToken = default)
         {
             async IAsyncEnumerable<LlmEvent> Empty()
             {
@@ -186,7 +181,7 @@ public class ProviderHealthCheckTests
             return Empty();
         }
 
-        public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
+        public override async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             return Result.Failure<IReadOnlyList<ModelInfo>>("unreachable");

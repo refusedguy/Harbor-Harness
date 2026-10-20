@@ -45,6 +45,10 @@ using Harbor.Application.Permissions;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.TestKit;
+// #1769: the agent double is generated (a concrete class per interface) — the
+// hand-written member-by-member fake is gone.
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent;
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -667,7 +671,7 @@ public class ReplRunnerConfigLoadTests
     }
 
     /// <summary>Records what the REPL forwarded, and which agent it initialized.</summary>
-    private sealed class RecordingAgent : IAgent
+    private sealed class RecordingAgent : FakeAgentBase
     {
         private readonly CancellationTokenSource _abortSource = new();
 
@@ -675,38 +679,32 @@ public class ReplRunnerConfigLoadTests
 
         public string? InitializedAgentName { get; private set; }
 
-        public CancellationToken AbortToken => _abortSource.Token;
+        public override CancellationToken AbortToken => _abortSource.Token;
 
-        public void RequestAbort() => _abortSource.Cancel();
+        public override void RequestAbort() => _abortSource.Cancel();
 
         // #559: Maybe-shaped, like the interface. This double is never initialized
         // (the tests assert on Initialize calls, not on state), so it throws if
         // anything ever reads it — which is the honest signal.
-        public Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
+        public override Maybe<AgentState> State => throw new NotSupportedException("Not used in these tests.");
 
-        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
+        public override IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new NopDisposable();
 
-        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
+        public override Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
         {
             Prompts.Add(message.Content);
             return Task.FromResult(Result.Success());
         }
 
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default)
+        public override Task<Result> PromptAsync(string text, CancellationToken ct = default)
         {
             Prompts.Add(text);
             return Task.FromResult(Result.Success());
         }
 
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public override void Initialize(Session session, AgentDefinition agent) => InitializedAgentName = agent.Name.Value;
 
-        public void ResetAbortSource() { }
-
-        public void Initialize(Session session, AgentDefinition agent) => InitializedAgentName = agent.Name.Value;
-
-        public void Steer(AgentMessage message) { }
-
-        public void Dispose() => _abortSource.Dispose();
+        public override void Dispose() => _abortSource.Dispose();
 
         private sealed class NopDisposable : IDisposable
         {

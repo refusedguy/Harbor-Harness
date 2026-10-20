@@ -8,6 +8,10 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
+// #1769: the agent-loop double is generated (a concrete class per interface) —
+// the hand-written member-by-member fake is gone.
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop;
+
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -90,9 +94,8 @@ public class AbortSurfaceGuardTests
         }
     }
 
-    private sealed class NoopLoop : IAgentLoop
+    private sealed class NoopLoop : FakeAgentLoopBase
     {
-        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
+        public NoopLoop() => RunAsyncResult = Result.Success();
     }
 }

@@ -7,6 +7,10 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
+// #1769: the agent-loop double is generated (a concrete class per interface) —
+// the hand-written member-by-member fake is gone.
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop;
+
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests;
@@ -47,7 +51,7 @@ public class SubAgentRunnerTests
         "test-model");
 
     /// <summary>Loop fake that appends scripted replies into the context and captures calls.</summary>
-    private sealed class ScriptedLoop : IAgentLoop
+    private sealed class ScriptedLoop : FakeAgentLoopBase
     {
         private readonly AgentMessage[] _replies;
         private readonly Result? _outcome;
@@ -63,7 +67,7 @@ public class SubAgentRunnerTests
         public CancellationToken LastCt { get; private set; }
         public Func<Task>? MidRun { get; set; }
 
-        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        public override async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             LastContext = session;
             LastAgent = agent;

@@ -10,6 +10,10 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
+// #1769: the agent double is generated (a concrete class per interface) — the
+// hand-written member-by-member fake is gone.
+using FakeAgentBase = Harbor.TestKit.Generated.FakeAgent;
+
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -73,8 +77,10 @@ public class ToolRetryProjectionTests
         new(new StubHost(status, new RunningAgent()), new ReplCommandCatalog(), NullLogger.Instance,
             null, new Lazy<LegacySlashRunner>(static () => null!));
 
-    private sealed class RunningAgent : IAgent
+    private sealed class RunningAgent : FakeAgentBase
     {
+        private readonly CancellationTokenSource _abortSource = new();
+
         public RunningAgent()
         {
             var def = new AgentDefinition(
@@ -83,20 +89,17 @@ public class ToolRetryProjectionTests
             State = AgentState.Idle("s", def) with { IsRunning = true };
         }
 
-        public CancellationToken AbortToken => _abortSource.Token;
-        public void RequestAbort() => _abortSource.Cancel();
-        private readonly CancellationTokenSource _abortSource = new();
+        public override CancellationToken AbortToken => _abortSource.Token;
 
-        // #559: Maybe-shaped, like the interface.
-        public Maybe<AgentState> State { get; }
-        public void Initialize(Session session, AgentDefinition agent) { }
-        public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new Nop();
-        public Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task WaitForIdleAsync(CancellationToken ct = default) => Task.CompletedTask;
-        public void ResetAbortSource() { }
-        public void Steer(AgentMessage message) { }
-        public void Dispose() => _abortSource.Dispose();
+        public override void RequestAbort() => _abortSource.Cancel();
+
+        public override IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) => new Nop();
+
+        public override Task<Result> PromptAsync(string text, CancellationToken ct = default) => Task.FromResult(Result.Success());
+
+        public override Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default) => Task.FromResult(Result.Success());
+
+        public override void Dispose() => _abortSource.Dispose();
 
         private sealed class Nop : IDisposable
         {

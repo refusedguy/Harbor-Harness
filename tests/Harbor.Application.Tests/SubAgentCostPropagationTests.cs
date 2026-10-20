@@ -6,6 +6,10 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.TestKit;
+// #1769: the agent-loop double is generated (a concrete class per interface) —
+// the hand-written member-by-member fake is gone.
+using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop;
+
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests;
@@ -47,7 +51,7 @@ public class SubAgentCostPropagationTests
         "test-model");
 
     /// <summary>Loop fake appending scripted replies, then returning the outcome.</summary>
-    private sealed class CostLoop : IAgentLoop
+    private sealed class CostLoop : FakeAgentLoopBase
     {
         private readonly Result? _outcome;
         private readonly AgentMessage[] _replies;
@@ -58,7 +62,7 @@ public class SubAgentCostPropagationTests
             _replies = replies;
         }
 
-        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        public override async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             foreach (AgentMessage message in _replies)
                 await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
@@ -72,7 +76,7 @@ public class SubAgentCostPropagationTests
     ///     own stats record with real rates (TurnRunner passes the resolved
     ///     model's pricing to UpdateStatsAsync).
     /// </summary>
-    private sealed class PricingLoop : IAgentLoop
+    private sealed class PricingLoop : FakeAgentLoopBase
     {
         private readonly Usage _usage;
         private readonly Pricing _pricing;
@@ -85,7 +89,7 @@ public class SubAgentCostPropagationTests
             _replies = replies;
         }
 
-        public async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        public override async Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             foreach (AgentMessage message in _replies)
                 await session.AppendMessageAsync(message, ct).ConfigureAwait(false);
@@ -469,11 +473,11 @@ public class SubAgentCostPropagationTests
     ///     Loop fake that captures the live session context so the test can
     ///     issue a turn debit against the same session a propagation targets.
     /// </summary>
-    private sealed class ContextCapturingLoop : IAgentLoop
+    private sealed class ContextCapturingLoop : FakeAgentLoopBase
     {
         public ISessionContext? Captured;
 
-        public Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
+        public override Task<Result> RunAsync(ISessionContext session, AgentDefinition agent, CancellationToken ct = default)
         {
             Captured = session;
             return Task.FromResult(Result.Success());
