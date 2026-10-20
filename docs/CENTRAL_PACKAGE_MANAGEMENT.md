@@ -172,7 +172,7 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 
 **Key difference from `Directory.Build.props`:** `Directory.Packages.props` is **only** evaluated during NuGet restore. It does not affect compilation or build properties. It only affects which NuGet package versions get restored.
 
-Harbor's `Directory.Packages.props` now carries **79 `<PackageVersion>` entries**
+Harbor's `Directory.Packages.props` now carries **80 `<PackageVersion>` entries**
 — the original migration shipped 41; the desktop/UI sprint added the rest.
 
 **One project is outside this file.** The NUKE build project (`build/_build.csproj`)
@@ -231,7 +231,7 @@ The file opens with a 28-line comment explaining:
 - `ManagePackageVersionsCentrally=true` — the master switch. When `true`, NuGet requires every `PackageReference` to resolve its version from a `PackageVersion` entry in this file (or a parent `Directory.Packages.props`).
 - `CentralPackageTransitivePinningEnabled=true` — additionally pins transitive dependencies. If package A depends on package B v1.0, and you declare `B v2.0` in this file, NuGet will use `B v2.0` instead of `B v1.0`. Without this, NuGet would let the transitive `B v1.0` win.
 
-### 4.3 The 79 `<PackageVersion>` entries
+### 4.3 The 80 `<PackageVersion>` entries
 
 Grouped top-to-bottom, in the order the file declares them (the counts are the
 file's own, recounted; the rows sum to the total at the bottom):
@@ -239,9 +239,8 @@ file's own, recounted; the rows sum to the total at the bottom):
 | Group | Count | Entries |
 |-------|-------|---------|
 | Microsoft.Extensions.* | 13 | `Logging.Abstractions`, `Logging`, `Logging.Console`, `DependencyInjection.Abstractions`, `DependencyInjection`, `Configuration.Abstractions`, `Configuration`, `Configuration.Json`, `Hosting.Abstractions`, `Hosting`, `Options`, `Http`, `FileSystemGlobbing` |
-| Microsoft.CodeAnalysis.* | 3 | `Microsoft.CodeAnalysis.CSharp` (Roslyn), `Microsoft.CodeAnalysis.NetAnalyzers`, `Microsoft.CodeAnalysis.BannedApiAnalyzers` |
+| Microsoft.CodeAnalysis.* | 4 | `Microsoft.CodeAnalysis.CSharp` (Roslyn), `Microsoft.CodeAnalysis.NetAnalyzers`, `Microsoft.CodeAnalysis.BannedApiAnalyzers`, `Microsoft.CodeAnalysis.PublicApiAnalyzers` |
 | Microsoft.Data.* | 1 | `Microsoft.Data.Sqlite` |
-| Microsoft.NET test SDK | 1 | `Microsoft.NET.Test.Sdk` |
 | TUnit + NetArchTest | 3 | `TUnit`, `TUnit.Assertions`, `NetArchTest.Rules` |
 | BenchmarkDotNet | 1 | `BenchmarkDotNet` |
 | CommunityToolkit.* | 1 | `CommunityToolkit.Mvvm` |
@@ -260,7 +259,8 @@ file's own, recounted; the rows sum to the total at the bottom):
 | DI analyzers | 3 | `DependencyInjection.Lifetime.Analyzers`, `Excubo.Analyzers.DependencyInjectionValidation`, `Excubo.Analyzers.Annotations` |
 | Serilog | 5 | `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File`, `Serilog.Sinks.Console`, `Serilog.Sinks.Async` |
 | Diff | 1 | `DiffPlex` |
-| **Total (at migration time; now 79)** | **79** | |
+| Reference hygiene | 1 | `ReferenceTrimmer` (build-time only, #1853) |
+| **Total (at migration time; now 80)** | **80** | |
 
 ### 4.4 The one project outside CPM: `build/_build.csproj`
 
@@ -650,7 +650,7 @@ If a vulnerable transitive shows up, add it to `Directory.Packages.props` with t
 
 ### 9.4 Harbor's current transitive pinning status
 
-Harbor pins **79** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
+Harbor pins **80** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
 
 ---
 

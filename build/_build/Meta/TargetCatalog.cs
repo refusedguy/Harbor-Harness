@@ -50,7 +50,7 @@ public static class TargetCatalog
             [new TargetOutput("dir", "src/**/bin/Release")],
             ["./build.sh Compile", "./build.sh Compile --configuration Debug"],
             ["default target; tests need it first because they run --no-build"], IsDefault: true),
-        new("Test", "dotnet test the whole solution --no-build after Compile.",
+        new("Test", "Run every test project as a plain executable --no-build after Compile.",
             ["Compile"], [],
             [new TargetParam("--configuration", "enum[Debug|Release]", "release", "must match the Compile configuration")],
             [new TargetOutput("none", null)],

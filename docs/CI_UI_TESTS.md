@@ -93,17 +93,18 @@ here, and the older "discovers zero tests, exit 5" wording conflated them:
    ran` / exit 5 failures in `renderer-perf-gate.yml` were this, and
    `CHANGELOG.md` (sprint *ci-cd-maturity*) records that deleting the single
    `--logger` flag turned that job green.
-2. **11 of the 36 test projects still reference `Microsoft.NET.Test.Sdk`**
-   (pinned in `Directory.Packages.props:71`). TUnit's installation docs say
-   that package must not be used with TUnit because it stops test discovery.
-   `TUNIT_MTP_AUDIT.md` proposes removing it; that change has not landed.
+2. **`Microsoft.NET.Test.Sdk` is not used, and must not be.** It was declared in
+   16 test projects and pinned in `Directory.Packages.props`; #1893 removed all
+   of them. TUnit's installation docs say that package must not be used with
+   TUnit because it stops test discovery. `tools/check-no-test-sdk.py` fails the
+   build if it comes back.
 
 Because of (2) the older blanket claim that `dotnet test` "discovers zero
-tests repo-wide" cannot hold as written — 25 of the 36 test projects never
-reference the package named as the blocker. What *is* established is that no
-CI job has run `dotnet test` since it was abandoned, so its current
-per-project behaviour is **unverified**. Running each project as a plain
-executable is the form CI actually exercises, which is why it is the only
+tests repo-wide" never held as written — the package named as the blocker was
+never in most of the test projects, and it is not in any of them now. What *is*
+established is that no CI job has run `dotnet test` since it was abandoned, so
+its current per-project behaviour is **unverified**. Running each project as a
+plain executable is the form CI actually exercises, which is why it is the only
 form documented here.
 
 ## Pre-build hygiene gate
