@@ -1,0 +1,37 @@
+# arch-anchor-exceptions — the line-number anchors in the architecture rule tree
+# that are part of the CHECKED FACT rather than a pointer to it, and why.
+# Read by tools/check-arch-anchors.py.
+#
+# THIS IS A RATCHET IN BOTH DIRECTIONS, NOT A TARGET. The gate passes only when
+# the set of anchors the tree produces is exactly the set written here:
+#
+#   * an anchor this file does not carry is RED. A NEW line-number anchor fails.
+#   * a row the tree no longer produces is RED. A CLOSED hole must have its row
+#     deleted in the same diff that closed it.
+#
+# So the file can only shrink, and the gate gets stricter as the tree is
+# converted. A closed hole cannot stay blessed.
+#
+# ── FORMAT ────────────────────────────────────────────────────────────────
+#
+#   <path relative to the repo root> | <the anchor text> | <reason>
+#
+#   path     the file the anchor lives in, slash-separated, from the repo root
+#   anchor   the anchor AS WRITTEN — `WidgetFactory.cs:42`, not the line it is
+#            on. A line number as the KEY would be the very defect this file
+#            exists to stop: the key would go stale on the next insert, and the
+#            exception would quietly stop excusing anything.
+#   reason   why this anchor is the checked fact and not a pointer to one
+#
+# ── ROWS ──────────────────────────────────────────────────────────────────
+#
+# Every row below is a SYNTHETIC FIXTURE: test data that names a line on
+# purpose, because the thing under test is a line number.
+#
+tests/Harbor.Architecture.Tests/ScanRuleTests.cs | hit.cs:1 | the report format under test: the rule's own output is `file:line`, and this asserts that shape
+tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:247 | the probe fixture is a synthetic source file whose own line numbers are the input
+tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:255 | the probe fixture is a synthetic source file whose own line numbers are the input
+tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:423 | the probe fixture is a synthetic source file whose own line numbers are the input
+tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs | EnforcerIntegrityTests.cs:467 | the probe fixture is a synthetic source file whose own line numbers are the input
+tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:162 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given
+tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs | apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:168 | the analyzer's own diagnostic text names the line of the SYNTHETIC source it was given

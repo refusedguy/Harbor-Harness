@@ -83,7 +83,7 @@
 //
 // The marker half is deliberately NOT a name scan. A name scan for
 // `I…Plugin` also matches `IAppReducerPlugin`
-// (src/Harbor.Ui.Framework.State/State/AppReducer.cs:48) — a UI-domain
+// (the `IAppReducerPlugin` interface) — a UI-domain
 // reducer hook where "plugin" means "reducer plugin", not "Harbor plugin". It
 // is not an extension axis, it is not IPlugin-deriving, and a rule that
 // flagged it would be wrong about code that has nothing to do with extension.
@@ -101,7 +101,7 @@
 //
 // BOUNDARY OF THE "NOTHING CALLS IT" CLAIM
 // -----------------------------------------
-// InMemoryEventBus's ring (src/Harbor.Registries/Events/InMemoryEventBus.cs:48)
+// InMemoryEventBus's ring (its own note on `IPluginLoadHost.EventBus`)
 // records the opposite lesson: "'no production callers' is not a provable claim
 // here", because a live bus is handed to out-of-tree plugin code through
 // `IPluginLoadHost.EventBus`. That caution does not transfer here, and the

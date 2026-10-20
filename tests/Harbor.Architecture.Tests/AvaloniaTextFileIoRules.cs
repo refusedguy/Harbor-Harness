@@ -1,7 +1,7 @@
 // AvaloniaTextFileIoRules.cs — source-level guard for issue #934:
 // `CodeEditorViewModel` read and wrote the file the user opened straight from the
-// view-model, with no seam: `File.Exists` :109, `File.ReadAllTextAsync` :114,
-// `File.WriteAllTextAsync` :138.
+// view-model, with no seam: `File.Exists`, `File.ReadAllTextAsync`,
+// `File.WriteAllTextAsync`.
 //
 // WHY A SEPARATE FILE AND NOT A WIDENING OF AvaloniaFileTreeWalkRules
 // -------------------------------------------------------------------
@@ -475,7 +475,7 @@ public class AvaloniaTextFileIoRules
                 + "probe runs on the dispatcher the user is looking at. Go through the Domain "
                 + $"{PortContractName} (Harbor.Abstractions, beside `IDirectoryLister`), implemented in "
                 + $"Harbor.Application beside `SystemDirectoryLister`, registered in "
-                + "ServiceRegistration.RegisterAppServices (which AppHost.cs:79 calls), and injected into "
+                + "ServiceRegistration.RegisterAppServices (which AppHost.BuildAsync calls), and injected into "
                 + "the view-model. Path strings are still the view-model's business: `Path.GetFileName` "
                 + "is how the tab is labelled. " + string.Join("\n", violations));
     }
@@ -776,7 +776,7 @@ public class AvaloniaTextFileIoRules
                 + $"A port that exists and is registered nowhere compiles, passes every other gate and "
                 + "substitutes nothing — `IGitQuery` was in exactly that state and the palette went on "
                 + "speaking to no one. Register it in ServiceRegistration.RegisterAppServices, the method "
-                + "AppHost.cs:79 calls at startup, next to the IDirectoryLister line #492 added. #934.");
+                + "AppHost.BuildAsync calls at startup, next to the IDirectoryLister line #492 added. #934.");
         }
 
         if (!consumedByViewModel)

@@ -65,7 +65,7 @@
 //
 // WHY NOT A SCAN FOR "PROJECT MENTION + LAYER WORD"
 // -------------------------------------------------
-// Tried against the corpus and rejected. `TuiEffectHost.cs:23` reads "Domain
+// Tried against the corpus and rejected. `TuiEffectHost`'s own summary reads "Domain
 // layer — it never needs to reference `Harbor.Application` for agent types": a
 // layer word and a project name in one sentence, and no claim about either. A
 // co-occurrence rule is either wrong on every legitimate sentence or narrowed

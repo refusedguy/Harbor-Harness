@@ -85,6 +85,10 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #1728. The arch-anchor gate reads the architecture rule tree and its own
+      # exceptions file, so a PR that edits the gate itself has to run it.
+      - 'tools/check-arch-anchors.py'
+      - 'tools/arch-anchor-exceptions.txt'
       # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
@@ -181,6 +185,10 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #1728. The arch-anchor gate reads the architecture rule tree and its own
+      # exceptions file, so a PR that edits the gate itself has to run it.
+      - 'tools/check-arch-anchors.py'
+      - 'tools/arch-anchor-exceptions.txt'
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
       # baseline, so a PR that edits the tree it measures — or the gate, or
@@ -269,6 +277,12 @@ jobs:
       # nothing is indistinguishable from a rule that found nothing.
       - name: Citation checker fails on a stale file:line and an unwired type
         run: python3 tools/check-doc-cites.py --self-test
+      # #1728. The eleventh gate is the only one that asks whether an
+      # architecture rule may anchor on a line number AT ALL. Its failure path
+      # is tested here for the same reason as the others: a rule edited until it
+      # matches nothing is indistinguishable from a rule that found nothing.
+      - name: Architecture-anchor gate fails on a planted line-number anchor
+        run: python3 tools/check-arch-anchors.py --self-test
       # #933. The fourth gate is the only one that asks whether a COUNT the
       # onboarding documents state still equals the count of tracked files.
       # Its failure path is tested for the same reason as the other three: the
@@ -446,7 +460,40 @@ jobs:
       # The numbers are the tree's, measured not guessed: 3 guides / 37 `using`
       # lines and 2 base lists on dev@7aff0c87.
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200 --min-guide-usings 30 --min-base-lists 2
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
+
+  # #1728. Eleventh question, and the only one about the ANCHORS the
+  # architecture rule tree uses: may an architecture rule point at a LINE
+  # NUMBER?
+  #
+  # The `cites` job above asks whether a `file:line` a test writes still names
+  # the line its author meant. This one asks the prior question: why is there a
+  # `file:line` to be wrong at all. A line number is a COORDINATE, and every
+  # line inserted above it moves the coordinate; the measured price of the
+  # coordinate form was three "repair the citation" incidents in one shift
+  # (#1701: `:549→:561`, #1658, #1502) plus the standing re-run tax.
+  #
+  # The architecture tree was the worst offender and has been converted to
+  # SYMBOLIC anchors (`Type.Member`, plus the condition that makes the site the
+  # one being talked about). This job is what keeps it converted: the seven
+  # anchors that remain are the ones where the number IS the checked fact, and
+  # they are listed with a reason in tools/arch-anchor-exceptions.txt.
+  #
+  # The floor is on the number of FILES the scan reads, not on the number of
+  # anchors: the anchor count is expected to be zero, and a floor on a defect
+  # is a floor on the defect. The non-vacuity proof is the gate's own
+  # --self-test (a planted anchor fails, an excused one passes, a stale
+  # exception row fails), run in the `selftest` job above.
+  archanchors:
+    name: architecture anchors
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that no architecture rule anchors on a line number
+        run: python3 tools/check-arch-anchors.py --min-files 40
 
   lint:
     name: markdown lint

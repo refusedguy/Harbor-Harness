@@ -5,18 +5,18 @@
 // THE DEFECT THIS GUARDS
 // ----------------------
 // ApprovalCoordinator holds each gate in a `GateSlot` whose `Tcs` is built with
-// RunContinuationsAsynchronously (ApprovalCoordinator.cs:35 — line numbers
-// stable across the #1615 move to src/Harbor.Permissions). Deciding a gate
+// RunContinuationsAsynchronously (the `GateSlot.Tcs` — stable across the
+// #1615 move to src/Harbor.Permissions). Deciding a gate
 // calls `TrySetResult` OUTSIDE the lock, which queues the waiter's continuation
 // on the thread pool instead of running it inline. When that continuation runs,
-// WaitForDecisionAsync calls `ForgetGate` (:213 / :218), which REMOVES the slot
+// WaitForDecisionAsync calls `ForgetGate`, which REMOVES the slot
 // from `_gates`.
 //
 // So there is a window, opened by the first decision and closed by the pool, in
 // which the same gate answers two different dispositions:
 //
 //   slot still registered  -> AlreadyDecided / AlreadyCancelled
-//   slot already forgotten -> StaleGate (the UnknownGate branch, :112-115)
+//   slot already forgotten -> StaleGate (the UnknownGate branch)
 //
 // Both are correct answers for their own state — a consumed gate is gone and
 // fails closed. The defect is that the TEST owned neither. A test written as

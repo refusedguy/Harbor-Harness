@@ -6,29 +6,25 @@
 // that the core already gives a default to, and the two answers disagreed with
 // the core:
 //
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:54   = "ollama"
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:66   = "jsonl"
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:116  ? "ollama" : …
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:118  ? "Inter"  : …
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:119  ? "jsonl"   : …
-//   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:120  ? "info"    : …
-//   src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:99
-// check-doc-cites: record-drift src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs:99 now="/// that can disagree. Skip (<c>overwriteDefaults: false<…" [#947: written over `mergedKeys[provider] = newKey;`; repair deferred to the owner's symbol-rename decision] -->
+//   SettingsViewModel._defaultProvider   = "ollama"
+//   SettingsViewModel._storageBackend    = "jsonl"
+//   SettingsViewModel._defaultProvider   ? "ollama" : …
+//   SettingsViewModel._fontFamily        ? "Inter"  : …
+//   SettingsViewModel._storageBackend    ? "jsonl"   : …
+//   SettingsViewModel._logLevel          ? "info"    : …
+//   ConfigStoreOnboardingPersister.PersistAsync
 //                                                               ? "jsonl"   : …
 //
 // while the records that own those fields say:
-//   CommonConfig.DefaultProvider = "anthropic"   (CommonConfig.cs:127)
-// check-doc-cites: record-drift CommonConfig.cs:127 now="/// Default provider ID used on first launch / when the u…" [#947: written over `public string DefaultProvider { get; ini`; repair deferred to the owner's symbol-rename decision] -->
-//   CommonConfig.StorageBackend  = ""           (CommonConfig.cs:150 — "not chosen";
-// check-doc-cites: record-drift CommonConfig.cs:150 now="/// <para>" [#947: written over `public string StorageBackend { get; init`; repair deferred to the owner's symbol-rename decision] -->
+//   CommonConfig.DefaultProvider = "anthropic"
+//   CommonConfig.StorageBackend  = ""           ("not chosen";
 //                                                 the composition preset decides:
 //                                                 CLI jsonl, desktop memory)
-//   CommonConfig.LogLevel       = "info"       (CommonConfig.cs:167)
-// check-doc-cites: record-drift CommonConfig.cs:167 now="/// way would plant the forbidden shape in the one place …" [#947: written over `public string LogLevel { get; init; } = `; repair deferred to the owner's symbol-rename decision] -->
+//   CommonConfig.LogLevel       = "info"
 //   AvaloniaConfig.FontFamily   = "Inter"      (AvaloniaConfig.cs)
 //
 // and the desktop composition root says:
-//   apps/Harbor.App.Avalonia/AppHost.cs:102      DefaultStorageBackend = "memory"
+//   AppHost.DesktopOptions                       DefaultStorageBackend = "memory"
 //
 // Three sources, one setting, no two in agreement. The empty-unset contract in
 // ADR-008 is only meaningful if the empty value survives the round trip — and
@@ -93,13 +89,11 @@
 // -----------------------------
 // `Theme` is deliberately NOT in R1's field list. Two lines outside this
 // issue's file scope have the same shape and are owned by another wave:
-//   apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74
-// check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: written over `private string _theme = "system";`; repair deferred to the owner's symbol-rename decision] -->
-// check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+//   ThemeSettingsViewModel._theme
 // The third site was the abstract base `ThemeSettingsViewModelBase` in this
 // project's ViewModels folder — the file is gone: #1835 removed the base
 // because nothing derived from it.
-// The next site, SettingsViewModel.cs:114, was fixed in the same commit that
+// The next site, SettingsViewModel._theme, was fixed in the same commit that
 // added this file — but a guard that named `Theme` would be red on day one, and
 // a red-on-arrival guard does not land. Widening the list is the next wave's
 // call to make, with the file above in the same commit.

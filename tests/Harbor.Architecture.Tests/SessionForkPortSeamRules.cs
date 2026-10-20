@@ -6,7 +6,7 @@
 // parameter of `SessionFactory`'s constructor, so a host that wires nothing
 // gets an error instead of a second, silent fork. #882 is the follow-up
 // question, and it is a good one: the port is bound in exactly ONE place —
-// `apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs:193` — and nothing
+// `ServiceRegistration.RegisterAppServices` — and nothing
 // says the next host has to bind it too. Only the compiler stands there, and
 // the compiler is standing in the wrong place (see "WHAT THE REQUIRED
 // PARAMETER DOES AND DOES NOT BUY" below).
@@ -46,7 +46,7 @@
 //    `Harbor.Ui.Framework.Abstractions` (where the port lives) and NOT on
 //    `Harbor.Ui.Framework.Sessions` (where the consumer lives), so it cannot name
 //    `SessionFactory` at all; it calls the core `SessionForkService` directly at
-//    `apps/Harbor.App.Cli/Commands/SessionForkRunner.cs:34`, which is ALLOWED —
+//    `SessionForkRunner.ForkAsync`, which is ALLOWED —
 //    the CLI may reference `Harbor.Application`, which Presentation may not.
 //
 //    That is why a rule of the shape "every composition root registers
@@ -507,7 +507,7 @@ public sealed class SessionForkPortSeamRules
                 continue;
             }
 
-            // Comments stripped: ServiceRegistration.cs:190-192 is a three-line comment
+            // Comments stripped: ServiceRegistration.RegisterAppServices is a three-line comment
             // explaining WHY the adapter exists, and it names both types. A registration scan
             // that reads prose grades the explanation as the registration.
             string clean = string.Join('\n', StrippedLines(text));
@@ -544,7 +544,7 @@ public sealed class SessionForkPortSeamRules
 
         await Assert.That(failures).IsEmpty().Because(
             "§ARCH (#882). The fork port is bound in exactly one place today "
-            + "(" + RegistrationPath + ":176), and #882's question is what happens in the next host. "
+            + "(" + RegistrationPath + "), and #882's question is what happens in the next host. "
             + "The required constructor parameter does not answer it: a DI registration is not a "
             + "construction, so no compiler sees it. " + string.Join("\n", failures));
     }
@@ -566,8 +566,7 @@ public sealed class SessionForkPortSeamRules
     ///         <c>Harbor.Ui.Framework.Abstractions</c> (the port) and not
     ///         <c>Harbor.Ui.Framework.Sessions</c> (the consumer), so it cannot name the consumer.
     ///         It calls the core <c>SessionForkService</c> directly at
-    ///         <c>Commands/SessionForkRunner.cs:34</c>, which is permitted — the CLI is a host that
-    // check-doc-cites: record-drift Commands/SessionForkRunner.cs:34 now="unresolved" [resolver blind spot — apps/Harbor.App.Cli/Commands/SessionForkRunner.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
+    ///         <c>SessionForkRunner.ForkAsync</c>, which is permitted — the CLI is a host that
     ///         may reference <c>Harbor.Application</c>.
     ///     </para>
     ///     <para>

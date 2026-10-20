@@ -63,7 +63,7 @@
 // each used by exactly one command. Git is the seventh because #929 added it
 // (see the growth table below): the tail grew with the interface, which is the
 // trend this ratchet exists to stop. Extracting those is owed work and the
-// interface's own TODO at IReplHost.cs:19-20 already names the first step
+// interface's own TODO on `IReplHost` already names the first step
 // (INewSessionHost). It is not what "split into four" means, and it is not
 // cheap: IReplHost is `internal` and hand-wired (nothing AddSingleton's it), so
 // the cost is touching 19 commands and the implementor, not a DI axis.
@@ -966,7 +966,7 @@ public sealed class FatInterfaceShapeRatchet
 
         await Assert.That(singles.Count).IsGreaterThanOrEqualTo(7)
             .Because("the single-consumer tail is the part of IReplHost that is genuinely worth "
-                   + "extracting, and it is what the interface's own TODO (IReplHost.cs:19-20, "
+                   + "extracting, and it is what the interface's own TODO (on IReplHost, "
                    + "INewSessionHost) is aimed at. Seven when measured: ScrollTimelineToEnd, Composer, "
                    + "RendererPipeline, PanelRegistry, PluginReload, HealthCheck, and Git — the last added "
                    + "by #929, so the tail is GROWING with the interface. If this has collapsed, the tail "

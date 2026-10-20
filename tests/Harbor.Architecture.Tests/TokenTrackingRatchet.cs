@@ -55,10 +55,10 @@
 // A DOCUMENTED GAP: THE REPL STATUS POLLERS
 // -----------------------------------------
 // The frame-render path really is a GetStats consumer — `host.Tokens?.GetStats()`
-// at ReplFrameRenderer.cs:229 (its #1506 extract; ReplLifecycle forwarders to
+// at ReplFrameRenderer.RenderFrameAsync (its #1506 extract; ReplLifecycle forwarders to
 // it) — and it is deliberately NOT a row in the table below. The only place its
 // text names the aggregate is a `//` comment at
-// ReplFrameRenderer.cs:237, so the name-based holder scan strips it and it never
+// ReplFrameRenderer.RenderFrameAsync, so the name-based holder scan strips it and it never
 // enters the measurement. Its twin PromptPipeline is a row because it takes an
 // `ITokenTracker?` parameter directly.
 //
@@ -73,7 +73,7 @@
 // TWO FACTS A READER SHOULD NOT HAVE TO RE-DERIVE
 // ------------------------------------------------
 //   * ITokenEstimator ALREADY EXISTS, in this very namespace —
-//     src/Harbor.Abstractions/Sessions/ICompactionService.cs:69 — and its
+//     ITokenEstimator — and its
 //     Estimate / EstimateMessage are byte-identical to the aggregate's. The
 //     counting slice needs no new interface at all; it needs the aggregate to
 //     stop redeclaring what is already declared next door.
@@ -123,8 +123,8 @@
 // Two scans, both over src/ + apps/ (SourceScan.ProductTrees), comments
 // stripped first (SourceCommentStripper) so that the XML docs which NAME the
 // aggregate to explain it are not graded as holders of it. Three files mention
-// it in prose only and are therefore NOT rows: ContextUsage.cs:16,
-// StatusViewModel.cs:114, and ReplFrameRenderer.cs:237 — the last of which is a
+// it in prose only and are therefore NOT rows: the `ContextUsage` summary,
+// StatusViewModel.SetUsage, and ReplFrameRenderer.RenderFrameAsync — the last of which is a
 // real consumer reached through the host (its ReplLifecycle delegate; #1506) and
 // is discussed under the gap above.
 //

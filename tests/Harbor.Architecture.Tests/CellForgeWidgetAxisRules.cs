@@ -16,8 +16,7 @@
 //     peers. Public visibility is a consequence of the assembly split, not a
 //     promise to anyone outside it.
 //   * There is NO DOOR. The one shipped `LayoutTree` is constructed in exactly
-//     one place — `new LayoutTree()` at
-//     `src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs:690`, inside the
+//     one place — `new LayoutTree()` inside the
 //     static factory `ChatScreen.Build(...)`, whose eight parameters are all
 //     in-tree. No plugin is ever handed a tree, a `ChatScreen`, or a `Panel`.
 //     `LayoutTree` itself is public with a public `AddRoot`/`Split`, so a
@@ -59,7 +58,7 @@
 //     cell-diff pipeline also owns.
 //
 // The promise is not only in the prose. `ITuiPlugin`'s own XML doc
-// (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:14-21`) teaches
+// (`ITuiPlugin`'s own XML doc) teaches
 // "Register a new view — append a custom panel to any `TuiViewPlacement`", and
 // its sample registers at `SidebarRight` — a placement
 // `BaseTuiRenderer.ShouldRenderPlacement` closes with `_ => false`. So even the

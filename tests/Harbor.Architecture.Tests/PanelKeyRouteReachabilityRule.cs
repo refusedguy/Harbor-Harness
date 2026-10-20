@@ -8,20 +8,19 @@
 // it: `IPanelProvider.OnKey` and `IOverlayLayer.OnKey`. The whole product tree
 // contains exactly THREE such hand-offs, and none of them can be entered:
 //
-//   src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:205
+//   OverlayStack.RouteKey
 //       `if (layer.OnKey(in key))` — inside `OverlayStack.RouteKey`, which no
 //       product method calls. (#812)
-//   src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs:96
+//   CellForgePanelAdapter.RouteKey
 //       `return provider.OnKey(key, ctx);` — inside
 //       `CellForgePanelAdapter.RouteKey`, whose only caller in the whole tree is
-//       `ChatScreenLayout.cs:1293`.
-//   src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170
-// check-doc-cites: record-drift src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs:170 now="/// sees it." [#947: written over `return _panel.OnKey(`; repair deferred to the owner's symbol-rename decision] -->
+//       `ChatScreenPanelDock.RoutePanelKey`.
+//   CellForgeJumpPaletteOverlayLayer.OnKey
 //       `return _panel.OnKey(` — inside that layer's own `OnKey`, and the layer
 //       is never constructed outside tests.
 //
-// And `ChatScreenLayout.RoutePanelKey` (`:1247`), the caller at `:1293`, has NO
-// caller either. So the chain is two links long and both ends are in the air.
+// And `ChatScreenPanelDock.RoutePanelKey` has NO caller either. So the chain is
+// two links long and both ends are in the air.
 //
 // WHY THE USER-VISIBLE PART IS SMALLER THAN "7 BROKEN PANELS"
 // -----------------------------------------------------------
@@ -31,12 +30,12 @@
 //
 //   * `CellForgeLogsPanel.OnKey` handles F12 by dispatching
 //     `AppMsg.TogglePanel("logs")` — and F12 is ALREADY bound globally to
-//     `ChatAction.ToggleLogsPanel` (`ChatKeyMap.cs:117`), which the reducer
-//     applies as the same `TogglePanel(state, "logs")` (`AppReducer.cs:450`).
+//     `ChatAction.ToggleLogsPanel` (`ChatKeyMap._entries`), which the reducer
+//     applies as the same `TogglePanel(state, "logs")` (`AppReducer.UpdateKeyGeneric`).
 //     The dead override is a byte-for-byte duplicate of a live hotkey.
 //   * `CellForgeHelpPanel.OnKey` handles '?' the same way, and '?' is already
 //     bound to `ChatAction.HelpPanel` → `TogglePanel(state, "help")`
-//     (`ChatKeyMap.cs:58`, `AppReducer.cs:443`).
+//     (`ChatKeyMap._entries`, `AppReducer.UpdateKeyGeneric`).
 //   * `CellForgeSkillFreshnessPanel.OnKey` is `=> false` — it wants nothing.
 //   * That leaves `CellForgeFileTreePanel` (j/k/h/l + Enter navigation),
 //     `CellForgeDiagnosticsPanel` (j/k cursor) and `CellForgeSubagentsPanel`
@@ -44,7 +43,7 @@
 //     capability the global keymap does not already have — plus
 //     `CellForgeJumpPalettePanel`, which is keyed AND unpainted, because
 //     `DefaultPlacement => Center` sends the dock home early
-//     (`ChatScreenLayout.cs:1100-1106`) and the `IOverlayLayer` meant to paint it
+//     (`ChatScreenPanelDock.AttachPanels`) and the `IOverlayLayer` meant to paint it
 //     is constructed by nothing but a test.
 //
 // So the honest count is "three panels with unreachable input, one hotkey that
@@ -60,11 +59,11 @@
 //     in the chain above is skipped by construction;
 //   * it dispatches `AppMsg.FocusPanel("logs")` by hand first, because
 //     `RoutePanelKey` returns early unless the panel is `Focused`
-//     (`ChatScreenLayout.cs:1280-1283`) and the product's F12 path only ever
-//     reaches `Visible` — `AppReducer.TogglePanel` (`:172-187`) toggles
+//     (`ChatScreenPanelDock.RoutePanelKey`) and the product's F12 path only ever
+//     reaches `Visible` — `AppReducer.TogglePanel` toggles
 //     Hidden↔Visible and never sets `FocusedPanelId`. NO product host dispatches
 //     `AppMsg.FocusPanel` with a non-null id; the one non-test dispatch is
-//     `contrib/tui/Harbor.Tui.SpectreTui/SpectreTuiRenderer.cs:323`, and
+//     `SpectreTuiRenderer.ChatScreen.OnKeyMessage`, and
 //     `contrib/` is unbuilt.
 //
 // The test manufactures the precondition the product never reaches, then asserts

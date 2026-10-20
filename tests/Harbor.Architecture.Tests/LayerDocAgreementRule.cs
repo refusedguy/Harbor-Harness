@@ -53,7 +53,7 @@
 //     contradicting its own prose four times.
 //   * The `Layer` enum's own XML doc already says it: Infrastructure is
 //     "Implementations: providers, storage, tools, IPC endpoints, telemetry,
-//     plugin machinery" (`FullLayerMatrixTests.cs:37`). "IPC endpoints" is the
+//     plugin machinery" (`Layer`). "IPC endpoints" is the
 //     gate's own name for `Harbor.Ipc.{Client,InProcess,Server}`.
 //
 // HONEST LIMIT OF THAT ARGUMENT — the layer class is a judgement, not a derivation
@@ -159,7 +159,7 @@
 //
 // STATUS: written without being compiled. Local dotnet is forbidden in this
 // repository and CI is the first build, exactly as recorded in
-// `DefaultModelDocClaimTests.cs:60-64`. Treat the C# as unverified until that run.
+// `DefaultModelDocClaimTests`'s STATUS block. Treat the C# as unverified until that run.
 //
 // Author: refusedguy (#888).
 

@@ -14,8 +14,8 @@
 // byte-identical to `apps/Harbor.App.Cli/Logging/`'s copies apart from the
 // namespace — and NOTHING outside that directory named any of them. The
 // Avalonia app logs through Serilog (`Harbor.Logging.LoggerSetup`, wired at
-// `Hosting/LoggingConfiguration.cs:29` and `:55`); this hand-rolled provider
-// check-doc-cites: record-drift Hosting/LoggingConfiguration.cs:29 now="unresolved" [resolver blind spot — apps/Harbor.App.Avalonia/Hosting/LoggingConfiguration.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
+// `LoggingConfiguration.Configure` and
+// `LoggingConfiguration.CreateBootstrapLoggerFactory`); this hand-rolled provider
 // was compiled into the app and registered by nobody, ever.
 //
 // The failure mode is specific and worth naming: because the two copies shared

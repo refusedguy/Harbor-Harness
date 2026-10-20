@@ -8,12 +8,12 @@
 // decision tree, not the CLI:
 //
 //   1. src/Harbor.Abstractions/Agents/AgentDefinition.cs              declaration
-//   2. src/Harbor.Hosting/Modules/ToolsCatalog.cs:40-46                registration
-//   3. src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs:376-390     the menu
-//   4. apps/Harbor.App.Cli/Commands/AgentCommand.cs:63                 /agent's own text
-//   5. src/Harbor.Application/Configuration/HarborConfig.cs:108        doc comment
+//   2. ToolsCatalog.CreateAgentRegistry                       registration
+//   3. OnboardingWizard.PickFreeTextAsync                     the menu
+//   4. AgentCommand.Description                               /agent's own text
+//   5. HarborConfig.TrySetModel                               doc comment
 //   6. src/Harbor.Desktop.Abstractions/Configuration/CommonConfig.cs  doc comment
-//   7. src/Harbor.Ui.Framework.ViewModels/ViewModels/SessionRowViewModel.cs:79
+//   7. SessionRowViewModel.Title                              the row's own title
 //   +. AGENTS.md, CLAUDE.md, docs/ARCHITECTURE.md
 //
 // Edits 1 and 2 are the axis itself: a definition and a registration. Edits 3

@@ -7,8 +7,8 @@
 // `Func<CommandContext, IReadOnlyList<string>, Task<Result>>`, and its sole
 // consumer was
 //
-//     var result = await reg.Execute(ctx, args);   // :192  assigned…
-//     return SlashCommandOutcome.Continue;          // :194  …never read
+//     var result = await reg.Execute(ctx, args);   // assigned…
+//     return SlashCommandOutcome.Continue;          // …never read
 //
 // `SlashCommandOutcome(bool ShouldQuit, int ExitCode)` has no error member, and
 // all three production entry points (`ReplRunner` x2, `PromptPipeline` via
@@ -74,7 +74,7 @@
 // -----------
 // A guard that cannot fire is worse than none, because it is believed. Four
 // tests close that: `Scanner_FlagsTheDiscardedResult` is the positive control
-// for rules A and B (the exact `:192` shape must be flagged) alongside three
+// for rules A and B (the exact shape must be flagged) alongside three
 // negative controls (the fixed spelling, and a read that lives inside an
 // interpolation hole — the case a naive "blank out string literals first" scan
 // gets wrong, because blanking the hole also deletes the only read), and
@@ -299,7 +299,7 @@ public sealed class SlashResultChannelTests
             """;
 
         // Negative control for rule B: the fall-through IS the failure arm.
-        // ReplRunner.cs:185 is the live example — `if (consoleResult.IsSuccess)
+        // ReplRunner.RunInteractiveAsync is the live example — `if (consoleResult.IsSuccess)
         // return …;` then a LogWarning naming the error.
         const string FallThroughIsTheFailureArm = """
             var consoleResult = await RunCellForgeAsync(ct);
@@ -382,7 +382,7 @@ public sealed class SlashResultChannelTests
             .Because(
                 "An `else` at a lower indent belongs to an ENCLOSING if. The inner `if (agentDef.IsSuccess)` "
                 + "has no failure arm of its own, and crediting the outer `else` would silently exempt every "
-                + "nested `if (x.IsSuccess)` in the tree — the same reason Repl/Commands/AgentCommand.cs:60 "
+                + "nested `if (x.IsSuccess)` in the tree — the same reason AgentCommand.ApplyAgentAsync "
                 + "needs an allow-list entry rather than passing.");
     }
 

@@ -2,7 +2,7 @@
 //
 // WHAT #474 SAID, AND WHAT WAS TRUE
 // ---------------------------------
-// #474 was filed from the 2026-09-28 audit: "`PanelContext.cs:5 — IServiceProvider?
+// #474 was filed from the 2026-09-28 audit: "`PanelContext — IServiceProvider?
 // Services stuffed into a per-frame context bag. 11 `ctx.Services?.GetService<T>()`
 // calls across 4 panels… Panels cannot be unit-tested without a full
 // ServiceProvider. Fix: inject via IPanelProvider constructor."
@@ -12,19 +12,18 @@
 //
 //   * `PanelContext.Services` is not an `IServiceProvider`. It is `PanelServices?`
 //     — an immutable record of six named, typed, nullable fields
-//     (src/Harbor.Ui.Framework.State/Panels/PanelContext.cs:22, PanelServices.cs:34).
-// check-doc-cites: record-drift PanelServices.cs:34 now="/// </remarks>" [#947: written over `public sealed record PanelServices`; repair deferred to the owner's symbol-rename decision] -->
+//     (PanelContext, PanelServices).
 //     #470 / PR #573 removed the container. The replacement is documented in the
 //     prose of both files, at the exact lines the audit cited.
 //   * Zero `ctx.Services?.GetService<T>()` calls remain. The only occurrence of
 //     the string "ctx.Services" anywhere under a Panels directory is a comment at
-//     CellForgeSubagentsPanel.cs:31 explaining that the locator is gone.
+//     the `CellForgeSubagentsPanel` summary explaining that the locator is gone.
 //   * The panels ARE unit-tested, with a hand-built bag and no container:
 //     tests/Harbor.Tui.CellForge.Tests/CellForgeBuiltinPanelsTests.cs builds
 //     `new PanelServices { Diagnostics = … }` and asserts on rendered rows;
 //     CellForgeSubagentsPanelTests.cs builds
 //     `new PanelServices { SessionStore = store, Sessions = manager, Store = uiStore }`.
-//   * The cited `ChatScreenLayout.cs:723,798,828,927,985` "5 more methods the
+//   * The cited `ChatScreen` / `CellForgeDockPanel` methods "5 more methods the
 //     provider is threaded through" are comments and layout arithmetic. The file
 //     has drifted since the audit; there is no provider there.
 //
@@ -48,12 +47,12 @@
 //      a panel is a shipped, sanctioned capability — not a theoretical one.
 //   2. The plugin CONSTRUCTS the panel. `ITuiPanelPlugin.RegisterPanels(
 //      IPanelRegistry)` hands the host a FINISHED `IPanelProvider` instance;
-//      `IPluginLoadHost.RegisterPanelProvider(IPanelProvider)` (:98) stores that
+//      `IPluginLoadHost.RegisterPanelProvider(IPanelProvider)` stores that
 //      instance. The host never news a plugin panel up, so it never gets to run its
 //      constructor. Constructor injection at the composition root is therefore
 //      STRUCTURALLY IMPOSSIBLE for exactly the panels the axis exists to admit.
 //   3. `PluginContext.Services` is an `IServiceCollection`
-//      (src/Harbor.Abstractions/Plugins/*:108) — a registration sink, not a
+//      (`PluginContext.Services`) — a registration sink, not a
 //      container. A plugin can ADD to the graph in `Initialize`; it is handed
 //      nothing it could resolve from in `RegisterPanels`.
 //

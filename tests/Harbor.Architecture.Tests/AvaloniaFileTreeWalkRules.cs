@@ -32,7 +32,7 @@
 // shapes are deliberately NOT forbidden, because forbidding them would either
 // ban the fix or ban an unrelated, already-accepted capability:
 //
-//   * `Directory.CreateDirectory` — AppHost.cs:130-131 makes `~/.harbor` and
+//   * `Directory.CreateDirectory` — AppHost.ResolveHarborDir makes `~/.harbor` and
 //     `~/.harbor/sessions` so a fresh install needs no manual setup. That is a
 //     composition root creating its own config directory, it is a single bounded
 //     call rather than an unbounded walk, and `PresentationCapabilityRules`

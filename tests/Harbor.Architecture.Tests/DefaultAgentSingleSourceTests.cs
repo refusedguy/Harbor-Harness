@@ -12,7 +12,7 @@
 // The third is the one that runs at startup on every host. It takes whichever agent
 // the registry happens to list first, so it agrees with the other two only by
 // coincidence. And it is not even a coincidence that holds: AgentRegistry is backed
-// by a ConcurrentDictionary (src/Harbor.Registries/Agents/AgentRegistry.cs:8), whose
+// by a ConcurrentDictionary (AgentRegistry), whose
 // enumeration order is unspecified — so "first" is not "the one registered first",
 // it is whatever the bucket layout yields on that run. The three sites agreeing is
 // an accident with a name, and the accident is invisible in review because all
