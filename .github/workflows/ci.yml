@@ -1607,6 +1607,19 @@ jobs:
           python3 tools/test-census.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
+      # Issue #1795 — the SKIPPED tests, with their reasons, in the same
+      # summary panel. A skipped test asserts nothing, and the shard loop
+      # prints per-ASSEMBLY counts only, so a suite that quietly stopped
+      # running half its tests stayed green until somebody counted by hand
+      # (that is how the 20 skipped Avalonia golden tests were found).
+      # Reporting only, never a gate: the script exits 0 on a missing TRX.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
       - name: Publish Test Results
         if: always()
         uses: dorny/test-reporter@v2
