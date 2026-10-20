@@ -1,5 +1,7 @@
 # Harbor.PolicyConfig
 
+## Overview
+
 Harbor's configuration family, as its own Application-layer assembly: the
 persisted config model (`HarborConfig` and its per-section records), the
 atomic JSON store over `~/.harbor/config.json`, the API-key store, the
