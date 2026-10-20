@@ -23,33 +23,49 @@ public class ToolCallBlockMapperTests
         return GridDump.Art(buffer);
     }
 
-    // #1810: the two mapper tables name EVERY member of ToolCallState, and
-    // the totality guard below proves it. Before, each table named three of
-    // the six — Pending, Cancelled and TimedOut had no row here at all, so a
-    // change to what those states paint was not caught by this file.
+    // #1810: the two mapper tables are ARRAYS, and the array is the whole
+    // truth about which members exist: the rows come from it, and the guard
+    // below proves it names every member of the enum. Before, each table
+    // named three of the six — Pending, Cancelled and TimedOut had no row
+    // here at all, so a change to what those states paint was not caught by
+    // this file.
+
+    /// <summary>The ToolCallState table of pill labels.</summary>
+    public static (string Name, ToolCallState State, string Expected)[] ToolCallStatePillCases =>
+    [
+        ("Pill_Maps_All_States_Pending", ToolCallState.Pending, "pending"),
+        ("Pill_Maps_All_States_Running", ToolCallState.Running, "running"),
+        ("Pill_Maps_All_States_Success", ToolCallState.Success, "ok"),
+        ("Pill_Maps_All_States_Error", ToolCallState.Error, "err"),
+        ("Pill_Maps_All_States_Cancelled", ToolCallState.Cancelled, "cancelled"),
+        ("Pill_Maps_All_States_TimedOut", ToolCallState.TimedOut, "timeout"),
+    ];
 
     [Test]
-    [Arguments(ToolCallState.Pending, "pending", DisplayName = "Pill_Maps_All_States_Pending")]
-    [Arguments(ToolCallState.Running, "running", DisplayName = "Pill_Maps_All_States_Running")]
-    [Arguments(ToolCallState.Success, "ok", DisplayName = "Pill_Maps_All_States_Success")]
-    [Arguments(ToolCallState.Error, "err", DisplayName = "Pill_Maps_All_States_Error")]
-    [Arguments(ToolCallState.Cancelled, "cancelled", DisplayName = "Pill_Maps_All_States_Cancelled")]
-    [Arguments(ToolCallState.TimedOut, "timeout", DisplayName = "Pill_Maps_All_States_TimedOut")]
-    public async Task Pill_Maps_All_States(ToolCallState state, string expectedPill)
+    [MethodDataSource(nameof(ToolCallStatePillCases))]
+    public async Task Pill_Maps_All_States(string name, ToolCallState state, string expectedPill)
     {
-        await Assert.That(StatusMappers.ToolCallStateToPill(state)).IsEqualTo(expectedPill);
+        await Assert.That(StatusMappers.ToolCallStateToPill(state)).IsEqualTo(expectedPill)
+            .Because($"{name} must hold for {state}");
     }
 
+    /// <summary>The ToolCallState table of brush keys.</summary>
+    public static (string Name, ToolCallState State, string Expected)[] ToolCallStateBrushCases =>
+    [
+        ("BrushKey_Maps_All_States_Pending", ToolCallState.Pending, "MochaOverlay2"),
+        ("BrushKey_Maps_All_States_Running", ToolCallState.Running, "MochaYellow"),
+        ("BrushKey_Maps_All_States_Success", ToolCallState.Success, "MochaGreen"),
+        ("BrushKey_Maps_All_States_Error", ToolCallState.Error, "MochaRed"),
+        ("BrushKey_Maps_All_States_Cancelled", ToolCallState.Cancelled, "MochaOverlay1"),
+        ("BrushKey_Maps_All_States_TimedOut", ToolCallState.TimedOut, "MochaRed"),
+    ];
+
     [Test]
-    [Arguments(ToolCallState.Pending, "MochaOverlay2", DisplayName = "BrushKey_Maps_All_States_Pending")]
-    [Arguments(ToolCallState.Running, "MochaYellow", DisplayName = "BrushKey_Maps_All_States_Running")]
-    [Arguments(ToolCallState.Success, "MochaGreen", DisplayName = "BrushKey_Maps_All_States_Success")]
-    [Arguments(ToolCallState.Error, "MochaRed", DisplayName = "BrushKey_Maps_All_States_Error")]
-    [Arguments(ToolCallState.Cancelled, "MochaOverlay1", DisplayName = "BrushKey_Maps_All_States_Cancelled")]
-    [Arguments(ToolCallState.TimedOut, "MochaRed", DisplayName = "BrushKey_Maps_All_States_TimedOut")]
-    public async Task BrushKey_Maps_All_States(ToolCallState state, string expectedBrush)
+    [MethodDataSource(nameof(ToolCallStateBrushCases))]
+    public async Task BrushKey_Maps_All_States(string name, ToolCallState state, string expectedBrush)
     {
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(state)).IsEqualTo(expectedBrush);
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(state)).IsEqualTo(expectedBrush)
+            .Because($"{name} must hold for {state}");
     }
 
     [Test]
@@ -281,24 +297,31 @@ public class ToolCallBlockMapperTests
     }
 
     /// <summary>
-    /// #1810: the totality check for the two mapper tables above. Both name
-    /// every member of <c>ToolCallState</c>, and this says so — a member
-    /// added to the enum has no row until it gets one.
+    /// #1810: the totality check for the ToolCallState pill table. The array
+    /// above names every member of the enum, and this says so — a member
+    /// added to <c>ToolCallState</c> has no row until it gets one.
     /// </summary>
     /// <remarks>
     /// The guard above walks <c>Enum.GetValues</c> over the PRODUCT and
     /// proves every state paints something. This one walks the TABLE and
     /// proves every state is NAMED. A table that forgot a member would leave
-    /// the first guard green and the second one red.
+    /// the first guard green and this one red.
     /// </remarks>
     [Test]
-    public async Task Every_State_Has_A_Row_In_Every_Table()
+    public async Task Every_State_Has_A_Row_In_The_Pill_Table()
     {
-        await Assert.That(Enum.GetValues<ToolCallState>().Length).IsGreaterThan(0).Because("the enum has members to name");
-        Exhaustive.AssertAllCases<ToolCallState>([
-            (typeof(ToolCallBlockMapperTests), nameof(Pill_Maps_All_States)),
-            (typeof(ToolCallBlockMapperTests), nameof(BrushKey_Maps_All_States)),
-        ], "every ToolCallState must have a row in a table");
+        await Assert.That(ToolCallStatePillCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<ToolCallState>(ToolCallStatePillCases.Select(c => c.State).ToHashSet(), "every ToolCallState must have a row in the pill table");
+    }
+
+    /// <summary>
+    /// #1810: the totality check for the ToolCallState brush table.
+    /// </summary>
+    [Test]
+    public async Task Every_State_Has_A_Row_In_The_Brush_Table()
+    {
+        await Assert.That(ToolCallStateBrushCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<ToolCallState>(ToolCallStateBrushCases.Select(c => c.State).ToHashSet(), "every ToolCallState must have a row in the brush table");
     }
 
     [Test]

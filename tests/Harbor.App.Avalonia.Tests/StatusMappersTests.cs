@@ -39,38 +39,53 @@ public class StatusMappersTests
 
     // ── ToolCallStateToBrushKey ────────────────────────────────────
 
-    // #1810: the table names EVERY member of the enum, and the guard below
-    // proves it — a member added to ToolCallState has no row here and the
-    // guard fails. Before the table the three rows below were three separate
-    // methods, and the other three members were covered by a different test
-    // each, so "which member has a row" was a question about the file.
+    // #1810: the table is an ARRAY, and the array is the whole truth about
+    // which members exist: the rows come from it, and the guard below proves
+    // it names every member of the enum. Before, the three rows below were
+    // three separate methods and the other three members were covered by a
+    // different test each, so "which member has a row" was a question about
+    // the file.
+
+    /// <summary>The ToolCallState table of brush keys.</summary>
+    public static (string Name, ToolCallState State, string Expected)[] ToolCallStateBrushCases =>
+    [
+        ("ToolCallStateToBrushKey_Pending_ReturnsOverlay2", ToolCallState.Pending, "MochaOverlay2"),
+        ("ToolCallStateToBrushKey_Running_ReturnsYellow", ToolCallState.Running, "MochaYellow"),
+        ("ToolCallStateToBrushKey_Success_ReturnsGreen", ToolCallState.Success, "MochaGreen"),
+        ("ToolCallStateToBrushKey_Error_ReturnsRed", ToolCallState.Error, "MochaRed"),
+        ("ToolCallStateToBrushKey_Cancelled_ReturnsOverlay1", ToolCallState.Cancelled, "MochaOverlay1"),
+        ("ToolCallStateToBrushKey_TimedOut_ReturnsRed", ToolCallState.TimedOut, "MochaRed"),
+    ];
 
     [Test]
-    [Arguments(ToolCallState.Pending, "MochaOverlay2", DisplayName = "ToolCallStateToBrushKey_Pending_ReturnsOverlay2")]
-    [Arguments(ToolCallState.Running, "MochaYellow", DisplayName = "ToolCallStateToBrushKey_Running_ReturnsYellow")]
-    [Arguments(ToolCallState.Success, "MochaGreen", DisplayName = "ToolCallStateToBrushKey_Success_ReturnsGreen")]
-    [Arguments(ToolCallState.Error, "MochaRed", DisplayName = "ToolCallStateToBrushKey_Error_ReturnsRed")]
-    [Arguments(ToolCallState.Cancelled, "MochaOverlay1", DisplayName = "ToolCallStateToBrushKey_Cancelled_ReturnsOverlay1")]
-    [Arguments(ToolCallState.TimedOut, "MochaRed", DisplayName = "ToolCallStateToBrushKey_TimedOut_ReturnsRed")]
-    public async Task ToolCallStateToBrushKey_ReturnsBrushKey(ToolCallState state, string expectedBrush)
+    [MethodDataSource(nameof(ToolCallStateBrushCases))]
+    public async Task ToolCallStateToBrushKey_ReturnsBrushKey(string name, ToolCallState state, string expectedBrush)
     {
         await Assert.That(StatusMappers.ToolCallStateToBrushKey(state))
-            .IsEqualTo(expectedBrush);
+            .IsEqualTo(expectedBrush)
+            .Because($"{name} must hold for {state}");
     }
 
     // ── ToolCallStateToPill ────────────────────────────────────────
 
+    /// <summary>The ToolCallState table of pill labels.</summary>
+    public static (string Name, ToolCallState State, string Expected)[] ToolCallStatePillCases =>
+    [
+        ("ToolCallStateToPill_Pending_ReturnsPendingLabel", ToolCallState.Pending, "pending"),
+        ("ToolCallStateToPill_Running_ReturnsRunningLabel", ToolCallState.Running, "running"),
+        ("ToolCallStateToPill_Success_ReturnsOkLabel", ToolCallState.Success, "ok"),
+        ("ToolCallStateToPill_Error_ReturnsErrLabel", ToolCallState.Error, "err"),
+        ("ToolCallStateToPill_Cancelled_ReturnsCancelledLabel", ToolCallState.Cancelled, "cancelled"),
+        ("ToolCallStateToPill_TimedOut_ReturnsTimeoutLabel", ToolCallState.TimedOut, "timeout"),
+    ];
+
     [Test]
-    [Arguments(ToolCallState.Pending, "pending", DisplayName = "ToolCallStateToPill_Pending_ReturnsPendingLabel")]
-    [Arguments(ToolCallState.Running, "running", DisplayName = "ToolCallStateToPill_Running_ReturnsRunningLabel")]
-    [Arguments(ToolCallState.Success, "ok", DisplayName = "ToolCallStateToPill_Success_ReturnsOkLabel")]
-    [Arguments(ToolCallState.Error, "err", DisplayName = "ToolCallStateToPill_Error_ReturnsErrLabel")]
-    [Arguments(ToolCallState.Cancelled, "cancelled", DisplayName = "ToolCallStateToPill_Cancelled_ReturnsCancelledLabel")]
-    [Arguments(ToolCallState.TimedOut, "timeout", DisplayName = "ToolCallStateToPill_TimedOut_ReturnsTimeoutLabel")]
-    public async Task ToolCallStateToPill_ReturnsLabel(ToolCallState state, string expectedPill)
+    [MethodDataSource(nameof(ToolCallStatePillCases))]
+    public async Task ToolCallStateToPill_ReturnsLabel(string name, ToolCallState state, string expectedPill)
     {
         await Assert.That(StatusMappers.ToolCallStateToPill(state))
-            .IsEqualTo(expectedPill);
+            .IsEqualTo(expectedPill)
+            .Because($"{name} must hold for {state}");
     }
 
     // #567: the two terminal states the old `_ =>` arms could not express. Both
@@ -148,25 +163,30 @@ public class StatusMappersTests
     }
 
     /// <summary>
-    /// #1810: the totality check. Both ToolCallState tables above name every
-    /// member of the enum, and this says so — a member added to
-    /// <c>ToolCallState</c> has no row in either table, and the guard fails
-    /// until it gets one.
+    /// #1810: the totality check for the ToolCallState pill table. The array
+    /// above names every member of the enum, and this says so — a member
+    /// added to <c>ToolCallState</c> has no row until it gets one.
     /// </summary>
     /// <remarks>
-    /// The covered set is READ from the tables' own rows rather than written
-    /// out here, so there is no second list to forget: a table and a
-    /// hand-written member list drift, and the drift is invisible until a
-    /// member is added.
+    /// The covered set is the array's own membership, so there is no second
+    /// list to forget: a table and a hand-written member list drift, and the
+    /// drift is invisible until a member is added.
     /// </remarks>
     [Test]
-    public async Task Every_ToolCallState_Has_A_Row_In_Every_Table()
+    public async Task Every_ToolCallState_Has_A_Row_In_The_Pill_Table()
     {
-        await Assert.That(Enum.GetValues<ToolCallState>().Length).IsGreaterThan(0).Because("the enum has members to name");
-        Exhaustive.AssertAllCases<ToolCallState>([
-            (typeof(StatusMappersTests), nameof(ToolCallStateToPill_ReturnsLabel)),
-            (typeof(StatusMappersTests), nameof(ToolCallStateToBrushKey_ReturnsBrushKey)),
-        ], "every ToolCallState must have a row in a table");
+        await Assert.That(ToolCallStatePillCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<ToolCallState>(ToolCallStatePillCases.Select(c => c.State).ToHashSet(), "every ToolCallState must have a row in the pill table");
+    }
+
+    /// <summary>
+    /// #1810: the totality check for the ToolCallState brush table.
+    /// </summary>
+    [Test]
+    public async Task Every_ToolCallState_Has_A_Row_In_The_Brush_Table()
+    {
+        await Assert.That(ToolCallStateBrushCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<ToolCallState>(ToolCallStateBrushCases.Select(c => c.State).ToHashSet(), "every ToolCallState must have a row in the brush table");
     }
 
     [Test]
@@ -183,16 +203,23 @@ public class StatusMappersTests
 
     // ── SessionStatusToText ────────────────────────────────────────
 
+    /// <summary>The SessionStatus table of display labels.</summary>
+    public static (string Name, SessionStatus Status, string Expected)[] SessionStatusTextCases =>
+    [
+        ("SessionStatusToText_Working_ReturnsWorkingLabel", SessionStatus.Working, "working"),
+        ("SessionStatusToText_Done_ReturnsDoneLabel", SessionStatus.Done, "done"),
+        ("SessionStatusToText_Error_ReturnsErrorLabel", SessionStatus.Error, "error"),
+        ("SessionStatusToText_Aborted_ReturnsAbortedLabel", SessionStatus.Aborted, "aborted"),
+        ("SessionStatusToText_Idle_ReturnsIdleLabel", SessionStatus.Idle, "idle"),
+    ];
+
     [Test]
-    [Arguments(SessionStatus.Working, "working", DisplayName = "SessionStatusToText_Working_ReturnsWorkingLabel")]
-    [Arguments(SessionStatus.Done, "done", DisplayName = "SessionStatusToText_Done_ReturnsDoneLabel")]
-    [Arguments(SessionStatus.Error, "error", DisplayName = "SessionStatusToText_Error_ReturnsErrorLabel")]
-    [Arguments(SessionStatus.Aborted, "aborted", DisplayName = "SessionStatusToText_Aborted_ReturnsAbortedLabel")]
-    [Arguments(SessionStatus.Idle, "idle", DisplayName = "SessionStatusToText_Idle_ReturnsIdleLabel")]
-    public async Task SessionStatusToText_ReturnsLabel(SessionStatus status, string expectedText)
+    [MethodDataSource(nameof(SessionStatusTextCases))]
+    public async Task SessionStatusToText_ReturnsLabel(string name, SessionStatus status, string expectedText)
     {
         await Assert.That(StatusMappers.SessionStatusToText(status))
-            .IsEqualTo(expectedText);
+            .IsEqualTo(expectedText)
+            .Because($"{name} must hold for {status}");
     }
 
     // ── SessionStatusToBrushKey ────────────────────────────────────
@@ -201,16 +228,23 @@ public class StatusMappersTests
     // table did not, so an aborted session's dot colour was untested. The
     // totality guard below is what makes that a failure rather than a gap.
 
+    /// <summary>The SessionStatus table of brush keys.</summary>
+    public static (string Name, SessionStatus Status, string Expected)[] SessionStatusBrushCases =>
+    [
+        ("SessionStatusToBrushKey_Working_ReturnsYellow", SessionStatus.Working, "MochaYellow"),
+        ("SessionStatusToBrushKey_Done_ReturnsGreen", SessionStatus.Done, "MochaGreen"),
+        ("SessionStatusToBrushKey_Error_ReturnsRed", SessionStatus.Error, "MochaRed"),
+        ("SessionStatusToBrushKey_Aborted_ReturnsOverlay2", SessionStatus.Aborted, "MochaOverlay2"),
+        ("SessionStatusToBrushKey_Idle_ReturnsOverlay0", SessionStatus.Idle, "MochaOverlay0"),
+    ];
+
     [Test]
-    [Arguments(SessionStatus.Working, "MochaYellow", DisplayName = "SessionStatusToBrushKey_Working_ReturnsYellow")]
-    [Arguments(SessionStatus.Done, "MochaGreen", DisplayName = "SessionStatusToBrushKey_Done_ReturnsGreen")]
-    [Arguments(SessionStatus.Error, "MochaRed", DisplayName = "SessionStatusToBrushKey_Error_ReturnsRed")]
-    [Arguments(SessionStatus.Aborted, "MochaOverlay2", DisplayName = "SessionStatusToBrushKey_Aborted_ReturnsOverlay2")]
-    [Arguments(SessionStatus.Idle, "MochaOverlay0", DisplayName = "SessionStatusToBrushKey_Idle_ReturnsOverlay0")]
-    public async Task SessionStatusToBrushKey_ReturnsBrushKey(SessionStatus status, string expectedBrush)
+    [MethodDataSource(nameof(SessionStatusBrushCases))]
+    public async Task SessionStatusToBrushKey_ReturnsBrushKey(string name, SessionStatus status, string expectedBrush)
     {
         await Assert.That(StatusMappers.SessionStatusToBrushKey(status))
-            .IsEqualTo(expectedBrush);
+            .IsEqualTo(expectedBrush)
+            .Because($"{name} must hold for {status}");
     }
 
     /// <summary>
@@ -219,13 +253,20 @@ public class StatusMappersTests
     /// gets one.
     /// </summary>
     [Test]
-    public async Task Every_SessionStatus_Has_A_Row_In_Every_Table()
+    public async Task Every_SessionStatus_Has_A_Row_In_The_Label_Table()
     {
-        await Assert.That(Enum.GetValues<SessionStatus>().Length).IsGreaterThan(0).Because("the enum has members to name");
-        Exhaustive.AssertAllCases<SessionStatus>([
-            (typeof(StatusMappersTests), nameof(SessionStatusToText_ReturnsLabel)),
-            (typeof(StatusMappersTests), nameof(SessionStatusToBrushKey_ReturnsBrushKey)),
-        ], "every SessionStatus must have a row in a table");
+        await Assert.That(SessionStatusTextCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<SessionStatus>(SessionStatusTextCases.Select(c => c.Status).ToHashSet(), "every SessionStatus must have a row in the label table");
+    }
+
+    /// <summary>
+    /// #1810: the totality check for the SessionStatus brush table.
+    /// </summary>
+    [Test]
+    public async Task Every_SessionStatus_Has_A_Row_In_The_Brush_Table()
+    {
+        await Assert.That(SessionStatusBrushCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<SessionStatus>(SessionStatusBrushCases.Select(c => c.Status).ToHashSet(), "every SessionStatus must have a row in the brush table");
     }
 
     // ── DurationToText ─────────────────────────────────────────────
