@@ -2111,6 +2111,62 @@ removing the key removes. On a four-core runner a process split ON TOP of the in
 parallelism buys no wall time (the CPU, not the process boundary, is the binding
 resource) and costs one runner job per extra shard. The split becomes the right lever
 when the runner has more cores; until then the in-process budget is.
+
+### 6.3.1 The screen wait ends on the child's state, not on the deadline (#2001) ✅ measured in CI
+
+**The lever.** Every PTY scenario waits for a repaint on the emulated grid with a
+ten-second diagnostic bound. The bound is NOT the lever: when the child process has
+exited and the pump has drained its output, no further repaint CAN arrive, so the
+wait is already decided and the rest of the bound is waste. The pump already knows
+that state (it is how the pump stops), so the wait now ends on it:
+`CellForgePtyScenarioBase.WaitForScreenAsync` raises `PtyChildExitedException`, "the
+child process exited and its output is drained: no further repaint can arrive". The
+ten seconds stay as the emergency bound for a child that is alive and merely quiet.
+
+**Why the mass-failure cost was bigger than 13 × 10 s.** PR #1970 measured thirteen
+scenarios failing at once: the PTY block went from ~100 s to 603 s and the `ui` shard
+job from 175 s to 678 s. 13 × 10 s is 130 s of waiting, so the other ~470 s was the
+`[ParallelLimiter<PtyScenarioLimit>]` (two permits for the whole assembly) serialising
+the failing scenarios while the healthy ones queued behind them. Ending the wait on
+the state removes the waiting AND the serialisation it feeds: a failing scenario now
+holds its permit for the seconds it needs to fail, not for the whole bound.
+
+**Measured on the `ui` shard (arm64), the same tree with and without the change.** The
+"before" row is this branch with the new tests and NO fix; the "after" row is the
+same branch with the fix. Both carry the same 64 tests.
+
+| Run | Tree | PTY project | The wait after the child's exit | The scenario's duration |
+|---|---|---|---|---|
+| [39469637522](https://github.com/refusedguy/Harbor-Harness/actions/runs/39469637522) (this branch, BEFORE the fix) | the new tests, no fix | 64 tests, 63 passed, **1 failed**; project **38.92 s** (census: sum 76.53 s, wall 38.86 s, factor 1.97) | the full bound: `screen condition not met within 00:00:10 (waited 10.0s)` | **10.64 s** |
+| [39474702848](https://github.com/refusedguy/Harbor-Harness/actions/runs/39474702848) (this branch, AFTER the fix) | the new tests + the fix | 64 tests, **64 passed**; project **37.36 s** | the state: `the child process exited and its output is drained: no further repaint can arrive` | under 3 s (the scenario's own assertion) |
+| [39467269890](https://github.com/refusedguy/Harbor-Harness/actions/runs/39467269890) (dev, the baseline) | dev, without the new tests | 61 tests, 61 passed; project **33.83 s** (census: sum 65.88 s, wall 33.77 s, factor 1.95) | no such scenario on that tree | not applicable |
+
+**Read the wait, not the project wall.** The project's wall moved by 1.6 s between the
+two branch rows, and the runner's own spread on the same project is larger than that
+(33.13 s and 33.83 s on two `dev` runs of the SAME tree), so the wall difference is
+NOT the measurement. The measurement is the wait: **10.0 s of pure waiting** in the
+before row (the full bound, and the only way that wait could end), and a wait that
+ends on the state in the after row. The pump publishes the terminal state within one
+pump idle cap (100 ms) of the child's death, and the scenario asserts that the wait
+ended in under 3 s. One scenario waiting out the timeout is 10 s of a lane; thirteen
+of them is 65 s of a two-lane budget, which is the shape #1970 measured.
+
+**The number of scenarios that wait out the timeout: 1 → 0.** Before the change, the
+scenario that waits for a repaint after the child's exit IS a scenario that waits out
+the timeout, because that is the only way its wait could end. After the change it
+ends on the state, and the deadline is reached only by a child that is alive and
+quiet: the `A_Live_Child_That_Does_Not_Paint_The_Condition_Still_Waits_Out_The_Bound`
+scenario pins that (1.62 s for a 1 s bound, and the exact `TimeoutException`, not the
+child-exited one).
+
+> **A CI fact that hides the per-test numbers of the "after" row.** That row has no
+> census: the TRX did not land in the upload path, because `ci.yml` on `dev` passes
+> `--results-directory "$GITHUB_WORKSPACE/$trx_dir"` with an already-absolute
+> `trx_dir`. The path comes out doubled, so neither the artifact upload nor
+> `tools/test-census.py` finds the file. That is a `dev` regression and not this
+> branch's: the "before" row, one `dev` commit earlier, has its census. The fix is
+> one token, `--results-directory "$trx_dir"`.
+
 ### 6.4 CI test-suite wall: `Harbor.E2E.App.Avalonia` (CI runs 39417846300 and 39421557542, dev and this PR, 2026-10-20)
 
 > **Provenance.** The `test (e2e)` shard of two CI runs on the same tree, one before the change and one after: `dev` at 8be16392 (run 39417846300) and this branch (run 39421557542). Both rows are the same measurement, taken from the shard log: the process wall from the `dotnet exec` group marker to the TUnit summary, and TUnit's own reported duration. The test counts are identical, so the difference is the wall and not a lost test.
