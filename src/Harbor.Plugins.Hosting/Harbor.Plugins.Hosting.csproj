@@ -12,6 +12,7 @@
       - PluginHostLocator  (probe for the out-of-process host binary)
       - PluginRouteAxisRegistry (what the out-of-process route does with each
                             extension axis, and why — #1723)
+      - PluginDependencyResolver (the default IPluginDependencyResolver — #1733)
 
     Depends on all four lower plugin layers (Storage, Compilation,
     Instantiation, Registration) + Abstractions.

@@ -1,3 +1,5 @@
+using Harbor.Plugins.Abstractions;
+
 namespace Harbor.Plugins.Hosting;
 /// <summary>
 ///     Tunable options for <see cref="PluginHost" />. Built up by
@@ -27,4 +29,17 @@ public sealed class PluginHostOptions
     ///     <see langword="false" />, the first failure aborts <see cref="PluginHost.LoadAllAsync" />.
     /// </summary>
     public bool ContinueOnError { get; set; } = true;
+
+    /// <summary>
+    ///     The resolver that says whether a declared dependency is satisfied (#1733).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Null — the default — means the host publishes NO capability: every declared
+    ///         dependency stays unsatisfied, and a plugin that declares one waits (registered,
+    ///         not activated) instead of activating against an infrastructure that is not
+    ///         there. A composition root that has capabilities to publish wires them here.
+    ///     </para>
+    /// </remarks>
+    public IPluginDependencyResolver? Dependencies { get; set; }
 }

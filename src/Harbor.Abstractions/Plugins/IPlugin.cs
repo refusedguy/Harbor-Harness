@@ -49,6 +49,31 @@ public interface IPlugin
     public string Description { get; }
 
     /// <summary>
+    ///     Names of the host capabilities this plugin requires before the host activates it
+    ///     (#1733). A name is an opaque string the HOST interprets: the name of another
+    ///     plugin in the same load set, or a capability the host publishes (an MCP client, a
+    ///     configuration file). While a declared dependency is not satisfied the plugin stays
+    ///     REGISTERED but NOT ACTIVATED — it is loaded and known, but
+    ///     <see cref="Initialize" /> and the <c>Register*</c> calls have not happened yet, so
+    ///     it contributes nothing until its dependencies are met. The host activates it as
+    ///     soon as they are.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The default is an EMPTY list: a plugin that declares nothing is activated
+    ///         exactly as it was before this member existed. A name the host does not know is
+    ///         NOT satisfied — unknown is not ready, and the plugin waits visibly instead of
+    ///         failing at load time.
+    ///     </para>
+    ///     <para>
+    ///         A dependency on another plugin's name is how two plugins are ordered. Two
+    ///         plugins that require each other can never both activate; the host reports
+    ///         that as a circular dependency rather than waiting forever.
+    ///     </para>
+    /// </remarks>
+    public IReadOnlyList<string> Dependencies => [];
+
+    /// <summary>
     ///     Initialize the plugin. Called once at load time.
     /// </summary>
     /// <param name="context">The plugin context (services, configuration, logger, event bus).</param>

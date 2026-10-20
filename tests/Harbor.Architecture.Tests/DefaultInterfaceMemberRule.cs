@@ -388,6 +388,9 @@ public sealed class DefaultInterfaceMemberRule
     ///         whole governed set with a block body instead of an expression body,
     ///         and it is listed here because a text-based DIM search misses exactly
     ///         that shape. Reflection does not.</item>
+    ///         <item><c>IPlugin.Dependencies</c> — the empty list, added by #1733 so
+    ///         an existing plugin keeps compiling and keeps loading the way it
+    ///         always did.</item>
     ///     </list>
     /// </summary>
     private static readonly ReviewedDefault[] Reviewed =
@@ -586,6 +589,16 @@ public sealed class DefaultInterfaceMemberRule
             + "and the one the classifier detects structurally, by the richer default standing next "
             + "to a poorer overload of the same name.",
             "https://github.com/refusedguy/Harbor-Harness/issues/579"),
+        new(
+            "Harbor.Abstractions.Plugins.IPlugin",
+            "Dependencies",
+            DimDirection.Conservative,
+            "Returns an empty list: a plugin that declares no dependency is activated exactly as it "
+            + "was before this member existed. The default fails towards NOTHING REQUIRED — the "
+            + "plugin is not handed dependencies it did not ask for, and a plugin that DOES declare "
+            + "one says so explicitly and is held back (registered, not activated) until the host "
+            + "reports the dependency met (#1733).",
+            ""),
     ];
 
     // =====================================================================

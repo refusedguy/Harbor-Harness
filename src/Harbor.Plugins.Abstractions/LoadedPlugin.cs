@@ -49,6 +49,19 @@ namespace Harbor.Plugins.Abstractions;
     /// </summary>
     public string DisplayName => $"{Name}@{Version} ({Path.GetFileName(SourcePath)})";
 
+    /// <summary>
+    ///     The dependency names the plugin declared through
+    ///     <see cref="IPlugin.Dependencies" /> (#1733). Read off the live instance
+    ///     rather than copied at load time, so the metadata cannot drift from what
+    ///     the plugin says.
+    /// </summary>
+    /// <remarks>
+    ///     A dependency name is opaque to this layer: the HOST decides what it
+    ///     means. The hosting layer resolves a name against the plugins it loaded
+    ///     and against the capabilities the host publishes.
+    /// </remarks>
+    public IReadOnlyList<string> Dependencies => Instance.Dependencies;
+
     private static readonly IReadOnlySet<PluginCapability> FrozenCapabilities =
         new HashSet<PluginCapability>();
 }

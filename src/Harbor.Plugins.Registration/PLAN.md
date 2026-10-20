@@ -10,10 +10,14 @@
 - [x] A refused registration fails the plugin's registration (#1758). The
       registrar used to log the refusal and answer `Success`, so a caller
       could not tell "fully wired" from "half-wired"
+- [x] Plugin dependency resolution (plugin A depends on plugin B) — the first
+      slice (#1733). The DECLARATION is on the contract (`IPlugin.Dependencies`)
+      and the RESOLUTION moved to the hosting layer, which is the composition
+      root that decides when a plugin is brought up. The registrar is unchanged:
+      it is called for a plugin only once its dependencies are met.
 
 ## TODO
 
-- [ ] Plugin dependency resolution (plugin A depends on plugin B)
 - [ ] Plugin unregistration on unload
 - [ ] Conflict resolution (two plugins register same tool name)
 

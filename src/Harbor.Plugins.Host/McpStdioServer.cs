@@ -36,11 +36,27 @@ internal sealed class McpStdioServer
 
     private readonly McpPluginLoadHost _loadHost;
     private readonly ILogger<McpStdioServer> _logger;
+    private readonly Action? _onSessionEstablished;
 
-    public McpStdioServer(McpPluginLoadHost loadHost, ILogger<McpStdioServer> logger)
+    /// <summary>
+    ///     Construct the MCP stdio server over the given sink.
+    /// </summary>
+    /// <param name="loadHost">The sink the exposed tools come from.</param>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="onSessionEstablished">
+    ///     Optional hook fired right after the client completes the MCP handshake
+    ///     (#1733). The plugin host uses it to activate the plugins that were waiting for
+    ///     the session to be up. A hook that throws is logged and swallowed: a plugin
+    ///     problem must not take the protocol loop down with it.
+    /// </param>
+    public McpStdioServer(
+        McpPluginLoadHost loadHost,
+        ILogger<McpStdioServer> logger,
+        Action? onSessionEstablished = null)
     {
         _loadHost = loadHost ?? throw new ArgumentNullException(nameof(loadHost));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _onSessionEstablished = onSessionEstablished;
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -113,6 +129,11 @@ internal sealed class McpStdioServer
         {
             case "initialize":
                 await WriteResultAsync(writer, idEl, WriteInitialize, ct).ConfigureAwait(false);
+                // #1733: the handshake is the moment the "mcp-session" capability becomes
+                // true. The plugins that were waiting for it are activated right here, so
+                // their tools are in the very next tools/list.
+                _loadHost.MarkSessionEstablished();
+                NotifySessionEstablished();
                 break;
 
             case "notifications/initialized":
@@ -202,6 +223,27 @@ internal sealed class McpStdioServer
         finally
         {
             ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    /// <summary>
+    ///     Fire the session-established hook, if there is one. A hook that throws is
+    ///     logged and swallowed: the protocol loop answers the client either way.
+    /// </summary>
+    private void NotifySessionEstablished()
+    {
+        if (_onSessionEstablished is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _onSessionEstablished();
+        }
+        catch (Exception ex)
+        {
+            McpStdioServerLog.SessionHookFailed(_logger, ex);
         }
     }
 
@@ -366,6 +408,9 @@ internal static partial class McpStdioServerLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Tool '{Tool}' threw")]
     public static partial void ToolThrew(ILogger logger, Exception ex, string tool);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error, Message = "The session-established hook threw; the MCP session continues")]
+    public static partial void SessionHookFailed(ILogger logger, Exception ex);
 }
 
 /// <summary>
