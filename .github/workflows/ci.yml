@@ -110,6 +110,10 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The skipped-test report (issue #1795) — same #618 argument:
+              # an edit to the script alone must not skip the job that
+              # executes it.
+              - 'tools/test-skips.py'
               # The pack-validation gate's instrument (#429). Same #618
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
@@ -1270,6 +1274,19 @@ jobs:
         shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Issue #1795 — the SKIPPED tests, with their reasons, in the same
+      # summary panel. A skipped test asserts nothing, and the shard loop
+      # prints per-ASSEMBLY counts only, so a suite that quietly stopped
+      # running half its tests stayed green until somebody counted by hand
+      # (that is how the 20 skipped Avalonia golden tests were found).
+      # Reporting only, never a gate: the script exits 0 on a missing TRX.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Publish Test Results

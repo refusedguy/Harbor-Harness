@@ -108,6 +108,9 @@ on:
       # same reason the gates above are triggered by their own sources.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
+      # #1795. The third reporter (the skipped tests, with their reasons) and
+      # its self-test — same trigger as the two above.
+      - 'tools/test-skips.py'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -176,6 +179,9 @@ on:
       # #1884. Same trigger as above: the two reporters and their self-tests.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
+      # #1795. The third reporter (the skipped tests, with their reasons) and
+      # its self-test — same trigger as the two above.
+      - 'tools/test-skips.py'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
@@ -295,6 +301,14 @@ jobs:
         run: python3 tools/test-measurements.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
+      # #1795. The third reporter: the SKIPPED tests of a run, with the reason
+      # each one declared. Same argument as the two above — a reporter that
+      # stops reporting is green on every run and tells nobody anything. Its
+      # self-test carries the two shapes that matter: a skip WITH a reason
+      # (the reason must survive, marker stripped) and a skip WITHOUT one
+      # (the report must say so instead of inventing a reason).
+      - name: Skipped-test report finds the skips and their reasons
+        run: python3 tools/test-skips.py --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a
