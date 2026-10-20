@@ -1,4 +1,4 @@
-using Harbor.Tui.CellForge.Widgets;
+using Harbor.Tui.CellForge.Mascot;
 
 namespace Harbor.Tui.CellForge.Tests;
 

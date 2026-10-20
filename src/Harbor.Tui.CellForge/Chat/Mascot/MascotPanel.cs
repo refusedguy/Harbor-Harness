@@ -4,7 +4,7 @@ using Harbor.Ui.Framework.Rendering.Widgets;
 // #436: GlowRegion is engine-typed; the accent/rect convert exactly below.
 using EngineCells = Harbor.Tui.CellForge.Rendering;
 
-namespace Harbor.Tui.CellForge.Widgets;
+namespace Harbor.Tui.CellForge.Mascot;
 
 public sealed class MascotPanel : Panel
 {

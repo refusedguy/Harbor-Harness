@@ -1,6 +1,9 @@
-namespace Harbor.Tui.CellForge.Widgets;
+namespace Harbor.Tui.CellForge.Mascot;
 
 using Harbor.Abstractions.Contracts;
+// #1619: the doc cref below names SpinnerStrip — the engine-hosted leaf
+// (#1620) — which lives in the Widgets namespace this file just left.
+using Harbor.Tui.CellForge.Widgets;
 
 /// <summary>Mascot mood — the host derives it from agent state (SpinnerStrip rhythm, approval gate, …).</summary>
 public enum MascotMood : byte

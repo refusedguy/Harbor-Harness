@@ -6,6 +6,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;

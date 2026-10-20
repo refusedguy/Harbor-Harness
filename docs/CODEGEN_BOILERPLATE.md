@@ -162,7 +162,7 @@ public sealed class MoodFrameAttribute : Attribute
 ### Annotated enum members
 
 ```csharp
-// src/Harbor.Tui.CellForge/Widgets/AmbientMascot.cs
+// src/Harbor.Tui.CellForge/Chat/Mascot/AmbientMascot.cs
 public enum MascotMood
 {
     [MoodFrame("AmbientMascot.IdleFrames", PanelEars = "AmbientMascot.EarsUp", PanelPaws = "AmbientMascot.PawsLoaf")]
