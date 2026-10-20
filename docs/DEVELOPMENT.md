@@ -239,6 +239,32 @@ A new `tools/check-*.py` needs the "why python" line in its header, a row in
 that table, and a self-test step in `docs.yml`. The checker says which of the
 three is missing.
 
+## What a guard firing meant — issue #1726
+
+`tools/guard-triage.py` reads what a CI run already produced (a TRX, or a job
+log) and writes down what each guard firing MEANT: a **defect** (the code the
+rule named was broken), a **style** rule (the rule is bound to the form of the
+tree), or **noise** (the rule fired on code the repository explicitly allows,
+or on its own table). It runs in the `test` job of `ci.yml` and uploads
+`guard-firings-core.json`.
+
+```bash
+./tools/guard-triage.py --self-test        # prove it still finds a failure
+./tools/guard-triage.py --trx "TestResults/core/*.trx" --out firings.json
+./tools/guard-triage.py --log run-12345.log --markdown firings.md
+```
+
+The class of a rule is a human decision, and it lives in
+`tools/guard-triage-classes.json` next to the firings it was decided from. If
+a rule of yours fired and the report says `unknown`, that is the worklist:
+read the firing, decide the class, and add an entry with the reason and the
+run it came from. A rule that fires only on noise needs a repair with it, and
+the repair is one of four: keep the rule, fix the rule (derive the value
+instead of writing it down), edit the ledger row, or retire the rule.
+
+The measurement and the numbers are in
+[docs/GUARD_VALUE_MEASUREMENT.md](./GUARD_VALUE_MEASUREMENT.md).
+
 ## Test duplication gate — issue 1778
 
 `tools/check-test-dup.py` finds duplicated **test bodies** in `tests/` and
