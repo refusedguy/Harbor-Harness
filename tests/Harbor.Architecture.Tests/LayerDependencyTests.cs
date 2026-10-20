@@ -66,6 +66,8 @@ public class LayerDependencyTests
         "Harbor.Onboarding",
         "Harbor.Hooks",
         "Harbor.Permissions",
+        // #1625: the configuration family, an Application-layer sibling.
+        "Harbor.PolicyConfig",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.Providers.OpenAiCompatible",
@@ -89,6 +91,8 @@ public class LayerDependencyTests
         "Harbor.Onboarding",
         "Harbor.Hooks",
         "Harbor.Permissions",
+        // #1625: the configuration family, an Application-layer sibling.
+        "Harbor.PolicyConfig",
         "Harbor.Registries",
         "Harbor.Plugins.Runtime",
         "Harbor.App.Cli"
@@ -156,6 +160,10 @@ public class LayerDependencyTests
         string[] forbidden =
         [
             "Harbor.Registries",
+            // #1625: the configuration family left this assembly; nothing in
+            // the residue binds a Harbor.PolicyConfig type, and the edge is
+            // forbidden here so it cannot creep back in.
+            "Harbor.PolicyConfig",
             "Harbor.Terminal.Abstractions",
             "Harbor.Plugins.Runtime",
             "Harbor.Plugins.Abstractions",

@@ -4,7 +4,8 @@
 // THE DEFECT, IN ONE LINE
 // -----------------------
 // `JsonConfigStore.LoadCore` ends by binding the loaded config through
-// `Validate` (ConfigStore.cs:124). `SaveCore` does not. So the store had two
+// `Validate` (ConfigStore.cs:124, re-anchored after the #1625 extraction to
+// Harbor.PolicyConfig). `SaveCore` does not. So the store had two
 // different answers to "is this config acceptable", and only the read path
 // asked. `UpdateAsync` is where the two meet: it loads, runs the caller's
 // updater over the result, and hands the outcome to `SaveAsync` — and it is the

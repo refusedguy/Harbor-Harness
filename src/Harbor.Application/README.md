@@ -12,18 +12,20 @@ LLM turns, tool invocations, compaction events, and permission checks.
 | `Sessions/WorkspacePaths.cs`       | `IWorkspacePaths` — the run-directory layout (`$HARBOR_HOME/runs/<runId>`), extracted from the workspace-materializer hub (#1610). |
 | `Providers/ProviderHealthCheck.cs` | `IProviderHealthCheck` — probes provider endpoints before onboarding/picking a model.                                   |
 | `Telemetry/`                       | Usage telemetry plumbing consumed by the app hosts.                                                                      |
-| `Configuration/HarborConfig.cs`    | Application config model + `JsonConfigStore`, `AuthStore`, `ProviderPresets` (the provider picker catalogue, projected from `providers/*.json` by `Configuration/ProviderPresetCatalog.cs` — one declaration per provider, #580).    |
 | `Skills/`                          | `SkillFreshnessSeeder` + `SkillUpdater` — the skill-lifecycle side of the workspace context.                             |
 | `FrontMatter.cs`                   | The single front-matter field reader shared by the skill seeder and the workspace-context service (#1580).              |
 | `Observability/`                   | `TurnChangeOracle` — the harness-side oracle of what a turn changed in the workspace: a projection over the event bus that fingerprints a mutating tool's target before and after the call and reports what the FILESYSTEM says (#1745, [ADR-020](../../docs/adr/ADR-020-turn-change-oracle.md)). |
 
-Two cohorts that used to live here have their own assemblies, with their
+Five cohorts that used to live here have their own assemblies, with their
 namespaces kept verbatim so no consumer had to rewrite a `using`:
 
 | Cohort | Assembly | Moved by |
 |---|---|---|
 | `Agents/*`, `Agents/Pipeline/*`, `Resilience/` (implementations) | [`Harbor.AgentRuntime`](../Harbor.AgentRuntime) | #1623 |
 | `Sessions/*` (compaction, prompt assembly, token tracking, workspace probes, session fork), `Skills/SkillProvider.cs` | [`Harbor.SessionContext`](../Harbor.SessionContext) | #1624 |
+| `Configuration/*` (the config model, the config store, the auth store, the provider catalogue) | [`Harbor.PolicyConfig`](../Harbor.PolicyConfig) | #1625 |
+| `Permissions/*` (the permission subdomain) | [`Harbor.Permissions`](../Harbor.Permissions) | #1615 |
+| `Configuration/Onboarding*` (the wizard trio) | [`Harbor.Onboarding`](../Harbor.Onboarding) | #1614 |
 
 
 ## Why this project exists
@@ -44,11 +46,14 @@ Application projects (`Harbor.Plugins.Runtime`, `Harbor.Scripting.*`).
 ## Dependency rules
 
 * **May reference:** `Harbor.Abstractions`, `Harbor.Extensions`,
-  `Harbor.Diagnostics.Abstractions`, `Harbor.Permissions` (#1615 — the seam
-  implementation, Application→Application edges are matrix-allowed).
+  `Harbor.Diagnostics.Abstractions`.
 * **Must not reference:** `Harbor.Registries`,
   `Harbor.Plugins.*`, `Harbor.Scripting.*`, `Harbor.Providers.*`,
-  `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app.
+  `Harbor.Storage.*`, `Harbor.Tools.Builtin`, `Harbor.Tui.*`, any app —
+  and, since #1625, the sibling Application assemblies
+  (`Harbor.Permissions`, `Harbor.PolicyConfig`, `Harbor.Onboarding`): the
+  configuration family and the permission subdomain are reached by the
+  composition root, not from here.
 * **Rationale:** use cases must be testable in isolation with stub/fake
   registries and providers. Pulling in concrete impls would couple the
   orchestration logic to specific infrastructure choices and break the
@@ -62,15 +67,18 @@ over `Assembly.GetReferencedAssemblies()`.
 
 Types declare namespaces matching their assembly of residence (ROP-D Z1):
 `Harbor.Application.Agents`, `Harbor.Application.Sessions`,
-`Harbor.Application.Configuration`, `Harbor.Application.Resilience`,
+`Harbor.Application.Resilience`,
 `Harbor.Application.Providers`, `Harbor.Application.Telemetry`. (The onboarding
-trio declared this Configuration namespace too; #1614 moved it to the
+trio declared the Configuration namespace too; #1614 moved it to the
 `Harbor.Onboarding` leaf keeping the namespace verbatim.) Consumers that
 no longer needs a `using` rewrite: the old `Harbor.Core` facade that once
 re-exported them was deleted in #451. The `Harbor.Application.Permissions`
 namespace is the #1615 extraction — the same namespace now lives in the
-sibling `Harbor.Permissions` assembly; `PermissionConfigStoreAdapter`
-implements that subdomain's seam on the Application side. The
+sibling `Harbor.Permissions` assembly. The `Harbor.Application.Configuration`
+namespace is the #1625 extraction — it now lives in the sibling
+`Harbor.PolicyConfig` assembly (and `PermissionConfigStoreAdapter`, which
+implements the permissions subdomain's seam over the whole-config
+`IConfigStore`, moved with it). The
 `Harbor.Application.Agents` / `.Resilience` namespaces are the #1623
 extraction (`Harbor.AgentRuntime`), and `Harbor.Application.Sessions` /
 `Harbor.Application.Skills` are the #1624 extraction
@@ -104,5 +112,7 @@ types simply live in the sibling assembly now, so a consumer needs the new
   (`AgentLoop`, `TurnRunner`, `ToolDispatcher`, pipeline behaviors).
 * [`Harbor.SessionContext`](../Harbor.SessionContext) — the session context
   (compaction, prompt assembly, token tracking, workspace probes, session fork).
+* [`Harbor.PolicyConfig`](../Harbor.PolicyConfig) — the configuration family
+  (the config model, the config store, the auth store, the provider catalogue).
 * [`docs/ARCHITECTURE_LAYERS.md`](../../docs/ARCHITECTURE_LAYERS.md) —
   the canonical layering matrix and design rationale.

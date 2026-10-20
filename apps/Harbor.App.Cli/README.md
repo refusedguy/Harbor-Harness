@@ -38,7 +38,7 @@ dotnet run --project apps/Harbor.App.Cli -- --help
 ## Configure providers and API keys
 
 Harbor ships JSON provider presets (13+ configs under `providers/`) and resolves each provider's API key through `AuthStore`
-(`src/Harbor.Application/Configuration/AuthStore.cs:33-38`). Resolution order:
+(`src/Harbor.PolicyConfig/Configuration/AuthStore.cs:33-38`). Resolution order:
 
 1. `~/.harbor/config.json` → `ApiKeys` dictionary (written by `harbor auth` or `/auth`)
 2. The provider preset's env var (e.g. `KILO_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`)

@@ -12,12 +12,16 @@
     #1614: verbatim extraction of Harbor.Application/Configuration's onboarding
     trio (OnboardingWizard, OnboardingPicks, SetupChecklistDetector) into a
     one-way leaf — an Application-layer sibling like Harbor.Hooks (#1613), but
-    with a real edge INTO Harbor.Application: the wizard binds AuthStore,
-    IConfigStore, JsonConfigStore and ProviderPresets, which stay with the
-    configuration family in Harbor.Application (the issue's "→Configuration"
-    arrow). 0 reverse edges: nothing in src/ references Harbor.Onboarding
-    except the composition root (Harbor.Hosting registers the wizard in
-    CoreModule), the CLI, and the test projects.
+    with a real edge INTO the configuration family: the wizard binds AuthStore,
+    IConfigStore, JsonConfigStore and ProviderPresets. 0 reverse edges: nothing
+    in src/ references Harbor.Onboarding except the composition root
+    (Harbor.Hosting registers the wizard in CoreModule), the CLI, and the test
+    projects.
+    #1625: that configuration family left Harbor.Application for
+    Harbor.PolicyConfig, so the one edge this leaf carries now points THERE
+    instead of at Harbor.Application — the leaf still binds exactly the same
+    types (AuthStore, IConfigStore, JsonConfigStore, ProviderPresets), and
+    nothing else in Harbor.Application was ever reachable from here.
     Namespace stays Harbor.Application.Configuration (verbatim move, the same
     convention as #1613 Hooks and the AgentLoop slice extractions
     #1464/#1475/#1480), so consumers keep their usings — only
@@ -27,7 +31,7 @@
     System.Linq — see GlobalUsings.cs.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -43,11 +43,12 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Abstractions.Contracts/     — models, events, records, PermissionRuleset
 ├── Harbor.Registries/                 — Agent/Tool/Provider registries, EventBus; builtin agents are declared in
 │                                        AgentDefinition and registered in ToolsCatalog.CreateAgentRegistry
-├── Harbor.Application/                — config, resources, skills, diagnostics, git, filesystem, telemetry
+├── Harbor.Application/                — resources, skills, diagnostics, git, filesystem, telemetry
 │                                        (split per ADR-018; Application-layer siblings extracted so far:
 │                                        Harbor.AgentRuntime #1623, Harbor.SessionContext #1624,
 │                                        Harbor.ChangeTracking #1616, Harbor.Hooks #1613,
-│                                        Harbor.Permissions #1615, Harbor.Onboarding #1614)
+│                                        Harbor.Permissions #1615, Harbor.Onboarding #1614,
+│                                        Harbor.PolicyConfig #1625)
 ├── Harbor.Hosting/                    — DI modules wired by the CLI (TuiModule, StorageModule, ...)
 ├── Harbor.Storage.{Jsonl,Memory,Sqlite,Shared}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite);
 │                                        Shared/ is linked-source (no .csproj, compiled into Jsonl+Sqlite)
@@ -112,7 +113,7 @@ gate: `tools/check-abstractions-contract.py`).
 | Layer            | Harbor projects                                                                                              | May reference                                |
 |------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|
 | **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL + gated NuGet only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
-| **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`, `Harbor.AgentRuntime`, `Harbor.SessionContext`, `Harbor.ChangeTracking`, `Harbor.Hooks`, `Harbor.Permissions`, `Harbor.Onboarding` | Domain, plus the Application→Application sibling edges the matrix grants (NOT Infrastructure, NOT Presentation) |
+| **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`, `Harbor.AgentRuntime`, `Harbor.SessionContext`, `Harbor.ChangeTracking`, `Harbor.Hooks`, `Harbor.Permissions`, `Harbor.Onboarding`, `Harbor.PolicyConfig` | Domain, plus the Application→Application sibling edges the matrix grants (NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`, `Harbor.Ipc.{Client,InProcess,Server}`, `Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,Runtime,Storage}` | Domain only (NOT Application, NOT each other) |
 | **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
 | **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`, `src/Harbor.Plugins.Host`) | Everything — the ONLY place that `new`s concrete impls |

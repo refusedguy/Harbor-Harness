@@ -10,6 +10,8 @@
     <!-- #1624: binds the moved session-context types directly. -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
+    <!-- #1625: binds the moved configuration types (HarborConfig, the config store seam) directly. -->
+    <ProjectReference Include="../../src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj"/>
     <!-- #1623: AgentLoopTests/CompactionSummaryRetryTests construct the moved types directly. -->
     <ProjectReference Include="../../src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>

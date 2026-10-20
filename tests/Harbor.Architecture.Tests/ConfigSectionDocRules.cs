@@ -3,7 +3,7 @@
 //
 // THE DEFECT, AND WHAT IT IS NOT
 // ------------------------------
-// `src/Harbor.Application/Configuration/ConfigSections.cs` carried the type
+// `src/Harbor.PolicyConfig/Configuration/ConfigSections.cs` carried the type
 // summary for `ToolingConfig` TWICE, one three-line `/// <summary>` block
 // immediately followed by an identical one (lines 97-102).
 //
@@ -59,11 +59,11 @@
 //
 // SCOPE, AND ITS LIMITS — STATED, NOT HIDDEN
 // ------------------------------------------
-// The scan is `src/Harbor.Application/Configuration/*.cs`, nine files. That is a
-// chosen scope, not an accident of convenience: it is the directory both halves
-// of #799 live in, and a repository-wide sweep of the same shape has NOT been
-// performed — this rule has never run outside CI, and landing a rule that fires
-// on files nobody has read would report findings nobody can triage. Whether the
+// The scan is `src/Harbor.PolicyConfig/Configuration/*.cs`, eleven files. That
+// is a chosen scope, not an accident of convenience: it is the directory both
+// halves of #799 live in, and a repository-wide sweep of the same shape has NOT
+// been performed — this rule has never run outside CI, and landing a rule that
+// fires on files nobody has read would report findings nobody can triage. Whether the
 // same copy-paste artifact exists elsewhere under `src/` is therefore UNKNOWN,
 // not absent; widening this is a decision to make with a CI log in hand, not a
 // one-word change.
@@ -95,7 +95,7 @@ internal static class ConfigSectionDocProbe
     ///     The directory both halves of #799 live in. Scoped, not repo-wide — see
     ///     the file header for why, and for what that leaves unchecked.
     /// </summary>
-    internal const string ScannedDirectory = "src/Harbor.Application/Configuration";
+    internal const string ScannedDirectory = "src/Harbor.PolicyConfig/Configuration";
 
     /// <summary>
     ///     Lowest number of <c>&lt;summary&gt;</c> elements the scan must count

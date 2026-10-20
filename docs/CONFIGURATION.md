@@ -463,7 +463,7 @@ mv config.json.new config.json
 
 ### 7.2 Legacy `HarborConfig` (still in use)
 
-The legacy `HarborConfig` (`src/Harbor.Application/Configuration/HarborConfig.cs`)
+The legacy `HarborConfig` (`src/Harbor.PolicyConfig/Configuration/HarborConfig.cs`)
 still exists at `~/.harbor/config.json`. It owns:
 
 - API keys per provider (used by `AuthStore`)

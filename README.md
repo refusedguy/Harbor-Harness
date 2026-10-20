@@ -178,7 +178,8 @@ Domain            Harbor.Abstractions (+ .Contracts), Harbor.Diagnostics.Abstrac
                   Harbor.Ui.Framework.Abstractions
 Application       Harbor.Application, Harbor.Registries, Harbor.Plugins.Abstractions,
                   Harbor.AgentRuntime, Harbor.SessionContext, Harbor.ChangeTracking,
-                  Harbor.Hooks, Harbor.Permissions, Harbor.Onboarding
+                  Harbor.Hooks, Harbor.Permissions, Harbor.Onboarding,
+                  Harbor.PolicyConfig
 Infrastructure    Harbor.Storage.{Jsonl,Memory,Sqlite}, Harbor.Providers.{Anthropic,
                   OpenAI,Ollama,OpenAiCompatible,Shared}, Harbor.Tools.Builtin,
                   Harbor.Logging, Harbor.Telemetry.*, Harbor.Transport.Remote,

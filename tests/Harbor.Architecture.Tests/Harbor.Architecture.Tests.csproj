@@ -125,6 +125,9 @@
     <ProjectReference Include="..\..\src\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the configuration family moved to its own assembly; the layer
+         matrix row and the path-bound rules name it, so the gate loads it. -->
+    <ProjectReference Include="..\..\src\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <!-- #1614: onboarding one-way leaf — SlashCommandContextScopeTests /
          ReplConstructorCompositionTests / BuiltinAgentPickerProjectionRules /
          CfeValueBaselineTests bind OnboardingWizard. -->

@@ -87,6 +87,9 @@
          assemblies (Harbor.Application use cases + Harbor.Registries impls);
          reference the real owners directly. -->
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the desktop app binds the moved configuration types (HarborConfig,
+         IConfigStore, AuthStore, ProviderPresets) directly. -->
+    <ProjectReference Include="..\..\src\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <!-- #1624: the desktop app binds the moved session-context types (MessageConverter, SessionForkService). -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <!-- #1623: ServiceRegistration binds the extracted agent-loop types directly (using Harbor.Application.Agents). -->

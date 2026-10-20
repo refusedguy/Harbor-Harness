@@ -8,6 +8,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1625: the configuration family moved here (verbatim, namespace kept) —
+         the config store / auth store / preset catalogue tests bind it directly. -->
+    <ProjectReference Include="..\..\src\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <!-- #1614: the onboarding trio moved here (verbatim, namespace kept) —
          OnboardingWizardTests / SetupChecklistDetectorTests / AuthStoreTests bind it directly. -->
     <ProjectReference Include="..\..\src\Harbor.Onboarding\Harbor.Onboarding.csproj"/>

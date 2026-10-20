@@ -74,7 +74,7 @@ public sealed class DefaultModelSingleSourceTests
     ///     because the rule is about this specific declaration.
     /// </summary>
     private const string DeclarationFileRelativePath =
-        "src/Harbor.Application/Configuration/ConfigSections.cs";
+        "src/Harbor.PolicyConfig/Configuration/ConfigSections.cs";
 
     /// <summary>Product trees scanned for a second hand-spelled copy.</summary>
     private static readonly string[] ProductTrees = ["src", "apps"];
