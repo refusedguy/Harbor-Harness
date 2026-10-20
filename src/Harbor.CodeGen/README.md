@@ -24,7 +24,7 @@ Internal Roslyn source generator for Harbor. Emits `R` constant classes from AXI
 
 | Package | Purpose |
 |---------|---------|
-| `Microsoft.CodeAnalysis.CSharp` (5.6.0, per `Directory.Packages.props`) | Roslyn analyzer APIs (`IIncrementalGenerator`, `IncrementalGeneratorInitializationContext`). PrivateAssets=all. |
+| `Microsoft.CodeAnalysis.CSharp` (5.9.0, per `Directory.Packages.props`) | Roslyn analyzer APIs (`IIncrementalGenerator`, `IncrementalGeneratorInitializationContext`). PrivateAssets=all. The pin matches the compiler the build runs on (SDK 10.0.402 ships Roslyn 5.9.0) — see #1897. |
 
 ## Tests
 

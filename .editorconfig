@@ -588,12 +588,19 @@ dotnet_diagnostic.RS0041.severity = none
 # ============================================================================
 # Two DI analyzer packages are wired in:
 #
-# 1. DependencyInjection.Lifetime.Analyzers (rules DI001–DI027)
+# 1. DependencyInjection.Lifetime.Analyzers (rules DI001–DI037)
 #    Solution-wide via /Directory.Build.props. Catches captive deps,
 #    lifetime mismatches, circular DI, scope leaks, BuildServiceProvider
 #    misuse, etc. Default severities are mostly Warning; we promote the
 #    high-signal rules to Error and demote the noisy design-smell rules
 #    to Suggestion.
+#
+#    The rule count is 37 because the package moved 2.18.24 → 3.7.8 in
+#    #1897: 2.18.24 shipped 26 ids (DI001–DI022, DI024–DI027; DI023 was
+#    unused) and 3.7.8 ships 37 (DI001–DI037, no gap), so ELEVEN ids were
+#    added and NONE removed. Every one of the eleven has a row below, at
+#    the severity the package ships it with, and the reason is in
+#    docs/ANALYZERS.md §DI lifetime rules.
 #
 # 2. Excubo.Analyzers.DependencyInjectionValidation (rules EDI01–EDI04)
 #    Apps-only via apps/Directory.Build.props. Validates [Exposes(typeof(T))]
@@ -626,10 +633,21 @@ dotnet_diagnostic.RS0041.severity = none
 #   DI020 Middleware captures scoped service               → warning
 #   DI021 Non-thread-safe service shared across handlers   → warning
 #   DI022 Service instance reused across handlers          → suggestion
+#   DI023 Fire-and-forget background work captures a scope → warning
 #   DI024 Hosted service scope outside execution loop      → warning
 #   DI025 Event subscription without unsubscribe           → warning
 #   DI026 Event subscription on scoped publisher           → suggestion
 #   DI027 Rx subscription without dispose                  → warning
+#   DI028 Discarded callback registration on a long-lived source → warning
+#   DI029 HttpClient lifetime misuse                       → warning
+#   DI030 Unbounded singleton or static cache              → suggestion
+#   DI031 Shared implementation registered under several service types → suggestion
+#   DI032 Service implements only IAsyncDisposable          → warning
+#   DI033 Container will not dispose a pre-built instance  → suggestion
+#   DI034 HttpContext used in fire-and-forget background work → warning
+#   DI035 Non-thread-safe service shared across a fan-out  → warning
+#   DI036 Registration added after the provider was built   → warning
+#   DI037 Un-awaited task escapes the scope that created it → warning
 #
 # Excubo DI validation rules:
 #   EDI01 Too many service extensions                      → suggestion
@@ -659,9 +677,21 @@ dotnet_diagnostic.DI014.severity = warning
 dotnet_diagnostic.DI018.severity = warning
 dotnet_diagnostic.DI020.severity = warning
 dotnet_diagnostic.DI021.severity = warning
+# DI023-DI037 are the eleven ids 2.18.24 did not have; each one is baselined
+# to the severity the analyzer ships it with, so the version move cannot turn
+# the zero-warning build red on the day it lands. The long reason for each is
+# in docs/ANALYZERS.md (DI lifetime rules); the short form is here.
+dotnet_diagnostic.DI023.severity = warning # Fire-and-forget background work captures a scope; the tree creates no service scope at all
 dotnet_diagnostic.DI024.severity = warning
 dotnet_diagnostic.DI025.severity = warning
 dotnet_diagnostic.DI027.severity = warning
+dotnet_diagnostic.DI028.severity = warning # Discarded callback registration on a longer-lived source; every linked token source in the tree is disposed
+dotnet_diagnostic.DI029.severity = warning # HttpClient lifetime misuse; the two long-lived clients set PooledConnectionLifetime, which the rule exempts
+dotnet_diagnostic.DI032.severity = warning # Service implements only IAsyncDisposable; no such type is registered as a plain type registration
+dotnet_diagnostic.DI034.severity = warning # HttpContext in fire-and-forget work; the tree has no ASP.NET and no HttpContext
+dotnet_diagnostic.DI035.severity = warning # Non-thread-safe service shared across a fan-out; no DbContext and no shared ADO.NET connection
+dotnet_diagnostic.DI036.severity = warning # Registration added after the provider was built; the one build-then-register site hands the collection on
+dotnet_diagnostic.DI037.severity = warning # Un-awaited task escapes the scope that created it; the tree creates no service scope at all
 
 # --- DI lifetime (suggestion — design smells, existing patterns) ---
 # DI007 service-locator and DI010 over-injection are anti-patterns, not bugs.
@@ -677,6 +707,9 @@ dotnet_diagnostic.DI012.severity = suggestion
 dotnet_diagnostic.DI016.severity = suggestion
 dotnet_diagnostic.DI022.severity = suggestion
 dotnet_diagnostic.DI026.severity = suggestion
+dotnet_diagnostic.DI030.severity = suggestion # Unbounded singleton or static cache; ships Info, and every collection field here is bounded or owned by a type the container never creates
+dotnet_diagnostic.DI031.severity = suggestion # Shared implementation under several service types; ships Info, and no implementation is registered under two service types
+dotnet_diagnostic.DI033.severity = suggestion # Container will not dispose a pre-built instance; ships Info, and the three pre-built registrations are written off (docs/ANALYZERS.md)
 
 # --- Excubo DI validation (suggestion — primary coverage is DI tests) ---
 dotnet_diagnostic.EDI01.severity = suggestion
