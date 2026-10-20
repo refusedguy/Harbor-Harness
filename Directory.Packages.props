@@ -18,7 +18,7 @@
     2. Microsoft.CodeAnalysis.* (Roslyn, analyzers, banned-api)
     3. Microsoft.Data.*        (storage drivers)
     4. Microsoft.NET.* / test SDK
-    5. TUnit + NetArchTest     (test framework + architecture rules)
+    5. TUnit + NetArchTest     (test framework + architecture rules, IL reader)
     6. CommunityToolkit.*      (MVVM)
     7. Spectre.*               (console + TUI libraries)
     8. Terminal.Gui / Termina / RazorConsole / Avalonia (alt UI stacks)
@@ -96,10 +96,61 @@
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
     <!-- ── Microsoft.NET test SDK ────────────────────────────────────────── -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <!-- ── TUnit + NetArchTest (test framework + arch rules) ─────────────── -->
+    <!-- ── TUnit + NetArchTest (test framework + arch rules + IL reader) ─── -->
     <PackageVersion Include="TUnit" Version="1.75.0" />
     <PackageVersion Include="TUnit.Assertions" Version="1.75.0" />
     <PackageVersion Include="NetArchTest.Rules" Version="1.3.2" />
+    <!--
+      Mono.Cecil — the IL reader behind the CAPABILITY half of the
+      architecture rules (#455), and the reason this entry exists (#1865).
+
+      Two files of tests/Harbor.Architecture.Tests walk the IL of every method
+      body of every Presentation assembly: PresentationCapabilityRules.cs
+      (1422 lines) and RendererEventSeamRule.cs (913 lines). Their input is
+      Cecil's object model — MethodBody.Instructions, Instruction.Operand,
+      MemberReference.DeclaringType — and 2336 lines of rules are written
+      against it. Replacing Cecil with System.Reflection.Metadata would mean
+      hand-decoding IL and resolving metadata tokens, which the probe's own
+      header puts at "~200 lines of token and arithmetic edge cases"; the
+      package stays.
+
+      What changes is WHO OWNS IT. Until #1865 the dependency was BORROWED:
+      NetArchTest.Rules 1.3.2 happens to depend on Mono.Cecil 0.11.3
+      (exclude="Build,Analyzers" in its nuspec), and the two rule files
+      compiled against that transitively-restored copy. Consequences that
+      were measured, not assumed:
+        * touching NetArchTest.Rules broke the compiler of 2336 lines of
+          IL rules that have nothing to do with its DSL;
+        * the IL-parsing version was a property of a DSL library, and
+          CentralPackageTransitivePinningEnabled could not pin it (there
+          was nothing to pin — the package was not declared here);
+        * migrating to TngTech.ArchUnitNET 0.13.4 (proposed in #1841, and
+          it declares Mono.Cecil 0.11.6) would have moved the parser under
+          the rules silently.
+      Declared here, the ownership is the rules', and the pin is visible.
+
+      0.11.6 is the floor that satisfies BOTH consumers: NetArchTest.Rules
+      1.3.2 requires >= 0.11.3, and TngTech.ArchUnitNET 0.13.4 requires
+      exactly 0.11.6. Pinning the higher of the two means the future
+      migration does not move the IL parser under the rules — which is the
+      drift this pin exists to prevent. Upstream shipped bug-fix releases
+      only between 0.11.3 (2020-09-15) and 0.11.6 (2024-10-02): no API
+      break is documented, the member names the two rule files use are
+      present in both assemblies, and the rules' own non-vacuity probes
+      (which read real IL and must still CATCH a forbidden capability) run
+      on every CI build — so a parser change that altered a verdict would
+      be red, not silent.
+
+      Test-only: no project under src/ or apps/ references it, so it never
+      reaches a published binary or an aot-publish.
+
+      Advisory status: no GitHub Advisory and no OSV record exists for
+      Mono.Cecil at any version (checked 2026-10-20 against the GitHub
+      Advisory DB API and the OSV query API). The non-blocking vulnerability
+      scan in ci.yml reports the solution's advisories on every
+      dependency-changing PR.
+    -->
+    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <!-- ── BenchmarkDotNet ───────────────────────────────────────────────── -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <!-- ── CommunityToolkit.* (MVVM) ─────────────────────────────────────── -->

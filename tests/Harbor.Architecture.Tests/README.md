@@ -19,7 +19,9 @@ Two halves of the layering contract, both mechanically enforced:
    `OwnershipDetector_StaysQuietOnTheFamilyNamespaces`.
 3. **Capability rules** — which I/O capabilities a Presentation assembly may
    exercise: `PresentationCapabilityRules` (issue #455). Walks each Presentation
-   assembly's IL with Mono.Cecil and fails on subprocess spawn, `System.IO.File`,
+   assembly's IL with Mono.Cecil (declared explicitly by this project and
+   version-pinned in `Directory.Packages.props`, #1865) and fails on subprocess
+   spawn, `System.IO.File`,
    `System.IO.Directory`, network and reflection emit. Existing violations are
    held in an enforced `KnownViolations` baseline with a tracking issue per site.
    Capabilities an assembly owns for good and will never give up — the console

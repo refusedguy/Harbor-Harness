@@ -397,8 +397,10 @@ repository bans Newtonsoft outright, so the treatment of a package that drags
 it in is to **drop that package**, not to except it. Measured on
 `dev@69fb5c80`: `NetArchTest.Rules` 1.3.2 (already referenced by
 `tests/Harbor.Architecture.Tests`) declares exactly one dependency,
-`Mono.Cecil` 0.11.3, and does not bring Newtonsoft — and if it ever did, the
-layering rules have a zero-dependency reflection fallback already
+`Mono.Cecil` (its nuspec says 0.11.3; the repository declares the package
+itself and pins 0.11.6 since #1865), and does not bring Newtonsoft — and if
+it ever did, the layering rules have a zero-dependency reflection fallback
+already
 (`tests/Harbor.Architecture.Tests/LayerDependencyTests.cs`).
 `TngTech.ArchUnitNET` 0.13.4, proposed in #1841, *does* declare
 `Newtonsoft.Json` 13.0.4; if that proposal is accepted with the package, this

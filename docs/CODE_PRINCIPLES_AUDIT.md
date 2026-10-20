@@ -1345,8 +1345,11 @@ fixed source file so the audit trail is grep-able from code.
 10. `AllExpectedHarborAssembliesAreLoaded` (sanity check — fails loudly if a ProjectReference is accidentally removed)
 
 The tests use plain `System.Reflection` (`Assembly.GetReferencedAssemblies()`) — zero
-extra dependencies (no NetArchTest, no Mono.Cecil). The test project references every
-Harbor project so the test runner can load each assembly into the AppDomain.
+extra dependencies (no NetArchTest DSL, no IL reading) in THIS file. The test project
+references every Harbor project so the test runner can load each assembly into the
+AppDomain; it does declare `Mono.Cecil`, but for the capability rules of
+`PresentationCapabilityRules.cs` and `RendererEventSeamRule.cs`, which this file does
+not use.
 
 ### Verification
 

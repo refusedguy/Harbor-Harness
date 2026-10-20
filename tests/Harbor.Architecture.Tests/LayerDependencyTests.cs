@@ -31,7 +31,10 @@ namespace Harbor.Architecture.Tests;
 ///         Each test loads a Harbor assembly via a type defined in it, then calls
 ///         <see cref="Assembly.GetReferencedAssemblies" /> to verify the dependency
 ///         direction. The tests intentionally use plain reflection — no NetArchTest
-///         or Mono.Cecil dependency — so the test project itself stays minimal.
+///         DSL and no IL reading — so THIS file needs nothing beyond the BCL.
+///         The project does declare <c>Mono.Cecil</c>, but for the capability
+///         rules (PresentationCapabilityRules.cs, RendererEventSeamRule.cs);
+///         this file does not use it.
 ///     </para>
 ///     <para>
 ///         <b>Why these tests exist:</b> the previous build had stale
