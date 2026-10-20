@@ -85,9 +85,9 @@ jobs:
       packages: ${{ steps.filter.outputs.packages }}
       deps: ${{ steps.filter.outputs.deps }}
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -118,6 +118,14 @@ jobs:
               # step with the test job's shard lists. Same #618 argument:
               # editing it must run the build job that executes it.
               - 'tools/ci-shard-slices.py'
+              # The build-output cache's mtime normalisation (issue #1927).
+              # It runs INSIDE the build job, and it decides whether MSBuild
+              # may skip a project — so an edit to it must set dotnet=true,
+              # or the edit lands unvalidated (issue #618's argument again,
+              # with a sharper payload: an edit that makes the tool skip the
+              # wrong files builds stale binaries, and a stale build is not
+              # a red build).
+              - 'tools/normalize-mtimes.py'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -184,73 +192,40 @@ jobs:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
 
-  # #428 / #1845. The public-API freeze of the two frozen assemblies.
+  # #428 (second slice). Public-API snapshot gate for the frozen interface
+  # facade.
   #
-  # The freeze itself is a COMPILE-time gate now, not a job:
-  # Microsoft.CodeAnalysis.PublicApiAnalyzers is referenced by
-  # Harbor.Abstractions and Harbor.Abstractions.Contracts and by nothing
-  # else, so RS0016 (a public symbol that is not in the declared API) and
-  # RS0017 (a declared API symbol that is not in the code) fail the build
-  # of the `build` job above. No runner, no python, no second copy of the
-  # surface: the compiler already has the symbol table.
+  # The baseline `src/Harbor.Abstractions/PublicAPI.Baseline.txt` is the
+  # reviewed surface: 413 effectively-public types/members as
+  # `Qualified.Type :: normalized declaration`, with no file paths and no
+  # line numbers, so moves and re-wraps do not fail the gate. Any added,
+  # removed or re-signed member fails it — additions regenerate the baseline
+  # in the same diff (`--update`, reviewed), removals/re-signs are breaking
+  # and need a major bump + CHANGELOG entry decided outside this gate.
+  # The sibling gate (tools/check-public-api.py, docs.yml) covers
+  # Harbor.Abstractions.Contracts; together they are the full #428 freeze.
+  # No dotnet, no packages: stdlib python only, always runs (no `needs`),
+  # and it is blocking, not advisory.
   #
-  # What the analyzer cannot see is WHICH COMMIT carried a change, so the
-  # re-signing half of the freeze lives here: a commit that edits the
-  # frozen baseline must edit the assembly's sources with it, and a commit
-  # that changes a public declaration must re-sign the baseline with it.
-  # tools/check-public-api-resign.py reads the PR's commit range and says
-  # so. Its --self-test is the non-vacuity proof of the python half, and it
-  # runs in the docs.yml `selftest` job.
-  #
-  # The second step is the non-vacuity proof of the COMPILE-time half, and
-  # it is here because it needs an SDK: a throwaway project with one public
-  # member and an empty baseline must FAIL the build with `error RS0016`,
-  # must PASS once the analyzer's own requested row is added, and must FAIL
-  # again with `error RS0017` when the member is deleted while the baseline
-  # still names it. A gate that stopped firing is indistinguishable from a
-  # surface nobody changed, and this job is what tells the two apart.
-  public-api:
-    name: public-api freeze
+  # The floor is a ratchet. Measured on this tree: 413 members. It is set
+  # AT that value, not below: a floor with slack cannot tell "the surface
+  # got smaller" from "the matcher stopped matching". The non-vacuity proof
+  # is the gate's own --self-test (added/removed member each fail naming
+  # it), run as the first step below.
+  public-api-abstractions:
+    name: public-api snapshot (Abstractions)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          submodules: recursive
-
-      # The floors are ratchets on the ROWS of the frozen baselines: 1896 for
-      # the contract assembly, 1269 for the facade. They are set AT the
-      # measured values, not below — a floor with slack cannot tell "the
-      # baseline was truncated" from "the surface got smaller". The numbers
-      # are not comparable with the python gate's (491 / 413): the analyzer
-      # counts implicit constructors, property accessors and the members the
-      # compiler synthesises for a record, none of which have a `public`
-      # keyword in the source for a line scan to find.
-      - name: "Re-signing gate: every change to the frozen surface is re-signed with it"
-        run: |
-          set -eu
-          base="$(git merge-base HEAD origin/dev 2>/dev/null || true)"
-          if [ -z "$base" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-          fi
-          if [ -z "$base" ]; then
-            echo "::error::cannot resolve the base commit of this range" >&2
-            exit 1
-          fi
-          python3 tools/check-public-api-resign.py --base "$base" \
-            --min-rows src/Harbor.Abstractions.Contracts=1896 \
-            --min-rows src/Harbor.Abstractions=1269
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: "10.0.x"
-
-      - name: "Non-vacuity: an unreviewed public member fails the build, a re-signed one passes"
-        run: bash tools/public-api-nonvacuity.sh
+      - name: Public-API snapshot gate fails on an unreviewed change
+        run: python3 tools/check-public-api-abstractions.py --self-test
+      - name: Check the frozen facade surface against its baseline
+        run: python3 tools/check-public-api-abstractions.py --min-members 413
 
   # #1882. Package-set gate for the test and sample projects.
   #
@@ -296,9 +271,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
@@ -333,6 +308,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      # The build-output cache (#1927) is WRITTEN by this job on a push to
+      # dev/master and on a manual dispatch. The cache service is reached
+      # through the runner's own runtime token, but the job is granted the
+      # narrow scope that covers cache management so that the grant and the
+      # capability agree.
+      actions: write
     env:
       # ── The architecture gate, off the PR path only ──────────────────────
       #
@@ -357,10 +338,27 @@ jobs:
       # build/_build. To put the gate back on the PR path, delete this env
       # block: the value is the only thing that turns it off.
       HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      # The NuGet global-packages folder is PINNED (#1927). The restored
+      # obj/*.csproj.nuget.g.props and obj/project.assets.json carry
+      # ABSOLUTE paths into it, so a cached build is only valid for the
+      # folder it was built against. The value IS the runner default
+      # (/home/runner/.nuget/packages), written down explicitly so that the
+      # cache key and the restore agree by construction — and it is part of
+      # the key, so a runner that moves the folder gets a cold build
+      # instead of a wrong one.
+      NUGET_PACKAGES: /home/runner/.nuget/packages
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          # The FULL history, not the default depth-1 (#1927). The cache
+          # entry is keyed by the commit its outputs were built from, and
+          # the mtime normalisation below needs that commit's TREE to know
+          # which files differ from the cached base — a depth-1 clone does
+          # not have it. This repository's whole history is 25 MiB, and the
+          # cost is paid by ONE job (this one), not by the shards.
+          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -377,6 +375,108 @@ jobs:
           dotnet-version: "10.0.402"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
+
+      # ── The build-output cache (issue #1927) ──────────────────────────────
+      #
+      # MSBuild is ALREADY incremental: CoreCompile skips a project whose
+      # output is newer than its inputs. CI is cold only because obj/ and
+      # bin/ are absent, so every pull request recompiles all 104 projects.
+      # These three steps restore those two directories and let MSBuild
+      # decide the fine-grained work; the rest of the build is unchanged.
+      #
+      # The key is deliberately COARSE — it names the TOOLCHAIN, not the
+      # source tree:
+      #
+      #   msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+      #
+      #   * <os>-<arch>      the runner family (this job is pinned to
+      #                      ubuntu-24.04: a label that moves would move the
+      #                      compiler with it)
+      #   * sdk<sdk>         the RESOLVED SDK version, because a different
+      #                      compiler writes different bytes into the same obj/
+      #   * nuget<packages>  the NuGet global-packages folder, because the
+      #                      restored obj/*.nuget.g.props and
+      #                      obj/project.assets.json carry absolute paths
+      #                      into it (see NUGET_PACKAGES above)
+      #   * <props hash>     Directory.Packages.props, Directory.Build.props,
+      #                      Directory.Build.targets and global.json — the
+      #                      inputs that move the package graph, the
+      #                      compiler flags and the SDK
+      #   * <sha>            the commit the outputs are built from. It rolls
+      #                      the entry forward, and it is also how the mtime
+      #                      step below learns which commit the restored
+      #                      outputs belong to.
+      #
+      # restore-keys holds the same prefix WITHOUT the sha, so a run that
+      # finds no entry for its own commit restores the most recent entry
+      # built from the same toolchain — the base branch's cache.
+      - name: Compute the build-output cache key
+        id: cache-key
+        shell: bash
+        run: |
+          set -euo pipefail
+          props="${{ hashFiles('Directory.Packages.props', 'Directory.Build.props', 'Directory.Build.targets', 'global.json') }}"
+          # The RESOLVED version, not the requested one: global.json decides
+          # which SDK actually runs, and the outputs are that SDK's bytes.
+          sdk="$(dotnet --version | tail -n 1 | tr -d '[:space:]')"
+          prefix="msbuild-v1-${{ runner.os }}-${{ runner.arch }}-sdk${sdk}-nuget${NUGET_PACKAGES}-${props}"
+          echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "cache prefix: ${prefix}"
+          echo "cache key:    ${prefix}-${{ github.sha }}"
+
+      - name: Restore the build outputs (obj/ + bin/)
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            **/obj
+            **/bin
+            # The runtime assets (the native libraries of every RID) and the
+            # satellite assemblies are COPIES of what the NuGet folder already
+            # holds: nothing in MSBuild's up-to-date check reads them, and the
+            # build re-copies them from the packages. They are the bulk of the
+            # payload, and the repository's 10 GB cache budget cannot hold
+            # them — the first version of this cache (1,921 MiB per entry)
+            # was evicted within minutes of being written, because the NuGet
+            # caches already fill the budget. The debug symbols go for the
+            # same reason: the artifacts do not carry them either.
+            !**/runtimes/**
+            !**/*.resources.dll
+            !**/*.pdb
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.prefix }}-
+
+      # The checkout gave every source file the CURRENT clock, so every
+      # restored output looks stale and MSBuild would rebuild the whole
+      # solution — the trap #1927 names. This step puts the mtimes back
+      # where the truth is:
+      #
+      #   * a file that DIFFERS from the commit the cache was built from
+      #     gets "now"      -> MSBuild rebuilds it, and through the project
+      #                         graph its dependents;
+      #   * a file that is IDENTICAL to it gets that commit's time, which
+      #     is older than the restored outputs -> MSBuild skips it.
+      #
+      # The base commit is the last field of the cache key that MATCHED
+      # (the key ends in the commit the outputs were built from).
+      - name: Normalise the source mtimes (so MSBuild can skip the unchanged)
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          key="${{ steps.cache-restore.outputs.cache-matched-key }}"
+          base="${key##*-}"
+          echo "restored cache entry: ${key} (built from ${base})"
+          rc=0
+          python3 tools/normalize-mtimes.py --repo "$GITHUB_WORKSPACE" --base "$base" || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::the cached base ${base} could not be resolved, so the changed set is unknown: the restored outputs cannot be told apart from stale ones. They are discarded and the tree is rebuilt from scratch."
+            find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
+            exit 0
+          fi
+          exit "$rc"
 
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also re-runs the 47-rule architecture gate embedded in
@@ -944,6 +1044,34 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # ── Save the build outputs ────────────────────────────────────────────
+      #
+      # The PULL REQUEST lane never writes. A pull request would create one
+      # entry per run (the key ends in the commit), and the repository's
+      # 10 GB cache budget would fill up with pull-request entries and evict
+      # the ones the base branch needs — that is the thrash the rule exists
+      # to prevent.
+      #
+      # dev and master push, and so does a MANUAL workflow_dispatch: that is
+      # the deliberate way to exercise the cache end to end on a branch that
+      # is not dev/master, and a manual run is rare enough not to thrash.
+      #
+      # The save happens LAST, after the build, the pack and the artifact
+      # uploads: an entry is only worth keeping if the run it came from was
+      # green.
+      - name: Save the build outputs (dev/master pushes and manual runs)
+        if: >-
+          (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
+          || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            **/obj
+            **/bin
+            !**/runtimes/**
+            !**/*.resources.dll
+            !**/*.pdb
+          key: ${{ steps.cache-key.outputs.key }}
 
   test:
     needs: [changes, build]
@@ -1033,9 +1161,9 @@ jobs:
               Harbor.LoadTests
               Harbor.E2E.Framework.Tests
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       # The shards run the binaries the build job already produced (the
       # "Download build outputs" step below), so nothing here restores into
@@ -1187,9 +1315,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1454,9 +1582,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1675,9 +1803,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1717,9 +1845,9 @@ jobs:
     env:
       HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
     steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-        with:
-          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:

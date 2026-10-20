@@ -260,6 +260,105 @@ To verify after publish:
 # Should list all builtin providers
 ```
 
+## The CI build-output cache
+
+The `build` job of `.github/workflows/ci.yml` restores `obj/` and `bin/` from
+the GitHub Actions cache before it compiles anything (issue #1927).
+
+MSBuild is already incremental: `CoreCompile` skips a project whose output is
+newer than its inputs. CI was cold only because those two directories did not
+exist, so every pull request recompiled the whole solution. The cache hands
+the outputs back and lets MSBuild decide the fine-grained work — the build
+itself (what is compiled, which flags, which configuration) does not change.
+
+### The key
+
+```
+msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+```
+
+| field | what it pins | why it is in the key |
+|---|---|---|
+| `<os>-<arch>` | the runner family | the job is pinned to `ubuntu-24.04`; a runner that moves moves the compiler with it |
+| `sdk<sdk>` | the RESOLVED SDK version (`dotnet --version`) | a different compiler writes different bytes into the same `obj/` |
+| `nuget<packages path>` | the NuGet global-packages folder | the restored `obj/*.csproj.nuget.g.props` and `obj/project.assets.json` carry ABSOLUTE paths into it, so an entry is only valid for the folder it was built against |
+| `<props hash>` | `Directory.Packages.props`, `Directory.Build.props`, `Directory.Build.targets`, `global.json` | the package graph, the compiler flags and the SDK |
+| `<sha>` | the commit the outputs were built from | rolls the entry forward, and it is also how the mtime step below learns which commit the restored outputs belong to |
+
+The key is deliberately COARSE: it names the toolchain, not the source tree.
+`restore-keys` holds the same prefix without the `<sha>`, so a run that finds
+no entry for its own commit restores the most recent entry built from the
+same toolchain — the base branch's cache.
+
+The NuGet folder is pinned to `/home/runner/.nuget/packages` in the job's
+environment. That IS the runner default; it is written down explicitly so
+that the key and the restore agree by construction, and a runner that moves
+the folder gets a cold build instead of a wrong one.
+
+The cached payload is `obj/` and `bin/` minus the runtime assets (the native
+libraries of every RID), the satellite assemblies and the debug symbols:
+those are copies of what the NuGet folder already holds, nothing in
+MSBuild's up-to-date check reads them, and the build re-copies them. They
+were the bulk of the payload, and the repository's cache budget is 10 GB.
+
+### The mtime trap, and what the cache does about it
+
+`actions/checkout` writes every source file with the CURRENT clock — git does
+not store mtimes. A restored output is older than "now", so every project
+looks stale and MSBuild recompiles the whole solution. The cache would buy
+nothing.
+
+`tools/normalize-mtimes.py` puts the mtimes back where the truth is:
+
+- the restored outputs (everything under `obj/` and `bin/`) get the current
+  time, so they are newer than the other things MSBuild compares them
+  against — the analyzer assemblies in the NuGet folder above all, which a
+  restored NuGet cache extracts at the start of every run;
+- a file whose content DIFFERS from the commit the cache was built from
+  gets one second after that, so MSBuild rebuilds it, and through the
+  project graph its dependents;
+- a file whose content is IDENTICAL to it gets that commit's time, which is
+  older than the restored outputs, so MSBuild skips it.
+
+The first rule keeps the build honest: a changed file must be NEWER than the
+output that was built from the old version of it, or the old output survives
+and the build is silently stale. The second rule is what makes the cache pay
+off.
+
+The base commit is read out of the cache key that matched, so the tool keeps
+no state of its own. If the base cannot be resolved (the branch that produced
+the entry is gone and the commit cannot be fetched), the tool exits 3 and the
+job DISCARDS the restored outputs and rebuilds from scratch: a cache whose
+base is unknown cannot be told apart from a stale one, and a stale build is
+worse than a slow one.
+
+### Who writes, who only reads
+
+| lane | restores | writes |
+|---|---|---|
+| pull request | yes | NEVER — one entry per pull request would fill the repository's 10 GB cache budget with pull-request entries and evict the ones the base branch needs |
+| push to `dev` / `master` | yes | yes |
+| manual `workflow_dispatch` | yes | yes — the deliberate way to exercise the cache end to end on a branch that is not `dev`/`master` |
+
+The `aot-publish` job is deliberately OUT of the cache: it publishes
+RID-specifically and self-contained (`-r linux-x64 --self-contained true`),
+and its intermediate outputs live in `obj/Release/net10.0/linux-x64/`, which
+is a different configuration from the one the cache holds.
+
+### How to bust it
+
+- **By itself.** The key moves when the SDK, `Directory.Packages.props`,
+  `Directory.Build.props`, `Directory.Build.targets`, `global.json` or the
+  NuGet folder moves — a package bump or an SDK bump is a cold build with no
+  action needed.
+- **On purpose.** Delete the entries (GitHub → the repository → Actions →
+  Caches, or `gh cache delete --all`), or change the `v1` prefix in the key.
+- **Locally.** `find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf
+  {} +` — the same thing the "Clean build artifacts" section above does.
+- **If a restored cache is suspected of being wrong.** The mtime step throws
+  away a cache whose base it cannot resolve. Anything else: delete the
+  entries and re-run.
+
 ## Multi-platform CI (GitHub Actions)
 
 ```yaml
