@@ -105,7 +105,6 @@ public sealed class TuiReadLineContractRules
         "src/Harbor.Tui.CellForge",
         "src/Harbor.Tui.CellForge.Engine",
         "src/Harbor.Tui.AnsiPlain",
-        "src/Harbor.Tui.NickConsoleEx",
         "src/Harbor.Tui.Notifications",
         "contrib/tui",
     ];
@@ -283,11 +282,13 @@ public sealed class TuiReadLineContractRules
                 + "renderer family moved, name where it went (contrib/tui is already listed) instead "
                 + "of leaving the old path behind. Missing: " + string.Join(", ", missing));
 
-        await Assert.That(RendererTrees.Length).IsEqualTo(6)
+        await Assert.That(RendererTrees.Length).IsEqualTo(5)
             .Because(
                 "The product-side non-vacuity of the source rule is a FILE COUNT, so it only holds if "
                 + "the walk is still pointed at every renderer family. Dropping a tree here lowers that "
                 + "count silently; a new family must raise this number in the same commit that names it. "
+                + "The count went from 6 to 5 when the vendored NickConsoleEx renderer left src/: it is "
+                + "still covered, by the contrib/tui entry, which is why the file count did not move. "
                 + $"Named: {string.Join(", ", RendererTrees)}");
     }
 

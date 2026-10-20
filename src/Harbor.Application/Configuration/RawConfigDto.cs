@@ -11,6 +11,13 @@ public sealed class RawConfigDto
     [JsonPropertyName("provider")] public string? Provider { get; set; }
     [JsonPropertyName("model")] public string? Model { get; set; }
     [JsonPropertyName("agent")] public string? Agent { get; set; }
+
+    /// <summary>
+    ///     Renderer id (see <see cref="PresentationConfig.Tui" />). Free-form
+    ///     on the way in: the TUI backend registry resolves an unknown id
+    ///     through its single fallback rule and warns, so a config written
+    ///     for a backend this build does not ship still loads.
+    /// </summary>
     [JsonPropertyName("tui")] public string? Tui { get; set; }
     [JsonPropertyName("storage")] public string? Storage { get; set; }
     [JsonPropertyName("onboarded")] public bool? Onboarded { get; set; }

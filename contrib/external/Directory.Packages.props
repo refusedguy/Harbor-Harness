@@ -1,0 +1,20 @@
+<Project>
+
+  <!--
+    Stops NuGet Central Package Management from leaking into vendored
+    third-party trees (upstream declares its own PackageReference versions).
+
+    NuGet imports the NEAREST Directory.Packages.props walking up from the
+    project directory, and imports only that one. Because this file declares
+    no <ManagePackageVersionsCentrally>, the vendored tree is outside CPM:
+    the root's Directory.Packages.props never reaches it.
+
+    RULE FOR ANY FUTURE VENDORED TREE
+    ---------------------------------
+    This file belongs with contrib/external/Directory.Build.props and
+    contrib/external/Directory.Build.targets, one directory level above the
+    vendored tree's root. All three travel together; a vendored tree with
+    only one of them inherits half of the root's build policy.
+  -->
+
+</Project>

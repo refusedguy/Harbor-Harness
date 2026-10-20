@@ -16,8 +16,10 @@
 //
 //   2. Vacuous coverage. An assembly absent from the inventory, the matrix and
 //      the out-of-scope list has UNBOUNDED reach — nothing constrains it. Live
-//      example: Harbor.Tui.NickConsoleEx (referenced by Harbor.Hosting, in no
-//      list at all).
+//      example when this file was written: Harbor.Tui.NickConsoleEx (referenced
+//      by Harbor.Hosting, in no list at all). That project has since left the
+//      product for contrib/tui/, so it is no longer a live example — the shape
+//      it named is still the one this file exists to catch.
 //
 // And two silent-degradation paths:
 //   - allowed-set rot: the matrix checked only actual ⊆ allowed, so the allowed
@@ -82,8 +84,6 @@ public sealed class EnforcerIntegrityTests
         new("Harbor.Tui.CellForge", "Harbor.Desktop.Animations",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         new("Harbor.Tui.CellForge.Engine", "Harbor.Abstractions",
-            "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
-        new("Harbor.Tui.NickConsoleEx", "Harbor.Abstractions",
             "#450: permitted by the matrix but the compiled assembly emits no AssemblyRef for it (the IL gate proved the edge is dead). The ProjectReference stays declared until the tracked cleanup removes it."),
         // #665: the (Notifications -> Harbor.Abstractions) exemption is GONE.
         // It was a #450 dead edge until NotificationTuiRenderer took an

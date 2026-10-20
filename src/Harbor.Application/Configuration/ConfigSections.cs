@@ -196,6 +196,19 @@ public sealed record CellForgeUiConfig(
 /// <summary>
 ///     UI / storage presentation preferences.
 /// </summary>
+/// <param name="Tui">
+///     Renderer id. The product ships <c>ansi</c>, <c>plain</c> and
+///     <c>cellforge</c> (legacy alias <c>consoleex</c>); the contributed
+///     Spectre family adds <c>spectre</c>, <c>fullscreen</c>,
+///     <c>spectre-tui</c>, <c>terminal-gui</c>, <c>termina</c>, <c>razor</c>
+///     and <c>sixel</c> when it is compiled in. An unknown id is NOT a
+///     config error: the TUI backend registry resolves it through its single
+///     fallback rule and logs a warning naming the requested id. The
+///     vendored <c>nickconsoleex</c> backend left the product, so that id
+///     now falls back like any other unknown value.
+/// </param>
+/// <param name="Storage">Session store id: <c>jsonl</c>, <c>memory</c>, <c>sqlite</c>.</param>
+/// <param name="Onboarded">Whether the first-run wizard has been completed.</param>
 public sealed record PresentationConfig(
     string Tui,
     string Storage,

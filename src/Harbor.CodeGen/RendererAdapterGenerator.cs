@@ -92,7 +92,7 @@ public sealed class RendererAdapterGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Whether the backend owns the terminal cursor across a frame.</summary>");
         string backendLower = data.Backend.ToLowerInvariant();
-        bool ownsCursor = backendLower != "plain" && backendLower != "nickconsoleex";
+        bool ownsCursor = backendLower != "plain";
         sb.AppendLine($"    public const bool CursorFrameBoundary = {ownsCursor.ToString().ToLowerInvariant()};");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Frame prologue — hides the cursor when the backend owns it across frames.</summary>");

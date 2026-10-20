@@ -44,10 +44,12 @@
 //
 //   A row with no comment at all fails, which is the case that matters most —
 //   the row the section's header does not mention and its author did not either.
-//   The TUnit0055 block for NickConsoleExGoldenFrameTests is the live example:
+//   The TUnit0055 block for NickConsoleExGoldenFrameTests was the live example:
 //   it set a severity to `none` for a rule it never named, under a comment
 //   arguing "no diagnostics fire in this file today" — a reason for DELETING the
-//   row, kept in the place a reason for keeping it belongs.
+//   row, kept in the place a reason for keeping it belongs. That file left with
+//   the vendored renderer it belonged to, so the example is historical now; the
+//   rule it demonstrated is not.
 //
 // WHY NOT EXTEND `AnalyzerSeverityScopeRules` INSTEAD
 // --------------------------------------------------

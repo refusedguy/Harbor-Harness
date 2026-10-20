@@ -296,10 +296,13 @@ public sealed class AnalyzerSeverityScopeRules
             .. PathScopedSections().Select(section => section.Anchor!)
         ];
 
+        // One real path section is enough to prove the scanner distinguishes a
+        // path section from a glob, and there is exactly one left: the second
+        // entry used to be the TUnit0055 demotion for the vendored renderer's
+        // golden-frame test, and that file left with the renderer.
         string[] realPathSections =
         [
             "apps/Harbor.App.Avalonia",
-            "tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs"
         ];
 
         foreach (string real in realPathSections)

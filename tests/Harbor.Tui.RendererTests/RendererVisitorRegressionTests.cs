@@ -4,7 +4,6 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.AnsiPlain;
-using Harbor.Tui.NickConsoleEx;
 using Harbor.Tui.Notifications;
 using Harbor.Tui.RendererTests.Support;
 using Harbor.Ui.Framework.State;
@@ -14,10 +13,11 @@ using TUnit.Assertions.Extensions;
 
 /// <summary>
 ///     Visitor-registry regression for issue #185: the per-renderer
-///     <c>switch (AgentEvent)</c> in AnsiPlain / NickConsoleEx / Notifications
-///     moved into registered <c>IAgentEventHandler</c>s. These tests pin the
-///     observable behavior — handled events still paint, unhandled events stay
-///     silent, and no event type throws on any of the three renderers.
+///     <c>switch (AgentEvent)</c> in AnsiPlain / Notifications moved into
+///     registered <c>IAgentEventHandler</c>s. These tests pin the observable
+///     behavior — handled events still paint, unhandled events stay silent,
+///     and no event type throws on either renderer. (A third arm, over the
+///     vendored NickConsoleEx backend, left with that backend.)
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -130,28 +130,6 @@ public class RendererVisitorRegressionTests
         }
 
         await Assert.That(writer.ToString()).IsNotEmpty();
-    }
-
-    [Test]
-    public async Task NickConsoleEx_FullEventSweep_DoesNotThrow()
-    {
-        var driver = new RecordingConsoleDriver(120, 40);
-        var renderer = new NickConsoleExTuiRenderer(
-            NullLogger<NickConsoleExTuiRenderer>.Instance, driverOverride: driver);
-        try
-        {
-            await renderer.InitializeAsync();
-            foreach (var evt in FullSweep())
-            {
-                await renderer.RenderAsync(evt);
-            }
-        }
-        finally
-        {
-            renderer.Dispose();
-        }
-
-        await Assert.That(driver.Snapshot()).IsNotEmpty();
     }
 
     [Test]

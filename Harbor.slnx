@@ -107,7 +107,6 @@
         <Project Path="src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj"/>
         <Project Path="src/Harbor.Tui.CellForge.Syntax/Harbor.Tui.CellForge.Syntax.csproj"/>
         <Project Path="src/Harbor.Tui.CellForge.Prompts/Harbor.Tui.CellForge.Prompts.csproj"/>
-        <Project Path="src/Harbor.Tui.NickConsoleEx/Harbor.Tui.NickConsoleEx.csproj"/>
         <Project Path="src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj"/>
     </Folder>
 

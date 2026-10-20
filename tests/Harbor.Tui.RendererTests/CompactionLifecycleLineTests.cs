@@ -2,7 +2,6 @@ namespace Harbor.Tui.RendererTests;
 
 using Harbor.Abstractions.Events;
 using Harbor.Tui.AnsiPlain;
-using Harbor.Tui.NickConsoleEx;
 using Harbor.Tui.Notifications;
 using Harbor.Tui.RendererTests.Support;
 using Harbor.Ui.Framework.State;
@@ -12,7 +11,9 @@ using TUnit.Assertions.Extensions;
 
 /// <summary>
 ///     Issue #840 — the <b>line</b> half of the compaction lifecycle, in the
-///     three renderers that own their own compaction output.
+///     two renderers that own their own compaction output (AnsiPlain and
+///     Notifications). The third arm this file used to hold belonged to the
+///     vendored NickConsoleEx backend, which left the product.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -149,24 +150,6 @@ public class CompactionLifecycleLineTests
                        + "writes something; an empty writer IS the shape #840 is about, and "
                        + "no assertion reading a status string can see it");
         }
-    }
-
-    // ── NickConsoleEx ─────────────────────────────────────────────────────
-
-    [Test]
-    public async Task NickConsoleEx_CompactionFailed_WritesTheTruncationWarning()
-    {
-        var driver = new RecordingConsoleDriver(120, 40);
-        using var renderer = new NickConsoleExTuiRenderer(
-            NullLogger<NickConsoleExTuiRenderer>.Instance, driverOverride: driver);
-        await renderer.InitializeAsync();
-
-        await renderer.RenderAsync(Failure());
-
-        await Assert.That(driver.Snapshot()).Contains(FailureLine)
-            .Because("this handler is a near-copy of the AnsiPlain one and the two have "
-                   + "drifted on purpose before; the composed cells are the only thing a "
-                   + "user of HARBOR_TUI=nickconsoleex actually reads");
     }
 
     // ── Notifications ─────────────────────────────────────────────────────

@@ -1,6 +1,11 @@
 <Project>
 
-  <!-- See external/Directory.Build.props: root build targets stop here. -->
+  <!--
+    See contrib/external/Directory.Build.props: root build targets stop here.
+    The same rule applies to any future vendored tree — the three boundary
+    files (props / targets / packages) travel together, one directory level
+    above the vendored root.
+  -->
 
   <!--
     Spectre.Console retarget (renderer-unification Phase 3).

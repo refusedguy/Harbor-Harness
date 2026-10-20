@@ -572,7 +572,6 @@ public sealed class RendererEventSeamRule
         [
             "Harbor.Tui.AnsiPlain.AnsiPlainTuiRenderer",
             "Harbor.Tui.CellForge.CellForgeTuiRenderer",
-            "Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer",
             "Harbor.Tui.Notifications.NotificationTuiRenderer",
         ];
 
@@ -591,8 +590,8 @@ public sealed class RendererEventSeamRule
         // hard-coded total would therefore be a flaky assertion dressed as a
         // strong one. What must not move is the floor: the src/ backends are
         // unconditionally referenced, so losing one is a real regression.
-        await Assert.That(inventory.ConcreteRendererCount).IsGreaterThanOrEqualTo(4)
-            .Because("the four src/ renderer families are unconditional ProjectReferences of this "
+        await Assert.That(inventory.ConcreteRendererCount).IsGreaterThanOrEqualTo(3)
+            .Because("the three src/ renderer families are unconditional ProjectReferences of this "
                    + "test project; a smaller table means the probe stopped seeing them");
 
         // The exclusion list is the same trap one level up: an assembly quietly
@@ -866,7 +865,7 @@ public sealed class RendererEventSeamRule
     /// <summary>
     ///     A renderer on the handler seam: it registers one
     ///     <c>IAgentEventHandler</c> in its constructor, exactly like
-    ///     AnsiPlain and NickConsoleEx. The rule must NOT report it.
+    ///     AnsiPlain. The rule must NOT report it.
     /// </summary>
     private sealed class HandlerRegisteredRenderer : ProbeRendererBase
     {

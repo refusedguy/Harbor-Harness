@@ -157,11 +157,6 @@ public class FullLayerMatrixTests
         // #1618: the prompt-engine pair (ListPromptEngine / FormPromptEngine,
         // SC7+SC6 #1215/#1214) as its own Presentation sibling.
         "Harbor.Tui.CellForge.Prompts",
-        // #450: was reachable from Harbor.Hosting but present in NEITHER this
-        // inventory, the matrix, nor an out-of-scope list — i.e. its own
-        // dependencies were unbounded. SharpConsoleUI is a third-party renderer
-        // library (external/ConsoleEx), referenced only for the renderer it wraps.
-        "Harbor.Tui.NickConsoleEx",
         // Application
         "Harbor.Application", "Harbor.ChangeTracking",
         // #1614: first-run wizard + setup-checklist detection, one-way leaf
@@ -518,14 +513,6 @@ public class FullLayerMatrixTests
         // store, no Result/Maybe railway: the pair is BCL + two direct edges.
         ["Harbor.Tui.CellForge.Prompts"] = new(Layer.Presentation,
             [ "Harbor.Extensions", "Harbor.Ui.Framework.Rendering" ]),
-        // #450: SharpConsoleUI-based renderer (HARBOR_TUI=nickconsoleex), wired
-        // behind HarborWithNickConsoleEx. It lives in src/ and Harbor.Hosting
-        // references it, so it belongs on the matrix like any other Presentation
-        // assembly: it may reach Domain (Abstractions facade) + the TUI vocabulary
-        // (Terminal.Abstractions) and nothing else. The third-party
-        // SharpConsoleUI project it wraps is not a Harbor assembly.
-        ["Harbor.Tui.NickConsoleEx"] = new(Layer.Presentation,
-            [ "Harbor.Abstractions.Contracts", "Harbor.Terminal.Abstractions"]),
 
         // ---- Application ----------------------------------------------------
         ["Harbor.Application"] = new(Layer.Application,
@@ -692,10 +679,6 @@ public class FullLayerMatrixTests
             "Harbor.Plugins.Hosting",
             // LoadedPlugin handle (StartupPluginLoad/PluginReloadService):
             "Harbor.Plugins.Abstractions",
-            // contrib/tui renderer references live outside src/: // renderer-unification Phase 3: nickprotop/ConsoleEx wrapper,
-            // wired behind HarborWithNickConsoleEx (mutually exclusive with
-            // HarborWithSpectreTui — see Harbor.Hosting.csproj).
-            "Harbor.Tui.NickConsoleEx",
         ]),
     };
 

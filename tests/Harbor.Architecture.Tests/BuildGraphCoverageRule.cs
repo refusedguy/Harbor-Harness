@@ -20,9 +20,9 @@
 //     — and a search for the forward-slashed path cannot match that text. So
 //     `apps/Harbor.App.Avalonia` (from `tests/Harbor.App.Avalonia.Tests` and
 //     `tests/Harbor.E2E.App.Avalonia`, both rows of `Harbor.slnx`) and
-//     `src/Harbor.CodeGen` (from five rows — `Terminal.Abstractions`,
-//     `Tui.CellForge`, `Tui.AnsiPlain`, `Tui.NickConsoleEx`,
-//     `Tui.CellForge.Tests`) were both invisible to it.
+//     `src/Harbor.CodeGen` (from four rows — `Terminal.Abstractions`,
+//     `Tui.CellForge`, `Tui.AnsiPlain`, `Tui.CellForge.Tests`) were both
+//     invisible to it.
 //
 //   * IT DOES NOT EXPLAIN `src/Harbor.Transport.Remote`. That project IS
 //     referenced forward-slashed, from `tests/Harbor.Transport.Remote.Tests`

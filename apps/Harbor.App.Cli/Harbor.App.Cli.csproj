@@ -30,16 +30,18 @@
                                            only; `status`/`ide` verbs excluded, `daemon`
                                            start degrades to a clear error via the headless
                                            verb; PublishIpcServer/Client fail fast)
-      * `HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex` (default
+      * `HarborWithRenderer=all|cellforge|ansiplain` (default
         `all`, global default in Directory.Build.props, NUKE with-renderer flag) —
-        build-time renderer-backend selection (slice A, #1144). Values other than
-        `all`/`nickconsoleex` currently exclude only the NickConsoleEx backend
-        (+ vendored SharpConsoleUI) from the composition: CellForge stays because
-        the agent-turn driver (Repl/ReplRunner.cs, used by `ask` and the REPL) is
-        CellForge-bound source, and AnsiPlain stays for the plain-pipe path and
-        the headless pairing QR (CliInfrastructure.cs). Unknown values fail the
-        build (see the Error guards in Harbor.Hosting.csproj); the runtime
-        HARBOR_TUI selection is untouched.
+        build-time renderer-backend selection (slice A, #1144). It currently
+        excludes NOTHING: the one backend it could leave out was the vendored
+        SharpConsoleUI renderer, and that backend left the product for
+        contrib/tui/ (it is not in Harbor.slnx and no CI job compiles it).
+        CellForge stays because the agent-turn driver (Repl/ReplRunner.cs, used
+        by `ask` and the REPL) is CellForge-bound source, and AnsiPlain stays
+        for the plain-pipe path and the headless pairing QR
+        (CliInfrastructure.cs). Unknown values fail the build (see the Error
+        guard in Harbor.Hosting.csproj); the runtime HARBOR_TUI selection is
+        untouched.
 
     The legacy `HARBOR_MINIMAL=true` is a shorthand that forces all of the
     above to `false`. It also defines the `HARBOR_MINIMAL` C# symbol, which no
