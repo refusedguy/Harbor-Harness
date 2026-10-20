@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using Result = CSharpFunctionalExtensions.Result;
@@ -140,7 +141,22 @@ internal static class FileVersion
                 length--;
             }
 
-            hash.AppendData(encoding.GetBytes(text.Slice(offset, length)));
+            ReadOnlySpan<char> chunk = text.Slice(offset, length);
+
+            // The span-based GetBytes needs a destination, so the encoded
+            // chunk goes through a pooled buffer: a multi-megabyte file would
+            // otherwise cost one throwaway byte[] per chunk.
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(encoding.GetByteCount(chunk));
+            try
+            {
+                int written = encoding.GetBytes(chunk, buffer);
+                hash.AppendData(buffer, 0, written);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
             offset += length;
         }
 

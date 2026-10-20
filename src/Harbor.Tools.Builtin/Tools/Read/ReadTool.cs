@@ -128,12 +128,12 @@ public sealed partial class ReadTool : ITool
             string b64 = Convert.ToBase64String(bytes);
 
             // #1757: the bytes are already in hand — the version is free here.
-            string digest = FileVersion.ComputeDigest(bytes);
+            string imageDigest = FileVersion.ComputeDigest(bytes);
 
             return ToolResult.Success(
                 $"Image: {path} ({bytes.Length} bytes, {mime}). " +
                 "Base64 is in metadata.imageBase64 for vision-capable hosts. " +
-                FileVersion.Annotate(digest),
+                FileVersion.Annotate(imageDigest),
                 new
                 {
                     path,
@@ -141,7 +141,7 @@ public sealed partial class ReadTool : ITool
                     sizeBytes = bytes.Length,
                     estimatedTokens = ImageTokenEstimate,
                     imageBase64 = b64,
-                    fileVersion = FileVersion.Token(digest)
+                    fileVersion = FileVersion.Token(imageDigest)
                 });
         }
 
