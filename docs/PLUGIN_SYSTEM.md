@@ -374,8 +374,19 @@ served out-of-process by `harbor-plugins-host` (registered automatically as the
 `harbor-csharp-plugins` MCP server when it ships next to the CLI); the CLI lists
 and calls plugin tools over MCP stdio. The Storage → Compilation →
 Instantiation → Registration → Hosting pipeline below runs **inside the host
-process**; only the tool capability crosses the wire (capability parity table:
-`src/Harbor.Plugins.Host/README.md`).
+process**; only the tool capability crosses the wire.
+
+**What the route does with each axis is declared once**, in
+`src/Harbor.Plugins.Hosting/PluginRouteAxisRegistry.cs`: every axis of
+extension (`src/Harbor.Plugins.Abstractions/PluginAxisRegistry.cs`) has a row
+there saying whether the out-of-process route CARRIES it, REFUSES it (with the
+technical reason it cannot cross the process boundary), or whether the axis is
+a CLOSED SEAM everywhere (#564). The refusal messages the host answers with are
+built from that declaration, so the reason a plugin author reads is the reason
+the product declares. The architecture gate
+(`tests/Harbor.Architecture.Tests/ExtensionAxisRouteCarriageRule.cs`) grades
+the declaration against the code: an axis with no declared fate fails, and so
+does a door that does not do what its row says.
 
 ```
 1. Harbor starts; the CLI probes for the plugin host (startup log says which
@@ -394,12 +405,17 @@ process**; only the tool capability crosses the wire (capability parity table:
       PluginContext, calls plugin.Initialize(context), and dispatches
       Register*() based on which sub-interface(s) the type implements:
           IToolPlugin     → RegisterTools (served over MCP tools/list + tools/call)
-          IProviderPlugin → refused with a reason (this route exposes tools
-                            only), logged and discarded
-          IAgentPlugin    → refused with a reason, logged and discarded
-          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (refused with a
-                            reason; closed seam, #564)
-          ITuiPanelPlugin → refused with a reason, logged and discarded
+          IProviderPlugin → refused with the declared reason
+          IAgentPlugin    → refused with the declared reason
+          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (refused with the
+                            declared reason; closed seam, #564)
+          ITuiPanelPlugin → refused with the declared reason
+          ISessionStorePlugin → refused with the declared reason
+          ITuiBackendPlugin   → refused with the declared reason
+      The verdict and the reason per axis are declared in
+      `src/Harbor.Plugins.Hosting/PluginRouteAxisRegistry.cs`; a refusal FAILS
+      the plugin's registration (#1758), so a plugin that contributes only
+      refused axes is reported as not loaded rather than as loaded-and-useless.
       The SafePluginRegistrar decorator wraps each call in try/catch so one bad plugin
       doesn't abort the rest.
 4. The CLI calls plugin tools via MCP; compilation errors surface as `isError`

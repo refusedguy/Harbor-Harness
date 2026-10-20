@@ -12,7 +12,7 @@ Out-of-process MCP stdio server that exposes Harbor's C# (Roslyn) `ITool` plugin
 |------|---------|
 | `Program.cs` | Stdio MCP server entry point (`Main`). |
 | `McpStdioServer.cs` | JSON-RPC 2.0 NDJSON loop: `initialize`, `tools/list`, `tools/call`, `ping`, `notifications/initialized`. |
-| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool` registrations and exposes them to the stdio server. Every other `IPluginLoadHost` door (`RegisterProvider`, `RegisterAgent`, `RegisterTuiPlugin`, `RegisterPanelProvider`, `RegisterSessionStore`, `RegisterTuiBackend`) **refuses** the registration with a reason. It is not exposed over MCP, so it was not registered. See the parity table below (#1758). |
+| `McpPluginLoadHost.cs` | In-process plugin registry that collects `ITool` registrations and exposes them to the stdio server. Every other `IPluginLoadHost` door (`RegisterProvider`, `RegisterAgent`, `RegisterTuiPlugin`, `RegisterPanelProvider`, `RegisterSessionStore`, `RegisterTuiBackend`) **refuses** the registration with the reason the route declares (see the parity table below, #1723). |
 | `NullEventBus.cs` | No-op event bus for plugin-host runs that don't need event streaming. |
 
 ## Capability parity: in-process JIT vs split host
@@ -21,19 +21,33 @@ The split host speaks MCP stdio, which carries tools only. Everything else a
 CS-source plugin can contribute in-process is **refused here with a reason**:
 the door answers `Result.Failure`, so the registrar can tell the caller that
 the contribution was dropped instead of reporting a plugin that loaded
-"successfully" and gave nothing (#1758). Each row names the reason, not just
-the verdict (#419).
+"successfully" and gave nothing (#1758).
 
-| Capability | In-process JIT (`CsPluginLoader`) | Split host (this exe) | Reason |
-|------------|-----------------------------------|-----------------------|--------|
-| Tool (`IToolPlugin`) | supported | supported | MCP `tools/list` + `tools/call` carry name, description, JSON schema and result — the full tool contract fits the wire. |
-| Provider (`IProviderPlugin`) | supported | refused (`Result.Failure`) | An `ILlmClient` factory cannot cross stdio: token streaming is per-turn and latency-sensitive, and auth material must not leave the core process. |
-| Agent (`IAgentPlugin`) | supported | refused (`Result.Failure`) | `AgentDefinition` carries a `PermissionRuleset` the core evaluates per call; rehydrating agents from a description string would silently drop the policy. |
-| TUI view (`ITuiPlugin`) | closed seam (#564 — collected, never rendered) | refused (`Result.Failure`) | Views must live in the renderer process; the seam is closed by #564, so the split does not reopen this one. |
-| TUI panel (`ITuiPanelPlugin`) | supported | refused (`Result.Failure`) | The panel registry lives in the TUI renderer process; panels are UI-process state, not serializable registrations. |
-| Session store (`ISessionStorePlugin`, #581) | supported | refused (`Result.Failure`) | The store is resolved in-core at startup via `HARBOR_STORAGE`; a store behind a pipe would put every session read on IPC. |
-| TUI backend (`ITuiBackendPlugin`, #581/#584) | supported | refused (`Result.Failure`) | The renderer is constructed in the UI process; a backend factory cannot be expressed as an MCP tool. |
+**The verdict per axis, and the reason for it, are declared in one place**:
+`src/Harbor.Plugins.Hosting/PluginRouteAxisRegistry.cs`. The refusal messages
+this host answers with are BUILT from that declaration, so the reason a plugin
+author reads is the reason the product declares — there is no second copy to
+drift. The architecture gate
+(`tests/Harbor.Architecture.Tests/ExtensionAxisRouteCarriageRule.cs`) grades
+the declaration against this host's code: an axis with no declared fate fails,
+and so does a door that does not do what its row says. The prose reason for
+each axis is in that rule's header.
+
+| Capability | In-process JIT (`CsPluginLoader`) | Split host (this exe) | Why |
+|------------|-----------------------------------|-----------------------|-----|
+| Tool (`IToolPlugin`) | supported | **carried** | MCP `tools/list` + `tools/call` carry name, description, JSON schema and result — the full tool contract fits the wire. |
+| Provider (`IProviderPlugin`) | supported | **refused** | An `ILlmClient` factory cannot cross stdio: token streaming is per-turn and latency-sensitive, and auth material must not leave the core process. |
+| Agent (`IAgentPlugin`) | supported | **refused** | `AgentDefinition` carries a `PermissionRuleset` the core evaluates per call; rehydrating agents from a description string would silently drop the policy. |
+| TUI view (`ITuiPlugin`) | closed seam (#564 — collected, never rendered) | **refused** | Views must live in the renderer process; the seam is closed by #564, so the split does not reopen this one. |
+| TUI panel (`ITuiPanelPlugin`) | supported | **refused** | The panel registry lives in the TUI renderer process; panels are UI-process state, not serializable registrations. |
+| Session store (`ISessionStorePlugin`, #581) | supported | **refused** | The store is resolved in-core at startup via `HARBOR_STORAGE`; a store behind a pipe would put every session read on IPC. |
+| TUI backend (`ITuiBackendPlugin`, #581/#584) | supported | **refused** | The renderer is constructed in the UI process; a backend factory cannot be expressed as an MCP tool. |
 | Skill / MCP server | n/a — not plugin axes | n/a | Skills ship as the builtin `skill` tool and MCP servers as `IMcpRegistry` entries; there is no plugin interface to implement. |
+
+The "Why" column above is a summary for the reader of this file. The sentences
+the host actually answers with are the declared ones
+(`PluginRouteAxisRegistry`); the two are not edited together, because there is
+only one of them.
 
 ## Process boundary is not a sandbox
 
