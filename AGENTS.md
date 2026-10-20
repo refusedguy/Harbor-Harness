@@ -117,7 +117,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 74 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 75 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 44 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
@@ -741,6 +741,11 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 13. **Don't bring the vendored SharpConsoleUI renderer back into the product** — `Harbor.Tui.NickConsoleEx` and the `nickprotop/ConsoleEx` submodule live in `contrib/` now, unmaintained and not compiled by CI (ADR-019). The product ships two renderers, CellForge and AnsiPlain. The `HARBOR_WITH_NICK_CONSOLE_EX` build constant, the `nickconsoleex` value of `HarborWithRenderer`, the `tui` value `nickconsoleex` and the public enum member `BackendKind.NickConsoleEx` are all gone, and `HARBOR_TUI=nickconsoleex` selects nothing. If you want SharpConsoleUI, clone the vendored tree, build the wrapper and wire it in by hand.
 
 ## Build & test commands
+
+> **Adding a rule or a gate?** [docs/ANALYZERS_AUTHORING.md](./docs/ANALYZERS_AUTHORING.md)
+> is the guide to writing one: where the file goes, how the diagnostic is
+> shaped, how the rule is waived, and the controls that prove the rule can
+> fail. Read it before writing the first rule.
 
 ```bash
 # Build everything

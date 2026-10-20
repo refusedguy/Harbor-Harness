@@ -15,6 +15,11 @@ Harbor runs three layers of static analysis + DI validation:
    `dotnet-arch` tool and its stale `dotnetarch.json` were removed in ROP-D; see
    §3).
 
+> **Writing a new rule?** [ANALYZERS_AUTHORING.md](./ANALYZERS_AUTHORING.md) is
+> the guide: where the file goes, how the diagnostic is shaped, how the rule is
+> waived, and the controls that prove the rule can fail. Read it before writing
+> the first rule.
+
 ---
 
 ## 1. Roslyn analyzers
