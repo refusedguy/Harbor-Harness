@@ -77,7 +77,9 @@ public static class McpLoginRunner
             return 1;
         }
 
-        var handler = new McpOAuthHandler(name, new Uri(remote.Url, UriKind.Absolute), remote.OAuth);
+        // The handler owns the client it speaks over (#1854) — disposing it here
+        // keeps the command from leaving a connection pool behind.
+        using var handler = new McpOAuthHandler(name, new Uri(remote.Url, UriKind.Absolute), remote.OAuth);
         output.WriteLine($"Opening browser for '{name}' OAuth login…");
         var result = await handler.LoginAsync(cancellationToken: ct).ConfigureAwait(false);
         if (result.IsFailure)

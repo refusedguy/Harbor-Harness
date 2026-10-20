@@ -44,10 +44,23 @@ internal static class JsonProviderDiscovery
     ///     resolver + catalog injected by the app (async-loaded config).
     ///     Mirrors the former Avalonia ProviderRegistration.RegisterJsonProviders.
     /// </summary>
+    /// <param name="pb">Registry builder the discovered providers are added to.</param>
+    /// <param name="authResolver">Auth resolver (desktop flavor).</param>
+    /// <param name="modelCatalog">Model catalog (desktop flavor).</param>
+    /// <param name="httpClientFactory">
+    ///     The client factory the discovered providers speak over (#1854). The
+    ///     desktop flavor used to build one <see cref="HttpClient" /> per
+    ///     discovered <c>providers/*.json</c> — a private connection pool each,
+    ///     never disposed and never re-resolving DNS — while the CLI flavor
+    ///     already took its clients from this factory. Same shape now, both
+    ///     flavors.
+    /// </param>
+    /// <param name="loggerFactory">Logger factory.</param>
     public static void RegisterDesktopProviders(
         IProviderRegistryBuilder pb,
         Harbor.Abstractions.Providers.IAuthResolver authResolver,
         Harbor.Providers.OpenAiCompatible.IModelCatalog modelCatalog,
+        IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory)
     {
         var seenIds = new HashSet<string>(StringComparer.Ordinal) { "ollama" };
@@ -82,7 +95,14 @@ internal static class JsonProviderDiscovery
                         continue;
                     }
 
-                    var http = new HttpClient { Timeout = TimeSpan.FromSeconds(config.Timeout) };
+                    // #1854: the client comes from the factory, like every other
+                    // provider client in the product (the CLI flavor below does
+                    // the same). One handler per provider, pooled and rotated by
+                    // the factory — instead of one private connection pool per
+                    // providers/*.json file, each with its own DNS lifetime and
+                    // no owner to dispose it.
+                    var http = httpClientFactory.CreateClient($"provider:{config.Id}");
+                    http.Timeout = TimeSpan.FromSeconds(config.Timeout);
                     // #195: configs are immutable — attach quirks via a sealed copy.
                     var configRef = config.WithQuirks(Harbor.Providers.OpenAiCompatible.Compat.ProviderCompatFlags.For(config.GetProviderId()));
                     pb.AddProvider(config.Id, () => new Harbor.Providers.OpenAiCompatible.OpenAiCompatibleLlmClient(
