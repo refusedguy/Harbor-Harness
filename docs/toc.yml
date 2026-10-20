@@ -82,6 +82,8 @@
   href: KILLER_FEATURES.md
 - name: Nuget Packaging
   href: NUGET_PACKAGING.md
+- name: Observed Instrumentation
+  href: OBSERVED_INSTRUMENTATION.md
 - name: Osc Protocol Matrix
   href: OSC_PROTOCOL_MATRIX.md
 - name: Patterns
