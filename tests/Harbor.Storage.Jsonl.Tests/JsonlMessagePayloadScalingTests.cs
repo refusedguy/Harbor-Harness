@@ -77,17 +77,9 @@ public class JsonlMessagePayloadScalingTests
         int index = i % 3;
         return index switch
         {
-            0 => new UserMessage($"u{i}", "sess", CreatedAt, "content", "code", "p/m"),
-            1 => new AssistantMessage(
-                $"a{i}", "sess", CreatedAt,
-                [new TextPart("hi"), new ThinkingPart("reason"), ToolCallPart.Create($"tc_{i}", "read", ArgsDoc.RootElement)],
-                StopReason.ToolUse, new Usage(10, 5), "p/m"),
-            _ => new ToolResultMessage(
-                $"r{i}", "sess", CreatedAt,
-                [
-                    new ToolResultEntry($"tc_{i - 1}", "read", "output", IsError: false),
-                    new ToolResultEntry("tc_early", "bash", "error", IsError: true),
-                ]),
+            0 => TestMessages.User("content", id: $"u{i}", sessionId: "sess", createdAt: CreatedAt, model: "p/m"),
+            1 => TestMessages.AssistantParts([new TextPart("hi"), new ThinkingPart("reason"), ToolCallPart.Create($"tc_{i}", "read", ArgsDoc.RootElement)], id: $"a{i}", sessionId: "sess", createdAt: CreatedAt, stopReason: StopReason.ToolUse, usage: new Usage(10, 5), model: "p/m"),
+            _ => TestMessages.ToolResult([new ToolResultEntry($"tc_{i - 1}", "read", "output", IsError: false), new ToolResultEntry("tc_early", "bash", "error", IsError: true),], id: $"r{i}", sessionId: "sess", createdAt: CreatedAt),
         };
     }
 

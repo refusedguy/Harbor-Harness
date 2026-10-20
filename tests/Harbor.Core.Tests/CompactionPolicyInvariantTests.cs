@@ -75,6 +75,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -619,14 +620,7 @@ public class CompactionPolicyInvariantTests
                 JsonDocument.Parse($$"""{"path":"file{{i}}.txt"}""").RootElement.Clone()));
         }
 
-        return new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            "session-1",
-            DateTimeOffset.UtcNow,
-            parts,
-            StopReason.ToolUse,
-            new Usage(0, 0),
-            "test-model");
+        return TestMessages.AssistantParts(parts, stopReason: StopReason.ToolUse);
     }
 
     private static ToolResultMessage ToolResult(string toolName, string output) => new(

@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Commands;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -69,14 +70,7 @@ public class SessionSearchRunnerTests
     [Test]
     public async Task Ignores_Thinking_Only_Assistant()
     {
-        var thinkingOnly = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            "s",
-            DateTimeOffset.UtcNow,
-            [new ThinkingPart("hidden deliberation about zebras")],
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var thinkingOnly = TestMessages.AssistantParts([new ThinkingPart("hidden deliberation about zebras")], sessionId: "s");
         await SessionFixtures.SeedAsync(_store, string.Empty, thinkingOnly);
 
         int exit = await SearchAsync("zebras");

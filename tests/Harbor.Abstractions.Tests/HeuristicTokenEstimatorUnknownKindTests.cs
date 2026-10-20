@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Abstractions.Tests;
 /// <summary>
@@ -17,14 +18,7 @@ public class HeuristicTokenEstimatorUnknownKindTests
     public async Task EstimateMessage_KnownKinds_KeepTheirExistingNumbers()
     {
         var estimator = new HeuristicTokenEstimator();
-        var assistant = new AssistantMessage(
-            "m1",
-            "s",
-            Ts,
-            new ContentPart[] { new TextPart("hello world"), new FilePart("a.png", "image/png", 1) },
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(new ContentPart[] { new TextPart("hello world"), new FilePart("a.png", "image/png", 1) }, id: "m1", sessionId: "s", createdAt: Ts);
 
         // 11 chars -> ceil(11/4) = 3, plus the flat 200 for the file, plus the
         // 100-token message framing. Same arithmetic the switch used to do.
@@ -34,14 +28,7 @@ public class HeuristicTokenEstimatorUnknownKindTests
     [Test]
     public async Task EstimateMessage_UnknownPartKind_RefusesIt()
     {
-        var assistant = new AssistantMessage(
-            "m1",
-            "s",
-            Ts,
-            new ContentPart[] { new RoguePart("payload") },
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(new ContentPart[] { new RoguePart("payload") }, id: "m1", sessionId: "s", createdAt: Ts);
 
         NotSupportedException ex = Assert.Throws<NotSupportedException>(
             () => new HeuristicTokenEstimator().EstimateMessage(assistant));

@@ -154,7 +154,7 @@ public class ChatAppReducerTests
         var state = new UiState { Ui = TerminalUiState.Empty with { ScrollOffset = 40 } };
         var history = new AgentMessage[]
         {
-            new UserMessage("u1", "s", DateTimeOffset.UtcNow, "hi", "code", "m", null),
+            TestMessages.User("hi", id: "u1", sessionId: "s", model: "m"),
         };
 
         var result = ChatAppReducer.Update(state,

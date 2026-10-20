@@ -158,8 +158,7 @@ public class TurnBehaviorTests
     private static TestSessionContext NewSession(params AgentMessage[] seed) =>
         new(Session.Create("/tmp/harbor-turn-behavior-tests", "code", "test", "test-model"), seed);
 
-    private static AgentMessage UserMsg(string sessionId, string content) => new UserMessage(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow, content, "user", "test-model");
+    private static AgentMessage UserMsg(string sessionId, string content) => TestMessages.User(content, sessionId: sessionId, agent: "user");
 
     [Test]
     public async Task CompactionBehavior_UnderThreshold_NoCompactionNoEvents()
@@ -182,15 +181,7 @@ public class TurnBehaviorTests
     public async Task CompactionBehavior_OverThreshold_CompactsAndPublishesCompleted()
     {
         var session = NewSession(UserMsg("s", "a"), UserMsg("s", "b"), UserMsg("s", "c"));
-        var summaryMessage = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Session.Id,
-            DateTimeOffset.UtcNow,
-            [new TextPart("summary")],
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model",
-            IsSummary: true);
+        var summaryMessage = TestMessages.Assistant("summary", sessionId: session.Session.Id, isSummary: true);
         var summary = new CompactionResult(
             "summary",
             PrunedMessageCount: 2,

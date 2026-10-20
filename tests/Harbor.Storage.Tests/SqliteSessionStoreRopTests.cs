@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -53,8 +54,7 @@ public class SqliteSessionStoreRopTests
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m-good", session.Id, DateTimeOffset.UtcNow, "kept", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("kept", id: "m-good", sessionId: session.Id, model: "claude-opus-4"));
 
             using (var conn = new SqliteConnection($"Data Source={dbPath}"))
             {
@@ -117,8 +117,7 @@ public class SqliteSessionStoreRopTests
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m1", session.Id, DateTimeOffset.UtcNow, "hello", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("hello", id: "m1", sessionId: session.Id, model: "claude-opus-4"));
 
             var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
 

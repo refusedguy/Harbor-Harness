@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 /// <summary>
 ///     Unit tests for <see cref="JsonlMessageCodec.DeserializeMessage" /> —
@@ -109,16 +110,7 @@ public class JsonlMessageCodecTests
     [Test]
     public async Task Serialize_ToolResultWithMetadata_DoesNotThrow_AndRoundTrips()
     {
-        var message = new ToolResultMessage(
-            "m1",
-            "sess-1",
-            DateTimeOffset.Parse("2026-01-01T00:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind),
-            new[]
-            {
-                new ToolResultEntry("tc1", "bash", "ok", false,
-                    new System.Collections.Generic.Dictionary<string, object?> { ["cwd"] = "/tmp" }),
-                new ToolResultEntry("tc2", "write", "denied", true, "plain-string-meta"),
-            });
+        var message = TestMessages.ToolResult(new[] {new ToolResultEntry("tc1", "bash", "ok", false, new System.Collections.Generic.Dictionary<string, object?> {["cwd"] = "/tmp"}), new ToolResultEntry("tc2", "write", "denied", true, "plain-string-meta"),}, id: "m1", sessionId: "sess-1", createdAt: DateTimeOffset.Parse("2026-01-01T00:00:00Z", null, System.Globalization.DateTimeStyles.RoundtripKind));
 
         var entry = new MessageEntry(
             "message", message.Id, message.ParentId, message.Role, message.CreatedAt,

@@ -10,6 +10,7 @@ using Harbor.Application.Tests.Fakes;
 using FakeAgentLoopBase = Harbor.TestKit.Generated.FakeAgentLoop; // #1769: generated double
 
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Application.Tests;
 
@@ -397,12 +398,8 @@ public class SubAgentRunnerTests
         var loop = new ScriptedLoop(replies:
         [
             Assistant("final prose"),
-            new UserMessage(Guid.NewGuid().ToString("N"), session1, DateTimeOffset.UtcNow, "follow-up", "explore", "test-model"),
-            new ToolResultMessage(
-                Guid.NewGuid().ToString("N"),
-                session1,
-                DateTimeOffset.UtcNow,
-                [])
+            TestMessages.User("follow-up", sessionId: session1, agent: "explore"),
+            TestMessages.ToolResult([], sessionId: session1)
         ]);
         var runner = new SubAgentRunner(store, loop, NullLogger<SubAgentRunner>.Instance);
 

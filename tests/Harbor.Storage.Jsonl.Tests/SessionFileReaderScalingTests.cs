@@ -345,7 +345,7 @@ public class SessionFileReaderScalingTests
         var buffer = new MemoryStream();
         foreach (var (id, createdAt, payload) in records)
         {
-            var message = new UserMessage(id, sessionId, createdAt, payload, "code", "test-model");
+            var message = TestMessages.User(payload, id: id, sessionId: sessionId, createdAt: createdAt);
             var entry = new MessageEntry(
                 "message",
                 message.Id,

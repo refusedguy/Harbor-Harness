@@ -3,6 +3,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 
@@ -94,41 +95,16 @@ public class MessageConverterLlmBenchmark
 
             if (mod == 0)
             {
-                list.Add(new UserMessage(
-                    id,
-                    sessionId,
-                    ts,
-                    $"Implement feature {i}: add unit tests for MessageConverter adapter.",
-                    "code",
-                    "test-model"));
+                list.Add(TestMessages.User($"Implement feature {i}: add unit tests for MessageConverter adapter.", id: id, sessionId: sessionId, createdAt: ts));
             }
             else if (mod == 1)
             {
                 // 3 parts exercises ConvertParts: TextPart + ThinkingPart + ToolCallPart
-                list.Add(new AssistantMessage(
-                    id,
-                    sessionId,
-                    ts,
-                    new ContentPart[]
-                    {
-                        new TextPart($"I'll implement feature {i} and add tests."),
-                        new ThinkingPart($"Reasoning for turn {i}: check edge cases around empty ToolResultMessage."),
-                        new ToolCallPart($"tc_{i}", "read", SampleArgs)
-                    },
-                    StopReason.ToolUse,
-                    new Usage(120, 40),
-                    "test-model"));
+                list.Add(TestMessages.AssistantParts(new ContentPart[] {new TextPart($"I'll implement feature {i} and add tests."), new ThinkingPart($"Reasoning for turn {i}: check edge cases around empty ToolResultMessage."), new ToolCallPart($"tc_{i}", "read", SampleArgs)}, id: id, sessionId: sessionId, createdAt: ts, stopReason: StopReason.ToolUse, usage: new Usage(120, 40)));
             }
             else
             {
-                list.Add(new ToolResultMessage(
-                    id,
-                    sessionId,
-                    ts,
-                    new[]
-                    {
-                        new ToolResultEntry($"tc_{i - 1}", "read", $"Contents of file {i - 1} (512 bytes)", false)
-                    }));
+                list.Add(TestMessages.ToolResult(new[] {new ToolResultEntry($"tc_{i - 1}", "read", $"Contents of file {i - 1} (512 bytes)", false)}, id: id, sessionId: sessionId, createdAt: ts));
             }
         }
 

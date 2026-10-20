@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Storage.Tests;
 /// <summary>
 ///     Tests for SqliteSessionStore — uses a temp file per test and deletes it in finally.
@@ -189,12 +190,9 @@ public class SqliteSessionStoreTests
 
             // Insert messages with explicit, non-monotonic timestamps.
             // SqliteSessionStore orders by created_at_ms ASC, so order should follow timestamps, not insertion order.
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m1", session.Id, baseTime.AddSeconds(10), "second-inserted-first-ts", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m2", session.Id, baseTime.AddSeconds(5), "first", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m3", session.Id, baseTime.AddSeconds(20), "third", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("second-inserted-first-ts", id: "m1", sessionId: session.Id, createdAt: baseTime.AddSeconds(10), model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("first", id: "m2", sessionId: session.Id, createdAt: baseTime.AddSeconds(5), model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("third", id: "m3", sessionId: session.Id, createdAt: baseTime.AddSeconds(20), model: "claude"));
 
             var messages = await store.GetMessagesAsync(session.Id);
 
@@ -407,10 +405,8 @@ public class SqliteSessionStoreTests
             var s2 = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
 
             // Same message id in two sessions (e.g. double ImportAsync preserving ids).
-            var r1 = await store.AppendMessageAsync(s1.Id, new UserMessage(
-                "shared-id", s1.Id, DateTimeOffset.UtcNow, "session-one", "code", "claude"));
-            var r2 = await store.AppendMessageAsync(s2.Id, new UserMessage(
-                "shared-id", s2.Id, DateTimeOffset.UtcNow, "session-two", "code", "claude"));
+            var r1 = await store.AppendMessageAsync(s1.Id, TestMessages.User("session-one", id: "shared-id", sessionId: s1.Id, model: "claude"));
+            var r2 = await store.AppendMessageAsync(s2.Id, TestMessages.User("session-two", id: "shared-id", sessionId: s2.Id, model: "claude"));
 
             await Assert.That(r1.IsSuccess).IsTrue();
             await Assert.That(r2.IsSuccess).IsTrue();
@@ -423,8 +419,7 @@ public class SqliteSessionStoreTests
             await Assert.That(((UserMessage)m2.Value[0]).Content).IsEqualTo("session-two");
 
             // Same-session duplicate is still a PK violation.
-            var dup = await store.AppendMessageAsync(s1.Id, new UserMessage(
-                "shared-id", s1.Id, DateTimeOffset.UtcNow, "dup", "code", "claude"));
+            var dup = await store.AppendMessageAsync(s1.Id, TestMessages.User("dup", id: "shared-id", sessionId: s1.Id, model: "claude"));
             await Assert.That(dup.IsFailure).IsTrue();
 
             // Updates stay scoped to their own session.
@@ -478,10 +473,8 @@ public class SqliteSessionStoreTests
             var afterMidnightLocal = new DateTimeOffset(2026, 5, 1, 0, 1, 0, TimeSpan.FromHours(2));
             var beforeMidnightUtc = new DateTimeOffset(2026, 4, 30, 23, 59, 0, TimeSpan.Zero);
 
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m-late-text", session.Id, beforeMidnightUtc, "second-instant", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m-early-instant", session.Id, afterMidnightLocal, "first-instant", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("second-instant", id: "m-late-text", sessionId: session.Id, createdAt: beforeMidnightUtc, model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("first-instant", id: "m-early-instant", sessionId: session.Id, createdAt: afterMidnightLocal, model: "claude"));
 
             var messages = await store.GetMessagesAsync(session.Id);
 

@@ -124,8 +124,8 @@ public class SessionManagerAtomicityTests
         var messages = new List<AgentMessage>();
         for (int i = 0; i < messageCount; i++)
             messages.Add(i % 2 == 0
-                ? TestMessages.User($"u{i}", session.Id)
-                : TestMessages.Assistant($"a{i}", session.Id));
+                ? TestMessages.User($"u{i}", sessionId: session.Id)
+                : TestMessages.Assistant($"a{i}", sessionId: session.Id));
         store.Seed(session, messages);
         return (store, session);
     }

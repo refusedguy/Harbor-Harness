@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -72,8 +73,7 @@ public class SqliteIsoStampRoundTripTests
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            var message = new UserMessage(
-                "umsg-1", session.Id, OddStamp, "round trip", "code", "claude-opus-4");
+            var message = TestMessages.User("round trip", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
             await Assert.That((await store.AppendMessageAsync(session.Id, message)).IsSuccess).IsTrue();
 
             var (createdAtText, _) = await ReadStampColumnsAsync(dbPath, messages: true);
@@ -106,12 +106,10 @@ public class SqliteIsoStampRoundTripTests
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            var original = new UserMessage(
-                "umsg-1", session.Id, DateTimeOffset.UtcNow, "before", "code", "claude-opus-4");
+            var original = TestMessages.User("before", id: "umsg-1", sessionId: session.Id, model: "claude-opus-4");
             await Assert.That((await store.AppendMessageAsync(session.Id, original)).IsSuccess).IsTrue();
 
-            var edited = new UserMessage(
-                "umsg-1", session.Id, OddStamp, "after", "code", "claude-opus-4");
+            var edited = TestMessages.User("after", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
             await Assert.That((await store.UpdateMessageAsync(session.Id, edited)).IsSuccess).IsTrue();
 
             var (createdAtText, _) = await ReadStampColumnsAsync(dbPath, messages: true);
@@ -136,8 +134,7 @@ public class SqliteIsoStampRoundTripTests
         try
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
-            var message = new UserMessage(
-                "umsg-1", session.Id, OddStamp, "anchor", "code", "claude-opus-4");
+            var message = TestMessages.User("anchor", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
             await Assert.That((await store.AppendMessageAsync(session.Id, message)).IsSuccess).IsTrue();
 
             var checkpointResult = await store.CreateCheckpointAsync(session.Id, "umsg-1", "label");

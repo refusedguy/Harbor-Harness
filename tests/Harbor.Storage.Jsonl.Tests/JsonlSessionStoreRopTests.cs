@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -87,8 +88,7 @@ public class JsonlSessionStoreRopTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m1", session.Id, DateTimeOffset.UtcNow, "kept", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("kept", id: "m1", sessionId: session.Id, model: "claude-opus-4"));
             string path = Path.Combine(store.GetRootDirectory(), $"{session.Id}.jsonl");
             File.AppendAllText(path, "{broken json line\n");
 
@@ -111,7 +111,7 @@ public class JsonlSessionStoreRopTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            var ghost = new UserMessage("msg-ghost", session.Id, DateTimeOffset.UtcNow, "Ghost", "code", "claude-opus-4");
+            var ghost = TestMessages.User("Ghost", id: "msg-ghost", sessionId: session.Id, model: "claude-opus-4");
 
             var result = await store.UpdateMessageAsync(session.Id, ghost);
 

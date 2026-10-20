@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="HeuristicTokenEstimator" /> on text payloads of
@@ -54,18 +55,7 @@ public class TokenEstimatorBenchmark
         }
         _mixedText = new string(mixed);
 
-        _assistantMessage = new AssistantMessage(
-            "msg-1",
-            "session-1",
-            DateTimeOffset.UtcNow,
-            new ContentPart[]
-            {
-                new TextPart(_mediumText),
-                new TextPart("Second part for multi-part estimation.")
-            },
-            StopReason.Stop,
-            new Usage(0, 0),
-            "stub-1");
+        _assistantMessage = TestMessages.AssistantParts(new ContentPart[] {new TextPart(_mediumText), new TextPart("Second part for multi-part estimation.")}, id: "msg-1", model: "stub-1");
     }
 
     [Benchmark(Description = "Estimate small (100 chars)", Baseline = true)]

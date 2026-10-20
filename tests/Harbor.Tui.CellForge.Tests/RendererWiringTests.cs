@@ -166,7 +166,7 @@ public class RendererWiringTests
         using var renderer = Create(backend);
         await renderer.InitializeAsync();
 
-        var user = new UserMessage("m1", "s1", DateTimeOffset.UtcNow, "hello e2e", "code", "model");
+        var user = TestMessages.User("hello e2e", id: "m1", sessionId: "s1", model: "model");
         await renderer.RenderAsync(TestEvents.AgentStart(messages: new AgentMessage[] { user }));
         await renderer.RenderAsync(TestEvents.AgentEnd());
 

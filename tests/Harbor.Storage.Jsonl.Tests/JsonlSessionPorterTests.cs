@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -23,13 +24,9 @@ public class JsonlSessionPorterTests
         var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
         await store.UpdateAsync(session with { Title = "porter fixture", ParentSessionId = "parent-x" });
 
-        await store.AppendMessageAsync(session.Id, new UserMessage(
-            "m-user-1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-2), "list files", "code", "claude-opus-4"));
+        await store.AppendMessageAsync(session.Id, TestMessages.User("list files", id: "m-user-1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-2), model: "claude-opus-4"));
 
-        await store.AppendMessageAsync(session.Id, new AssistantMessage(
-            "m-asst-1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-1),
-            [new TextPart("here are the files"), new ThinkingPart("thinking silently")],
-            StopReason.Stop, new Usage(10, 5), "claude-opus-4"));
+        await store.AppendMessageAsync(session.Id, TestMessages.AssistantParts([new TextPart("here are the files"), new ThinkingPart("thinking silently")], id: "m-asst-1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-1), usage: new Usage(10, 5), model: "claude-opus-4"));
 
         await store.AppendMessageAsync(session.Id, TestToolResult(session.Id));
 

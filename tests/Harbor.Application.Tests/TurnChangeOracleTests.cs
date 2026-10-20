@@ -303,7 +303,7 @@ public class TurnChangeOracleTests
             message = message.AppendToolCall(part);
         }
 
-        var toolResults = new ToolResultMessage("m-results", SessionId, DateTimeOffset.UtcNow, results);
+        var toolResults = TestMessages.ToolResult(results, id: "m-results", sessionId: SessionId);
         await bus.PublishAsync(TestEvents.TurnEnd(message, [toolResults], SessionId));
     }
 

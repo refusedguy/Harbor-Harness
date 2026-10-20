@@ -61,14 +61,9 @@ public class RunLimitOutcomeTests
         const string toolCallId = "tc-cap-1";
         return
         [
-            new UserMessage($"u-1-{Guid.NewGuid():N}", sessionId, BaseTime, "do the thing", "code", "kilo-auto"),
-            new AssistantMessage(
-                $"a-1-{Guid.NewGuid():N}", sessionId, BaseTime.AddSeconds(1),
-                [new ToolCallPart(toolCallId, "read", JsonArgs("""{"path":"README.md"}"""))],
-                StopReason.ToolUse, new Usage(10, 5), "kilo-auto"),
-            new ToolResultMessage(
-                $"t-1-{Guid.NewGuid():N}", sessionId, BaseTime.AddSeconds(2),
-                [new ToolResultEntry(toolCallId, "read", "file contents", false)])
+            TestMessages.User("do the thing", id: $"u-1-{Guid.NewGuid():N}", sessionId: sessionId, createdAt: BaseTime, model: "kilo-auto"),
+            TestMessages.AssistantParts([new ToolCallPart(toolCallId, "read", JsonArgs("""{"path":"README.md"}"""))], id: $"a-1-{Guid.NewGuid():N}", sessionId: sessionId, createdAt: BaseTime.AddSeconds(1), stopReason: StopReason.ToolUse, usage: new Usage(10, 5), model: "kilo-auto"),
+            TestMessages.ToolResult([new ToolResultEntry(toolCallId, "read", "file contents", false)], id: $"t-1-{Guid.NewGuid():N}", sessionId: sessionId, createdAt: BaseTime.AddSeconds(2))
         ];
     }
 

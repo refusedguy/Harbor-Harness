@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -20,7 +21,7 @@ public class MessageConverterImageTests
     public async Task ToLlmMessages_TextOnlyUser_KeepsTheSingleTextBlockShape()
     {
         var converter = new MessageConverter();
-        var user = new UserMessage("m1", "s1", Ts, "hello", "code", "test-model");
+        var user = TestMessages.User("hello", id: "m1", sessionId: "s1", createdAt: Ts);
 
         var result = converter.ToLlmMessages([user]);
 
@@ -33,9 +34,7 @@ public class MessageConverterImageTests
     public async Task ToLlmMessages_ImageTurn_EmitsTextThenImageBlocks()
     {
         var converter = new MessageConverter();
-        var user = new UserMessage(
-            "m1", "s1", Ts, "what is this?", "code", "test-model",
-            Attachments: [new ImageAttachment("/tmp/a.png", "image/png", 4, 2, PngBytes)]);
+        var user = TestMessages.User("what is this?", id: "m1", sessionId: "s1", createdAt: Ts, attachments: [new ImageAttachment("/tmp/a.png", "image/png", 4, 2, PngBytes)]);
 
         var result = converter.ToLlmMessages([user]);
 
@@ -54,13 +53,7 @@ public class MessageConverterImageTests
     public async Task ToLlmMessages_MultipleImages_PreserveOrderAndMimeTypes()
     {
         var converter = new MessageConverter();
-        var user = new UserMessage(
-            "m1", "s1", Ts, "compare", "code", "test-model",
-            Attachments:
-            [
-                new ImageAttachment("/tmp/a.png", "image/png", 1, 1, [0x01]),
-                new ImageAttachment("/tmp/b.jpg", "image/jpeg", 2, 2, [0x02])
-            ]);
+        var user = TestMessages.User("compare", id: "m1", sessionId: "s1", createdAt: Ts, attachments: [new ImageAttachment("/tmp/a.png", "image/png", 1, 1, [0x01]), new ImageAttachment("/tmp/b.jpg", "image/jpeg", 2, 2, [0x02])]);
 
         var result = converter.ToLlmMessages([user]);
 
@@ -74,7 +67,7 @@ public class MessageConverterImageTests
     public async Task ToLlmMessages_EmptyAttachmentList_BehavesLikeATextOnlyTurn()
     {
         var converter = new MessageConverter();
-        var user = new UserMessage("m1", "s1", Ts, "hi", "code", "test-model", Attachments: []);
+        var user = TestMessages.User("hi", id: "m1", sessionId: "s1", createdAt: Ts, attachments: []);
 
         var result = converter.ToLlmMessages([user]);
 
@@ -85,7 +78,7 @@ public class MessageConverterImageTests
     [Test]
     public async Task UserMessage_HasAttachments_TracksPresence()
     {
-        var without = new UserMessage("m1", "s1", Ts, "hi", "code", "m");
+        var without = TestMessages.User("hi", id: "m1", sessionId: "s1", createdAt: Ts, model: "m");
         await Assert.That(without.HasAttachments).IsFalse();
 
         var with = without with

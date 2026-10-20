@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -19,13 +20,7 @@ public class DeleteMessagesAfterTests
         var ids = new List<string>(count);
         for (int i = 0; i < count; i++)
         {
-            var message = new UserMessage(
-                $"msg-{i:D2}-{Guid.NewGuid():N}",
-                created.Id,
-                DateTimeOffset.UtcNow.AddMilliseconds(i),
-                $"message {i}",
-                "code",
-                "test-model");
+            var message = TestMessages.User($"message {i}", id: $"msg-{i:D2}-{Guid.NewGuid():N}", sessionId: created.Id, createdAt: DateTimeOffset.UtcNow.AddMilliseconds(i));
             await store.AppendMessageAsync(created.Id, message);
             ids.Add(message.Id);
         }
@@ -99,8 +94,7 @@ public class DeleteMessagesAfterTests
         var (sessionId, ids) = await SeedAsync(store, 4);
         await store.DeleteMessagesAfterAsync(sessionId, ids[0]);
 
-        var fresh = new UserMessage(
-            Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow, "fresh", "code", "test-model");
+        var fresh = TestMessages.User("fresh", sessionId: sessionId);
         var append = await store.AppendMessageAsync(sessionId, fresh);
 
         await Assert.That(append.IsSuccess).IsTrue();

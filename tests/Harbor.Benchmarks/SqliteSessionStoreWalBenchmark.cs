@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -56,22 +57,9 @@ public class SqliteSessionStoreWalBenchmark
         _sessionId = _session.Id;
 
         var now = DateTimeOffset.UtcNow;
-        _userMessage = new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now,
-            "Write a C# function that reverses a string.",
-            "code",
-            "stub-1");
+        _userMessage = TestMessages.User("Write a C# function that reverses a string.", sessionId: _sessionId, createdAt: now, model: "stub-1");
 
-        _assistantMessage = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(1),
-            new[] { new TextPart("Here is a function that reverses a string.") },
-            StopReason.Stop,
-            new Usage(120, 35),
-            "stub-1");
+        _assistantMessage = TestMessages.Assistant("Here is a function that reverses a string.", sessionId: _sessionId, createdAt: now.AddSeconds(1), usage: new Usage(120, 35), model: "stub-1");
     }
 
     [IterationCleanup]

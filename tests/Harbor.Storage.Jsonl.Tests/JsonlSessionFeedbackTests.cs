@@ -354,14 +354,7 @@ public class JsonlSessionFeedbackTests
             // only asked "does the line contain it?" would drop this message
             // from the history — silently, and for ever.
             using var argsDoc = JsonDocument.Parse("""{"type":"messageRating","id":"not-a-feedback-record"}""");
-            var message = new AssistantMessage(
-                $"msg-{Guid.NewGuid():N}",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                [ToolCallPart.Create("tc_1", "read", argsDoc.RootElement)],
-                StopReason.ToolUse,
-                new Usage(1, 1),
-                "claude");
+            var message = TestMessages.AssistantParts([ToolCallPart.Create("tc_1", "read", argsDoc.RootElement)], id: $"msg-{Guid.NewGuid():N}", sessionId: session.Id, stopReason: StopReason.ToolUse, usage: new Usage(1, 1), model: "claude");
             await store.AppendMessageAsync(session.Id, message);
 
             var messages = await store.GetMessagesAsync(session.Id);

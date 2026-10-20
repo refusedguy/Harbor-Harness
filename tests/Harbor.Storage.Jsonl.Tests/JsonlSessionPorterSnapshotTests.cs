@@ -3,6 +3,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -266,8 +267,7 @@ public class JsonlSessionPorterSnapshotTests
     /// </summary>
     private static byte[] MessageLine(string sessionId, string id, int input, int output)
     {
-        var message = new AssistantMessage(
-            id, sessionId, Epoch, [new TextPart("hello")], StopReason.Stop, new Usage(input, output), "test-model");
+        var message = TestMessages.Assistant("hello", id: id, sessionId: sessionId, createdAt: Epoch, usage: new Usage(input, output));
         var entry = new MessageEntry(
             "message",
             message.Id,

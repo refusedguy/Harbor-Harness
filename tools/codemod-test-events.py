@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""codemod-test-events.py — rewrite hand-built test events into TestEvents calls.
+"""codemod-test-events.py — rewrite hand-built test events and messages into factory calls.
 
 WHAT IT DOES
 ============
@@ -12,6 +12,22 @@ Issue #1821: the test tree built its events by hand —
 — 604 constructions across 83 files, repeating the same handful of literals in
 every one of them. `tests/Harbor.TestKit.Support/TestEvents.cs` is the one place
 that builds them now, and this script is what moved the call sites over.
+
+Issue #1816: the same tree built its MESSAGES by hand —
+
+    var user = new UserMessage(
+        "m1",
+        session.Id,
+        DateTimeOffset.UtcNow,
+        "hi",
+        "code",
+        "test-model");
+
+— 196 constructions across 72 files, repeating the same handful of literals
+again. `tests/Harbor.TestKit.Support/TestMessages.cs` is the one place that
+builds them now, and this script is what moved those call sites over too
+(195 of the 196 — the one that carries a comment inside the construction is
+left alone, and the report says so).
 
     python3 tools/codemod-test-events.py --check     # report only, writes nothing
     python3 tools/codemod-test-events.py --apply     # rewrite the tree
@@ -40,6 +56,16 @@ So the script never guesses:
     message", and a builder that substitutes a default would silently change
     it.
 
+THE MESSAGES ARE WRITTEN DIFFERENTLY, AND WHY
+==============================================
+A message record's adjacent parameters are often the SAME type — `agent` and
+`model` are both `string`, `id` and `sessionId` are both `string` — so a
+positional call can swap them and still COMPILE. The script therefore writes
+the payload of a message positionally (it is the argument every call site
+passes and the one the reader looks for) and every other argument as a NAMED
+argument, which makes the swap inexpressible. The event records do not have
+that shape, so the event calls keep the positional form they had.
+
 WHAT IT TOUCHES
 ===============
   * `tests/**/*.cs`, except `tests/Harbor.Architecture.Tests/` — the guard tree
@@ -51,7 +77,7 @@ WHAT IT TOUCHES
     `<ProjectReference>` to `Harbor.TestKit.Support` if it does not have one
     already. That part references only `Harbor.Abstractions` and
     `Harbor.Abstractions.Contracts`, so the edge adds no product assembly to a
-    consumer that publishes events — it already has both.
+    consumer that publishes events or builds a message — it already has both.
 
 Stdlib only: no pip, no network, no dotnet. Same shape as the other tools in
 this directory.
@@ -120,6 +146,16 @@ LLM_EVENTS = [
 
 KNOWN_EVENTS = DOMAIN_EVENTS + LLM_EVENTS
 
+# The MESSAGE types the script knows how to build (#1816). Anything else is
+# left alone.
+MESSAGE_TYPES = [
+    "UserMessage",
+    "AssistantMessage",
+    "ToolResultMessage",
+]
+
+KNOWN_TYPES = KNOWN_EVENTS + MESSAGE_TYPES
+
 # ---------------------------------------------------------------------------
 # The defaults, and the text that stands for each of them
 # ---------------------------------------------------------------------------
@@ -131,6 +167,21 @@ DEFAULT_TOOL_NAME = '"counter"'
 DEFAULT_EMPTY_ASSISTANT = 'AssistantMessage.Empty("s1", "m")'
 DEFAULT_METADATA = "SessionMetadata.Empty"
 DEFAULT_EMPTY_ARGS = '"{}"'
+
+# The MESSAGE defaults (#1816). Each one is the value the builder substitutes,
+# so a source argument equal to it can be left out. The counts that chose
+# them are in `tests/Harbor.TestKit.Support/TestMessages.cs`.
+DEFAULT_MESSAGE_ID = 'Guid.NewGuid().ToString("N")'
+DEFAULT_MESSAGE_SESSION = '"session-1"'
+DEFAULT_MESSAGE_CREATED_AT = "DateTimeOffset.UtcNow"
+DEFAULT_MESSAGE_AGENT = '"code"'
+DEFAULT_MESSAGE_MODEL = '"test-model"'
+DEFAULT_MESSAGE_STOP_REASON = "StopReason.Stop"
+DEFAULT_MESSAGE_USAGE = "new Usage(0, 0)"
+DEFAULT_MESSAGE_PARENT = "null"
+DEFAULT_MESSAGE_ATTACHMENTS = "null"
+DEFAULT_MESSAGE_IS_SUMMARY = "false"
+DEFAULT_MESSAGE_SUMMARY_KEPT = "null"
 
 EMPTY_LIST = "[]"
 
@@ -240,6 +291,30 @@ def mask_code(text: str) -> str:
     return "".join(out)
 
 
+def has_comment(text: str) -> bool:
+    """Whether the text carries a comment outside its string literals.
+
+    The check cannot be done on the masked text: masking blanks the comment
+    out, so the marker disappears with it. And it cannot be a plain substring
+    search either: `/* body */` inside a string literal is DATA, not a
+    comment. So the text is walked the way the lexer walks it.
+    """
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c == "/" and i + 1 < n and text[i + 1] in "/*":
+            return True
+        if c == '"':
+            i = _string_end(text, i)
+            continue
+        if c == "'":
+            i = _char_end(text, i)
+            continue
+        i += 1
+    return False
+
+
 def collapse_whitespace(text: str) -> str | None:
     """Fold an argument that spans several lines onto one line.
 
@@ -249,8 +324,7 @@ def collapse_whitespace(text: str) -> str | None:
     """
     if "\n" not in text:
         return text
-    masked = mask_code(text)
-    if "//" in masked or "/*" in masked:
+    if has_comment(text):
         return None
 
     out: list[str] = []
@@ -378,10 +452,10 @@ def _matching_paren(text: str, open_paren: int) -> int:
 
 
 def find_calls(text: str) -> list[tuple[str, int, int, list[Argument]]]:
-    """Every `new <Event>(...)` in the text, with its arguments."""
+    """Every `new <Event>(...)` and `new <Message>(...)` in the text, with its arguments."""
     masked = mask_code(text)
     calls = []
-    pattern = re.compile(r"\bnew\s+(" + "|".join(KNOWN_EVENTS) + r")\s*\(")
+    pattern = re.compile(r"\bnew\s+(" + "|".join(KNOWN_TYPES) + r")\s*\(")
     for match in pattern.finditer(masked):
         typename = match.group(1)
         open_paren = match.end() - 1
@@ -633,6 +707,229 @@ JSON_ARGS_PATTERN = re.compile(
     r"^(?:System\.Text\.Json\.)?JsonDocument\.Parse\((.*)\)\.RootElement\.Clone\(\)$", re.DOTALL
 )
 
+# ---------------------------------------------------------------------------
+# The messages (#1816)
+# ---------------------------------------------------------------------------
+
+# The parameters of the MESSAGE records, in the records' own order. The
+# codemod needs them to read a construction that names its arguments
+# (`new UserMessage(Id: "m1", ...)`) and to know which parameter each
+# positional argument fills.
+RECORD_PARAMS: dict[str, list[str]] = {
+    "UserMessage": [
+        "Id",
+        "SessionId",
+        "CreatedAt",
+        "Content",
+        "Agent",
+        "Model",
+        "ParentId",
+        "Attachments",
+    ],
+    "AssistantMessage": [
+        "Id",
+        "SessionId",
+        "CreatedAt",
+        "Parts",
+        "StopReason",
+        "Usage",
+        "Model",
+        "ParentId",
+        "IsSummary",
+        "SummaryFirstKeptId",
+    ],
+    "ToolResultMessage": [
+        "Id",
+        "SessionId",
+        "CreatedAt",
+        "Results",
+        "ParentId",
+    ],
+}
+
+# The record parameters the record itself gives a default. A source that did
+# not name one of them means the record's default, which is what the builder
+# substitutes too.
+RECORD_DEFAULTS: dict[str, str] = {
+    "ParentId": "null",
+    "Attachments": "null",
+    "IsSummary": "false",
+    "SummaryFirstKeptId": "null",
+}
+
+
+@dataclass
+class MessageParam:
+    """One parameter of a message builder: its name, its value and its default."""
+
+    name: str
+    value: str
+    default: str
+    substitutes_null: bool = False
+
+
+@dataclass
+class MessagePlan:
+    """What to write in place of a message construction."""
+
+    method: str
+    payload: str
+    params: list[MessageParam]
+
+
+# (method, the record parameter that carries the payload, the parameters) per
+# message type. Each parameter is (factory name, record name, default text,
+# "the builder substitutes a value for a null").
+MESSAGE_SPECS: dict[str, tuple[str, str, list[tuple[str, str, str, bool]]]] = {
+    "UserMessage": (
+        "User",
+        "Content",
+        [
+            ("id", "Id", DEFAULT_MESSAGE_ID, True),
+            ("sessionId", "SessionId", DEFAULT_MESSAGE_SESSION, True),
+            ("createdAt", "CreatedAt", DEFAULT_MESSAGE_CREATED_AT, True),
+            ("agent", "Agent", DEFAULT_MESSAGE_AGENT, True),
+            ("model", "Model", DEFAULT_MESSAGE_MODEL, True),
+            ("parentId", "ParentId", DEFAULT_MESSAGE_PARENT, False),
+            ("attachments", "Attachments", DEFAULT_MESSAGE_ATTACHMENTS, False),
+        ],
+    ),
+    "AssistantMessage": (
+        "Assistant",
+        "Parts",
+        [
+            ("id", "Id", DEFAULT_MESSAGE_ID, True),
+            ("sessionId", "SessionId", DEFAULT_MESSAGE_SESSION, True),
+            ("createdAt", "CreatedAt", DEFAULT_MESSAGE_CREATED_AT, True),
+            ("stopReason", "StopReason", DEFAULT_MESSAGE_STOP_REASON, True),
+            ("usage", "Usage", DEFAULT_MESSAGE_USAGE, True),
+            ("model", "Model", DEFAULT_MESSAGE_MODEL, True),
+            ("parentId", "ParentId", DEFAULT_MESSAGE_PARENT, False),
+            ("isSummary", "IsSummary", DEFAULT_MESSAGE_IS_SUMMARY, True),
+            ("summaryFirstKeptId", "SummaryFirstKeptId", DEFAULT_MESSAGE_SUMMARY_KEPT, False),
+        ],
+    ),
+    "ToolResultMessage": (
+        "ToolResult",
+        "Results",
+        [
+            ("id", "Id", DEFAULT_MESSAGE_ID, True),
+            ("sessionId", "SessionId", DEFAULT_MESSAGE_SESSION, True),
+            ("createdAt", "CreatedAt", DEFAULT_MESSAGE_CREATED_AT, True),
+            ("parentId", "ParentId", DEFAULT_MESSAGE_PARENT, False),
+        ],
+    ),
+}
+
+# The assistant's payload is a list of content parts. When the list is exactly
+# one text part, the builder's TEXT form says the same thing in fewer
+# characters, and the codemod uses it.
+TEXT_PART_PATTERN = re.compile(r"^new\s+TextPart\s*\((.*)\)$", re.DOTALL)
+ARRAY_INIT_PATTERN = re.compile(r"^new\s*(?:\w+\s*)?\[\s*\]\s*\{(.*)\}$", re.DOTALL)
+
+
+def single_text_part(parts: str) -> str | None:
+    """The text of a parts expression that is exactly one text part.
+
+    Returns `None` when the expression is not one text part — then the
+    caller keeps the parts list as it is.
+    """
+    text = parts.strip()
+    if text.startswith("[") and text.endswith("]"):
+        inner = text[1:-1]
+    else:
+        match = ARRAY_INIT_PATTERN.match(text)
+        if match is None:
+            return None
+        inner = match.group(1)
+
+    elements = [arg for arg in split_arguments(inner) if arg.value.strip()]
+    if len(elements) != 1:
+        return None
+    match = TEXT_PART_PATTERN.match(elements[0].value.strip())
+    if match is None:
+        return None
+    literal = match.group(1).strip()
+    if not (literal.startswith('"') or literal.startswith('$"')):
+        return None
+    return literal
+
+
+def resolve_message_args(typename: str, args: list[Argument]) -> dict[str, str] | None:
+    """The values a construction passes, keyed by the record's parameter name.
+
+    Returns `None` when the arguments do not fit the record — a name the
+    record does not have, or one argument too many.
+    """
+    names = RECORD_PARAMS[typename]
+    values: dict[str, str] = {}
+    next_positional = 0
+    for arg in args:
+        if arg.named:
+            index = next(
+                (i for i, name in enumerate(names) if name.lower() == arg.name.lower()),
+                None,
+            )
+            if index is None:
+                return None
+            values[names[index]] = arg.value
+            next_positional = max(next_positional, index + 1)
+        else:
+            if next_positional >= len(names):
+                return None
+            values[names[next_positional]] = arg.value
+            next_positional += 1
+    return values
+
+
+def plan_for_message(typename: str, args: list[Argument]) -> tuple[MessagePlan | None, str]:
+    """The plan for one message construction, and the reason there is none."""
+    spec = MESSAGE_SPECS.get(typename)
+    if spec is None:
+        return None, f"{typename}: no builder for this type"
+    method, payload_name, param_spec = spec
+
+    # A comment inside a construction is left alone. The comma-split puts a
+    # trailing comment at the HEAD of the next argument, and the message
+    # factory moves the payload to the front — so the comment would travel
+    # to a place where it reads as if it documented something else. Leaving
+    # the construction alone keeps the comment where its author put it.
+    for argument in args:
+        if has_comment(argument.value):
+            return None, f"{typename}: a comment inside the construction"
+
+    values = resolve_message_args(typename, args)
+    if values is None:
+        return None, f"{typename}: the argument shape is not one the builder can reproduce"
+
+    payload = values.get(payload_name)
+    if payload is None:
+        return None, f"{typename}: the payload argument is missing"
+
+    if typename == "AssistantMessage":
+        text = single_text_part(payload)
+        if text is not None:
+            method = "Assistant"
+            payload = text
+        else:
+            method = "AssistantParts"
+
+    params: list[MessageParam] = []
+    for factory_name, record_name, default, substitutes in param_spec:
+        value = values.get(record_name)
+        if value is None:
+            # The source did not name the parameter, so the RECORD's default
+            # applies. It is the same default the builder substitutes, so the
+            # argument is left out.
+            if record_name not in RECORD_DEFAULTS:
+                return None, f"{typename}: the {record_name} argument is missing"
+            continue
+        if is_null(value) and substitutes:
+            return None, f"{typename}: the {record_name} argument is null and the builder substitutes a value for it"
+        params.append(MessageParam(factory_name, value, default, substitutes))
+
+    return MessagePlan(method, payload, params), ""
+
 
 def plan_for(typename: str, args: list[Argument]) -> tuple[Plan | None, str]:
     """The plan for one construction, and the reason there is none."""
@@ -771,6 +1068,31 @@ def emit(method: str, params: list[Param]) -> str:
     return f"TestEvents.{method}({', '.join(rendered)})"
 
 
+def fold(value: str) -> str:
+    """The argument on one line, when folding it does not lose a comment."""
+    if "\n" not in value:
+        return value
+    folded = collapse_whitespace(value)
+    return value if folded is None else folded
+
+
+def emit_message(plan: MessagePlan) -> str:
+    """Write the message call.
+
+    The payload is positional — it is the argument every call site passes and
+    the one the reader looks for. Every other argument is NAMED, because a
+    message record's adjacent parameters are often the same type: `agent` and
+    `model` are both `string`, `id` and `sessionId` are both `string`, and a
+    positional call can swap them and still compile.
+    """
+    rendered = [fold(plan.payload)]
+    for param in plan.params:
+        if param.default and same_value(param.value, param.default):
+            continue
+        rendered.append(f"{param.name}: {fold(param.value)}")
+    return f"TestMessages.{plan.method}({', '.join(rendered)})"
+
+
 # ---------------------------------------------------------------------------
 # The per-file rewrite
 # ---------------------------------------------------------------------------
@@ -786,20 +1108,34 @@ class FileResult:
     chars_after: int = 0
 
 
-def rewrite_text(text: str) -> tuple[str, int, list[tuple[int, str, str]]]:
+def rewrite_text(text: str) -> tuple[str, int, list[tuple[int, str, str]], list[str]]:
     """Rewrite every construction in one file.
 
-    Returns the new text, the number of sites rewritten, and the sites that
-    were left alone — each with the offset and the reason.
+    Returns the new text, the number of sites rewritten, the sites that
+    were left alone — each with the offset and the reason — and the type of
+    every site that was rewritten.
     """
     calls = find_calls(text)
     skipped: list[tuple[int, str, str]] = []
     replacements: list[tuple[int, int, str]] = []
+    rewritten: list[str] = []
     consumed_until = -1
 
     for typename, start, end, args in calls:
         if start < consumed_until:
             continue  # inside a construction that was already rewritten
+        if typename in MESSAGE_TYPES:
+            message_plan, reason = plan_for_message(typename, args)
+            if message_plan is None:
+                skipped.append((start, typename, reason))
+                continue
+            call = emit_message(message_plan)
+            if call == text[start:end]:
+                continue
+            replacements.append((start, end, call))
+            rewritten.append(typename)
+            consumed_until = end
+            continue
         plan: Plan | None
         if typename == "MessageUpdateEvent":
             plan, reason = plan_for_update(typename, args)
@@ -818,15 +1154,16 @@ def rewrite_text(text: str) -> tuple[str, int, list[tuple[int, str, str]]]:
         if call == text[start:end]:
             continue
         replacements.append((start, end, call))
+        rewritten.append(typename)
         consumed_until = end
 
     if not replacements:
-        return text, 0, skipped
+        return text, 0, skipped, rewritten
 
     out = text
     for start, end, call in reversed(replacements):
         out = out[:start] + call + out[end:]
-    return out, len(replacements), skipped
+    return out, len(replacements), skipped, rewritten
 
 
 # ---------------------------------------------------------------------------
@@ -966,7 +1303,10 @@ def iter_source_files(root: Path) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Rewrite hand-built test events into TestEvents calls (#1821)."
+        description=(
+            "Rewrite hand-built test events and messages into TestEvents and "
+            "TestMessages calls (#1821, #1816)."
+        )
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="report only; write nothing")
@@ -986,20 +1326,25 @@ def main() -> int:
     skipped_sites: list[dict] = []
     projects_needing_reference: set[str] = set()
     total_sites = 0
+    event_sites = 0
+    message_sites = 0
     lines_before = lines_after = 0
     chars_before = chars_after = 0
 
     for path in iter_source_files(root):
         text = path.read_text(encoding="utf-8")
-        new_text, sites, skipped = rewrite_text(text)
+        new_text, sites, skipped, rewritten = rewrite_text(text)
         relative = path.relative_to(root).as_posix()
         for offset, typename, reason in skipped:
-            skipped_by_reason[reason] += 1
+            family = "messages" if typename in MESSAGE_TYPES else "events"
+            labelled = f"{family}: {reason}"
+            skipped_by_reason[labelled] += 1
             skipped_sites.append(
                 {
                     "file": relative,
                     "line": text.count("\n", 0, offset) + 1,
                     "type": typename,
+                    "family": family,
                     "reason": reason,
                 }
             )
@@ -1018,6 +1363,11 @@ def main() -> int:
             )
         )
         total_sites += sites
+        for typename in rewritten:
+            if typename in MESSAGE_TYPES:
+                message_sites += 1
+            else:
+                event_sites += 1
         lines_before += text.count("\n") + 1
         lines_after += new_text.count("\n") + 1
         chars_before += len(text)
@@ -1044,6 +1394,8 @@ def main() -> int:
         "mode": "apply" if args.apply else "check",
         "files_changed": len(results),
         "sites_rewritten": total_sites,
+        "event_sites_rewritten": event_sites,
+        "message_sites_rewritten": message_sites,
         "lines_before": lines_before,
         "lines_after": lines_after,
         "chars_before": chars_before,
@@ -1070,6 +1422,8 @@ def main() -> int:
     print(f"mode:            {report['mode']}")
     print(f"files changed:   {report['files_changed']}")
     print(f"sites rewritten: {report['sites_rewritten']}")
+    print(f"  events:        {event_sites}")
+    print(f"  messages:      {message_sites}")
     print(
         f"lines:           {report['lines_before']} -> {report['lines_after']} "
         f"({report['lines_after'] - report['lines_before']:+d})"

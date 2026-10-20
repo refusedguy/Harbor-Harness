@@ -15,14 +15,7 @@ public class ChatAppReducerUnknownMessageTests
     [Test]
     public async Task AgentStart_Replay_DropsAFilePartFromTheTextLineListAsBefore()
     {
-        var assistant = new AssistantMessage(
-            "m1",
-            "s",
-            DateTimeOffset.UnixEpoch,
-            new ContentPart[] { new TextPart("hello"), new FilePart("a.png", "image/png", 1) },
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(new ContentPart[] { new TextPart("hello"), new FilePart("a.png", "image/png", 1) }, id: "m1", sessionId: "s", createdAt: DateTimeOffset.UnixEpoch);
         AgentMessage[] history = new[] { assistant };
 
         var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
@@ -46,14 +39,7 @@ public class ChatAppReducerUnknownMessageTests
     [Test]
     public async Task AgentStart_Replay_UnknownPartKind_RefusesIt()
     {
-        var assistant = new AssistantMessage(
-            "m1",
-            "s",
-            DateTimeOffset.UnixEpoch,
-            new ContentPart[] { new RoguePart("payload") },
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(new ContentPart[] { new RoguePart("payload") }, id: "m1", sessionId: "s", createdAt: DateTimeOffset.UnixEpoch);
         AgentMessage[] history = new[] { assistant };
 
         NotSupportedException ex = Assert.Throws<NotSupportedException>(

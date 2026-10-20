@@ -116,8 +116,7 @@ public sealed class DefaultAgentBoundStateResultTests
         Session session = NewSession();
         using DefaultAgent subject = NewAgent(session, out FakeSessionStore store);
 
-        Result result = await subject.PromptAsync(new UserMessage(
-            Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, "hi", "user", "test-model"));
+        Result result = await subject.PromptAsync(TestMessages.User("hi", sessionId: session.Id, agent: "user"));
 
         await Assert.That(result.IsFailure).IsTrue()
             .Because("The UserMessage overload must refuse too — it is the overload the image path and the IPC path use.");
@@ -138,8 +137,7 @@ public sealed class DefaultAgentBoundStateResultTests
         using DefaultAgent fromMessage = NewAgent(session, out _);
 
         Result text = await fromText.PromptAsync("hello");
-        Result message = await fromMessage.PromptAsync(new UserMessage(
-            Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, "hi", "user", "test-model"));
+        Result message = await fromMessage.PromptAsync(TestMessages.User("hi", sessionId: session.Id, agent: "user"));
 
         await Assert.That(text.Error).IsEqualTo(message.Error)
             .Because(

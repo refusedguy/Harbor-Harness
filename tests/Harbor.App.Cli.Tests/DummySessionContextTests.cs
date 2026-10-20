@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Hosting;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -30,13 +31,7 @@ public class DummySessionContextTests
     public async Task SteeringQueue_WrittenMessage_IsReadableFromSameContext()
     {
         var context = NewContext();
-        var message = new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            context.Session.Id,
-            DateTimeOffset.UtcNow,
-            "steer now",
-            "user",
-            "test-model");
+        var message = TestMessages.User("steer now", sessionId: context.Session.Id, agent: "user");
 
         bool written = context.SteeringQueue.Writer.TryWrite(message);
 
@@ -52,13 +47,7 @@ public class DummySessionContextTests
         var a = NewContext();
         var b = NewContext();
 
-        _ = a.SteeringQueue.Writer.TryWrite(new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            a.Session.Id,
-            DateTimeOffset.UtcNow,
-            "for a",
-            "user",
-            "test-model"));
+        _ = a.SteeringQueue.Writer.TryWrite(TestMessages.User("for a", sessionId: a.Session.Id, agent: "user"));
 
         await Assert.That(b.SteeringQueue.Reader.TryRead(out _)).IsFalse();
     }

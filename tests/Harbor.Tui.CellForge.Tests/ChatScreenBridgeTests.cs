@@ -445,12 +445,7 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 40, 6);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        var image = new AssistantMessage(
-            Guid.NewGuid().ToString("N"), "s1", DateTimeOffset.UtcNow,
-            [
-                new TextPart("before"),
-                new FilePart("shots/a.png", "image/png", 2048, ImageTestPng.Header(640, 480)),
-            ], StopReason.Stop, new Usage(0, 0), "test-model");
+        var image = TestMessages.AssistantParts([new TextPart("before"), new FilePart("shots/a.png", "image/png", 2048, ImageTestPng.Header(640, 480)),], sessionId: "s1");
 
         await bus.PublishAsync(TestEvents.AgentStart(messages: [image]));
 
@@ -761,14 +756,10 @@ public class ChatScreenBridgeTests
 
         const string sid = "s1";
         var now = DateTimeOffset.UtcNow;
-        var u1 = new UserMessage("u1", sid, now, "first question", "code", "m");
-        var a1 = new AssistantMessage(
-            "a1", sid, now, [new TextPart("first answer")],
-            StopReason.Stop, new Usage(0, 0), "m");
-        var u2 = new UserMessage("u2", sid, now, "second question", "code", "m");
-        var a2 = new AssistantMessage(
-            "a2", sid, now, [new TextPart("second answer")],
-            StopReason.Stop, new Usage(0, 0), "m");
+        var u1 = TestMessages.User("first question", id: "u1", sessionId: sid, createdAt: now, model: "m");
+        var a1 = TestMessages.Assistant("first answer", id: "a1", sessionId: sid, createdAt: now, model: "m");
+        var u2 = TestMessages.User("second question", id: "u2", sessionId: sid, createdAt: now, model: "m");
+        var a2 = TestMessages.Assistant("second answer", id: "a2", sessionId: sid, createdAt: now, model: "m");
 
         // ── Turn 1: user → assistant ──
         await bus.PublishAsync(TestEvents.AgentStart(sid, [u1]));

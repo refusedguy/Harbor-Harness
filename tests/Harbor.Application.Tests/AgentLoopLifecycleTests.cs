@@ -28,21 +28,8 @@ public class AgentLoopLifecycleTests
         var messages = new List<AgentMessage>(userAssistantPairs * 2);
         for (int i = 0; i < userAssistantPairs; i++)
         {
-            messages.Add(new UserMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                DateTimeOffset.UtcNow,
-                $"question-{i}",
-                "user",
-                "test-model"));
-            messages.Add(new AssistantMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                DateTimeOffset.UtcNow,
-                new ContentPart[] { new TextPart($"answer-{i}") },
-                StopReason.Stop,
-                new Usage(0, 0),
-                "test-model"));
+            messages.Add(TestMessages.User($"question-{i}", sessionId: sessionId, agent: "user"));
+            messages.Add(TestMessages.Assistant($"answer-{i}", sessionId: sessionId));
         }
 
         return messages;
@@ -338,13 +325,7 @@ public class AgentLoopLifecycleTests
         ]);
         var loop = TestLoops.Create(client, new FakeToolRegistry(counter), new FakeTokenTracker(), new FakeCompactionService(), new FakeEventBus());
         var session = NewSession();
-        session.EnqueueSteering([.. Enumerable.Range(0, 5).Select(i => (AgentMessage)new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            session.Session.Id,
-            DateTimeOffset.UtcNow,
-            $"steer-{i}",
-            "user",
-            "test-model"))]);
+        session.EnqueueSteering([.. Enumerable.Range(0, 5).Select(i => (AgentMessage)TestMessages.User($"steer-{i}", sessionId: session.Session.Id, agent: "user"))]);
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
@@ -381,12 +362,10 @@ public class DefaultAgentConcurrencyTests
             agent = new DefaultAgent(store, fakeLoop, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
             agent.Initialize(session, agentDefinition);
 
-            var first = agent.PromptAsync(new UserMessage(
-                Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, "first", "user", "test-model"));
+            var first = agent.PromptAsync(TestMessages.User("first", sessionId: session.Id, agent: "user"));
             await Task.Yield();
 
-            var second = await agent.PromptAsync(new UserMessage(
-                Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, "second", "user", "test-model"));
+            var second = await agent.PromptAsync(TestMessages.User("second", sessionId: session.Id, agent: "user"));
 
             await Assert.That(second.IsFailure).IsTrue();
             string error = second.Error;

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -42,7 +43,7 @@ public class JsonlSessionStoreUpdatePositionTests
         {
             var append = await store.AppendMessageAsync(
                 session.Id,
-                new UserMessage($"m{i}", session.Id, Epoch.AddSeconds(i), $"body {i}", "code", "claude-opus-4"));
+                TestMessages.User($"body {i}", id: $"m{i}", sessionId: session.Id, createdAt: Epoch.AddSeconds(i), model: "claude-opus-4"));
             await Assert.That(append.IsSuccess).IsTrue();
         }
 
@@ -99,8 +100,7 @@ public class JsonlSessionStoreUpdatePositionTests
             // The edit changes the body and nothing else — the same message id,
             // the same instant. This is what an edit IS: the same record, with
             // a different payload.
-            var edited = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "m1", sessionId, Epoch.AddSeconds(1), "edited body", "code", "claude-opus-4"));
+            var edited = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(1), model: "claude-opus-4"));
             await Assert.That(edited.IsSuccess).IsTrue();
 
             string[] after = await File.ReadAllLinesAsync(path);
@@ -151,8 +151,7 @@ public class JsonlSessionStoreUpdatePositionTests
         var (store, sessionId, path) = await SeedAsync();
         try
         {
-            var edited = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "m1", sessionId, Epoch.AddSeconds(1), "edited body", "code", "claude-opus-4"));
+            var edited = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(1), model: "claude-opus-4"));
             await Assert.That(edited.IsSuccess).IsTrue();
 
             var rewind = await store.DeleteMessagesAfterAsync(sessionId, "m1");

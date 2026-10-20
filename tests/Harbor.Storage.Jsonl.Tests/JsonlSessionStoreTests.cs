@@ -1,6 +1,7 @@
 using System.Reflection;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 public class JsonlSessionStoreTests
 {
@@ -39,13 +40,7 @@ public class JsonlSessionStoreTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
-            var userMsg = new UserMessage(
-                "msg-1",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                "Hello",
-                "code",
-                "claude-opus-4");
+            var userMsg = TestMessages.User("Hello", id: "msg-1", sessionId: session.Id, model: "claude-opus-4");
 
             var appendResult = await store.AppendMessageAsync(session.Id, userMsg);
             await Assert.That(appendResult.IsSuccess).IsTrue();
@@ -69,9 +64,9 @@ public class JsonlSessionStoreTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
-            await store.AppendMessageAsync(session.Id, new UserMessage("m1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-2), "first", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage("m2", session.Id, DateTimeOffset.UtcNow.AddSeconds(-1), "second", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage("m3", session.Id, DateTimeOffset.UtcNow, "third", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("first", id: "m1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-2), model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("second", id: "m2", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-1), model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("third", id: "m3", sessionId: session.Id, model: "claude"));
 
             var messages = await store.GetMessagesAsync(session.Id);
             await Assert.That(messages.Value.Count).IsEqualTo(3);
@@ -113,11 +108,8 @@ public class JsonlSessionStoreTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m1", session.Id, DateTimeOffset.UtcNow, "hello", "code", "claude-opus-4"));
-            await store.AppendMessageAsync(session.Id, new AssistantMessage(
-                "m2", session.Id, DateTimeOffset.UtcNow,
-                new ContentPart[] { new TextPart("hi") }, StopReason.Stop, new Usage(10, 5), "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("hello", id: "m1", sessionId: session.Id, model: "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.Assistant("hi", id: "m2", sessionId: session.Id, usage: new Usage(10, 5), model: "claude-opus-4"));
 
             var list = await store.ListAsync();
             await Assert.That(list.IsSuccess).IsTrue();
@@ -176,13 +168,7 @@ public class JsonlSessionStoreTests
         var store = CreateStore();
         try
         {
-            var msg = new UserMessage(
-                "msg-1",
-                "nonexistent",
-                DateTimeOffset.UtcNow,
-                "Hello",
-                "code",
-                "claude-opus-4");
+            var msg = TestMessages.User("Hello", id: "msg-1", sessionId: "nonexistent", model: "claude-opus-4");
             var result = await store.UpdateMessageAsync("nonexistent", msg);
             await Assert.That(result.IsFailure).IsTrue();
         }
@@ -199,13 +185,7 @@ public class JsonlSessionStoreTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            var ghost = new UserMessage(
-                "msg-ghost",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                "Ghost",
-                "code",
-                "claude-opus-4");
+            var ghost = TestMessages.User("Ghost", id: "msg-ghost", sessionId: session.Id, model: "claude-opus-4");
             var result = await store.UpdateMessageAsync(session.Id, ghost);
             await Assert.That(result.IsFailure).IsTrue();
 
@@ -296,7 +276,7 @@ public class JsonlSessionStoreCancellationTests
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            var message = new UserMessage("m1", "s1", DateTimeOffset.UtcNow, "hi", "code", "claude-opus-4");
+            var message = TestMessages.User("hi", id: "m1", sessionId: "s1", model: "claude-opus-4");
 
             await Assert.That(async () =>
                 await store.AppendMessageAsync("s1", message, cts.Token)
@@ -528,12 +508,11 @@ public class JsonlSessionStoreCancellationTests
 
             // DDD-audit 25.08 (ROP-C Z3): UpdateMessageAsync used to re-append,
             // so every edit grew the file with a duplicate id entry.
-            var original = new UserMessage("msg-1", sessionId, DateTimeOffset.UtcNow, "before", "user", "claude-opus-4");
+            var original = TestMessages.User("before", id: "msg-1", sessionId: sessionId, agent: "user", model: "claude-opus-4");
             var appendResult = await store.AppendMessageAsync(sessionId, original);
             await Assert.That(appendResult.IsSuccess).IsTrue();
 
-            var editResult = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "msg-1", sessionId, original.CreatedAt, "after", "user", "claude-opus-4"));
+            var editResult = await store.UpdateMessageAsync(sessionId, TestMessages.User("after", id: "msg-1", sessionId: sessionId, createdAt: original.CreatedAt, agent: "user", model: "claude-opus-4"));
             await Assert.That(editResult.IsSuccess).IsTrue();
 
             string[] lines = await File.ReadAllLinesAsync(Path.Combine(tempDir, $"{sessionId}.jsonl"));

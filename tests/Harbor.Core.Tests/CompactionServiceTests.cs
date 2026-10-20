@@ -472,14 +472,7 @@ public class CompactionServiceTests
     private static AssistantMessage AssistantWithToolCall(string id, string toolName)
     {
         var args = JsonDocument.Parse("{}").RootElement.Clone();
-        return new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            "session-1",
-            DateTimeOffset.UtcNow,
-            new[] { new ToolCallPart(id, toolName, args) },
-            StopReason.ToolUse,
-            new Usage(0, 0),
-            "test-model");
+        return TestMessages.AssistantParts(new[] { new ToolCallPart(id, toolName, args) }, stopReason: StopReason.ToolUse);
     }
 
     private static string PromptText(CapturingSummaryClient client)

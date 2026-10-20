@@ -80,7 +80,7 @@ public class SlashCommandForkTests
         for (int i = 0; i < 3; i++)
         {
             await store.AppendMessageAsync(parent.Id,
-                new UserMessage(Guid.NewGuid().ToString("N"), parent.Id, DateTimeOffset.UtcNow.AddSeconds(i), $"q{i}", "code", "test-model"));
+                TestMessages.User($"q{i}", sessionId: parent.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(i)));
         }
         var history = (await store.GetMessagesAsync(parent.Id)).Value;
         int sessionsBefore = store.Sessions.Count;
