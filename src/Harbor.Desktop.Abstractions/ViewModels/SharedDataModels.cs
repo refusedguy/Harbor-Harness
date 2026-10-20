@@ -234,11 +234,43 @@ public class ToastViewModel
         TimeToLive = timeToLive;
     }
 
-    public string Icon => Kind switch
+    /// <summary>
+    ///     The leading glyph for this toast, from the shared presentation table.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1543. This used to carry its own glyph switch, and it had
+    ///         already drifted: it drew "▲" and "✕" where the terminal
+    ///         renderer drew "!" and "✗" for the same two kinds. Nothing
+    ///         caught the drift, because a mapping that lives in a switch is
+    ///         only wrong to the eye.
+    ///     </para>
+    ///     <para>
+    ///         The table is keyed by the canonical
+    ///         <see cref="Harbor.Ui.Framework.Services.ToastKind" />, so the
+    ///         two enums are bridged below. That bridge is a TYPE conversion,
+    ///         not a second opinion about what a kind looks like — the
+    ///         appearance is the table's row and only the table's row.
+    ///     </para>
+    ///     <para>
+    ///         The table is named in full, as every other type in this file
+    ///         is: <c>Harbor.Desktop.Abstractions.Models</c> and
+    ///         <c>Harbor.Ui.Framework.Services</c> both declare a
+    ///         <c>ToastKind</c>, so a namespace import of the latter would
+    ///         make every <c>ToastKind</c> here ambiguous (CS0104).
+    ///     </para>
+    /// </remarks>
+    public string Icon => Harbor.Ui.Framework.Services.ToastPresentations.Glyph(CanonicalKind).ToString();
+
+    /// <summary>
+    ///     The canonical kind — the one the shared presentation table is keyed
+    ///     by.
+    /// </summary>
+    private Harbor.Ui.Framework.Services.ToastKind CanonicalKind => Kind switch
     {
-        Harbor.Desktop.Abstractions.Models.ToastKind.Success => "✓",
-        Harbor.Desktop.Abstractions.Models.ToastKind.Warning => "▲",
-        Harbor.Desktop.Abstractions.Models.ToastKind.Error => "✕",
-        _ => "ℹ"
+        Harbor.Desktop.Abstractions.Models.ToastKind.Success => Harbor.Ui.Framework.Services.ToastKind.Success,
+        Harbor.Desktop.Abstractions.Models.ToastKind.Warning => Harbor.Ui.Framework.Services.ToastKind.Warning,
+        Harbor.Desktop.Abstractions.Models.ToastKind.Error => Harbor.Ui.Framework.Services.ToastKind.Error,
+        _ => Harbor.Ui.Framework.Services.ToastKind.Info,
     };
 }

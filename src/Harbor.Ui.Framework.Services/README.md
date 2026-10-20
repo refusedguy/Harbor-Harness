@@ -17,6 +17,7 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 | `Services/IOverlayStack.cs` | `IOverlayStack` — `Push`, `PopTop`, `Current`, `Stack`. |
 | `Services/IThemeService.cs` | `IThemeService` — theme apply/toggle/dark/light/HDS variants. |
 | `Services/IToastService.cs` | `IToastService` — `Show(message, kind)` with `ToastAdded` event. |
+| `Services/ToastPresentation.cs` | `ToastPresentations` — the one table that maps a `ToastKind` to a glyph and two theme resource keys (#1543). |
 | `Services/GitService.cs` | `GitService` — reads git status (`GetGitStatus`) for session metadata. |
 | `Services/GitSessionInfo.cs` | `GitSessionInfo` record (`Branch`, `IsDirty`, `DirtyCount`, `LastCommit`). |
 | `Services/SessionStatusTracker.cs` | `SessionStatusTracker` — tracks per-session status and message count, raises events. |
@@ -27,6 +28,7 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 - **Platform services**: `IDialogService`, `IDispatcherAdapter`, `IFilePicker`, `IThemeService`, `IToastService`, `IOverlayStack` — all renderer-agnostic contracts.
 - **`GitService`**: `GetGitStatus(directory)` → `GitSessionInfo`.
 - **`SessionStatusTracker`**: `Get/SetStatus`, `NotifyMessageCount`, events for status/count changes.
+- **`ToastPresentations`**: `All` (the table), `For(kind)`, `Glyph(kind)`, `IconResourceKey(kind)`, `BrushResourceKey(kind)`. The rows hold theme resource KEYS, never brushes or geometries, so the XAML dictionaries stay the source of truth.
 
 ## Dependencies
 
