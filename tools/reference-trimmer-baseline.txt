@@ -1,0 +1,47 @@
+# reference-trimmer-baseline — the unused references the tree produces, as
+# measured by ReferenceTrimmer 3.5.13, and the reason each one is still there.
+#
+# OWNER: issue #1853. Read by tools/check-reference-trimmer.py on every PR.
+#
+# THIS IS A RATCHET, NOT A TARGET. The gate passes only when the set of
+# findings the tree produces is exactly the set written here:
+#
+#   * a finding this file does not carry is RED. A NEW unused reference fails.
+#   * a row the tree no longer produces is RED. A CLOSED hole must have its
+#     row deleted in the same diff that closed it.
+#
+# So the file can only shrink, and the gate gets stricter as the tree is
+# fixed. A closed finding cannot stay blessed.
+#
+# ── FORMAT ────────────────────────────────────────────────────────────────
+#
+#   <rule> | <subject> | <reason> | <owner>
+#
+#   rule     One of the rules tools/check-reference-trimmer.py produces:
+#              RT0001  a bare <Reference> the compiler never uses.
+#              RT0002  a <ProjectReference> the compiler never uses.
+#              RT0003  a <PackageReference> the compiler never uses.
+#   subject  "<project> :: <reference>", where <project> is the
+#            repository-relative path of the .csproj and <reference> is the
+#            package id or the project-reference path the analyzer named.
+#   reason   Why this candidate is allowed to stay. At least 40 characters,
+#            and not a bare URL: a URL says where the debt is, not why it is
+#            allowed here.
+#   owner    A '@handle' somebody can be asked about.
+#
+# ── WHAT IS NOT HERE, AND WHY ─────────────────────────────────────────────
+#
+# The four projects whose <PackageReference> set tools/check-abstractions-
+# contract.py already answers for — src/Harbor.Abstractions,
+# src/Harbor.Abstractions.Contracts, src/Harbor.Extensions and
+# src/Harbor.Application — are not listed here. Their findings are dropped
+# before the comparison, because two gates answering the same question for
+# the same projects means two baselines to keep in step.
+#
+# Microsoft.NET.Test.Sdk is a separate matter: it is a candidate in its own
+# right, and the decision to remove it belongs to issue #1893, not to this
+# one. Rows for it are not written until that issue has landed.
+#
+# ── THE ROWS ──────────────────────────────────────────────────────────────
+#
+# (empty — the first measured run writes them)

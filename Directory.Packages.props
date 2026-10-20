@@ -27,6 +27,7 @@
    11. Performance              (ZLinq, NonBlocking, MemoryPack, CSharpFunctionalExtensions)
    12. SQLite drivers
    13. Source generators        (ZLinq.DropInGenerator, Termina.Generators)
+   14. Reference hygiene        (ReferenceTrimmer — build-time only, #1853)
 -->
 <Project>
   <PropertyGroup>
@@ -401,5 +402,28 @@
       renderer); nothing the pilot calls was removed.
     -->
     <PackageVersion Include="DiffPlex" Version="1.9.0" />
+    <!-- ── Reference hygiene (#1853) ─────────────────────────────────────── -->
+    <!--
+      ReferenceTrimmer 3.5.13 (MIT) — a build-time analyzer that asks Roslyn
+      which assemblies the compiled code actually uses, and reports the
+      declared references that none of them reach:
+
+        RT0001  a bare <Reference> the compiler never uses
+        RT0002  a <ProjectReference> the compiler never uses
+        RT0003  a <PackageReference> the compiler never uses
+
+      It is NOT referenced by any project by default. The <PackageReference>
+      that turns it on lives in /Directory.Build.props behind the
+      `HarborReferenceTrimmer` property, and the CI job that sets the
+      property is the `reference-trimmer` job in .github/workflows/ci.yml.
+      The pin here exists so that Central Package Management has a version
+      to resolve against when that job restores.
+
+      The pin is a version catalogue entry, not a declared dependency: no
+      project references the package outside that one job, so nothing in the
+      dependency graph reaches it. tools/check-reference-trimmer.py is the
+      gate; docs/REFERENCE-TRIMMER.md is the report.
+    -->
+    <PackageVersion Include="ReferenceTrimmer" Version="3.5.13" />
   </ItemGroup>
 </Project>
