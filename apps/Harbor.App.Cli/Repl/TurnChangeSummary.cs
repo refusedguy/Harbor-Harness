@@ -37,8 +37,11 @@ internal sealed class TurnChangeSummary
 
     /// <summary>
     ///     The lines for the reports sealed since the last call, oldest first.
-    ///     Empty when the host has no oracle, or when nothing changed since
-    ///     the last call.
+    ///     Empty when the host has no oracle, when nothing changed since
+    ///     the last call, or when the reports in between said nothing: a turn
+    ///     that touched no file and ran no tool the oracle cannot see through
+    ///     has nothing to report, and a line saying «no file changes» in the
+    ///     chat would be noise on every turn of every session.
     /// </summary>
     internal IReadOnlyList<string> TakeNewLines()
     {
@@ -55,12 +58,25 @@ internal sealed class TurnChangeSummary
                 continue;
             }
 
-            lines.Add(Describe(report));
             _lastSequence = report.Sequence;
+            if (!HasSomethingToSay(report))
+            {
+                continue;
+            }
+
+            lines.Add(Describe(report));
         }
 
         return lines;
     }
+
+    /// <summary>
+    ///     True when the report says something: a path the oracle watched, or a
+    ///     tool it could not see through. A report with neither is a turn where
+    ///     nothing happened that the oracle could measure.
+    /// </summary>
+    private static bool HasSomethingToSay(TurnChangeReport report) =>
+        report.Files.Count > 0 || report.UnobservedTools.Count > 0;
 
     /// <summary>
     ///     One line for one report.
@@ -69,8 +85,8 @@ internal sealed class TurnChangeSummary
     internal static string Describe(TurnChangeReport report)
     {
         List<string> changed = [];
-        int unchanged = 0;
-        int unverified = 0;
+        List<string> unchanged = [];
+        List<string> unverified = [];
 
         foreach (WorkspaceChange file in report.Files)
         {
@@ -82,10 +98,10 @@ internal sealed class TurnChangeSummary
                     changed.Add(file.Path);
                     break;
                 case WorkspaceChangeKind.Unchanged:
-                    unchanged++;
+                    unchanged.Add(file.Path);
                     break;
                 default:
-                    unverified++;
+                    unverified.Add(file.Path);
                     break;
             }
         }
@@ -95,14 +111,14 @@ internal sealed class TurnChangeSummary
             : $"changed {changed.Count} file(s): {string.Join(", ", changed)}";
 
         List<string> notes = [];
-        if (unchanged > 0)
+        if (unchanged.Count > 0)
         {
-            notes.Add($"{unchanged} declared path(s) unchanged");
+            notes.Add($"declared but unchanged: {Join(unchanged)}");
         }
 
-        if (unverified > 0)
+        if (unverified.Count > 0)
         {
-            notes.Add($"{unverified} path(s) unverified");
+            notes.Add($"unverified: {Join(unverified)}");
         }
 
         if (report.UnobservedTools.Count > 0)
@@ -111,5 +127,24 @@ internal sealed class TurnChangeSummary
         }
 
         return notes.Count == 0 ? line : $"{line}; {string.Join("; ", notes)}";
+    }
+
+    /// <summary>
+    ///     How many paths one note names before the rest is counted instead.
+    ///     A turn that wrote forty files must not turn the chat into a list.
+    /// </summary>
+    private const int MaxNamedPaths = 5;
+
+    /// <summary>
+    ///     The paths of one note, bounded.
+    /// </summary>
+    private static string Join(List<string> paths)
+    {
+        if (paths.Count <= MaxNamedPaths)
+        {
+            return string.Join(", ", paths);
+        }
+
+        return $"{string.Join(", ", paths.Take(MaxNamedPaths))}, +{paths.Count - MaxNamedPaths} more";
     }
 }

@@ -157,6 +157,12 @@ public sealed class ModelRefSingleParserTests
             + "matcher's spelling — 'StartsWith' on a variable named 'prefix' — is the same "
             + "shape as the provider/ prefix strip this rule is about. Listed because the "
             + "matcher is textual, not semantic.",
+        ["src/Harbor.Application/Observability/TurnChangeOracle.cs"] =
+            "NOT A REFERENCE. A filesystem path prefix: the oracle checks that a declared tool "
+            + "path stays INSIDE the workspace root before it reads it. Nothing is cut apart — "
+            + "the path is matched whole — and the matcher's spelling ('StartsWith' on a "
+            + "variable named 'prefix') is the same shape as the provider/ prefix strip this "
+            + "rule is about. Listed because the matcher is textual, not semantic.",
     };
 
     /// <summary>

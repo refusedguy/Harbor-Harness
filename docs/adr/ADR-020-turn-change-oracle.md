@@ -107,19 +107,27 @@ failed», and it cannot say «the file's bytes differ».
 
 ### What the user sees
 
-One line per turn, drawn by the host and decided by the core:
+One line per turn that has something to report, drawn by the host and decided
+by the core:
 
 - the REPL appends the line to the chat after the prompt completes;
 - `harbor ask` writes it through the renderer, so it lands in the same
   stream as the assistant's own text;
-- every turn is logged, so the same fact is in the log file.
+- every turn is logged, so the same fact is in the log file whatever the
+  chat showed.
 
 The line names what changed, and it names what could not be seen:
 
 ```
 changed 2 file(s): src/a.cs, src/b.cs
-no file changes; 1 declared path(s) unchanged; unobserved: bash
+no file changes; declared but unchanged: src/a.cs; unobserved: bash
 ```
+
+A turn that touched no file and ran no tool the oracle cannot see through
+prints NOTHING. Silence is the right answer for a turn where nothing the
+oracle could measure happened, and a line in the chat on every turn of every
+session would be noise. The log still records every turn, so the record is
+complete even where the chat is quiet.
 
 ### What the agent can do with it
 
