@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """aot-publish-gate.py — the AOT publish gate (issue #413).
 
+Stdlib only — no pip, no network, no dotnet. It is a gate FOR a build, so it
+has to sit outside it: the publish it judges is produced by another job, and a
+gate that had to run the SDK to see the log could not run on the pull request
+that breaks the publish.
+
 WHAT THIS CHECKS
 ----------------
 `dotnet publish` of `apps/Harbor.App.Cli` with NativeAOT produces a log. This

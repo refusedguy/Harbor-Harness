@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Publish the SKIPPED tests of a run, with their reasons, in the job summary.
 
+Stdlib only — no pip, no network, no dotnet. It reads the TRX artifacts a CI
+run already produced, so it adds no run and no build.
+
 Issue #1795. The `test` job runs every suite with `--report-trx`, and MTP
 writes a skipped test into the TRX as a `NotExecuted` result whose
 `<Output><DebugTrace>` carries the skip reason the test declared. That is
