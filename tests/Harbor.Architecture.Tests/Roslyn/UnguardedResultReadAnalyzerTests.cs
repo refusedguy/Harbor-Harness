@@ -218,7 +218,16 @@ public sealed class UnguardedResultReadAnalyzerTests
                     return loaded.IsSuccess && loaded.Value.Length > 0 ? loaded.Value : "failed";
                 }
 
-                // NEAR-MISS 5 — the property-pattern guard.
+                // NEAR-MISS 5 — the `||` short-circuit guard: the right operand
+                // runs only when the left one is false, i.e. only when the
+                // result is a SUCCESS.
+                public async Task<string> GuardedByShortCircuitOrAsync()
+                {
+                    var loaded = await _store.LoadAsync();
+                    return loaded.IsFailure || loaded.Value.Length > 0 ? loaded.Value : "failed";
+                }
+
+                // NEAR-MISS 6 — the property-pattern guard.
                 public async Task<string> GuardedByPatternAsync()
                 {
                     var loaded = await _store.LoadAsync();
@@ -230,7 +239,7 @@ public sealed class UnguardedResultReadAnalyzerTests
                     return "failed";
                 }
 
-                // NEAR-MISS 6 — the guard dominates a read inside a lambda.
+                // NEAR-MISS 7 — the guard dominates a read inside a lambda.
                 public async Task<string> GuardedInsideLambdaAsync()
                 {
                     var loaded = await _store.LoadAsync();
@@ -243,14 +252,14 @@ public sealed class UnguardedResultReadAnalyzerTests
                     return read();
                 }
 
-                // NEAR-MISS 7 — a same-shaped type that is NOT a Result.
+                // NEAR-MISS 8 — a same-shaped type that is NOT a Result.
                 public string NotAResult()
                 {
                     Box box = new Box();
                     return box.Value;
                 }
 
-                // NEAR-MISS 8 — the OTHER value type of the same library.
+                // NEAR-MISS 9 — the OTHER value type of the same library.
                 public string NotAResultEither()
                 {
                     Maybe<string> maybe = Maybe<string>.None;
@@ -355,6 +364,10 @@ public sealed class UnguardedResultReadAnalyzerTests
 
         List<string> analyzerSites = await AnalyzerSitesAsync();
 
+        // The table goes out BEFORE the assertions: a red run must still carry
+        // the measurement, because the measurement is the point of the run.
+        PrintDifferential(textHits, analyzerSites);
+
         var missed = textHits
             .Where(hit => !analyzerSites.Contains(TextSite(hit), StringComparer.Ordinal))
             .ToList();
@@ -393,8 +406,6 @@ public sealed class UnguardedResultReadAnalyzerTests
                 + "dominance model failing to recognise a guard shape the tree uses constantly "
                 + "(early return, early continue, fail-fast throw, `&&` short circuit, property "
                 + "pattern). Reported " + analyzerSites.Count + " site(s).");
-
-        PrintDifferential(textHits, analyzerSites);
     }
 
     // =====================================================================

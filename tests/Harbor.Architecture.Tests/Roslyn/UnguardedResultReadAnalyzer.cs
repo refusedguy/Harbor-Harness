@@ -94,8 +94,9 @@
 //       `if (V.IsSuccess) { return; }` leaves V known to be a FAILURE, which
 //       does NOT protect a `.Value` read.
 //   (3) SHORT CIRCUIT. The read is the right operand of `V.IsSuccess && …`
-//       (V is a success there), or the left operand of `V.IsFailure || …`
-//       (V is a success there).
+//       (V is a success there), or the right operand of `V.IsFailure || …`
+//       (the right operand runs only when the left one is false, so V is a
+//       success there).
 //   (4) PATTERN. The read's value is a pattern variable declared by
 //       `is { IsSuccess: true }` (or `is { IsFailure: false }`) and the read
 //       lies in the branch the pattern matched.
@@ -300,8 +301,8 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                     break;
 
                 // (3) SHORT CIRCUIT — the right operand of `&&` runs only when
-                // the left one is true; the left operand of `||` runs only when
-                // the left one is false.
+                // the left one is true, and the right operand of `||` runs only
+                // when the left one is false.
                 case BinaryExpressionSyntax andAlso when andAlso.IsKind(SyntaxKind.LogicalAndExpression):
                     if (current == andAlso.Right)
                     {
@@ -311,7 +312,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                     break;
 
                 case BinaryExpressionSyntax orElse when orElse.IsKind(SyntaxKind.LogicalOrExpression):
-                    if (current == orElse.Left)
+                    if (current == orElse.Right)
                     {
                         facts.Merge(ConditionFacts(context, orElse.Left).WhenFalse);
                     }
