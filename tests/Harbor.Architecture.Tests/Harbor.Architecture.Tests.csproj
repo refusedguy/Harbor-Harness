@@ -12,7 +12,7 @@
       triggers on a probe helper.
     -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);CS1591;S3011;S2365;CA1851</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;S3011;S2365;CA1851;RS2008;RS1035;RS1036</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -24,6 +24,25 @@
   <ItemGroup>
     <PackageReference Include="NetArchTest.Rules"/>
     <PackageReference Include="TUnit.Assertions"/>
+    <!--
+      Microsoft.CodeAnalysis.CSharp — the PILOT for issue #1729, which asks
+      whether the rules that check the TEXT of the product source should move
+      to the compiler's own view of it. The pilot writes two of those rules as
+      real DiagnosticAnalyzers and runs them IN-PROCESS against a compilation
+      the test builds, so the analyzer reaches the compiler's symbol table
+      without becoming a build-time analyzer over ~140 projects. With
+      TreatWarningsAsErrors on, a build-time analyzer that fires on existing
+      code turns the build red before anybody has read the rule, and that is
+      the wrong order for a pilot.
+
+      The version is already pinned in Directory.Packages.props for
+      src/Harbor.CodeGen, so the repository tracks no new version for it. The
+      package is build-time only: no product project references it and nothing
+      in src/ or apps/ depends on it, so the NativeAOT rule (#626) is not
+      engaged. That rule governs shipped code, and this is a test-only
+      dependency.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
     <!--
       Two guards name Maybe<T> in a rule: TuiReadLineContractRules asserts that
       ITuiRenderer.ReadLineAsync returns Task<Maybe<string>> (#589), and
