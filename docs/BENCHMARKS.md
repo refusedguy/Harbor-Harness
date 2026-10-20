@@ -2401,11 +2401,11 @@ runs the architecture gate), and the project dispatch timeline.
 `tools/aggregate-build-vcpu.py` turns the runs into the table below, and
 `tools/measure-project-graph.py` parses the dependency graph.
 
-**Provenance.** CI runs 39454123726 (primary) and 39448423292 (the same
-matrix one commit earlier, an independent reproduction), 2026-10-20. Runner:
-`ubuntu-latest`, AMD EPYC 9V74 / 9V45, 4 vCPU (`nproc`=4, `/proc/stat`
-accounts for 4 CPUs, affinity `0-3`, no cgroup quota), .NET SDK 10.0.402.
-The restore is timed separately and is in none of the numbers below.
+**Provenance.** CI runs 39454123726, 39448423292 and 39462228165 (the same
+matrix on two trees), 2026-10-20. Runner: `ubuntu-latest`, AMD EPYC 9V74 /
+9V45, 4 vCPU (`nproc`=4, `/proc/stat` accounts for 4 CPUs, affinity `0-3`, no
+cgroup quota), .NET SDK 10.0.402. The restore is timed separately and is in
+none of the numbers below.
 
 **The meter is calibrated, not asserted.** A known 1-way load reads 1.11 busy
 cores and a known 4-way load reads 4.00 (`calib-1-way` / `calib-4-way` in the
@@ -2416,37 +2416,37 @@ CPUs `/proc/stat` accounts for.
 
 | arm | what changes | n | wall (s) | avg busy cores of 4 | at ≥ 3.5 cores | `Csc` tasks | `Csc` task time | gate (s) | wall ratio | ratio without the gate |
 |---|---|---:|---|---|---|---:|---|---|---|---|
-| A | the CI command as it is | 6 | 321.8..409.0 (median 356.6) | 3.28..3.55 | 60..71 % | 112 | 325..452 s | 99..129 | 1.00 | 1.00 |
-| B | `-p:MaxCpuCount=1` | 6 | 298.8..399.8 (median 381.3) | 3.28..3.54 | 54..71 % | 112 | 313..479 s | 94..140 | 1.07 | 1.05 |
-| C | `-maxcpucount:1` | 6 | 329.7..368.6 (median 354.7) | 3.10..3.23 | 46..53 % | 112 | 192..224 s | 119..135 | **0.99** | **0.95** |
-| D | `-p:UseSharedCompilation=false` | 3 | 492.7..911.4 (median 849.5) | 3.09..3.32 | 53..63 % | 112 | 681..1357 s | 71..127 | 2.38 | 3.04 |
+| A | the CI command as it is | 9 | 254.1..409.0 (median 348.7) | 3.28..3.61 | 60..73 % | 112 | 325..452 s | 80..135 | 1.00 | 1.00 |
+| B | `-p:MaxCpuCount=1` | 9 | 298.8..399.8 (median 378.0) | 3.28..3.54 | 54..71 % | 112 | 313..479 s | 94..140 | 1.08 | 1.05 |
+| C | `-maxcpucount:1` | 9 | 244.1..368.6 (median 350.9) | 2.90..3.23 | 30..53 % | 112 | 133..224 s | 70..135 | **1.01** | **0.95** |
+| D | `-p:UseSharedCompilation=false` | 5 | 492.7..911.4 (median 858.9) | 3.09..3.60 | 53..78 % | 112 | 681..1673 s | 71..193 | 2.46 | 2.99 |
 
 **The falsification ratio is 1.0, not 4.** Arm C is one MSBuild node, one
-project at a time, and it is not slower: 0.99 of the baseline on the wall,
-0.95 with the architecture gate taken out, and all six of arm C's wall times
-(329.7..368.6 s) lie inside arm A's six (321.8..409.0 s). The runner's own
-speed moves a build by up to 2x between jobs, so every run's gate duration is
-kept as the speed proxy: the architecture gate is the same single-process
+project at a time, and it is not slower: 1.01 of the baseline on the wall,
+0.95 with the architecture gate taken out, and every one of arm C's nine wall
+times (244.1..368.6 s) lies inside arm A's nine (254.1..409.0 s). The runner's
+own speed moves a build by up to 2x between jobs, so every run's gate duration
+is kept as the speed proxy: the architecture gate is the same single-process
 workload in every arm, and dividing each run by its own gate puts both arms
 at 1.0.
 
 **Why the ratio is 1.0: one compilation already uses three of the four
 cores.** The per-process accounting says it directly. `VBCSCompiler` (the
-Roslyn compiler server) consumed 668..686 CPU-seconds in arm C, where
-exactly ONE compilation was in flight, over a 226..233 s compile phase: that
-is 2.8..3.0 cores per compilation. In arm A, with four nodes, the same
-process consumed 726..771 CPU-seconds over a 223..280 s compile phase: 3.0..3.2
+Roslyn compiler server) consumed 439..686 CPU-seconds in arm C, where
+exactly ONE compilation was in flight, over a 169..244 s compile phase: that
+is 2.6..3.0 cores per compilation. In arm A, with four nodes, the same
+process consumed 537..787 CPU-seconds over a 174..280 s compile phase: 3.0..3.6
 cores. The number is the same in both arms. The four vCPU are therefore
 saturated from INSIDE a single compilation (Roslyn's parallel analyzer
 driver), not by running several projects at once, so more MSBuild nodes cannot
 buy more throughput: the same four cores are already busy. The `Csc` task
-time tells the same story from the other side, 192..224 s in arm C against
+time tells the same story from the other side, 133..224 s in arm C against
 325..452 s in arm A for the same 112 compilations: in arm A each `Csc` task
 spends most of its time waiting for a CPU that is busy anyway.
 
 **The graph is not the limiter either.** Measured, not modelled: at least four
-projects were in flight for 97.0..99.2 % of the build (peak 81..83 in
-flight, average 28..33). The graph agrees
+projects were in flight for 97.0..99.2 % of the build (peak 76..83 in
+flight, average 25..33). The graph agrees
 (`tools/measure-project-graph.py`): 109 projects, 453 edges, depth 15, widest
 level 20 projects, and 10 of its 16 levels are wide enough for four
 compilers.
@@ -2459,7 +2459,7 @@ true is that the compile phase is CPU-throughput-bound on the runner's four
 cores.
 
 **The prescribed property is inert.** `-p:MaxCpuCount=1` (arm B) cannot be
-told from the baseline: 1.07 on the wall, 1.05 after the speed
+told from the baseline: 1.08 on the wall, 1.05 after the speed
 normalisation, the same 112 `Csc` tasks, the same 3.3..3.5 busy cores. MSBuild
 reads the `-maxcpucount` SWITCH; the `MaxCpuCount` property appears in no
 MSBuild target and in no global-property lookup. The repository's own
@@ -2473,18 +2473,18 @@ issue, and not for the number in the issue.**
 * The compile phase is the analyzers inside each compilation, and it is
   throughput-bound on four cores. More CORES buy more throughput; more
   MSBuild NODES do not. A second job on a second runner gives the analyzer a
-  second set of four cores, so the compile phase (240 s of arm A's 357 s
+  second set of four cores, so the compile phase (238 s of arm A's 349 s
   median wall) could roughly halve, to ~120 s.
 * The split has to be two INDEPENDENT clusters of the graph. The layer split
   the issue proposes first ("src+apps | tests") buys nothing, because the
   test projects depend on the product projects, so the halves run one after
   the other.
 * The architecture gate caps the win. It is a single process running the whole
-  architecture suite: 99..129 s, 29..35 % of the build, and it can only run
+  architecture suite: 80..135 s, 29..38 % of the build, and it can only run
   after both halves are compiled. Realistic ceiling: ~120 s of compile plus
-  ~120 s of gate = ~240..260 s against 357 s now, about 1.4x, not the 209 s
+  ~120 s of gate = ~240..260 s against 349 s now, about 1.4x, not the 209 s
   the issue quotes.
-* `-p:UseSharedCompilation=false` (arm D) is not the answer: 2.4x slower on
+* `-p:UseSharedCompilation=false` (arm D) is not the answer: 2.5x slower on
   the wall (492.7..911.4 s), because every compilation then pays the Roslyn
   start-up cost and four of them oversubscribe the same four cores.
 * The levers this measurement points at instead: the analyzers themselves
@@ -2492,7 +2492,7 @@ issue, and not for the number in the issue.**
   path with the analyzers moved to a gate job is the obvious next
   measurement, not a claim), the `obj/`+`bin/` cache (#1927), and the
   architecture gate out of the build step (#1920, worth the measured
-  99..129 s).
+  80..135 s).
 
 **What this does not say.** It does not measure a two-job split, so the ~1.4x
 above is a projection from the measured CPU work, not a measured split. It
