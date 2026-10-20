@@ -65,11 +65,16 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// </summary>
     public PanelServices PanelDeps { get; }
     private UiStore? _subscribedStore;
-    private readonly StatusBarViewModel _statusVm;
-    private readonly ChatHistoryViewModel _chatVm;
-    private readonly InputViewModel _inputVm;
-    private readonly ComposerController _composer = new();
-    private readonly QuickSwitchSlots _quickSwitchSlots = new();
+
+    /// <summary>
+    ///     Mediator seam (issue #1556): owns the chat screen's three colleague
+    ///     view-models, the composer and the quick-switch slots, and assembles
+    ///     <see cref="ChatScreenProjector" /> from them at one assembly point —
+    ///     the construction the renderer's two constructors used to duplicate.
+    ///     The renderer depends on the seam, not on each VM by name.
+    /// </summary>
+    private readonly IChatViewModelMediator _mediator;
+    private readonly ChatScreenProjector _chatProjector;
 
     /// <summary>
     /// Per-screen projectors (epic #1195, issue #1202): the frame tick projects
@@ -77,8 +82,6 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     /// live in <see cref="ChatScreenProjector"/>, new screens bring their own.
     /// </summary>
     public ScreenProjectorRegistry Projectors { get; }
-
-    private readonly ChatScreenProjector _chatProjector;
 
     /// <summary>
     ///     Revision of the last applied <see cref="UiStore" /> notification
@@ -135,12 +138,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
             ?? new PanelServices { Store = _store, Sessions = sessions };
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
-        _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
-        _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
-        _inputVm = ResolveInputVm(inputVm);
-        _chatProjector = new ChatScreenProjector(
-            _statusVm, _chatVm, _inputVm, _composer, _quickSwitchSlots,
-            () => Screen, IdlePlaceholder, BusyPlaceholder);
+        _mediator = new ChatViewModelMediator(
+            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
+            statusVm, chatVm, inputVm);
+        _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
         Context = new CellForgeRenderContext();
@@ -169,12 +170,10 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
             ?? new PanelServices { Store = _store, Sessions = sessions };
         Panels = new CellForgePanelRegistry();
         RegisterBuiltinPanels(Panels);
-        _statusVm = statusVm ?? ViewModels.Get<StatusBarViewModel>("status-bar")!;
-        _chatVm = chatVm ?? ViewModels.Get<ChatHistoryViewModel>("chat-history")!;
-        _inputVm = ResolveInputVm(inputVm);
-        _chatProjector = new ChatScreenProjector(
-            _statusVm, _chatVm, _inputVm, _composer, _quickSwitchSlots,
-            () => Screen, IdlePlaceholder, BusyPlaceholder);
+        _mediator = new ChatViewModelMediator(
+            ViewModels, () => Screen, IdlePlaceholder, BusyPlaceholder,
+            statusVm, chatVm, inputVm);
+        _chatProjector = _mediator.ChatProjector;
         Projectors = new ScreenProjectorRegistry();
         Projectors.Register(_chatProjector);
         Context = new CellForgeRenderContext(backend);
@@ -201,17 +200,9 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
         panels.Register(new CellForgeSubagentsPanel());
     }
 
-    /// <summary>
-    ///     Resolves the input view model (explicit instance or the registry default),
-    ///     keeps field/registry/bound-view coherent, and wires the two-way binding
-    ///     with the composer buffer.
-    /// </summary>
-    private InputViewModel ResolveInputVm(InputViewModel? inputVm)
-    {
-        var resolved = inputVm ?? ViewModels.Get<InputViewModel>("input")!;
-        ViewModels.Register(resolved);
-        return resolved;
-    }
+    // Mediator seam (issue #1556): VM registry resolution and the composer
+    // two-way binding moved to ChatViewModelMediator.ResolveInputVm — the
+    // input VM registration into the shared registry rides with it verbatim.
 
     public override ITuiRenderContext Context { get; }
 
@@ -366,7 +357,7 @@ public sealed partial class CellForgeTuiRenderer : BaseTuiRenderer
     }
 
     /// <summary>Composer buffer mirrored from <see cref="UiState.Ui.Input"/> (test seam).</summary>
-    internal PromptBuffer PromptBuffer => _composer.Buffer;
+    internal PromptBuffer PromptBuffer => _mediator.PromptBuffer;
 
     /// <summary>Fallback TEA store (test seam for panel-seeding assertions). The live path reads <see cref="ActiveStore"/>.</summary>
     internal UiStore Store => _store;
