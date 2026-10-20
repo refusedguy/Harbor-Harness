@@ -54,6 +54,13 @@ public class FullLayerMatrixTests
         // produces no runtime assembly, so there is no layer edge to constrain.
         ["Harbor.CodeGen"] = "Source-generator project; consumed via OutputItemType=Analyzer, emits no runtime assembly.",
 
+        // The architecture rules as compiler extensions (#1842). The same shape
+        // as the source generator above: a build-time Roslyn component that
+        // every product project consumes with OutputItemType=Analyzer and
+        // ReferenceOutputAssembly=false, so it produces no runtime edge and
+        // there is nothing to constrain.
+        ["Harbor.Arch.Analyzers"] = "Build-time Roslyn analyzer project (the repository's own architecture rules); consumed via OutputItemType=Analyzer, produces no runtime assembly.",
+
         // Harbor.Plugins.Host.csproj produces the assembly 'harbor-plugins-host'
         // (OutputType=Exe): an out-of-process MCP stdio server, i.e. an
         // app/composition root like apps/*. It may reference anything.
@@ -119,7 +126,13 @@ public class FullLayerMatrixTests
     ///     excluded from the matrix — but it must be declared here, so that a
     ///     NEW analyzer reference cannot slip past unnoticed.
     /// </summary>
-    internal static readonly string[] SourceGeneratorProjects = ["Harbor.CodeGen"];
+    /// <remarks>
+    ///     #1842 adds the second entry: the architecture rules as compiler
+    ///     extensions. The declaration covers both shapes on purpose — the
+    ///     rule asks "is this analyzer reference a known build-time component",
+    ///     and the answer for a generator and for an analyzer is the same.
+    /// </remarks>
+    internal static readonly string[] SourceGeneratorProjects = ["Harbor.CodeGen", "Harbor.Arch.Analyzers"];
 
     // The single source of truth for "which src assemblies exist AND are under
     // enforcement". LayerDependencyTests.AllExpectedHarborAssembliesAreLoaded

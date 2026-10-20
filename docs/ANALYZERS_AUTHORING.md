@@ -53,7 +53,7 @@ There are three substrates, and the invariant decides which one you need.
 |---|---|---|
 | a file (its path, its presence, a csproj entry, a line of text) | source scan | `tests/Harbor.Architecture.Tests/` |
 | a symbol (a type, a call, a resolved property, a discarded value) | Roslyn analyzer, run in-process | `tests/Harbor.Architecture.Tests/Roslyn/` |
-| the same, enforced on every build | build-time analyzer | `src/Harbor.Arch.Analyzers/`, which does not exist yet |
+| the same, enforced on every build | build-time analyzer | `src/Harbor.Arch.Analyzers/` |
 
 The decision rule in one sentence: if the fact you need is a type, write an
 analyzer; if it is a line of text, write a source scan.
@@ -124,6 +124,23 @@ To promote:
    `<OutputItemType>Analyzer</OutputItemType>` and declare it in
    `FullLayerMatrixTests.SourceGeneratorProjects`.
 4. Give the rule a severity row in `.editorconfig`, starting at `suggestion`.
+
+**This path has been walked once.** The first two rules to be promoted are
+`HARCH001` and `HARCH002` (#1842), and the project, the classification, the
+wiring and the severity rows are what this section describes. What the walk
+added to this document is the answer to a question the pilot could not answer:
+the rules are wired through `src/Directory.Build.props` and
+`apps/Directory.Build.props` rather than through every project file, because a
+reference repeated in sixty project files is a reference that sixty project
+files can forget. The wiring is read by the build, and it is asserted by a
+test, so "the analyzer is enabled" is a checked statement and not a hope.
+
+The severity row of a promoted rule follows the ladder in
+[the severity section](#severity) below: `suggestion` first, then the
+findings are fixed or baselined, then `warning`, then `error`. A rule whose
+findings are already known to be empty — because the text rule it replaces
+still gates the same tree, and the differential agrees with it — may start one
+step further up, and the row says which step it started at and why.
 
 ### The package
 

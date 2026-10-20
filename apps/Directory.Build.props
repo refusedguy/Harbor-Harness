@@ -71,4 +71,22 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    Harbor.Arch.Analyzers — the repository's OWN architecture rules, as
+    compiler extensions (#1842). The composition roots are product code, so
+    the rules apply to them exactly as they apply to the libraries: a
+    composition root that loads code at run time is as invisible to
+    NativeAOT as a library that does.
+
+    OutputItemType=Analyzer hands the assembly to the compiler;
+    ReferenceOutputAssembly=false keeps it out of the app's reference list,
+    so nothing about it reaches the shipped binary.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../src/Harbor.Arch.Analyzers/Harbor.Arch.Analyzers.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
 </Project>

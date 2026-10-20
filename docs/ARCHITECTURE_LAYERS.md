@@ -739,7 +739,9 @@ src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
    in the test csproj) fails loudly instead of silently skipping.
 
 Out of scope by design: `Harbor.CodeGen` (source-generator project, consumed via
-`OutputItemType=Analyzer`), `Harbor.Plugins.Host` (OutputType=Exe out-of-process
+`OutputItemType=Analyzer`), `Harbor.Arch.Analyzers` (the repository's own
+architecture rules as build-time analyzers, consumed the same way — #1842),
+`Harbor.Plugins.Host` (OutputType=Exe out-of-process
 MCP server — an app), and `apps/*` composition roots. Every one of these lives in
 `OutOfScopeAssemblies` with a reason, and `EnforcerIntegrityTests.SrcProjects_AreAllClassified`
 fails when a new `src/` project is in neither list.

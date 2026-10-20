@@ -753,6 +753,29 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # the corresponding architecture test will fail with a clear list of the
 # forbidden references.
 # ============================================================================
+# HARBOR'S OWN ARCHITECTURE RULES (build-time analyzers, #1842)
+# ============================================================================
+# Two of the rules this repository grades on itself are written as compiler
+# extensions and live in src/Harbor.Arch.Analyzers. The compiler runs them
+# over every product project, so a violation fails the build where it is
+# written rather than in a test run afterwards.
+#
+# HARCH001 — the dynamic-code ban (#626), decided by resolving the TYPE: a
+# type derived from a banned one is a hit, and a comment or a string literal
+# that names one is not. The plugin family is exempt by id in
+# src/Directory.Build.props, because loading code at run time IS the plugin
+# product.
+#
+# HARCH002 — a namespace root belongs to the project that declares it. A
+# file walk cannot answer that question, because the shared source folders
+# are compiled into several assemblies at once.
+#
+# Both are `warning`, and the build promotes warnings to errors, so a
+# violation in a product tree is a build error. One id per rule, so that one
+# rule can be switched off without switching off its neighbour.
+dotnet_diagnostic.HARCH001.severity = warning # the tree is clean against this rule: the text rule that stays as the oracle reads the whole source text, and the analyzer's differential over the live tree agrees with it
+dotnet_diagnostic.HARCH002.severity = warning # the tree is clean against this rule: the ownership table is the only input, and no project outside the owners declares an owned root
+# ============================================================================
 # PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865)
 # ============================================================================
 # Everything above this line is tree-wide. This block is the ONE place where a

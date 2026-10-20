@@ -46,15 +46,12 @@
     <PackageReference Include="Mono.Cecil"/>
     <PackageReference Include="TUnit.Assertions"/>
     <!--
-      Microsoft.CodeAnalysis.CSharp — the PILOT for issue #1729, which asks
-      whether the rules that check the TEXT of the product source should move
-      to the compiler's own view of it. The pilot writes two of those rules as
-      real DiagnosticAnalyzers and runs them IN-PROCESS against a compilation
-      the test builds, so the analyzer reaches the compiler's symbol table
-      without becoming a build-time analyzer over ~140 projects. With
-      TreatWarningsAsErrors on, a build-time analyzer that fires on existing
-      code turns the build red before anybody has read the rule, and that is
-      the wrong order for a pilot.
+      Microsoft.CodeAnalysis.CSharp — the substrate the architecture rules
+      that check the TEXT of the product source are moving onto (#1729,
+      #1842). The promoted rules live in src/Harbor.Arch.Analyzers, and the
+      tests here run them IN-PROCESS against a compilation the test builds, so
+      the analyzer reaches the compiler's symbol table without the test
+      project having to be a compiler.
 
       The version is already pinned in Directory.Packages.props for
       src/Harbor.CodeGen, so the repository tracks no new version for it. The
@@ -119,6 +116,23 @@
     on each to assert that the layering invariants from docs/ARCHITECTURE_LAYERS.md hold.
   -->
   <ItemGroup>
+    <!--
+      #1842: the promoted architecture rules, as an ordinary reference.
+
+      The product projects consume this project as an ANALYZER
+      (OutputItemType=Analyzer, ReferenceOutputAssembly=false) — the compiler
+      loads it and runs it over every product tree. The tests here consume it
+      as a LIBRARY, because they drive the analyzers in-process: they build a
+      compilation and ask the analyzer for its verdict, which is the cheap way
+      to plant an offender and read the answer. The same class serves both
+      places, and that is the property the promotion rests on.
+
+      This reference is also what puts the analyzer project into the build
+      closure that BuildGraphCoverageRule measures: the closure is computed
+      from the ProjectReferences the project files declare, and the reference
+      that src/Directory.Build.props adds is not one of them.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Arch.Analyzers\Harbor.Arch.Analyzers.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>

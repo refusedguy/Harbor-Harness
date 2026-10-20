@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      BUILD-TIME ONLY (#1842). This project holds the repository's OWN
+      architecture rules, written as Roslyn analyzers instead of regex scans
+      over the source text.
+
+      It is a Roslyn component: the compiler loads it and runs its rules over
+      every product project. Nothing here reaches a shipped binary — the
+      projects that consume it reference it with
+      `<OutputItemType>Analyzer</OutputItemType>` and
+      `<ReferenceOutputAssembly>false</ReferenceOutputAssembly>`, so the
+      assembly is handed to the compiler and never becomes a runtime
+      reference of the consuming project. The NativeAOT rule (#626) governs
+      shipped code, and a compiler extension is not shipped code.
+
+      `IsPackable=false` because the rules are internal to this repository and
+      are never published as a NuGet package; `IsRoslynComponentPackage` and
+      `RoslynComponent` mark what the project IS, so that a packer or a reader
+      does not have to guess.
+    -->
+    <IsPackable>false</IsPackable>
+    <IsRoslynComponentPackage>true</IsRoslynComponentPackage>
+    <RoslynComponent>Harbor.Arch.Analyzers</RoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!--
+      RS1041 asks a compiler extension to target netstandard2.0, because an
+      extension may be loaded by a compiler older than the one this repository
+      builds with. The rule does not hold here: global.json pins SDK
+      10.0.402, and the analyzer is loaded by THAT compiler and by no other,
+      so the target framework that matches the SDK is the one that can load
+      it. The same suppression, with the same reason, is carried by
+      src/Harbor.CodeGen.
+
+      RS2008 asks an analyzer package to carry release-tracking files, which
+      exist so that a PUBLISHED analyzer can say which diagnostics a given
+      release added. This analyzer is never published — it is consumed by the
+      build of this repository alone — so the files would document a release
+      that does not exist. The same reasoning is why
+      tests/Harbor.Architecture.Tests suppresses the rule for the analyzers it
+      hosts.
+    -->
+    <NoWarn>$(NoWarn);RS1041;RS2008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The compiler API. NO Version attribute: the version is the central pin
+      in /Directory.Packages.props, and writing one here would state a
+      SECOND answer to the same question — which is how a restore ends up with
+      an exact version constraint that conflicts with the pin and fails with
+      NU1608. The pin is the only place the version is written down, and this
+      project asks for the same version the source generators and the
+      architecture tests already ask for.
+
+      PrivateAssets=all: the analyzer runs inside the compiler, which already
+      hosts the Roslyn runtime, so nothing may flow to a consumer of this
+      project.
+
+      Proj0037 (#1857) wants ExcludeAssets=runtime on every PrivateAssets=all
+      reference. It does not hold here, and the finding is scoped at this
+      element rather than silenced globally: the analyzer is compiled against
+      Microsoft.CodeAnalysis.CSharp, and the local copy of the Roslyn runtime
+      is what lets it load against the version it was compiled against.
+      Excluding it would change how the analyzer is loaded, which is a
+      separate decision with its own verification. src/Harbor.CodeGen takes
+      the same position for the same reason.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The architecture tests drive these analyzers in-process (they build a
+      compilation and ask the analyzer for its verdict), and one of the
+      assertions they make is about the ownership TABLE, which is internal:
+      a rule that owns an exception table is not more honest for publishing
+      it. The same pattern is used by src/Harbor.Tools.Builtin for its own
+      test project.
+    -->
+    <InternalsVisibleTo Include="Harbor.Architecture.Tests"/>
+  </ItemGroup>
+
+</Project>

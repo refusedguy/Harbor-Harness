@@ -92,6 +92,9 @@ src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Co
 src/Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ — daemon/remote IPC
 src/Harbor.Transport.Remote/, Harbor.Telemetry.{Core,Otlp}/, Harbor.CodeGen/, Harbor.Logging/,
 src/Harbor.Extensions/, Harbor.Diagnostics.Abstractions/
+src/Harbor.Arch.Analyzers/           — the repository's OWN architecture rules as build-time analyzers
+                                       (HARCH001 dynamic code, HARCH002 namespace ownership); the compiler
+                                       runs them over src/ and apps/; procedure: docs/ANALYZERS_AUTHORING.md
 
 apps/Harbor.App.Cli/                  — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/             — cross-platform desktop GUI
