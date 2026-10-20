@@ -37,6 +37,13 @@
 #   testdup   duplicated test bodies in tests/ (#1778), with a scan-size floor.
 #             It lives here rather than in ci.yml because it needs no .NET
 #             SDK and because ci.yml is the workflow the dotnet matrix owns.
+#   merge-loss  the local squash-merges: a pull request that touches
+#             `.github/workflows/` cannot be merged through the GitHub API with
+#             this repository's token (no `workflow` scope), so it is merged
+#             LOCALLY with `git merge --squash`, and the resolution dropped
+#             whole sections of files. The job walks those merges and asks
+#             whether what they dropped is still missing. No dotnet, no
+#             network beyond the pull request refs it names itself.
 #
 # THE FLOORS ARE THE POINT
 #
@@ -117,6 +124,14 @@ on:
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
       - 'tools/check-public-api-resign.py'
+      # The merge-loss gate. A pull request that touches a workflow file is
+      # merged LOCALLY (the token has no `workflow` scope), and the local
+      # squash-merge dropped content. The gate has to run on every such pull
+      # request, and on the push that lands it — so the trigger is the
+      # workflow files themselves, not the gate's own sources alone.
+      - '.github/workflows/**'
+      - 'tools/check-local-merge-loss.py'
+      - 'tools/merge-loss-exceptions.txt'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -188,6 +203,12 @@ on:
       - 'docs/toc.yml'
       - 'api/**'
       - '.github/workflows/docs.yml'
+      # The merge-loss gate. Same trigger as above: a pull request that
+      # touches a workflow file is the one that gets merged LOCALLY, so the
+      # gate has to run on it.
+      - '.github/workflows/**'
+      - 'tools/check-local-merge-loss.py'
+      - 'tools/merge-loss-exceptions.txt'
   workflow_dispatch:
 
 permissions: {}
@@ -263,6 +284,17 @@ jobs:
       # self-test is here, with the other gates that have one.
       - name: Re-signing gate fails on an unreviewed change
         run: python3 tools/check-public-api-resign.py --self-test
+      # The merge-loss gate. Its failure path is tested here for the same
+      # reason as the other gates': a checker edited until it matches nothing
+      # is indistinguishable from a checker that found nothing. The fixture
+      # is a throwaway git repo with one local squash-merge that took the
+      # pull request's version of a file and dropped the line dev had added
+      # to it — the failure this gate exists to catch, at the size of one
+      # file. The fixture also carries the two shapes that must NOT be
+      # reported: a merge that kept every line, and a line an ordinary
+      # commit removed on purpose.
+      - name: Merge-loss checker reports a dropped line
+        run: python3 tools/check-local-merge-loss.py --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
       # body. Its failure path is tested here for the same reason as the
@@ -544,6 +576,58 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that no test serializes through the reflection resolver
         run: python3 tools/check-test-json-reflection.py
+
+  # The local squash-merges. A pull request that touches `.github/workflows/`
+  # cannot be merged through the GitHub API with this repository's token: the
+  # token has no `workflow` scope and the API refuses the merge. Those pull
+  # requests were merged LOCALLY — `git merge --squash` onto `dev`, then
+  # `git push origin HEAD:dev` — and the conflicted files were resolved by
+  # hand. The resolution kept the YAML valid and the build green, and it
+  # dropped whole sections of files: the "Proj0037/Proj0040" and "#1795"
+  # sections of CHANGELOG.md, the `test-skips.py` row of tools/README.md,
+  # the skipped-test self-test step of this file, the "Public API freeze"
+  # section of docs/ANALYZERS.md, and the absolute --results-directory of
+  # the ci.yml shard step.
+  #
+  # This job asks, for every one of those merges, whether the content it
+  # dropped is STILL missing from the tree. The pull request's head commit is
+  # named in the merge commit's own body, so the gate needs no network of its
+  # own; the one fetch below puts those heads into the object store.
+  #
+  # It is a history gate, so it runs on the whole history rather than on the
+  # diff of the pull request: a loss that a pull request puts back turns it
+  # green, and a loss that nothing puts back keeps it red.
+  merge-loss:
+    name: local squash-merges dropped nothing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The gate needs the pull request's HEAD commit to know what the pull
+      # request intended, and it reads that SHA out of the merge commit's
+      # body. GitHub keeps `refs/pull/<n>/head` for every pull request ever
+      # merged, so one fetch per merge brings the heads in. A head that is
+      # missing makes the gate ERROR rather than skip: a gate that cannot
+      # see a merge is a gate that is blind to it.
+      - name: Fetch the pull request heads the history names
+        run: |
+          set -eu
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/dev:refs/remotes/origin/dev"
+          for pr in $(git log --first-parent --format=%B origin/dev \
+                      | grep -o 'Squash-merged into dev (PR #[0-9]*' \
+                      | grep -o '[0-9]*' | sort -u); do
+            git fetch --no-tags --quiet origin \
+              "+refs/pull/$pr/head:refs/remotes/pull/$pr/head" || true
+          done
+      - name: The local squash-merges dropped nothing
+        run: >-
+          python3 tools/check-local-merge-loss.py
+          --range origin/dev --tip HEAD --min-merges 1
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually
