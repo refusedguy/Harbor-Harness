@@ -2469,11 +2469,12 @@ runs the architecture gate), and the project dispatch timeline.
 `tools/aggregate-build-vcpu.py` turns the runs into the table below, and
 `tools/measure-project-graph.py` parses the dependency graph.
 
-**Provenance.** CI runs 39454123726, 39448423292 and 39462228165 (the same
-matrix on two trees), 2026-10-20. Runner: `ubuntu-latest`, AMD EPYC 9V74 /
-9V45, 4 vCPU (`nproc`=4, `/proc/stat` accounts for 4 CPUs, affinity `0-3`, no
-cgroup quota), .NET SDK 10.0.402. The restore is timed separately and is in
-none of the numbers below.
+**Provenance.** The same matrix was run three times, on two trees (the branch
+before and after its rebase onto `dev`): CI runs 39448423292, 39454123726 and
+39462228165, 2026-10-20. Nine replicates per arm, pooled. Runner:
+`ubuntu-latest`, AMD EPYC 9V74 / 9V45, 4 vCPU (`nproc`=4, `/proc/stat`
+accounts for 4 CPUs, affinity `0-3`, no cgroup quota), .NET SDK 10.0.402. The
+restore is timed separately and is in none of the numbers below.
 
 **The meter is calibrated, not asserted.** A known 1-way load reads 1.11 busy
 cores and a known 4-way load reads 4.00 (`calib-1-way` / `calib-4-way` in the
