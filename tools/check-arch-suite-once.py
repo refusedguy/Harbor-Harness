@@ -36,7 +36,7 @@ are easy to bring back by accident, and nothing else in the repository would
 say so: the suite would run twice, slowly, and the pull request would still
 be green.
 
-So this gate reads the workflow files and asks four questions.
+So this gate reads the workflow files and asks five questions.
 
   EXEC-ONCE      the suite is executed exactly once on the pull-request
                  lane, by the `core` shard's project list, and by nothing
@@ -53,6 +53,12 @@ So this gate reads the workflow files and asks four questions.
                  it is the DUPLICATION that costs.
   GATE-DEFAULT   `Directory.Build.props` defaults `HarborArchGate` to
                  `true`, so the gate is on unless a workflow says otherwise.
+  GATE-CONDITION the target's own condition still asks the property before
+                 it runs. Everything above rests on one sentence: the
+                 target runs only when `HarborArchGate` is `true`, and an
+                 environment variable of that name IS an MSBuild property.
+                 A target that stopped asking would run inside every
+                 Release build, and every other rule here would be green.
 
 WHAT IT CANNOT SEE, AND SAYS SO
 -------------------------------
@@ -106,6 +112,8 @@ BLOCK_MARKERS = ("|", ">", "|-", ">-", "|+", ">+")
 FLAG_OFF = "-p:HarborArchGate=false"
 # The default the gate carries when nothing says otherwise.
 DEFAULT_ON = "<HarborArchGate Condition=\"'$(HarborArchGate)' == ''\">true</HarborArchGate>"
+# The clause in the target's condition that asks the property before it runs.
+GATE_CONDITION = "'$(HarborArchGate)' == 'true'"
 
 
 # --------------------------------------------------------------------- parsing
@@ -348,6 +356,29 @@ def check_default(props: str) -> list[str]:
     ]
 
 
+def check_condition(props: str) -> list[str]:
+    """GATE-CONDITION: the target still asks the property before it runs.
+
+    The whole design rests on one sentence: the MSBuild target runs only
+    when `HarborArchGate` is `true`, and an environment variable of that
+    name IS an MSBuild property. A target whose condition stopped asking
+    would run inside every Release build whatever the workflow says, and
+    every other rule here would still be green.
+    """
+    if "HarborArchitectureGate" not in props:
+        return [
+            f"GATE-CONDITION: `{PROPS.name}` has no `HarborArchitectureGate` "
+            f"target - the architecture gate does not exist"
+        ]
+    if GATE_CONDITION not in props:
+        return [
+            f"GATE-CONDITION: the `HarborArchitectureGate` target's condition "
+            f"no longer requires `{GATE_PROPERTY}` to be `true` - it would run "
+            f"inside every Release build, whatever the workflow says"
+        ]
+    return []
+
+
 def evaluate(workflow: str, props: str, min_shards: int) -> list[str]:
     """Every finding the tree has, in the order the rules are stated."""
     shards = shard_lists(workflow)
@@ -361,6 +392,7 @@ def evaluate(workflow: str, props: str, min_shards: int) -> list[str]:
     problems += check_once(workflow, shards)
     problems += check_gate(workflow)
     problems += check_default(props)
+    problems += check_condition(props)
     return problems
 
 
@@ -435,6 +467,10 @@ FIXTURE_PROPS = """<Project>
   <PropertyGroup>
     <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
   </PropertyGroup>
+  <Target Name="HarborArchitectureGate"
+          AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true' AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'">
+  </Target>
 </Project>
 """
 
@@ -523,13 +559,31 @@ def self_test() -> int:
                 + ("; ".join(findings) if findings else "the checker found nothing")
             )
 
-    # GATE-DEFAULT reads the props, not the workflow.
+    # GATE-DEFAULT and GATE-CONDITION read the props, not the workflow.
     findings = evaluate(FIXTURE_WORKFLOW, FIXTURE_PROPS.replace("true</HarborArchGate>",
                                                                 "false</HarborArchGate>"), 4)
     if not any(finding.startswith("GATE-DEFAULT") for finding in findings):
         failures.append(
             "the planted defect (the gate's default turned off) did not fire "
             "GATE-DEFAULT: " + ("; ".join(findings) if findings else "the checker found nothing")
+        )
+
+    findings = evaluate(FIXTURE_WORKFLOW, FIXTURE_PROPS.replace(
+        "AND '$(HarborArchGate)' == 'true' AND ", ""), 4)
+    if not any(finding.startswith("GATE-CONDITION") for finding in findings):
+        failures.append(
+            "the planted defect (the target no longer asks the property) did "
+            "not fire GATE-CONDITION: "
+            + ("; ".join(findings) if findings else "the checker found nothing")
+        )
+
+    findings = evaluate(FIXTURE_WORKFLOW, FIXTURE_PROPS.replace(
+        'Name="HarborArchitectureGate"', 'Name="SomethingElse"'), 4)
+    if not any(finding.startswith("GATE-CONDITION") for finding in findings):
+        failures.append(
+            "the planted defect (the gate target is gone) did not fire "
+            "GATE-CONDITION: "
+            + ("; ".join(findings) if findings else "the checker found nothing")
         )
 
     # The floor: a workflow with fewer shards than the floor must be a
