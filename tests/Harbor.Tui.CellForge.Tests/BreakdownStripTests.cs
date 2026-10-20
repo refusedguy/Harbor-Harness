@@ -9,9 +9,9 @@ public class BreakdownStripTests
 {
     private static string Art(int width, IReadOnlyList<BreakdownSegment> segs)
     {
-        var buffer = new ScreenBuffer(width, 1);
+        var buffer = TestRender.Buffer(width, 1);
         BreakdownStrip.Paint(buffer, new Rect(0, 0, width, 1), segs);
-        return GridDump.Art(buffer).TrimEnd('\n');
+        return TestRender.Art(buffer).TrimEnd('\n');
     }
 
     [Test]
@@ -48,9 +48,9 @@ public class BreakdownStripTests
     [Test]
     public async Task Paint_Degenerate_NoThrow()
     {
-        var buffer = new ScreenBuffer(4, 1);
+        var buffer = TestRender.Buffer(4, 1);
         BreakdownStrip.Paint(buffer, new Rect(0, 0, 0, 1), [new("a", 1)]);
-        await Assert.That(GridDump.Art(buffer).Length).IsGreaterThan(0);
+        await Assert.That(TestRender.Art(buffer).Length).IsGreaterThan(0);
     }
 
     [Test]

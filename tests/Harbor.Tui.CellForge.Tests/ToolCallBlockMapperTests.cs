@@ -18,9 +18,9 @@ public class ToolCallBlockMapperTests
 {
     private static string PaintHeader(ToolCallBlock block, int width = 40, int height = 6)
     {
-        var buffer = new ScreenBuffer(width, height);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, height), 0));
-        return GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(width, height);
+        block.Paint(TestRender.Ctx(buffer));
+        return TestRender.Art(buffer);
     }
 
     // #1810: the two mapper tables are ARRAYS, and the array is the whole

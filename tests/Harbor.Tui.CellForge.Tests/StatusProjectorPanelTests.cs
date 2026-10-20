@@ -198,14 +198,14 @@ public class StatusProjectorPanelTests
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
         screen.Status.ProjectedState = MockState("running", tokensIn: 1500, tokensOut: 300, costUsd: 0m);
 
-        var buffer = new ScreenBuffer(80, 8);
+        var buffer = TestRender.Buffer(80, 8);
         screen.Tree.Solve(80, 8);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(buffer);
         }
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         // First paint → Tick = 1 → WorkingFrames[1].
         await Assert.That(art).Contains(SpinnerStrip.WorkingFrames[1]);
         await Assert.That(art).Contains("running");

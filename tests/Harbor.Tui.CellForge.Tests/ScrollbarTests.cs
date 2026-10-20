@@ -81,7 +81,7 @@ public class ScrollbarTests
     [Test]
     public async Task TryPaint_PaintsThumbOverTrack()
     {
-        var buffer = new ScreenBuffer(1, 10);
+        var buffer = TestRender.Buffer(1, 10);
         bool painted = Scrollbar.TryPaint(buffer, new Rect(0, 0, 1, 10), 20, 0, 10);
 
         await Assert.That(painted).IsTrue();
@@ -99,7 +99,7 @@ public class ScrollbarTests
         viewport.Configure(20, 10);
         viewport.ScrollToEnd();
 
-        var buffer = new ScreenBuffer(1, 10);
+        var buffer = TestRender.Buffer(1, 10);
         bool painted = Scrollbar.TryPaint(buffer, new Rect(0, 0, 1, 10), viewport);
 
         await Assert.That(painted).IsTrue();
@@ -113,7 +113,7 @@ public class ScrollbarTests
     [Test]
     public async Task TryPaint_UsesRightmostColumn()
     {
-        var buffer = new ScreenBuffer(3, 10);
+        var buffer = TestRender.Buffer(3, 10);
         bool painted = Scrollbar.TryPaint(buffer, new Rect(0, 0, 3, 10), 20, 0, 10);
 
         await Assert.That(painted).IsTrue();
@@ -126,7 +126,7 @@ public class ScrollbarTests
     [Test]
     public async Task TryPaint_HiddenLeavesBufferUntouched()
     {
-        var buffer = new ScreenBuffer(1, 5);
+        var buffer = TestRender.Buffer(1, 5);
         bool painted = Scrollbar.TryPaint(buffer, new Rect(0, 0, 1, 5), 3, 0, 10);
 
         await Assert.That(painted).IsFalse();
@@ -144,8 +144,8 @@ public class ScrollbarTests
         await Assert.That(info.IsScrollable).IsTrue();
         await Assert.That(Scrollbar.ThumbGeometry(info, 10)).IsEqualTo(Scrollbar.ThumbGeometry(20, 10, 10, 10));
 
-        var a = new ScreenBuffer(1, 10);
-        var b = new ScreenBuffer(1, 10);
+        var a = TestRender.Buffer(1, 10);
+        var b = TestRender.Buffer(1, 10);
         bool pa = Scrollbar.TryPaint(a, new Rect(0, 0, 1, 10), info);
         bool pb = Scrollbar.TryPaint(b, new Rect(0, 0, 1, 10), 20, 10, 10);
 
@@ -166,7 +166,7 @@ public class ScrollbarTests
         ScrollInfo info = ((IScrollInfoProvider)viewport).GetScrollInfo();
         await Assert.That((info.Total, info.Offset, info.Viewport)).IsEqualTo((20L, 4L, 10));
 
-        var buffer = new ScreenBuffer(1, 10);
+        var buffer = TestRender.Buffer(1, 10);
         await Assert.That(Scrollbar.TryPaint(buffer, new Rect(0, 0, 1, 10), info)).IsTrue();
     }
 
@@ -181,7 +181,7 @@ public class ScrollbarTests
         await Assert.That(info.Total).IsEqualTo(10);
         await Assert.That(info.Viewport).IsEqualTo(4);
 
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
         list.Paint(buffer, new Rect(0, 0, 10, 4));
 
         // Shared indicator paints on the rightmost column; content stays put.
@@ -221,7 +221,7 @@ public class ScrollbarTests
     [Test]
     public async Task VerticalLeft_UsesLeftColumn()
     {
-        var buffer = new ScreenBuffer(3, 10);
+        var buffer = TestRender.Buffer(3, 10);
         bool painted = Scrollbar.TryPaint(
             buffer, new Rect(0, 0, 3, 10), 20, 0, 10,
             ScrollbarOrientation.VerticalLeft);
@@ -235,7 +235,7 @@ public class ScrollbarTests
     [Test]
     public async Task HorizontalBottom_PaintsThumbOverTrack()
     {
-        var buffer = new ScreenBuffer(10, 3);
+        var buffer = TestRender.Buffer(10, 3);
         bool painted = Scrollbar.TryPaint(
             buffer, new Rect(0, 0, 10, 3), 20, 0, 10,
             ScrollbarOrientation.HorizontalBottom);
@@ -253,7 +253,7 @@ public class ScrollbarTests
     [Test]
     public async Task HorizontalTop_UsesTopRow()
     {
-        var buffer = new ScreenBuffer(10, 3);
+        var buffer = TestRender.Buffer(10, 3);
         bool painted = Scrollbar.TryPaint(
             buffer, new Rect(0, 0, 10, 3), 20, 0, 10,
             ScrollbarOrientation.HorizontalTop);
@@ -269,7 +269,7 @@ public class ScrollbarTests
     {
         var beginStyle = new CellStyle(ChatPalette.Accent);
         var endStyle = new CellStyle(ChatPalette.Warning);
-        var buffer = new ScreenBuffer(1, 10);
+        var buffer = TestRender.Buffer(1, 10);
         bool painted = Scrollbar.TryPaint(
             buffer, new Rect(0, 0, 1, 10), 20, 0, 10,
             ScrollbarOrientation.VerticalRight, ScrollbarSymbols.DoubleVertical,
@@ -293,7 +293,7 @@ public class ScrollbarTests
         // track and push the end arrow out of the painted area.
         // total=31, viewport=24 → maxOffset=7; stale offset 8 clamps to 7;
         // 22-cell inner track → 17-cell thumb rows 6..22, ▲ at 0, ▼ at 23.
-        var buffer = new ScreenBuffer(1, 24);
+        var buffer = TestRender.Buffer(1, 24);
         bool painted = Scrollbar.TryPaint(
             buffer, new Rect(0, 0, 1, 24), 31, 8, 24,
             ScrollbarOrientation.VerticalRight, ScrollbarSymbols.DoubleVertical);

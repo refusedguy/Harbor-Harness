@@ -31,11 +31,11 @@ public sealed class WhichKeyHelpOverlayTests
     public async Task Hidden_Paint_LeavesBufferUntouched()
     {
         var overlay = new WhichKeyHelpOverlay();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Which-key");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Which-key");
         await Assert.That(buffer.Get(40, 12).Rune).IsEqualTo((int)' ');
     }
 
@@ -44,11 +44,11 @@ public sealed class WhichKeyHelpOverlayTests
     {
         var overlay = new WhichKeyHelpOverlay();
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Which-key");
         await Assert.That(art).Contains("Hotkeys");
         await Assert.That(art).Contains("Alt+1..9");
@@ -62,11 +62,11 @@ public sealed class WhichKeyHelpOverlayTests
     {
         var overlay = new WhichKeyHelpOverlay();
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Context");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Context");
     }
 
     [Test]
@@ -74,11 +74,11 @@ public sealed class WhichKeyHelpOverlayTests
     {
         var overlay = new WhichKeyHelpOverlay();
         overlay.Show(new WhichKeyContext("timeline", "palette"));
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Context");
         await Assert.That(art).Contains("timeline");
         await Assert.That(art).Contains("palette");
@@ -107,11 +107,11 @@ public sealed class WhichKeyHelpOverlayTests
     {
         var overlay = new WhichKeyHelpOverlay();
         overlay.Show();
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         overlay.Paint(buffer, new Rect(0, 0, 10, 4));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Which-key");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Which-key");
     }
 
     [Test]
@@ -149,11 +149,11 @@ public sealed class WhichKeyHelpOverlayTests
         var stack = new OverlayStack();
         stack.Push(new StubLayer("base", new Rect(0, 0, 80, 24), 'a'));
         stack.Push(layer);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         stack.PaintOver(buffer);
 
-        await Assert.That(GridDump.Art(buffer)).Contains("Which-key");
+        await Assert.That(TestRender.Art(buffer)).Contains("Which-key");
         await Assert.That(stack.HitTest(layer.Bounds.X + 1, layer.Bounds.Y + 1)!.Id).IsEqualTo("whichkey");
         await Assert.That(stack.HitTest(0, 0)!.Id).IsEqualTo("base");
 
@@ -173,11 +173,11 @@ public sealed class WhichKeyHelpOverlayTests
         var stack = new OverlayStack();
         stack.Push(new StubLayer("base", new Rect(0, 0, 80, 24), 'a'));
         stack.Push(layer);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         stack.PaintOver(buffer);
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Which-key");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Which-key");
         await Assert.That(buffer.Get(40, 12).Rune).IsEqualTo((int)'a');
     }
 
@@ -186,12 +186,12 @@ public sealed class WhichKeyHelpOverlayTests
     {
         var overlay = new WhichKeyHelpOverlay();
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Leader");
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("pending ctrl+x");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Leader");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("pending ctrl+x");
     }
 
     [Test]
@@ -204,11 +204,11 @@ public sealed class WhichKeyHelpOverlayTests
             new LeaderEntry("panel", 'p', "toggle panel"),
         ]);
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 32);
+        var buffer = TestRender.Buffer(80, 32);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 32));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Leader");
         await Assert.That(art).Contains("session");
         await Assert.That(art).Contains("panel");
@@ -224,11 +224,11 @@ public sealed class WhichKeyHelpOverlayTests
         overlay.SetLeaderBindings([new LeaderEntry("session", 's', "save session")]);
         overlay.SetLeaderBindings(null);
         overlay.Show();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Leader");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Leader");
         await Assert.That(overlay.LeaderBindings.Count).IsEqualTo(0);
     }
 
@@ -242,15 +242,15 @@ public sealed class WhichKeyHelpOverlayTests
         await Assert.That(overlay.PendingChord.HasValue).IsTrue();
         await Assert.That(overlay.PendingChord.Value).IsEqualTo('g');
 
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
-        await Assert.That(GridDump.Art(buffer)).Contains("pending ctrl+x g");
+        await Assert.That(TestRender.Art(buffer)).Contains("pending ctrl+x g");
 
         overlay.SetPending(null);
         await Assert.That(overlay.PendingChord.HasValue).IsFalse();
 
-        var cleared = new ScreenBuffer(80, 24);
+        var cleared = TestRender.Buffer(80, 24);
         overlay.Paint(cleared, new Rect(0, 0, 80, 24));
-        await Assert.That(GridDump.Art(cleared)).DoesNotContain("pending ctrl+x");
+        await Assert.That(TestRender.Art(cleared)).DoesNotContain("pending ctrl+x");
     }
 }

@@ -25,7 +25,7 @@ public class SessionTabStripUnreadTests
 
     private static ScreenBuffer Painted(SessionTabStripPanel panel, int width, int height)
     {
-        var buffer = new ScreenBuffer(width, height);
+        var buffer = TestRender.Buffer(width, height);
         var tree = new LayoutTree();
         tree.AddRoot(panel);
         tree.Solve(width, height);

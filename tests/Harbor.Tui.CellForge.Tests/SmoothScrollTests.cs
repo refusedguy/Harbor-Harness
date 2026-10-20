@@ -36,7 +36,7 @@ public class SmoothScrollTests
     {
         tl.CurrentTick = tick;
         _ = tl.PrepareFrame(Width, Height);
-        var buffer = new ScreenBuffer(Width, Height);
+        var buffer = TestRender.Buffer(Width, Height);
         tl.Paint(buffer, new Rect(0, 0, Width, Height));
         return buffer;
     }
@@ -106,7 +106,7 @@ public class SmoothScrollTests
         var mid = Paint(tl, tick: 11 + (PanelFx.FadeFrames / 2));
         var settled = Paint(tl, tick: 11 + PanelFx.FadeFrames + 1);
 
-        await Assert.That(GridDump.Art(mid)).IsNotEqualTo(GridDump.Art(settled)); // visible glide
+        await Assert.That(TestRender.Art(mid)).IsNotEqualTo(TestRender.Art(settled)); // visible glide
     }
 
     [Test]

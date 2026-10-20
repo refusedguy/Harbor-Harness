@@ -136,9 +136,9 @@ public class CommandPaletteViewTests
         var palette = Open();
         _ = palette.HandleKey(KeyEvent.Char(new Rune('m')));
 
-        var buffer = new ScreenBuffer(50, 10);
+        var buffer = TestRender.Buffer(50, 10);
         palette.Paint(buffer, new Rect(2, 1, 46, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("m");
         await Assert.That(art).Contains("Switch model");
@@ -149,7 +149,7 @@ public class CommandPaletteViewTests
     public async Task Paint_SelectedRow_IsHighlighted()
     {
         var palette = Open();
-        var buffer = new ScreenBuffer(50, 10);
+        var buffer = TestRender.Buffer(50, 10);
         palette.Paint(buffer, new Rect(2, 1, 46, 8));
 
         // Row 0 selected → accent bold title style.
@@ -161,9 +161,9 @@ public class CommandPaletteViewTests
     public async Task Paint_Invisible_NothingDrawn()
     {
         var palette = new CommandPaletteView();
-        var buffer = new ScreenBuffer(20, 6);
+        var buffer = TestRender.Buffer(20, 6);
         palette.Paint(buffer, new Rect(0, 0, 20, 6));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art.Trim()).IsEqualTo(string.Empty);
     }

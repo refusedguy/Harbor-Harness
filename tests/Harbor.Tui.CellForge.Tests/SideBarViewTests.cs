@@ -10,7 +10,7 @@ public class SideBarViewTests
 {
     private static (ScreenBuffer Buffer, Rect Rect) MakeBuffer(int cols = 60, int rows = 24)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         return (buffer, new Rect(cols - SideBarLayout.DefaultWidth, 0, SideBarLayout.DefaultWidth, rows - 1));
     }
 
@@ -79,7 +79,7 @@ public class SideBarViewTests
     [Test]
     public async Task Paint_TinyRect_NoThrow()
     {
-        var buffer = new ScreenBuffer(20, 10);
+        var buffer = TestRender.Buffer(20, 10);
         SideBarView.Paint(buffer, new Rect(19, 9, 42, 6), SideBarState.Empty);
         SideBarView.Paint(buffer, new Rect(0, 0, 5, 3), SideBarState.Empty);
     }

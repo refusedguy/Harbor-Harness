@@ -80,13 +80,13 @@ public class WidgetStateMaybeContractTests
     public async Task ToolCallBlock_Running_PaintsHeaderOnly_AndDoesNotThrow()
     {
         ToolCallBlock block = RunningBlock();
-        var buffer = new ScreenBuffer(80, 4);
+        var buffer = TestRender.Buffer(80, 4);
 
         // Before the Maybe conversion this path was reachable only because Paint held the
         // guard. Calling the line-count helpers directly is what used to be an NRE.
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 4), 0));
+        block.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("edit");
         await Assert.That(art).DoesNotContain("done");
     }
@@ -96,11 +96,11 @@ public class WidgetStateMaybeContractTests
     {
         ToolCallBlock block = RunningBlock();
         block.Complete(new ToolResultBody("the body text", false, TimeSpan.FromMilliseconds(5)));
-        var buffer = new ScreenBuffer(80, 4);
+        var buffer = TestRender.Buffer(80, 4);
 
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 4), 0));
+        block.Paint(TestRender.Ctx(buffer));
 
-        await Assert.That(GridDump.Art(buffer)).Contains("the body text")
+        await Assert.That(TestRender.Art(buffer)).Contains("the body text")
             .Because("Presence must still paint exactly as before — the Maybe is a signature change, not a rendering change.");
     }
 

@@ -32,7 +32,7 @@ public class GoldenChatWidgetsTests
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"# golden: {name}\n");
         sb.Append(CultureInfo.InvariantCulture, $"## art ({buffer.Cols}x{buffer.Rows})\n");
-        sb.Append(GridDump.Art(buffer));
+        sb.Append(TestRender.Art(buffer));
         sb.Append("## cells\n");
         sb.Append(GridDump.Cells(buffer));
         return sb.ToString();
@@ -43,13 +43,13 @@ public class GoldenChatWidgetsTests
         string doc = Snap(name, buffer);
         string expected = Golden.Verify(name, doc);
         await Assert.That(doc).IsEqualTo(expected);
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     private static void PaintBlock(IChatBlock block, ScreenBuffer buffer)
     {
         int h = block.Measure(buffer.Cols).MinLines;
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, buffer.Cols, h), 0));
+        block.Paint(TestRender.Ctx(buffer, buffer.Cols, h));
     }
 
     [Test]
@@ -60,7 +60,7 @@ public class GoldenChatWidgetsTests
         await Assert.That(ok).IsTrue();
         await Assert.That(block).IsNotNull();
 
-        var buffer = new ScreenBuffer(32, block!.Measure(32).MinLines);
+        var buffer = TestRender.Buffer(32, block!.Measure(32).MinLines);
         PaintBlock(block, buffer);
 
         string art = await VerifyAsync("t3-table-block", buffer);
@@ -81,9 +81,9 @@ public class GoldenChatWidgetsTests
         const int w = 48;
         int h1 = running.Measure(w).MinLines;
         int h2 = done.Measure(w).MinLines;
-        var buffer = new ScreenBuffer(w, h1 + h2);
-        running.Paint(new BlockPaintContext(buffer, new Rect(0, 0, w, h1), 0));
-        done.Paint(new BlockPaintContext(buffer, new Rect(0, h1, w, h2), 0));
+        var buffer = TestRender.Buffer(w, h1 + h2);
+        running.Paint(TestRender.Ctx(buffer, w, h1));
+        done.Paint(TestRender.Ctx(buffer, 0, h1, w, h2));
 
         string art = await VerifyAsync("t3-toolcall-block", buffer);
         await Assert.That(art.Contains("read")).IsTrue();
@@ -97,7 +97,7 @@ public class GoldenChatWidgetsTests
         var block = new ThinkingBlock("Considering edge cases in the diff path.");
         block.SetExpanded(true); // O10 #1179: collapsed is the summary header —
                                  // pin the expanded body byte-identical.
-        var buffer = new ScreenBuffer(40, block.Measure(40).MinLines);
+        var buffer = TestRender.Buffer(40, block.Measure(40).MinLines);
         PaintBlock(block, buffer);
 
         string art = await VerifyAsync("t3-thinking-block", buffer);
@@ -108,7 +108,7 @@ public class GoldenChatWidgetsTests
     public async Task UserBlock_Prompt_Golden()
     {
         var block = new UserBlock("please fix the parser");
-        var buffer = new ScreenBuffer(40, block.Measure(40).MinLines);
+        var buffer = TestRender.Buffer(40, block.Measure(40).MinLines);
         PaintBlock(block, buffer);
 
         string art = await VerifyAsync("t3-user-block", buffer);
@@ -121,7 +121,7 @@ public class GoldenChatWidgetsTests
     {
         var stream = new StreamingMarkdownBlock();
         stream.Push("Ship **fast**.\n- one\n");
-        var buffer = new ScreenBuffer(40, stream.Measure(40).MinLines);
+        var buffer = TestRender.Buffer(40, stream.Measure(40).MinLines);
         PaintBlock(stream, buffer);
 
         string art = await VerifyAsync("t3-streaming-markdown", buffer);
@@ -132,7 +132,7 @@ public class GoldenChatWidgetsTests
     [Test]
     public async Task GaugeBar_Half_Golden()
     {
-        var buffer = new ScreenBuffer(24, 1);
+        var buffer = TestRender.Buffer(24, 1);
         GaugeBar.Paint(buffer, new Rect(0, 0, 24, 1), new GaugeState(0.5));
 
         string art = await VerifyAsync("t3-gauge-bar", buffer);
@@ -143,7 +143,7 @@ public class GoldenChatWidgetsTests
     [Test]
     public async Task Scrollbar_Track_And_Thumb_Golden()
     {
-        var buffer = new ScreenBuffer(4, 8);
+        var buffer = TestRender.Buffer(4, 8);
         var viewport = new ScrollableViewport();
         viewport.Configure(100, 8);
         viewport.SetOffset(20);
@@ -167,7 +167,7 @@ public class GoldenChatWidgetsTests
             new CommandItem("quit", "Quit harbor"),
         ]);
 
-        var buffer = new ScreenBuffer(32, 8);
+        var buffer = TestRender.Buffer(32, 8);
         palette.Paint(buffer, new Rect(0, 0, 32, 8));
 
         string art = await VerifyAsync("t3-command-palette", buffer);
@@ -184,7 +184,7 @@ public class GoldenChatWidgetsTests
             new FilePickerItem("README.md", "docs"),
         ]);
 
-        var buffer = new ScreenBuffer(32, 8);
+        var buffer = TestRender.Buffer(32, 8);
         picker.Paint(buffer, new Rect(0, 0, 32, 8));
 
         string art = await VerifyAsync("t3-file-picker", buffer);
@@ -199,7 +199,7 @@ public class GoldenChatWidgetsTests
         overlay.Show("saved", ToastKind.Success);
         overlay.Show("disk full", ToastKind.Error);
 
-        var buffer = new ScreenBuffer(40, 6);
+        var buffer = TestRender.Buffer(40, 6);
         overlay.Paint(buffer, new Rect(0, 0, 40, 6)); // first pass drains the queue
         overlay.Paint(buffer, new Rect(0, 0, 40, 6)); // second pass paints
 
@@ -218,7 +218,7 @@ public class GoldenChatWidgetsTests
             TokensOut: 300,
             CostUsd: 0.001);
 
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         SideBarView.Paint(buffer, new Rect(0, 0, 30, 8), state);
 
         string art = await VerifyAsync("t3-sidebar", buffer);
@@ -228,7 +228,7 @@ public class GoldenChatWidgetsTests
     [Test]
     public async Task PanelChrome_BorderBox_Golden()
     {
-        var buffer = new ScreenBuffer(24, 6);
+        var buffer = TestRender.Buffer(24, 6);
         PanelChrome.PaintBorderBox(buffer, new Rect(0, 0, 24, 6));
 
         string art = await VerifyAsync("t3-panel-chrome", buffer);
@@ -240,7 +240,7 @@ public class GoldenChatWidgetsTests
     [Test]
     public async Task SpinnerStrip_Frame_Golden()
     {
-        var buffer = new ScreenBuffer(16, 1);
+        var buffer = TestRender.Buffer(16, 1);
         buffer.SetText(0, 0, SpinnerStrip.FrameString(1) + " working", CellStyle.Plain);
 
         string art = await VerifyAsync("t3-spinner-strip", buffer);

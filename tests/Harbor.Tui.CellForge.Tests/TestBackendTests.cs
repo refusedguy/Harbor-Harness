@@ -183,10 +183,10 @@ public class TestBackendRuleTests
     public async Task WidgetUnits_PaintDirectlyAgainstBuffer_NoBackend()
     {
         // UNIT side: raw buffer, GridDump.Art assert — TestBackend must not appear.
-        var buffer = new ScreenBuffer(10, 2);
+        var buffer = TestRender.Buffer(10, 2);
         PaintGreeting(buffer);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).IsEqualTo("hi        \n          \n");
     }
 

@@ -109,7 +109,7 @@ public class CyrillicRenderingTests
     [Test]
     public async Task ScreenBuffer_SetText_Cyrillic_NarrowCells()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         buf.SetText(0, 0, "привет", CellStyle.Plain);
 
         await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('п');
@@ -127,7 +127,7 @@ public class CyrillicRenderingTests
     [Test]
     public async Task ScreenBuffer_SetText_Cyrillic_RowHash()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         buf.SetText(0, 0, "привет", CellStyle.Plain);
         ulong hashAfterWrite = buf.RowHashCode(0);
         await Assert.That(buf.IsRowHashValid(0)).IsTrue();
@@ -144,7 +144,7 @@ public class CyrillicRenderingTests
     [Test]
     public async Task ScreenBuffer_SetRune_Cyrillic_SingleCell()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         bool placed = buf.SetRune(4, 0, new Rune('я'), CellStyle.Plain);
         await Assert.That(placed).IsTrue();
         await Assert.That(buf.Get(4, 0).Rune).IsEqualTo(0x044F);
@@ -157,7 +157,7 @@ public class CyrillicRenderingTests
     [Test]
     public async Task ScreenBuffer_SetRune_Cyrillic_Overwrite()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         buf.SetText(0, 0, "привет", CellStyle.Plain);
         _ = buf.SetRune(2, 0, new Rune('я'), CellStyle.Plain);
         await Assert.That(buf.Get(2, 0).Rune).IsEqualTo('я');
@@ -168,7 +168,7 @@ public class CyrillicRenderingTests
     [Test]
     public async Task ScreenBuffer_RowHash_EqualRows_WithCyrillic()
     {
-        var buf = new ScreenBuffer(10, 2);
+        var buf = TestRender.Buffer(10, 2);
         buf.SetText(0, 0, "привет", CellStyle.Plain);
         buf.SetText(0, 1, "привет", CellStyle.Plain);
         await Assert.That(buf.RowHashCode(0)).IsEqualTo(buf.RowHashCode(1));

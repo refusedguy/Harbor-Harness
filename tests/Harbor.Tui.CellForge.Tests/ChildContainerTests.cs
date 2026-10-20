@@ -93,7 +93,7 @@ public sealed class ChildContainerTests
         container.Add(new ProbePanel("c", log), FlexTrack.Fill(1));
         container.Solve(new Rect(0, 0, 30, 5));
 
-        container.Paint(new ScreenBuffer(30, 5));
+        container.Paint(TestRender.Buffer(30, 5));
 
         await Assert.That(string.Join(",", log)).IsEqualTo("a,b,c");
     }
@@ -109,7 +109,7 @@ public sealed class ChildContainerTests
         container.Add(b, FlexTrack.Fixed(10));
 
         container.Solve(new Rect(0, 0, 0, 10));
-        container.Paint(new ScreenBuffer(1, 10));
+        container.Paint(TestRender.Buffer(1, 10));
 
         await Assert.That(a.Rect).IsEqualTo(new Rect(0, 0, 0, 10));
         await Assert.That(b.Rect).IsEqualTo(new Rect(0, 0, 0, 10));
@@ -133,7 +133,7 @@ public sealed class ChildContainerTests
         // No explicit inner.Solve: the outer solve seats the inner rect, and
         // the inner arrange happens lazily on paint (same as tree-seating).
         outer.Solve(new Rect(0, 0, 30, 20));
-        outer.Paint(new ScreenBuffer(30, 20));
+        outer.Paint(TestRender.Buffer(30, 20));
 
         await Assert.That(top.Rect).IsEqualTo(new Rect(0, 0, 30, 10));
         await Assert.That(inner.Rect).IsEqualTo(new Rect(0, 10, 30, 10));
@@ -178,7 +178,7 @@ public sealed class ChildContainerTests
         container.Add(b, FlexTrack.Fill(1));
         container.Rect = new Rect(5, 2, 20, 6);
 
-        container.Paint(new ScreenBuffer(30, 12));
+        container.Paint(TestRender.Buffer(30, 12));
 
         await Assert.That(a.Rect).IsEqualTo(new Rect(5, 2, 10, 6));
         await Assert.That(b.Rect).IsEqualTo(new Rect(15, 2, 10, 6));

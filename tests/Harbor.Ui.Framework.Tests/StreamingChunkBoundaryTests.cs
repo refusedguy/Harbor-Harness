@@ -56,7 +56,7 @@ public class StreamingChunkBoundaryTests
     {
         renderer.RenderTail(width);
         int rows = Math.Max(1, renderer.LineCount);
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestGrid.Buffer(cols, rows);
         for (int i = 0; i < renderer.LineCount && i < rows; i++)
         {
             MdLine line = renderer.LineAt(i);
@@ -324,7 +324,7 @@ public class StreamingChunkBoundaryTests
         // ScreenBuffer is a stateless per-call sink, so a run handed to it with
         // a lone half still yields U+FFFD. This is why the hold belongs in the
         // source buffer, not here.
-        var buffer = new ScreenBuffer(16, 1);
+        var buffer = TestGrid.Buffer(16, 1);
         buffer.SetText(0, 0, "\uD83D", CellStyle.Plain);
 
         await Assert.That(buffer.Get(0, 0).Rune)

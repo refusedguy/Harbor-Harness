@@ -89,7 +89,7 @@ public class PanelFxTests
         ChatPalette.PinFrame();
         try
         {
-            var buffer = new ScreenBuffer(20, 5);
+            var buffer = TestRender.Buffer(20, 5);
             var accentStyle = new CellStyle(ChatPalette.Accent);
 
             buffer.SetRune(5, 0, new Rune('語'), accentStyle);

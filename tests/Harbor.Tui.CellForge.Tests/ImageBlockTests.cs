@@ -54,10 +54,10 @@ public class ImageBlockTests
     public async Task Paint_Shows_Name_Dims_AndSize()
     {
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
-        var buffer = new ScreenBuffer(40, 2);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
+        var buffer = TestRender.Buffer(40, 2);
+        block.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("◉ screenshot.png");
         await Assert.That(art).Contains("640×480");
         await Assert.That(art).Contains("2 KB");
@@ -140,13 +140,13 @@ public class ImageBlockTests
     {
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
         var sink = new RecordingSink(InlineImageKind.None);
-        var buffer = new ScreenBuffer(40, 6);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+        var buffer = TestRender.Buffer(40, 6);
+        block.Paint(TestRender.Ctx(buffer, sink));
 
         await Assert.That(sink.Placed).IsEmpty();
         await Assert.That(sink.EncodeCalls).IsEqualTo(0);
-        await Assert.That(GridDump.Art(buffer)).Contains("◉ screenshot.png");
-        await Assert.That(GridDump.Art(buffer)).Contains("640×480");
+        await Assert.That(TestRender.Art(buffer)).Contains("◉ screenshot.png");
+        await Assert.That(TestRender.Art(buffer)).Contains("640×480");
         // Measure keeps the pre-#387 height so the timeline layout is untouched.
         await Assert.That(block.Measure(40).MinLines).IsEqualTo(2);
     }
@@ -185,8 +185,8 @@ public class ImageBlockTests
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480), graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
         const int H = 20;
-        var buffer = new ScreenBuffer(40, H);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, H), 0, inlineImages: sink));
+        var buffer = TestRender.Buffer(40, H);
+        block.Paint(TestRender.Ctx(buffer, sink));
 
         await Assert.That(sink.Placed.Count).IsEqualTo(1);
         var (cells, payload) = sink.Placed[0];
@@ -200,12 +200,12 @@ public class ImageBlockTests
         await Assert.That(payload).StartsWith("\u001B_Gf=100,a=T,C=1,c=38,r=14,");
 
         // Caption survives under the bitmap — that is the whole point of a card.
-        await Assert.That(GridDump.Art(buffer)).Contains("640×480");
+        await Assert.That(TestRender.Art(buffer)).Contains("640×480");
         // The graphic rows are blanked so no stale card text shows through.
-        string topRow = GridDump.Art(buffer).Split('\n')[0];
+        string topRow = TestRender.Art(buffer).Split('\n')[0];
         await Assert.That(topRow.Trim()).IsEqualTo(string.Empty);
         // ...while the caption row itself is still text.
-        await Assert.That(GridDump.Art(buffer).Split('\n')[H - 1]).Contains("640×480");
+        await Assert.That(TestRender.Art(buffer).Split('\n')[H - 1]).Contains("640×480");
     }
 
     [Test]
@@ -213,11 +213,11 @@ public class ImageBlockTests
     {
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480), graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.Osc1337);
-        var buffer = new ScreenBuffer(40, 20);
+        var buffer = TestRender.Buffer(40, 20);
 
         for (int tick = 0; tick < 3; tick++)
         {
-            block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), tick, inlineImages: sink));
+            block.Paint(TestRender.Ctx(buffer, tick, sink));
         }
 
         // Three frames, one encode: the payload is cached per block, not rebuilt
@@ -238,12 +238,12 @@ public class ImageBlockTests
 
         var block = new ImageBlock("shots/screenshot.png", "image/png", 2048, PngHeader(640, 480));
         var sink = new RecordingSink(kind);
-        var buffer = new ScreenBuffer(40, 6);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+        var buffer = TestRender.Buffer(40, 6);
+        block.Paint(TestRender.Ctx(buffer, sink));
 
         await Assert.That(sink.Enabled).IsFalse();
         await Assert.That(sink.Placed).IsEmpty();
-        await Assert.That(GridDump.Art(buffer)).Contains("◉ screenshot.png");
+        await Assert.That(TestRender.Art(buffer)).Contains("◉ screenshot.png");
         // ...and it reserves the card height, not a graphic-sized hole.
         await Assert.That(block.Measure(40).MinLines).IsEqualTo(2);
     }
@@ -259,11 +259,11 @@ public class ImageBlockTests
         await Assert.That(block.PixelWidth).IsEqualTo(0);
 
         var sink = new RecordingSink(InlineImageKind.KittyApc);
-        var buffer = new ScreenBuffer(40, 6);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 6), 0, inlineImages: sink));
+        var buffer = TestRender.Buffer(40, 6);
+        block.Paint(TestRender.Ctx(buffer, sink));
 
         await Assert.That(sink.Placed).IsEmpty();
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("◉ broken.png");
         await Assert.That(art).Contains("⚠");
     }
@@ -278,12 +278,12 @@ public class ImageBlockTests
         byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
         var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg, graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
-        var buffer = new ScreenBuffer(40, 20);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), 0, inlineImages: sink));
+        var buffer = TestRender.Buffer(40, 20);
+        block.Paint(TestRender.Ctx(buffer, sink));
 
         await Assert.That(block.GraphicHeight(40)).IsGreaterThan(0); // the gate passed
         await Assert.That(sink.Placed).IsEmpty();
-        await Assert.That(GridDump.Art(buffer)).Contains("◉ photo.jpg");
+        await Assert.That(TestRender.Art(buffer)).Contains("◉ photo.jpg");
     }
 
     [Test]
@@ -292,11 +292,11 @@ public class ImageBlockTests
         byte[] jpeg = JpegProbeTests.Jpeg(800, 600);
         var block = new ImageBlock("shots/photo.jpg", "image/jpeg", 4096, jpeg, graphicsAvailable: true);
         var sink = new RecordingSink(InlineImageKind.KittyApc);
-        var buffer = new ScreenBuffer(40, 20);
+        var buffer = TestRender.Buffer(40, 20);
 
         for (int tick = 0; tick < 4; tick++)
         {
-            block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 20), tick, inlineImages: sink));
+            block.Paint(TestRender.Ctx(buffer, tick, sink));
         }
 
         // A payload the protocol cannot carry must cost ONE attempt, not one

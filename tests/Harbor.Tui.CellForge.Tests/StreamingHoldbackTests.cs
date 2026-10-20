@@ -149,8 +149,8 @@ public class StreamingHoldbackTests
                              // not body rows — pin body paint expanded.
         b.Append("thinking line one\nthinking line two\npartial");
         var m = b.Measure(30);
-        var buffer = new ScreenBuffer(30, m.MinLines);
-        b.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, m.MinLines), 0));
-        await Assert.That(GridDump.Art(buffer).Contains("thinking line one")).IsTrue();
+        var buffer = TestRender.Buffer(30, m.MinLines);
+        b.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer).Contains("thinking line one")).IsTrue();
     }
 }

@@ -38,7 +38,7 @@ public class ScreenBuilderTests
             new ScreenLeafSpec { Id = "a", Track = FlexTrack.Fill(), Create = () => new BorderPanel("a", 4, 1, title: "hello builder") },
         ]);
         await Assert.That(tree.Panels.Count).IsEqualTo(1);
-        var buffer = new ScreenBuffer(30, 6);
+        var buffer = TestRender.Buffer(30, 6);
         tree.Solve(30, 6);
         tree.PaintAll(buffer);
         await Assert.That(ScreenFixtures.Art(buffer).Contains("hello builder")).IsTrue();

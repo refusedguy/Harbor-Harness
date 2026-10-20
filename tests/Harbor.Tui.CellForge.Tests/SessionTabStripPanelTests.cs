@@ -24,7 +24,7 @@ public class SessionTabStripPanelTests
 
     private static ScreenBuffer Painted(SessionTabStripPanel panel, int width, int height)
     {
-        var buffer = new ScreenBuffer(width, height);
+        var buffer = TestRender.Buffer(width, height);
         // Panel.Rect has an internal setter, so drive the panel through a real
         // layout solve — the same path production uses.
         var tree = new LayoutTree();
@@ -238,7 +238,7 @@ public class SessionTabStripPanelTests
 
         await Assert.That(panel.Rect.Height).IsEqualTo(0);
 
-        var buffer = new ScreenBuffer(40, 4);
+        var buffer = TestRender.Buffer(40, 4);
         tree.PaintAll(buffer);
         await Assert.That(ScreenFixtures.Row(buffer, 0, 40).Trim()).IsEqualTo(string.Empty);
     }

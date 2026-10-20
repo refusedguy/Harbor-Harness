@@ -121,9 +121,9 @@ public class PanelWiringTests
         var dock = FindDock(screen, CellForgeDockPanel.BottomId);
         await Assert.That(dock.Providers.Count).IsEqualTo(1);
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, buffer);
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
     }
 
@@ -150,9 +150,9 @@ public class PanelWiringTests
         var dock = FindDock(screen, CellForgeDockPanel.RightId);
         await Assert.That(dock.Providers.Count).IsEqualTo(1);
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, buffer);
-        await Assert.That(GridDump.Art(buffer)).Contains("Todo List");
+        await Assert.That(TestRender.Art(buffer)).Contains("Todo List");
     }
 
     [Test]
@@ -175,18 +175,18 @@ public class PanelWiringTests
             screen, owner.Registry, store.State,
             services: null, viewportWidth: 100, viewportHeight: 40);
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, buffer);
-        await Assert.That(GridDump.Art(buffer)).Contains("1.5K");
+        await Assert.That(TestRender.Art(buffer)).Contains("1.5K");
 
         // A fresh snapshot (same visible set, new numbers) refreshes the leaf
         // payload in place — no re-attach, no tree surgery — and repaints.
         var next = store.State with { Chat = store.State.Chat with { Cost = new CostSnapshot(2500, 100, 0.01m) } };
         ChatScreenPanelDock.UpdatePanels(screen, owner.Registry, next, services: null);
 
-        var after = new ScreenBuffer(100, 40);
+        var after = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, after);
-        string art = GridDump.Art(after);
+        string art = TestRender.Art(after);
         await Assert.That(art).Contains("2.5K");
         await Assert.That(art).DoesNotContain("1.5K");
     }
@@ -296,12 +296,12 @@ public class PanelWiringTests
         screen.Tree.Solve(100, 40);
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         int painted = ChatScreenPanelDock.PaintBottomStack(
             buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
 
         await Assert.That(painted > 0).IsTrue();
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
         await Assert.That(art).Contains("1.5K");
     }

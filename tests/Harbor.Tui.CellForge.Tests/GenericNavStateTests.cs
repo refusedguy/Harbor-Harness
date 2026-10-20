@@ -119,7 +119,7 @@ public class GenericNavStateTests
         right.SetItems(["one", "two", "three", "four"]);
         left.State.MoveTo(2);
 
-        var buffer = new ScreenBuffer(20, 4);
+        var buffer = TestRender.Buffer(20, 4);
         right.Paint(buffer, new Rect(0, 0, 20, 4), left.State);
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("three")).IsTrue();
@@ -135,7 +135,7 @@ public class GenericNavStateTests
         state.SetContent(list.Count, viewportH: 2);
         state.SelectLast();
 
-        var buffer = new ScreenBuffer(20, 2);
+        var buffer = TestRender.Buffer(20, 2);
         list.Paint(buffer, new Rect(0, 0, 20, 2), state);
         await Assert.That(ScreenFixtures.Art(buffer).Contains("four")).IsTrue();
     }

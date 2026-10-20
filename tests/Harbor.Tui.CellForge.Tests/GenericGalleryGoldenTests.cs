@@ -31,7 +31,7 @@ public class GenericGalleryGoldenTests
 
     private static string[] ArtLines(ScreenBuffer buffer)
     {
-        string[] split = GridDump.Art(buffer).Split('\n');
+        string[] split = TestRender.Art(buffer).Split('\n');
         var lines = new string[buffer.Rows];
         for (int i = 0; i < lines.Length; i++)
         {
@@ -57,7 +57,7 @@ public class GenericGalleryGoldenTests
             });
         }
 
-        var buffer = new ScreenBuffer(entry.Cols, entry.Rows);
+        var buffer = TestRender.Buffer(entry.Cols, entry.Rows);
         screen.Solve(entry.Cols, entry.Rows);
         screen.PaintAll(buffer);
         return ArtLines(buffer);

@@ -26,9 +26,9 @@ public class ToolCallBlockDiffCapTests
         var block = new ToolCallBlock(new ToolCallInfo("t1", "edit", "big.cs"));
         block.Complete(new ToolResultBody("ok", isError: false, TimeSpan.FromMilliseconds(3), diffText));
         measuredLines = block.Measure(width).MinLines;
-        var buffer = new ScreenBuffer(width, measuredLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, measuredLines), 0));
-        return GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(width, measuredLines);
+        block.Paint(TestRender.Ctx(buffer));
+        return TestRender.Art(buffer);
     }
 
     /// <summary>

@@ -195,17 +195,13 @@ public class ReadGroupBlockTests
 
             var group = (ReadGroupBlock)panel.Timeline.BlockAt(0);
 
-            var collapsed = new ScreenBuffer(80, 1);
-            group.Paint(new BlockPaintContext(collapsed, new Rect(0, 0, 80, 1), 0));
-            string collapsedArt = GridDump.Art(collapsed);
+            string collapsedArt = TestRender.Art(group, 80, 1);
             await Assert.That(collapsedArt).Contains("gathered context");
             await Assert.That(collapsedArt).Contains("1 read");
             await Assert.That(collapsedArt).Contains("1 search");
 
             await Assert.That(bridge.ToggleToolCard("tc2")).IsTrue();
-            var expanded = new ScreenBuffer(80, 3);
-            group.Paint(new BlockPaintContext(expanded, new Rect(0, 0, 80, 3), 0));
-            string art = GridDump.Art(expanded);
+            string art = TestRender.Art(group, 80, 3);
             await Assert.That(art).Contains("read");
             await Assert.That(art).Contains("a.cs");
             await Assert.That(art).Contains("grep");
@@ -223,7 +219,7 @@ public class ReadGroupBlockTests
 
             var tl = panel.Timeline;
             tl.PrepareFrame(40, 8);
-            tl.Paint(new ScreenBuffer(40, 8), new Rect(0, 0, 40, 8)); // registers the header rect
+            tl.Paint(TestRender.Buffer(40, 8), new Rect(0, 0, 40, 8)); // registers the header rect
             var group = (ReadGroupBlock)tl.BlockAt(tl.Count - 1);
 
             await Assert.That(bridge.TryRouteToolCardClick(

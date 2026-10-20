@@ -49,7 +49,7 @@ public class FilePickerNavStateTests
         var picker = Open();
         picker.State.MoveTo(2);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         picker.Paint(buffer, new Rect(0, 0, 60, 12), picker.State);
 
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -67,7 +67,7 @@ public class FilePickerNavStateTests
         var right = Open();
         left.State.MoveTo(3);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         right.Paint(buffer, new Rect(0, 0, 60, 12), left.State);
         await Assert.That(IsPicked(buffer, 5)).IsTrue();
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -80,7 +80,7 @@ public class FilePickerNavStateTests
         picker.State.SelectLast();
 
         // Height 6 → 2 list rows; selection drags the viewport down.
-        var buffer = new ScreenBuffer(60, 6);
+        var buffer = TestRender.Buffer(60, 6);
         picker.Paint(buffer, new Rect(0, 0, 60, 6), picker.State);
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("src/e.cs")).IsTrue();
@@ -96,7 +96,7 @@ public class FilePickerNavStateTests
         foreign.SetContent(99);
         foreign.MoveTo(50);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         picker.Paint(buffer, new Rect(0, 0, 60, 12), foreign);
         await Assert.That(IsPicked(buffer, 3)).IsTrue();
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -110,11 +110,11 @@ public class FilePickerNavStateTests
 
         // Stateful paint leaves the legacy selection alone: the legacy path
         // still highlights the first entry.
-        var stateful = new ScreenBuffer(60, 12);
+        var stateful = TestRender.Buffer(60, 12);
         picker.Paint(stateful, new Rect(0, 0, 60, 12), picker.State);
         await Assert.That(IsPicked(stateful, 6)).IsTrue();
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         picker.Paint(buffer, new Rect(0, 0, 60, 12));
         await Assert.That(IsPicked(buffer, 2)).IsTrue();
         await Assert.That(IsPicked(buffer, 3)).IsFalse();

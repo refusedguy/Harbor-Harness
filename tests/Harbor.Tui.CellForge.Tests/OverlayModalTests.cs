@@ -149,7 +149,7 @@ public sealed class OverlayModalTests
     {
         var stack = new OverlayStack();
         stack.Push(new StubLayer("base", new Rect(0, 0, 10, 4), 'a'));
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
         stack.PaintOver(buffer);
         await Assert.That(buffer.Get(5, 2).Rune).IsEqualTo((int)'a');
 

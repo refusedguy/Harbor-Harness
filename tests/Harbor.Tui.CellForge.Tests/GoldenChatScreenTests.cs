@@ -55,7 +55,7 @@ public class GoldenChatScreenTests
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 
         // Zone sanity: prompt text on a lower row, model id on the bottom row.
-        string art = GridDump.Art(session.PaintBuffer);
+        string art = TestRender.Art(session.PaintBuffer);
         var rows = art.Split('\n');
         await Assert.That(rows.Any(r => r.Contains("fix the bug"))).IsTrue();          // composer zone
         await Assert.That(rows.Any(r => r.StartsWith('⠙') || r.StartsWith('⠸'))).IsTrue(); // spinner glyph

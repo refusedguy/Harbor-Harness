@@ -73,7 +73,7 @@ public class SideBarLayoutTests
     {
         var screen = Build();
         screen.Tree.Solve(40, 24);
-        var buffer = new ScreenBuffer(40, 24);
+        var buffer = TestRender.Buffer(40, 24);
         screen.Sidebar!.Paint(buffer);
         await Assert.That(screen.Sidebar.Rect.Width).IsEqualTo(0);
     }

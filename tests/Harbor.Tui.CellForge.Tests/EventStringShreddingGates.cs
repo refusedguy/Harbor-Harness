@@ -190,7 +190,7 @@ public sealed class EventStringShreddingGates
     /// </summary>
     private static PerfGateLeg DriveFrameCost(int frames)
     {
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         var rect = new Rect(0, 0, 80, 20);
         var tl = new VirtualizedChatTimeline();
         var card = new ToolCallBlock(new ToolCallInfo("t1", "read", "src/a.cs")) { MaxBodyLines = 4 };

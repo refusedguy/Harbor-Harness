@@ -50,9 +50,9 @@ public class ThinkingCollapseTests
         await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
         await Assert.That(block.CheapEstimate(80)).IsEqualTo(1);
 
-        var buffer = new ScreenBuffer(80, 1);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(80, 1);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("+ Thought: reasoning line 1")).IsTrue();
         await Assert.That(art.Contains("reasoning line 11")).IsFalse();
         await Assert.That(art.Contains("…")).IsFalse();
@@ -62,9 +62,9 @@ public class ThinkingCollapseTests
     public async Task Collapsed_HeaderCarriesDuration()
     {
         var block = new ThinkingBlock("weighing the options", TimeSpan.FromSeconds(2.5));
-        var buffer = new ScreenBuffer(80, 1);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(80, 1);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("+ Thought: weighing the options · 2.5s")).IsTrue();
     }
 
@@ -72,9 +72,9 @@ public class ThinkingCollapseTests
     public async Task Collapsed_BoldTitleBecomesSummary()
     {
         var block = new ThinkingBlock("**Inspecting PR workflow**\n\nFirst step\nSecond step");
-        var buffer = new ScreenBuffer(80, 1);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(80, 1);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("+ Thought: Inspecting PR workflow")).IsTrue();
         await Assert.That(art.Contains("First step")).IsFalse();
     }
@@ -86,9 +86,9 @@ public class ThinkingCollapseTests
         block.Append("first thought\nsecond thought\nthird thought\n");
         await Assert.That(block.Measure(80).MinLines).IsEqualTo(1);
 
-        var buffer = new ScreenBuffer(80, 1);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 1), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(80, 1);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("+ Thinking: first thought")).IsTrue();
         await Assert.That(art.Contains("second thought")).IsFalse();
     }
@@ -121,9 +121,7 @@ public class ThinkingCollapseTests
         await Assert.That(block.IsFullyExpanded).IsTrue();
         await Assert.That(block.Measure(80).MinLines).IsEqualTo(30);
 
-        var buffer = new ScreenBuffer(80, 30);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 30), 0));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(block, 80, 30);
         await Assert.That(art.Contains("reasoning line 30")).IsTrue();
         await Assert.That(art.Contains("…")).IsFalse();
 

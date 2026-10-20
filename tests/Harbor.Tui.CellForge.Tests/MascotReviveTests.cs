@@ -119,7 +119,7 @@ public class MascotReviveTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
         using var bridge = new ChatScreenBridge(bus, screen.Timeline, status);
         bridge.TrackMascot(screen.Mascot, screen.Status);
@@ -144,7 +144,7 @@ public class MascotReviveTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
         using var bridge = new ChatScreenBridge(bus, screen.Timeline, status);
         bridge.TrackMascot(screen.Mascot, screen.Status);

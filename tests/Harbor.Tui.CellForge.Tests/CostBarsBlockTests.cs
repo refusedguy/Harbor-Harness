@@ -16,9 +16,9 @@ public class CostBarsBlockTests
         await Assert.That(bars.Measure(30).IsExact).IsTrue();
         await Assert.That(bars.RawText()).IsEqualTo("(empty)");
 
-        var buffer = new ScreenBuffer(30, 1);
-        bars.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, 1), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("(empty)");
+        var buffer = TestRender.Buffer(30, 1);
+        bars.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("(empty)");
     }
 
     [Test]
@@ -71,9 +71,7 @@ public class CostBarsBlockTests
         await Assert.That(bars.Measure(30).MinLines).IsEqualTo(3);
         await Assert.That(bars.RawText()).IsEqualTo("cost $\nsonnet 1.5\nhaiku 0.5");
 
-        var buffer = new ScreenBuffer(30, 3);
-        bars.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, 3), 0));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(bars, 30, 3);
         await Assert.That(art).Contains("cost $");
         await Assert.That(art).Contains("sonnet");
         await Assert.That(art).Contains("haiku");

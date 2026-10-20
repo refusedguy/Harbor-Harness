@@ -28,9 +28,9 @@ public sealed class SetupChecklistOverlayTests
 
     private static string Art(SetupChecklistOverlay overlay, int cols = 80, int rows = 24)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         overlay.Paint(buffer, new Rect(0, 0, cols, rows));
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
@@ -199,12 +199,12 @@ public sealed class SetupChecklistOverlayTests
         var stack = new OverlayStack();
         stack.Push(layer);
 
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         stack.PaintOver(buffer);
 
         await Assert.That(layer.Visible).IsFalse();
         await Assert.That(stack.HasModalBarrier).IsFalse();
-        await Assert.That(GridDump.Art(buffer).Replace("\n", string.Empty).Trim()).IsEqualTo(string.Empty);
+        await Assert.That(TestRender.Art(buffer).Replace("\n", string.Empty).Trim()).IsEqualTo(string.Empty);
     }
 
     [Test]
@@ -217,7 +217,7 @@ public sealed class SetupChecklistOverlayTests
         var stack = new OverlayStack();
         stack.Push(layer);
 
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         stack.PaintOver(buffer);
 
         await Assert.That(layer.Visible).IsTrue();
@@ -232,7 +232,7 @@ public sealed class SetupChecklistOverlayTests
         // not reachable through the concrete type, hence the cast.
         await Assert.That(((IOverlayLayer)layer).IsModal).IsFalse();
         await Assert.That(stack.HasModalBarrier).IsFalse();
-        await Assert.That(GridDump.Art(buffer)).Contains("Setup guide");
+        await Assert.That(TestRender.Art(buffer)).Contains("Setup guide");
     }
 
     [Test]

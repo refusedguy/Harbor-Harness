@@ -18,8 +18,8 @@ public class InlineImageRenderTests
 {
     private static ScreenBuffer PaintBlock(ImageBlock block, InlineImageLayer layer, int cols, int rows)
     {
-        var buffer = new ScreenBuffer(cols, rows);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, cols, rows), 0, inlineImages: layer));
+        var buffer = TestRender.Buffer(cols, rows);
+        block.Paint(TestRender.Ctx(buffer, layer));
         return buffer;
     }
 
@@ -311,7 +311,7 @@ public class InlineImageRenderTests
         string frame = Encoding.UTF8.GetString(backend.Writes[0]);
         await Assert.That(frame).DoesNotContain("\u001B_G");
         await Assert.That(frame).DoesNotContain("\u001B]1337");
-        await Assert.That(GridDump.Art(session.PaintBuffer)).Contains("◉ shot.png");
+        await Assert.That(TestRender.Art(session.PaintBuffer)).Contains("◉ shot.png");
     }
 
     // ── Fullscreen zoom viewer ──────────────────────────────────────────────
@@ -395,10 +395,10 @@ public class InlineImageRenderTests
         var viewer = new ImageViewerOverlay();
         viewer.Show(block, layer);
 
-        var buffer = new ScreenBuffer(60, 20);
+        var buffer = TestRender.Buffer(60, 20);
         viewer.Paint(buffer, new Rect(0, 0, 60, 20));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("shot.png");
         await Assert.That(art).Contains("zoom 100%");
         await Assert.That(art).Contains("+/- zoom | m markup | esc close");
@@ -435,12 +435,12 @@ public class InlineImageRenderTests
 
         long scrollBefore = timeline.ScrollY;
         bool followBefore = timeline.FollowTail;
-        string artBefore = GridDump.Art(PaintTimeline(timeline, 60, 20));
+        string artBefore = TestRender.Art(PaintTimeline(timeline, 60, 20));
 
         var viewer = new ImageViewerOverlay();
         viewer.Show(new ImageBlock("shot.png", "image/png", 10, ImageBlockTests.PngHeader(640, 480), graphicsAvailable: true), layer);
 
-        var viewerBuffer = new ScreenBuffer(60, 20);
+        var viewerBuffer = TestRender.Buffer(60, 20);
         viewer.Paint(viewerBuffer, new Rect(0, 0, 60, 20));
         viewer.ZoomIn();
         viewer.ZoomIn();
@@ -450,12 +450,12 @@ public class InlineImageRenderTests
         await Assert.That(viewer.Visible).IsFalse();
         await Assert.That(timeline.ScrollY).IsEqualTo(scrollBefore);
         await Assert.That(timeline.FollowTail).IsEqualTo(followBefore);
-        await Assert.That(GridDump.Art(PaintTimeline(timeline, 60, 20))).IsEqualTo(artBefore);
+        await Assert.That(TestRender.Art(PaintTimeline(timeline, 60, 20))).IsEqualTo(artBefore);
     }
 
     private static ScreenBuffer PaintTimeline(VirtualizedChatTimeline timeline, int cols, int rows)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         timeline.Paint(buffer, new Rect(0, 0, cols, rows));
         return buffer;
     }
@@ -468,10 +468,10 @@ public class InlineImageRenderTests
         var viewer = new ImageViewerOverlay();
         viewer.Show(new ImageBlock("shot.png", "image/png", 2048, ImageBlockTests.PngHeader(640, 480)), null);
 
-        var buffer = new ScreenBuffer(60, 20);
+        var buffer = TestRender.Buffer(60, 20);
         viewer.Paint(buffer, new Rect(0, 0, 60, 20));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("640×480");
         await Assert.That(art).Contains("shot.png");
     }
@@ -485,9 +485,9 @@ public class InlineImageRenderTests
         await Assert.That(viewer.ComputeBox(new Rect(0, 0, 5, 20)).Width).IsEqualTo(0);
 
         viewer.Hide();
-        var buffer = new ScreenBuffer(60, 20);
+        var buffer = TestRender.Buffer(60, 20);
         viewer.Paint(buffer, new Rect(0, 0, 60, 20));
-        await Assert.That(GridDump.Art(buffer).Trim()).IsEqualTo(string.Empty);
+        await Assert.That(TestRender.Art(buffer).Trim()).IsEqualTo(string.Empty);
     }
 
     [Test]

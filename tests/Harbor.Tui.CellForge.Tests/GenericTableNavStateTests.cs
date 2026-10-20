@@ -41,7 +41,7 @@ public class GenericTableNavStateTests
     {
         var table = Open();
         table.State.MoveTo(1);
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         table.Paint(buffer, new Rect(0, 0, 30, 8), table.State);
 
         // Body rows start at y=3 (top rule, header, mid rule); text at x=2.
@@ -59,7 +59,7 @@ public class GenericTableNavStateTests
         var right = Open();
         left.State.MoveTo(2);
 
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         right.Paint(buffer, new Rect(0, 0, 30, 8), left.State);
         await Assert.That(IsReversed(buffer, 2, 5)).IsTrue();
         await Assert.That(IsReversed(buffer, 2, 3)).IsFalse();
@@ -78,7 +78,7 @@ public class GenericTableNavStateTests
         table.State.SelectLast();
 
         // Height 6 → frame 4 + 2 body rows; selection drags the viewport down.
-        var buffer = new ScreenBuffer(20, 6);
+        var buffer = TestRender.Buffer(20, 6);
         table.Paint(buffer, new Rect(0, 0, 20, 6), table.State);
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("r4")).IsTrue();
@@ -94,7 +94,7 @@ public class GenericTableNavStateTests
         foreign.SetContent(99);
         foreign.MoveTo(50);
 
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         table.Paint(buffer, new Rect(0, 0, 30, 8), foreign);
         await Assert.That(IsReversed(buffer, 2, 4)).IsTrue();
         await Assert.That(IsReversed(buffer, 2, 3)).IsFalse();
@@ -104,14 +104,14 @@ public class GenericTableNavStateTests
     public async Task Table_LegacyPaint_NoSelectionByDefault()
     {
         var table = Open();
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         table.Paint(buffer, new Rect(0, 0, 30, 8));
         await Assert.That(IsReversed(buffer, 2, 3)).IsFalse();
         await Assert.That(IsReversed(buffer, 2, 4)).IsFalse();
         await Assert.That(IsReversed(buffer, 2, 5)).IsFalse();
 
         table.SelectedRow = 0;
-        var selected = new ScreenBuffer(30, 8);
+        var selected = TestRender.Buffer(30, 8);
         table.Paint(selected, new Rect(0, 0, 30, 8));
         await Assert.That(IsReversed(selected, 2, 3)).IsTrue();
         await Assert.That(IsReversed(selected, 2, 4)).IsFalse();

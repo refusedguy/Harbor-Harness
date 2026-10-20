@@ -17,9 +17,9 @@ public class SparklineBlockTests
         await Assert.That(spark.Measure(20).IsExact).IsTrue();
         await Assert.That(spark.RawText()).IsEqualTo("(empty)");
 
-        var buffer = new ScreenBuffer(20, 1);
-        spark.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 20, 1), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("(empty)");
+        var buffer = TestRender.Buffer(20, 1);
+        spark.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("(empty)");
     }
 
     [Test]
@@ -52,9 +52,9 @@ public class SparklineBlockTests
         await Assert.That(spark.CheapEstimate(20)).IsEqualTo(2);
         await Assert.That(spark.RawText()).IsEqualTo("tok/s\n" + SparklineBlock.MapToGlyphs([1, 2, 3]));
 
-        var buffer = new ScreenBuffer(20, 2);
-        spark.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 20, 2), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(20, 2);
+        spark.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("tok/s");
         await Assert.That(art).Contains(SparklineBlock.MapToGlyphs([1, 2, 3]));
     }
@@ -63,9 +63,9 @@ public class SparklineBlockTests
     public async Task Paint_ClipsToWidth()
     {
         var spark = new SparklineBlock([0, 1, 2, 3, 4, 5, 6, 7]);
-        var buffer = new ScreenBuffer(4, 1);
-        spark.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 4, 1), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains(SparklineBlock.Levels[..4]);
+        var buffer = TestRender.Buffer(4, 1);
+        spark.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains(SparklineBlock.Levels[..4]);
     }
 
     [Test]

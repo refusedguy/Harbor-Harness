@@ -465,10 +465,10 @@ public class CellForgeJumpPalettePanelTests
         overlays.Push(layer);
         await Assert.That(overlays.HasModalBarrier).IsFalse();
 
-        var buffer = new ScreenBuffer(120, 40);
+        var buffer = TestRender.Buffer(120, 40);
         buffer.Fill(new Rect(0, 0, 120, 40), Cell.Blank);
         layer.Paint(buffer, new Rect(0, 0, 120, 40));
-        await Assert.That(GridDump.Art(buffer).Trim()).IsEmpty();
+        await Assert.That(TestRender.Art(buffer).Trim()).IsEmpty();
     }
 
     [Test]
@@ -490,7 +490,7 @@ public class CellForgeJumpPalettePanelTests
 
         // ... and the dock neither paints it in the bottom-stack fallback nor
         // routes keys to it (the overlay layer owns both).
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         int painted = ChatScreenPanelDock.PaintBottomStack(
             buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
         await Assert.That(painted).IsEqualTo(0);

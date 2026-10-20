@@ -63,9 +63,9 @@ public class ToolCallCardTests
             await Assert.That(card.Status).IsEqualTo(ToolCallState.Error);
             await Assert.That(card.Body.Value.Output).IsEqualTo("exit code 1");
 
-            var buffer = new ScreenBuffer(40, 2);
-            card.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
-            await Assert.That(GridDump.Art(buffer)).Contains("✖ bash (50ms)");
+            var buffer = TestRender.Buffer(40, 2);
+            card.Paint(TestRender.Ctx(buffer));
+            await Assert.That(TestRender.Art(buffer)).Contains("✖ bash (50ms)");
         }
     }
 
@@ -119,9 +119,9 @@ public class ToolCallCardTests
         await Assert.That(block.IsExpanded).IsTrue();
         await Assert.That(block.Measure(40).MinLines).IsEqualTo(2); // header + full-args row
 
-        var buffer = new ScreenBuffer(40, 2);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("args:");
+        var buffer = TestRender.Buffer(40, 2);
+        block.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("args:");
 
         block.SetExpanded(false);
         await Assert.That(block.IsExpanded).IsFalse();
@@ -140,9 +140,7 @@ public class ToolCallCardTests
         block.Complete(new ToolResultBody(output, isError: false, TimeSpan.FromMilliseconds(10)));
 
         await Assert.That(block.Measure(60).MinLines).IsEqualTo(1 + 2 + 1);
-        var collapsed = new ScreenBuffer(60, 4);
-        block.Paint(new BlockPaintContext(collapsed, new Rect(0, 0, 60, 4), 0));
-        string collapsedArt = GridDump.Art(collapsed);
+        string collapsedArt = TestRender.Art(block, 60, 4);
         await Assert.That(collapsedArt).Contains("line-01");
         await Assert.That(collapsedArt).Contains("line-02");
         await Assert.That(collapsedArt).Contains("…");
@@ -151,9 +149,7 @@ public class ToolCallCardTests
 
         block.ToggleExpanded();
         await Assert.That(block.Measure(60).MinLines).IsEqualTo(1 + 1 + 10);
-        var expanded = new ScreenBuffer(60, 12);
-        block.Paint(new BlockPaintContext(expanded, new Rect(0, 0, 60, 12), 0));
-        string art = GridDump.Art(expanded);
+        string art = TestRender.Art(block, 60, 12);
         await Assert.That(art).Contains("read");
         await Assert.That(art).Contains("limit"); // full args row, not the 48-char summary
         await Assert.That(art).Contains("line-01");
@@ -170,9 +166,9 @@ public class ToolCallCardTests
 
         await Assert.That(block.Measure(60).MinLines)
             .IsEqualTo(1 + 1 + ToolCallBlock.ExpandedBodyLines + 1);
-        var buffer = new ScreenBuffer(60, 1 + 1 + ToolCallBlock.ExpandedBodyLines + 1);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(60, 1 + 1 + ToolCallBlock.ExpandedBodyLines + 1);
+        block.Paint(TestRender.Ctx(buffer, 60, buffer.Rows));
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("line-20");
         await Assert.That(art).Contains("…");
         await Assert.That(art).DoesNotContain("line-21");
@@ -187,8 +183,8 @@ public class ToolCallCardTests
 
         await Assert.That(block.TryHitHeader(5, 3)).IsFalse(); // never painted
 
-        var buffer = new ScreenBuffer(80, 8);
-        block.Paint(new BlockPaintContext(buffer, new Rect(2, 3, 40, 2), 0));
+        var buffer = TestRender.Buffer(80, 8);
+        block.Paint(TestRender.Ctx(buffer, 2, 3, 40, 2));
 
         await Assert.That(block.TryHitHeader(5, 3)).IsTrue();
         await Assert.That(block.TryHitHeader(1, 3)).IsFalse(); // left of the card
@@ -207,7 +203,7 @@ public class ToolCallCardTests
 
             var tl = panel.Timeline;
             tl.PrepareFrame(40, 8);
-            tl.Paint(new ScreenBuffer(40, 8), new Rect(0, 0, 40, 8)); // registers the header rect
+            tl.Paint(TestRender.Buffer(40, 8), new Rect(0, 0, 40, 8)); // registers the header rect
             var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
 
             await Assert.That(bridge.TryRouteToolCardClick(

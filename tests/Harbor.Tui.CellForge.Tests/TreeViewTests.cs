@@ -132,8 +132,8 @@ public class TreeViewTests
     public async Task Nav_PageUpDown_MoveViewport()
     {
         var tree = Sample();
-        var buffer = new ScreenBuffer(40, 4);
-        tree.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 4), 0));
+        var buffer = TestRender.Buffer(40, 4);
+        tree.Paint(TestRender.Ctx(buffer));
 
         _ = tree.HandleKey(KeyEvent.Simple(KeyCode.End));
         await Assert.That(tree.HandleKey(KeyEvent.Simple(KeyCode.PageUp))).IsTrue();
@@ -182,9 +182,9 @@ public class TreeViewTests
         await Assert.That(tree.Measure(40).MinLines).IsEqualTo(1);
         await Assert.That(tree.HandleKey(KeyEvent.Simple(KeyCode.Down))).IsFalse();
 
-        var buffer = new ScreenBuffer(20, 1);
-        tree.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 20, 1), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("(empty)");
+        var buffer = TestRender.Buffer(20, 1);
+        tree.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("(empty)");
         await Assert.That(tree.RawText()).IsEqualTo("(empty)");
     }
 
@@ -192,10 +192,10 @@ public class TreeViewTests
     public async Task Paint_RendersGlyphsAndIndent()
     {
         var tree = Sample();
-        var buffer = new ScreenBuffer(40, 4);
-        tree.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 4), 0));
+        var buffer = TestRender.Buffer(40, 4);
+        tree.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("▾ src");
         await Assert.That(art).Contains("  · app.cs");
         await Assert.That(art).Contains("  ▸ lib");

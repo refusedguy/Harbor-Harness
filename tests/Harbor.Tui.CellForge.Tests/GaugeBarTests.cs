@@ -9,9 +9,9 @@ public class GaugeBarTests
 {
     private static string Art(int width, GaugeState state)
     {
-        var buffer = new ScreenBuffer(width, 1);
+        var buffer = TestRender.Buffer(width, 1);
         GaugeBar.Paint(buffer, new Rect(0, 0, width, 1), state);
-        return GridDump.Art(buffer).TrimEnd('\n');
+        return TestRender.Art(buffer).TrimEnd('\n');
     }
 
     [Test]
@@ -100,10 +100,10 @@ public class GaugeBarTests
     [Test]
     public async Task Paint_DegenerateRect_NoThrow()
     {
-        var buffer = new ScreenBuffer(4, 1);
+        var buffer = TestRender.Buffer(4, 1);
         GaugeBar.Paint(buffer, new Rect(0, 0, 0, 1), new GaugeState(0.5));
         GaugeBar.Paint(buffer, new Rect(0, 0, 4, 0), new GaugeState(0.5));
-        await Assert.That(GridDump.Art(buffer).Length).IsGreaterThan(0);
+        await Assert.That(TestRender.Art(buffer).Length).IsGreaterThan(0);
     }
 
     [Test]
@@ -111,7 +111,7 @@ public class GaugeBarTests
     {
         // Ratio 0.5 over width 10 with a 2-cell label: label starts at 4,
         // so cell 4 is over fill, cell 5 over track → different style codes.
-        var buffer = new ScreenBuffer(10, 1);
+        var buffer = TestRender.Buffer(10, 1);
         var onFill = new CellStyle(ChatPalette.Accent, attrs: StyleAttr.Bold);
         var onTrack = ChatPalette.Dim;
         GaugeBar.Paint(buffer, new Rect(0, 0, 10, 1), new GaugeState(0.5, "ab"),

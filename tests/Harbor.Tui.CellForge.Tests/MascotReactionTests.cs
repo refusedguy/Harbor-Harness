@@ -71,7 +71,7 @@ public class MascotReactionTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         screen.Tree.Solve(cols, rows);
         return (screen, buffer);
     }
@@ -225,7 +225,7 @@ public class MascotReactionTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 
@@ -257,7 +257,7 @@ public class MascotReactionTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 
@@ -272,7 +272,7 @@ public class MascotReactionTests
             status.SignalMascot(MascotReaction.ErrorBlink);
             mascot.Paint(buffer); // notify paint — frame 0, settled tint
 
-            string art = GridDump.Art(buffer);
+            string art = TestRender.Art(buffer);
             await Assert.That(art).Contains(AmbientMascot.ErrorBlinkFrames[0]);
             await Assert.That(art).Contains(AmbientMascot.ReactionEars(MascotReaction.ErrorBlink)[0]);
 
@@ -318,7 +318,7 @@ public class MascotReactionTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 

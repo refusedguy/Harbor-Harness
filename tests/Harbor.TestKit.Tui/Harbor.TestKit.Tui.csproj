@@ -83,4 +83,36 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
+  <!--
+    #1777: the render harness (TestRender) — the grid a widget paints into,
+    the paint context over it, and the art that comes back out.
+
+    The vocabulary it speaks (ScreenBuffer, BlockPaintContext, IChatBlock)
+    belongs to Harbor.Ui.Framework.Rendering, so the edge is direct rather
+    than leaned on transitively.
+
+    The closure cost is ZERO for every consumer of this project, measured on
+    the csproj-XML walk this repository uses (RepoPaths.ReadProjectReferences
+    semantics: analyzer-only edges excluded). Harbor.Ui.Framework.Rendering
+    closes over {Abstractions.Contracts, DesignSystem, Desktop.Animations,
+    Extensions}, and all six projects that reference this sibling:
+    Harbor.App.Cli.Tests, Harbor.Benchmarks, Harbor.TestKit.Tests,
+    Harbor.Tui.PerfTests, Harbor.Tui.RendererTests and
+    Harbor.Tui.CellForge.Tests, already had every one of those four in
+    their closure:
+
+      Harbor.App.Cli.Tests       61 -> 61
+      Harbor.Benchmarks          33 -> 33
+      Harbor.TestKit.Tests       22 -> 22
+      Harbor.Tui.PerfTests       20 -> 20
+      Harbor.Tui.RendererTests   21 -> 21
+      Harbor.Tui.CellForge.Tests 60 -> 60
+
+    The core kit is the wrong home for it: the core reaches no UI assembly
+    at all, and the harness is UI vocabulary by definition.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.Rendering/Harbor.Ui.Framework.Rendering.csproj" />
+  </ItemGroup>
+
 </Project>

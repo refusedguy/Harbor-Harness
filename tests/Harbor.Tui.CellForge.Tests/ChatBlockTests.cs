@@ -22,11 +22,11 @@ public class ChatBlockTests
     [Test]
     public async Task UserBlock_Paint_PrefixOnlyOnFirstLine()
     {
-        var buffer = new ScreenBuffer(14, 4);
+        var buffer = TestRender.Buffer(14, 4);
         var block = new UserBlock("hello world again");
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 14, 4), tick: 0));
+        block.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         var rows = art.Split('\n');
         await Assert.That(rows[0].TrimEnd()).IsEqualTo(" YOU"); // v2 accent header (col 1)
         await Assert.That(rows[1].TrimEnd()).IsEqualTo("│ hello world");
@@ -37,9 +37,9 @@ public class ChatBlockTests
     [Test]
     public async Task SystemBlock_PaintsDimItalic()
     {
-        var buffer = new ScreenBuffer(20, 1);
+        var buffer = TestRender.Buffer(20, 1);
         var block = new SystemBlock("compacting…");
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 20, 1), 0));
+        block.Paint(TestRender.Ctx(buffer));
 
         var cell = buffer.Get(0, 0);
         await Assert.That((int)(cell.Style.Attrs & StyleAttr.Dim)).IsNotEqualTo(0);
@@ -68,9 +68,9 @@ public class ChatBlockTests
         var m = block.Measure(60);
         await Assert.That(m.MinLines).IsEqualTo(1 /*header*/ + 2 /*body*/ + 1 /*continuation*/);
 
-        var buffer = new ScreenBuffer(40, m.MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, m.MinLines), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(40, m.MinLines);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("✔ read (850ms)");
         await Assert.That(art).Contains("l1");
@@ -88,9 +88,9 @@ public class ChatBlockTests
         await Assert.That(block.Status).IsEqualTo(ToolCallState.Error);
         await Assert.That(block.Body.Value.Output).IsEqualTo("boom");
 
-        var buffer = new ScreenBuffer(30, 2);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, 2), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("✖ edit (5ms)");
+        var buffer = TestRender.Buffer(30, 2);
+        block.Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("✖ edit (5ms)");
     }
 
     [Test]

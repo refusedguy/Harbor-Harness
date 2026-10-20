@@ -296,9 +296,9 @@ public class PaletteCatalogTests
         var palette = new CommandPaletteView();
         palette.ShowDefaultCatalog();
 
-        var buffer = new ScreenBuffer(60, 24);
+        var buffer = TestRender.Buffer(60, 24);
         palette.Paint(buffer, new Rect(2, 1, 56, 20));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("/agent");
         await Assert.That(art).Contains("New Session");

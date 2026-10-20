@@ -26,14 +26,14 @@ public class StatusPanelMascotTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = mode };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
-        var buffer = new ScreenBuffer(cols, 8);
+        var buffer = TestRender.Buffer(cols, 8);
         screen.Tree.Solve(cols, 8);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(buffer);
         }
 
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
@@ -83,7 +83,7 @@ public class StatusPanelMascotTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Running, Phase = AgentPhase.Thinking };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string art = PaintFrames(screen, buffer, 4);
@@ -97,7 +97,7 @@ public class StatusPanelMascotTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Running, Phase = AgentPhase.ToolCall };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false);
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string art = PaintFrames(screen, buffer, 4);
@@ -112,7 +112,7 @@ public class StatusPanelMascotTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Errored };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, timeProvider: clock);
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string first = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
@@ -135,7 +135,7 @@ public class StatusPanelMascotTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle, Phase = AgentPhase.Succeeded };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, timeProvider: clock);
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         string first = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
@@ -159,7 +159,7 @@ public class StatusPanelMascotTests
                 panel.Paint(buffer);
             }
 
-            sb.Append(GridDump.Art(buffer));
+            sb.Append(TestRender.Art(buffer));
             sb.Append('\n');
         }
 

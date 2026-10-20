@@ -14,7 +14,7 @@ public class PanelFxWiringTests
     {
         tl.CurrentTick = tick;
         _ = tl.PrepareFrame(width, height);
-        var buffer = new ScreenBuffer(width, height);
+        var buffer = TestRender.Buffer(width, height);
         tl.Paint(buffer, new Rect(0, 0, width, height));
         return buffer;
     }
@@ -28,7 +28,7 @@ public class PanelFxWiringTests
 
         var buffer = PaintTimeline(tl, 40, 4, tick: 0);
 
-        await Assert.That(GridDump.Art(buffer)).Contains("hello");
+        await Assert.That(TestRender.Art(buffer)).Contains("hello");
         // v2 YOU header sits at col 1 with the accent — no blending on cold screens.
         await Assert.That(buffer.Get(1, 0).Style.Fg).IsEqualTo(ChatPalette.Accent);
     }
@@ -50,8 +50,8 @@ public class PanelFxWiringTests
         // offset 1, so the v2 block (YOU header + body + gap) still shows its
         // body while shifted (motion visible, alpha < 1). Tick 1 would clip
         // everything but the header (offset 2 of 3 rows).
-        string animArt = GridDump.Art(animating);
-        string settledArt = GridDump.Art(settled);
+        string animArt = TestRender.Art(animating);
+        string settledArt = TestRender.Art(settled);
 
         await Assert.That(animArt).Contains("late arrival");
         await Assert.That(settledArt).Contains("late arrival");
@@ -64,7 +64,7 @@ public class PanelFxWiringTests
         plainTl.ScrollToEnd(6);
         ScreenBuffer baseline = PaintTimeline(plainTl, 40, 6, tick: 99);
 
-        await Assert.That(GridDump.Art(baseline)).IsEqualTo(settledArt);
+        await Assert.That(TestRender.Art(baseline)).IsEqualTo(settledArt);
     }
 
     [Test]
@@ -108,8 +108,8 @@ public class PanelFxWiringTests
 
         CellStyle HeaderAt(long tick)
         {
-            var buffer = new ScreenBuffer(30, 4);
-            gate.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 30, 4), tick));
+            var buffer = TestRender.Buffer(30, 4);
+            gate.Paint(TestRender.Ctx(buffer, tick));
             return buffer.Get(0, 0).Style;
         }
 
@@ -130,13 +130,13 @@ public class PanelFxWiringTests
         status.SetContext(1000, 10_000);
 
         var screen = ChatScreen.Build(new ComposerController(), status);
-        var buffer = new ScreenBuffer(60, 20);
+        var buffer = TestRender.Buffer(60, 20);
         screen.Tree.Solve(60, 20);
 
         Frame(screen, buffer);
         status.Mode = StatusBarMode.AwaitingApproval;   // flip mid-stream
         Frame(screen, buffer);                          // crossfade frame 1
-        string duringCrossfade = GridDump.Art(buffer);
+        string duringCrossfade = TestRender.Art(buffer);
 
         for (int i = 0; i < PanelFx.FadeFrames + 2; i++)
         {
@@ -144,7 +144,7 @@ public class PanelFxWiringTests
         }
 
         await Assert.That(duringCrossfade.Length > 0).IsTrue();
-        await Assert.That(GridDump.Art(buffer)).Contains("awaiting approval");
+        await Assert.That(TestRender.Art(buffer)).Contains("awaiting approval");
     }
 
     private static void Frame(ChatScreen screen, ScreenBuffer buffer)

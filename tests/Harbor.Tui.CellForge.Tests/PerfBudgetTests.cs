@@ -20,7 +20,7 @@ public class PerfBudgetTests
     [Test]
     public async Task TimelineFrame_SteadyState_IsAllocationFree()
     {
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         var tl = new VirtualizedChatTimeline();
         for (int i = 0; i < 40; i++)
         {
@@ -182,7 +182,7 @@ public class PerfBudgetTests
         vm.SetUsage(12_400, 5_200, 0.0021m);
         var workspace = new StatusSeg[12];
 
-        var buffer = new ScreenBuffer(80, 1);
+        var buffer = TestRender.Buffer(80, 1);
         var panelRect = new Rect(0, 0, 80, 1);
 
         _ = vm.BuildSegments(workspace);

@@ -50,7 +50,7 @@ public class CommandPaletteNavStateTests
         var palette = Open();
         palette.State.MoveTo(2);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         palette.Paint(buffer, new Rect(0, 0, 60, 12), palette.State);
 
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -68,7 +68,7 @@ public class CommandPaletteNavStateTests
         var right = Open();
         left.State.MoveTo(3);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         right.Paint(buffer, new Rect(0, 0, 60, 12), left.State);
         await Assert.That(IsPicked(buffer, 5)).IsTrue();
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -81,7 +81,7 @@ public class CommandPaletteNavStateTests
         palette.State.SelectLast();
 
         // Height 6 → 2 list rows; selection drags the viewport down.
-        var buffer = new ScreenBuffer(60, 6);
+        var buffer = TestRender.Buffer(60, 6);
         palette.Paint(buffer, new Rect(0, 0, 60, 6), palette.State);
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("Command 19")).IsTrue();
@@ -97,7 +97,7 @@ public class CommandPaletteNavStateTests
         foreign.SetContent(99);
         foreign.MoveTo(50);
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         palette.Paint(buffer, new Rect(0, 0, 60, 12), foreign);
         await Assert.That(IsPicked(buffer, 3)).IsTrue();
         await Assert.That(IsPicked(buffer, 2)).IsFalse();
@@ -111,11 +111,11 @@ public class CommandPaletteNavStateTests
 
         // Stateful paint leaves the legacy selection alone: the legacy path
         // still highlights the first entry.
-        var stateful = new ScreenBuffer(60, 12);
+        var stateful = TestRender.Buffer(60, 12);
         palette.Paint(stateful, new Rect(0, 0, 60, 12), palette.State);
         await Assert.That(IsPicked(stateful, 6)).IsTrue();
 
-        var buffer = new ScreenBuffer(60, 12);
+        var buffer = TestRender.Buffer(60, 12);
         palette.Paint(buffer, new Rect(0, 0, 60, 12));
         await Assert.That(IsPicked(buffer, 2)).IsTrue();
         await Assert.That(IsPicked(buffer, 3)).IsFalse();

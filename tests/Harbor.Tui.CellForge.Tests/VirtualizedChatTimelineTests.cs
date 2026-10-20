@@ -67,7 +67,7 @@ public class VirtualizedChatTimelineTests
     [Test]
     public async Task Paint_TouchesOnlyViewportRect()
     {
-        var buffer = new ScreenBuffer(40, 12);
+        var buffer = TestRender.Buffer(40, 12);
         buffer.FillAll(Cell.From(new Rune('.'), CellStyle.Plain));
 
         var tl = new VirtualizedChatTimeline();
@@ -84,7 +84,7 @@ public class VirtualizedChatTimelineTests
         var rect = new Rect(2, 8, 30, 4);
         tl.Paint(buffer, rect);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         var rows = art.Split('\n');
 
         // Rows above the rect stay untouched filler.

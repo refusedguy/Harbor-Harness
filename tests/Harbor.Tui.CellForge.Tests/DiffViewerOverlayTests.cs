@@ -49,20 +49,20 @@ public sealed class DiffViewerOverlayTests
 
     private static string PaintArt(DiffViewerOverlay overlay, int cols = 80, int rows = 24)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         overlay.Paint(buffer, new Rect(0, 0, cols, rows));
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
     public async Task Hidden_Paint_LeavesBufferUntouched()
     {
         var overlay = new DiffViewerOverlay();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Diff");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Diff");
         await Assert.That(buffer.Get(40, 12).Rune).IsEqualTo((int)' ');
     }
 
@@ -184,11 +184,11 @@ public sealed class DiffViewerOverlayTests
     public async Task TinyViewport_PaintStaysNoop()
     {
         var overlay = Shown();
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         overlay.Paint(buffer, new Rect(0, 0, 10, 4));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Diff");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Diff");
     }
 
     [Test]
@@ -265,11 +265,11 @@ public sealed class DiffViewerOverlayTests
         var stack = new OverlayStack();
         stack.Push(new StubLayer("base", new Rect(0, 0, 80, 24), 'a'));
         stack.Push(layer);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         stack.PaintOver(buffer);
 
-        await Assert.That(GridDump.Art(buffer)).Contains("src/app.cs");
+        await Assert.That(TestRender.Art(buffer)).Contains("src/app.cs");
         await Assert.That(stack.HitTest(0, 0)!.Id).IsEqualTo("diff");
         await Assert.That(stack.TopModal!.Id).IsEqualTo("diff");
         await Assert.That(stack.HasModalBarrier).IsTrue();
@@ -294,11 +294,11 @@ public sealed class DiffViewerOverlayTests
         var stack = new OverlayStack();
         stack.Push(new StubLayer("base", new Rect(0, 0, 80, 24), 'a'));
         stack.Push(layer);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         stack.PaintOver(buffer);
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("Diff");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("Diff");
         await Assert.That(buffer.Get(40, 12).Rune).IsEqualTo((int)'a');
     }
 
@@ -342,8 +342,8 @@ public sealed class DiffViewerOverlayTests
 
     private static string PaintAll(ChatScreen screen)
     {
-        var buffer = new ScreenBuffer(48, 14);
+        var buffer = TestRender.Buffer(48, 14);
         screen.Tree.PaintAll(buffer);
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 }
