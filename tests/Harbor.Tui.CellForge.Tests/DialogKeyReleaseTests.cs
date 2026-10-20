@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -308,18 +309,5 @@ public class DialogKeyReleaseTests
     }
 
     private static string ReadRepoFile(params string[] segments) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot() }.Concat(segments).ToArray()));
-
-    /// <summary>Walks up from the test binaries to the repo root (<c>Harbor.slnx</c>).</summary>
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("[#784] repository root not found; see ReadRepoFile.");
-    }
+        File.ReadAllText(Path.Combine(new[] { RepoPaths.Root }.Concat(segments).ToArray()));
 }

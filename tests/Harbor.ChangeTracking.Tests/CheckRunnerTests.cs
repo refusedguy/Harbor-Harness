@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -249,11 +250,9 @@ public class CheckRunnerTests
     {
         if (!OperatingSystem.IsLinux())
             return;
-        string? saved = Environment.GetEnvironmentVariable(CanaryKey);
-        Environment.SetEnvironmentVariable(CanaryKey, CanaryValue);
-        try
-        {
-            await WithIsolatedHome(async _ =>
+        using var canary = new EnvScope(CanaryKey);
+        canary.Set(CanaryKey, CanaryValue);
+        await WithIsolatedHome(async _ =>
             {
                 string worktree = NewTempDir();
                 try
@@ -275,11 +274,6 @@ public class CheckRunnerTests
                     DeleteDir(worktree);
                 }
             });
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(CanaryKey, saved);
-        }
     }
 
     [Test]
@@ -287,11 +281,9 @@ public class CheckRunnerTests
     {
         if (!OperatingSystem.IsLinux())
             return;
-        string? saved = Environment.GetEnvironmentVariable(CanaryKey);
-        Environment.SetEnvironmentVariable(CanaryKey, CanaryValue);
-        try
-        {
-            await WithIsolatedHome(async _ =>
+        using var canary = new EnvScope(CanaryKey);
+        canary.Set(CanaryKey, CanaryValue);
+        await WithIsolatedHome(async _ =>
             {
                 string worktree = NewTempDir();
                 try
@@ -312,11 +304,6 @@ public class CheckRunnerTests
                     DeleteDir(worktree);
                 }
             });
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(CanaryKey, saved);
-        }
     }
 
     [Test]
@@ -475,8 +462,7 @@ public class CheckRunnerTests
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         using var home = new TempDirScope("harbor-home");
-        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));
-    }
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));    }
 
     private static string NewTempDir()
     {

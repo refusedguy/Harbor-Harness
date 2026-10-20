@@ -4,6 +4,7 @@ using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
+using Harbor.TestKit;
 using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.DependencyInjection;
 

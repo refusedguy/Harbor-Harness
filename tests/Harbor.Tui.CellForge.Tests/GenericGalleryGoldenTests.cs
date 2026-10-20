@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Generic;
 using TUnit.Core;
 
@@ -21,21 +22,9 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericGalleryGoldenTests
 {
-    private static string FixtureDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-        }
-
-        return Path.Combine(dir.FullName, "tests", "fixtures", "generic-layout");
-    }
+    /// <summary>Shared fixture directory (generic-layout goldens).</summary>
+    private static string FixtureDir() =>
+        Path.Combine(RepoPaths.Root, "tests", "fixtures", "generic-layout");
 
     private static string Normalize(string s) =>
         s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);

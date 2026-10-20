@@ -8,6 +8,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <!-- #1773: the shared test helpers (the environment scope among them).
+         The sibling references Harbor.Abstractions only, which this project
+         already has, so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
 </Project>

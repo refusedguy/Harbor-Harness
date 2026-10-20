@@ -3,6 +3,7 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Compilation;
+using Harbor.TestKit;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Emit;
@@ -308,7 +309,7 @@ public sealed class PluginReferenceContractTests
     /// </summary>
     private static async Task<string> ReadDocumentedPanelExampleAsync()
     {
-        string guide = await File.ReadAllTextAsync(Path.Combine(LocateRepoRoot(), GuideRelativePath))
+        string guide = await File.ReadAllTextAsync(Path.Combine(RepoPaths.Root, GuideRelativePath))
             .ConfigureAwait(false);
 
         string[] lines = guide.Split('\n');
@@ -362,24 +363,5 @@ public sealed class PluginReferenceContractTests
     {
         string? located = Path.GetDirectoryName(typeof(IPlugin).Assembly.Location);
         return !string.IsNullOrEmpty(located) ? located : AppContext.BaseDirectory;
-    }
-
-    /// <summary>Walk up from the test binaries to the repository root (contains docs/).</summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, GuideRelativePath)))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            "Repository root with " + GuideRelativePath + " not found above "
-            + AppContext.BaseDirectory + ".");
     }
 }

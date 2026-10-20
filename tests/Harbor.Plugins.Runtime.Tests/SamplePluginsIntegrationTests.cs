@@ -1,6 +1,7 @@
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests;
@@ -31,7 +32,7 @@ public sealed class SamplePluginsIntegrationTests
     [Test]
     public async Task DiscoverAndLoad_AllShippedSamples_LoadsFivePluginsWithTheirTools()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         using var fixture = await PluginTestFixture.CreateAsync(uniqueSuffix: "S").ConfigureAwait(false);
         foreach ((string relativePath, _, _) in Samples)
         {
@@ -102,27 +103,5 @@ public sealed class SamplePluginsIntegrationTests
         }
 
         return report.ToString();
-    }
-
-    /// <summary>
-    ///     Walk up from the test binaries to the repository root (the directory
-    ///     that contains <c>samples/plugins-cs</c>).
-    /// </summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            string probe = Path.Combine(dir.FullName, "samples", "plugins-cs");
-            if (Directory.Exists(probe))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Repository root with samples/plugins-cs not found above {AppContext.BaseDirectory}.");
     }
 }

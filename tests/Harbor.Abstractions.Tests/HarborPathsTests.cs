@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Filesystem;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -36,36 +37,22 @@ public class HarborPathsTests
     [Test]
     public async Task HarborHome_WhenHarborHomeSet_ReturnsCustomValueVerbatim()
     {
-        string? previousHome = Environment.GetEnvironmentVariable(HarborPaths.HarborHomeVariable);
-        try
-        {
-            Environment.SetEnvironmentVariable(HarborPaths.HarborHomeVariable, "/tmp/harbor-paths-hermetic");
+        using var home = new EnvScope(HarborPaths.HarborHomeVariable);
+        home.Set(HarborPaths.HarborHomeVariable, "/tmp/harbor-paths-hermetic");
 
-            await Assert.That(HarborPaths.GetHarborHome()).IsEqualTo("/tmp/harbor-paths-hermetic");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(HarborPaths.HarborHomeVariable, previousHome);
-        }
+        await Assert.That(HarborPaths.GetHarborHome()).IsEqualTo("/tmp/harbor-paths-hermetic");
     }
 
     [Test]
     public async Task HarborHome_WhenHarborHomeEmpty_FallsBackToUserProfile()
     {
-        string? previousHome = Environment.GetEnvironmentVariable(HarborPaths.HarborHomeVariable);
-        try
-        {
-            // Empty string is the "unset" shape the pattern match treats as
-            // absent; tooling that clears the variable must not strand the
-            // resolution on a blank value.
-            Environment.SetEnvironmentVariable(HarborPaths.HarborHomeVariable, string.Empty);
+        using var home = new EnvScope(HarborPaths.HarborHomeVariable);
+        // Empty string is the "unset" shape the pattern match treats as
+        // absent; tooling that clears the variable must not strand the
+        // resolution on a blank value.
+        home.Set(HarborPaths.HarborHomeVariable, string.Empty);
 
-            await Assert.That(HarborPaths.GetHarborHome()).IsEqualTo(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(HarborPaths.HarborHomeVariable, previousHome);
-        }
+        await Assert.That(HarborPaths.GetHarborHome()).IsEqualTo(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".harbor"));
     }
 }

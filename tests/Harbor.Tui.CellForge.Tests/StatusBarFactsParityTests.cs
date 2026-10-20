@@ -1,4 +1,5 @@
 using System.Globalization;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
@@ -244,18 +245,5 @@ public class StatusBarFactsParityTests
     }
 
     private static string ReadRepoFile(params string[] segments) =>
-        File.ReadAllText(Path.Combine(new[] { RepoRoot() }.Concat(segments).ToArray()));
-
-    /// <summary>Walks up from the test binaries to the repo root (<c>Harbor.slnx</c>).</summary>
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-               ?? throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-    }
+        File.ReadAllText(Path.Combine(new[] { RepoPaths.Root }.Concat(segments).ToArray()));
 }

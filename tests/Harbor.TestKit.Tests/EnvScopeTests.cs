@@ -15,91 +15,125 @@ public class EnvScopeTests
 {
     private const string Variable = "HARBOR_TESTKIT_ENV_PROBE";
 
-    [Test]
-    public async Task Restores_The_Value_It_Read()
+    /// <summary>
+    ///     Pins the variable to a value for the duration of the body and puts
+    ///     back the value it read. The class writes the environment directly
+    ///     here — and restores what it READ — because the architecture guard
+    ///     requires exactly that shape of every class that writes, and this
+    ///     file is one of them.
+    /// </summary>
+    private static async Task WithAmbientValue(string value, Func<Task> body)
     {
-        Environment.SetEnvironmentVariable(Variable, "before");
-
-        using (var scope = new EnvScope(Variable))
+        string? ambient = Environment.GetEnvironmentVariable(Variable);
+        try
         {
-            scope.Set(Variable, "during");
-            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("during");
+            Environment.SetEnvironmentVariable(Variable, value);
+            await body().ConfigureAwait(false);
         }
-
-        await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
-            .Because("the scope read the value before it wrote it, so the value it puts back is the one that was there — not the one it made up");
+        finally
+        {
+            Environment.SetEnvironmentVariable(Variable, ambient);
+        }
     }
 
     [Test]
-    public async Task Restores_A_Variable_That_Did_Not_Exist_By_Removing_It()
+    public async Task Restores_The_Value_It_Read()
     {
-        Environment.SetEnvironmentVariable(Variable, null);
-
-        using (var scope = new EnvScope(Variable))
+        await WithAmbientValue("before", async () =>
         {
-            scope.Set(Variable, "during");
-            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("during");
-        }
+            using (var scope = new EnvScope(Variable))
+            {
+                scope.Set(Variable, "during");
+                await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("during");
+            }
 
-        await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsNull()
-            .Because("restoring 'absent' means removing the variable, not setting it to the empty string — an empty string is a value, and a provider would read it as one");
+            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
+                .Because("the scope read the value before it wrote it, so the value it puts back is the one that was there — not the one it made up");
+        });
+    }
+
+    [Test]
+    public async Task Restores_A_Variable_That_Was_Absent_By_Removing_It()
+    {
+        string? ambient = Environment.GetEnvironmentVariable(Variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(Variable, null);
+
+            using (var scope = new EnvScope(Variable))
+            {
+                scope.Set(Variable, "during");
+                await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("during");
+            }
+
+            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsNull()
+                .Because("restoring 'absent' means removing the variable, not setting it to the empty string — an empty string is a value, and a provider would read it as one");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Variable, ambient);
+        }
     }
 
     [Test]
     public async Task Restores_Even_When_The_Body_Throws()
     {
-        Environment.SetEnvironmentVariable(Variable, "before");
-
-        try
+        await WithAmbientValue("before", async () =>
         {
-            using var scope = new EnvScope(Variable);
-            scope.Set(Variable, "during");
-            throw new InvalidOperationException("the test body failed");
-        }
-        catch (InvalidOperationException)
-        {
-            // The failure is the point; the restore is the subject.
-        }
+            try
+            {
+                using var scope = new EnvScope(Variable);
+                scope.Set(Variable, "during");
+                throw new InvalidOperationException("the test body failed");
+            }
+            catch (InvalidOperationException)
+            {
+                // The failure is the point; the restore is the subject.
+            }
 
-        await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
-            .Because("the compiler emits the dispose for a `using` even when the body throws, and the restore is what makes the NEXT test's environment the one it expects");
+            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
+                .Because("the compiler emits the dispose for a `using` even when the body throws, and the restore is what makes the NEXT test's environment the one it expects");
+        });
     }
 
     [Test]
     public async Task Restores_A_Variable_It_Was_Not_Told_About()
     {
-        Environment.SetEnvironmentVariable(Variable, "before");
-
-        using (var scope = new EnvScope())
+        await WithAmbientValue("before", async () =>
         {
-            scope.Set(Variable, "during");
-        }
+            using (var scope = new EnvScope())
+            {
+                scope.Set(Variable, "during");
+            }
 
-        await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
-            .Because("the scope reads the value at the moment of the write, so a variable it was not told about is still restored — a scope that only restored its ctor list would leak every other write");
+            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
+                .Because("the scope reads the value at the moment of the write, so a variable it was not told about is still restored — a scope that only restored its ctor list would leak every other write");
+        });
     }
 
     [Test]
     public async Task Reports_The_Original_Value()
     {
-        Environment.SetEnvironmentVariable(Variable, "before");
+        await WithAmbientValue("before", async () =>
+        {
+            using var scope = new EnvScope(Variable);
 
-        using var scope = new EnvScope(Variable);
-
-        await Assert.That(scope.OriginalValue(Variable)).IsEqualTo("before");
+            await Assert.That(scope.OriginalValue(Variable)).IsEqualTo("before");
+        });
     }
 
     [Test]
     public async Task Dispose_Is_Idempotent()
     {
-        Environment.SetEnvironmentVariable(Variable, "before");
+        await WithAmbientValue("before", async () =>
+        {
+            var scope = new EnvScope(Variable);
+            scope.Set(Variable, "during");
+            scope.Dispose();
+            scope.Dispose();
 
-        var scope = new EnvScope(Variable);
-        scope.Set(Variable, "during");
-        scope.Dispose();
-        scope.Dispose();
-
-        await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
-            .Because("a second dispose must not restore the ORIGINAL over a value a later write put there");
+            await Assert.That(Environment.GetEnvironmentVariable(Variable)).IsEqualTo("before")
+                .Because("a second dispose must not restore the ORIGINAL over a value a later write put there");
+        });
     }
 }

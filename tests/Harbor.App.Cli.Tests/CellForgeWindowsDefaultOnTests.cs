@@ -1,4 +1,5 @@
 using Harbor.App.Cli.Hosting;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -28,58 +29,51 @@ public class CellForgeWindowsDefaultOnTests
     [Test]
     public async Task WindowsDefault_IsOn_AndOnlyOptOutBlocks()
     {
-        string? prev = Environment.GetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable);
-        try
+        using var optOut = new EnvScope(TuiMode.WindowsCellForgeOptOutVariable);
+        // The default-on contract: Windows with the variable unset is no
+        // longer a blocked platform. This is the state a fresh install is
+        // in, and the state slice 1 turned into the legacy fallback.
+        optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, null);
+        await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsFalse()
+            .Because("a fresh install must reach the Windows VT raw-mode controller, not the legacy fallback.");
+
+        // Slice-1 spellings meant CellForge and still do.
+        foreach (string optedIn in new[] { "1", "true", "True", "TRUE", " 1 " })
         {
-            // The default-on contract: Windows with the variable unset is no
-            // longer a blocked platform. This is the state a fresh install is
-            // in, and the state slice 1 turned into the legacy fallback.
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, null);
+            optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, optedIn);
             await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsFalse()
-                .Because("a fresh install must reach the Windows VT raw-mode controller, not the legacy fallback.");
-
-            // Slice-1 spellings meant CellForge and still do.
-            foreach (string optedIn in new[] { "1", "true", "True", "TRUE", " 1 " })
-            {
-                Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, optedIn);
-                await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsFalse()
-                    .Because($"'{optedIn}' must not block the Windows controller.");
-            }
-
-            // Only an explicit off keeps the legacy renderer on Windows.
-            foreach (string optedOut in new[] { "0", "false", "False", "FALSE", " false " })
-            {
-                Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, optedOut);
-                await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsTrue()
-                    .Because($"'{optedOut}' is the documented way to keep legacy on Windows.");
-            }
-
-            // Anything else is not an instruction — leave the default alone.
-            foreach (string? neither in new[] { "off", "no", "yes", string.Empty })
-            {
-                Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, neither);
-                await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsFalse()
-                    .Because($"'{neither ?? "(empty)"}' is not an opt-out and must not be read as one.");
-            }
-
-            // Off Windows the platform raw-mode controller is established, so
-            // the gate never fires regardless of the flag.
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, null);
-            await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, "0");
-            await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, "1");
-            await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
-
-            // The ambient overload agrees with the pure one on this host: on
-            // Windows the unset state is unblocked, off Windows it always is.
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, null);
-            await Assert.That(TuiMode.IsCellForgeBlockedOnThisOs()).IsFalse()
-                .Because("this host must not be a blocked platform with the variable unset.");
+                .Because($"'{optedIn}' must not block the Windows controller.");
         }
-        finally
+
+        // Only an explicit off keeps the legacy renderer on Windows.
+        foreach (string optedOut in new[] { "0", "false", "False", "FALSE", " false " })
         {
-            Environment.SetEnvironmentVariable(TuiMode.WindowsCellForgeOptOutVariable, prev);
+            optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, optedOut);
+            await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsTrue()
+                .Because($"'{optedOut}' is the documented way to keep legacy on Windows.");
         }
+
+        // Anything else is not an instruction — leave the default alone.
+        foreach (string? neither in new[] { "off", "no", "yes", string.Empty })
+        {
+            optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, neither);
+            await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: true)).IsFalse()
+                .Because($"'{neither ?? "(empty)"}' is not an opt-out and must not be read as one.");
+        }
+
+        // Off Windows the platform raw-mode controller is established, so
+        // the gate never fires regardless of the flag.
+        optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, null);
+        await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
+        optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, "0");
+        await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
+        optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, "1");
+        await Assert.That(TuiMode.IsCellForgeBlocked(platformIsWindows: false)).IsFalse();
+
+        // The ambient overload agrees with the pure one on this host: on
+        // Windows the unset state is unblocked, off Windows it always is.
+        optOut.Set(TuiMode.WindowsCellForgeOptOutVariable, null);
+        await Assert.That(TuiMode.IsCellForgeBlockedOnThisOs()).IsFalse()
+            .Because("this host must not be a blocked platform with the variable unset.");
     }
 }

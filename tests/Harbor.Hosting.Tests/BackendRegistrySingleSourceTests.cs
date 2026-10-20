@@ -6,6 +6,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Hosting.Rendering;
 using Harbor.Storage.Memory;
 using Harbor.Terminal.Abstractions;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;

@@ -1,5 +1,6 @@
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -260,6 +261,5 @@ public class RunRejectTests
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         using var home = new TempDirScope("harbor-home");
-        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));
-    }
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));    }
 }

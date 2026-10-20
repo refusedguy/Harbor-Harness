@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests;
@@ -135,7 +136,7 @@ public sealed class SessionBroadcastPluginTests
     /// </summary>
     private static async Task<(FakePluginLoadHost Host, ITool Broadcast, ITool Inbox)> LoadShippedSampleAsync()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(
             Path.Combine(repoRoot, "samples", "plugins-cs", "SessionBroadcastPlugin.cs")).ConfigureAwait(false);
 
@@ -172,23 +173,4 @@ public sealed class SessionBroadcastPluginTests
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
         (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
-
-    /// <summary>
-    ///     Walk up from the test binaries to the repository root (the directory
-    ///     that contains <c>samples/plugins-cs</c>).
-    /// </summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            string probe = Path.Combine(dir.FullName, "samples", "plugins-cs");
-            if (Directory.Exists(probe))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Repository root with samples/plugins-cs not found above {AppContext.BaseDirectory}.");
-    }
 }

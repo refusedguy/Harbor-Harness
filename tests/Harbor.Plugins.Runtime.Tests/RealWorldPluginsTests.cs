@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests;
@@ -104,7 +105,7 @@ public sealed class RealWorldPluginsTests
     [Test]
     public async Task CacheInvalidation_SourceEdit_Recompiles()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(
             Path.Combine(repoRoot, "tests", "Plugins", "RealWorld", "DiToolPlugin.cs")).ConfigureAwait(false);
 
@@ -143,7 +144,7 @@ public sealed class RealWorldPluginsTests
     /// </summary>
     private static async Task<(FakePluginLoadHost Host, IReadOnlyList<CompiledPlugin> Loaded)> LoadAsync(string fileName)
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(
             Path.Combine(repoRoot, "tests", "Plugins", "RealWorld", fileName)).ConfigureAwait(false);
 
@@ -175,23 +176,4 @@ public sealed class RealWorldPluginsTests
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
         (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
-
-    /// <summary>
-    ///     Walk up from the test binaries to the repository root (the directory
-    ///     that contains <c>tests/Plugins/RealWorld</c>).
-    /// </summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            string probe = Path.Combine(dir.FullName, "tests", "Plugins", "RealWorld");
-            if (Directory.Exists(probe))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Repository root with tests/Plugins/RealWorld not found above {AppContext.BaseDirectory}.");
-    }
 }

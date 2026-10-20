@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.Compilation;
@@ -27,7 +28,7 @@ public sealed class RealSourceCompilationTests
     [Test]
     public async Task CachingCompiler_RealHelloWorldSample_SecondCompileHitsCache()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         var scriptLoad = await PluginScript.LoadAsync(Path.Combine(repoRoot, SampleRelativePath))
             .ConfigureAwait(false);
         await Assert.That(scriptLoad.IsSuccess).IsTrue();
@@ -72,7 +73,7 @@ public sealed class RealSourceCompilationTests
     [Test]
     public async Task MissingUsing_InRealSource_ReportsErrorWithLineNumber()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(Path.Combine(repoRoot, SampleRelativePath))
             .ConfigureAwait(false);
 
@@ -174,24 +175,5 @@ public sealed class RealSourceCompilationTests
         }
 
         throw new InvalidOperationException($"identifier '{identifier}' not found in source");
-    }
-
-    /// <summary>Walk up from the test binaries to the repo root (contains samples/plugins-cs).</summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            string probe = Path.Combine(dir.FullName, "samples", "plugins-cs");
-            if (Directory.Exists(probe))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Repository root with samples/plugins-cs not found above {AppContext.BaseDirectory}.");
     }
 }

@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -523,8 +524,7 @@ public class ChangeSetFreezerTests : ChangeTrackingTestBase
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         using var home = new TempDirScope("harbor-home");
-        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));
-    }
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));    }
 
 
     /// <summary>Linux-only helper: make a hook file executable (the hooks test returns early off Linux).</summary>

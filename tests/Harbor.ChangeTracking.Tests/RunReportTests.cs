@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 

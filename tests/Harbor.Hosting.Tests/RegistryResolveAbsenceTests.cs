@@ -19,6 +19,7 @@
 
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;

@@ -4,6 +4,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.ChangeTracking.Tests;
@@ -318,6 +319,5 @@ public class OwnerReportPersistenceTests
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         using var home = new TempDirScope("harbor-home");
-        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));
-    }
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));    }
 }
