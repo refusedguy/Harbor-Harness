@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Harbor.E2E.Framework;
 using Harbor.E2E.Framework.Pty;
@@ -20,11 +22,34 @@ public abstract class CellForgePtyScenarioBase
 {
     private const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
 
+    /// <summary>Default bound for a screen condition wait.</summary>
+    private const int DefaultScreenTimeoutMs = 10_000;
+
+    /// <summary>
+    ///     Upper bound on how long the pump sleeps between "the child produced
+    ///     nothing new" checks. The pump is woken by the output signal long
+    ///     before this cap matters; the cap only bounds how quickly a dead
+    ///     child is noticed.
+    /// </summary>
+    private static readonly TimeSpan PumpIdleCap = TimeSpan.FromMilliseconds(100);
+
     private readonly object _screenLock = new();
     private AnsiTerminalBuffer _screen = new(100, 30);
     private Decoder _decoder = Encoding.UTF8.GetDecoder();
     private int _consumedRaw;
     private CancellationTokenSource? _pumpCts;
+
+    // ── Repaint signal ──────────────────────────────────────────────────────
+    // The emulated grid has exactly ONE writer (the pump thread). Every
+    // repaint bumps a version counter and releases the waiters, so a test can
+    // wait for "the grid changed" instead of sleeping a fixed interval and
+    // hoping. The signal is raised by the very code that writes the grid, so
+    // a waiter can never miss a change that already landed.
+    private long _screenVersion;
+    private TaskCompletionSource _screenRepainted = NewSignal();
+
+    /// <summary><see cref="Environment.TickCount64" /> of the last repaint.</summary>
+    private long _lastRepaintTick;
 
     [ClassDataSource<MockServerFixture>(Shared = SharedType.None)]
     public required MockServerFixture Fixture { get; init; }
@@ -92,6 +117,11 @@ public abstract class CellForgePtyScenarioBase
             _consumedRaw = 0;
         }
 
+        // A fresh grid is a fresh timeline for the repaint signal too.
+        Interlocked.Exchange(ref _screenRepainted, NewSignal());
+        Interlocked.Increment(ref _screenVersion);
+        Volatile.Write(ref _lastRepaintTick, Environment.TickCount64);
+
         string dll = ResolveCliDllPath();
         var spec = new PtyStartSpec(
             FileName: HarborAppLocator.ResolveDotnetHost(),
@@ -102,7 +132,7 @@ public abstract class CellForgePtyScenarioBase
         Session = PtySession.Start(spec);
 
         _pumpCts = new CancellationTokenSource();
-        _ = Task.Run(() => PumpLoop(_pumpCts.Token));
+        _ = Task.Run(() => PumpLoopAsync(_pumpCts.Token));
     }
 
     /// <summary>Current visible grid as raw text (emulated terminal state).</summary>
@@ -171,28 +201,56 @@ public abstract class CellForgePtyScenarioBase
     protected Task AssertScrollbackLinesAsync(params string[] expected) =>
         PtyBufferAsserts.AssertScrollbackLinesAsync(ScrollbackLines(), expected);
 
-    protected async Task<string[]> WaitForScreenAsync(Func<string[], bool> predicate, TimeSpan? timeout = null)
+    /// <summary>
+    ///     Wait until <paramref name="predicate" /> holds over the emulated
+    ///     grid, then return the grid it matched on.
+    ///     <para />
+    ///     Condition wait, not a sleep: the waiter is woken by the repaint
+    ///     signal the pump raises, so the wait costs exactly the child's
+    ///     latency (no poll interval of overshoot) and it can never miss a
+    ///     repaint that already landed. On timeout the failure says WHICH
+    ///     condition was not met — the caller's own predicate expression is
+    ///     captured by the compiler and quoted back — instead of only how
+    ///     long we waited.
+    /// </summary>
+    /// <param name="predicate">Condition over the normalized visible lines.</param>
+    /// <param name="timeout">Bound on the whole wait. Defaults to 10 s.</param>
+    /// <param name="predicateSource">
+    ///     The caller's predicate expression, captured by the compiler. It is
+    ///     what the timeout diagnostic quotes as "expected".
+    /// </param>
+    protected async Task<string[]> WaitForScreenAsync(
+        Func<string[], bool> predicate,
+        TimeSpan? timeout = null,
+        [CallerArgumentExpression(nameof(predicate))] string? predicateSource = null)
     {
-        var deadline = TimeSpan.FromSeconds(10);
-        if (timeout is { } t)
-        {
-            deadline = t;
-        }
-
+        TimeSpan deadline = timeout ?? TimeSpan.FromMilliseconds(DefaultScreenTimeoutMs);
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (sw.Elapsed < deadline)
+        while (true)
         {
+            // Read the version BEFORE the grid: a repaint that lands between
+            // the two is then seen by the wait below instead of being missed.
+            long version = ScreenVersion;
             string[] lines = NormalizedLines();
             if (predicate(lines))
             {
                 return lines;
             }
 
-            await Task.Delay(50).ConfigureAwait(false);
+            TimeSpan remaining = deadline - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            bool repainted = await WaitForRepaintAsync(version, remaining).ConfigureAwait(false);
+            if (!repainted)
+            {
+                break;
+            }
         }
 
-        throw new TimeoutException(
-            $"screen condition not met within {deadline}. Raw tail:\n{Tail(Session.RawText, 4000)}\nScreen:\n{ScreenText}");
+        throw new TimeoutException(DescribeScreenTimeout(deadline, sw.Elapsed, predicateSource));
     }
 
     protected Task<bool> WaitForRawTextAsync(string needle, TimeSpan? timeout = null) =>
@@ -207,6 +265,13 @@ public abstract class CellForgePtyScenarioBase
     /// proceeds mid-repaint. Never throws: on timeout it returns the current
     /// grid so the caller's <c>WaitForScreenAsync</c> still guards.
     /// <para />
+    /// The stability window is measured against the REAL repaint times (the
+    /// pump stamps every repaint) and the child must have no un-pumped bytes
+    /// left, so "settled" means exactly that — nothing has changed the grid
+    /// for <paramref name="stableFor" />. The old implementation re-read the
+    /// grid on a fixed 100 ms tick and always paid the full window plus a
+    /// tick of overshoot.
+    /// <para />
     /// Keep fixed delays where the timing itself is the subject (Ctrl+C
     /// gesture window, PTY chunk gaps) — quiescence is for "let the UI
     /// settle" pauses only.
@@ -216,24 +281,180 @@ public abstract class CellForgePtyScenarioBase
         TimeSpan stable = stableFor ?? TimeSpan.FromMilliseconds(300);
         TimeSpan deadline = timeout ?? TimeSpan.FromSeconds(5);
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        string last = ScreenText;
-        TimeSpan lastChange = TimeSpan.Zero;
-        while (sw.Elapsed < deadline)
+        while (true)
         {
-            await Task.Delay(100).ConfigureAwait(false);
-            string current = ScreenText;
-            if (!string.Equals(current, last, StringComparison.Ordinal))
-            {
-                last = current;
-                lastChange = sw.Elapsed;
-            }
-            else if (sw.Elapsed - lastChange >= stable)
+            long quietMs = Environment.TickCount64 - Volatile.Read(ref _lastRepaintTick);
+            bool childDrained = PendingRawBytes == 0;
+            if (childDrained && quietMs >= stable.TotalMilliseconds)
             {
                 break;
             }
+
+            TimeSpan remaining = deadline - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            // Wake on the next repaint. The cap keeps the loop honest when the
+            // grid is quiet but the child still has bytes in flight.
+            TimeSpan wait = remaining < PumpIdleCap ? remaining : PumpIdleCap;
+            _ = await WaitForRepaintAsync(wait).ConfigureAwait(false);
         }
 
-        return NormalizeLines(last);
+        return NormalizedLines();
+    }
+
+    /// <summary>
+    /// Answer the child's approval gate and keep answering it until the
+    /// turn's follow-up marker lands.
+    /// <para />
+    /// This replaces the "poll every N ms, send 'a' while the prompt is
+    /// visible" loop the error scenarios used. The prompt and the follow-up
+    /// text are OBSERVED states: the loop wakes on the repaint signal, so the
+    /// 'a' goes out the moment the gate is painted instead of up to a full
+    /// poll interval later — and the gate is re-answered while it stays on
+    /// screen, because the child may drop a keypress and a lost key would
+    /// hang the turn.
+    /// </summary>
+    /// <param name="promptMarker">Text the approval gate paints.</param>
+    /// <param name="doneMarker">Text that proves the turn moved on.</param>
+    /// <param name="timeout">Bound on the whole wait.</param>
+    /// <param name="answerKey">Key that answers the gate ("a" allows, "n" denies).</param>
+    /// <param name="onFirstAnswer">
+    /// Invoked once, the first time the gate is answered — the hook the
+    /// scenarios use to swap the mock's response.
+    /// </param>
+    /// <returns><see langword="true" /> when the gate was answered at least once.</returns>
+    protected async Task<bool> AnswerApprovalGateAsync(
+        string promptMarker,
+        string doneMarker,
+        TimeSpan timeout,
+        string answerKey = "a",
+        Action? onFirstAnswer = null)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        bool approved = false;
+        long lastAnswerTick = 0;
+        while (sw.Elapsed < timeout)
+        {
+            string[] snap = NormalizedLines();
+            if (snap.Any(x => x.Contains(promptMarker, StringComparison.Ordinal)))
+            {
+                // Re-answer at most every 250 ms — the SAME rate the old
+                // 250 ms poll loop used. The gate stays painted for as long
+                // as the tool runs, and a repaint-driven loop must not turn
+                // into a key flood (an extra 'a' would land in the composer).
+                long now = Environment.TickCount64;
+                if (lastAnswerTick == 0 || now - lastAnswerTick >= 250)
+                {
+                    Session.SendKey(answerKey);
+                    lastAnswerTick = now;
+                    if (!approved)
+                    {
+                        approved = true;
+                        onFirstAnswer?.Invoke();
+                    }
+                }
+            }
+
+            if (snap.Any(x => x.Contains(doneMarker, StringComparison.Ordinal)))
+            {
+                break;
+            }
+
+            TimeSpan remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            // Wake on the next repaint — that is the signal that says "the
+            // gate appeared / the turn moved on, look again".
+            TimeSpan wait = remaining < PumpIdleCap ? remaining : PumpIdleCap;
+            _ = await WaitForRepaintAsync(wait).ConfigureAwait(false);
+        }
+
+        return approved;
+    }
+
+    /// <summary>
+    /// Wait until the emulated grid is repainted, or the timeout elapses.
+    /// Returns <see langword="true" /> when a repaint was observed.
+    /// </summary>
+    protected Task<bool> WaitForRepaintAsync(TimeSpan timeout, CancellationToken cancellationToken = default) =>
+        WaitForRepaintAsync(ScreenVersion, timeout, cancellationToken);
+
+    private async Task<bool> WaitForRepaintAsync(
+        long observedVersion,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            var signal = Volatile.Read(ref _screenRepainted);
+            if (ScreenVersion != observedVersion)
+            {
+                return true;
+            }
+
+            TimeSpan remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return false;
+            }
+
+            var expiry = Task.Delay(remaining, cancellationToken);
+            if (await Task.WhenAny(signal.Task, expiry).ConfigureAwait(false) != signal.Task)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>Monotonic version of the emulated grid; bumped on every repaint.</summary>
+    private long ScreenVersion => Volatile.Read(ref _screenVersion);
+
+    /// <summary>Bytes the child produced that the pump has not written to the grid yet.</summary>
+    private int PendingRawBytes
+    {
+        get
+        {
+            lock (_screenLock)
+            {
+                return Math.Max(0, Session.OutputLength - _consumedRaw);
+            }
+        }
+    }
+
+    private static TaskCompletionSource NewSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private void SignalRepaint()
+    {
+        var previous = Interlocked.Exchange(ref _screenRepainted, NewSignal());
+        previous.TrySetResult();
+    }
+
+    /// <summary>
+    /// The timeout message: what was expected (the caller's predicate), what
+    /// was seen (the grid), and the raw tail the child produced.
+    /// </summary>
+    private string DescribeScreenTimeout(TimeSpan deadline, TimeSpan waited, string? predicateSource)
+    {
+        var sb = new StringBuilder();
+        sb.Append("screen condition not met within ")
+            .Append(deadline)
+            .Append(" (waited ")
+            .Append(waited.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture))
+            .AppendLine("s).");
+        sb.Append("expected: ").AppendLine(predicateSource ?? "<predicate>");
+        sb.AppendLine("Raw tail:");
+        sb.AppendLine(Tail(Session.RawText, 4000));
+        sb.AppendLine("Screen:");
+        sb.Append(ScreenText);
+        return sb.ToString();
     }
 
     /// <summary>Type text + Enter into the composer (raw byte '\r' = Enter in raw mode).</summary>
@@ -248,9 +469,9 @@ public abstract class CellForgePtyScenarioBase
     protected void WriteHomeConfig(string json) =>
         File.WriteAllText(Path.Combine(TempHome, ".harbor", "config.json"), json);
 
-    private void PumpLoop(CancellationToken ct)
+    private async Task PumpLoopAsync(CancellationToken ct)
     {
-        // Decoder state is pump-thread-private; only screen writes take the lock.
+        // Decoder state is pump-private; only screen writes take the lock.
         var chunkBuf = new char[8192];
         bool drainedAfterExit = false;
         while (!ct.IsCancellationRequested)
@@ -259,7 +480,6 @@ public abstract class CellForgePtyScenarioBase
             lock (_screenLock)
             {
                 delta = Session.RawOutputFrom(_consumedRaw);
-                _consumedRaw += delta.Length;
             }
 
             if (delta.Length == 0)
@@ -270,7 +490,15 @@ public abstract class CellForgePtyScenarioBase
                 }
 
                 drainedAfterExit = Session.HasExited;
-                Thread.Sleep(20);
+
+                // Sleep on the child's NEXT BYTE instead of on a fixed tick.
+                // The old Thread.Sleep(20) added up to 20 ms of latency to
+                // every repaint (the child had already produced the bytes —
+                // the pump just had not looked yet) and burned a core
+                // spinning at 50 wake-ups a second for the whole test.
+                _ = await Session
+                    .WaitForOutputChangeAsync(Session.OutputLength, PumpIdleCap, ct)
+                    .ConfigureAwait(false);
                 continue;
             }
 
@@ -278,6 +506,11 @@ public abstract class CellForgePtyScenarioBase
             int chars = _decoder.GetChars(delta, 0, delta.Length, chunkBuf, 0);
             if (chars <= 0)
             {
+                lock (_screenLock)
+                {
+                    _consumedRaw += delta.Length;
+                }
+
                 continue;
             }
 
@@ -285,7 +518,18 @@ public abstract class CellForgePtyScenarioBase
             lock (_screenLock)
             {
                 _screen.Write(chunk);
+
+                // The bytes count as consumed only AFTER the grid shows them.
+                // Counting them earlier would let a quiescence check see "no
+                // pending bytes" while the repaint is still owed.
+                _consumedRaw += delta.Length;
+                Volatile.Write(ref _lastRepaintTick, Environment.TickCount64);
+                Interlocked.Increment(ref _screenVersion);
             }
+
+            // Release the screen waiters AFTER the grid is written: a waiter
+            // that wakes on this signal must see the new grid.
+            SignalRepaint();
         }
     }
 

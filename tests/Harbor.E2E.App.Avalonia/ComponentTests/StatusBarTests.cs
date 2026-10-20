@@ -39,7 +39,7 @@ public sealed class StatusBarTests : ComponentTestBase
 
         var hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasIdle).IsTrue();
+        await Assert.That(hasIdle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("statusbar-idle").ConfigureAwait(false);
     }
@@ -62,7 +62,7 @@ public sealed class StatusBarTests : ComponentTestBase
 
         var hasRunning = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasRunning).IsTrue();
+        await Assert.That(hasRunning).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("statusbar-running").ConfigureAwait(false);
 
@@ -91,7 +91,7 @@ public sealed class StatusBarTests : ComponentTestBase
 
         var hasModel = await Driver.WaitForTextAsync("qwen2.5-coder:7b", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasModel).IsTrue();
+        await Assert.That(hasModel).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("statusbar-model-label").ConfigureAwait(false);
     }
@@ -145,7 +145,7 @@ public sealed class StatusBarTests : ComponentTestBase
 
         var hasCost = await Driver.WaitForTextAsync("$0.0234", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasCost).IsTrue();
+        await Assert.That(hasCost).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("statusbar-cost").ConfigureAwait(false);
     }

@@ -48,7 +48,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(sawPlaceholder).IsTrue();
+        await Assert.That(sawPlaceholder).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var send = Driver.FindButtonByText("Send ▶");
         await Assert.That(send).IsNotNull();
@@ -102,7 +102,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var sawMessage = await Driver.WaitForTextAsync("Hello AI!", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawMessage).IsTrue();
+        await Assert.That(sawMessage).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var inputText = UI(() => input!.Text);
         await Assert.That(string.IsNullOrEmpty(inputText)).IsTrue();
@@ -138,11 +138,11 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasStreaming).IsTrue();
+        await Assert.That(hasStreaming).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasBuffer = await Driver.WaitForTextAsync("streaming a response", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasBuffer).IsTrue();
+        await Assert.That(hasBuffer).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("chat-streaming").ConfigureAwait(false);
 
@@ -173,7 +173,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var hasIndicator = await Driver.WaitForTextAsync("running", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasIndicator).IsTrue();
+        await Assert.That(hasIndicator).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("chat-agent-running").ConfigureAwait(false);
 
@@ -205,14 +205,14 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var had = await Driver.WaitForTextAsync("Message that will be cleared", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(had).IsTrue();
+        await Assert.That(had).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // Now clear via Ctrl+L equivalent.
         UI(() => Vm.Chat.ClearCommand.Execute(null));
 
         var sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawPlaceholder).IsTrue();
+        await Assert.That(sawPlaceholder).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var stillThere = Driver.GetAllVisibleText().Contains("Message that will be cleared", StringComparison.Ordinal);
         await Assert.That(stillThere).IsFalse();
@@ -242,7 +242,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var hasError = await Driver.WaitForTextAsync("Something went wrong", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasError).IsTrue();
+        await Assert.That(hasError).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("chat-error").ConfigureAwait(false);
     }
@@ -267,7 +267,7 @@ public sealed class ChatViewTests : ComponentTestBase
 
         var hasThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasThinking).IsTrue();
+        await Assert.That(hasThinking).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("chat-thinking").ConfigureAwait(false);
 

@@ -86,13 +86,13 @@ public sealed class MicroControlsTests : ComponentTestBase
         {
             var shown = await Driver.WaitForTextInWindowAsync(
                 window, "Ctrl+B", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(shown).IsTrue();
+            await Assert.That(shown).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() => kbd.Keys = "Ctrl+Shift+T");
             var updated = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("Ctrl+Shift+T", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(updated).IsTrue();
+            await Assert.That(updated).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -119,13 +119,13 @@ public sealed class MicroControlsTests : ComponentTestBase
         {
             var shown = await Driver.WaitForTextInWindowAsync(
                 window, "running", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(shown).IsTrue();
+            await Assert.That(shown).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() => badge.StatusText = "idle");
             var updated = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("idle", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(updated).IsTrue();
+            await Assert.That(updated).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {

@@ -36,7 +36,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasMsg = await Driver.WaitForTextAsync("Info: connection established.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue();
+        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-info").ConfigureAwait(false);
     }
@@ -55,7 +55,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasMsg = await Driver.WaitForTextAsync("Success: file saved.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue();
+        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-success").ConfigureAwait(false);
     }
@@ -74,7 +74,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasMsg = await Driver.WaitForTextAsync("Warning: rate limit approaching.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue();
+        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-warning").ConfigureAwait(false);
     }
@@ -93,7 +93,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasMsg = await Driver.WaitForTextAsync("Error: provider returned 503.", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue();
+        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-error").ConfigureAwait(false);
     }
@@ -144,7 +144,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasToastBefore = await Driver.WaitForTextAsync("Auto-dismiss test", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasToastBefore).IsTrue();
+        await Assert.That(hasToastBefore).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // Wait for auto-dismiss (4s) — poll until the toast is actually gone.
         await Driver.WaitForTextAbsentAsync("Auto-dismiss test", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
@@ -173,7 +173,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var hasMsg = await Driver.WaitForTextAsync("deliberately long toast", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasMsg).IsTrue();
+        await Assert.That(hasMsg).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
 

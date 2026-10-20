@@ -130,22 +130,33 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
             return;
         }
 
-        // Wheel up repeatedly — pollable: each tick waits (bounded) for the
-        // reveal condition that cannot appear without the scroll landing.
-        // Early-exits on quiet runners; same worst-case bound as the old
-        // fixed 150ms sleeps on loaded ones. Timing/layout dependent, best effort.
+        // Wheel up repeatedly — the scroll lands as a grid repaint, so each
+        // tick waits for THAT (the condition) instead of a fixed 150 ms gap,
+        // and then looks for the reveal. A grid that does not change means
+        // the scroll hit its limit: nothing more can come, so stop early
+        // instead of burning the remaining ticks. Timing/layout dependent,
+        // best effort.
         bool revealed = false;
+        int idleTicks = 0;
         for (int tick = 0; tick < 50 && !revealed; tick++)
         {
             Session.SendKey(WheelUpSeq);
-            try
+            bool repainted = await WaitForRepaintAsync(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
+            revealed = NormalizedLines().Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal));
+            if (revealed)
             {
-                _ = await WaitForScreenAsync(
-                    l => l.Any(x => x.Contains(welcomeMarker, StringComparison.Ordinal)),
-                    TimeSpan.FromMilliseconds(150)).ConfigureAwait(false);
-                revealed = true;
+                break;
             }
-            catch (TimeoutException) { /* next tick */ }
+
+            // A grid that does not change means the app is not reacting to
+            // the wheel — the scroll is at its limit, so further ticks cannot
+            // reveal anything. Three strikes, so a slow runner that misses a
+            // repaint is not mistaken for a dead scroll.
+            idleTicks = repainted ? 0 : idleTicks + 1;
+            if (idleTicks >= 3)
+            {
+                break;
+            }
         }
 
         // Soft assertion: log if not revealed but don't fail — scroll is inherently timing-sensitive
@@ -162,18 +173,12 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         if (!ok)
         {
             Console.WriteLine($"WARN: WHEEL-OK not in raw, checking server received: {Server.RequestCount}, screen:\n{ScreenText}");
-            // Pollable fallback: the mock records the request only when it
-            // actually arrives — poll instead of a fixed 1s sleep.
-            bool serverGot = false;
-            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
-            while (!serverGot && DateTime.UtcNow < deadline)
-            {
-                serverGot = Server.ReceivedRequests.Any(r => r.RawBody.Contains("wheel-check"));
-                if (!serverGot)
-                {
-                    await Task.Delay(100).ConfigureAwait(false);
-                }
-            }
+            // Condition fallback: the mock records the request only when it
+            // actually arrives — wait for THAT (the mock signals every
+            // recorded request) instead of polling on a fixed interval.
+            bool serverGot = await Server.WaitForRequestAsync(
+                r => r.RawBody.Contains("wheel-check", StringComparison.Ordinal),
+                TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             if (!serverGot)
             {
                 Console.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");

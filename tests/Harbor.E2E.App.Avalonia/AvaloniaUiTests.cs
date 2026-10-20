@@ -183,7 +183,7 @@ public sealed class AvaloniaUiTests
         // "No file open" placeholder).
         bool sawPlaceholder = await Driver.WaitForTextAsync("What are we building today?", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(sawPlaceholder).IsTrue();
+        await Assert.That(sawPlaceholder).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         string screenshot = await Driver.ScreenshotAsync("01-chat-default").ConfigureAwait(false);
         await Assert.That(File.Exists(screenshot)).IsTrue();
@@ -276,7 +276,7 @@ public sealed class AvaloniaUiTests
         // The user's message must appear in the chat history.
         bool sawMessage = await Driver.WaitForTextAsync("Hello AI!", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawMessage).IsTrue();
+        await Assert.That(sawMessage).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // After send, the input is cleared.
         string? inputText = Driver.OnUIThread(() => input!.Text);
@@ -313,7 +313,7 @@ public sealed class AvaloniaUiTests
                     .Contains($"{expected} msgs", StringComparison.Ordinal);
             },
             TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-        await Assert.That(counterUpdated).IsTrue();
+        await Assert.That(counterUpdated).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("04-message-sent").ConfigureAwait(false);
     }
@@ -341,7 +341,7 @@ public sealed class AvaloniaUiTests
         // The code editor's empty-state placeholder must be visible.
         bool sawCodePlaceholder = await Driver.WaitForTextAsync("No file open", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawCodePlaceholder).IsTrue();
+        await Assert.That(sawCodePlaceholder).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // ActiveView must be "code" on the view-model.
         string? activeView = Driver.OnUIThread(() =>
@@ -375,7 +375,7 @@ public sealed class AvaloniaUiTests
 
         bool sawDiff = await Driver.WaitForTextAsync("Diff viewer", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawDiff).IsTrue();
+        await Assert.That(sawDiff).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("06-diff-modal").ConfigureAwait(false);
 
@@ -528,7 +528,7 @@ public sealed class AvaloniaUiTests
         // Poll for the settings dialog content instead of a fixed delay.
         bool hasTheme = await Driver.WaitForTextAsync("Theme", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasTheme).IsTrue();
+        await Assert.That(hasTheme).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("08-settings").ConfigureAwait(false);
 
@@ -621,7 +621,7 @@ public sealed class AvaloniaUiTests
         // Poll for the toast text instead of a fixed delay.
         bool hasToast = await Driver.WaitForTextAsync("Hello toast", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasToast).IsTrue();
+        await Assert.That(hasToast).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("10-toast-shown").ConfigureAwait(false);
 
@@ -657,7 +657,7 @@ public sealed class AvaloniaUiTests
         // Poll for the command palette content instead of a fixed delay.
         bool hasPalette = await Driver.WaitForTextAsync("Command", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasPalette).IsTrue();
+        await Assert.That(hasPalette).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("12-command-palette").ConfigureAwait(false);
 
@@ -690,7 +690,7 @@ public sealed class AvaloniaUiTests
         // Poll for the provider browser content instead of a fixed delay.
         bool hasBrowser = await Driver.WaitForTextAsync("Provider browser", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasBrowser).IsTrue();
+        await Assert.That(hasBrowser).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("13-provider-browser").ConfigureAwait(false);
 
@@ -860,7 +860,7 @@ public sealed class AvaloniaUiTests
         // Honest visibility probe (C1): collapsed banners no longer satisfy it.
         bool hasIndicator = await Driver.WaitForRenderedTextAsync("Agent is running", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasIndicator).IsTrue();
+        await Assert.That(hasIndicator).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("19-streaming-indicator").ConfigureAwait(false);
 
@@ -893,7 +893,7 @@ public sealed class AvaloniaUiTests
         // Status text defaults to "idle" — proves the status group is rendered.
         bool hasIdle = await Driver.WaitForTextAsync("idle", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasIdle).IsTrue();
+        await Assert.That(hasIdle).IsTrue().Because(Driver.LastWaitDiagnostic);
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -926,7 +926,7 @@ public sealed class AvaloniaUiTests
         // Poll for the streaming buffer text instead of a fixed delay.
         bool sawStreaming = await Driver.WaitForTextAsync("Streaming response", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawStreaming).IsTrue();
+        await Assert.That(sawStreaming).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("22-streaming-buffer").ConfigureAwait(false);
 
@@ -962,7 +962,7 @@ public sealed class AvaloniaUiTests
         // Poll for the thinking indicator instead of a fixed delay.
         bool sawThinking = await Driver.WaitForTextAsync("thinking", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawThinking).IsTrue();
+        await Assert.That(sawThinking).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("23-thinking-buffer").ConfigureAwait(false);
 
@@ -1012,7 +1012,7 @@ public sealed class AvaloniaUiTests
         // Poll for the tool call card text instead of a fixed delay.
         bool sawTool = await Driver.WaitForRenderedTextAsync("read", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(sawTool).IsTrue();
+        await Assert.That(sawTool).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("24-tool-call-card").ConfigureAwait(false);
 
@@ -1046,7 +1046,7 @@ public sealed class AvaloniaUiTests
         // Poll for the error state text instead of a fixed delay.
         bool sawError = await Driver.WaitForTextAsync("error", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawError).IsTrue();
+        await Assert.That(sawError).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("25-error-state").ConfigureAwait(false);
 
@@ -1081,7 +1081,7 @@ public sealed class AvaloniaUiTests
         // Poll for the compaction status text instead of a fixed delay.
         bool sawCompacting = await Driver.WaitForTextAsync("compacting", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawCompacting).IsTrue();
+        await Assert.That(sawCompacting).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("26-compaction-status").ConfigureAwait(false);
 
@@ -1165,7 +1165,7 @@ public sealed class AvaloniaUiTests
         // Poll for the code view placeholder instead of a fixed delay.
         bool sawCode = await Driver.WaitForTextAsync("No file open", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawCode).IsTrue();
+        await Assert.That(sawCode).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         string? activeView = Driver.OnUIThread(() =>
             (Driver.MainWindow.DataContext as MainViewModel)?.ActiveView);
@@ -1239,7 +1239,7 @@ public sealed class AvaloniaUiTests
 
         bool sawSlash = await Driver.WaitForTextAsync("/help", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(sawSlash).IsTrue();
+        await Assert.That(sawSlash).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("30-autocomplete-slash").ConfigureAwait(false);
     }
@@ -1298,11 +1298,11 @@ public sealed class AvaloniaUiTests
                 return count >= 4;
             },
             TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        await Assert.That(vmReady).IsTrue();
+        await Assert.That(vmReady).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         bool sawLines = await Driver.WaitForTextAsync("Line 4", TimeSpan.FromSeconds(15))
             .ConfigureAwait(false);
-        await Assert.That(sawLines).IsTrue();
+        await Assert.That(sawLines).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ScreenshotAsync("31-chat-scroll").ConfigureAwait(false);
     }

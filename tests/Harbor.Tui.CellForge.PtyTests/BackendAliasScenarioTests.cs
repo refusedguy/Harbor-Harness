@@ -36,15 +36,19 @@ public sealed class BackendAliasScenarioTests : CellForgePtyScenarioBase
             l => l.Any(x => x.Contains("idle", StringComparison.Ordinal) || x.Contains("○ idle", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-        // Settle: two snapshots 400 ms apart must agree (no spinner/mascot drift).
+        // Settle: the frame must STOP CHANGING (no spinner/mascot drift). The
+        // old loop compared two snapshots a fixed 400 ms apart and hoped they
+        // agreed; the repaint signal answers the same question directly —
+        // "did the grid change inside this window?" — and the wait ends the
+        // moment the grid is still instead of always paying the full gap.
         var deadline = TimeSpan.FromSeconds(15);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.Elapsed < deadline)
         {
             string first = NormalizeToGoldenText(ScreenText);
-            await Task.Delay(400).ConfigureAwait(false);
+            bool repainted = await WaitForRepaintAsync(TimeSpan.FromMilliseconds(400)).ConfigureAwait(false);
             string second = NormalizeToGoldenText(ScreenText);
-            if (first == second)
+            if (!repainted || first == second)
             {
                 return second;
             }

@@ -112,6 +112,24 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     private readonly string _screenshotDir;
     private readonly string _tempHome;
 
+    /// <summary>
+    ///     How often a "wait until the tree shows X" poll re-reads the visual
+    ///     tree. This is the ONLY knob the waits had: a fixed 50 ms tick
+    ///     meant every wait paid up to a full tick of overshoot AFTER the
+    ///     condition was already true. 20 ms keeps the overshoot small
+    ///     while the tree walk stays cheap enough to repeat.
+    /// </summary>
+    private const int PollIntervalMs = 20;
+
+    /// <summary>
+    ///     What the last wait gave up on: the text it expected and the text
+    ///     it actually saw. Assertion messages quote it, so a failure says
+    ///     WHAT was missing ("expected 'Send ▶'") instead of only
+    ///     "expected true, was false".
+    /// </summary>
+    public string LastWaitDiagnostic { get; private set; } =
+        "no visual wait has run yet — the assertion below did not follow a WaitFor* call";
+
     static HeadlessAvaloniaDriver()
     {
         var uiThread = new Thread(UIThreadMain)
@@ -576,10 +594,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             string current = GetAllVisibleText();
             if (current.Contains(text, StringComparison.Ordinal))
             {
+                LastWaitDiagnostic = $"expected '{text}' — found it";
                 return true;
             }
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(PollIntervalMs).ConfigureAwait(false);
         }
+
+        LastWaitDiagnostic = DescribeMiss(text, GetAllVisibleText());
         return false;
     }
 
@@ -596,10 +617,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             string current = GetRenderedText();
             if (current.Contains(text, StringComparison.Ordinal))
             {
+                LastWaitDiagnostic = $"expected the RENDERED tree to show '{text}' — found it";
                 return true;
             }
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(PollIntervalMs).ConfigureAwait(false);
         }
+
+        LastWaitDiagnostic = DescribeMiss($"rendered '{text}'", GetRenderedText());
         return false;
     }
 
@@ -618,10 +642,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             string current = GetAllVisibleText();
             if (!current.Contains(text, StringComparison.Ordinal))
             {
+                LastWaitDiagnostic = $"expected '{text}' to be GONE — it is";
                 return true;
             }
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(PollIntervalMs).ConfigureAwait(false);
         }
+
+        LastWaitDiagnostic = DescribeMiss($"'{text}' to be gone", GetAllVisibleText());
         return !GetAllVisibleText().Contains(text, StringComparison.Ordinal);
     }
 
@@ -637,9 +664,10 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         TimeSpan? timeout = null)
     {
         var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        string current = string.Empty;
         while (DateTimeOffset.UtcNow < deadline)
         {
-            string current = OnUIThread(() =>
+            current = OnUIThread(() =>
             {
                 var sb = new StringBuilder();
                 AppendText(window, sb);
@@ -647,10 +675,13 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             });
             if (current.Contains(text, StringComparison.Ordinal))
             {
+                LastWaitDiagnostic = $"expected the window to show '{text}' — found it";
                 return true;
             }
-            await Task.Delay(50).ConfigureAwait(false);
+            await Task.Delay(PollIntervalMs).ConfigureAwait(false);
         }
+
+        LastWaitDiagnostic = DescribeMiss($"'{text}' in the window", current);
         return false;
     }
 
@@ -672,16 +703,33 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         TimeSpan? pollInterval = null)
     {
         var deadline = DateTimeOffset.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
-        var interval = pollInterval ?? TimeSpan.FromMilliseconds(50);
+        var interval = pollInterval ?? TimeSpan.FromMilliseconds(PollIntervalMs);
         while (DateTimeOffset.UtcNow < deadline)
         {
             if (condition())
             {
+                LastWaitDiagnostic = "the condition held";
                 return true;
             }
             await Task.Delay(interval).ConfigureAwait(false);
         }
-        return condition();
+
+        bool held = condition();
+        LastWaitDiagnostic = held
+            ? "the condition held"
+            : $"the condition never became true within {timeout ?? TimeSpan.FromSeconds(5)}";
+        return held;
+    }
+
+    /// <summary>
+    ///     The diagnostic a failed wait reports: what was expected and what
+    ///     the tree actually showed.
+    /// </summary>
+    private static string DescribeMiss(string expectation, string seen)
+    {
+        const int maxSeen = 600;
+        string trimmed = seen.Length <= maxSeen ? seen : seen[..maxSeen] + "…";
+        return $"expected {expectation}, but the visible tree never showed it. Visible text was:\n{trimmed}";
     }
 
     /// <summary>

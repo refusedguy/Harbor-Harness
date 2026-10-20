@@ -54,28 +54,12 @@ public sealed class PermissionDenyScenarioTests : CellForgePtyScenarioBase
         // Deny with "n" (one-shot — a re-served call re-prompts, so deny
         // again until the text follow-up lands), switching the mock to text
         // on the first denial so the run can settle.
-        bool denied = false;
-        var denySw = System.Diagnostics.Stopwatch.StartNew();
-        while (denySw.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            string[] snap = NormalizedLines();
-            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
-            {
-                Session.SendKey("n");
-                if (!denied)
-                {
-                    denied = true;
-                    Server.SetResponse("test-model", "probe-deny-done-423b");
-                }
-            }
-
-            if (snap.Any(x => x.Contains("probe-deny-done-423b", StringComparison.Ordinal)))
-            {
-                break;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
+        bool denied = await AnswerApprovalGateAsync(
+            "permission required",
+            "probe-deny-done-423b",
+            TimeSpan.FromSeconds(30),
+            answerKey: "n",
+            onFirstAnswer: () => Server.SetResponse("test-model", "probe-deny-done-423b")).ConfigureAwait(false);
 
         await Assert.That(denied).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 

@@ -26,7 +26,10 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         int marker = Session.OutputLength;
         await Session.ResizeAsync(60, 30).ConfigureAwait(false);
 
-        // Erase-in-display mode 2 must appear AFTER the resize point.
+        // Erase-in-display mode 2 must appear AFTER the resize point. The
+        // child's bytes are the condition: wait for the next OUTPUT (the
+        // session signals every chunk it reads) instead of polling the raw
+        // buffer on a fixed interval.
         bool erased = false;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(5))
@@ -38,10 +41,12 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
                 break;
             }
 
-            await Task.Delay(50).ConfigureAwait(false);
+            _ = await Session.WaitForOutputChangeAsync(
+                Session.OutputLength,
+                TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
         }
 
-        await Assert.That(erased).IsTrue();
+        await Assert.That(erased).IsTrue().Because("the app must erase the display before the next frame after a resize");
 
         // Repainted grid settles within the new width.
         _ = await WaitForScreenAsync(
@@ -57,7 +62,10 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
             lines = NormalizedLines();
             if (lines.All(x => x.Length <= 60))
                 break;
-            await Task.Delay(100).ConfigureAwait(false);
+
+            // The reflow lands as a grid repaint — wait for THAT instead of
+            // sleeping a fixed interval between width reads.
+            _ = await WaitForRepaintAsync(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
         }
 
         await Assert.That(lines.All(x => x.Length <= 60)).IsTrue();

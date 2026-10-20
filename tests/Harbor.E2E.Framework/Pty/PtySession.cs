@@ -48,6 +48,15 @@ public sealed class PtySession : IAsyncDisposable
     private readonly object _writeLock = new();
     private readonly byte[] _initialTermios;
 
+    // ── Output-arrival signal ───────────────────────────────────────────────
+    // The reader thread wakes every waiter the moment the kernel hands it
+    // bytes. Before this, a poll loop had to sleep a fixed interval between
+    // checks: the sleep was the cost (up to a full interval per wait) and
+    // it still raced the child under load. The signal is raised by the very
+    // code whose output is being awaited, so a waiter can never miss bytes
+    // that already landed.
+    private TaskCompletionSource _outputArrived = NewSignal();
+
     private PtySession(int masterFd, int slaveFd, int pid, byte[] initialTermios)
     {
         _masterFd = masterFd;
@@ -59,6 +68,7 @@ public sealed class PtySession : IAsyncDisposable
             () =>
             {
                 _ = LibcNative.waitpid(_pid, out int status, 0);
+                SignalOutputArrived();
                 return DecodeStatus(status);
             });
 
@@ -217,10 +227,64 @@ public sealed class PtySession : IAsyncDisposable
                 return true;
             }
 
-            await Task.Delay(50).ConfigureAwait(false);
+            TimeSpan remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                break;
+            }
+
+            // Sleep on the child's next byte instead of on a fixed tick: the
+            // wait costs the child's latency, not a poll interval.
+            _ = await WaitForOutputChangeAsync(OutputLength, remaining).ConfigureAwait(false);
         }
 
-        return false;
+        return predicate(RawText);
+    }
+
+    /// <summary>
+    ///     Await the child's next output. Resolves <see langword="true" /> as
+    ///     soon as the cumulative output grows past
+    ///     <paramref name="observedLength" /> bytes (or the child exits),
+    ///     <see langword="false" /> when <paramref name="timeout" /> elapses.
+    ///     Signal-driven: the reader thread releases the waiters the moment
+    ///     bytes land, so this never pays a poll interval and never misses
+    ///     output that already arrived.
+    /// </summary>
+    public async Task<bool> WaitForOutputChangeAsync(
+        int observedLength,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        while (true)
+        {
+            var signal = Volatile.Read(ref _outputArrived);
+            if (OutputLength != observedLength)
+            {
+                return true;
+            }
+
+            TimeSpan remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return false;
+            }
+
+            var expiry = Task.Delay(remaining, cancellationToken);
+            if (await Task.WhenAny(signal.Task, expiry).ConfigureAwait(false) != signal.Task)
+            {
+                return false;
+            }
+        }
+    }
+
+    private static TaskCompletionSource NewSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private void SignalOutputArrived()
+    {
+        var previous = Interlocked.Exchange(ref _outputArrived, NewSignal());
+        previous.TrySetResult();
     }
 
     /// <summary>
@@ -373,6 +437,8 @@ public sealed class PtySession : IAsyncDisposable
                     _raw.Add(buf[i]);
                 }
             }
+
+            SignalOutputArrived();
         }
     }
 }

@@ -57,7 +57,7 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var opened = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsCommandPaletteOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.IsCommandPaletteOpen = false);
         var closed = UI(() => Vm.IsCommandPaletteOpen);
@@ -80,7 +80,7 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var hasExplorer = await Driver.WaitForRenderedTextAsync("Explorer", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasExplorer).IsTrue();
+        await Assert.That(hasExplorer).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var toggle = Driver.FindControlByName<Button>("Rail_ToggleButton");
         await Assert.That(toggle).IsNotNull();
@@ -88,17 +88,17 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var collapsed = await Driver.WaitForConditionAsync(
             () => UI(() => !Vm.IsSidebarVisible), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(collapsed).IsTrue();
+        await Assert.That(collapsed).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var explorerGone = await Driver.WaitForConditionAsync(
             () => !UI(() => Driver.GetRenderedText().Contains("Explorer", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(explorerGone).IsTrue();
+        await Assert.That(explorerGone).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await Driver.ClickAsync(toggle!).ConfigureAwait(false);
         var expanded = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsSidebarVisible), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(expanded).IsTrue();
+        await Assert.That(expanded).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await CaptureAsync("shell-activityrail-toggled").ConfigureAwait(false);
     }
@@ -119,7 +119,7 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var hasHeader = await Driver.WaitForRenderedTextAsync("SESSIONS", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasHeader).IsTrue();
+        await Assert.That(hasHeader).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var searchBox = Driver.FindControlByName<TextBox>("SessionsFlyout_SearchBox");
         await Assert.That(searchBox).IsNotNull();
@@ -159,7 +159,7 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var opened = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsRightDrawerOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var tab = UI(() => Vm.RightDrawerTab);
         await Assert.That(tab).IsEqualTo("inspector");
@@ -176,7 +176,7 @@ public sealed class ShellChromeTests : ComponentTestBase
 
         var hasFooter = await Driver.WaitForRenderedTextAsync("Ready", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasFooter).IsTrue();
+        await Assert.That(hasFooter).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.ToggleRightDrawerCommand.Execute(null));
         var closed = UI(() => Vm.IsRightDrawerOpen);
@@ -199,12 +199,12 @@ public sealed class ShellChromeTests : ComponentTestBase
         UI(() => Vm.SwitchView("board"));
         var onBoard = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.ActiveView == "board"), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(onBoard).IsTrue();
+        await Assert.That(onBoard).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.SwitchView("chat"));
         var onChat = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.ActiveView == "chat"), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(onChat).IsTrue();
+        await Assert.That(onChat).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await CaptureAsync("shell-board-tab").ConfigureAwait(false);
     }

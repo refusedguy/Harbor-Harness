@@ -61,28 +61,12 @@ public sealed class EditDiffScenarioTests : CellForgePtyScenarioBase
         // at the mock so the run settles after this one execution. Re-prompt
         // tolerant: a lost key leaves the turn waiting at the prompt (turns are
         // sequential), so approve again until the follow-up text lands.
-        bool approved = false;
-        var approvalSw = System.Diagnostics.Stopwatch.StartNew();
-        while (approvalSw.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            string[] snap = NormalizedLines();
-            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
-            {
-                Session.SendKey("a");
-                if (!approved)
-                {
-                    approved = true;
-                    Server.SetResponse("test-model", "probe-edit-done-1057");
-                }
-            }
-
-            if (snap.Any(x => x.Contains("probe-edit-done-1057", StringComparison.Ordinal)))
-            {
-                break;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
+        bool approved = await AnswerApprovalGateAsync(
+            "permission required",
+            "probe-edit-done-1057",
+            TimeSpan.FromSeconds(30),
+            answerKey: "a",
+            onFirstAnswer: () => Server.SetResponse("test-model", "probe-edit-done-1057")).ConfigureAwait(false);
 
         await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 

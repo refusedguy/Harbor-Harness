@@ -38,7 +38,7 @@ public sealed class CommandPaletteTests : ComponentTestBase
 
         var hasPalette = await Driver.WaitForTextAsync("Command palette", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasPalette).IsTrue();
+        await Assert.That(hasPalette).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // The Results collection should be populated with all commands.
         var resultCount = UI(() => Vm.CommandPalette.Results.Count);
@@ -67,7 +67,7 @@ public sealed class CommandPaletteTests : ComponentTestBase
 
         var hasNewSession = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasNewSession).IsTrue();
+        await Assert.That(hasNewSession).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasUnrelated = Driver.GetAllVisibleText().Contains("Switch to chat", StringComparison.Ordinal);
         // "Switch to chat" should NOT be in the filtered results.

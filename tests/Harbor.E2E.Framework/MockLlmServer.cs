@@ -64,6 +64,9 @@ public sealed class MockLlmServer : IAsyncDisposable
     private Task? _loopTask;
     private int _requestCount;
 
+    /// <summary>Released whenever a request is recorded (see <see cref="WaitForRequestAsync" />).</summary>
+    private TaskCompletionSource _requestArrived = NewSignal();
+
     /// <summary>
     ///     The base URI clients should target. Populated after <see cref="StartAsync" />.
     ///     Always <c>http://localhost:&lt;port&gt;</c> with no trailing slash — the
@@ -89,6 +92,51 @@ public sealed class MockLlmServer : IAsyncDisposable
 
     /// <summary>Total number of requests served (any endpoint). For diagnostics.</summary>
     public int RequestCount => Volatile.Read(ref _requestCount);
+
+    private static TaskCompletionSource NewSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private void SignalRequestArrived()
+    {
+        var previous = Interlocked.Exchange(ref _requestArrived, NewSignal());
+        previous.TrySetResult();
+    }
+
+    /// <summary>
+    ///     Await the next chat-completion request that matches
+    ///     <paramref name="predicate" />. Signal-driven: the HTTP handler
+    ///     releases the waiters the moment a request is recorded, so a caller
+    ///     that waits for "the agent asked the model" pays the model's
+    ///     latency instead of a poll interval — and the wait cannot miss a
+    ///     request that already landed.
+    /// </summary>
+    /// <returns><see langword="true" /> when a matching request was seen.</returns>
+    public async Task<bool> WaitForRequestAsync(
+        Func<ChatCompletionRequest, bool> predicate,
+        TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (true)
+        {
+            var signal = Volatile.Read(ref _requestArrived);
+            if (ReceivedRequests.Any(predicate))
+            {
+                return true;
+            }
+
+            TimeSpan remaining = timeout - sw.Elapsed;
+            if (remaining <= TimeSpan.Zero)
+            {
+                return false;
+            }
+
+            var expiry = Task.Delay(remaining);
+            if (await Task.WhenAny(signal.Task, expiry).ConfigureAwait(false) != signal.Task)
+            {
+                return false;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -431,6 +479,8 @@ public sealed class MockLlmServer : IAsyncDisposable
         {
             _received.Add(new ChatCompletionRequest(model ?? "", requestBody));
         }
+
+        SignalRequestArrived();
 
         // Echo mode bypasses scripted responses entirely: the served text is
         // derived from the request itself (see SetEchoResponse).

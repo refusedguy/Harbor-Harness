@@ -183,7 +183,7 @@ public sealed class SettingsTests : ComponentTestBase
         // by looking for the "Provider Configuration" label.
         var hasProviderConfig = await Driver.WaitForTextAsync("Provider Configuration", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasProviderConfig).IsTrue();
+        await Assert.That(hasProviderConfig).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // At least one provider row visible (Ollama is always registered).
         var providerCount = UI(() => Vm.Settings.ProviderConfigs.Count);
