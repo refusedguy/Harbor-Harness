@@ -1,0 +1,51 @@
+# Named exceptions to the test/sample package-set gate
+# (tools/check-test-packages.py, issue #1882).
+#
+# ONE exception per line, four fields, separated by `|`:
+#
+#   <package or assembly name> | <project glob> | <reason> | <owner>
+#
+# Every field is mandatory. A line whose reason or owner is empty is
+# reported as EXCEPTION-UNJUSTIFIED, because an exception nobody can
+# justify is a silent allowance. A line that matches nothing in scope is
+# reported as EXCEPTION-STALE, because an allowance with no referent is a
+# permission that outlived the dependency that needed it.
+#
+# The project glob is matched against the project's repository-relative path
+# (`tests/Harbor.Architecture.Tests`) and against its bare directory name.
+# `*` covers every project in scope.
+#
+# WHAT THE BANNED NAMES ARE
+#
+#   Read out of `BannedSymbols.txt` — the file the BannedApiAnalyzers
+#   already consume. An `N:` entry names a namespace, and the package that
+#   ships it is the namespace itself: `N:Newtonsoft.Json` bans the package
+#   `Newtonsoft.Json` and the assembly `Newtonsoft.Json.dll` in every test
+#   and sample project. To ban another package, add its `N:` entry there
+#   rather than to a second list here.
+#
+# WHY THIS FILE HAS NO ENTRIES TODAY
+#
+# `Newtonsoft.Json` is the one real candidate and it is deliberately NOT
+# listed. The repository bans Newtonsoft.Json outright (`BannedSymbols.txt`
+# and AGENTS.md §"What NOT to do" #2: "use System.Text.Json only"), so the
+# treatment of a package that drags it in is: DROP THE DEPENDENCY, DO NOT
+# EXCEPT IT. Measured on dev@69fb5c80:
+#
+#   * `NetArchTest.Rules` 1.3.2 — already referenced by
+#     `tests/Harbor.Architecture.Tests` — declares exactly one dependency,
+#     `Mono.Cecil` 0.11.3. It does NOT bring Newtonsoft.Json. If a future
+#     version of it did, the fix would be to drop it: the layering rules
+#     have a zero-dependency reflection fallback already
+#     (`tests/Harbor.Architecture.Tests/LayerDependencyTests.cs`), so the
+#     NetArchTest DSL is a convenience, not a requirement.
+#   * `TngTech.ArchUnitNET` 0.13.4 — proposed in #1841 — declares
+#     `Newtonsoft.Json 13.0.4`. If that proposal is accepted with this
+#     package, the gate goes red, and the answer is either to not take the
+#     package or to record here, in a file a reviewer can see, WHY a
+#     test-only Newtonsoft is worth having. What must not happen is the
+#     package arriving quietly.
+#
+# The file is empty of entries and is still committed: its presence is what
+# makes "drop it or name it" an explicit choice rather than a default
+# nobody made.

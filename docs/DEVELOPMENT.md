@@ -189,6 +189,85 @@ issues #1769–#1777 land, `--update` lowers it, and the floor tightens with
 it. Zones other programmes own are exempted explicitly, with a reason and an
 expiry date, and an expired exemption fails the gate.
 
+## Package-set checks (test and sample projects)
+
+`tools/check-test-packages.py` answers one question about every project under
+`tests/` and `samples/`: **which packages may it reference, directly or
+transitively, and is any banned one among them?**
+
+It exists because nothing else answered it (issue #1882). `BannedSymbols.txt`
+bans `N:Newtonsoft.Json`, but that file is an RS0030 analyzer input: it covers
+source code only, and RS0030 is switched off for `tests/` and `samples/` in
+`Directory.Build.props`, so a *transitive* dependency could put Newtonsoft into
+a test project's `bin/` with no rule noticing. `tools/check-abstractions-contract.py`
+covers four `src/` projects, `tools/aot-publish-gate.py` covers `src/` and
+`apps/`, and the rule in `AGENTS.md` is prose.
+
+```bash
+dotnet restore Harbor.slnx        # the gate reads what the restore resolves
+./tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
+./tools/check-test-packages.py --self-test   # prove the gate still fails on a banned package
+./tools/check-test-packages.py --report      # the census, per project
+```
+
+**How it reads the graph.** Two sources, and the difference matters. The
+`<PackageReference>` elements of the `.csproj` are the *direct* half and need
+nothing but the file. `obj/project.assets.json` — the graph NuGet writes during
+*restore* — is the *transitive* half: every package in the closure, its
+version, and the exact asset paths that will be copied into the output
+directory. No build is involved and no network is needed.
+
+**What "banned" means.** The banned names come from `BannedSymbols.txt`, not
+from a second list: an `N:` entry names a namespace, and the package that
+ships it is the namespace itself (`N:Newtonsoft.Json` bans the package
+`Newtonsoft.Json` and the assembly `Newtonsoft.Json.dll`). To ban another
+package, add its `N:` entry there.
+
+**Exceptions are named, justified, and never silent.**
+`tools/test-package-exceptions.txt` holds one exception per line:
+
+```
+<package or assembly name> | <project glob> | <reason> | <owner>
+```
+
+Every field is mandatory — an exception with no reason is reported as
+`EXCEPTION-UNJUSTIFIED`, and one that matches nothing is reported as
+`EXCEPTION-STALE`, so the file cannot accumulate permissions that no longer
+apply.
+
+**The Newtonsoft case.** It is deliberately **not** an exception. The
+repository bans Newtonsoft outright, so the treatment of a package that drags
+it in is to **drop that package**, not to except it. Measured on
+`dev@69fb5c80`: `NetArchTest.Rules` 1.3.2 (already referenced by
+`tests/Harbor.Architecture.Tests`) declares exactly one dependency,
+`Mono.Cecil` 0.11.3, and does not bring Newtonsoft — and if it ever did, the
+layering rules have a zero-dependency reflection fallback already
+(`tests/Harbor.Architecture.Tests/LayerDependencyTests.cs`).
+`TngTech.ArchUnitNET` 0.13.4, proposed in #1841, *does* declare
+`Newtonsoft.Json` 13.0.4; if that proposal is accepted with the package, this
+gate goes red and the answer is either to not take the package or to record,
+in the exception file, why a test-only Newtonsoft is worth having. What must
+not happen is the package arriving quietly.
+
+**In CI.** Two places, because the question has two answers:
+
+| Job | What it asserts |
+|---|---|
+| `test/sample package set` (`ci.yml`) | the resolved package graph of every test and sample project — `check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400`, after `dotnet restore` |
+| `build` (`ci.yml`, one step after the solution build) | the output directories the build produced — `check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40` |
+
+The first answers "which packages may this project pull in, directly or
+transitively" from the graph NuGet resolved. The second answers the issue's
+literal question — "is the forbidden DLL in the output directory" — against
+the bytes the build actually produced. They are separate mechanisms: a file
+can reach an output directory without being a package in the graph.
+
+The `test/sample package set` job is triggered by the `packages` path filter
+in the `changes` job: a `.csproj` under `tests/`/`samples/`,
+`Directory.Build.props`, `Directory.Packages.props`, `BannedSymbols.txt`, the
+gate, or its exception file — that is every way the package set of a test
+project can move.
+
 ## Running the CLI
 
 ```bash

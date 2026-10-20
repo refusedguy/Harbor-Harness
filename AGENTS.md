@@ -722,7 +722,7 @@ Harbor следует принципам OOP/SOLID/GoF/FP/ROP/perf. Полный
 ## What NOT to do
 
 1. **Don't add dependencies to `Harbor.Abstractions`** — it must stay as small as it is today. It is not zero-dep: the measured set is 7 `PackageReference` (`CSharpFunctionalExtensions`, `MemoryPack`, `ZLinq` + `ZLinq.DropInGenerator`, and the three `Microsoft.Extensions.*.Abstractions`), plus one `ProjectReference` to `Harbor.Abstractions.Contracts`. This list used to say "only CSharpFunctionalExtensions" and was wrong by six. It is now enforced by [`tools/check-abstractions-contract.py`](./tools/check-abstractions-contract.py), which fails when a declared package has no `using` under it or a non-BCL `using` has no package over it — run `--report` to print the census rather than trusting this sentence. The gate covers four projects, not just this one: `Harbor.Abstractions.Contracts`, plus `Harbor.Extensions` and `Harbor.Application`, which carried the same phantom `CommunityToolkit.HighPerformance` edge until #1016's follow-up measured that nothing in `src/` used it. `Harbor.Extensions` and `Harbor.Application` are not frozen contracts — they are on the gate because their dependency sets are the ones every other assembly inherits through them.
-2. **Don't use `Newtonsoft.Json`** — use `System.Text.Json` only.
+2. **Don't use `Newtonsoft.Json`** — use `System.Text.Json` only. The ban is enforced on source code by `BannedSymbols.txt` (RS0030), but RS0030 is off for `tests/` and `samples/`, so a *transitive* dependency could put Newtonsoft into a test project's `bin/` with nothing saying so. [`tools/check-test-packages.py`](./tools/check-test-packages.py) closes that hole: it reads the resolved package graph of every test and sample project and fails on a banned package, direct or transitive. Exceptions are named and justified in [`tools/test-package-exceptions.txt`](./tools/test-package-exceptions.txt) — one line per exception, with a reason and an owner. Today that file has **no** entries: the treatment of a package that drags Newtonsoft in is to **drop that package**, not to except it.
 3. **Don't use EF Core** — not AOT-compatible. Use Dapper or raw ADO.NET.
 4. **Don't throw exceptions for expected failures** — use `Result<T>`.
 5. **Don't use `xUnit` or `NUnit`** — TUnit only.
@@ -755,6 +755,13 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 
 # Run CLI
 dotnet run --project apps/Harbor.App.Cli
+
+# Gate the package set of the test and sample projects (#1882). The gate reads
+# the resolved package graph `dotnet restore` writes, so the restore comes
+# first; the gate itself is stdlib python and needs no build.
+dotnet restore Harbor.slnx
+python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
+python3 tools/check-test-packages.py --self-test   # prove the gate still fails on a banned package
 
 # CLI verbs: ask <prompt> | run | demo | setup | auth | config | providers | models [provider] |
 #            sessions | mcp | serve | tui | events | storage | logs | daemon (start|stop|status) |
