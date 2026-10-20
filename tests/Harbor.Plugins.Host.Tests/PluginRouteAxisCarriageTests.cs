@@ -150,7 +150,7 @@ public sealed class PluginRouteAxisCarriageTests
 
         using var call = JsonDocument.Parse(callFrame!);
         var result = call.RootElement.GetProperty("result");
-        await Assert.That(result.GetProperty("isError").GetBoolean()).IsEqualTo(false);
+        await Assert.That(result.GetProperty("isError").GetBoolean()).IsFalse();
         await Assert.That(result.GetProperty("content")[0].GetProperty("text").GetString())
             .IsEqualTo("crossing:hi")
             .Because(
