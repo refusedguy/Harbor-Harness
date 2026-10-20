@@ -481,21 +481,24 @@ jobs:
   # reaches a CI run through its OWN list entry OR through a listed project
   # that references it, and the gate has to count both.
   #
-  # What the gate finds on dev@8d09f569, with 40 .csproj under tests/ and 37
+  # What the gate finds on dev@8be16392, with 43 .csproj under tests/ and 38
   # test projects carrying tests:
   #
-  #   * every one of the 37 is discovered by some CI run, so nothing is
+  #   * every one of the 38 is discovered by some CI run, so nothing is
   #     silently unrun -- the hole the issue was filed about does not
   #     exist in the shape the issue described;
   #   * Harbor.E2E.Framework's 26 tests run SIX times per CI run, in each
   #     of the six listed projects that reference it: 156 executions of 26
-  #     tests, about 1.23 s of duplicated test time;
+  #     tests, about 1.06 s of duplicated test time;
   #   * Harbor.Ipc.Tests references that framework and names none of its
   #     types, so the reference buys nothing: 13 product assemblies dragged
   #     into the IPC closure, and a sixth copy of the 26 tests;
   #   * Harbor.Terminal.Abstractions.Tests references Harbor.TestKit and
-  #     names none of its types: 3 product assemblies dragged in for
+  #     names none of its types: 4 product assemblies dragged in for
   #     nothing;
+  #   * Harbor.TestKit.Tests references Harbor.TestKit and names none of
+  #     its types, a leftover of the TestKit split: 16 product assemblies
+  #     dragged in for nothing;
   #   * Harbor.E2E.App.Avalonia defines the two-process split (E2eShards)
   #     that would put the framework's tests in one shard, and CI runs the
   #     project once without a filter, so the partition is dead code.
@@ -510,9 +513,9 @@ jobs:
   #
   # The floors are a ratchet, set AT the measured counts rather than below
   # them: a floor with slack cannot tell "the tree got smaller" from "the
-  # matcher stopped matching". Measured on this tree: 40 .csproj under
-  # tests/, 37 test projects carrying tests, 7 CI lists, 36 distinct
-  # projects the lists name, 38 projects discovered by a CI run. A PR that
+  # matcher stopped matching". Measured on this tree: 43 .csproj under
+  # tests/, 38 test projects carrying tests, 7 CI lists, 37 distinct
+  # projects the lists name, 41 projects discovered by a CI run. A PR that
   # legitimately removes a project lowers them in the same diff, where a
   # reviewer sees it.
   #
@@ -534,7 +537,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every test project is discovered by a CI run
-        run: python3 tools/check-test-projects.py --min-projects 40 --min-tested 37 --min-lists 7 --min-claims 36 --min-contexts 38
+        run: python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

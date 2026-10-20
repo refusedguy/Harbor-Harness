@@ -1,5 +1,5 @@
 # test-project-baseline — the known holes in the CI test-project lists, and
-# the deliberate exemptions, as measured on dev@8d09f569.
+# the deliberate exemptions, as measured on dev@8be16392.
 #
 # OWNER: issue #1823. Read by tools/check-test-projects.py on every PR.
 #
@@ -20,18 +20,21 @@
 #   rule     One of the rules tools/check-test-projects.py produces:
 #              PROJECT-UNCLAIMED     a test project whose classes no CI
 #                                     execution context discovers.
-#              PROJECT-EMPTY         a test project (IsTestProject is not
-#                                     false there) that carries no [Test]
-#                                     method. Legitimate for a fixture
-#                                     library, but only when it is written
-#                                     down here.
+#              PROJECT-EMPTY         a test project with no [Test] method
+#                                     that no project carrying tests
+#                                     consumes. A helper library that a
+#                                     test project consumes is not a hole.
 #              TEST-DUPLICATED       a test project's test classes are
 #                                     discovered in more than one CI
 #                                     execution context, because several
 #                                     listed projects reference it.
 #              TEST-REFERENCE-UNUSED A test project references another test
-#                                     project at runtime and names none of
-#                                     its types.
+#                                     project at runtime, names none of its
+#                                     types, and the reference is not free:
+#                                     it duplicates the referenced project's
+#                                     tests or it drags product assemblies
+#                                     into the referencing project's
+#                                     closure.
 #              SHARD-UNWIRED         a project defines a treenode-filter
 #                                     partition of itself and no CI list
 #                                     runs it with a filter.
@@ -47,13 +50,24 @@
 #            allowed here.
 #   owner    A '@handle' somebody can be asked about.
 #
+# ── WHICH ROWS ARE WAITING ON WHICH WORK ──────────────────────────────────
+#
+#   Harbor.Ipc.Tests -> Harbor.E2E.Framework   PR #1943 drops the
+#                                               reference.
+#   TEST-DUPLICATED Harbor.E2E.Framework        PR #1943 moves the tests
+#                                               into their own project, so
+#                                               they stop running six
+#                                               times.
+#   SHARD-UNWIRED Harbor.E2E.App.Avalonia       PR #1946 wires the
+#                                               per-class process split.
+#
+#   The other two rows are not waiting on anybody: they are holes nobody
+#   has picked up yet, and the next person to touch those projects should
+#   drop the reference and delete the row in the same diff.
+#
 # ── THE HOLES ─────────────────────────────────────────────────────────────
 #
 # The rows below are the measured state of the tree, not a wish list.
-#
-# Harbor.TestKit is a shared fixture library. It inherits IsTestProject=true
-# from tests/Directory.Build.props, and it carries no test of its own, so
-# no CI list can run it. It is the reason the PROJECT-EMPTY rule exists.
 #
 # Harbor.Tui.PerfTests is not forgotten. The perf-gate job runs it, and the
 # job is deliberately scoped to PRs that touch the UI paths, because the
@@ -76,7 +90,7 @@
 #
 # What the same fact costs is duplication. Six listed projects reference the
 # framework, so its 26 tests run six times per CI run, 156 executions
-# instead of 26, for about 1.23 seconds of duplicated test time.
+# instead of 26, for about 1.06 seconds of duplicated test time.
 #
 # Harbor.Ipc.Tests is the concrete instance of the waste: it references the
 # framework and names none of its types, so the reference buys nothing. It
@@ -85,8 +99,14 @@
 #
 # Harbor.Terminal.Abstractions.Tests has the same shape with a different
 # target: it references Harbor.TestKit and names none of its types, which
-# drags 3 product assemblies into its closure. TestKit carries no tests,
+# drags 4 product assemblies into its closure. TestKit carries no tests,
 # so nothing is duplicated there; the cost is the closure alone.
+#
+# Harbor.TestKit.Tests is the third of that shape. The TestKit split
+# (#1834) moved the helpers it exercises into Harbor.TestKit.Support and
+# Harbor.TestKit.Tui and left the reference to Harbor.TestKit behind: the
+# project names 21 Support types and 4 Tui types and not one TestKit type,
+# and the reference drags 16 product assemblies into its closure.
 #
 # Harbor.E2E.App.Avalonia already defines the two-process split that would
 # fix the duplication: E2eShards.Shard0 and E2eShards.Shard1 are
@@ -96,9 +116,9 @@
 # without a filter, so the partition is dead code and the classes it
 # separates run in a single process.
 #
-PROJECT-EMPTY | Harbor.TestKit | Shared fixture library for the test tree: other test projects reference it and it carries no test of its own, so no CI list can run it. | @refusedguy
+TEST-DUPLICATED | Harbor.E2E.Framework | Six listed projects reference it, so TUnit discovers its 26 tests in each of them and they run six times per CI run instead of once. PR 1943 moves them into their own project. | @refusedguy
 CLAIM-CONDITIONAL | Harbor.Tui.PerfTests | The perf-gate job runs it only when the PR touches the UI paths, because the suite measures renderer throughput against a committed baseline rather than asserting correctness. | @refusedguy
-TEST-DUPLICATED | Harbor.E2E.Framework | Six listed projects reference it, so TUnit discovers its 26 tests in each of them and they run six times per CI run instead of once. Issue 1812 owns the fix. | @refusedguy
-TEST-REFERENCE-UNUSED | Harbor.Ipc.Tests -> Harbor.E2E.Framework | It names none of the framework's types, so the reference buys nothing while dragging 13 product assemblies into the IPC closure and duplicating 26 tests. | @refusedguy
-TEST-REFERENCE-UNUSED | Harbor.Terminal.Abstractions.Tests -> Harbor.TestKit | It names none of TestKit's types, so the reference buys nothing while dragging 3 product assemblies into the project's closure. | @refusedguy
-SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.Ipc.Tests -> Harbor.E2E.Framework | It names none of the framework's types, so the reference buys nothing while dragging 13 product assemblies into the IPC closure and duplicating 26 tests. PR 1943 drops it. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.Terminal.Abstractions.Tests -> Harbor.TestKit | It names none of TestKit's types, so the reference buys nothing while dragging 4 product assemblies into the project's closure. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.TestKit.Tests -> Harbor.TestKit | The 1834 TestKit split left the reference behind: the project exercises Support and Tui directly and names none of Harbor.TestKit's types, while the reference drags 16 product assemblies in. | @refusedguy
+SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. PR 1946 wires it. | @refusedguy
