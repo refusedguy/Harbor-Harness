@@ -56,14 +56,13 @@ public interface IMcpRemoteTransport : IAsyncDisposable
 ///     <see cref="McpOAuthHandler" /> when the server has an <c>auth</c> config,
 ///     else the <c>HARBOR_MCP_OAUTH_TOKEN</c> environment fallback).
 /// </summary>
-public sealed class McpHttpTransport : IMcpRemoteTransport
+public sealed class McpHttpTransport : McpRemoteTransportBase
 {
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
     private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
-    private HttpClient? _client;
     private string? _sessionId;
     private bool _disposed;
 
@@ -82,6 +81,14 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     }
 
     /// <summary>
+    ///     The client is bounded by the request timeout — this transport's
+    ///     request IS the whole exchange. The client itself is assembled by the
+    ///     base's Factory Method (#1567); the timeout is the only thing that
+    ///     differs from the legacy SSE transport.
+    /// </summary>
+    protected override TimeSpan ClientTimeout => _requestTimeout;
+
+    /// <summary>
     ///     Result railway for the round-trip (#201 C4, sealed to the interface in
     ///     #587): expected network failures (5xx/408, client-side timeout, no-frame
     ///     SSE body, unreachable endpoint) surface as
@@ -92,7 +99,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
+    public override async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
@@ -177,7 +184,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
     }
 
-    public ValueTask DisposeAsync()
+    public override ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -185,7 +192,7 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         }
 
         _disposed = true;
-        _client?.Dispose();
+        DisposeClient();
         return ValueTask.CompletedTask;
     }
 
@@ -356,24 +363,6 @@ public sealed class McpHttpTransport : IMcpRemoteTransport
         string error = $"HTTP {_endpoint} failed after {attempts} attempt(s) in {sw.Elapsed.TotalMilliseconds:0}ms: {cause}";
         if (_logger is not null) McpHttpTransportLog.TransportFailure(_logger, error);
         return Result.Failure<T>(error);
-    }
-
-    private HttpClient GetClient()
-    {
-        if (_client is { } existing)
-        {
-            return existing;
-        }
-
-        var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) };
-        var client = new HttpClient(handler)
-        {
-            Timeout = _requestTimeout,
-        };
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        _client = client;
-        return client;
     }
 }
 
