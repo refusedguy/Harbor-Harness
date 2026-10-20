@@ -21,6 +21,14 @@
       reference goes with it rather than becoming an unused edge.
     -->
     <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
+    <!--
+      #1810: the closure-neutral half of the kit, for the exhaustiveness
+      check the escape-code table is guarded with. It reaches
+      Harbor.Abstractions and nothing else, so the reference adds no product
+      assembly this project does not already have — the same argument
+      #1772/#1773 made for the core.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

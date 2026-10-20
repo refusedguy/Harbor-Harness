@@ -1,43 +1,53 @@
 using Harbor.Terminal.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.Tests;
 
 public class GeneratedEscapeCodeTests
 {
-    [Test]
-    public async Task StyleFlagEscapeCodes_Reset_ReturnsCorrectSequence()
-    {
-        await Assert.That(StyleFlagEscapeCodes.Reset).IsEqualTo("\x1b[0m");
-    }
+    // #1810: the escape-code table is an ARRAY, and the array is the whole
+    // truth about which members exist: the rows come from it, and the guard
+    // below proves it names every member of the enum. Before, six of the
+    // nine members had a method of their own and Blink, Reverse and Hidden
+    // had none at all — the generated constants for those three were never
+    // asserted by anyone.
+
+    /// <summary>The StyleFlag table of escape-code sequences.</summary>
+    public static (string Name, StyleFlag Flag, string EscapeCode, string Expected)[] StyleFlagEscapeCodeCases =>
+    [
+        ("StyleFlagEscapeCodes_Reset_ReturnsCorrectSequence", StyleFlag.Reset, StyleFlagEscapeCodes.Reset, "\x1b[0m"),
+        ("StyleFlagEscapeCodes_Bold_ReturnsCorrectSequence", StyleFlag.Bold, StyleFlagEscapeCodes.Bold, "\x1b[1m"),
+        ("StyleFlagEscapeCodes_Dim_ReturnsCorrectSequence", StyleFlag.Dim, StyleFlagEscapeCodes.Dim, "\x1b[2m"),
+        ("StyleFlagEscapeCodes_Italic_ReturnsCorrectSequence", StyleFlag.Italic, StyleFlagEscapeCodes.Italic, "\x1b[3m"),
+        ("StyleFlagEscapeCodes_Underline_ReturnsCorrectSequence", StyleFlag.Underline, StyleFlagEscapeCodes.Underline, "\x1b[4m"),
+        ("StyleFlagEscapeCodes_Blink_ReturnsCorrectSequence", StyleFlag.Blink, StyleFlagEscapeCodes.Blink, "\x1b[5m"),
+        ("StyleFlagEscapeCodes_Reverse_ReturnsCorrectSequence", StyleFlag.Reverse, StyleFlagEscapeCodes.Reverse, "\x1b[7m"),
+        ("StyleFlagEscapeCodes_Hidden_ReturnsCorrectSequence", StyleFlag.Hidden, StyleFlagEscapeCodes.Hidden, "\x1b[8m"),
+        ("StyleFlagEscapeCodes_Strike_ReturnsCorrectSequence", StyleFlag.Strike, StyleFlagEscapeCodes.Strike, "\x1b[9m"),
+    ];
 
     [Test]
-    public async Task StyleFlagEscapeCodes_Bold_ReturnsCorrectSequence()
+    [MethodDataSource(nameof(StyleFlagEscapeCodeCases))]
+    public async Task StyleFlagEscapeCodes_ReturnsCorrectSequence(
+        string name,
+        StyleFlag flag,
+        string escapeCode,
+        string expected)
     {
-        await Assert.That(StyleFlagEscapeCodes.Bold).IsEqualTo("\x1b[1m");
+        await Assert.That(escapeCode).IsEqualTo(expected)
+            .Because($"the row for {flag} must name the sequence the generator emits ({name})");
     }
 
+    /// <summary>
+    /// #1810: the totality check. The table above names every member of
+    /// <c>StyleFlag</c>, and this says so — a member added to the enum has
+    /// no row until it gets one.
+    /// </summary>
     [Test]
-    public async Task StyleFlagEscapeCodes_Dim_ReturnsCorrectSequence()
+    public async Task Every_StyleFlag_Has_A_Row_In_The_Table()
     {
-        await Assert.That(StyleFlagEscapeCodes.Dim).IsEqualTo("\x1b[2m");
-    }
-
-    [Test]
-    public async Task StyleFlagEscapeCodes_Italic_ReturnsCorrectSequence()
-    {
-        await Assert.That(StyleFlagEscapeCodes.Italic).IsEqualTo("\x1b[3m");
-    }
-
-    [Test]
-    public async Task StyleFlagEscapeCodes_Underline_ReturnsCorrectSequence()
-    {
-        await Assert.That(StyleFlagEscapeCodes.Underline).IsEqualTo("\x1b[4m");
-    }
-
-    [Test]
-    public async Task StyleFlagEscapeCodes_Strike_ReturnsCorrectSequence()
-    {
-        await Assert.That(StyleFlagEscapeCodes.Strike).IsEqualTo("\x1b[9m");
+        await Assert.That(StyleFlagEscapeCodeCases.Length).IsGreaterThan(0).Because("the table has rows to check");
+        Exhaustive.AssertAllCases<StyleFlag>(StyleFlagEscapeCodeCases.Select(c => c.Flag).ToHashSet(), "every StyleFlag must have a row in the escape-code table");
     }
 
     [Test]
