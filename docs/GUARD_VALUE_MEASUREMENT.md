@@ -104,7 +104,10 @@ python3 tools/guard-triage.py --self-test
 
 It writes three things: a machine-readable JSON report (every firing, with the
 rule, the guard file and line, the evidence, the class and the ratchet), a
-Markdown table, and a short table for a CI job summary.
+Markdown table, and a short table for a CI job summary. The JSON carries the
+schema id `harbor.guard-triage/1` and the registry carries
+`harbor.guard-triage/registry/1`, so a consumer can tell which shape it is
+looking at.
 
 ### The four classes
 
