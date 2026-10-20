@@ -1096,17 +1096,26 @@ runner's speed cancels. The time branch asserts only when the measurement is
 trusted (reproducible spread, long enough leg); otherwise it reports and stands
 down.
 
-| Test | Unit of work | Gate | Measured BEFORE (run 39390539021) |
+| Test | Claim | Gate | Measured |
 |---|---|---|---|
-| `ToolStart_On_An_Open_Card_CostsWithinBudget` | one tool-start event on a card the LLM already opened | ≤ **8 B** per event (HARD) + ≤ 1.0 probe units (SOFT) | **104.0 B** per event, **0.5** probe units (0.0002 ms/unit, trusted) |
-| `ToolCardFrame_CostsWithinBudget` | one painted frame of a timeline carrying a 64 KiB tool card | ≤ **4 KiB** per frame (HARD) + ≤ 700 probe units (SOFT) | **131 144 B** per frame (two copies of the body), **339.1** probe units (0.1290 ms/unit) |
-| `PatchSplit_CostsWithinBudget` | one split of a 1000-line CRLF patch with tabbed lines | ≤ **128 KiB** per split (HARD) + ≤ 1400 probe units (SOFT) | **175 248 B** per split, **682.7** probe units (0.2580 ms/unit) |
+| `ToolStart_On_An_Open_Card_CostsWithinBudget` | allocation per tool-start event on a card the LLM already opened | ≤ 8 B per event (machine-independent, HARD) | **104.0 B → 0.0 B** per event (before run 39390539021 → after run 39399621327) — the shaped args are gone, and the card is a dictionary probe |
+| `ToolStart_On_An_Open_Card_CostsWithinBudget` | time per tool-start event, in **probe units** — the cost of one event divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 1.0 probe units per event (machine-scaled, SOFT — stands down when the measurement is not trusted) | **0.5 → 0.2** probe units per event (before run 39390539021 → after run 39399621327) |
+| `ToolCardFrame_CostsWithinBudget` | allocation per painted frame of a timeline carrying a 64 KiB tool card | ≤ 4 KiB per frame (machine-independent, HARD) | **131 144 B → 0.0 B** per frame (before run 39390539021 → after run 39399621327) — the frame paints spans, and the body is not copied at all |
+| `ToolCardFrame_CostsWithinBudget` | time per painted frame, in **probe units** | ≤ 700 probe units per frame (machine-scaled, SOFT) | **339.1 → 299.1** probe units per frame (before run 39390539021 → after run 39399621327) |
+| `PatchSplit_CostsWithinBudget` | allocation per split of a 1000-line CRLF patch with tabbed lines | ≤ 128 KiB per split (machine-independent, HARD) | **175 248 B → 93 336 B** per split (before run 39390539021 → after run 39399621327) — the remaining bytes are the lines themselves, which are the API's result |
+| `PatchSplit_CostsWithinBudget` | time per patch split, in **probe units** | ≤ 1400 probe units per split (machine-scaled, SOFT) | **682.7 → 505.2** probe units per split (before run 39390539021 → after run 39399621327) |
 
 The BEFORE column is the run of the **gate-only commit** (the first commit of
 PR #1910): the gate landed before the fix on purpose, because a budget pinned
 from a tree that still shreds strings says nothing about the fix. Every budget
 above sits below that measured cost — so the pre-slice shape fails the gate — and
 above what the slice leaves behind.
+
+The gate earned its keep on the way: the first cut of the patch split expanded
+each line's tabs through a `StringBuilder`, and the measurement of that cut read
+**208 936 B per split** — *more* than the shape it replaced (a StringBuilder per
+line costs the object, its chunk buffer and the string it hands back). The
+expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
 > the `test (ui)` job log on every run, and `tools/test-measurements.py` lifts
