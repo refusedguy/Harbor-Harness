@@ -24,4 +24,17 @@
     <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
   </ItemGroup>
 
+  <!--
+    #1547: the prompt's command table (ListPromptCommandTable and the
+    command objects it holds) is internal on purpose — it is the input
+    vocabulary, not a surface a host programs against. The test project is
+    the one place that has to see it: the rows ARE the spec the tests walk
+    (every row must be reachable, and the vim rows must run the SAME
+    command objects as the arrow rows), and a behavioural test alone cannot
+    see a row that no key ever reaches.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Harbor.Tui.CellForge.Tests"/>
+  </ItemGroup>
+
 </Project>

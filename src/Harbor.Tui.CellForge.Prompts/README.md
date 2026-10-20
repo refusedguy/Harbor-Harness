@@ -65,6 +65,14 @@ Deeper:
   else → `state.Update`; `MultiListPromptStrategy<T>` maps Space→toggle and
   types through `AcceptsTypedChar` when search is on; both surface
   `CalculatePageSize` / `CalculateInitialIndex` for host-driven page math.
+- The key loop of `ListPromptState<T>.Update` is a command table
+  (`ListPromptCommandTable`, internal — #1547): one row per gesture
+  (arrows/Home/End/paging, the incremental-search keys, the vim keys), each
+  row naming the command it runs and the mode it is live in
+  (`SearchEnabled` on / off). `Update` is a lookup plus an execute, and the
+  vim rows run the SAME command objects as the arrow rows (`j` is `Down`,
+  `g` is `Home`), so a new key is one row and the old `KeyCode` switch +
+  `UpdateVim` pair is gone.
 - `ListPromptTree<T>` + `ListPromptItem<T>.AddChild` build group trees;
   `Flatten()` produces the interleaved row order `ListPromptState<T>` consumes.
 
