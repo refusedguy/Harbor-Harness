@@ -204,9 +204,11 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (27 files). 26 of them are run by a workflow; the
-27th, `gen-e2e-shards.py`, is a generator a human runs, and `md_gate.py` is
-imported by two of the others rather than run. All 27 are listed, because a
+Every python tool in `tools/` (33 files). 29 of them are run by a workflow; the
+other four are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
+which is imported by two of the others rather than run, and the two
+measurement helpers `aggregate-build-vcpu.py` and `measure-project-graph.py`,
+which a human runs after a measurement run. All 33 are listed, because a
 tool that is not listed is a tool nobody reviews., with the question
 it answers, where it runs, whether it blocks a build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
@@ -223,6 +225,7 @@ The modes are:
 
 | Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|
+| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-abstractions-contract.py` | every dependency the four guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 13 --min-namespaces 7 --min-files 130` |
 | `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
@@ -246,6 +249,8 @@ The modes are:
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
+| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml | measure | reporter | — | — | — |
+| `tools/measure-project-graph.py` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, evaluation-cost.yml | build, measurement | reporter | `--self-test` | — | — |
 | `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
 | `tools/normalize-mtimes.py` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
