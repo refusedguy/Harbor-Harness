@@ -431,19 +431,74 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     ///         a consistent prefix, never a record cut in half), it is just not
     ///         remembered.
     ///     </para>
+    ///     <para>
+    ///         <b>#1744:</b> this returns the LOG's messages — what the file
+    ///         holds, unaltered. The reader's view of the same read (the
+    ///         transcript with the interrupted turns closed in memory, and what
+    ///         the read could not deliver) is <see cref="GetTranscriptAsync" />.
+    ///         The two are kept apart on purpose: a fork copies these messages
+    ///         and the stats fold over them, so nothing may be added to them
+    ///         behind the store's back.
+    ///     </para>
     /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+    {
+        var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+        if (read.IsFailure)
+            return read.ConvertFailure<IReadOnlyList<AgentMessage>>();
+
+        // (read.Value is guarded by the failure check above.)
+        var messages = read.Value.Messages;
+        return Result.Success(messages);
+    }
+
+    /// <summary>
+    ///     Read the session's transcript: the messages a reader gets — with the
+    ///     turns the log never closed closed in memory — together with what the
+    ///     read could not deliver (#1744).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The read never fails on a broken record and never drops one
+    ///         silently: a record whose bytes are not a complete document is
+    ///         skipped (its content is unknowable) and COUNTED, and the turns
+    ///         the log never closed are closed here, in memory, so the
+    ///         transcript a reader gets is balanced and says what it could not
+    ///         deliver. Nothing is written back.
+    ///     </para>
+    ///     <para>
+    ///         The transcript and the integrity come from ONE pass over the
+    ///         file — a second read would be a second generation, and the two
+    ///         halves could describe different moments.
+    ///     </para>
+    /// </remarks>
+    public async Task<Result<SessionTranscript>> GetTranscriptAsync(string sessionId, CancellationToken ct = default)
+    {
+        var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+        if (read.IsFailure)
+            return read.ConvertFailure<SessionTranscript>();
+
+        // (read.Value is guarded by the failure check above.)
+        var transcript = read.Value.Transcript;
+        return Result.Success(transcript);
+    }
+
+    /// <summary>
+    ///     ONE cold read of a session: the log's messages and the reader's view
+    ///     of the same read, from the same pass over the file (#1744).
+    /// </summary>
+    private async Task<Result<SessionReadResult>> ReadSessionAsync(string sessionId, CancellationToken ct)
     {
         // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return resolved.ConvertFailure<IReadOnlyList<AgentMessage>>();
+            return resolved.ConvertFailure<SessionReadResult>();
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
-            return Result.Failure<IReadOnlyList<AgentMessage>>(SessionStoreErrors.SessionNotFound(sessionId));
+            return Result.Failure<SessionReadResult>(SessionStoreErrors.SessionNotFound(sessionId));
         }
 
         return await Result.Try(async () =>
@@ -455,7 +510,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             if (_messageCache.TryGetValue(sessionId, out var cached) && cached.IsFreshFor(stat))
             {
                 // Cache hit — return the cached list directly. Zero allocations.
-                return Result.Success(cached.Messages);
+                return Result.Success(new SessionReadResult(cached.Messages, cached.Transcript));
             }
 
             // Cache miss (or stale) — parse from disk.
@@ -464,10 +519,11 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             // crashing on an unguarded .Value.
             var parseResult = await SessionFileReader.ParseMessagesFromDiskAsync(sessionFile, sessionId, _logger, ct).ConfigureAwait(false);
             if (parseResult.IsFailure)
-                return parseResult.ConvertFailure<IReadOnlyList<AgentMessage>>();
+                return parseResult.ConvertFailure<SessionReadResult>();
 
             // (parseResult.Value is guarded by the failure check above.)
             var snapshot = parseResult.Value;
+            var transcript = BuildTranscript(snapshot);
             if (snapshot.IsStable)
             {
                 // The ConcurrentDictionary slot is updated atomically and the
@@ -475,7 +531,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 // either the old entry or the new entry but never a half-built
                 // one.
                 _messageCache[sessionId] = new SessionCacheEntry(
-                    snapshot.Stat.LastWriteUtc, snapshot.Stat.Length, snapshot.Messages);
+                    snapshot.Stat.LastWriteUtc, snapshot.Stat.Length, snapshot.Messages, transcript);
             }
             else
             {
@@ -486,10 +542,26 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 _messageCache.TryRemove(sessionId, out _);
             }
 
-            return Result.Success(snapshot.Messages);
+            return Result.Success(new SessionReadResult(snapshot.Messages, transcript));
         }, ResultErrors.Message)
             .Bind(x => x)
             .TapError(e => JsonlSessionStoreLog.ReadMessagesFailed(_logger, sessionId, e));
+    }
+
+    /// <summary>
+    ///     The reader's view of one read: the messages with the turns the log
+    ///     never closed closed IN MEMORY, plus the honest statement of what
+    ///     the read could not deliver (#1744).
+    /// </summary>
+    private static SessionTranscript BuildTranscript(MessageReadSnapshot snapshot)
+    {
+        var unclosed = TranscriptInspector.FindUnclosedToolCalls(snapshot.Messages);
+        var integrity = new TranscriptIntegrity(
+            snapshot.UnreadableRecordCount,
+            snapshot.IsTailTruncated,
+            unclosed);
+        var balanced = TranscriptInspector.CloseUnclosedToolCalls(snapshot.Messages);
+        return new SessionTranscript(balanced, integrity);
     }
 
     /// <summary>

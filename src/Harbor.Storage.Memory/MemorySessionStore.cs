@@ -13,7 +13,7 @@ namespace Harbor.Storage.Memory;
 ///     Implements Repository pattern (GOF) via ISessionStore.
 ///     All data is lost on process exit. Use for unit tests or one-shot prompts.
 /// </summary>
-public sealed class MemorySessionStore : ISessionStore
+public sealed partial class MemorySessionStore : ISessionStore
 {
     private readonly ConcurrentDictionary<string, List<AgentMessage>> _messages = new();
     private readonly ConcurrentDictionary<string, Session> _sessions = new();

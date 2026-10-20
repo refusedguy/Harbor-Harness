@@ -122,6 +122,58 @@ public interface ISessionStore
     public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Read the session's TRANSCRIPT: the messages a reader gets — with
+    ///     the turns the log never closed closed in memory — together with what
+    ///     the read could not deliver (#1744).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="GetMessagesAsync" /> returns the LOG's messages: what
+    ///         the store holds, no more. This member returns the READ's view of
+    ///         them, and the difference is exactly what a crashed process leaves
+    ///         behind:
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <term>a broken record</term>
+    ///             <description>
+    ///                 The bytes of a record are not a complete document — the
+    ///                 write was cut. The content is unknowable, so the record is
+    ///                 skipped; <see cref="TranscriptIntegrity.UnreadableRecordCount" />
+    ///                 says how many, and
+    ///                 <see cref="TranscriptIntegrity.IsTailTruncated" /> says
+    ///                 whether the cut was at the tail.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <term>an unclosed turn</term>
+    ///             <description>
+    ///                 The assistant asked for tools and the results never
+    ///                 landed. The transcript closes the turn IN MEMORY (nothing
+    ///                 is written back), so a reader sees a balanced history
+    ///                 with the interrupted calls marked, and
+    ///                 <see cref="TranscriptIntegrity.UnclosedToolCalls" /> names
+    ///                 them.
+    ///             </description>
+    ///         </item>
+    ///     </list>
+    ///     <para>
+    ///         <b>Default implementation:</b> a failure. A store that cannot
+    ///         tell the caller what it could not deliver must say so: a
+    ///         transcript that reads as complete when it is not is the exact
+    ///         lie this member exists to remove.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     The transcript and its integrity, or failure if the session does not
+    ///     exist or the store does not expose one.
+    /// </returns>
+    public Task<Result<SessionTranscript>> GetTranscriptAsync(string sessionId, CancellationToken ct = default)
+    { return Task.FromResult(Result.Failure<SessionTranscript>($"Session store '{GetType().Name}' does not expose a transcript (#1744).")); }
+
+    /// <summary>
     ///     Get the session's whole LOG: every record ever written, in write
     ///     order — the current messages, the versions they replaced, and the
     ///     events that moved messages out of the surface.

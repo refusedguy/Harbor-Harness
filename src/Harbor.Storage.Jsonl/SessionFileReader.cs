@@ -185,6 +185,16 @@ internal static class SessionFileReader
                 SessionFileReaderLog.OversizedRecordSkipped(logger, sessionId, ChunkedLineReader.MaxRecordBytes);
             }
 
+            if (won.Snapshot.IsTailTruncated)
+            {
+                // #1744: the tail is the shape a killed process leaves — the
+                // write was cut in the middle of the last record. It is named
+                // apart from the general malformed-line warning, because "the
+                // session was cut short" and "some record in the middle is
+                // corrupt" call for different repairs.
+                SessionFileReaderLog.TruncatedTailSkipped(logger, sessionId);
+            }
+
             if (!won.Snapshot.IsStable)
             {
                 // Loud, because the caller is deliberately NOT caching this and
@@ -221,6 +231,8 @@ internal static class SessionFileReader
         long lastRead;
         long budget;
         bool sawOversized;
+        bool sawOversizedTail;
+        TrailingRecord tail;
         using (var fs = new FileStream(
                    sessionFile, FileMode.Open, FileAccess.Read, FileShare.Read,
                    bufferSize: 64 * 1024, useAsync: true))
@@ -237,9 +249,10 @@ internal static class SessionFileReader
                 FoldRecords(reader, sessionId, inbox, errors);
             }
 
-            FoldTrailingRecord(reader, sessionId, inbox, errors);
+            tail = FoldTrailingRecord(reader, sessionId, inbox, errors);
             lastRead = reader.BytesRead;
             sawOversized = reader.SawOversizedRecord;
+            sawOversizedTail = reader.SawOversizedTail;
         }
 
         // Unchanged mtime across the read, unchanged length, and every
@@ -250,8 +263,43 @@ internal static class SessionFileReader
         var after = SessionFileStat.Read(sessionFile);
         bool stable = lastRead == budget && after.Matches(stat) && after.Length == budget;
 
-        var snapshot = new MessageReadSnapshot(inbox.ToChronological(), stat, stable, inbox.Header);
+        // #1744: the read counts what it could NOT deliver. A record whose
+        // bytes are not a complete document is skipped — there is nothing to
+        // salvage from half a JSON object — but the skip is counted and the
+        // tail case is named, so it never reads as "the agent never said
+        // that". The oversized record counts as one unreadable record: it
+        // was dropped, and a dropped record is a record the caller does not
+        // have.
+        int unreadable = errors.Total + (sawOversized ? 1 : 0);
+        bool tailTruncated = tail == TrailingRecord.Unreadable || sawOversizedTail;
+
+        var snapshot = new MessageReadSnapshot(
+            inbox.ToChronological(),
+            stat,
+            stable,
+            inbox.Header,
+            unreadable,
+            tailTruncated);
         return Result.Success(new SnapshotAttempt(snapshot, errors.Total, errors.Summary(), sawOversized));
+    }
+
+    /// <summary>
+    ///     What the last record of the file was — the record that has no
+    ///     terminator behind it, if the file has one.
+    /// </summary>
+    private enum TrailingRecord
+    {
+        /// <summary>The file ended with a terminator: there is no trailing record.</summary>
+        None,
+
+        /// <summary>The trailing record decoded.</summary>
+        Decoded,
+
+        /// <summary>
+        ///     The trailing record did not decode: the write was cut at the
+        ///     tail of the log, which is the shape a killed process leaves.
+        /// </summary>
+        Unreadable,
     }
 
     /// <summary>
@@ -292,16 +340,27 @@ internal static class SessionFileReader
     ///     record the single-buffer reader used to pick up with
     ///     <c>nl &lt; 0 ? rest : …</c>.
     /// </summary>
-    private static void FoldTrailingRecord(
+    /// <remarks>
+    ///     The record that has no terminator behind it is the one a killed
+    ///     process leaves half-written, so its fate is reported separately
+    ///     (#1744): a trailing record that does not decode is a truncated TAIL,
+    ///     which is a different fact from a broken record somewhere in the
+    ///     middle of the log.
+    /// </remarks>
+    private static TrailingRecord FoldTrailingRecord(
         ChunkedLineReader reader,
         string sessionId,
         MessageInbox inbox,
         ParseErrors errors)
     {
-        if (reader.TryGetTrailingRecord(out var record))
+        if (!reader.TryGetTrailingRecord(out var record))
         {
-            FoldRecord(record, sessionId, inbox, errors);
+            return TrailingRecord.None;
         }
+
+        return FoldRecord(record, sessionId, inbox, errors)
+            ? TrailingRecord.Decoded
+            : TrailingRecord.Unreadable;
     }
 
     /// <summary>
@@ -309,7 +368,13 @@ internal static class SessionFileReader
     ///     Header lines and blank lines are dropped; a per-line parse failure is
     ///     routed to <paramref name="errors" /> and the record is skipped.
     /// </summary>
-    private static void FoldRecord(
+    /// <returns>
+    ///     True when the record decoded into a message. False for a record that
+    ///     was dropped — a parse failure, a header, a checkpoint, a blank line
+    ///     — so the caller can tell "the tail did not decode" from "the tail
+    ///     was not a message at all" (#1744).
+    /// </returns>
+    private static bool FoldRecord(
         ReadOnlySpan<byte> record,
         string sessionId,
         MessageInbox inbox,
@@ -317,7 +382,7 @@ internal static class SessionFileReader
     {
         if (record.IsEmpty || record.IndexOfAnyExcept((byte)' ', (byte)'\t') < 0)
         {
-            return;
+            return true;
         }
 
         if (IsSessionHeaderLine(record))
@@ -327,23 +392,23 @@ internal static class SessionFileReader
             // be a second generation). A second header line is a leftover, not
             // a second generation: the first one wins.
             inbox.CaptureHeader(record);
-            return;
+            return true;
         }
 
         if (IsCheckpointLine(record))
         {
-            return;
+            return true;
         }
 
         var msgResult = JsonlLineParser.Parse(record, sessionId);
         if (msgResult.IsSuccess)
         {
             inbox.Add(msgResult.Value);
+            return true;
         }
-        else
-        {
-            errors.Add($"Line parse failed: {msgResult.Error}");
-        }
+
+        errors.Add($"Line parse failed: {msgResult.Error}");
+        return false;
     }
 
     /// <summary>
@@ -542,4 +607,7 @@ internal static partial class SessionFileReaderLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Session {SessionId} was being appended to while it was read; returning {MessageCount} message(s) from a partial snapshot (not cached).")]
     public static partial void PartialSnapshotReturned(ILogger logger, string sessionId, int messageCount);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Session {SessionId} ends with a record that could not be decoded: the write was cut at the tail. The rest of the session was read; the interrupted record is reported as unreadable.")]
+    public static partial void TruncatedTailSkipped(ILogger logger, string sessionId);
 }

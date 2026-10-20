@@ -1,1 +1,38 @@
 #nullable enable
+Harbor.Abstractions.Models.TranscriptIntegrity
+Harbor.Abstractions.Models.TranscriptIntegrity.<Clone>$() -> Harbor.Abstractions.Models.TranscriptIntegrity!
+Harbor.Abstractions.Models.TranscriptIntegrity.Deconstruct(out int UnreadableRecordCount, out bool IsTailTruncated, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallPart!>! UnclosedToolCalls) -> void
+Harbor.Abstractions.Models.TranscriptIntegrity.Equals(Harbor.Abstractions.Models.TranscriptIntegrity? other) -> bool
+Harbor.Abstractions.Models.TranscriptIntegrity.IsComplete.get -> bool
+Harbor.Abstractions.Models.TranscriptIntegrity.IsTailTruncated.get -> bool
+Harbor.Abstractions.Models.TranscriptIntegrity.IsTailTruncated.init -> void
+Harbor.Abstractions.Models.TranscriptIntegrity.TranscriptIntegrity(int UnreadableRecordCount, bool IsTailTruncated, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallPart!>! UnclosedToolCalls) -> void
+Harbor.Abstractions.Models.TranscriptIntegrity.UnclosedToolCalls.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallPart!>!
+Harbor.Abstractions.Models.TranscriptIntegrity.UnclosedToolCalls.init -> void
+Harbor.Abstractions.Models.TranscriptIntegrity.UnreadableRecordCount.get -> int
+Harbor.Abstractions.Models.TranscriptIntegrity.UnreadableRecordCount.init -> void
+override Harbor.Abstractions.Models.TranscriptIntegrity.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.TranscriptIntegrity.GetHashCode() -> int
+override Harbor.Abstractions.Models.TranscriptIntegrity.ToString() -> string!
+static Harbor.Abstractions.Models.TranscriptIntegrity.operator !=(Harbor.Abstractions.Models.TranscriptIntegrity? left, Harbor.Abstractions.Models.TranscriptIntegrity? right) -> bool
+static Harbor.Abstractions.Models.TranscriptIntegrity.operator ==(Harbor.Abstractions.Models.TranscriptIntegrity? left, Harbor.Abstractions.Models.TranscriptIntegrity? right) -> bool
+Harbor.Abstractions.Models.TranscriptInspector
+static Harbor.Abstractions.Models.TranscriptInspector.CloseUnclosedToolCalls(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+static Harbor.Abstractions.Models.TranscriptInspector.FindUnclosedToolCalls(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! messages) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ToolCallPart!>!
+static Harbor.Abstractions.Models.UnresolvedToolCall.NotStartedText(string! toolName) -> string!
+static Harbor.Abstractions.Models.UnresolvedToolCall.OutcomeUnknownText(string! toolName) -> string!
+static Harbor.Abstractions.Models.UnresolvedToolCall.TextFor(string! code, string! toolName) -> string!
+Harbor.Abstractions.Sessions.SessionTranscript
+Harbor.Abstractions.Sessions.SessionTranscript.<Clone>$() -> Harbor.Abstractions.Sessions.SessionTranscript!
+Harbor.Abstractions.Sessions.SessionTranscript.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, out Harbor.Abstractions.Models.TranscriptIntegrity! Integrity) -> void
+Harbor.Abstractions.Sessions.SessionTranscript.Equals(Harbor.Abstractions.Sessions.SessionTranscript? other) -> bool
+Harbor.Abstractions.Sessions.SessionTranscript.Integrity.get -> Harbor.Abstractions.Models.TranscriptIntegrity!
+Harbor.Abstractions.Sessions.SessionTranscript.Integrity.init -> void
+Harbor.Abstractions.Sessions.SessionTranscript.Messages.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>!
+Harbor.Abstractions.Sessions.SessionTranscript.Messages.init -> void
+Harbor.Abstractions.Sessions.SessionTranscript.SessionTranscript(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.AgentMessage!>! Messages, Harbor.Abstractions.Models.TranscriptIntegrity! Integrity) -> void
+override Harbor.Abstractions.Sessions.SessionTranscript.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionTranscript.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionTranscript.ToString() -> string!
+static Harbor.Abstractions.Sessions.SessionTranscript.operator !=(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool
+static Harbor.Abstractions.Sessions.SessionTranscript.operator ==(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool

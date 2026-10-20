@@ -56,4 +56,36 @@ public static class UnresolvedToolCall
     ///     when the operation is read-only or idempotent.
     /// </summary>
     public const string OutcomeUnknownCode = "TOOL_OUTCOME_UNKNOWN";
+
+    /// <summary>
+    ///     The model-facing text for a call that never started: it had no
+    ///     effect, so the retry is safe.
+    /// </summary>
+    /// <param name="toolName">The tool the model asked for.</param>
+    /// <returns>The model-facing explanation, carrying the code.</returns>
+    public static string NotStartedText(string toolName) =>
+        $"{NotStartedCode}: tool '{toolName}' was never started — the turn ended before it ran. "
+        + "The call had no effect and is safe to retry.";
+
+    /// <summary>
+    ///     The model-facing text for a call whose outcome is unknown: it may
+    ///     have taken effect, so a blind retry can apply it twice.
+    /// </summary>
+    /// <param name="toolName">The tool the model asked for.</param>
+    /// <returns>The model-facing explanation, carrying the code.</returns>
+    public static string OutcomeUnknownText(string toolName) =>
+        $"{OutcomeUnknownCode}: tool '{toolName}' has no recorded result — the turn ended before its outcome was captured. "
+        + "The call may have taken effect: retry only if the operation is read-only or idempotent; "
+        + "if it may have side effects, first verify external state or ask the user. Do not retry blindly.";
+
+    /// <summary>
+    ///     The model-facing text for a code.
+    /// </summary>
+    /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
+    /// <param name="toolName">The tool the model asked for.</param>
+    /// <returns>The model-facing explanation, carrying the code.</returns>
+    public static string TextFor(string code, string toolName) =>
+        string.Equals(code, NotStartedCode, StringComparison.Ordinal)
+            ? NotStartedText(toolName)
+            : OutcomeUnknownText(toolName);
 }

@@ -252,6 +252,24 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
                 return null;
             }
 
+            // #1744: the TRANSCRIPT, not the raw message list. A session whose
+            // last turn was cut in half is replayed with the interrupted calls
+            // closed and marked, so the reader SEES that the turn was never
+            // closed instead of wondering why a tool call has no answer.
+            var transcript = await store.GetTranscriptAsync(session.Id, ct).ConfigureAwait(false);
+            if (transcript.IsSuccess)
+            {
+                if (transcript.Value.Messages.Count > 0)
+                {
+                    host.Bridge.ReplayHistory(transcript.Value.Messages);
+                }
+
+                return transcript.Value.Messages;
+            }
+
+            // A store that cannot report a transcript state (an out-of-tree
+            // one) still has its messages: the reader gets them without the
+            // interrupted-turn marker, which is less and not wrong.
             var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
             if (history.IsSuccess && history.Value.Count > 0)
             {
