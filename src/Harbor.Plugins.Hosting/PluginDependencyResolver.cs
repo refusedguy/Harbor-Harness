@@ -45,14 +45,6 @@ public sealed class PluginDependencyResolver : IPluginDependencyResolver
         _logger = logger;
     }
 
-    /// <summary>
-    ///     A resolver that satisfies nothing. Every declared dependency stays unsatisfied, so
-    ///     a plugin that declares one waits instead of activating against something that is
-    ///     not there.
-    /// </summary>
-    public static PluginDependencyResolver Empty { get; } = new(
-        new Dictionary<string, Func<bool>>(StringComparer.Ordinal));
-
     /// <inheritdoc />
     public bool IsSatisfied(string name)
     {

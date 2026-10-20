@@ -27,11 +27,4 @@ namespace Harbor.Plugins.Abstractions;
 public sealed record PendingPlugin(
     string Name,
     Version Version,
-    IReadOnlyList<string> UnsatisfiedDependencies)
-{
-    /// <summary>
-    ///     Human-readable identifier used in log lines, matching
-    ///     <see cref="LoadedPlugin.DisplayName" />'s shape.
-    /// </summary>
-    public string DisplayName => $"{Name}@{Version}";
-}
+    IReadOnlyList<string> UnsatisfiedDependencies);
