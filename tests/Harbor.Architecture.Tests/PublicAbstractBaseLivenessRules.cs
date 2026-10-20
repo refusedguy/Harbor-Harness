@@ -60,12 +60,10 @@
 // comment is invisible to every tool that reads the file, so the reason is lost
 // the moment the next person reformats the file.
 //
-// So a reservation here is a ROW, and the row carries:
-//   * the full type name, the thing being excused;
-//   * the REASON, as a value, long enough to be an argument (the shared
-//     `ExemptionReason` check enforces the floor);
-//   * the tracking issue, in its own column, so a URL is never mistaken for a
-//     reason.
+// So a reservation here is a ROW, and the row carries three things: the full
+// type name (the thing being excused), the REASON as a value long enough to be
+// an argument (the shared ExemptionReason check enforces the floor), and the
+// tracking issue in its own column, so a URL is never mistaken for a reason.
 //
 // And the table is LIVENESS-CHECKED in both directions. A row that names a type
 // which no longer exists fails. A row whose type has since GAINED an
