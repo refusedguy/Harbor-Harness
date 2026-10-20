@@ -223,10 +223,6 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("cached", null, DateTimeOffset.UtcNow.AddHours(1)));
-        bool called = false;
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
-            new McpOAuthConfig(), cache,
-            () => { called = true; return new HttpClient(new StubHttpMessageHandler(_ => Json(new { }))); });
         int requests = 0;
         using var http = StubClient(_ =>
         {

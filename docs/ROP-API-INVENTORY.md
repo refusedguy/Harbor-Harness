@@ -749,7 +749,7 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 
 ### 5.6.1 The blind spot now has a type-resolving analyser beside it (report-only, #1868)
 
-`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH003`) resolves the
+`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH004`) resolves the
 **type of the property being read** instead of the symbol of the receiver:
 
 - `Value`'s containing type is `Result<T>` whatever stands in front of it — an await, an

@@ -64,7 +64,7 @@
       HARCH003 in tests/Harbor.Architecture.Tests/Roslyn/ — a type-resolving
       analyzer rather than a spelling match (#1852).
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers">
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

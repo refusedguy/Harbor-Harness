@@ -1,4 +1,4 @@
-// UnguardedResultReadAnalyzer.cs — HARCH003: the unguarded-Result rule as a
+// UnguardedResultReadAnalyzer.cs — HARCH004: the unguarded-Result rule as a
 // TYPE-resolving analyzer with a dominance model, replacing the regex spelling
 // of `tests/Harbor.Architecture.Tests/UnguardedResultReadRules.cs`.
 //
@@ -153,7 +153,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
-///     HARCH003 — a <c>Result</c> is read without a dominating guard.
+///     HARCH004 — a <c>Result</c> is read without a dominating guard.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -170,7 +170,7 @@ namespace Harbor.Architecture.Tests;
 public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 {
     /// <summary>The diagnostic id this rule reports under.</summary>
-    public const string DiagnosticId = "HARCH003";
+    public const string DiagnosticId = "HARCH004";
 
     /// <summary>The rule as the compiler sees it.</summary>
     /// <remarks>
