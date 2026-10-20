@@ -36,7 +36,7 @@ measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 | **`Microsoft.CodeAnalysis.PublicApiAnalyzers`** | **two frozen assemblies** | **RS0016, RS0017, RS0022, RS0024–RS0027, RS0036, RS0037, RS0041, RS0048, RS0050** |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
-| **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
+| **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI037** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 | **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
@@ -62,15 +62,15 @@ API.
 
 | Package | Version checked | Licence | Verdict | Reason |
 |---------|-----------------|---------|---------|--------|
-| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.302 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.402 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. The 10.0.302 → 10.0.402 move adds zero ids (329 `CA####` ids in both builds) and changes no severity (#1897). |
 | `Roslynator.Analyzers` | 5.0.1 | Apache-2.0 | ADOPT, solution-wide | 284 RCS ids and no severity rows at all: the 4.15.0 to 5.0.1 gap introduced zero new ids and removed twenty obsolete implementations (#1851). |
 | `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, solution-wide | 24 S rules are demoted or switched off, each with a reason. The licence is not LGPL: it is the "SONAR Source-Available License v1.0", whose AI-use clause is open in #1858. |
 | `Meziantou.Analyzer` | 3.0.315 | MIT | ADOPT, solution-wide | 207 MA rows. The 3.0.123 to 3.0.315 gap added 31 ids, each baselined at the severity the package ships it with (#1851). |
 | `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, solution-wide | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
 | `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids and no severity rows: nine rules fire 216 times and every one of them is in `tests/`, where `TreatWarningsAsErrors` is off (#1905). The dynamic-code ban is not this package, it is RS0030 (#1844). |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.6.0 | MIT | ADOPT, solution-wide | RS0030 over `BannedSymbols.txt` and `BannedSymbols.DynamicCode.txt`. Since #1844 the compiler enforces the dynamic-code ban that a hand-written regex used to (#626). |
-| `DependencyInjection.Lifetime.Analyzers` | 2.18.24 | MIT | ADOPT, solution-wide | 29 DI rows, one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. |
-| `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. |
+| `DependencyInjection.Lifetime.Analyzers` | 3.7.8 | MIT | ADOPT, solution-wide | 40 DI rows (37 tree-wide, 3 path-scoped), one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. The 2.18.24 → 3.7.8 move added eleven ids and removed none; each new id is baselined at the severity the package ships it with, and DI033's one finding was written off with a reason rather than fixed (#1897). |
+| `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. 1.4.1 exists and adds no id, but its rewritten walker crashes the compiler with AD0001 on five production projects — under `TreatWarningsAsErrors` they then fail to compile and emit no CFE0001 at all, so the guard would go blind exactly where the crash class lives. The pin stays at 1.3.0 (`docs/ROP-API-INVENTORY.md` §5.1). |
 | `DotNetProjectFile.Analyzers` | 1.19.1 | MIT | ADOPT, solution-wide | 193 Proj rows in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig). Three rules are errors, one is `none`, two stay `suggestion` because the lock-file question is the owner's (#1851, #1857). |
 | `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
 | `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 are `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. |
@@ -119,11 +119,13 @@ API.
 #### What changed since the 2026-10-20 audit
 
 The audit that produced the first version of this table recorded a snapshot.
-Seven of its rows have moved since, and the table above carries the current
+Eight of its rows have moved since, and the table above carries the current
 state:
 
 | Package | The audit said | It is now | Why |
 |---------|----------------|----------|-----|
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.302 | 10.0.402 | A servicing patch of the same minor, moved with the SDK it ships beside (#1897). Zero new ids — 329 `CA####` ids in both builds — and no severity changed, so the verdict is unchanged and only the version moved. |
+| `DependencyInjection.Lifetime.Analyzers` | 2.18.24 | 3.7.8 | The one move that adds rules: eleven ids, none removed (#1897). Each new id is baselined at the severity the package ships it with, and the one finding DI033 had is written off with a reason (the instances are pre-built on purpose; the container does not dispose what it did not create). |
 | `DotNetProjectFile.Analyzers` | REJECT for now, it covers `.csproj` hygiene rather than our invariants | ADOPT, three rules as errors | The package is in the tree at 1.19.1 with Proj0037, Proj0040 and Proj0041 as errors (#1851, #1857). |
 | `Microsoft.VisualStudio.Threading.Analyzers` | not rejected, resolved separately in #1852 | ADOPT with scope | #1852 merged. The package is in the tree with one rule on, and the gate that actually decides "is this an unobserved Task" is now `HARCH003`, a house analyzer, not the package. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | a candidate with an open decision | ADOPT, staged | #1845 is decided and PR #1944 is open. The python public-API gate it replaces is still in the tree until that pull request merges. |
@@ -175,14 +177,20 @@ warnings are warnings nobody reads.
 > severity. See #1905.
 ### Version baseline, and what a version move may change
 
-The two families in the table above are the ones a version move has been
+The families in the table above are the ones a version move has been
 measured against.
-Both are read out of the shipped packages, not out of a changelog summary.
+Every count is read out of the shipped packages — the ids come out of the
+analyzer assemblies' string heaps, the titles and default severities out of
+the README each package ships — not out of a changelog summary.
 
 | Family | Pinned | Decision |
 |--------|--------|----------|
 | `Roslynator.Analyzers` | 5.0.1 | **No severity rows.** The 4.15.0 → 5.0.1 gap introduces **zero** new diagnostic ids: both packages ship exactly 284 `RCS####` ids, read out of the analyzer assemblies. Roslynator 5.0.0 removes the *implementations* of twenty obsolete rules (RCS0014, RCS0022, RCS0038, RCS0043, RCS0047, RCS1008–RCS1010, RCS1012, RCS1035, RCS1036, RCS1038/RCS1040/RCS1041/RCS1066/RCS1072/RCS1091/RCS1106, RCS1176/RCS1177, RCS1237) and points at successor rules that already ship in 4.15.0, so the move can only shrink the finding surface. 5.0.0 also adds the `roslyn5.0` analyzer flavour, which is the one the .NET 10 SDK (Roslyn 5.x) loads; 4.15.0 only shipped roslyn3.8/roslyn4.7. |
 | `Meziantou.Analyzer` | 3.0.315 | **31 new rows, one per new rule.** The 3.0.123 → 3.0.315 gap adds `MA0213`–`MA0243` and changes **no** severity on the 209 rules that already existed — both facts read out of the `configuration/default.editorconfig` the package ships, which lists every rule with its default severity. Each new rule is baselined to the severity the analyzer ships it with, so the move cannot turn the zero-warning build red on the day it lands. The three that ship as `warning` (MA0220, MA0240, MA0241) read the `BannedSyntaxes.txt` file, which this repository does not have, so they have no input; they are advisory here so that adding that file later cannot break the build either. |
+| `DependencyInjection.Lifetime.Analyzers` | 3.7.8 | **11 new rows, one per new rule.** The 2.18.24 → 3.7.8 gap adds **eleven** ids and removes **none**: 2.18.24 ships 26 (`DI001`–`DI022`, `DI024`–`DI027`; `DI023` was unused), 3.7.8 ships 37 (`DI001`–`DI037`, no gap). The gap spans 41 published versions, and the ids arrive in steps: 3.0.0 adds `DI028`/`DI029`/`DI030`, 3.5.20 adds `DI023`/`DI031`–`DI035`, 3.6.0 adds `DI036`, 3.7.0 adds `DI037`, and 3.7.8 is the `DI013` behaviour fix (closed implementation compatibility is now CLR assignability, so an implicit numeric conversion or a user-defined operator can no longer hide a registration the container cannot bind). Each new id is baselined to the severity the package ships it with; the per-id decision and the reason are in §DI lifetime rules below. |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.402 | **No severity rows.** The 10.0.302 → 10.0.402 gap is a servicing patch of the same minor and adds **zero** ids: both analyzer assemblies ship the same **329** `CA####` ids, and the C#-specific satellite the same 5 — read out of the shipped assemblies. The main assembly is the same **length** (2 561 320 bytes) but **not byte-identical**: 2 099 499 bytes differ (metadata offsets shift between builds), so the "byte-identical" claim the original audit recorded does not hold for the version actually taken. The rule set is what the build cares about, and it did not move. |
+| `Microsoft.CodeAnalysis.CSharp` | 5.9.0 | **No severity rows — this is a compiler, not an analyzer.** The delta is measured on the compiler and on the analyzer it drags in: **1987 → 2002** distinct `CS####` ids, **17 added** (`CS9378`–`CS9394`) and **2 removed** (`CS9367`, `CS9368`). Every added id is an *error* for a language feature the tree does not use (shebang, `requires unsafe`, closed type declarations, unions, the `safe` modifier, labelled `break`/`continue`), so no new *warning* can fire. The transitive analyzer `Microsoft.CodeAnalysis.Analyzers` moves 5.3.0 → 5.9.0-1.26328.17 with **52** `RS####` ids in both — zero added, zero removed. Public API: six members removed (compiler-generated backing fields and three `TextLine` members) and one signature family changed (`SyntaxFactory.BreakStatement`/`ContinueStatement` gained a label parameter); the tree uses none of them, and no member became obsolete between the two versions. The pin now matches the compiler the build runs on: `global.json` asks for SDK 10.0.402, and the 10.0.4xx SDK branch pins `MicrosoftCodeAnalysisCSharpPackageVersion` = 5.9.0. |
+| `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | **No move, and the reason is measured.** 1.4.1 exists and adds **zero** ids — 1.3.0 and 1.4.1 ship the same two (`CFE0001`, `CFE0002`) and the same three public types. What 1.4.x changes is the rule body: `CFE0001`'s title reads "IsSuccess or **IsFailure**" where 1.3.0 reads "IsError", the message appends the file/line/char of the offending access, and the walker was rewritten into a `ResultValueWalker`. **That rewrite crashes the compiler**: 1.4.1 reports `AD0001 … System.InvalidOperationException` on five production projects, and under this repository's `TreatWarningsAsErrors=true` those projects then fail to compile — a project that does not compile emits no `CFE0001` at all, so the §ROP-001 guard would go blind exactly where the crash class lives (`docs/ROP-API-INVENTORY.md` §5.1 has the measurement). There is no intermediate version that dodges the rewrite: `ResultValueWalker` is already in 1.4.0's assembly too. The pin stays at 1.3.0, and the guard keeps firing on the known shapes (209 sites, 35 shipped + 174 under `tests/`). |
 
 **The rule for the next move is the one these two moves established:** a
 version bump lands with a **baseline**, not with a finding. Every id the new
@@ -196,10 +204,11 @@ One hole is known and is not widened by this table: `MA0184`–`MA0212` exist in
 `warning` (the EventSource and JsonSerializer rules) and none of them fires
 here.
 
-### DI lifetime rules (DependencyInjection.Lifetime.Analyzers 2.18.24)
+### DI lifetime rules (DependencyInjection.Lifetime.Analyzers 3.7.8)
 
-26 diagnostics covering captive deps, lifetime mismatches, circular DI,
-scope leaks, and `BuildServiceProvider` misuse.
+37 diagnostics covering captive deps, lifetime mismatches, circular DI,
+scope leaks, `BuildServiceProvider` misuse, HttpClient lifetime, and
+un-awaited work that outlives its scope.
 
 | ID | Title | Default | Harbor | Rationale |
 |----|-------|---------|--------|-----------|
@@ -215,7 +224,7 @@ scope leaks, and `BuildServiceProvider` misuse.
 | DI010 | Constructor over-injection | Info | Suggestion | Design smell. |
 | DI011 | `IServiceProvider` injection | Info | Suggestion | Intentional in HostBuilder.cs. |
 | DI012 | Conditional registration misuse | Info | Suggestion | Code smell. |
-| **DI013** | **Implementation type mismatch** | Error | **Error** | Default; restated for visibility. |
+| **DI013** | **Implementation type mismatch** | Error | **Error** | Default; restated for visibility. 3.7.8 also fixes the rule's own compatibility test (closed implementation compatibility is CLR assignability now), so an implicit conversion can no longer hide a registration the container cannot bind. |
 | DI014 | Root provider not disposed | Warning | Warning | Leak. |
 | **DI015** | **Unresolvable dependency** | Warning | **Error** | Build-time signal for missing deps. |
 | DI016 | `BuildServiceProvider` misuse | Warning | Suggestion | Existing pattern in HostBuilder.cs — refactor tracked separately. |
@@ -225,10 +234,21 @@ scope leaks, and `BuildServiceProvider` misuse.
 | DI020 | Middleware captures scoped service | Warning | Warning | Real bug. |
 | DI021 | Non-thread-safe service shared across handlers | Warning | Warning | Concurrency bug. |
 | DI022 | Service instance reused across handlers | Info | Suggestion | Design smell. |
+| DI023 | Fire-and-forget background work captures a scope | Warning | Warning | New in 3.0.0. Needs a `using` scope inside the same method — the tree creates **no** service scope at all (`CreateScope`/`CreateAsyncScope` appear nowhere), so the rule has no input. |
 | DI024 | Hosted service scope outside loop | Warning | Warning | Real bug. |
 | DI025 | Event subscription without unsubscribe | Warning | Warning | Memory leak. |
 | DI026 | Event subscription on scoped publisher | Info | Suggestion | Design smell. |
 | DI027 | Rx subscription without dispose | Warning | Warning | Memory leak. |
+| DI028 | Discarded callback registration on a longer-lived source | Warning | Warning | New in 3.0.0. The tree registers no callback on `ApplicationStopping`, `IOptionsMonitor.OnChange`, `ChangeToken.OnChange` or `IChangeToken`; every `CreateLinkedTokenSource` in the tree is disposed on the path that owns it (`DefaultAgent`, `IdeJsonRpcServer`, `IdeSessionBridge`, `BackgroundTaskRegistry`), and the remaining `CancellationToken.Register` sites take a method parameter, which the rule excludes. |
+| DI029 | HttpClient lifetime misuse | Warning | Warning | New in 3.0.0. The tree's two long-lived clients (`WebFetchTool.SharedClient`, `McpHttpClientFactory.Create`) both set `PooledConnectionLifetime`, which is the rule's own documented exemption; the discovered-provider clients come from `IHttpClientFactory` since #1854; the two raw `new HttpClient` sites that remain (`ProviderFactories`' desktop Ollama client, `ConfigRegistration`'s desktop model catalog) are locals in a static method — neither a container registration nor a static field — and the socket-exhaustion tier needs `IHttpClientFactory` in the same compilation, which only `Harbor.Hosting` has, where neither type is a registered implementation. |
+| DI030 | Unbounded singleton or static cache | Info | Suggestion | New in 3.0.0. Every private collection field in the tree is either size-checked, removed from, or owned by a type the container never creates (`PluginReloadService`, `ThemeDirectoryWatcher`, `BackgroundTaskRegistry`). Design smell, not a bug — Info by the package's own choice. |
+| DI031 | Shared implementation registered under several service types | Info | Suggestion | New in 3.5.20. No implementation is registered under two service types on one collection: the two implementations that appear twice (`SystemDirectoryLister`, `ProcessGitQuery`) are registered in two *different* assemblies, each under one service type. |
+| DI032 | Service implements only `IAsyncDisposable` | Warning | Warning | New in 3.5.20. Every `IAsyncDisposable`-only type in the tree (`McpRegistry`, `LspClient`, `PtyProcess`, `EventBroadcaster`, …) is constructed directly and never registered as a plain type registration, and `McpRegistry` reaches the container through an opaque factory, which the rule leaves quiet. |
+| DI033 | Container will not dispose a pre-built instance | Info | Suggestion | New in 3.5.20. **Written off with a reason, not fixed.** Three sites hand the container an instance it did not create — `TelemetryModule`'s `EventBusQueueAgeReporter` and `TelemetryTextExporter`, and `RegistryFacade`'s `McpRegistry` — and the container does not dispose an implementation instance (Microsoft's own guideline: "the developer is responsible for disposing the services"). They are pre-built on purpose: their inputs (the eagerly-composed event bus, the export options, the transport factories) are not container services. The consequence is bounded — the poll loop, the export's file handle and the MCP registry's children live until the process exits — and closing it properly needs a shutdown seam the composition root does not have (a startup resolution or a hosted service), which is a composition-root change, not a package-bump one. The rule stays at `suggestion`, so the finding is visible in the IDE and invisible in the build log. |
+| DI034 | `HttpContext` used in fire-and-forget background work | Warning | Warning | New in 3.5.20. ASP.NET Core only; the tree has no `HttpContext` and no ASP.NET dependency. |
+| DI035 | Non-thread-safe service shared across a fan-out | Warning | Warning | New in 3.5.20. Needs a `DbContext`/ADO.NET type shared across a `Task.WhenAll` projection; the tree's `WhenAll` sites are task-array and stdout/stderr drains, and the SQLite layer never fans out over a connection. |
+| DI036 | Registration added after the provider was built | Warning | Warning | New in 3.6.0. The one build-then-register site is `HostBuilder.Build` (bootstrap `BuildServiceProvider()` at line 35, registrations after it), and the rule leaves it quiet: the collection is handed on (`ConfigureLogging(builder, …)`), the host builder is passed as an argument, and a later `builder.Build()` builds the same collection again. |
+| DI037 | Un-awaited task escapes the scope that created it | Warning | Warning | New in 3.7.0. Needs a `using` scope in the same method — the tree creates no service scope at all. |
 
 Full docs: <https://georgepwall1991.github.io/DependencyInjection.Lifetime.Analyzers/rules/>
 
@@ -238,6 +258,42 @@ Full docs: <https://georgepwall1991.github.io/DependencyInjection.Lifetime.Analy
 > `apps/Harbor.App.Avalonia/`, where a static `IServiceProvider` is a
 > suggestion. If you are reading the table to decide whether a diagnostic is
 > visible in your build, that exception is the thing to check first.
+
+#### The eleven ids 2.18.24 did not have
+
+The move to 3.7.8 adds eleven ids and removes none. Each one gets a row at the
+severity the package ships it with, and the reasons above are the answers to
+"what would this rule find here?":
+
+* **DI023 and DI037** need a `using` service scope in the method that starts
+  the work. `CreateScope()` and `CreateAsyncScope()` appear nowhere in the
+  tree, so both rules have no input at all — not "no finding today", but no
+  shape to find.
+* **DI029, DI034, DI035** are the three platform-shaped rules: HttpClient
+  lifetime (exempted here by `PooledConnectionLifetime`), `HttpContext` in
+  fire-and-forget work (no ASP.NET in the tree), and a shared non-thread-safe
+  service across a `Task.WhenAll` fan-out (no `DbContext`, no shared ADO.NET
+  connection).
+* **DI028** is the third member of the subscription-leak family: no callback
+  is registered on a longer-lived source without keeping the registration.
+* **DI030, DI031, DI033** ship as `Info` and are kept at `suggestion` — the
+  same treatment the other `Info` rules in this family already get. DI033 had
+  one finding: three registrations hand the container an instance it did not
+  create, and the container does not dispose such an instance. It is written
+  off with a reason rather than fixed, because the instances are pre-built on
+  purpose and closing the gap properly needs a shutdown seam the composition
+  root does not have.
+* **DI032 and DI036** are the two `Warning` rules whose subject the tree does
+  not have: no registered implementation implements `IAsyncDisposable` without
+  `IDisposable`, and no registration lands after the provider is built.
+
+**What was measured, and how.** The ids come out of the shipped analyzer
+assemblies (the `DI###` strings in the assembly's string heap); the titles and
+the default severities come out of the README the package ships, which lists
+every rule with both. The "finds nothing here" column above was established
+by reading the tree against each rule's own *Guardrails* section — the
+package documents, per rule, which shapes it deliberately stays quiet about,
+and the shapes this repository has are those.
 
 ### Path-scoped severity overrides
 
@@ -855,12 +911,15 @@ where a diagnostic severity is written down outside `.editorconfig`.
 `tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj` reference
 `Microsoft.CodeAnalysis.CSharp` with `PrivateAssets=all`, and the rule asks for
 `ExcludeAssets=runtime` there. It does not hold: both generators are compiled
-against Roslyn 5.6.0 while the .NET 10 SDK ships an older Roslyn, and the
-local copy of the Roslyn runtime is what lets a generator load against the
-version it was compiled against. The finding is scoped at those two elements
-with `NoWarn="Proj0037"` and a comment, rather than silenced globally. The
-canonical fix (exclude the runtime asset) lands when the repository's Roslyn
-pin and the SDK's Roslyn are aligned.
+against the pinned Roslyn while the compiler that loads them is the SDK's own,
+and the local copy of the Roslyn runtime is what lets a generator load against
+the version it was compiled against. The finding is scoped at those two
+elements with `NoWarn="Proj0037"` and a comment, rather than silenced
+globally. The canonical fix (exclude the runtime asset) lands when the
+repository's Roslyn pin and the SDK's Roslyn are aligned — and as of #1897
+they are: the pin is 5.9.0 and the SDK 10.0.402 ships Roslyn 5.9.0. The fix
+is not taken here, because changing how a source generator is loaded is its
+own change with its own verification.
 
 #### `ExcludeAssets` has to be an attribute
 

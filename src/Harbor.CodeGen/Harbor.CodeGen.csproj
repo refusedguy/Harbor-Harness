@@ -13,12 +13,19 @@
     <!--
       Proj0037 (#1857) wants ExcludeAssets=runtime on every PrivateAssets=all
       reference. It does not hold here, and the finding is scoped at this
-      element rather than silenced globally: this generator is compiled against
-      Microsoft.CodeAnalysis.CSharp 5.6.0, while the .NET 10 SDK ships an
-      older Roslyn, and the local copy of the Roslyn runtime is what lets the
-      generator load against the version it was compiled against. Excluding it
-      would change how the generator is loaded, which is a separate decision
-      from this one.
+      element rather than silenced globally: this generator is compiled
+      against Microsoft.CodeAnalysis.CSharp, and the local copy of the Roslyn
+      runtime is what lets the generator load against the version it was
+      compiled against. Excluding it would change how the generator is
+      loaded, which is a separate decision from this one.
+
+      The pin moved 5.6.0 → 5.9.0 in #1897, and it now MATCHES the compiler
+      the build runs on: global.json asks for SDK 10.0.402, and the 10.0.4xx
+      SDK branch pins MicrosoftCodeAnalysisCSharpPackageVersion =
+      5.9.0-1.26480.109. That is the condition the canonical fix
+      (ExcludeAssets=runtime) was waiting for; it is not taken here, because
+      changing how a source generator is loaded is its own change with its own
+      verification.
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
   </ItemGroup>

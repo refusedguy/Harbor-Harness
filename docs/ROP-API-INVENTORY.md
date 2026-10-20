@@ -634,6 +634,21 @@ object` on five production projects (`Harbor.Application` ×40, `Harbor.Tools.Bu
 where the risk is highest. 1.3.0 predates the `ResultValueWalker` rework (changelog: 1.4.1
 "addressed multiple issues related to pattern matching and complex conditional logic") and runs clean.
 
+**There is no intermediate version that dodges the rewrite (#1897).** 1.4.0 was checked against
+1.4.1 by reading the two shipped analyzer assemblies: 1.4.0 already carries the
+`ResultValueWalker` type (and keeps the 1.3.0-era `HasBeenCheckedBeforeAccess` helper beside it),
+1.4.1 has the rewritten walker alone, and 1.3.0 has neither. So the pin stays at 1.3.0 rather
+than stepping to 1.4.0 — the rework the crash came with is already in 1.4.0.
+
+**What the 1.4.x move would have changed, had it been safe.** Zero diagnostic ids (both versions
+ship `CFE0001` and `CFE0002`, and the same three public types); the rule BODY is what moved:
+`CFE0001`'s title reads "IsSuccess or **IsFailure**" where 1.3.0 reads "IsError", the message
+appends the file/line/char of the offending access, and the walker models ternary conditions,
+`is` patterns and function bodies. The bump is worth taking when the upstream crash is fixed — and
+the 209-site measurement in 5.2 must be re-taken at that point, because a walker that recognises
+more check shapes reports fewer sites and the baseline in 5.4 must not keep rows that no longer
+fire.
+
 ### 5.2 Measured baseline (CI, `dotnet build Harbor.slnx -c Release`, analyzer 1.3.0)
 
 **209 CFE0001 sites total: 35 in shipped code (src/ + apps/), 174 under `tests/`.** (#561 moved one site out of production when it deleted `PluginCompilationResult`, and added two when the compiler contract became a real `Result<T>` — the `compiled.Value` read in `PluginHost.LoadAllAsync` and the `inner.Value.AssemblyBytes` read in `CachingCompiler.CompileAsync`, both false positives of the early-return guard shape, both carrying a documented pragma. #671 took one out of production: `ProviderModelPickerViewModel.BuildProviderGroupAsync` read `cfgResult.Value` to decide a provider's authorization from a config dictionary, and deleting that read — `IAuthResolver` answers that question now — deleted the site and its pragma with it. #1055s3 took one out of production: deleting the in-process plugin pipeline removed `PluginReloadService.ReloadCoreAsync` and its `result.Value` read with it.)

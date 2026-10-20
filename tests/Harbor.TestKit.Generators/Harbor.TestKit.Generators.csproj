@@ -30,12 +30,18 @@
       Proj0037 (#1857) wants ExcludeAssets=runtime here, and the rule's premise
       does not hold for this project — the same reason as
       src/Harbor.CodeGen/Harbor.CodeGen.csproj: the generator is compiled
-      against Microsoft.CodeAnalysis.CSharp 5.6.0 while the .NET 10 SDK ships
-      an older Roslyn, and the local copy of the Roslyn runtime is what lets
-      it load against the version it was compiled against. The finding is
-      scoped at this element rather than silenced globally; the canonical fix
-      (ExcludeAssets=runtime) lands when the repository's Roslyn pin and the
-      SDK's Roslyn are aligned.
+      against Microsoft.CodeAnalysis.CSharp, and the local copy of the Roslyn
+      runtime is what lets it load against the version it was compiled
+      against. The finding is scoped at this element rather than silenced
+      globally; the canonical fix (ExcludeAssets=runtime) lands when the
+      repository's Roslyn pin and the SDK's Roslyn are aligned.
+
+      They ARE aligned as of #1897: the pin moved 5.6.0 → 5.9.0 and global.json
+      asks for SDK 10.0.402, whose own Roslyn is 5.9.0
+      (MicrosoftCodeAnalysisCSharpPackageVersion = 5.9.0-1.26480.109 on the
+      10.0.4xx SDK branch). The fix is still not taken here, because changing
+      how a source generator is loaded is its own change with its own
+      verification.
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
   </ItemGroup>
