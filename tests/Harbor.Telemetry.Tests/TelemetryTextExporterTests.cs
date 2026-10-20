@@ -174,19 +174,38 @@ public class TelemetryTextExporterTests : IDisposable
     }
 
     /// <summary>
-    ///     The default is "no sink": the sink is inert, no listener is
-    ///     attached, and the tracer creates no span at all — so a normal run
-    ///     writes nothing and allocates nothing.
+    ///     The default is "no sink": the sink attaches no listener, so it
+    ///     captures nothing and writes nothing.
     /// </summary>
+    /// <remarks>
+    ///     The assertion is deliberately about THIS sink and not about the
+    ///     process: another test class in this assembly holds an
+    ///     <see cref="System.Diagnostics.ActivityListener" /> of its own, so
+    ///     "no span is created at all" would be a claim about the test
+    ///     process rather than about the sink. What the sink must guarantee is
+    ///     that it captures and exports nothing — and the composition root
+    ///     must not even build one (see
+    ///     <c>tests/Harbor.Hosting.Tests/TelemetryExportOptionsTests.cs</c>).
+    /// </remarks>
     [Test]
-    public async Task Disabled_ByDefault_TheSinkIsInert()
+    public async Task Disabled_ByDefault_TheSinkCapturesAndWritesNothing()
     {
         await Assert.That(new TelemetryExportOptions().Target).IsEqualTo(TelemetryExportTarget.None);
 
         using var exporter = new TelemetryTextExporter(new TelemetryExportOptions(), _logger);
 
-        ITelemetrySpan? span = ActivityTracer.Instance.StartSpan("tool.execute");
-        await Assert.That(span).IsNull();
+        using (ITelemetrySpan? span = ActivityTracer.Instance.StartSpan("tool.execute"))
+        {
+            span?.SetTag("tool.name", "read");
+        }
+
+        // Nothing of its own accord either: an inert sink accepts no record.
+        bool accepted = exporter.TryExport("activity", "tool.execute", []);
+        await Assert.That(accepted).IsFalse();
+
+        TelemetryExportStats stats = exporter.Stats;
+        await Assert.That(stats.ExportedRecords).IsEqualTo(0L);
+        await Assert.That(stats.PendingRecords).IsEqualTo(0);
     }
 
     /// <summary>The file target appends one line per record to the given path.</summary>
