@@ -49,6 +49,19 @@ the host actually answers with are the declared ones
 (`PluginRouteAxisRegistry`); the two are not edited together, because there is
 only one of them.
 
+## One capability is published by this route
+
+A plugin may declare what it needs before it is activated
+(`IPlugin.Dependencies`, #1733). The name is opaque to the plugin: the host
+resolves it against the plugins it loaded and against the capabilities the
+route publishes.
+
+This process publishes exactly one capability: **`mcp-session`**, the MCP
+session with the CLI. It is false while the plugins load — the client has not
+connected yet — and true from the handshake onwards. A plugin that declares it
+waits, visibly, instead of failing at load time, and comes up at the handshake:
+its tools are in the very next `tools/list`.
+
 ## Process boundary is not a sandbox
 
 This host runs CS-source plugins with **full trust**, exactly like the

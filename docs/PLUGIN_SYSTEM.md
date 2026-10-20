@@ -352,6 +352,13 @@ composition root says the environment changed — for the out-of-process host,
 that is the MCP handshake. The plugin is then initialized and registered like
 any other.
 
+**The version gate still applies, at activation time.** A plugin that needs a
+Harbor newer than the running one is refused by the registrar in front of
+`Initialize` (§Version compatibility), and nothing changes about that refusal:
+no tool, no provider, no half-initialized state. A plugin that is still waiting
+for a dependency has not been version-checked yet — the check runs when the
+dependency is met, and the refusal is the same refusal it was before.
+
 **A name the host does not know is never satisfied.** Unknown is not ready: a
 capability the host never published must not read as "available", or the plugin
 would activate against an infrastructure that is not there and fail at the
