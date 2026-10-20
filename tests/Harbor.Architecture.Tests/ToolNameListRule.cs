@@ -43,6 +43,39 @@
 // lists stay lists. The fix has to make each derivable row READ the declaration,
 // so there is nothing left to keep in sync.
 //
+// AND WHY #1564 IS NOT THAT MOVE
+// ------------------------------
+// #1564 does introduce a catalog of tool names — `WellKnownTools` — and points
+// the call sites at it, so the objection above has to be answered rather than
+// waved away. Three things make it a different move:
+//
+//   1. It is not a NINTH list. The safety table already carried a tool column
+//      with exactly the twenty builtin names and the two plugin-vocabulary
+//      names, and that column IS the catalog, moved out of the table and typed.
+//      The row set is unchanged, so the guard that already watched the table
+//      (`BuiltinToolSafetyDeclarationsTests`, which compares it against the
+//      tools that actually register) still watches it, and now watches it
+//      through the catalog.
+//
+//   2. The drift the paragraph above fears is closed by a chain, not by
+//      discipline. A new tool registers under the name its `[ToolInfo]`
+//      attribute declares; `WellKnownToolsRule` compares that declaration
+//      against the catalog; the safety table reads the catalog, so it has the
+//      tool's row; and the existing cross-check compares the table against the
+//      registry. A tool added without a catalog member is a red test at two
+//      points, not a name that silently matches nothing.
+//
+//   3. What the catalog replaced was not a list of NAMES but a list of
+//      SPELLINGS: `"bash"` written out at two hundred and fifty-nine sites.
+//      A list of spellings is not a list of facts, and it is the one thing
+//      this rule was never able to police — the rule polices SETS, and a
+//      single name in a permission rule is a lookup, not a set.
+//
+// So the classification above still holds, with the names read from the
+// catalog instead of written out: (1) DERIVABLE rows still read the
+// declaration, and (2) POLICY rows still state what an AGENT may do, which no
+// declaration can say.
+//
 // THE RULES
 // ---------
 // Both rules are stated over the DERIVED vocabulary, never a written one, so a
@@ -115,39 +148,37 @@ public sealed class ToolNameListRule
     ///         This list is NOT the file set the rule checks, and that difference is
     ///         the whole safety argument, so it is measured rather than asserted. The
     ///         scan is <see cref="SourceScan.ProductTrees" /> — every <c>.cs</c> file
-    ///         under <c>src/</c> and <c>apps/</c>, 993 of them — and this table is a
+    ///         under <c>src/</c> and <c>apps/</c> — and this table is a
     ///         set of tolerated files inside it. Nothing outside the list goes
     ///         unchecked because of the list: a new file carrying a tool table is
     ///         enforced, and a rename or a move makes the key stop matching, which is
     ///         a RED test rather than a silent gap. That is the safe direction, and
     ///         the cost runs the other way — the list cannot tell a live policy from a
-    ///         fossil, which is what the liveness test below is for. Six entries, all
-    ///         six carrying a table the finder recognises, across nine recognised
-    ///         tables in six files and zero offenders; #860 removed the two that
-    ///         carried none. The count is a measurement, not a target.
-    ///         (#1170 adds a seventh: per-tool permission presentation.)
+    ///         fossil, which is what the liveness test below is for.
+    ///     </para>
+    ///     <para>
+    ///         The list had six entries when #1564 landed, and seven once the
+    ///         turn-change oracle joined it. It has three now, and the measurement
+    ///         says why: the four files that used to write tool names out read
+    ///         <c>WellKnownTools</c> instead, so they no longer carry a table of
+    ///         tool names at all and their exemptions had become dead — which the
+    ///         liveness test below reports as an error. The three that remain each
+    ///         carry a table the finder recognises: the catalog itself, which is
+    ///         the one place a builtin tool's name is written down; the permission
+    ///         presentation, whose switch labels are C# constants and cannot read
+    ///         the catalog; and the turn-change oracle, whose write/no-write split
+    ///         is a policy no tool declaration can state. The count is a
+    ///         measurement, not a target.
     ///     </para>
     /// </remarks>
     private static readonly Dictionary<string, string> PolicyExemptions = new(StringComparer.Ordinal)
     {
-        ["src/Harbor.Abstractions.Contracts/Permissions/BuiltinToolSafetyProfiles.cs"] =
-            "This IS the declaration the other rules make the lists read. It is the one place a "
-            + "tool name may be written down, because a tool's safety profile is a property of the "
-            + "tool and has to be written somewhere. `BuiltinToolSafetyDeclarationsTests` "
-            + "cross-checks every row against the tools that actually register, so this table "
-            + "cannot rot the way a private list can.",
-
-        ["src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs"] =
-            "This IS the policy: each rule names a tool to allow, deny or ask about it. "
-            + "Nothing on a tool says which verbs an agent may use.",
-
-        ["src/Harbor.Abstractions/Agents/AgentDefinition.cs"] =
-            "The plan/explore agents' default permissions. What an agent may do is a "
-            + "statement about the AGENT, not about each tool.",
-
-        ["src/Harbor.Ui.Framework.Projection/Projection/PanelExtractors.cs"] =
-            "TrackedTools is the set of tools whose edits the Recent-Changes panel "
-            + "watches — a projection concern with no tool-side declaration.",
+        ["src/Harbor.Abstractions.Contracts/Models/Identifiers/WellKnownTools.cs"] =
+            "This IS the catalog the other rules make the lists read (#1564). It is the one place a "
+            + "builtin tool's name is written down, because a name has to be written somewhere. Every "
+            + "permission rule, safety declaration and comparison reads it from here, and "
+            + "`WellKnownToolsRule` cross-checks the catalog against the tools' own declarations, so this "
+            + "table cannot rot the way a private list can.",
 
         ["src/Harbor.Application/Observability/TurnChangeOracle.cs"] =
             "The oracle's watch list: the tools that WRITE a file, and the tools that cannot. "
@@ -157,14 +188,11 @@ public sealed class ToolNameListRule
             + "path-declaring tool) would hash every file a read touches, twice, to report that "
             + "nothing changed.",
 
-        ["src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs"] =
-            "The diff preview must decide which tool calls render a diff. A tool does "
-            + "not declare that it is diff-shaped; the renderer owns that.",
-
         ["src/Harbor.Tui.CellForge/Chat/Panels/PermissionPresentation.cs"] =
             "Per-tool permission presentation (opencode steal #1170): which gate "
             + "renders a diff, a command, a pattern or file:line:col. A tool does "
-            + "not declare how its permission prompt is drawn; the renderer owns that.",
+            + "not declare how its permission prompt is drawn; the renderer owns that. The switch labels "
+            + "are C# constants, so they cannot read `WellKnownTools` and the names are written out here.",
     };
 
     /// <summary>
