@@ -1,4 +1,5 @@
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Instantiation;
 
 namespace Harbor.Plugins.Hosting;
 /// <summary>
@@ -42,4 +43,19 @@ public sealed class PluginHostOptions
     ///     </para>
     /// </remarks>
     public IPluginDependencyResolver? Dependencies { get; set; }
+
+    /// <summary>
+    ///     The Harbor version the host runs as (#1739).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The host checks a plugin's manifest BEFORE it compiles the plugin, and
+    ///         that check needs the running version. The default is
+    ///         <see cref="PluginLifecycle.CurrentHarborVersion" /> — the same version
+    ///         the plugin is handed in <c>PluginContext.HarborVersion</c> and the same
+    ///         one the registrar checks the in-code floor against, so the two gates
+    ///         speak about the same Harbor.
+    ///     </para>
+    /// </remarks>
+    public Version HarborVersion { get; set; } = PluginLifecycle.CurrentHarborVersion;
 }

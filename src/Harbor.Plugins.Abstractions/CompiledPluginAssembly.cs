@@ -24,13 +24,19 @@ namespace Harbor.Plugins.Abstractions;
     ///     <see cref="Instantiation.LoadedPlugin.LoadedFromCache" />.
     /// </param>
     /// <param name="DeclaredCapabilities">
-    ///     Capabilities declared in the plugin's manifest (fail-closed empty set when
-    ///     absent). Used by the sandbox ALC and the execution guard.
-    /// </param>
-    public sealed record CompiledPluginAssembly(
+///     Capabilities declared in the plugin's manifest (fail-closed empty set when
+///     absent). Used by the sandbox ALC and the execution guard.
+/// </param>
+/// <param name="Manifest">
+///     The manifest the plugin shipped next to its source, or <c>null</c> when the
+///     plugin ships none (#1739). It travels with the assembly so the registration
+///     layer can check the declaration against the code it describes.
+/// </param>
+public sealed record CompiledPluginAssembly(
     Assembly Assembly,
     string SourceHash,
     string SourcePath,
     byte[]? AssemblyBytes = null,
     bool FromCache = false,
-    IReadOnlySet<PluginCapability>? DeclaredCapabilities = null);
+    IReadOnlySet<PluginCapability>? DeclaredCapabilities = null,
+    PluginManifest? Manifest = null);

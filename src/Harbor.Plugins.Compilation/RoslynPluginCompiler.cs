@@ -93,7 +93,8 @@ public sealed class RoslynPluginCompiler : IPluginCompiler
             script.Path,
             assemblyBytes,
             FromCache: false,
-            script.DeclaredCapabilities);
+            script.DeclaredCapabilities,
+            script.Manifest);
         return Task.FromResult(Result.Success(compiled));
     }
 

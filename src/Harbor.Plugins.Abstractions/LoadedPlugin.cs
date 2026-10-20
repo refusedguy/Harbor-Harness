@@ -17,6 +17,12 @@ namespace Harbor.Plugins.Abstractions;
     ///     Capabilities declared in the plugin's manifest (fail-closed empty set when
     ///     absent). Used by the execution sandbox and audit trail.
     /// </param>
+/// <param name="Manifest">
+///     The manifest the plugin shipped next to its source, or <c>null</c> when the
+///     plugin ships none (#1739). The registration layer checks the declaration
+///     against the live plugin: the name and the version must be the ones the
+///     plugin reports, and the declared axes must be the axes it implements.
+/// </param>
     public sealed record LoadedPlugin(
     IPlugin Instance,
     string Name,
@@ -25,7 +31,8 @@ namespace Harbor.Plugins.Abstractions;
     string SourcePath,
     string SourceHash,
     bool LoadedFromCache,
-    IReadOnlySet<PluginCapability> DeclaredCapabilities)
+    IReadOnlySet<PluginCapability> DeclaredCapabilities,
+    PluginManifest? Manifest = null)
 {
     /// <summary>
     ///     Convenience ctor for callers that don't track capability manifests

@@ -83,6 +83,29 @@ public static class PluginCompatibility
     }
 
     /// <summary>
+    ///     Whether two versions name the same Harbor.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The comparison is the one <see cref="IsCompatible" /> uses: component
+    ///         by component, with an unspecified component read as 0. So "0.4" and
+    ///         "0.4.0" name the same Harbor, exactly as they do for the floor
+    ///         check — a plugin that declares <c>new Version(1, 0)</c> and a
+    ///         manifest that declares "1.0.0" are talking about the same version
+    ///         and must not be reported as a disagreement.
+    ///     </para>
+    /// </remarks>
+    /// <param name="left">The first version.</param>
+    /// <param name="right">The second version.</param>
+    /// <returns>True when the two name the same Harbor.</returns>
+    public static bool IsSameVersion(Version left, Version right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        return Compare(left, right) == 0;
+    }
+
+    /// <summary>
     ///     Component by component comparison, with an unspecified component read as 0.
     ///     Returns a negative number when <paramref name="left" /> is older, zero when
     ///     the two name the same Harbor, a positive number when

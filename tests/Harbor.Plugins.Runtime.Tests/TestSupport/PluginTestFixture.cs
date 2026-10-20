@@ -1,3 +1,5 @@
+using Harbor.Plugins.Storage;
+
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;
 /// <summary>
 ///     Per-test fixture: creates a unique temp <c>~/.harbor</c>-like directory with a
@@ -48,5 +50,17 @@ public sealed class PluginTestFixture : IDisposable
     {
         string path = Path.Combine(PluginsDir, fileName);
         await File.WriteAllTextAsync(path, source).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Write the manifest that belongs to a plugin source file, next to it
+    ///     and named after it (#1739).
+    /// </summary>
+    /// <param name="json">The manifest document.</param>
+    /// <param name="fileName">The plugin source file the manifest belongs to.</param>
+    public async Task WriteManifestAsync(string json, string fileName = "plugin.cs")
+    {
+        string manifestPath = PluginManifestReader.PathFor(Path.Combine(PluginsDir, fileName));
+        await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
     }
 }
