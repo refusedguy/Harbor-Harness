@@ -200,6 +200,10 @@ dotnet_diagnostic.CA1871.severity = none # DoNotPassNullableStructToArgumentNull
 dotnet_diagnostic.CA1872.severity = suggestion # Use ArrayEmpty
 
 # --- Sonar ---
+# SonarAnalyzer.CSharp 10.29.0.143774 ships 447 rule ids. The ones this
+# repository switches off are listed here, and every row says why: 23 ids are
+# off tree-wide, 4 more are NoWarn'd in Directory.Build.props, and 6 more are
+# quiet under tests/ only (the section at the end of this file).
 dotnet_diagnostic.SA1101.severity = none # prefix local calls with this
 dotnet_diagnostic.S1694.severity = none # abstract record for discriminated unions is OK
 dotnet_diagnostic.S101.severity = none # allow LlmEvent-style acronyms in PascalCase
@@ -816,3 +820,24 @@ dotnet_diagnostic.DI014.severity = suggestion
 # that is not in the tree is the #865 shape in the other direction — a
 # permission for nothing. The contributed renderer keeps its own .editorconfig
 # beside it, where the tree that owns the file can see it.
+
+# --- Sonar in the test tree ---
+# The six rules below are off under tests/ only. The split is measured, not
+# assumed: on dev@086ef777 (CI run 39472959027, the Release build of
+# Harbor.slnx) SonarAnalyzer.CSharp reported 476 sites in 40 rules, and every
+# one of them is under tests/. There are 0 under src/ and 0 under apps/, so
+# each rule below is worth something in a product tree and is noise in a test
+# tree. Off here, on everywhere else.
+[tests/**.cs]
+# S5443: a hardcoded "/tmp/..." literal is the fixture a hermetic test pins.
+dotnet_diagnostic.S5443.severity = none # hardcoded temp path is the test's own fixture data
+# S1215: GC.Collect is the setup of the allocation and finalization tests.
+dotnet_diagnostic.S1215.severity = none # GC.Collect is the setup of the allocation and finalization tests
+# S1313: the addresses (8.8.8.8, 169.254.169.254, 192.168.88.42) are the test data.
+dotnet_diagnostic.S1313.severity = none # hardcoded IP addresses are the test's own data
+# S5332: the http URLs are fixtures, an .invalid host or a local server the test starts.
+dotnet_diagnostic.S5332.severity = none # http is the fixture: an .invalid host or a local test server
+# S3878: an explicit array for a params overload is the calling convention in the helpers.
+dotnet_diagnostic.S3878.severity = none # explicit array for a params overload, by convention
+# S3220: the overload shape is a call-style question, not a defect.
+dotnet_diagnostic.S3220.severity = none # overload shape, not a defect

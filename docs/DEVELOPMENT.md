@@ -1370,6 +1370,76 @@ comment — never globally. Current example: `MessagePack` NU1902/NU1903
 same-machine transport) suppressed in `Harbor.Ipc.*` with a comment in
 `Directory.Packages.props`.
 
+### Analyzer licences
+
+A build-time analyzer is a dependency like any other, and the licence question
+is asked the same way: read the licence that the pinned version ships, then
+decide whether the use is inside it.
+
+**An analyzer does not reach the product.** Every analyzer package in this
+repository is referenced with `PrivateAssets=all` and
+`ExcludeAssets="runtime"` (`Directory.Build.props`), so nothing it contributes
+is copied into a Harbor binary or into a consumer's dependency graph: the
+analyzer assemblies are consumed by the compiler, and the one analyzer package
+that also carries a runtime assembly (`Excubo.Analyzers.Annotations`) has that
+asset excluded. What its licence has to permit is the build, not what Harbor
+ships.
+
+**Read the licence in the nupkg, not the registry field.** The version to read
+is the pinned one. `SonarAnalyzer.CSharp` declares its licence as a FILE
+rather than as an SPDX expression: the nuspec says
+`<license type="file">licenses\LICENSE.txt</license>`, and that file is the
+licence. Some packages in the tree declare no licence in the nuspec at all, so
+the registry field alone does not always answer the question. LGPL is not a
+disqualifier for a build-time analyzer either: `SecurityCodeScan` was rejected
+on activity and duplication, not on the licence (`docs/ANALYZERS.md`).
+
+**The one source-available package, and its AI clause.**
+`SonarAnalyzer.CSharp` 10.29.0.143774 ships the "SONAR Source-Available
+License v1.0" (last updated November 13, 2024). It grants a copyright and a
+patent licence "for any Non-competitive Purpose", and it defines that term as
+any purpose except three:
+
+- (a) providing a product or service with the same or substantially similar
+  functionality as SonarQube;
+- (b) competing with SonarQube;
+- (c) employing, using or engaging artificial intelligence technology that is
+  not part of the Program to ingest, interpret, analyze, train on or interact
+  with the data the Program provides, or to engage with the Program in any
+  manner.
+
+How those land on Harbor:
+
+- (a) and (b) do not bite. Harbor is an AI coding harness, not a code quality
+  platform, and it offers nothing that substitutes for SonarQube.
+- (c) does not reach the product. The "Program" is the analyzer's own
+  contribution and the data it provides are its diagnostics; the Harbor
+  runtime consumes neither. The analyzer runs inside the compiler at build
+  time, the package never reaches a binary, and no Harbor code reads a
+  diagnostic.
+- (c) does reach the dev workflow, on the widest reading. The diagnostics are
+  in this repository's build log, and an AI agent working on the repository
+  reads the build log. On a literal reading, that is AI interacting with data
+  the Program provided.
+
+**The decision, and what it is not.** The package stays (`docs/ANALYZERS.md`,
+the `SonarAnalyzer.CSharp` row). The reason this is not a licence clearance
+is stated rather than hidden: reading (c) as a ban on AI-assisted development
+that uses a Roslyn analyzer would make the licence unusable for the audience
+SonarSource ships it to, so the plausible reading is the narrow one, about AI
+over Sonar's own analysis data and engine. That is a reading of a licence, not
+a legal opinion, and the owner may take a different one. If the owner does,
+the way out is measured: the package contributes 0 findings to `src/` and
+`apps/` today (476 sites, every one under `tests/`), so removing it costs the
+product tree 447 preventive rules and the test tree the 116 sites that are
+still worth reading, and it costs the shipped binary nothing.
+
+**When you add an analyzer, the licence is part of the check.** Read the
+`license` element of the nuspec inside the nupkg, and read the file it points
+at when it is a file. LGPL-3.0 and source-available licences are not
+disqualifiers for a build-time analyzer. A release that has been abandoned for
+years, and a rule family this tree already has, are.
+
 ### Auto-merge (explicitly deferred)
 
 Dependabot auto-merge is NOT enabled. Patch/minor auto-merge for trusted
