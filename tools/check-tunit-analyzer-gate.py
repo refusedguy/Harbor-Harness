@@ -19,6 +19,9 @@ WHAT THIS TOOL IS
       FAIL, with TUnitAssertions0005, at that exact line);
     * one that a scoped waiver suppresses (the build must NOT mention it).
 
+  WHY PYTHON: stdlib only, and it must run where there is no .NET SDK
+  and no built tree - the gate is what proves the SDK is not needed.
+
   This tool builds the canary and asserts exactly that outcome. It is a
   control, not a report: it exits non-zero unless it saw the one diagnostic
   it planted.
