@@ -291,10 +291,13 @@ Harbor.Abstractions.Sessions.ISessionQuery :: public Task<Result<SessionQueryRes
 Harbor.Abstractions.Sessions.ISessionQuery :: public interface ISessionQuery
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<IReadOnlyList<Session>>> ListAsync(string? projectId = null, CancellationToken ct = default)
+Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<Session>> CreateAsync(string directory, string agentName, string providerId, string modelId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<Session>> GetAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<int>> PurgeMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result<int>> RewindMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
 Harbor.Abstractions.Sessions.ISessionStore :: public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)

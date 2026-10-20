@@ -435,6 +435,43 @@ public sealed class DefaultInterfaceMemberRule
             + "estimate, so the staleness is visible the same way an ignored append is.",
             ""),
         new(
+            "Harbor.Abstractions.Sessions.ISessionStore",
+            "GetSessionLogAsync",
+            DimDirection.Conservative,
+            "Fails loudly: a store that has not been migrated to the append-only log (#1784) "
+            + "reports that it has no log. Returning an empty log would be a lie that reads like "
+            + "a fact — 'the agent never said anything' instead of 'this store cannot tell you'. "
+            + "The omission is visible to the caller, which is the direction #579's convention "
+            + "requires.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ISessionStore",
+            "RewindMessagesAfterAsync",
+            DimDirection.Conservative,
+            "Fails loudly: a store that cannot keep records fails instead of falling back to the "
+            + "destructive delete. The fallback would be exactly the data loss #1784 removes, and "
+            + "a default that silently destroyed the agent's text on the caller's behalf is the "
+            + "permissive direction the convention bans.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ISessionStore",
+            "DeleteMessagesAfterAsync",
+            DimDirection.Conservative,
+            "The soft-deprecated forwarder of #1784: it routes to the RICHER "
+            + "RewindMessagesAfterAsync, not to a poorer overload, so nothing is dropped on the "
+            + "way. It is conservative because the member it routes to fails loudly when the "
+            + "store has not been migrated — the old name cannot destroy anything the new one "
+            + "would not.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ISessionStore",
+            "PurgeMessagesAfterAsync",
+            DimDirection.Conservative,
+            "Fails loudly: prune is never automatic (#1784, owner decision — only an explicit "
+            + "command may destroy records), and a store with no prune plan must not report "
+            + "success for work it never did.",
+            ""),
+        new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",
             "HandleKey",
             DimDirection.Conservative,

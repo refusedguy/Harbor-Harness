@@ -551,3 +551,31 @@ Harbor.Abstractions.Permissions.ToolSafetyProfile :: public sealed record ToolSa
 Harbor.Abstractions.Permissions.ToolSafetyProfile :: public static ToolSafetyProfile Command(string argumentName = "command")
 Harbor.Abstractions.Permissions.ToolSafetyProfile :: public static ToolSafetyProfile Opaque
 Harbor.Abstractions.Permissions.ToolSafetyProfile :: public static ToolSafetyProfile Path(string argumentName = "path")
+Harbor.Abstractions.Sessions.SessionLogEntry :: public AgentMessage? Message
+Harbor.Abstractions.Sessions.SessionLogEntry :: public DateTimeOffset? OccurredAt
+Harbor.Abstractions.Sessions.SessionLogEntry :: public SessionLogEntryState? State
+Harbor.Abstractions.Sessions.SessionLogEntry :: public int RemovedCount
+Harbor.Abstractions.Sessions.SessionLogEntry :: public required SessionLogEntryKind Kind
+Harbor.Abstractions.Sessions.SessionLogEntry :: public required int Position
+Harbor.Abstractions.Sessions.SessionLogEntry :: public required string Id
+Harbor.Abstractions.Sessions.SessionLogEntry :: public sealed record SessionLogEntry
+Harbor.Abstractions.Sessions.SessionLogEntry :: public string? AnchorId
+Harbor.Abstractions.Sessions.SessionLogEntryKind :: Message
+Harbor.Abstractions.Sessions.SessionLogEntryKind :: Rewind
+Harbor.Abstractions.Sessions.SessionLogEntryKind :: public enum SessionLogEntryKind
+Harbor.Abstractions.Sessions.SessionLogEntryState :: Current
+Harbor.Abstractions.Sessions.SessionLogEntryState :: LogOnly
+Harbor.Abstractions.Sessions.SessionLogEntryState :: Shadowed
+Harbor.Abstractions.Sessions.SessionLogEntryState :: public enum SessionLogEntryState
+Harbor.Abstractions.Sessions.SessionLogFold :: public static SessionSurface Fold(IReadOnlyList<SessionLogEntry> log)
+Harbor.Abstractions.Sessions.SessionLogFold :: public static class SessionLogFold
+Harbor.Abstractions.Sessions.SessionLogGuard :: public static IReadOnlyList<string> FindLostRecords(IReadOnlyList<SessionLogEntry> before, IReadOnlyList<SessionLogEntry> after)
+Harbor.Abstractions.Sessions.SessionLogGuard :: public static bool IsLossless(IReadOnlyList<SessionLogEntry> before, IReadOnlyList<SessionLogEntry> after)
+Harbor.Abstractions.Sessions.SessionLogGuard :: public static class SessionLogGuard
+Harbor.Abstractions.Sessions.SessionLogGuard :: public static string Fingerprint(AgentMessage message)
+Harbor.Abstractions.Sessions.SessionSurface :: public required IReadOnlyList<AgentMessage> Current
+Harbor.Abstractions.Sessions.SessionSurface :: public required IReadOnlyList<SessionLogEntry> Entries
+Harbor.Abstractions.Sessions.SessionSurface :: public required IReadOnlyList<SessionLogEntry> LogOnly
+Harbor.Abstractions.Sessions.SessionSurface :: public required IReadOnlyList<SessionLogEntry> Shadowed
+Harbor.Abstractions.Sessions.SessionSurface :: public required IReadOnlyList<string> Warnings
+Harbor.Abstractions.Sessions.SessionSurface :: public sealed record SessionSurface
