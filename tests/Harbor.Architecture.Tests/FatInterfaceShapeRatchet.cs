@@ -102,6 +102,45 @@
 // to it, and never consulting it. The write-only scan below is what found it
 // and what keeps it from coming back; the field is deleted in the same PR.
 //
+// THE EFFECTIVE SURFACE (the #1879 half)
+// -------------------------------------
+// Everything above counts DECLARED members. #1831's audit measured 124 public
+// interfaces and found the hole: a type that INHERITS a wide surface looks
+// small, because only what it declares was counted. The audit's own line:
+//
+//   ISessionManager   0 declared, 23 effective — a wide alias over four
+//                     roles. "The ratchet counts DeclaredOnly → sees 0 and
+//                     calls the alias 'narrow' (precisely like IThemeService,
+//                     which it praises)."
+//
+// So the ratchet now freezes TWO numbers per aggregate: the declared one it
+// always had, and the EFFECTIVE one — every member a consumer can reach
+// through a reference typed as the aggregate, declared or inherited.
+//
+// The counting rule is written down, once, in `EffectiveInterfaceSurface.cs`,
+// and it is not "count everything reflection returns":
+//
+//   * instance METHODS, PROPERTIES and EVENTS count, by NAME;
+//   * STATIC members do not (reached through the type, not through an
+//     instance; not an implementor's obligation);
+//   * OPERATORS do not (C# makes an operator `public static`; it is sugar
+//     over a named method);
+//   * NESTED TYPES do not (a type, not a member of the contract);
+//   * ACCESSORS do not (`get_X` is not a second member of a property).
+//
+// The unit is the NAME, not the signature, and that is deliberate: the
+// audit's numbers are names, so the two can be compared, and the ratchet
+// already grades the signature-level question separately and explicitly for
+// the one type whose overload pairs matter (IApprovalCoordinator).
+//
+// WHAT THE BASELINE MOVED BY: IThemeService's effective line is 12 where its
+// declared line was 0 — the alias now has a ceiling, so a member added to a
+// ROLE (which the declared count never saw) is a regression. ISessionManager
+// joins the table at 23 effective over 0 declared. IApprovalCoordinator (9
+// over 9) and IReplHost (31 over 31) inherit nothing, so their effective
+// lines equal their declared ones — and a base interface appearing on either
+// of them now moves the number, which is the point.
+//
 // RATCHET SEMANTICS
 // -----------------
 // Every axis fires on ROT (an addition) and on SILENT CHANGE (a delta nobody
@@ -148,6 +187,25 @@ internal sealed record ReplHostConsumerBaseline(string File, IReadOnlyList<strin
 ///     full name, and how many members it declared when measured.
 /// </summary>
 internal sealed record AggregateShape(string Name, string FullName, int MeasuredMemberCount);
+
+/// <summary>
+///     One interface this file governs on its EFFECTIVE surface: the type
+///     name, the namespace-qualified full name, the effective member names
+///     measured when the table was written, and whether the measurement comes
+///     from reflection or from source.
+/// </summary>
+/// <param name="Name">The governed aggregate's simple type name.</param>
+/// <param name="FullName">The namespace-qualified full name.</param>
+/// <param name="BaselineMembers">The effective member names, ordinal-sorted.</param>
+/// <param name="MeasuredFromSource">
+///     <see langword="true" /> when the type lives in an application this
+///     assembly does not reference, so the surface is read from source.
+/// </param>
+internal sealed record EffectiveAggregateShape(
+    string Name,
+    string FullName,
+    IReadOnlyList<string> BaselineMembers,
+    bool MeasuredFromSource);
 
 /// <summary>
 ///     The two halves of a baseline comparison, both asserted empty by the real
@@ -215,6 +273,25 @@ public sealed class FatInterfaceShapeRatchet
     /// <summary>Matches the issue's figure for <c>IApprovalCoordinator</c>, which is correct.</summary>
     private const int MeasuredApprovalMembers = 9;
 
+    /// <summary>
+    ///     <c>ISessionManager</c> declares NOTHING of its own either. It is a
+    ///     facade over four roles — <c>ISessionQueries</c> (4),
+    ///     <c>ISessionLifecycle</c> (8), <c>ISessionStatusTracker</c> (5) and
+    ///     <c>IPanelSessionGateway</c> (6) — so its effective surface is 23.
+    ///     This is the #1831 finding the effective measurement exists for: the
+    ///     declared count is 0 and the audit's table calls the type a "wide
+    ///     alias", which the old ratchet could not see.
+    /// </summary>
+    private const int MeasuredSessionManagerEffectiveMembers = 23;
+
+    /// <summary>
+    ///     <c>IThemeService</c>'s effective surface: the twelve member names
+    ///     its three roles carry between them. Its DECLARED count is 0, which
+    ///     is why the effective line is a different number and not a copy of
+    ///     the declared one.
+    /// </summary>
+    private const int MeasuredThemeEffectiveMembers = 12;
+
     /// <summary>The governed aggregate's simple type name, as a named constant.</summary>
     private const string ReplHostName = "IReplHost";
 
@@ -226,6 +303,12 @@ public sealed class FatInterfaceShapeRatchet
 
     /// <inheritdoc cref="ReplHostName"/>
     private const string TokenTrackerName = "ITokenTracker";
+
+    /// <summary>
+    ///     The wide alias over four roles that #1831's audit measured at 0
+    ///     declared and 23 effective members.
+    /// </summary>
+    private const string SessionManagerName = "ISessionManager";
 
     /// <summary>
     ///     Every product file that names <c>IReplHost</c> and uses at least one
@@ -339,6 +422,64 @@ public sealed class FatInterfaceShapeRatchet
         "RequestCancel(IAgentRunner)",
         "TryCommitApproval(Int64, String, Int32)",
         "WaitForDecisionAsync(String, CancellationToken)",
+    ];
+
+    /// <summary>
+    ///     The effective member names of <c>ISessionManager</c>: the union of
+    ///     its four roles, measured from the source the audit measured. Four on
+    ///     <c>ISessionQueries</c>, eight on <c>ISessionLifecycle</c>, five on
+    ///     <c>ISessionStatusTracker</c> (three methods and two events) and six
+    ///     on <c>IPanelSessionGateway</c>.
+    /// </summary>
+    private static readonly string[] SessionManagerEffectiveMembers =
+    [
+        // ISessionQueries
+        "Active", "ActiveContext", "GetContext", "GetGitInfo",
+        // ISessionLifecycle
+        "BranchActiveAsync", "DeleteSessionAsync", "EnsureDefaultSessionAsync",
+        "NewSessionAsync", "OpenSessionAsync", "RebindFromCommonConfigAsync",
+        "RefreshGitInfo", "RenameSessionAsync",
+        // ISessionStatusTracker
+        "GetStatus", "MessageCountChanged", "NotifyMessageCount", "SetStatus",
+        "StatusChanged",
+        // IPanelSessionGateway
+        "GetBranch", "GetDirectory", "GetIsDirty", "GetIsSubagent", "GetStatusText",
+        "OpenPanelSessionAsync",
+    ];
+
+    // =====================================================================
+    // 1b. The EFFECTIVE surface: declared members PLUS inherited ones.
+    //     #1879. The counting rule is in EffectiveInterfaceSurface.cs.
+    // =====================================================================
+
+    /// <summary>
+    ///     The aggregates graded on their EFFECTIVE member surface: the
+    ///     members a consumer reaches through a reference typed as the
+    ///     aggregate, declared or inherited.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <c>IThemeService</c>'s baseline is <see cref="ThemeRoleMembers" />
+    ///         — the SAME twelve names the roles carry. That is not a copy: the
+    ///         effective surface of the alias IS the union of the roles' names,
+    ///         and reusing one table is what makes it impossible for the two
+    ///         to drift.
+    ///     </para>
+    ///     <para>
+    ///         <c>IApprovalCoordinator</c>'s baseline is
+    ///         <see cref="BaselineApprovalMembers" /> and <c>IReplHost</c>'s is
+    ///         <see cref="BaselineReplHostMembers" />, because both inherit
+    ///         nothing: their effective surface equals their declared one. A
+    ///         BASE INTERFACE appearing on either of them now moves the number,
+    ///         which is the whole point of the second line.
+    ///     </para>
+    /// </remarks>
+    private static readonly EffectiveAggregateShape[] EffectiveAggregates =
+    [
+        new(ThemeServiceName, "Harbor.Ui.Framework.Services.IThemeService", ThemeRoleMembers, MeasuredFromSource: false),
+        new(ApprovalCoordinatorName, "Harbor.Abstractions.Permissions.IApprovalCoordinator", BaselineApprovalMembers, MeasuredFromSource: false),
+        new(SessionManagerName, "Harbor.Ui.Framework.Sessions.ISessionManager", SessionManagerEffectiveMembers, MeasuredFromSource: false),
+        new(ReplHostName, "apps/Harbor.App.Cli/Repl/Commands/IReplHost.cs", BaselineReplHostMembers, MeasuredFromSource: true),
     ];
 
     // =====================================================================
@@ -577,6 +718,136 @@ public sealed class FatInterfaceShapeRatchet
                    + "wide type and pins a reference to it that nothing consults. Forward the CONSTRUCTOR "
                    + "PARAMETER to whoever needs it instead, as AgentLoop's four behaviours already do. "
                    + "Found: " + string.Join("; ", writeOnly.Distinct(StringComparer.Ordinal)));
+    }
+
+    // =====================================================================
+    // 1b. The EFFECTIVE surface ratchet (#1879). Declared members PLUS the
+    //     members an aggregate inherits.
+    // =====================================================================
+
+    /// <summary>
+    ///     No aggregate carries more EFFECTIVE members than it did: not more
+    ///     declared, and not more inherited. A member that arrives through a
+    ///     base interface is exactly the addition the declared count could
+    ///     not see, which is the #1831 hole.
+    /// </summary>
+    [Test]
+    public async Task Ratchet_NoAggregateCarriesMoreEffectiveMembersThanMeasured()
+    {
+        foreach (EffectiveAggregateShape aggregate in EffectiveAggregates)
+        {
+            IReadOnlyList<string>? measured = MeasureEffectiveMembers(aggregate);
+
+            await Assert.That(measured).IsNotNull()
+                .Because($"{aggregate.FullName} must be measurable for this ratchet to mean anything. "
+                       + "A null measurement means the type was renamed, deleted, or (for a source-measured "
+                       + "one) a base interface could not be resolved in the product tree. An empty "
+                       + "measurement would be worse: a ratchet over nothing is green forever");
+
+            IReadOnlyList<string> surface = measured!;
+
+            await Assert.That(surface.Count).IsGreaterThan(0)
+                .Because($"{aggregate.FullName} measured ZERO effective members. Either the interface "
+                       + "moved or the measurement stopped counting, and a ratchet over an empty "
+                       + "measurement is green for the wrong reason");
+
+            ShapeDelta delta = CompareSets(
+                $"effective member of {aggregate.Name}",
+                aggregate.BaselineMembers,
+                surface);
+
+            await Assert.That(delta.Regressions).IsEmpty()
+                .Because($"{aggregate.Name} carries an effective member it did not carry when this table "
+                       + "was measured. An inherited member counts: the surface a consumer holds is the "
+                       + "declared members plus the inherited ones, and a member that arrives through a "
+                       + "base interface is a new obligation on every implementor and every test double. "
+                       + "Added: " + string.Join(", ", delta.Regressions));
+
+            await Assert.That(delta.Improvements).IsEmpty()
+                .Because($"{aggregate.Name} lost an effective member. That is a split landing, a "
+                       + "deletion, or a rename — all three change what the rest of this file means, so "
+                       + "re-measure the table in the same commit. Removed: "
+                       + string.Join(", ", delta.Improvements));
+        }
+    }
+
+    /// <summary>
+    ///     The effective surface really is bigger than the declared one, and
+    ///     the difference is the INHERITED members. Both aliases declare
+    ///     nothing of their own; their effective surfaces are 12 and 23.
+    /// </summary>
+    [Test]
+    public async Task Claim_TheEffectiveSurfaceCountsTheInheritedMembers()
+    {
+        IReadOnlyList<string> themeDeclared = MeasureDeclaredMembers(ThemeServiceName);
+        IReadOnlyList<string> themeEffective = MeasureEffectiveMembers(EffectiveAggregates[0])!;
+
+        await Assert.That(themeDeclared).IsEmpty()
+            .Because("IThemeService declares nothing of its own; that is the premise of this claim. If it "
+                   + "declares something now, the alias stopped being an alias and this file's story "
+                   + "about it has to be re-derived. Declared now: " + string.Join(", ", themeDeclared));
+
+        await Assert.That(themeEffective.Count).IsEqualTo(MeasuredThemeEffectiveMembers)
+            .Because("the three theme roles carry 12 member names between them and IThemeService hands "
+                   + "every one of them to a consumer typed as the alias. Measured now ("
+                   + themeEffective.Count + "): " + string.Join(", ", themeEffective));
+
+        await Assert.That(themeEffective.Contains("ThemeJsonApplied")).IsTrue()
+            .Because("ThemeJsonApplied is declared on IThemeWatcher and on nothing else. It can only be in "
+                   + "the effective surface if the measurement walks the inherited members, which is the "
+                   + "whole difference between this measurement and the declared one");
+
+        IReadOnlyList<string> sessionDeclared = MeasureDeclaredMembers(SessionManagerName);
+        IReadOnlyList<string> sessionEffective = MeasureEffectiveMembers(EffectiveAggregates[2])!;
+
+        await Assert.That(sessionDeclared).IsEmpty()
+            .Because("ISessionManager is a facade over four roles and declares nothing itself. That is the "
+                   + "#1831 finding: the old ratchet counted 0 and called a 23-member alias narrow. "
+                   + "Declared now: " + string.Join(", ", sessionDeclared));
+
+        await Assert.That(sessionEffective.Count).IsEqualTo(MeasuredSessionManagerEffectiveMembers)
+            .Because("#1831's audit measured ISessionManager at 23 effective members over 0 declared, and "
+                   + "this measurement reproduces the audit's number from the tree rather than taking it "
+                   + "on trust. Measured now (" + sessionEffective.Count + "): "
+                   + string.Join(", ", sessionEffective));
+    }
+
+    /// <summary>
+    ///     Two instruments, one number. The reflection path reads the loaded
+    ///     assemblies; the source path reads the declarations in the product
+    ///     tree and follows the base list by name. They must agree, or one of
+    ///     them is measuring something other than the surface.
+    /// </summary>
+    [Test]
+    public async Task Claim_TheSourceAndReflectionMeasurementsAgree()
+    {
+        IReadOnlyList<string>? fromSource = EffectiveInterfaceSurface.MeasureFromSource(ThemeServiceName);
+        IReadOnlyList<string>? fromReflection = MeasureEffectiveMembers(EffectiveAggregates[0]);
+
+        await Assert.That(fromSource).IsNotNull()
+            .Because("IThemeService must be readable from source for the two instruments to be compared. A "
+                   + "null means the interface was not found or one of its base interfaces could not be "
+                   + "resolved in the product tree");
+
+        await Assert.That(fromReflection).IsNotNull()
+            .Because("IThemeService must be reachable by reflection for the two instruments to be compared");
+
+        ShapeDelta delta = CompareSets(
+            "effective member of IThemeService",
+            fromSource!,
+            fromReflection!);
+
+        await Assert.That(delta.Regressions).IsEmpty()
+            .Because("the reflection path found a member the source path did not. One of the two "
+                   + "instruments is measuring something other than the surface, and the ratchet is only "
+                   + "as good as the worse of them. Only in reflection: "
+                   + string.Join(", ", delta.Regressions));
+
+        await Assert.That(delta.Improvements).IsEmpty()
+            .Because("the source path found a member the reflection path did not. The source scanner reads "
+                   + "declarations as TEXT, so a member it sees and reflection does not is either a "
+                   + "declaration reflection does not model or a scanner bug. Only in source: "
+                   + string.Join(", ", delta.Improvements));
     }
 
     // =====================================================================
@@ -875,6 +1146,58 @@ public sealed class FatInterfaceShapeRatchet
                    + "genuinely read, and a guard that cries wolf is a guard that gets deleted");
     }
 
+    /// <summary>
+    ///     Control: a member added to a theme ROLE — which the DECLARED count
+    ///     of the alias cannot see, because the alias declares nothing — is
+    ///     reported as an effective-surface regression.
+    /// </summary>
+    /// <remarks>
+    ///     This is the control that says the second line is load-bearing. The
+    ///     declared count of <c>IThemeService</c> stays 0 whatever happens to a
+    ///     role, so a member added to a role is invisible to the old axis; the
+    ///     effective count is 12 and grows to 13.
+    /// </remarks>
+    [Test]
+    public async Task Control_AMemberOnAnInheritedRoleIsReportedAsAnEffectiveRegression()
+    {
+        var degraded = new List<string>(ThemeRoleMembers) { "LoadHdsTheme" };
+
+        ShapeDelta delta = CompareSets("effective member of IThemeService", ThemeRoleMembers, degraded);
+
+        await Assert.That(delta.Regressions)
+            .IsEquivalentTo(new[] { "effective member of IThemeService: LoadHdsTheme" })
+            .Because("this is the claim that the effective-surface ratchet is load-bearing, made checkable: "
+                   + "a member added to an INHERITED interface must come out of the SAME comparator as a "
+                   + "regression. If this fails, the comparator no longer reports growth and "
+                   + "Ratchet_NoAggregateCarriesMoreEffectiveMembersThanMeasured is green for the wrong "
+                   + "reason");
+
+        await Assert.That(delta.Improvements).IsEmpty()
+            .Because("adding a member removes nothing");
+    }
+
+    /// <summary>
+    ///     Control: a member that DISAPPEARS from an inherited role is
+    ///     reported too, so the table cannot rot into a stale permission.
+    /// </summary>
+    [Test]
+    public async Task Control_AMemberLostFromAnInheritedRoleIsReportedAsAnEffectiveChange()
+    {
+        var degraded = new List<string>(ThemeRoleMembers);
+        degraded.Remove("Watch");
+
+        ShapeDelta delta = CompareSets("effective member of IThemeService", ThemeRoleMembers, degraded);
+
+        await Assert.That(delta.Improvements)
+            .IsEquivalentTo(new[] { "effective member of IThemeService: Watch" })
+            .Because("a member that left an inherited role changes what the effective surface is, and the "
+                   + "table has to be re-measured in the same commit. Without this half the table would "
+                   + "silently keep a ceiling for a member that no longer exists");
+
+        await Assert.That(delta.Regressions).IsEmpty()
+            .Because("the scenario only removes a member");
+    }
+
     // =====================================================================
     // Measurement.
     // =====================================================================
@@ -946,6 +1269,34 @@ public sealed class FatInterfaceShapeRatchet
                 .Where(static n => !IsAccessorName(n))
                 .OrderBy(static n => n, StringComparer.Ordinal)
         ];
+    }
+
+    /// <summary>
+    ///     The EFFECTIVE member surface of one governed aggregate: its declared
+    ///     members plus the members it inherits, under the counting rule in
+    ///     <see cref="EffectiveInterfaceSurface" />.
+    /// </summary>
+    /// <param name="aggregate">The aggregate to measure.</param>
+    /// <returns>
+    ///     The member names, or <see langword="null" /> when the measurement
+    ///     could not be taken at all — the type is gone, or a base interface
+    ///     of a source-measured type could not be resolved. A null is a
+    ///     FAILURE, never an empty set: an empty set would let the ratchet
+    ///     pass without having measured anything.
+    /// </returns>
+    private static IReadOnlyList<string>? MeasureEffectiveMembers(EffectiveAggregateShape aggregate)
+    {
+        if (aggregate.MeasuredFromSource)
+        {
+            return EffectiveInterfaceSurface.MeasureFromSource(aggregate.Name);
+        }
+
+        if (Resolve(aggregate.Name) is not { } type)
+        {
+            return null;
+        }
+
+        return EffectiveInterfaceSurface.Measure(type);
     }
 
     /// <summary>
@@ -1265,7 +1616,7 @@ public sealed class FatInterfaceShapeRatchet
     ///     </para>
     /// </summary>
     /// <returns>The declared member names, ordinal-sorted. Empty when not found.</returns>
-    private static IReadOnlyList<string> MeasureMembersFromSource(string typeName)
+    internal static IReadOnlyList<string> MeasureMembersFromSource(string typeName)
     {
         foreach (string path in SourceScan.EnumerateProductCsFiles())
         {
@@ -1359,23 +1710,40 @@ public sealed class FatInterfaceShapeRatchet
     ///     <c>(</c>, with an optional generic argument list between them so a
     ///     generic method cannot hide. The name is the LAST identifier before
     ///     the paren, which is why the return type is consumed first.
+    ///     <para>
+    ///         The type part is a SEQUENCE of words, not one word, because an
+    ///         interface may declare its members with an explicit access
+    ///         modifier: <c>public string Current { get; }</c> puts two words
+    ///         before the name, and a one-word type part matched the modifier
+    ///         and read the TYPE as the name. IReplHost declares no modifiers,
+    ///         so this changed nothing there; the theme roles declare every
+    ///         member with <c>public</c> and were measured as EMPTY before the
+    ///         fix — the "a ratchet over an empty measurement is green
+    ///         forever" failure this file warns about.
+    ///     </para>
     /// </summary>
     private static readonly Regex MethodDeclaration = new(
-        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)?(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(",
+        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\(",
         RegexOptions.Compiled);
 
     /// <summary>
-    ///     A property: an identifier followed by <c>{ get</c>. Anchored on
-    ///     <c>{ get</c> rather than a bare <c>;</c> so a method is not also
-    ///     counted as a property.
+    ///     A property: an identifier followed by <c>{ get</c> or by an
+    ///     expression body. Anchored on the accessor rather than a bare
+    ///     <c>;</c> so a method is not also counted as a property.
     /// </summary>
     private static readonly Regex PropertyDeclaration = new(
-        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)?(?<name>[A-Za-z_]\w*)\s*\{\s*get",
+        @"(?:[A-Za-z_][\w\.<>,\?\[\]]*\s+)*(?<name>[A-Za-z_]\w*)\s*(?:\{\s*get|=>)",
         RegexOptions.Compiled);
 
-    /// <summary>An interface event: <c>event T Name;</c>.</summary>
+    /// <summary>
+    ///     An interface event: <c>event T Name;</c>. The type part spans the
+    ///     generic argument list INCLUDING its comma — <c>event
+    ///     Action&lt;string, SessionStatus&gt;? StatusChanged;</c> names
+    ///     <c>StatusChanged</c>, and a type part that stopped at the comma
+    ///     read <c>SessionStatus</c> instead.
+    /// </summary>
     private static readonly Regex EventDeclaration = new(
-        @"\bevent\s+[A-Za-z_][\w\.<>,\?\[\]]*\s+(?<name>[A-Za-z_]\w*)",
+        @"^(?:(?:public|internal|protected|private)\s+)?\bevent\s+[A-Za-z_][\w\.<>,\?\[\],\s]*\s+(?<name>[A-Za-z_]\w*)",
         RegexOptions.Compiled);
 
     /// <summary>
