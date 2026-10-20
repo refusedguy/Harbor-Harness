@@ -65,6 +65,16 @@
 name: evaluation-cost
 
 on:
+  # The push trigger is scoped to the branch that introduces this file, and
+  # it exists for one reason: GitHub will only dispatch a workflow that
+  # exists on the DEFAULT branch — verified, `gh workflow run nightly.yml
+  # --ref ci/restructure-lanes-and-gates` answers "HTTP 404: workflow
+  # nightly.yml not found on the default branch". Until this file is on
+  # dev there is no other way to run it, and a measurement nobody can run
+  # is not a measurement. When this file moves into the nightly lane
+  # (PR #1923), the push trigger goes with it.
+  push:
+    branches: [ci/1919-arm64-pool]
   workflow_dispatch:
     inputs:
       skip-resolver-off:
