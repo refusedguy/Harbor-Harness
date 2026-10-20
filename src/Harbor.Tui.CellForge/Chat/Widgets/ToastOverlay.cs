@@ -20,6 +20,13 @@ public sealed class ToastOverlay
     private const int MaxVisible = 4;
     private const int DefaultDismissAfterTicks = 240;
 
+    /// <summary>
+    ///     Cells a toast row may take: the glyph, the separator, the message
+    ///     and the ellipsis. The row is bounded by the toast width, which is
+    ///     bounded by <see cref="MaxWidth" />.
+    /// </summary>
+    private const int MaxRowChars = MaxWidth + 2;
+
     private readonly List<ToastNotification> _active = new();
     private readonly Queue<ToastNotification> _pending = new();
     private long _tick;
@@ -137,14 +144,26 @@ public sealed class ToastOverlay
         int count = Math.Min(_active.Count, MaxVisible);
         int bottom = Math.Min(rect.Y + count - 1, rect.Bottom - 1);
         int painted = 0;
+        // One row buffer for the whole strip. The row used to be built as a
+        // fresh string per toast per frame ("<glyph> " + message, plus a
+        // truncated copy when it did not fit) — two allocations per toast on
+        // every frame the toast was up. The buffer is allocated once per
+        // painted strip, on the stack, and never escapes.
+        Span<char> row = stackalloc char[MaxRowChars];
         for (int i = 0; i < count && rect.Y + painted <= bottom; i++)
         {
-            PaintToast(buffer, rect.X, rect.Y + painted, right, _active[i]);
+            PaintToast(buffer, rect.X, rect.Y + painted, right, _active[i], row);
             painted++;
         }
     }
 
-    private void PaintToast(ScreenBuffer buffer, int left, int top, int right, ToastNotification toast)
+    private void PaintToast(
+        ScreenBuffer buffer,
+        int left,
+        int top,
+        int right,
+        ToastNotification toast,
+        Span<char> row)
     {
         if (top >= buffer.Rows || right >= buffer.Cols)
         {
@@ -172,13 +191,37 @@ public sealed class ToastOverlay
         }
         int textX = left + AccentWidth;
         int textW = right - textX + 1;
-        string prefix = Glyph(toast.Kind) + " ";
-        string combined = prefix + toast.Message;
-        if (combined.Length > textW)
+
+        // The row is "<glyph> <message>", truncated to textW - 1 characters
+        // plus an ellipsis when it does not fit — the same characters, in the
+        // same order, as the concatenated string the row used to be.
+        int full = 2 + toast.Message.Length;
+        bool ellipsis = full > textW;
+        int take = ellipsis ? Math.Max(0, textW - 1) : full;
+
+        int len = 0;
+        if (take > 0)
         {
-            combined = combined[..Math.Max(0, textW - 1)] + "…";
+            row[len++] = Glyph(toast.Kind);
         }
-        buffer.SetText(textX, top, combined, textStyle);
+        if (take > 1)
+        {
+            row[len++] = ' ';
+        }
+
+        int message = Math.Min(Math.Max(0, take - 2), toast.Message.Length);
+        if (message > 0)
+        {
+            toast.Message.AsSpan(0, message).CopyTo(row[len..]);
+            len += message;
+        }
+
+        if (ellipsis)
+        {
+            row[len++] = '…';
+        }
+
+        buffer.SetText(textX, top, row[..len], textStyle);
     }
 
     private void DrainPending()
@@ -189,11 +232,16 @@ public sealed class ToastOverlay
         }
     }
 
-    private static string Glyph(ToastKind kind) => kind switch
+    /// <summary>
+    ///     The row's leading glyph. A char, not a string: the row is written
+    ///     into a caller-owned buffer, and a one-character string per toast per
+    ///     frame would be an allocation for a constant.
+    /// </summary>
+    private static char Glyph(ToastKind kind) => kind switch
     {
-        ToastKind.Success => "✓",
-        ToastKind.Warning => "!",
-        ToastKind.Error => "✗",
-        _ => "ℹ",
+        ToastKind.Success => '✓',
+        ToastKind.Warning => '!',
+        ToastKind.Error => '✗',
+        _ => 'ℹ',
     };
 }

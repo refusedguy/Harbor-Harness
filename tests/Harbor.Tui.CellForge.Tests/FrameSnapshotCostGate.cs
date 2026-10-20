@@ -95,32 +95,39 @@ public sealed class FrameSnapshotCostGate
 
     // ── the budgets ─────────────────────────────────────────────────────────
     //
-    // PROVISIONAL in the first commit of this slice: the numbers are pinned
-    // from the CI measurement that follows, exactly as the house pattern
-    // asks ("the byte budget is pinned from the CI measurement").
+    // The byte budgets are CEILINGS, pinned from the CI measurement of the
+    // pre-#1140 tree: the tab strip paid ~1.4 KB per painted frame and the
+    // toast overlay ~0.6 KB, so a ceiling an order of magnitude below those
+    // numbers catches the regression the slice removes while leaving room
+    // for the runtime's own bookkeeping. The time budgets are in PROBE UNITS
+    // (see `PerfGate`), so they mean the same thing on every runner.
 
     /// <summary>
     ///     Allocation budget for ONE painted tab-strip frame, in bytes.
     ///     Machine-independent, so it is compared as measured, with no band.
+    ///     The measured value on the fixed tree is 0 B per frame — the strip
+    ///     paints from the memoised plan and allocates nothing — so this
+    ///     ceiling is the regression line, not a description of the cost.
     /// </summary>
-    private const long MaxBytesPerTabStripFrame = 64 * 1024;
+    private const long MaxBytesPerTabStripFrame = 256;
 
     /// <summary>
     ///     Time budget for ONE painted tab-strip frame, in probe units (see
     ///     <c>PerfGate</c>). Machine-scaled and soft.
     /// </summary>
-    private const double MaxProbeUnitsPerTabStripFrame = 20_000.0;
+    private const double MaxProbeUnitsPerTabStripFrame = 5_000.0;
 
     /// <summary>
     ///     Allocation budget for ONE painted overlay frame (the toast strip
-    ///     inside the overlay stack), in bytes.
+    ///     inside the overlay stack), in bytes. Same shape as the tab strip's
+    ///     ceiling: the measured value on the fixed tree is 0 B per frame.
     /// </summary>
-    private const long MaxBytesPerOverlayFrame = 64 * 1024;
+    private const long MaxBytesPerOverlayFrame = 128;
 
     /// <summary>
     ///     Time budget for ONE painted overlay frame, in probe units.
     /// </summary>
-    private const double MaxProbeUnitsPerOverlayFrame = 20_000.0;
+    private const double MaxProbeUnitsPerOverlayFrame = 5_000.0;
 
     /// <summary>
     ///     The layout's own floor, in bytes: the tab-cell array the plan
@@ -169,7 +176,7 @@ public sealed class FrameSnapshotCostGate
         panel.Paint(buffer);
 
         PerfGateResult result = await PerfGate.MeasureAsync(
-            work: frames => Task.FromResult(DriveTabStripCost(panel, buffer, frames)),
+            work: frames => Task.FromResult(DriveFrameCost(frames, () => panel.Paint(buffer))),
             units: Frames,
             options: new PerfGateOptions
             {
@@ -343,10 +350,12 @@ public sealed class FrameSnapshotCostGate
     }
 
     /// <summary>
-    ///     Paints the strip <paramref name="frames" /> times and reports the
-    ///     window's wall time and its allocation.
+    ///     Runs <paramref name="frames" /> frames of <paramref name="frame" />
+    ///     behind a GC fence and reports the window's wall time and its
+    ///     allocation. One shape for every measured window, so the two gates
+    ///     below measure the same way.
     /// </summary>
-    private static PerfGateLeg DriveTabStripCost(SessionTabStripPanel panel, ScreenBuffer buffer, int frames)
+    private static PerfGateLeg DriveFrameCost(int frames, Action frame)
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -356,7 +365,7 @@ public sealed class FrameSnapshotCostGate
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < frames; i++)
         {
-            panel.Paint(buffer);
+            frame();
         }
 
         sw.Stop();
@@ -377,12 +386,7 @@ public sealed class FrameSnapshotCostGate
         panel.Strip = strip;
         panel.Paint(buffer);
 
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++)
+        PerfGateLeg leg = DriveFrameCost(frames, () =>
         {
             // A new snapshot instance with the same tabs: exactly what the
             // reducer hands over when a tab really changes.
@@ -392,10 +396,9 @@ public sealed class FrameSnapshotCostGate
                 ActiveTabId = strip.ActiveTabId
             };
             panel.Paint(buffer);
-        }
+        });
 
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return allocated / frames;
+        return leg.Allocated / frames;
     }
 
     /// <summary>
@@ -421,26 +424,10 @@ public sealed class FrameSnapshotCostGate
         new(new string('m', ToastMessageChars), ToastKind.Info);
 
     /// <summary>
-    ///     Paints the overlay stack <paramref name="frames" /> times and
-    ///     reports the window's wall time and its allocation.
+    ///     The overlay stack's own paint, <paramref name="frames" /> times.
     /// </summary>
-    private static PerfGateLeg DriveOverlayCost(OverlayStack stack, ScreenBuffer buffer, int frames)
-    {
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        var sw = Stopwatch.StartNew();
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < frames; i++)
-        {
-            stack.PaintOver(buffer);
-        }
-
-        sw.Stop();
-        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
-    }
+    private static PerfGateLeg DriveOverlayCost(OverlayStack stack, ScreenBuffer buffer, int frames) =>
+        DriveFrameCost(frames, () => stack.PaintOver(buffer));
 
     /// <summary>
     ///     The row build the toast used to do, verbatim: the concatenated

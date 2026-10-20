@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
@@ -139,17 +138,36 @@ public sealed class SessionTabStripPanel : Panel
     /// <summary>Longest title the strip will draw before the window runs out.</summary>
     public const int MaxTitleCells = 32;
 
-    /// <summary>Status dot — width 1 in <c>UnicodeWidth</c>, so cells never drift.</summary>
-    private const char StatusGlyph = '●';
+    /// <summary>
+    ///     Longest run of cells the underline may cover when it is written from
+    ///     a stack buffer. A tab is at most a few dozen cells wide, so this is
+    ///     a formality: past it the string form is used instead, so the
+    ///     painted run is identical either way.
+    /// </summary>
+    private const int MaxStackRun = 512;
+
+    /// <summary>
+    ///     Cells the "+N" summary may take: the sign plus the digits of a
+    ///     32-bit count.
+    /// </summary>
+    private const int OverflowLabelMaxChars = 12;
+
+    /// <summary>
+    ///     Status dot — width 1 in <c>UnicodeWidth</c>, so cells never drift.
+    ///     A string, not a char: the strip paints every frame, and a
+    ///     <c>char.ToString()</c> per glyph is an allocation the runtime only
+    ///     happens to cache.
+    /// </summary>
+    private const string StatusGlyph = "●";
 
     /// <summary>Pinned marker.</summary>
-    private const char PinGlyph = '▪';
+    private const string PinGlyph = "▪";
 
     /// <summary>Dirty marker (uncommitted work in the session).</summary>
-    private const char DirtyGlyph = '•';
+    private const string DirtyGlyph = "•";
 
     /// <summary>"tabs hidden on the left" hint.</summary>
-    private const char MoreLeftGlyph = '<';
+    private const string MoreLeftGlyph = "<";
 
     /// <summary>Focused-tab underline.</summary>
     private const char UnderlineGlyph = '▁';
@@ -173,6 +191,43 @@ public sealed class SessionTabStripPanel : Panel
 
     /// <summary>Session ids that carried an unread signal on the last painted frame.</summary>
     private HashSet<string> _lastUnread = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The unread ids of the frame being painted. A scratch set, reused
+    ///     across frames: the strip paints every frame, and a fresh
+    ///     <see cref="HashSet{T}" /> per frame was an allocation per frame for
+    ///     a set that never outlives the paint. It swaps with
+    ///     <see cref="_lastUnread" /> at the end of every frame, so neither
+    ///     frame ever allocates a set.
+    /// </summary>
+    private HashSet<string> _unreadScratch = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The ids whose settle tick is drained this frame. The drain mutates
+    ///     the settle map while it walks it, so the ids have to be copied out
+    ///     first — into a scratch list that is reused across frames, because a
+    ///     new list per frame was an allocation per frame for a copy that
+    ///     never outlives the paint.
+    /// </summary>
+    private readonly List<string> _settleDrain = [];
+
+    /// <summary>
+    ///     The memoised plan and the inputs it was built from (#1140). The
+    ///     plan is a pure function of (the strip snapshot, the width), and
+    ///     both are stable across the frames of a quiet turn: the strip
+    ///     snapshot is an immutable value the reducer replaces only when a
+    ///     tab really changes. Without the memo every painted frame rebuilt
+    ///     the whole plan — two scratch arrays, an
+    ///     <see cref="ImmutableArray{T}"/> builder, a cell array and a
+    ///     truncated title string per visible tab.
+    /// </summary>
+    private TabStripState? _planStrip;
+
+    /// <summary>Width the memoised plan was laid out for.</summary>
+    private int _planWidth = -1;
+
+    /// <summary>The memoised plan itself.</summary>
+    private TabStripPlan _plan = TabStripPlan.Hidden;
 
     /// <summary>Latest tab-strip snapshot, projected by the renderer (never mutated here).</summary>
     public TabStripState Strip { get; set; } = TabStripState.Empty;
@@ -200,6 +255,14 @@ public sealed class SessionTabStripPanel : Panel
     ///     Lays the strip out for <paramref name="width" /> columns. Pure: same
     ///     inputs, same plan, no buffer and no mutation — the reason the geometry
     ///     can be asserted directly by tests instead of through a screenshot.
+    ///     <para>
+    ///         The plan is memoised (#1140): the inputs are the strip snapshot
+    ///         and the width, and the snapshot is an immutable value the
+    ///         reducer replaces only when a tab really changes. A quiet frame
+    ///         therefore re-derives nothing — it reuses the plan it already
+    ///         built instead of paying for the whole layout again, which is
+    ///         what a painted frame used to cost.
+    ///     </para>
     /// </summary>
     public TabStripPlan Layout(int width)
     {
@@ -207,6 +270,16 @@ public sealed class SessionTabStripPanel : Panel
         var tabs = strip.Tabs;
         if (!strip.ShouldRender || tabs.Length == 0 || width <= 0)
             return TabStripPlan.Hidden;
+
+        // The memo is safe to publish: TabStripPlan.Cells is an
+        // ImmutableArray<TabCell>, so the cached plan and a freshly built one
+        // are indistinguishable to a reader, and LastPlan keeps pointing at
+        // an immutable snapshot rather than at a buffer someone else may
+        // overwrite.
+        if (ReferenceEquals(_planStrip, strip) && _planWidth == width)
+        {
+            return _plan;
+        }
 
         int active = strip.ActiveTabId is { } id ? strip.IndexOf(id) : 0;
         if (active < 0)
@@ -257,11 +330,16 @@ public sealed class SessionTabStripPanel : Panel
         // The "N more" summary and the "<" hint were not in the growth budget, so
         // shrink until they fit. The focused tab is never dropped, and the side
         // that is farther from it goes first so the scroll tracks the focus.
+        //
+        // The "+N" summary is measured here, inside the loop, so its buffer is
+        // hoisted out: a stack allocation inside a loop is a stack that grows
+        // with the loop.
+        Span<char> overflowLabel = stackalloc char[OverflowLabelMaxChars];
         int hiddenLeft = lo;
         int hiddenRight = tabs.Length - 1 - hi;
         while (lo < active || hi > active)
         {
-            int reserve = MoreLeftCells(hiddenLeft) + OverflowCells(hiddenRight);
+            int reserve = MoreLeftCells(hiddenLeft) + OverflowCells(hiddenRight, overflowLabel);
             if (spent + reserve <= width)
                 break;
 
@@ -280,7 +358,7 @@ public sealed class SessionTabStripPanel : Panel
         }
 
         int moreIndicator = MoreLeftCells(hiddenLeft);
-        int overflowCells = OverflowCells(hiddenRight);
+        int overflowCells = OverflowCells(hiddenRight, overflowLabel);
         int available = width - moreIndicator - overflowCells;
 
         // Hand the slack back as title width, one cell at a time. The focused tab
@@ -354,7 +432,7 @@ public sealed class SessionTabStripPanel : Panel
             overflowX = Math.Min(Math.Max(moreIndicator, x - SeparatorWidth), limit);
         }
 
-        return new TabStripPlan(
+        var plan = new TabStripPlan(
             IsVisible: true,
             FirstVisible: lo,
             Cells: ClampToWidth(cells.ToImmutable(), width),
@@ -362,6 +440,11 @@ public sealed class SessionTabStripPanel : Panel
             HiddenRight: hiddenRight,
             OverflowX: overflowX,
             MoreLeft: hiddenLeft > 0);
+
+        _planStrip = strip;
+        _planWidth = width;
+        _plan = plan;
+        return plan;
     }
 
     /// <summary>
@@ -436,14 +519,19 @@ public sealed class SessionTabStripPanel : Panel
         }
 
         if (plan.MoreLeft)
-            buffer.SetText(rect.X, rect.Y, MoreLeftGlyph.ToString(), OverflowStyle);
+            buffer.SetText(rect.X, rect.Y, MoreLeftGlyph, OverflowStyle);
 
         if (plan.OverflowX >= 0)
         {
+            // The "+N" summary, written into a stack buffer: the string form
+            // was two allocations (the number and the concatenation) on every
+            // painted frame that hides tabs.
+            Span<char> label = stackalloc char[OverflowLabelMaxChars];
+            int labelLen = FormatOverflowLabel(plan.HiddenRight, label);
             buffer.SetText(
                 rect.X + plan.OverflowX,
                 rect.Y,
-                OverflowLabel(plan.HiddenRight),
+                label[..labelLen],
                 OverflowStyle);
         }
 
@@ -550,7 +638,12 @@ public sealed class SessionTabStripPanel : Panel
     private void TrackSettle()
     {
         var tabs = Strip.Tabs;
-        var unread = new HashSet<string>(StringComparer.Ordinal);
+        // The unread set of THIS frame, in the scratch set that is reused
+        // across frames: the strip paints every frame, and a fresh HashSet
+        // per frame was an allocation per frame for a set that never
+        // outlives the paint.
+        HashSet<string> unread = _unreadScratch;
+        unread.Clear();
         for (int i = 0; i < tabs.Length; i++)
         {
             if (tabs[i].HasUnread)
@@ -563,14 +656,24 @@ public sealed class SessionTabStripPanel : Panel
 
         if (_settle.Count > 0)
         {
-            var ids = new List<string>(_settle.Keys);
-            for (int i = 0; i < ids.Count; i++)
+            // The drain mutates the settle map while it walks it, so the ids
+            // are copied out first — into the scratch list, reused across
+            // frames rather than allocated per frame. The map is walked
+            // directly (not through Keys): AddRange over the key collection
+            // would box the collection's enumerator, which is an allocation
+            // per frame on the very path this removes allocations from.
+            _settleDrain.Clear();
+            foreach (var pair in _settle)
             {
-                int left = _settle[ids[i]] - 1;
+                _settleDrain.Add(pair.Key);
+            }
+            for (int i = 0; i < _settleDrain.Count; i++)
+            {
+                int left = _settle[_settleDrain[i]] - 1;
                 if (left <= 0)
-                    _settle.Remove(ids[i]);
+                    _settle.Remove(_settleDrain[i]);
                 else
-                    _settle[ids[i]] = left;
+                    _settle[_settleDrain[i]] = left;
             }
         }
 
@@ -580,7 +683,10 @@ public sealed class SessionTabStripPanel : Panel
                 _settle[id] = MarkerFadeTicks;
         }
 
-        _lastUnread = unread;
+        // This frame's unread set becomes the next frame's "last unread" set,
+        // and the old one becomes the scratch — a swap, so neither frame ever
+        // allocates a set.
+        (_lastUnread, _unreadScratch) = (_unreadScratch, _lastUnread);
     }
 
     private void PaintCell(ScreenBuffer buffer, in Rect rect, in TabCell cell, double settleLevel)
@@ -588,12 +694,12 @@ public sealed class SessionTabStripPanel : Panel
         int y = rect.Y;
 
         if (cell.HasPinMarker)
-            buffer.SetText(rect.X + cell.X, y, PinGlyph.ToString(), PinnedStyle);
+            buffer.SetText(rect.X + cell.X, y, PinGlyph, PinnedStyle);
 
         buffer.SetText(
             rect.X + cell.X + (cell.HasPinMarker ? PinWidth : 0),
             y,
-            StatusGlyph.ToString(),
+            StatusGlyph,
             StatusStyle(cell.Status));
 
         buffer.SetText(
@@ -615,7 +721,7 @@ public sealed class SessionTabStripPanel : Panel
             buffer.SetText(
                 rect.X + cell.TitleX + cell.TitleCells,
                 y,
-                DirtyGlyph.ToString(),
+                DirtyGlyph,
                 style);
         }
     }
@@ -632,7 +738,28 @@ public sealed class SessionTabStripPanel : Panel
             var cell = cells[i];
             // Leading cell plus the rest of the tab: one continuous run reads as
             // an underline, a bare glyph would look like a stray cursor.
-            buffer.SetText(rect.X + cell.X, y, new string(UnderlineGlyph, cell.Width), PinnedStyle);
+            // The run is written from a stack buffer: a fresh string per frame
+            // for a run of cells the strip paints every frame. The buffer is
+            // sized by the tab's own width, which the solver bounds by the
+            // viewport; the string form stays as the fallback for an absurd
+            // width, so the painted run is identical either way.
+            int run = cell.Width;
+            if (run <= 0)
+            {
+                return;
+            }
+
+            if (run <= MaxStackRun)
+            {
+                Span<char> underline = stackalloc char[run];
+                underline.Fill(UnderlineGlyph);
+                buffer.SetText(rect.X + cell.X, y, underline, PinnedStyle);
+            }
+            else
+            {
+                buffer.SetText(rect.X + cell.X, y, new string(UnderlineGlyph, run), PinnedStyle);
+            }
+
             return;
         }
     }
@@ -660,12 +787,46 @@ public sealed class SessionTabStripPanel : Panel
     // ── text helpers ────────────────────────────────────────────────────────
 
     /// <summary>Cells taken by the "+N" summary, or 0 when everything fits.</summary>
-    private static int OverflowCells(int hidden) =>
-        hidden <= 0 ? 0 : 1 + OverflowLabel(hidden).Length;
+    private static int OverflowCells(int hidden, Span<char> into)
+    {
+        if (hidden <= 0)
+        {
+            return 0;
+        }
 
-    /// <summary>The "+N" summary text (leading blank separates it from the last tab).</summary>
-    private static string OverflowLabel(int hidden) =>
-        hidden <= 0 ? string.Empty : "+" + hidden.ToString(CultureInfo.InvariantCulture);
+        return 1 + FormatOverflowLabel(hidden, into);
+    }
+
+    /// <summary>
+    ///     Writes the "+N" summary into <paramref name="into" /> and returns its
+    ///     length. The digits are written by hand: <c>int.ToString</c>
+    ///     allocates a string, and the summary is painted on every frame that
+    ///     hides tabs.
+    /// </summary>
+    private static int FormatOverflowLabel(int hidden, Span<char> into)
+    {
+        if (hidden <= 0)
+        {
+            return 0;
+        }
+
+        into[0] = '+';
+
+        // The digits, most significant first: count them, then write them back.
+        int digits = 1;
+        for (int probe = hidden; probe >= 10; probe /= 10)
+        {
+            digits++;
+        }
+
+        for (int i = digits - 1; i >= 0; i--)
+        {
+            into[1 + i] = (char)('0' + (hidden % 10));
+            hidden /= 10;
+        }
+
+        return 1 + digits;
+    }
 
     /// <summary>Cells taken by the "&lt;" hint, or 0 when nothing is hidden left.</summary>
     private static int MoreLeftCells(int hidden) => hidden > 0 ? 1 : 0;
