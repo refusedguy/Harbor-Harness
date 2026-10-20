@@ -12,7 +12,17 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj"/>
-    <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!--
+      Harbor.TestKit used to be referenced here, and was used by NOTHING in
+      this project: no `using Harbor.TestKit`, no qualified type name, no
+      opted-in interface. The reference only cost closure — Harbor.Application,
+      Harbor.Desktop.Abstractions and Harbor.Permissions arrived with it
+      (20 -> 15 projects). (Harbor.TestKit declares no test methods of its own,
+      so this edge never duplicated a test run; the cost here was the closure
+      alone.) tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs now
+      keeps a test project from referencing another test project it does not
+      use.
+    -->
     <!-- ReactiveHookGenerator must run here too: ReactiveViewModelTests' stub
          declares [Reactive] fields and tests its EMITTED hooks end-to-end
          (issue #1542). Analyzer output does not flow transitively through
