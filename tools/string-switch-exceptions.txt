@@ -1,0 +1,57 @@
+# String switches that are still in the tree, and why each one stays.
+#
+# #1575 turned the string-dispatched `switch` into a `FrozenDictionary` table
+# where the shape allowed it, and left this file as the ratchet for the ones
+# that did not. Read it as the list of OPEN questions about string dispatch,
+# not as a list of things somebody forgot.
+#
+# The rule the gate enforces (tools/check-string-switch.py --check):
+#
+#   * every string-dispatched `switch` in src/ and apps/ is named here, with
+#     a reason, and an unlisted one fails the gate;
+#   * every row here still names a switch the tree has, and a stale one fails
+#     the gate too, so a closed hole cannot stay blessed.
+#
+# The row key is `<path> | <selector>`, where the selector is the expression
+# the switch dispatches on, normalized. It is stable under a line move and
+# changes when the dispatch itself changes, which is exactly when the row
+# has to be looked at again.
+#
+# WHAT WAS CONVERTED, AND WHAT THE CONVERSION WAS
+#
+#   src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs   47 labels -> 2 tables
+#   src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs  4 -> 1 table
+#   src/Harbor.Tui.CellForge.Engine/Capabilities/InlineImageProbe.cs  3 -> 1 table
+#   src/Harbor.Hosting/Modules/TelemetryModule.cs             4 -> 1 table
+#
+# The key-spec one is the reason the gate exists: the parser answered the
+# same two questions ("which modifier?", "which key?") from two case ladders,
+# and the f-key arm carried a numeric guard that could never fail because
+# the twelve labels above it had already decided the answer. As tables, the
+# vocabulary has one owner and the guard is gone.
+#
+# ---------------------------------------------------------------------------
+
+# --- apps/ --- outside #1575's src/ scope, kept here so the gate covers the
+# --- whole product surface and these cannot grow unnoticed.
+
+apps/Harbor.App.Avalonia/Hosting/ServiceRegistration.cs | ipcMode.ToLowerInvariant() | One named mode ("ipc-client") and a default that takes everything else. A table would hold a single row and still need the default arm, so the switch is the shorter form.
+apps/Harbor.App.Avalonia/Services/ThemeService.cs | t.ToLowerInvariant() | Two named variants (light/dark); a MISS falls through to the palette index below, which is the real lookup. The switch is a pre-filter, not a vocabulary.
+apps/Harbor.App.Cli/Commands/AuthCommand.cs | subcommand | Each arm is a different async flow with its own argument count, its own parse and its own output. There is no value to tabulate: the arms are code.
+apps/Harbor.App.Cli/Commands/DemoCommand.cs | arg | The arms are PATTERN matches ("case var _ when arg.StartsWith("--scene=")"), not string labels. A table cannot carry a guard, and rewriting the guards would change what the flag accepts.
+apps/Harbor.App.Cli/Commands/LogsCommand.cs | args[0].ToLowerInvariant() | Each arm is a different async flow (list / last / follow / clean) with its own return shape. Same reason as AuthCommand: the arms are code, not values.
+apps/Harbor.App.Cli/Commands/SessionsVerb.cs | sub | Eleven subcommands, each an async call with a DIFFERENT signature (some take the logger, some take the remaining args). A table of delegates would need one common signature plus a wrapper per arm: more code than the ladder, and one more thing to keep in step.
+apps/Harbor.App.Cli/Configuration/ConfigValueSetter.cs | key.ToLowerInvariant() | Seven config keys, and each arm parses its value with a DIFFERENT parser (ModelRef, ProviderId, AgentName, a decimal with an invariant culture) and returns a different mutation. The dispatch is over "which parser", not over "which value".
+
+# --- src/ ---
+
+src/Harbor.CodeGen/EscapeCodeGenerator.cs | na.Key | The arms read Roslyn metadata: "na.Key" is an attribute's named-argument key, and each arm extracts a different kind of value (a string, a nullable namespace, a member name). There is no shared value to put in a table.
+src/Harbor.CodeGen/MoodFrameGenerator.cs | na.Key | Same shape as EscapeCodeGenerator: a Roslyn named-argument key, and each arm does something different with it.
+src/Harbor.CodeGen/ReactiveHookGenerator.cs | named.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
+src/Harbor.CodeGen/RendererAdapterGenerator.cs | na.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
+src/Harbor.CodeGen/ToolGlueGenerator.cs | na.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
+src/Harbor.Ipc.Abstractions/Endpoints/HostsCatalog.cs | prop.Name.ToLowerInvariant() | Four of the five arms carry a `when` guard on the JSON VALUE KIND ("host" only when the value is a string, "port" only when it is a number). The dispatch is over (property name x value shape), so a table would have to carry the same guard inside its values, which is the switch in disguise with a dictionary on top.
+src/Harbor.Plugins.Host/McpStdioServer.cs | method | Each MCP method arm is a different async flow: two of them return null before writing, two await a different writer, one is the error path. The arms are code, not values, and their return shapes differ.
+src/Harbor.Tui.CellForge/Chat/Panels/PermissionPresentation.cs | toolKey | Sixteen labels in eight groups, and each group composes a TITLE and appends BODY LINES rather than producing a value. A table would replace one dispatch with a dictionary plus an enum dispatch of the same eight arms: the same code with a layer on top. The tool-name vocabulary itself already has one owner (the tool registry).
+src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlay.cs | key.Character.ToString() | The switch is over a ONE-CHARACTER string ("q", "+", "-", ...). The right narrowing is a char switch on key.Character, not a table: the ladder is not a vocabulary, it is a key map. Left for the TUI slice that owns the widget.
+src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs | text | Same shape: "text" is key.Character.ToString(), a one-character key map. (This file's other case labels are the same dispatch in a switch expression.)

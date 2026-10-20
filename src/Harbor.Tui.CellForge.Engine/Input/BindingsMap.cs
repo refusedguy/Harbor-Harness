@@ -7,6 +7,7 @@
 // Same leaf rule as KeyBindings.cs: BCL-only, AOT-compatible, zero Harbor
 // references, render-thread owned, chat untouched.
 
+using System.Collections.Frozen;
 using System.Text;
 
 namespace Harbor.Tui.CellForge.Input;
@@ -53,6 +54,78 @@ public sealed record Binding(
 /// </summary>
 public static class KeySpec
 {
+    /// <summary>
+    /// The modifier names a spec may carry, and the bit each one sets.
+    /// The lookup key is the lowercased token, which is exactly what the case
+    /// ladder this table replaced compared against, so "CTRL" and "ctrl" still mean
+    /// the same thing and "hyper" still means nothing.
+    /// </summary>
+    private static readonly FrozenDictionary<string, KeyModifiers> ModifierBits =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, KeyModifiers>(StringComparer.Ordinal)
+            {
+                ["ctrl"] = KeyModifiers.Ctrl,
+                ["control"] = KeyModifiers.Ctrl,
+                ["shift"] = KeyModifiers.Shift,
+                ["alt"] = KeyModifiers.Alt,
+                ["option"] = KeyModifiers.Alt,
+                ["meta"] = KeyModifiers.Meta,
+                ["super"] = KeyModifiers.Meta,
+                ["win"] = KeyModifiers.Meta,
+                ["cmd"] = KeyModifiers.Meta,
+                ["command"] = KeyModifiers.Meta,
+            },
+            StringComparer.Ordinal);
+
+    /// <summary>
+    /// The named key specs, and the key code each one names. "space" is
+    /// deliberately NOT in this table: it is the one spec that names a
+    /// CHARACTER rather than a key code, and <see cref="TryParse" /> answers
+    /// it before it looks here.
+    /// </summary>
+    private static readonly FrozenDictionary<string, KeyCode> NamedKeys =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, KeyCode>(StringComparer.Ordinal)
+            {
+                ["enter"] = KeyCode.Enter,
+                ["return"] = KeyCode.Enter,
+                ["tab"] = KeyCode.Tab,
+                ["backspace"] = KeyCode.Backspace,
+                ["bspace"] = KeyCode.Backspace,
+                ["escape"] = KeyCode.Escape,
+                ["esc"] = KeyCode.Escape,
+                ["up"] = KeyCode.Up,
+                ["down"] = KeyCode.Down,
+                ["left"] = KeyCode.Left,
+                ["right"] = KeyCode.Right,
+                ["home"] = KeyCode.Home,
+                ["end"] = KeyCode.End,
+                ["pageup"] = KeyCode.PageUp,
+                ["page_up"] = KeyCode.PageUp,
+                ["pgup"] = KeyCode.PageUp,
+                ["pagedown"] = KeyCode.PageDown,
+                ["page_down"] = KeyCode.PageDown,
+                ["pgdn"] = KeyCode.PageDown,
+                ["pgdown"] = KeyCode.PageDown,
+                ["insert"] = KeyCode.Insert,
+                ["ins"] = KeyCode.Insert,
+                ["delete"] = KeyCode.Delete,
+                ["del"] = KeyCode.Delete,
+                ["f1"] = KeyCode.F1,
+                ["f2"] = KeyCode.F2,
+                ["f3"] = KeyCode.F3,
+                ["f4"] = KeyCode.F4,
+                ["f5"] = KeyCode.F5,
+                ["f6"] = KeyCode.F6,
+                ["f7"] = KeyCode.F7,
+                ["f8"] = KeyCode.F8,
+                ["f9"] = KeyCode.F9,
+                ["f10"] = KeyCode.F10,
+                ["f11"] = KeyCode.F11,
+                ["f12"] = KeyCode.F12,
+            },
+            StringComparer.Ordinal);
+
     /// <summary>Parses <paramref name="spec"/> into <paramref name="gesture"/>.</summary>
     /// <returns>False when the spec is empty, has no key, or names an unknown key.</returns>
     public static bool TryParse(string? spec, out KeyGesture gesture)
@@ -72,29 +145,12 @@ public static class KeySpec
         var mods = KeyModifiers.None;
         for (int i = 0; i < parts.Length - 1; i++)
         {
-            switch (parts[i].ToLowerInvariant())
+            if (!ModifierBits.TryGetValue(parts[i].ToLowerInvariant(), out KeyModifiers bit))
             {
-                case "ctrl":
-                case "control":
-                    mods |= KeyModifiers.Ctrl;
-                    break;
-                case "shift":
-                    mods |= KeyModifiers.Shift;
-                    break;
-                case "alt":
-                case "option":
-                    mods |= KeyModifiers.Alt;
-                    break;
-                case "meta":
-                case "super":
-                case "win":
-                case "cmd":
-                case "command":
-                    mods |= KeyModifiers.Meta;
-                    break;
-                default:
-                    return false;
+                return false;
             }
+
+            mods |= bit;
         }
 
         string key = parts[^1];
@@ -104,85 +160,20 @@ public static class KeySpec
             return true;
         }
 
-        switch (key.ToLowerInvariant())
+        string named = key.ToLowerInvariant();
+        if (named == "space")
         {
-            case "space":
-                gesture = KeyGesture.ForChar(' ', mods);
-                return true;
-            case "enter":
-            case "return":
-                gesture = KeyGesture.ForKey(KeyCode.Enter, mods);
-                return true;
-            case "tab":
-                gesture = KeyGesture.ForKey(KeyCode.Tab, mods);
-                return true;
-            case "backspace":
-            case "bspace":
-                gesture = KeyGesture.ForKey(KeyCode.Backspace, mods);
-                return true;
-            case "escape":
-            case "esc":
-                gesture = KeyGesture.ForKey(KeyCode.Escape, mods);
-                return true;
-            case "up":
-                gesture = KeyGesture.ForKey(KeyCode.Up, mods);
-                return true;
-            case "down":
-                gesture = KeyGesture.ForKey(KeyCode.Down, mods);
-                return true;
-            case "left":
-                gesture = KeyGesture.ForKey(KeyCode.Left, mods);
-                return true;
-            case "right":
-                gesture = KeyGesture.ForKey(KeyCode.Right, mods);
-                return true;
-            case "home":
-                gesture = KeyGesture.ForKey(KeyCode.Home, mods);
-                return true;
-            case "end":
-                gesture = KeyGesture.ForKey(KeyCode.End, mods);
-                return true;
-            case "pageup":
-            case "page_up":
-            case "pgup":
-                gesture = KeyGesture.ForKey(KeyCode.PageUp, mods);
-                return true;
-            case "pagedown":
-            case "page_down":
-            case "pgdn":
-            case "pgdown":
-                gesture = KeyGesture.ForKey(KeyCode.PageDown, mods);
-                return true;
-            case "insert":
-            case "ins":
-                gesture = KeyGesture.ForKey(KeyCode.Insert, mods);
-                return true;
-            case "delete":
-            case "del":
-                gesture = KeyGesture.ForKey(KeyCode.Delete, mods);
-                return true;
-            case "f1":
-            case "f2":
-            case "f3":
-            case "f4":
-            case "f5":
-            case "f6":
-            case "f7":
-            case "f8":
-            case "f9":
-            case "f10":
-            case "f11":
-            case "f12":
-                if (int.TryParse(key[1..], out int n) && n >= 1 && n <= 12)
-                {
-                    gesture = KeyGesture.ForKey((KeyCode)((int)KeyCode.F1 + (n - 1)), mods);
-                    return true;
-                }
-
-                return false;
-            default:
-                return false;
+            gesture = KeyGesture.ForChar(' ', mods);
+            return true;
         }
+
+        if (NamedKeys.TryGetValue(named, out KeyCode code))
+        {
+            gesture = KeyGesture.ForKey(code, mods);
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>Canonical display for a gesture ("ctrl+j", "space", "enter").</summary>

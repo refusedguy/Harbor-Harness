@@ -121,6 +121,14 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
+      # #1575. The string-switch gate reads `src/` and `apps/`, and compares
+      # the result against its committed exceptions file, so a PR that edits
+      # the gate or the exceptions must run it, and so must a PR that edits
+      # the tree it measures. The rewrites file is the reviewed record of what
+      # the gate's own `--apply` mode replays, so it is a trigger too.
+      - 'tools/check-string-switch.py'
+      - 'tools/string-switch-exceptions.txt'
+      - 'tools/string-switch-rewrites.py'
       # #1884. The two reporters (the measurement table and the wall census)
       # and their self-tests: a PR that edits either must run them, for the
       # same reason the gates above are triggered by their own sources.
@@ -224,6 +232,12 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
+      # #1575. Same trigger as above: the string-switch gate reads `src/` and
+      # `apps/` and compares the result against its committed exceptions
+      # file, so a PR that edits the gate or the exceptions must run it.
+      - 'tools/check-string-switch.py'
+      - 'tools/string-switch-exceptions.txt'
+      - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
@@ -421,7 +435,14 @@ jobs:
       # it produces.
       - name: Chain census finds every planted guard shape and rewrites the one it promises
         run: python3 tools/check-result-chains.py --self-test
-
+      # #1575. The string-switch gate is the only one that asks whether the
+      # product dispatches on a string literal with a `case` ladder. Its
+      # failure path is tested here for the same reason as the others: a rule
+      # edited until it matches nothing is indistinguishable from a rule that
+      # found nothing, and the load-bearing fixtures are the planted string
+      # switch, the unlisted switch, the stale row and the floor.
+      - name: String-switch gate fails on an unlisted string switch
+        run: python3 tools/check-string-switch.py --self-test
   links:
     name: internal links
     runs-on: ubuntu-latest
@@ -870,6 +891,49 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that no test serializes through the reflection resolver
         run: python3 tools/check-test-json-reflection.py
+
+  # #1575. Eleventh question, and the only one about DISPATCH: does the
+  # product answer a question by comparing a string literal in a `case`
+  # ladder, and is every ladder that is still there named in the exceptions
+  # file with a reason?
+  #
+  # The issue filed the shape as boilerplate: 152 `case "..."` labels under
+  # `src/` and `apps/`, of which 47 lived in one file (the CellForge key-spec
+  # parser) and answered two questions -- "which modifier?" and "which key?"
+  # -- from two case ladders. The replacement is a `FrozenDictionary` table,
+  # and the argument for it is not the lookup speed (the compiler already
+  # hash-optimises a large string switch): it is that the vocabulary has ONE
+  # owner, so a key added to one ladder and not its twin cannot happen.
+  #
+  # That argument only holds if nothing else is allowed to grow a second
+  # ladder over the same strings, which is what this gate is for. It runs in
+  # BASELINE MODE: the ladders the tree has today are recorded in
+  # tools/string-switch-exceptions.txt, one row per ladder with a reason, and
+  # only NEW ladders fail. The file is a ratchet in both directions: a row
+  # the tree no longer produces fails too, so a closed hole cannot stay
+  # blessed.
+  #
+  # The floors are a ratchet, like the ones above. Measured on this tree:
+  # 17 statement-form switches, 84 statement labels, 46 expression-form
+  # switches, 238 expression labels -- 322 string labels in all. The floor is
+  # set below the measured count, because this gate's whole purpose is to
+  # make that count go DOWN; a scanner that stopped matching would report a
+  # clean tree, and a clean tree is the one answer this gate must never give
+  # by accident.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a planted string
+  # switch is found, an unlisted switch fails, a stale row fails and the
+  # floor fails), run in the `selftest` job above.
+  stringswitch:
+    name: string switch
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that every string-dispatched switch is listed
+        run: python3 tools/check-string-switch.py --check --min-labels 280
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually

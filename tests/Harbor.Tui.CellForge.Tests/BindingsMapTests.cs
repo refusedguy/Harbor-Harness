@@ -72,6 +72,95 @@ public sealed class BindingsMapTests
         await Assert.That(EngineInput.KeySpec.TryParse("hyper+x", out _)).IsFalse();
     }
 
+    // #1575: the key-spec vocabulary is a TABLE now (KeySpec.ModifierBits and
+    // KeySpec.NamedKeys), and the point of a table is that it cannot lose a
+    // row without something saying so. These two tests are that something:
+    // they walk every spelling the parser accepts and pin the gesture each
+    // one produces, so a row dropped from either table fails here.
+    [Test]
+    public async Task KeySpec_Parses_Every_Modifier_Spelling()
+    {
+        (string Spec, EngineInput.KeyModifiers Mods)[] cases =
+        [
+            ("ctrl", EngineInput.KeyModifiers.Ctrl),
+            ("control", EngineInput.KeyModifiers.Ctrl),
+            ("shift", EngineInput.KeyModifiers.Shift),
+            ("alt", EngineInput.KeyModifiers.Alt),
+            ("option", EngineInput.KeyModifiers.Alt),
+            ("meta", EngineInput.KeyModifiers.Meta),
+            ("super", EngineInput.KeyModifiers.Meta),
+            ("win", EngineInput.KeyModifiers.Meta),
+            ("cmd", EngineInput.KeyModifiers.Meta),
+            ("command", EngineInput.KeyModifiers.Meta),
+        ];
+
+        foreach ((string spec, EngineInput.KeyModifiers mods) in cases)
+        {
+            AssertKeySpec(spec + "+x", out EngineInput.KeyGesture gesture);
+            await Assert.That(gesture.Modifiers).IsEqualTo(mods);
+            await Assert.That((char)gesture.Char.Value).IsEqualTo('x');
+        }
+    }
+
+    [Test]
+    public async Task KeySpec_Parses_Every_Named_Key()
+    {
+        (string Spec, EngineInput.KeyCode Key)[] cases =
+        [
+            ("enter", EngineInput.KeyCode.Enter),
+            ("return", EngineInput.KeyCode.Enter),
+            ("tab", EngineInput.KeyCode.Tab),
+            ("backspace", EngineInput.KeyCode.Backspace),
+            ("bspace", EngineInput.KeyCode.Backspace),
+            ("escape", EngineInput.KeyCode.Escape),
+            ("esc", EngineInput.KeyCode.Escape),
+            ("up", EngineInput.KeyCode.Up),
+            ("down", EngineInput.KeyCode.Down),
+            ("left", EngineInput.KeyCode.Left),
+            ("right", EngineInput.KeyCode.Right),
+            ("home", EngineInput.KeyCode.Home),
+            ("end", EngineInput.KeyCode.End),
+            ("pageup", EngineInput.KeyCode.PageUp),
+            ("page_up", EngineInput.KeyCode.PageUp),
+            ("pgup", EngineInput.KeyCode.PageUp),
+            ("pagedown", EngineInput.KeyCode.PageDown),
+            ("page_down", EngineInput.KeyCode.PageDown),
+            ("pgdn", EngineInput.KeyCode.PageDown),
+            ("pgdown", EngineInput.KeyCode.PageDown),
+            ("insert", EngineInput.KeyCode.Insert),
+            ("ins", EngineInput.KeyCode.Insert),
+            ("delete", EngineInput.KeyCode.Delete),
+            ("del", EngineInput.KeyCode.Delete),
+            ("f1", EngineInput.KeyCode.F1),
+            ("f2", EngineInput.KeyCode.F2),
+            ("f3", EngineInput.KeyCode.F3),
+            ("f4", EngineInput.KeyCode.F4),
+            ("f5", EngineInput.KeyCode.F5),
+            ("f6", EngineInput.KeyCode.F6),
+            ("f7", EngineInput.KeyCode.F7),
+            ("f8", EngineInput.KeyCode.F8),
+            ("f9", EngineInput.KeyCode.F9),
+            ("f10", EngineInput.KeyCode.F10),
+            ("f11", EngineInput.KeyCode.F11),
+            ("f12", EngineInput.KeyCode.F12),
+        ];
+
+        foreach ((string spec, EngineInput.KeyCode key) in cases)
+        {
+            AssertKeySpec(spec, out EngineInput.KeyGesture gesture);
+            await Assert.That(gesture.Key).IsEqualTo(key);
+        }
+    }
+
+    [Test]
+    public async Task KeySpec_Rejects_Names_Outside_The_Table()
+    {
+        foreach (string spec in new[] { "f0", "f13", "f01", "nope", "pgdn2", "spaces", "pageupup" })
+        {
+            await Assert.That(EngineInput.KeySpec.TryParse(spec, out _)).IsFalse();
+        }
+    }
+
     [Test]
     public async Task TryMatch_Highest_Priority_Wins_Char_CaseExact()
     {

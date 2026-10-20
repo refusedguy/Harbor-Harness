@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models.Identifiers;
@@ -16,6 +17,45 @@ namespace Harbor.Ui.Framework.Projection;
 /// </summary>
 public static class PanelRows
 {
+    /// <summary>
+    ///     The todo markers the panel understands: the icon each one renders
+    ///     and the summary bucket it counts into. One table, so the icon and
+    ///     the count cannot disagree about what a marker means. They used to
+    ///     be two parallel switches over the same string, and a marker added
+    ///     to one and not the other rendered an icon and counted nothing.
+    /// </summary>
+    /// <remarks>
+    ///     The freeze is spelled out rather than left to the extension method
+    ///     on purpose: this file already imports
+    ///     <c>Harbor.Abstractions.Extensions</c> (for <c>Ensure</c> and
+    ///     <c>Truncate</c>), and that namespace carries its own
+    ///     <c>ToFrozenDictionary</c>, so the extension form is ambiguous here
+    ///     (CS0121). The static call names the one that is meant.
+    /// </remarks>
+    private static readonly FrozenDictionary<string, (string Icon, TodoBucket Bucket)> TodoMarkers =
+        FrozenDictionary.ToFrozenDictionary(
+            new Dictionary<string, (string Icon, TodoBucket Bucket)>(StringComparer.Ordinal)
+            {
+                ["[x]"] = ("✓", TodoBucket.Done),
+                ["[X]"] = ("✓", TodoBucket.Done),
+                ["[~]"] = ("→", TodoBucket.Active),
+                ["[ ]"] = ("○", TodoBucket.Pending),
+            },
+            StringComparer.Ordinal);
+
+    /// <summary>Which summary bucket a todo marker counts into.</summary>
+    private enum TodoBucket : byte
+    {
+        /// <summary>Finished.</summary>
+        Done = 0,
+
+        /// <summary>In progress.</summary>
+        Active = 1,
+
+        /// <summary>Not started.</summary>
+        Pending = 2,
+    }
+
     /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
     public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
     {
@@ -36,25 +76,24 @@ public static class PanelRows
             int contentBudget = Math.Max(1, width - 6);
             for (int i = 0; i < todos.Count; i++)
             {
-                string icon = todos[i].Marker switch
+                // A marker the table does not know renders the "?" fallback and
+                // counts into no bucket, which is what the two switches gave.
+                string icon = "?";
+                if (TodoMarkers.TryGetValue(todos[i].Marker, out var marker))
                 {
-                    "[x]" or "[X]" => "✓",
-                    "[~]" => "→",
-                    "[ ]" => "○",
-                    _ => "?",
-                };
-                switch (todos[i].Marker)
-                {
-                    case "[x]":
-                    case "[X]":
-                        done++;
-                        break;
-                    case "[~]":
-                        active++;
-                        break;
-                    case "[ ]":
-                        pending++;
-                        break;
+                    icon = marker.Icon;
+                    switch (marker.Bucket)
+                    {
+                        case TodoBucket.Done:
+                            done++;
+                            break;
+                        case TodoBucket.Active:
+                            active++;
+                            break;
+                        case TodoBucket.Pending:
+                            pending++;
+                            break;
+                    }
                 }
 
                 rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");
