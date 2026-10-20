@@ -890,7 +890,10 @@ The fourth row is the lock half of #487. It calibrates first: if the runner cann
 four threads on pure CPU work, the test prints `SKIPPED` instead of failing, because that outcome
 says nothing about the code.
 
-### Store-path scaling gates (#410) — **RELATIVE**, CI merge gate
+### Store-path scaling gates (#410) — **PER-UNIT BUDGET** + **COUNTS**, CI merge gate
+
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK (bytes per unit, hard; probe units per unit, soft) over a FIXED amount of work. The rows below are the pre-conversion measurement, kept as the dated record; the current budgets are in [the #1948 section](#the-ratio-form-gates-become-per-unit-budgets-1948--per-unit-budget-ci-merge-gate).
+
 
 `Harbor.Ui.Framework.Tests.StorePathScalingGates`, in the `test (ui)` merge-gate shard.
 
@@ -958,6 +961,12 @@ fires.
 
 ### MatchesPattern scaling gate (#1528) — **RELATIVE**, CI merge gate
 
+**Leg length fixed in #1948** — the leg scaler now starts at ONE unit instead of at a
+burst of 200 `Evaluate` calls, so the legs land at ~100 ms instead of 876–1 838 ms and
+the gate stops paying 26.5 s of its 27.9 s to prove a ratio that never moved. The FORM
+is still a ratio: converting it needs `Harbor.TestKit.PerfGate`, which this assembly
+cannot reach until #1889's TestKit split gives it the TestKit reference.
+
 `Harbor.Abstractions.Tests.MatchesPatternScalingGates`, in the `test (core)` merge-gate shard.
 
 Same relative convention as #410: N against 2N inside one run, no absolute
@@ -973,7 +982,10 @@ separator class, so per-call matching passes the raw strings with identical
 | `Cost_GrowsLinearly_InRuleCount` | time over N-rule `Evaluate` miss-walks, 256 → 512 rules — warm-up discarded, best-of-5 | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.39** (17.058 → 23.767 ms) |
 | `Cost_GrowsLinearly_InRuleCount` | allocations over the same walks — exact-zero, not a ratio: 2 wasted strings per rule are still linear, so a ratio gate passes with the bug in place | exactly 0 B on both windows | 0 → 0 B |
 
-### Prompt-cache key scaling gate (#1532) — **RELATIVE**, CI merge gate
+### Prompt-cache key scaling gate (#1532) — **PER-UNIT BUDGET**, CI merge gate
+
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK (bytes per unit, hard; probe units per unit, soft) over a FIXED amount of work. The rows below are the pre-conversion measurement, kept as the dated record; the current budgets are in [the #1948 section](#the-ratio-form-gates-become-per-unit-budgets-1948--per-unit-budget-ci-merge-gate).
+
 
 `Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests`, in the
 `test (core)` merge-gate shard.
@@ -1193,6 +1205,85 @@ nothing (#591):
 > into the `test (ui)` job log on every run — cite THAT run's values when
 > filling the Measured column, never the local absolute milliseconds.
 
+### The ratio-form gates become per-unit budgets (#1948) — **PER-UNIT BUDGET**, CI merge gate
+
+Eleven gates move from the RELATIVE form to the #1747 form: a **budget per unit
+of work**, with the amount of work FIXED, the allocation branch
+machine-independent and hard, the time branch in **probe units** and soft.
+
+**Why the relative form had to go.** A ratio's denominator is the same order of
+magnitude as its numerator, so runner noise moves it by whole multiples, and
+its base is not a fixed amount of work — so the number the gate reads depends
+on the size the gate happened to pick. The receipt is run 39423151864, where
+`ToolDispatcherToolContextScalingTests` read **time x4.69 while allocations read
+x1.99** on a tree nobody had touched: textbook linear memory with an inflated
+stopwatch. The 7 failures in 151 `core` runs (4.6 %) were all of that shape.
+
+Two of the gates were not merely noisy but **measuring the harness**:
+
+- `ToolDispatcherToolContextScalingTests` — the fake event bus keeps every
+  published event forever, so the GC's marking cost per dispatch grows with the
+  dispatch count. The 2N leg paid for a bigger retained pile, and the ratio
+  measured the RETENTION, not the dispatcher. The pile is now cleared between
+  dispatches.
+- `AgentReducerToolBoundaryTests` — the two ratio legs were **the same
+  measurement** (`ToolBoundaryLeg(units)` on both sides), so the ratio was
+  noise around 1.00 and the gate could not fail on the quadratic behaviour it
+  was written for.
+
+| Test | Claim | Old gate | New gate | Measured (run 39423151864) |
+|---|---|---|---|---|
+| `ToolDispatcherToolContextScalingTests.ToolContextBuilds_CostPerToolCall_StaysWithinBudget` | allocation per tool call, over a FIXED 50 000 calls | ratio `alloc(2N)/alloc(N)` ≤ 3.0 (and `time(2N)/time(N)` ≤ 3.15) | **≤ 4 000 B per call** (machine-independent, HARD) | **2 382 B** per call (135 563 152 B over 569 dispatches of 100 calls) |
+| `ToolDispatcherToolContextScalingTests.ToolContextBuilds_CostPerToolCall_StaysWithinBudget` | time per tool call, in **probe units** — the cost of one call divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ratio, above | **≤ 12 probe units per call** (machine-scaled, SOFT) | **~2.2 probe units** per call — 0.828 µs/call against a probe that costs 0.000380 ms/unit |
+| `ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget` | allocation per tool call, over a FIXED 25 000 calls | ratio ≤ 3.0 / 3.15 | **≤ 3 500 B per call** (HARD) | **2 079 B** per call (58 421 064 B over 281 dispatches of 100 calls) |
+| `ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget` | time per tool call, in probe units | ratio, above | **≤ 35 probe units per call** (SOFT) | **~6.4 probe units** per call — 2.44 µs/call |
+| `CachingSystemPromptBuilderKeyScalingTests.KeyCost_PerTurn_StaysWithinBudget` | allocation per turn's key computation, over a FIXED 1 000 turns at the LARGER context | ratio ≤ 3.0 / 3.15 | **≤ 1 536 B per turn** (HARD) | **984 B** per turn (2 954 192 B over 3 002 turns) — and the **same** number at twice the context size, which is the point: the key streams the context through one bounded buffer |
+| `CachingSystemPromptBuilderKeyScalingTests.KeyCost_PerTurn_StaysWithinBudget` | time per turn's key computation, in probe units | ratio, above | **≤ 600 probe units per turn** (SOFT) | **~171 probe units** per turn — 65.0 µs/turn at 65 536 chars |
+| `TurnRunnerToolTableReuseTests.RunAsync_CostPerTurn_StaysWithinBudget` | allocation per text-only turn, over a FIXED 1 000 turns against a 200-tool registry | ratio ≤ 3.0 / 3.15 | **≤ 30 000 B per turn** (HARD) | **23 010 B** per turn (34 055 168 B over 1 480 turns) |
+| `TurnRunnerToolTableReuseTests.RunAsync_CostPerTurn_StaysWithinBudget` | time per text-only turn, in probe units | ratio, above | **≤ 600 probe units per turn** (SOFT) | **~205 probe units** per turn — 77.8 µs/turn |
+| `TurnRunnerUpdateCoalescingTests.PublishCost_PerDelta_StaysWithinBudget` | allocation per published delta, over a FIXED 1 000 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 92 B per delta** (HARD) | **72 B** per delta (147 649 968 B over 1 024 turns of 2 000 deltas) |
+| `TurnRunnerUpdateCoalescingTests.PublishCost_PerDelta_StaysWithinBudget` | time per published delta, in probe units | ratio, above | **≤ 0.6 probe units per delta** (SOFT) | **~0.116 probe units** per delta — 0.044 µs/delta |
+| `ToolRegistryDescribeOnceTests.ResolveTools_CostPerResolve_StaysWithinBudget` | allocation per first-time filtered resolve, over a FIXED 100 000 resolves | ratio ≤ 3.0 / 3.15 | **≤ 1 500 B per resolve** (HARD) | **984 B** per resolve (98 400 000 B over 100 000 resolves) |
+| `ToolRegistryDescribeOnceTests.ResolveTools_CostPerResolve_StaysWithinBudget` | time per first-time filtered resolve, in probe units | ratio, above | **≤ 8 probe units per resolve** (SOFT) | **~1.7 probe units** per resolve — 0.645 µs/resolve |
+| `JsonlMessagePayloadScalingTests.SerializeMessagePayload_CostPerMessage_StaysWithinBudget` | allocation per serialized message, over a FIXED 1 000 000 messages | ratio ≤ 3.0 / 3.15 | **≤ 220 B per message** (HARD) | **145 B** per message (49 788 976 B over 21 387 batches of 16) |
+| `JsonlMessagePayloadScalingTests.SerializeMessagePayload_CostPerMessage_StaysWithinBudget` | time per serialized message, in probe units | ratio, above | **≤ 0.6 probe units per message** (SOFT) | **~0.115 probe units** per message — 0.044 µs/message |
+| `SessionFileReaderScalingTests.ReadPath_CostPerRead_StaysWithinBudget` | allocation per full session-file read, over a FIXED 8 reads of a 4 000-message file | ratio ≤ 3.0 / 3.15 | **≤ 1 600 000 B per read** (HARD) | **1 275 659 B** per read (16 583 576 B over 13 reads) |
+| `SessionFileReaderScalingTests.ReadPath_CostPerRead_StaysWithinBudget` | time per full session-file read, in probe units | ratio, above | **≤ 60 000 probe units per read** (SOFT) | **~25 200 probe units** per read — 9.59 ms/read |
+| `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | allocation per painted frame, over a FIXED 400 paints of a 400-line region | ratio ≤ 3.15 (time only) | **≤ 0 B per frame** (HARD — the exact zero, the strongest shape a byte claim can take) | **0 B** per frame |
+| `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | time per painted frame, in probe units | ratio, above | **≤ 900 probe units per frame** (SOFT) | **~312 probe units** per frame |
+| `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | allocation per tool-start/end pair, over a FIXED 4 000 pairs | ratio ≤ 3.0 — **the same measurement on both sides** | **≤ 16 000 B per pair** (HARD) | **11 959 B** per pair (208 151 840 B over 17 404 pairs) |
+| `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | time per tool-start/end pair, in probe units | ratio, above | **≤ 40 probe units per pair** (SOFT) | **~9.6 probe units** per pair — 3.64 µs/pair |
+| `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | allocation per scripted delta, over a FIXED 100 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 1 700 B per delta** (HARD) | **1 300 B** per delta (71 508 360 B over 55 drives of 1 000 deltas) |
+| `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | time per scripted delta, in probe units | ratio, above | **≤ 2.6 probe units per delta** (SOFT) | **~0.87 probe units** per delta — 0.331 µs/delta |
+
+**The leg length is FIXED now, and that is where the wall time went.** The
+shared helper's leg SCALER raised the unit count until a leg lasted ~100 ms, so
+the faster the runner the FEWER units a leg carried — and the more the verdict
+moved with the machine. `StorePathScalingGates` swung between **3.6 s and
+27.4 s** across runs (the largest variance source in the `ui` shard, 17 % of its
+wall) and `MatchesPatternScalingGates` paid **876–1 838 ms per leg against a
+100 ms target**: its scaler started at `initialUnits = CallsPerWindow = 200`,
+and one unit was already a burst of 200 `Evaluate` calls, so the leg was 8–17×
+the target on every probe, every confirmation, the warm-up and all five rounds.
+26.5 s of that gate's 27.9 s went to proving a ratio that never moved
+(x2.03–x2.21 across seven runs). Its scaler now starts at ONE unit; the gate's
+FORM is still a ratio, because converting it needs `Harbor.TestKit.PerfGate`,
+which `Harbor.Abstractions.Tests` cannot reach until #1889's TestKit split
+gives it the TestKit reference.
+
+**The control still fails.** No gate is disabled. The store path's sublinearity
+claim is the COUNT gate beside it (`FullProjections ≤ folds + 2`,
+`TailRebuilds ≤ policyFlushes + streaming transitions`, `Materializations ≤
+deltas/10`, `LineRestyles == 0`), every counter of which is shown non-zero
+before it is bounded; the byte branch of every converted gate refuses a zero
+measurement; and the time branch stands down only when the rounds do not
+reproduce each other, reporting either way.
+
+> The `[perf-gate] …: measured …` report lines print into the shard job log on
+> every run, and `tools/test-measurements.py` lifts them into the job summary
+> (#618) — cite THAT run's values when filling a Measured column, never local
+> absolute milliseconds.
+
 ### Perf-gate inventory (#1747) — every gate, one verdict
 
 The discipline #1747 asks for, in one table: **measure → report → assert
@@ -1205,20 +1296,25 @@ measurement, not the claim, is what is wrong).
 
 | Gate | Shape today | Compares | Verdict |
 |---|---|---|---|
-| `Harbor.Ui.Framework.Tests.StorePathScalingGates.Cost_GrowsSubLinearly_InDeltas` | ratio | `time(2N)/time(N)` and `alloc(2N)/alloc(N)` ≤ 3.0 over 1000/2000 deltas; GC-fenced legs, best-of-3 | **keep** — fenced legs, measured 1.99 against a 3.00 limit (run 36860503050). Next in line for the constant conversion, but its `TheRatioRuleAnswersTheDeclaredQuestion` positive control is written around the ratio rule, so that conversion is its own change |
+| `Harbor.Ui.Framework.Tests.StorePathScalingGates.Cost_GrowsSubLinearly_InDeltas` | ratio | `time(2N)/time(N)` and `alloc(2N)/alloc(N)` ≤ 3.0 over 1000/2000 deltas; GC-fenced legs, best-of-3 | **convert to a constant** — done in #1948. Its `TheRatioRuleAnswersTheDeclaredQuestion` control stays, now pinning the SHARED ratio rule the other ratio gates still ride; this file's own control is the COUNT gate beside it |
 | `Harbor.Ui.Framework.Tests.ProjectHistoryScalingGates` | ratio | `time(2N)/time(N)` ≤ 3.0 over 512/1024 transcript lines; best-of-5, no fence, no leg scaling | **convert to a constant** — done in #1747. This was the ×3.10 red (#1285) |
 | `Harbor.Storage.Tests.SqliteAppendScalingGate` | ratio | `time(2N)/time(N)` ≤ 3.0 over 1024/2048 appends; best-of-3, no fence | **convert to a constant** — done in #1747, as `SqliteAppendCostGate`. This was the "ratio 3.102 vs limit 3.00" red |
 | `Harbor.Tui.CellForge.Tests.FrameSnapshotCostGate` | absolute bytes per painted frame | ≤ 256 B / ≤ 128 B per painted tab-strip / overlay frame; time in probe units | **keep** — a constant budget per unit of work, in the house `PerfGate` shape. The pre-#1140 tree measures 2 688 B and 560 B per frame against it and fails both ceilings (run 39391746836); the fixed tree measures 0 B per frame on both (run 39399184283) |
-| `Harbor.Application.Tests.ToolDispatcherResolveOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — the ratio's measurement is already hardened (legs scaled toward ~100 ms, medians of 5, GC fence, ×1.05 band on the time branch) |
-| `Harbor.Application.Tests.TurnRunnerToolTableReuseTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
-| `Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Application.Tests.ToolDispatcherResolveOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
+| `Harbor.Application.Tests.TurnRunnerToolTableReuseTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
+| `Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
 | `Harbor.Core.Tests.CompactionPolicyMaterializeScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **keep** — same |
-| `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
-| `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **keep** — same |
-| `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **keep** — the exact-zero form is the strongest shape a byte claim can take |
+| `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
+| `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **convert to a constant** — done in #1948; the pre-#1533 companion stays on the ratio helper because it never gated anything |
+| `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **keep** — the exact-zero form is the strongest shape a byte claim can take. Its LEG LENGTH was fixed in #1948 (the scaler now starts at ONE unit, not at a burst of 200 calls): the legs were 876–1 838 ms against a 100 ms target, and 26.5 s of the gate's 27.9 s went to proving a ratio that never moved. The FORM stays a ratio until #1889 gives this assembly the TestKit reference |
 | `Harbor.Domain.Tests.BashArgMatcherScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
 | `Harbor.Providers.Tests.OpenAiCompatibleRequestBuildScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
 | `Harbor.Providers.Tests.SsePumpScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Application.Tests.ToolDispatcherToolContextScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the 2N leg read **time x4.69 with alloc x1.99** (run 39423151864) because the fake event bus's retained event pile made the GC's marking cost grow with the dispatch count | **convert to a constant** — done in #1948; the harness's retained pile is cleared between dispatches |
+| `Harbor.Registries.Tests.ToolRegistryDescribeOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
+| `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` (read path) | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
+| `Harbor.Tui.CellForge.Tests.GenericLiveRegionTests` | ratio | ≤ 3.15, time only; red at 3.54 on a real CI run | **convert to a constant** — done in #1948: the byte branch is the exact zero the steady paint already pins |
+| `Harbor.Ui.Framework.Tests.AgentReducerToolBoundaryTests` | ratio | ≤ 3.0, through `TestScalingGate` — and **the same measurement on BOTH sides**, so the ratio was noise around 1.00 and the gate could not fail | **convert to a constant** — done in #1948 |
 | `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Update_HeaderEditOnABigSession_…` | differential | `(big − baseline) ≥ 0` **and** `< 2 MiB` | **replace the methodology** — done in #1747. The `≥ 0` floor was a FALSE premise: both operands come from one monotonic counter, so their difference can legitimately be negative (a saving), and the observed value was exactly that (−15 384 B). A broken measurement is a negative SINGLE window, and that shape is refused inside `AllocationProbe`. The ceiling is now a constant per MiB of bulk rewritten |
 | `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Read_ThousandRecordSession_…` | absolute + blanket `[Retry(3)]` | `allocated < graph + fileBytes` — a ceiling ~1.5% under the measured number | **replace the methodology** — done in #1747. The measurement is now a minimum over three reads (the process-wide counter's noise only ever inflates a reading), the budget is a constant per record, and the blanket retry is gone |
 | `Harbor.Storage.Jsonl.Tests.JsonlAllocationBudgetTests` | absolute bytes | ≤ 8 KB/line, ≤ 512 KB/read | **keep** — a byte budget is already machine-independent and already per unit of work |
@@ -1254,7 +1350,10 @@ much does ONE UNIT OF WORK cost, and is that within a reviewed constant?".
 | **Assert softly** | The allocation branch asserts hard. The time branch asserts ONLY when the measurement is TRUSTED — the spread across rounds is within `MaxTrustedSpread` and the leg was long enough to measure. A runner that cannot reproduce its own baseline is not evidence about the code, so the time branch reports and stands down instead of failing the build (the `StatusBarFitPerfTests` #487 precedent) |
 | **Non-vacuity** | A leg that measured nothing is a failure, not a pass: a zero millisecond reading is refused before any budget is read, and a zero byte reading is refused too — a byte count of zero satisfies every ceiling, so a mis-wired probe would make the gate pass on any tree (#591). A workload that legitimately allocates nothing per unit opts out with `RequirePositiveBytes = false` |
 
-### JsonlMessagePayload serialization gate (#1531) — **RELATIVE**, CI merge gate ⏳ first run pending
+### JsonlMessagePayload serialization gate (#1531) — **PER-UNIT BUDGET**, CI merge gate
+
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK (bytes per unit, hard; probe units per unit, soft) over a FIXED amount of work. The rows below are the pre-conversion measurement, kept as the dated record; the current budgets are in [the #1948 section](#the-ratio-form-gates-become-per-unit-budgets-1948--per-unit-budget-ci-merge-gate).
+
 
 `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests`, in the `test (platform)` merge-gate shard.
 
@@ -1286,7 +1385,10 @@ byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
 > `test (platform)` job log on every run — cite THAT run's values when filling
 > the Measured column, never the local absolute milliseconds.
 
-### Per-delta update coalescing (#1527) — **RELATIVE**, CI merge gate ✅ measured
+### Per-delta update coalescing (#1527) — **PER-UNIT BUDGET**, CI merge gate ✅ measured
+
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK (bytes per unit, hard; probe units per unit, soft) over a FIXED amount of work. The rows below are the pre-conversion measurement, kept as the dated record; the current budgets are in [the #1948 section](#the-ratio-form-gates-become-per-unit-budgets-1948--per-unit-budget-ci-merge-gate).
+
 
 `Harbor.Application.Tests.TurnRunnerUpdateCoalescingTests`, in the `test (core)` merge-gate shard.
 
@@ -1319,7 +1421,10 @@ published before the turn's end event.
 > TRX (and the job summary), not in the console log — the console only shows a
 > gate's line when it skips.
 
-### Tool-context callback closures (#1529) — **RELATIVE**, CI merge gate ✅ measured
+### Tool-context callback closures (#1529) — **PER-UNIT BUDGET**, CI merge gate ✅ measured
+
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK (bytes per unit, hard; probe units per unit, soft) over a FIXED amount of work. The rows below are the pre-conversion measurement, kept as the dated record; the current budgets are in [the #1948 section](#the-ratio-form-gates-become-per-unit-budgets-1948--per-unit-budget-ci-merge-gate).
+
 
 `Harbor.Application.Tests.ToolDispatcherToolContextScalingTests`, in the `test (core)` merge-gate shard.
 
