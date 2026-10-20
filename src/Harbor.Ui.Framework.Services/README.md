@@ -10,7 +10,6 @@ Platform service abstractions and implementations for the Harbor UI Framework �
 
 | Subfolder / File | Purpose |
 |------------------|---------|
-| `IRenderEngine.cs` | `IRenderEngine` — renderer lifecycle contract. |
 | `Overlays/OverlayController.cs` | `OverlayController` — manages overlay open/close/stack state. |
 | `Services/IDialogService.cs` | `IDialogService` — `ConfirmAsync`, `PromptAsync`, `AlertAsync`. |
 | `Services/IDispatcherAdapter.cs` | `IDispatcherAdapter` — platform dispatcher (`Post`, `Invoke`, `Bind`/`Unbind` store). |

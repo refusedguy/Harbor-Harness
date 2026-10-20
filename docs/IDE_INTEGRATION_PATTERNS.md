@@ -243,7 +243,7 @@
 - **Harbor path**: Implement ghost text first (easiest via LSP or editor extension APIs), then inline diff overlay, then composer.
 
 ### 7.5 What Harbor should adopt *now*
-1. **`IHarborIdeClient` interface** in `Harbor.Abstractions` — file I/O, nav, git, terminal, workspace. Thin adapters in `Harbor.Ide.{Vscode,JetBrains,None}`.
+1. **`IHarborIdeClient` interface** in `Harbor.Abstractions`: file I/O, nav, git, terminal, workspace. Thin adapters in `Harbor.Ide.{Vscode,JetBrains,None}`. **Status (2026-10-20, #1831): the contract exists and is frozen, but the IDE bridge itself is DEFERRED by owner decision (issue #1252, "Do NOT implement"). The interface is deliberately unimplemented, is marked as reserved in its source, and is pinned by `tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs`. Do not add an adapter until #1252 is unblocked.**
 2. **ACP server mode** in `apps/Harbor.App.Cli` — `harbor --acp` spawns stdio JSON-RPC, making Harbor instantly available in JetBrains AI Assistant and Zed.
 3. **Typed message protocol** between core and any webview/UI — define in `Harbor.Abstractions.Contracts.Messages`.
 4. **Unix socket context bridge** — mirror Codex `/ide` so Harbor CLI can pull file/selection/tabs from a companion IDE extension.

@@ -346,18 +346,25 @@ public sealed class SlashCommandRouterShapeRule
             .Select(static t => t.FullName ?? t.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        // All four are declared in src/Harbor.Abstractions/Tui/ITuiRenderer.cs —
-        // the exact file the router was removed from, and the only place in the
+        // Both are declared in src/Harbor.Abstractions/Tui/ITuiRenderer.cs, the
+        // exact file the router was removed from, and the only place in the
         // assembly that still matches the file name. ITuiRenderer ITSELF is not
         // one of them: it moved to Harbor.Terminal.Abstractions when the TUI
         // contracts were split out, so the file kept the name and lost the type.
         // Probing by file name would be probing a type that has not been in this
         // assembly for a long time, which fails the liveness test for a reason
         // that has nothing to do with whether the scan works.
+        //
+        // The list used to hold four names. #1831 removed IInputHandler and
+        // KeyPressEventArgs from that file. The input-strategy contract had no
+        // implementor and no consumer, and the live input strategy is
+        // Harbor.Tui.CellForge.Engine.Input.IInputHandler, a different interface
+        // with the same simple name. The two survivors are the LIVE command
+        // contracts this file also pins in TheDeletionWasSurgical_…, so they are
+        // the right liveness anchors: both are still declared here, and both are
+        // still implemented.
         string[] expected =
         [
-            "Harbor.Abstractions.Tui.IInputHandler",
-            "Harbor.Abstractions.Tui.KeyPressEventArgs",
             "Harbor.Abstractions.Tui.ISlashCommand",
             "Harbor.Abstractions.Tui.ICommandContext",
         ];
@@ -366,7 +373,7 @@ public sealed class SlashCommandRouterShapeRule
 
         await Assert.That(missing).IsEmpty()
             .Because(
-                "these three types are declared in the same file the router was deleted from. If the "
+                "these types are declared in the same file the router was deleted from. If the "
                 + "reflection scan cannot see them, it is not reading that file, and a ban evaluated "
                 + "over a file the scan never opened is decoration. Missing: " + string.Join(", ", missing));
 

@@ -46,6 +46,12 @@ Two halves of the layering contract, both mechanically enforced:
    Sits with `ExemptionReason.cs`, which is the one place that answers "does
    this tolerated row state a reason?" for the five C# exemption tables; a
    config demotion is the sixth, and the only one whose row is not a value.
+6. **Dead-surface rules**: a public contract that nobody keeps.
+   `DeadPublicInterfaceRule` (#1831) requires every public interface in a
+   contract assembly to have at least one implementor or at least one consumer.
+   A contract that is legitimately waiting for a deferred product decision is
+   excused by a named, reasoned, liveness-checked reservation table rather than
+   by a comment. See ARCHITECTURE_LAYERS.md §5 and §5.9.
 
 ## Run
 

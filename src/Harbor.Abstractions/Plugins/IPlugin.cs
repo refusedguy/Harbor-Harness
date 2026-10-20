@@ -149,8 +149,22 @@ public sealed class PluginContext
 ///     Host for plugins — manages discovery, loading, and lifecycle.
 /// </summary>
 /// <remarks>
-///     Implementations live in <c>Harbor.Plugins.Runtime</c> (JIT) and a future AOT-compatible
-///     out-of-process variant.
+///     <para>
+///         Implementations live in <c>Harbor.Plugins.Runtime</c> (JIT) and a future AOT-compatible
+///         out-of-process variant.
+///     </para>
+///     <para>
+///         <b>RESERVED, deliberately unimplemented (issue #1831).</b> This contract has NO
+///         implementor and NO consumer in the tree today: the running plugin host is composed
+///         from the narrower seams (<c>IPluginSource</c> → <c>IPluginCompiler</c> →
+///         <c>IPluginInstantiator</c> → <c>IPluginRegistrar</c>), and the registration sink it
+///         would have been joined with is <c>Harbor.Plugins.Abstractions.IPluginLoadHost</c>,
+///         which is intentionally a different contract. Whether a full load/unload lifecycle
+///         host exists at all, and in which process, is the open plugin-host ADR
+///         (#418, a slice of #48), so this surface is kept, marked, and pinned by
+///         <c>tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs</c> rather than deleted
+///         while that decision is pending.
+///     </para>
 /// </remarks>
 public interface IPluginHost
 {

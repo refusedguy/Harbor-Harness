@@ -10,6 +10,25 @@ namespace Harbor.Abstractions.Ide;
 ///     Implementations are thin adapters: VS Code extension, JetBrains plugin, or a no-op
 ///     stub for headless/CLI scenarios. The agent core depends ONLY on this interface.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>RESERVED, deliberately unimplemented (issue #1831).</b> This contract has NO
+///         implementor and NO consumer in the tree today, and that is a DECISION, not an
+///         oversight: the IDE bridge is an explicitly deferred product decision
+///         (issue #1252, "IDE bridge as product (DEFERRED)") whose body says "Do NOT
+///         implement" until the out-of-process plugin story matures. The contract is kept
+///         because <c>docs/IDE_INTEGRATION_PATTERNS.md</c> §7.5 names it as the seam a
+///         future VS Code / JetBrains adapter would implement, and because it is frozen in
+///         <c>PublicAPI.Baseline.txt</c>. Deleting it would take a published promise
+///         away while the decision that would replace it is still open.
+///     </para>
+///     <para>
+///         It is pinned by <c>tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs</c>,
+///         which allows a zero-implementor public interface ONLY through a named, reasoned
+///         reservation row. The row is liveness-checked: the day an adapter lands, the row
+///         must go in the same commit.
+///     </para>
+/// </remarks>
 public interface IHarborIdeClient
 {
     // ── File I/O ──────────────────────────────────────────────────────────────
@@ -60,7 +79,22 @@ public sealed record ProcessResult(
     string Stdout,
     string Stderr);
 
-/// <summary>Handle to a running background process.</summary>
+/// <summary>
+///     Handle to a running background process.
+/// </summary>
+/// <remarks>
+///     <para>
+///         <b>RESERVED, deliberately unimplemented (issue #1831).</b> Part of the same reserved
+///         IDE-bridge surface as <see cref="IHarborIdeClient" />: no implementor and no
+///         consumer in the tree, pending the deferred product decision in issue #1252. See
+///         <c>tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs</c>.
+///     </para>
+///     <para>
+///         NOT the same contract as <c>Harbor.Tools.Builtin.IProcessHandle</c> (the Bash tool's
+///         child-process handle), which IS implemented and in use. The two share a simple name
+///         and nothing else.
+///     </para>
+/// </remarks>
 public interface IProcessHandle : IAsyncDisposable
 {
     /// <summary>Process ID.</summary>

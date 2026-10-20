@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### #1831 - мёртвая публичная поверхность: удалено, зарезервировано, защищено гвардом
+
+**22 публичных члена, которые охранял public-API-гейт, но которыми не пользовался никто. Два интерфейса удалены, четыре оставлены как явная резервация под отложенное продуктовое решение, новый гвард не даёт мёртвой поверхности вернуться.**
+
+**Проверка предпосылки (весь репозиторий: `src/`, `apps/`, `tests/`, `samples/`, `contrib/`, `tools/`).** Реализаторов нет ни у одного из трёх: `IHarborIdeClient`, `ITuiRenderBackend`, `IRenderEngine`. Потребителей нет тоже. Единственное упоминание `IHarborIdeClient` во всём дереве, рефлексивный тест `tests/Harbor.Abstractions.Tests/IHarborIdeClientTests.cs`, который вызывает ни одного члена; у двух других только собственный файл объявления. `ITuiRenderBackend` дополнительно ссылался в doc-комментарии на несуществующий тип `IRenderAsyncBackend`, то есть контракт не был привязан никогда.
+
+**Вердикт по интерфейсам: не «мёртвые», а три разных случая.**
+
+- `ITuiRenderBackend` (`Harbor.Terminal.Abstractions`) и `IRenderEngine` (`Harbor.Ui.Framework.Services`): **мёртвые и безопасные к удалению**: ноль реализаторов, ноль потребителей, нет документационной резервации. Файлы удалены.
+- `IHarborIdeClient` + `IProcessHandle` (`Harbor.Abstractions.Ide`): **резервация под отложенное решение**: IDE-мост отложен владельцем (issue #1252, «DEFERRED», «Do NOT implement»), а `docs/IDE_INTEGRATION_PATTERNS.md` §7.5 называет `IHarborIdeClient` швом, который реализует будущий адаптер VS Code / JetBrains. Удаление сняло бы опубликованное обещание, пока решение не принято. Оставлены, помечены «RESERVED, deliberately unimplemented» и внесены в таблицу резерваций.
+- `IEventSubscriber` (`Harbor.Abstractions.Events`): **резервация под #21** (двухпроцессная архитектура AOT-core + JIT-UI ещё в открытой разведке). Оставлена, помечена.
+- `IPluginHost` (`Harbor.Abstractions.Plugins`): **резервация под #418** (ADR о судьбе plugin-host: полный load/unload-хост ещё не решён; живой хост собран из `IPluginSource` → `IPluginCompiler` → `IPluginInstantiator` → `IPluginRegistrar`). Оставлен, помечен.
+
+**BREAKING (публичный API `Harbor.Abstractions`, заморожен гейтом `tools/check-public-api-abstractions.py`):** удалены `Harbor.Abstractions.Tui.IInputHandler` (2 участника) и `Harbor.Abstractions.Tui.KeyPressEventArgs` (3 участника). Контракт ввода не имел ни реализатора, ни потребителя: `ITuiRenderer` уехал в `Harbor.Terminal.Abstractions`, а живая стратегия ввода это другой интерфейс с тем же простым именем, `Harbor.Tui.CellForge.Engine.Input.IInputHandler`. `KeyPress` (запись) остаётся: это payload для обработки клавиш во view-слое (`Harbor.Terminal.Abstractions`). Также удалены `Harbor.Terminal.Abstractions.Renderers.ITuiRenderBackend` (6 участников) и `Harbor.Ui.Framework.Services.IRenderEngine` (5 участников): они вне замороженной сборки, но входят в пакуемые сборки. Пакеты `0.4.0-alpha` на nuget.org ещё не публикуются, поэтому внешних потребителей нет по определению.
+
+**Новый гвард: `tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs`.** Публичный интерфейс в контрактной сборке обязан иметь хотя бы одного реализатора ИЛИ хотя бы одного потребителя. Исключение это не комментарий, а именованная таблица `ReservedSurface`: каждая строка несёт причину (проверяется общим `ExemptionReason`) и ссылку на issue-владельца в отдельной колонке, а её живость проверяется: если интерфейс получил реализатора или исчез, строка обязана быть удалена в том же коммите. Тип в потребителе (`typeof`/`nameof`) использованием не считается, и именно эта форма держала `IHarborIdeClient` «живым». Разрешение имён учитывает namespace (в дереве два `IProcessHandle` и два `IInputHandler`), сканируются только верхнеуровневые объявления, а `tests/` включён в обход (тест-дубль, реализующий контракт, это реализатор), `contrib/` нет (не компилируется CI). Контроль невакуумности: правило обязано найти все три аудиторских интерфейса (синтетические исходники с исходными именами) и различать «есть реализатор», «есть потребитель» и «только `typeof`».
+
+**Известный пробел (не в этом PR):** `FatInterfaceShapeRatchet` считает `DeclaredOnly`, поэтому широкий алиас вроде `ISessionManager` (0 объявленных / 23 эффективных) недооценивается. Это относится к программе arch-guard (#1724, #1725–#1730), которая идёт последней.
+
 ### #1757 — CAS-версия файла для `write`/`edit` (safety)
 
 **Запись против изменившегося файла отвергается, а не затирает чужую правку молча.**
