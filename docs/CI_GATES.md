@@ -15,7 +15,7 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `15b5e44c`, the tree this policy landed on:
+Measured on `dev` at `be4f8d25`, the tree the table was written against:
 
 | | |
 |---|---|
