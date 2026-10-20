@@ -10,6 +10,14 @@
 # a loss that the gate reports is accepted when one exception names its
 # file, its pull request and a regex that picks it out.
 #
+# TWO THINGS THE REGEX MUST KNOW
+#
+#   * The line it is matched against has its whitespace COLLAPSED, so a
+#     regex may not carry a run of spaces: "a  b" never matches, "a b" does.
+#   * A backslash-escaped pipe is a LITERAL pipe, so a regex can carry an
+#     alternation ("a\|b") and can name a table row ("| C, 39440361839 |").
+#     An unescaped pipe separates the fields.
+#
 # WHAT AN EXCEPTION IS FOR
 #
 # The gate compares LINES. A piece of content that a squash-merge dropped is
@@ -45,39 +53,31 @@
 .github/workflows/ci.yml | 1967 | trx_dir_abs | the same command line with the path in a variable; the inline $GITHUB_WORKSPACE/$trx_dir is restored instead
 
 # --- accepted on 2026-10-20: content that was rewritten, not lost ---
-.github/workflows/ci.yml | 1992 | \#\ `dotnet\ test`\ →\ Microsoft\.Testing\.Platform\ bridge\ discovers\ ZERO\ tests | the NOTE on running tests was rewritten with the corrected wording: exit 5 is the platform's INVALID COMMAND-LINE ARGUMENTS code, a run that discovers no tests exits 8, and Microsoft.NET.Test.Sdk is gone from every project (#1893). The old text said the opposite and was wrong; AGENTS.md records the correction
-.github/workflows/ci.yml | 1992 | \#\ \(MTP\ host\ exits\ 5\ with\ one\ silent\ discovery\ error;\ verified\ on\ SDK\ 10\.0\.302 | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ for\ every\ tests/\*\.Tests\ project\)\ while\ the\ same\ assemblies\ run\ green\ via | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ direct\ host\ execution\.\ So\ every\ job\ below\ runs\ test\ projects\ as\ plain | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ executables:\ `dotnet\ run\ \-\-project\ tests/<Name>\ \-\-\ <mtp\-args>`\. | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ The\ floors\ are\ a\ ratchet:\ 43\ projects\ in\ scope,\ 55\ declared\ references | the same note with the floors #1893 raised: 49 projects in scope, 50 declared references
-.github/workflows/ci.yml | 1992 | \#\ and\ \~1950\ resolved\ package\ entries\ on\ the\ tree\ this\ landed\ on\.\ A\ scan | the same note with the floors #1893 raised (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | run:\ python3\ tools/check\-test\-packages\.py\ \-\-min\-projects\ 43\ \-\-min\-declared\ 40\ \-\-min\-packages\ 1400 | the same gate command with the floor #1893 raised: --min-declared 50
-.github/workflows/ci.yml | 1992 | \#\ The\ TRX\ has\ to\ land\ under\ the\ WORKSPACE,\ not\ under\ the\ assembly's | the #1884 note that stands in the same place says the same thing with the newer reasoning (TUnit 1.75 resolves a relative --results-directory against the test app's OWN working directory)
-.github/workflows/ci.yml | 1992 | \#\ own\ bin\ directory:\ the\ upload\ step\ globs\ `TestResults/\*\*/\*\.trx` | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ from\ the\ workspace\ root,\ and\ a\ relative\ \-\-results\-directory\ is | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ resolved\ against\ the\ assembly\ directory\ by\ the\ test\ platform\ \- | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ so\ a\ relative\ path\ put\ every\ TRX\ where\ the\ glob\ could\ not\ see | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ it,\ and\ the\ shard\ uploaded\ no\ results\ at\ all\. | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ \(Microsoft\.Testing\.Extensions\.CodeCoverage\ ships\ transitively\ with | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ Microsoft\.NET\.Test\.Sdk\ —\ no\ new\ packages\)\ and\ publishes\ per\-project\ line | the note now says coverage comes from Microsoft.Testing.Extensions.CodeCoverage, which TUnit carries transitively; the test SDK itself is no longer referenced anywhere
-.github/workflows/ci.yml | 1992 | \#\ coverage\ to\ the\ job\ summary\ \+\ raw\ cobertura\.xml\ artifacts\ \(30\-day | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ retention\ feeds\ the\ "month\ of\ green\ reports"\ baseline\ for\ a\ future | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
-.github/workflows/ci.yml | 1992 | \#\ diff\-threshold\)\. | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
-.github/workflows/ci.yml | 1946 | \#\ renders\ the\ tests\ that\ PRINTED\ something,\ so\ it\ sees\ \~88\ of\ the\ \~8\ 340 | the same sentence with the counts of the current tree
-docs/BENCHMARKS.md | 1946 | >\ \*\ \*\*C\ —\ final\*\*,\ run\ \*\*39440361839\*\*\ \(this\ branch's\ head,\ after\ the | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ \ \ toast\-timer\ change\ of\ §6\.4\ and\ after\ `StateTestRunnerTests`\ moved\ to\ a | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | >\ \ \ project\ of\ its\ own\):\ three\ processes,\ 107\ tests\ instead\ of\ 133\.\ The\ plan | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | >\ \ \ checked\ in\ is\ measured\ from\ run\ \*\*39436580540\*\*,\ the\ run\ before\ it\. | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | \ C,\ 39440361839\ \(final\ tree\)\ 3\ \*\*15\.5\ s\* | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | Run\ C's\ shards\ measured\ 13\.4\ s\ \(shard\-0,\ 41\ tests\),\ 15\.5\ s\ \(shard\-1,\ 61\)\ and | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | \(run\ A\)\ to\ \*\*38\.5\ s\*\*\ \(run\ B\)\ to\ \*\*24\.3\ s\*\*\ \(run\ C\):\ the\ project\ above\ is | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | 60\.6\ s\ of\ the\ 67\.7\ s\ before,\ and\ 15\.9\ s\ of\ the\ 24\.3\ s\ after\. | the pull request dropped these rows from its own final head (see the neighbouring exception)
-docs/BENCHMARKS.md | 1946 | >\ toast\-timer\ change\ of\ §6\.4\ and\ after\ `StateTestRunnerTests`\ moved\ to\ a | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ project\ of\ its\ own\):\ three\ processes,\ 107\ tests\ instead\ of\ 133\.\ The\ plan | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ checked\ in\ is\ measured\ from\ run\ \*\*39436580540\*\*,\ the\ run\ before\ it\. | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ toast\-timer\ change\ of\ §6\.4\ and\ after\ `State | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ project\ of\ its\ own\):\ three\ processes,\ 107\ t | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | >\ checked\ in\ is\ measured\ from\ run\ \*\*394365805 | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | C,\ 39440361839\ \(final\ tree\)\ 3\ \*\*15\.5\ s\*\*\ \*\*15 | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
-docs/BENCHMARKS.md | 1946 | C,\ 39440361839\ \(final\ tree\) | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
+.github/workflows/ci.yml | 1992 | \# `dotnet test` → Microsoft\.Testing\.Platform bridge discovers ZERO tests | the NOTE on running tests was rewritten with the corrected wording: exit 5 is the platform's INVALID COMMAND-LINE ARGUMENTS code, a run that discovers no tests exits 8, and Microsoft.NET.Test.Sdk is gone from every project (#1893). The old text said the opposite and was wrong; AGENTS.md records the correction
+.github/workflows/ci.yml | 1992 | \# \(MTP host exits 5 with one silent discovery error; verified on SDK 10\.0\.302 | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# for every tests/\*\.Tests project\) while the same assemblies run green via | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# direct host execution\. So every job below runs test projects as plain | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# executables: `dotnet run \-\-project tests/<Name> \-\- <mtp\-args>`\. | the NOTE on running tests was rewritten with the corrected wording (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# The floors are a ratchet: 43 projects in scope, 55 declared references | the same note with the floors #1893 raised: 49 projects in scope, 50 declared references
+.github/workflows/ci.yml | 1992 | \# and \~1950 resolved package entries on the tree this landed on\. A scan | the same note with the floors #1893 raised (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | run: python3 tools/check\-test\-packages\.py \-\-min\-projects 43 \-\-min\-declared 40 \-\-min\-packages 1400 | the same gate command with the floor #1893 raised: --min-declared 50
+.github/workflows/ci.yml | 1992 | \# The TRX has to land under the WORKSPACE, not under the assembly's | the #1884 note that stands in the same place says the same thing with the newer reasoning (TUnit 1.75 resolves a relative --results-directory against the test app's OWN working directory)
+.github/workflows/ci.yml | 1992 | \# own bin directory: the upload step globs `TestResults/\*\*/\*\.trx` | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# from the workspace root, and a relative \-\-results\-directory is | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# resolved against the assembly directory by the test platform \- | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# so a relative path put every TRX where the glob could not see | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# it, and the shard uploaded no results at all\. | the #1884 note that stands in the same place says the same thing with the newer reasoning (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# \(Microsoft\.Testing\.Extensions\.CodeCoverage ships transitively with | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# Microsoft\.NET\.Test\.Sdk — no new packages\) and publishes per\-project line | the note now says coverage comes from Microsoft.Testing.Extensions.CodeCoverage, which TUnit carries transitively; the test SDK itself is no longer referenced anywhere
+.github/workflows/ci.yml | 1992 | \# coverage to the job summary \+ raw cobertura\.xml artifacts \(30\-day | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# retention feeds the "month of green reports" baseline for a future | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
+.github/workflows/ci.yml | 1992 | \# diff\-threshold\)\. | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
+.github/workflows/ci.yml | 1946 | renders the tests that PRINTED something | the same sentence with the counts of the current tree
+docs/BENCHMARKS.md | 1946 | > \* \*\*C — final\*\*, run \*\*39440361839\*\* \(this branch's head, after the | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
+docs/BENCHMARKS.md | 1946 | Run C's shards measured 13\.4 s \(shard\-0, 41 tests\), 15\.5 s \(shard\-1, 61\) and | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | \(run A\) to \*\*38\.5 s\*\* \(run B\) to \*\*24\.3 s\*\* \(run C\): the project above is | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | 60\.6 s of the 67\.7 s before, and 15\.9 s of the 24\.3 s after\. | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | > toast\-timer change of §6\.4 and after `StateTestRunnerTests` moved to a | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | > project of its own\): three processes, 107 tests instead of 133\. The plan | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | > checked in is measured from run \*\*39436580540\*\*, the run before it\. | the pull request dropped these rows from its own final head (see the neighbouring exception)
+docs/BENCHMARKS.md | 1946 | \| C,\ 39440361839\ \(final\ tree\)\| 3\ \|\ \*\*15\.5\ s\*\| \*\*15\.9\ s\*\| 107\ \| 19\| | the pull request dropped this row of its own benchmark table; the row in the file today carries the newer run id and the newer numbers

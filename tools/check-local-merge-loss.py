@@ -335,7 +335,10 @@ def load_exceptions(path: str) -> list[tuple[str, int, re.Pattern[str], str]]:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            fields = [field.strip() for field in line.split("|")]
+            # A backslash-escaped pipe is a literal one, so a regex can
+            # carry an alternation (and a table row can be named).
+            fields = re.split(r"(?<!\\)\|", line, maxsplit=3)
+            fields = [field.strip().replace("\\|", "|") for field in fields]
             if len(fields) != 4 or not all(fields):
                 print(
                     f"error: {path}:{number}: an exception needs four fields "
