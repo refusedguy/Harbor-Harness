@@ -56,7 +56,7 @@ public class TelemetryExportOptionsTests
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.Target).IsEqualTo(TelemetryExportTarget.Console);
-        await Assert.That(resolved.MaxRecordBytes).IsEqualTo(512);
+        await Assert.That(resolved!.MaxRecordBytes).IsEqualTo(512);
     }
 
     /// <summary>The file target gets a path — the one under the Harbor home when none is given.</summary>
@@ -72,8 +72,8 @@ public class TelemetryExportOptionsTests
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.Target).IsEqualTo(TelemetryExportTarget.File);
-        await Assert.That(resolved.FilePath).IsNotNull();
-        await Assert.That(resolved.FilePath!).Contains("telemetry");
+        await Assert.That(resolved!.FilePath).IsNotNull();
+        await Assert.That(resolved!.FilePath!).Contains("telemetry");
     }
 
     /// <summary>

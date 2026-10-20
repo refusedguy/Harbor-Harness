@@ -143,8 +143,8 @@ public class TelemetryTextExporterTests : IDisposable
         }
 
         TelemetryExportStats stats = exporter.Stats;
-        await Assert.That(stats.DroppedRecords).IsGreaterThan(0);
-        await Assert.That(stats.DroppedBytes).IsGreaterThan(0);
+        await Assert.That(stats.DroppedRecords).IsGreaterThan(0L);
+        await Assert.That(stats.DroppedBytes).IsGreaterThan(0L);
         await Assert.That(_observed.Any(o => o.Name == TelemetryTagNames.ExportDropped && o.Value > 0)).IsTrue();
         await Assert.That(_logger.Messages.Any(m => m.Contains("dropped"))).IsTrue();
     }
@@ -168,8 +168,8 @@ public class TelemetryTextExporterTests : IDisposable
         exporter.Flush();
 
         TelemetryExportStats stats = exporter.Stats;
-        await Assert.That(stats.TruncatedRecords).IsEqualTo(1);
-        await Assert.That(stats.TruncatedBytes).IsGreaterThan(0);
+        await Assert.That(stats.TruncatedRecords).IsEqualTo(1L);
+        await Assert.That(stats.TruncatedBytes).IsGreaterThan(0L);
         await Assert.That(_observed.Any(o => o.Name == TelemetryTagNames.ExportTruncated)).IsTrue();
     }
 

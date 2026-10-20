@@ -80,8 +80,8 @@ public sealed partial class TelemetryTextExporter : IDisposable
     private readonly TextWriter? _output;
     private readonly ActivityListener? _activityListener;
     private readonly MeterListener? _meterListener;
-    private readonly CancellationTokenSource? _shutdown;
-    private readonly Task? _flushLoop;
+    private CancellationTokenSource? _shutdown;
+    private Task? _flushLoop;
 
     private readonly object _bufferGate = new();
     private readonly Queue<PendingRecord> _pending = new();
@@ -143,10 +143,9 @@ public sealed partial class TelemetryTextExporter : IDisposable
             ActivityStopped = OnActivityStopped,
         };
 
-        if (!ActivitySource.AddActivityListener(_activityListener))
-        {
-            LogListenerRejected(_logger);
-        }
+        // AddActivityListener returns the listener it registered; there is no
+        // failure mode to report — the listener is live from here on.
+        ActivitySource.AddActivityListener(_activityListener);
 
         _meterListener = new MeterListener
         {
@@ -602,12 +601,6 @@ public sealed partial class TelemetryTextExporter : IDisposable
         Level = LogLevel.Warning,
         Message = "Telemetry export flushing stopped after an error.")]
     private static partial void LogFlushFailed(ILogger logger, Exception exception);
-
-    [LoggerMessage(
-        EventId = 4,
-        Level = LogLevel.Warning,
-        Message = "The telemetry activity listener was rejected — no span will be exported.")]
-    private static partial void LogListenerRejected(ILogger logger);
 
     /// <summary>One record waiting in the buffer.</summary>
     private readonly record struct PendingRecord(string Line, int Size);
