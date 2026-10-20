@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """check-result-chains.py — the lever for issue #1558.
 
+WHY PYTHON: stdlib only, and it must run where there is no .NET SDK and no
+built solution — a gate that needs the SDK cannot run on the PR that fixes
+the build.
+
 Issue #1558 asks for the ``if (x.IsFailure) return …; var v = x.Value;`` shape
 to turn into CSharpFunctionalExtensions ``.Bind()`` / ``.Map()`` chains. This
 script finds those places so a reviewer can re-run the same census instead of
@@ -97,7 +101,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass

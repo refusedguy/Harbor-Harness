@@ -1,10 +1,10 @@
 {
   "by_kind": {
     "chain-mapped": 8,
-    "chain-same": 73,
+    "chain-same": 77,
     "non-result": 118,
     "rewriteable": 1,
-    "side-effect": 203,
+    "side-effect": 205,
     "terminal-mapped": 1,
     "terminal-same": 21
   },
@@ -55,7 +55,7 @@
     "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs": 1,
     "apps/Harbor.App.Cli/Repl/ReplLifecycle.cs": 2,
     "apps/Harbor.App.Cli/Repl/ReplRunner.cs": 7,
-    "apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs": 3,
+    "apps/Harbor.App.Cli/Repl/SessionSwitchManager.cs": 4,
     "apps/Harbor.App.Cli/Repl/SessionTitleService.cs": 3,
     "apps/Harbor.App.Cli/Repl/SlashCommandDispatcher.cs": 5,
     "src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs": 1,
@@ -65,6 +65,7 @@
     "src/Harbor.AgentRuntime/Agents/DefaultSessionContext.cs": 3,
     "src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs": 13,
     "src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs": 4,
+    "src/Harbor.AgentRuntime/Agents/TurnRunner.cs": 1,
     "src/Harbor.Application/Attachments/ImageAttachmentReader.cs": 3,
     "src/Harbor.Application/Configuration/ConfigStore.cs": 3,
     "src/Harbor.Application/Providers/ProviderHealthCheck.cs": 2,
@@ -112,14 +113,14 @@
     "src/Harbor.SessionContext/Sessions/WorkspaceInspector.cs": 3,
     "src/Harbor.Storage.Jsonl/JsonlCheckpointStore.cs": 3,
     "src/Harbor.Storage.Jsonl/JsonlLineParser.cs": 1,
-    "src/Harbor.Storage.Jsonl/JsonlSessionStore.cs": 10,
+    "src/Harbor.Storage.Jsonl/JsonlSessionStore.cs": 12,
     "src/Harbor.Storage.Jsonl/JsonlSessionStoreSnapshot.cs": 2,
     "src/Harbor.Storage.Jsonl/SessionCheckpointOriginator.cs": 6,
     "src/Harbor.Storage.Jsonl/SessionFileReader.cs": 2,
     "src/Harbor.Storage.Jsonl/SessionPorter.cs": 11,
     "src/Harbor.Storage.Sqlite/SqliteCheckpointStore.cs": 6,
     "src/Harbor.Storage.Sqlite/SqliteSessionQuery.cs": 1,
-    "src/Harbor.Storage.Sqlite/SqliteSessionStore.cs": 1,
+    "src/Harbor.Storage.Sqlite/SqliteSessionStore.cs": 3,
     "src/Harbor.Telemetry.Core/TracingAgentProxy.cs": 1,
     "src/Harbor.Terminal.Pty/PtyProcess.cs": 4,
     "src/Harbor.Tools.Builtin/Tools/Bash/BashTool.cs": 1,
@@ -153,6 +154,6 @@
     "src/Harbor.Ui.Framework.Sessions/Sessions/SessionLifecycleService.cs": 7,
     "src/Harbor.Ui.Framework.State/State/TuiEffectHost.cs": 1
   },
-  "survivors": 82,
-  "total_guards": 425
+  "survivors": 86,
+  "total_guards": 431
 }

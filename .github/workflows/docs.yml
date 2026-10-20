@@ -151,6 +151,12 @@ on:
       - 'tools/pack-validate.py'
       - 'tools/test-skips.py'
       - 'tools/normalize-mtimes.py'
+      # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
+      # `if (x.IsFailure)` guard sites and ratchets the count of chain
+      # candidates, so a PR that edits the gate or the baseline must run it —
+      # and so must a PR that edits the tree it measures (the .cs paths above).
+      - 'tools/check-result-chains.py'
+      - 'tools/result-chains-baseline.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -239,6 +245,11 @@ on:
       - 'tools/pack-validate.py'
       - 'tools/test-skips.py'
       - 'tools/normalize-mtimes.py'
+      # #1558. Same trigger as above: the chain census measures `src/` and
+      # `apps/` (the .cs paths above), so a PR that edits the gate or the
+      # baseline must run it.
+      - 'tools/check-result-chains.py'
+      - 'tools/result-chains-baseline.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -400,6 +411,16 @@ jobs:
         run: python3 tools/test-skips.py TestResults --self-test
       - name: Mtime normaliser still tells a changed file from an unchanged one
         run: python3 tools/normalize-mtimes.py --self-test
+      # #1558. The chain census. Its failure path is tested here for the same
+      # reason as the others: a scanner edited until it matches nothing is
+      # indistinguishable from a scanner that found nothing. The load-bearing
+      # fixtures are the five shapes the census tells apart (a chain
+      # candidate, a terminal guard, a side-effect guard, a guard that does
+      # not return a Result, and the one shape the rewrite applies to), and
+      # the rewrite itself — the census MUST produce the Bind call it says
+      # it produces.
+      - name: Chain census finds every planted guard shape and rewrites the one it promises
+        run: python3 tools/check-result-chains.py --self-test
 
   links:
     name: internal links
@@ -990,6 +1011,37 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
         run: python3 tools/check-gate-policy.py --min-gates 27
+
+  # #1558. The chain census, and the ratchet on it.
+  #
+  # Issue #1558 asks for the `if (x.IsFailure) return …; var v = x.Value;`
+  # shape to become a CSharpFunctionalExtensions `.Bind()` / `.Map()` chain.
+  # What it must not do is leave the number that says how many are left in a
+  # comment nobody can re-derive: the census is a script, and the script is
+  # what CI runs.
+  #
+  # The gate is a RATCHET on the count of chain candidates — the guard sites a
+  # chain could actually replace. A NEW candidate turns the job red; a
+  # translated one lowers the count and stays green, so the ratchet only moves
+  # in the direction the issue wants. The baseline records the count the tree
+  # had when this landed; every site the census leaves is a site somebody read
+  # and decided to keep.
+  #
+  # The census classifies every guard site, so it also says WHY a site is not
+  # a candidate: a guard whose body logs or has a side effect, a guard that
+  # does not return a Result at all, a terminal guard with nothing unwrapped
+  # after it. The script's own --self-test is the non-vacuity proof and runs
+  # in the `selftest` job above.
+  result-chains:
+    name: result-chain ratchet
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: The chain-candidate count has not gone up
+        run: python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #
