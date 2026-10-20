@@ -254,11 +254,12 @@ gate scans `tests/` only, so the product code has no duplication gate at all.
 | `check-dup-jscpd.py` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
 
 Over the test tree the two overlap on 1965 lines: 30.0% of the python gate's
-duplicated lines, 23.7% of jscpd's. 37 of the python gate's 206 groups sit
+duplicated lines, 23.3% of jscpd's. 37 of the python gate's 206 groups sit
 entirely inside a jscpd clone, 25 partly and 144 not at all. Neither is a
-subset of the other — jscpd flags 397 files the python gate does not, and the
-python gate flags 72 files jscpd does not. jscpd is also seven times faster,
-which is why it is affordable to run on every PR that touches the tree.
+subset of the other — jscpd flags 94 files the python gate does not, and the
+python gate flags 113 files jscpd does not. jscpd is also an order of
+magnitude faster, which is why it is affordable to run on every PR that
+touches the tree.
 
 **Why the rule is a total and not jscpd's own `--fail-on-new-clones`.** jscpd
 ships a baseline gate, and issue #1847 proposed it. It was measured on 13 real
