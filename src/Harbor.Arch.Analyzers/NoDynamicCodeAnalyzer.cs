@@ -67,6 +67,16 @@ public sealed class NoDynamicCodeAnalyzer : DiagnosticAnalyzer
     ///     be built locally. The order is (id, title, messageFormat, category,
     ///     defaultSeverity, isEnabledByDefault, description, helpLinkUri,
     ///     customTags).
+    ///     <para>
+    ///         The ninth argument is NOT written here, and the reason is where
+    ///         this file lives: the ninth is a <c>params</c> array of custom
+    ///         tags, and an empty array passed to a params parameter is what
+    ///         S3878 forbids in a product tree (the rule is switched off
+    ///         under <c>tests/</c> only, which is why the analyzers that stay
+    ///         in the architecture test project may still write it). Omitting
+    ///         it leaves the same descriptor: the tags stay empty, because
+    ///         nothing was passed.
+    ///     </para>
     /// </remarks>
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
@@ -76,8 +86,7 @@ public sealed class NoDynamicCodeAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning,
         true,
         "AGENTS.md requires NativeAOT-readiness: no reflection emit, no Assembly.Load. The one place this capability is wanted is the plugin family, where loading code at run time IS the product.",
-        null,
-        []);
+        null);
 
     /// <summary>The type whose <c>Load*</c> methods load an assembly.</summary>
     private const string AssemblyTypeName = "System.Reflection.Assembly";

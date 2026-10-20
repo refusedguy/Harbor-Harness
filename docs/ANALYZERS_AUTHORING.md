@@ -225,6 +225,14 @@ private static readonly DiagnosticDescriptor Rule = new(
 The nine arguments are, in order: id, title, message format, category,
 default severity, enabled by default, description, help link, custom tags.
 
+**The ninth argument is where the rule lives.** It is a `params` array of
+custom tags, and an empty array passed to a `params` parameter is what S3878
+forbids in a product tree. The rule is switched off under `tests/` only — the
+helpers there pass arrays to `params` overloads by convention — so a rule that
+lives in the architecture test project may write `[]`, and a **promoted** rule,
+which lives in `src/`, omits the argument. The descriptor is the same either
+way: the tags stay empty, because nothing was passed.
+
 **The message names the symbol.** `'{0}'` is the symbol the rule is about, and
 the message format starts with it. A failure message that says what to do and
 not what it found costs the reader a trip to the file.

@@ -46,7 +46,10 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
     /// <remarks>
     ///     Positional for the same reason as HARCH001's descriptor: (id, title,
     ///     messageFormat, category, defaultSeverity, isEnabledByDefault,
-    ///     description, helpLinkUri, customTags).
+    ///     description, helpLinkUri, customTags). The ninth argument is
+    ///     omitted for the same reason too: an empty array passed to a
+    ///     <c>params</c> parameter is what S3878 forbids in a product tree,
+    ///     and the tags stay empty because nothing was passed.
     /// </remarks>
     private static readonly DiagnosticDescriptor Rule = new(
         DiagnosticId,
@@ -56,8 +59,7 @@ public sealed class NamespaceOwnershipAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning,
         true,
         "A namespace is the layer's vocabulary. Two assemblies declaring the same root means a consumer cannot tell, by reading, which side of the pyramid the type it named came from.",
-        null,
-        []);
+        null);
 
     /// <summary>
     ///     The roots this rule owns, and the projects allowed to declare under
