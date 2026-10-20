@@ -329,12 +329,20 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     }
 
     /// <summary>
-    ///     Update a message in place. <b>ROP-C Z3 (DDD-audit 25.08):</b> this
-    ///     used to be a plain re-append — every edit grew the file with a
-    ///     duplicate entry (the "latest wins" read made it invisible until the
-    ///     file ballooned). Now stale entries with the same message id are
-    ///     dropped and the fresh entry is appended once, mirroring
-    ///     <see cref="UpdateAsync" />'s rewrite-in-place semantics.
+    ///     Update a message IN PLACE: the fresh record takes the position the
+    ///     stale one held, so "file order = insertion order" survives an edit
+    ///     (<b>#1798</b>). <b>ROP-C Z3 (DDD-audit 25.08):</b> this used to be a
+    ///     plain re-append — every edit grew the file with a duplicate entry
+    ///     (the "latest wins" read made it invisible until the file ballooned)
+    ///     — and then a drop-and-append rewrite, which dropped the stale
+    ///     entry and appended the fresh one at the END of the file. That
+    ///     second shape kept the file free of duplicates but MOVED the record:
+    ///     the edited message jumped to the tail of the history, and a rewind
+    ///     anchored on it (<see cref="DeleteMessagesAfterAsync" />) removed
+    ///     nothing, because the anchor was the last record in the file. The
+    ///     record now keeps its position, and a stale duplicate of the same id
+    ///     (a file written before the duplicate-drop, or an append that raced
+    ///     the edit) is still dropped, so the file holds one record per id.
     /// </summary>
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
@@ -378,10 +386,14 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 // temp is created, so the original — and its directory's mtime —
                 // are left exactly as they were, which is what makes this a
                 // "not found" outcome instead of an appended duplicate.
+                //
+                // #1798: the fresh record REPLACES the stale one where it
+                // stands. The rewrite is the same one it always was (a full
+                // atomic copy of the file), so the cost of an update does not
+                // change — only the position of the record does.
                 return SessionFileIO.RewriteRecordsAtomic(
                     sessionFile,
-                    new DropMessagePlan(message.Id),
-                    entryBytes);
+                    new ReplaceMessagePlan(message.Id, entryBytes));
             }
             finally
             {
@@ -533,10 +545,12 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     /// <summary>
     ///     "Rewind to here": drop every <c>"message"</c> entry AFTER the target
     ///     id in file order. File order IS insertion order for this store
-    ///     (append-only + rewrite-in-place), which is exactly the ordering the
-    ///     read path reconstructs. Header/session lines are never touched; the
-    ///     target message itself is kept. Rewrites the file in place — same
-    ///     semantics as <see cref="UpdateMessageAsync" />.
+    ///     (append-only + rewrite-in-place — <see cref="UpdateMessageAsync" />
+    ///     keeps an edited record at its position, <b>#1798</b>), which is
+    ///     exactly the ordering the read path reconstructs. Header/session lines
+    ///     are never touched; the target message itself is kept. Rewrites the
+    ///     file in place — same semantics as
+    ///     <see cref="UpdateMessageAsync" />.
     /// </summary>
     public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
