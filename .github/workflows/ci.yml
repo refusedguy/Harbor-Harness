@@ -83,6 +83,7 @@ jobs:
       dotnet: ${{ steps.filter.outputs.dotnet }}
       ui: ${{ steps.filter.outputs.ui }}
       packages: ${{ steps.filter.outputs.packages }}
+      deps: ${{ steps.filter.outputs.deps }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -165,6 +166,19 @@ jobs:
               - 'tests/Harbor.Terminal.*/**'
               - 'tests/Harbor.DesignSystem.Tests/**'
               - 'tests/Harbor.App.Avalonia.Tests/**'
+            # The dependency graph, and nothing else. `dotnet package list
+            # --vulnerable` reads the RESTORED graph, so its answer can only
+            # change when the graph changes: a version bump in
+            # Directory.Packages.props (central package management) or a
+            # PackageReference added/removed/updated in Directory.Build.props
+            # (the analyzer gate lives there). A code change cannot move a
+            # single advisory, so on every PR that touches neither file the
+            # 42-second scan is skipped instead of re-reporting the same
+            # answer (measured on run 39389070999: 42 s of which 3.6 s is the
+            # restore and 36.5 s is the NuGet advisory API round trip).
+            deps:
+              - 'Directory.Packages.props'
+              - 'Directory.Build.props'
 
   # #428 (second slice). Public-API snapshot gate for the frozen interface
   # facade.
@@ -269,10 +283,43 @@ jobs:
   build:
     needs: changes
     if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`. The label moves: ubuntu-latest switches to
+    # Ubuntu 26.04 in November 2026 (runner-images ubuntu24/20261018.339,
+    # 2026-10-19), and every timing number this repo records — the 549 s
+    # build job, the 62.7 s architecture suite, the 42 s advisory scan — was
+    # taken on 24.04. A label that moves turns a measured baseline into a
+    # guess. This job is x64 and depends on nothing about the image, so the
+    # pin is free. The OTHER jobs in this file are still on `ubuntu-latest`:
+    # they belong to the job-graph work, and moving them is a one-line change
+    # each (see the PR body).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
+    env:
+      # ── The architecture gate, off the PR path only ──────────────────────
+      #
+      # HarborArchitectureGate (Directory.Build.props) runs the WHOLE
+      # Harbor.Architecture.Tests assembly with `dotnet exec` after
+      # Harbor.Architecture.Tests builds: 68.0 s of work measured on run
+      # 39389070999 (the [arch-gate] message at +309.70 s, the suite's own
+      # summary at +377.71 s, the compile's last project at +387.83 s).
+      #
+      # It is a good gate and it stays a gate: on a push to dev/master (and
+      # on every non-pull_request event, which includes the nightly lane and
+      # workflow_dispatch) a layering regression still fails the BUILD
+      # itself. What changes is the PR lane, where the same suite runs
+      # THREE times for one result: once as this gate, once in the `core`
+      # test shard (65.8 s) and once in `coverage`.
+      #
+      # The ASSEMBLY is still built here — the `core` shard needs the DLL —
+      # only the EXECUTION moves to the shard. The property is read by
+      # MSBuild, and an environment variable of the same name IS an MSBuild
+      # property (Directory.Build.props only defaults it when it is empty),
+      # so it reaches the `dotnet build` that NUKE runs without touching
+      # build/_build. To put the gate back on the PR path, delete this env
+      # block: the value is the only thing that turns it off.
+      HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -281,7 +328,16 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          # Pinned to the exact SDK, not "10.0.x". global.json asks for
+          # 10.0.402 with rollForward=latestPatch, which forbids the SDK
+          # from leaving the 10.0.4xx feature band — so a job that installs
+          # "10.0.x" would break the moment the band moves (10.0.5xx) and
+          # global.json cannot resolve it. Asking for the exact version
+          # makes this job's SDK independent of what the runner image
+          # happens to ship. 10.0.402 is the SDK the runners already use
+          # (dotnet/release-metadata/10.0: latest-sdk 10.0.402, released
+          # 2026-10-13).
+          dotnet-version: "10.0.402"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
@@ -289,6 +345,11 @@ jobs:
       # also re-runs the 47-rule architecture gate embedded in
       # Directory.Build.props (HarborArchGate) — any layering regression
       # fails the build itself.
+      #
+      # On the PR path that EXECUTION is switched off by the job-level
+      # HarborArchGate env var above (the suite still runs in the `core`
+      # shard); on a push to dev/master the gate runs exactly as before.
+      # The suite is still COMPILED here — the shard needs the DLL.
       #
       # #701 — the master/dev fork is GONE, and the reason it existed was not
       # the reason it looks like it existed. It was added in 40fef5b3 with the
@@ -434,13 +495,57 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # Advisory report only: surfaces `dotnet list package --vulnerable`
+      # Advisory report only: surfaces `dotnet package list --vulnerable`
       # output (NU190x advisories) on every PR without failing the build.
       # continue-on-error is intentional — see "Dependency & advisory policy"
       # in docs/DEVELOPMENT.md. Failing on advisories is deferred (issue #25).
+      #
+      # Three changes, each with its measured size (run 39389070999, job
+      # 118518321386, step "Report vulnerable packages (non-blocking)" = 42 s):
+      #
+      #   * `--no-restore` — the noun-first `dotnet package list` RESTORES
+      #     first as of .NET 10 (learn.microsoft.com/en-us/dotnet/core/
+      #     compatibility/sdk/10.0/dotnet-package-list-restore). The restore
+      #     was 3.6 s of the 42 s ("All projects are up-to-date for
+      #     restore") and the assets it produces are already on disk: the
+      #     NUKE Compile target restored the solution 370 s earlier.
+      #   * the path filter — the scan is SKIPPED unless the dependency graph
+      #     changed (needs.changes.outputs.deps). The remaining 36.5 s is
+      #     not the restore: it is the NuGet advisory API round trip, which
+      #     is the price of the report, not of the plumbing. A code-only PR
+      #     cannot change one advisory, so it does not pay the 36.5 s.
+      #   * the guard — a report-only step that prints nothing is
+      #     indistinguishable from a clean scan. The check below fails the
+      #     STEP (the job still continues: continue-on-error) when the scan
+      #     did not complete or produced no per-project result.
+      #
+      # The noun-first spelling is the .NET 10 form; `dotnet list package`
+      # is the verb-first alias of the same command and is deprecated in
+      # favour of it. The solution is passed with --project: the noun-first
+      # command takes NO positional argument (`dotnet package list [options]`
+      # in `dotnet package list --help`), and the repo root holds two
+      # solutions, so the implicit search would fail anyway.
       - name: Report vulnerable packages (non-blocking)
+        if: needs.changes.outputs.deps == 'true' || github.event_name == 'workflow_dispatch'
         continue-on-error: true
-        run: dotnet list Harbor.slnx package --vulnerable --include-transitive
+        run: |
+          set -uo pipefail
+          out="$(dotnet package list --project Harbor.slnx --vulnerable --include-transitive --no-restore 2>&1)"
+          status=$?
+          printf '%s\n' "$out"
+          # Guard. Both markers are locale-independent ON PURPOSE: the CLI
+          # localises its prose (the runner is en_US today, a guard that
+          # depends on that is a guard that breaks). A project name in
+          # backticks is what a per-project result line looks like, and it
+          # is what proves the scan listed something.
+          if [ "$status" -ne 0 ]; then
+            echo "::error::the advisory scan exited $status — the report above is not a complete scan"
+            exit 1
+          fi
+          if ! grep -q '`Harbor\.' <<<"$out"; then
+            echo "::error::the advisory report contains no per-project result — the report is EMPTY, not clean"
+            exit 1
+          fi
 
       - name: Upload architecture-gate log
         if: always()
@@ -451,41 +556,193 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Stash build outputs
+      # ── Build outputs: one artifact PER CONSUMER ──────────────────────────
+      #
+      # Measured on run 39389070999 (artifact 12249049956): ONE artifact,
+      # 8,106 files, 1,254.2 MiB raw / 446.1 MiB zipped, uploaded in 50.5 s
+      # and then downloaded IN FULL by six jobs — the four test shards,
+      # coverage and perf-gate: 10 + 17 + 60 + 9 + 11 + 10 = 117 s of runner
+      # time to hand 2,676 MiB to consumers that each need a quarter of it.
+      #
+      # Two changes, one artefact set:
+      #
+      # 1. THE PAYLOAD IS TRIMMED. Of the 8,106 files, 4,004 are satellite
+      #    localisation assemblies and 218 are NuGet's restore files. Only 28
+      #    of the satellites are ours (ru/Harbor.Ui.Framework.Abstractions.
+      #    resources.dll, issue #434); the other 3,949 belong to NuGet
+      #    packages (Microsoft.Testing.*, Roslyn, TestPlatform) and are read
+      #    by nobody — a missing satellite falls back to the neutral
+      #    assembly. The restore files (obj/project.assets.json and
+      #    obj/project.nuget.cache) are inputs to MSBuild and never to the
+      #    runtime: a test project resolves from its own <Project>.deps.json
+      #    + <Project>.runtimeconfig.json, both in the same output
+      #    directory, and NEITHER mentions project.assets.json (checked in
+      #    the artifact itself). The `!` exclusion below drops every
+      #    satellite whose assembly name does not start with "Harbor.".
+      #
+      # 2. IT IS SPLIT PER CONSUMER. A test project's output directory is
+      #    self-contained: the project's own DLL, every project reference
+      #    copied local, its deps/runtimeconfig JSON, and the native assets
+      #    under runtimes/linux-x64/native/ (libSkiaSharp.so, libe_sqlite3.so
+      #    — the Avalonia and SQLite native libraries, 129 files here, all
+      #    kept). So a shard needs only its own projects' directories. The
+      #    one cross-directory dependency in the whole repo is CliDriver
+      #    (tests/Harbor.E2E.Framework/CliDriver.cs), which spawns
+      #    apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll — so
+      #    the e2e slice carries the CLI's own output directory too.
+      #
+      # `solution-binaries` is KEPT as the combined artifact the `coverage`
+      # job downloads (core + platform — the two shard lists coverage runs).
+      # It is duplicated on purpose: the coverage job belongs to the
+      # job-graph work, and this change must not depend on that edit landing
+      # first. When coverage switches to the two slices, this upload can be
+      # deleted — it is 135.1 MiB of the 448.1 MiB below.
+      #
+      # The upload total is FLAT: 448.1 MiB zipped across six artifacts
+      # versus 446.1 MiB in one, and 4,329 files instead of 8,106 (fewer
+      # blobs to push). The saving is on the DOWNLOAD side: ~18 s across
+      # the six consumers instead of 117 s, and the platform shard's 60 s
+      # download becomes ~7.5 s.
+      #
+      # One line of context for the artifact-storage budget: the single
+      # artifact was 469,943,655 bytes = 448.0 MiB, i.e. 89.6% of the
+      # GitHub Free plan's entire 500 MB artifact storage limit before the
+      # run's other artifacts are counted. The split keeps the total flat
+      # instead of growing it, and the trimmed payload is what keeps it
+      # flat.
+      - name: Stash build outputs — core shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-core
+          path: |
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/**
+            tests/Harbor.Config.Tests/bin/Release/net10.0/**
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/**
+            tests/Harbor.Application.Tests/bin/Release/net10.0/**
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/**
+            tests/Harbor.Core.Tests/bin/Release/net10.0/**
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/**
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/**
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/**
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/**
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/**
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Stash build outputs — platform shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-platform
+          path: |
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/**
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/**
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/**
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/**
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/**
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Stash build outputs — ui shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-ui
+          path: |
+            tests/Harbor.Tui.Tests/bin/Release/net10.0/**
+            tests/Harbor.Tui.RendererTests/bin/Release/net10.0/**
+            tests/Harbor.Tui.CellForge.Tests/bin/Release/net10.0/**
+            tests/Harbor.Ui.Framework.Tests/bin/Release/net10.0/**
+            tests/Harbor.DesignSystem.Tests/bin/Release/net10.0/**
+            tests/Harbor.Tui.CellForge.PtyTests/bin/Release/net10.0/**
+            tests/Harbor.Terminal.Abstractions.Tests/bin/Release/net10.0/**
+            tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Stash build outputs — e2e shard (+ the CLI it spawns)
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-e2e
+          path: |
+            tests/Harbor.E2E.Cli/bin/Release/net10.0/**
+            tests/Harbor.E2E.App.Avalonia/bin/Release/net10.0/**
+            tests/Harbor.Tui.E2E.Tests/bin/Release/net10.0/**
+            tests/Harbor.App.Cli.Tests/bin/Release/net10.0/**
+            tests/Harbor.LoadTests/bin/Release/net10.0/**
+            # CliDriver spawns the CLI from the CLI's own output directory
+            # (apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll),
+            # not from the test's copy of it.
+            apps/Harbor.App.Cli/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Stash build outputs — renderer perf gate
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-perf
+          path: |
+            tests/Harbor.Tui.PerfTests/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Stash build outputs — combined (what the coverage job downloads)
         uses: actions/upload-artifact@v7
         with:
           name: solution-binaries
           path: |
-            apps/**/bin/Release/net10.0/*.dll
-            apps/**/bin/Release/net10.0/*.json
-            apps/**/bin/Release/net10.0/*.so
-            apps/**/bin/Release/net10.0/Harbor.App.Cli
-            src/**/bin/Release/net10.0/*.dll
-            src/**/bin/Release/net10.0/*.json
-            src/**/bin/Release/net10.0/runtimes/linux-x64/native/*
-            tests/**/bin/Release/net10.0/*.dll
-            tests/**/bin/Release/net10.0/*.json
-            tests/**/bin/Release/net10.0/runtimes/linux-x64/native/*
-            # Satellite resource assemblies (#434: UiStrings.<locale>.resx builds
-            # into <culture>/*.resources.dll). The top-level *.dll globs above do
-            # not cross the culture directory, so without these lines localized
-            # lookups silently fall back to en in every job that reuses this
-            # artifact while passing locally.
-            apps/**/bin/Release/net10.0/*/*.resources.dll
-            src/**/bin/Release/net10.0/*/*.resources.dll
-            tests/**/bin/Release/net10.0/*/*.resources.dll
-            **/obj/project.assets.json
-            **/obj/project.nuget.cache
+            tests/Harbor.Abstractions.Tests/bin/Release/net10.0/**
+            tests/Harbor.Config.Tests/bin/Release/net10.0/**
+            tests/Harbor.Domain.Tests/bin/Release/net10.0/**
+            tests/Harbor.Application.Tests/bin/Release/net10.0/**
+            tests/Harbor.ChangeTracking.Tests/bin/Release/net10.0/**
+            tests/Harbor.Core.Tests/bin/Release/net10.0/**
+            tests/Harbor.Registries.Tests/bin/Release/net10.0/**
+            tests/Harbor.Hosting.Tests/bin/Release/net10.0/**
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/**
+            tests/Harbor.Lsp.Tests/bin/Release/net10.0/**
+            tests/Harbor.Terminal.Pty.Tests/bin/Release/net10.0/**
+            tests/Harbor.Telemetry.Tests/bin/Release/net10.0/**
+            tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/**
+            tests/Harbor.Storage.Tests/bin/Release/net10.0/**
+            tests/Harbor.Storage.Jsonl.Tests/bin/Release/net10.0/**
+            tests/Harbor.Providers.Tests/bin/Release/net10.0/**
+            tests/Harbor.Transport.Remote.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Abstractions.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Runtime.Tests/bin/Release/net10.0/**
+            tests/Harbor.Plugins.Host.Tests/bin/Release/net10.0/**
+            tests/Harbor.Ipc.Tests/bin/Release/net10.0/**
+            !**/*/[!H]*.resources.dll
             !**/*.pdb
             !**/*.xml
-            !apps/Harbor.App.Avalonia/**
           retention-days: 1
           if-no-files-found: error
 
   test:
     needs: [changes, build]
     if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    # Pinned image + pinned SDK, same reasons as the build job: the numbers
+    # this repo measures were taken on ubuntu-24.04 with SDK 10.0.402, and
+    # global.json forbids the SDK from leaving the 10.0.4xx band.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -573,12 +830,20 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          # The exact SDK global.json asks for — see the build job. The NuGet
+          # cache is deliberately NOT restored here (see the comment above):
+          # the shards run prebuilt binaries and never restore into it.
+          dotnet-version: "10.0.402"
 
-      - name: Download build outputs
+      # The shard's OWN slice, not the whole solution: the build job uploads
+      # one artifact per consumer (see the build job). A shard's projects
+      # are self-contained in their own output directories, so the slice is
+      # everything it needs — 55.8–99.2 MiB zipped instead of 446.1, and
+      # the platform shard's download falls from 60 s to ~7.5 s.
+      - name: Download build outputs (this shard only)
         uses: actions/download-artifact@v7
         with:
-          name: solution-binaries
+          name: solution-binaries-${{ matrix.shard }}
 
       # ubuntu-latest does not ship ripgrep — without it the RipGrepTool
       # integration tests self-skip and the platform shard silently runs
@@ -937,12 +1202,18 @@ jobs:
   # ---------------------------------------------------
   # #555 freezes new extension axes, so this is a gate added to an existing
   # workflow rather than a new workflow file. It is a separate job because it
-  # needs its own `PublishAot` build of the whole tree (~10-20 min, its own
-  # ILC pass) and must not consume the `build` job's 15-minute budget; the
-  # `build` job would go red on timeout and take the whole solution build with
-  # it. It `needs: build` so it starts from a tree already known to compile,
-  # and it is NOT in the required-gate list on day one — see the PR body for
-  # the measured duration and the sharding decision.
+  # needs its own `PublishAot` build of the whole tree and must not consume
+  # the `build` job's 15-minute budget; the `build` job would go red on
+  # timeout and take the whole solution build with it. It `needs: build` so it
+  # starts from a tree already known to compile, and it is NOT in the
+  # required-gate list on day one — see the PR body for the measured
+  # duration and the sharding decision.
+  #
+  # The measured cost is 3.4 runner-minutes (issue #1803's decomposition of
+  # the baseline run: aot 3.4 against build 8.7, coverage 3.7, test-os 19.5).
+  # The "~10-20 min" that used to be quoted here was an estimate, and it was
+  # wrong by 3-6x — it is what made this job look expensive enough to
+  # warrant its own scheduling decision.
   #
   # ON WALL-CLOCK TIME
   # -----------------
@@ -1218,7 +1489,8 @@ jobs:
   perf-gate:
     needs: [changes, build]
     if: (needs.changes.outputs.ui == 'true' || github.event_name == 'workflow_dispatch') && needs.build.result == 'success' && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    # Pinned image + pinned SDK, same reasons as the build job.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -1231,13 +1503,14 @@ jobs:
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          # The exact SDK global.json asks for — see the build job.
+          dotnet-version: "10.0.402"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
-      - name: Download build outputs
+      - name: Download build outputs (renderer perf only)
         uses: actions/download-artifact@v7
         with:
-          name: solution-binaries
+          name: solution-binaries-perf
       - name: Run renderer performance gate
         run: |
           sudo systemctl stop snapd.service snapd.socket || true
