@@ -326,14 +326,19 @@ private static UiState StoreAt(int offset) => new()
     [
         "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.StoreScroll.cs",
+        // #1511: the eviction/replace/entrance partial owns the resident-history
+        // ledger the layout measures (MarkLastDirty invalidates the cache's
+        // heights), so it sits inside the same sync invariant.
+        "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.Eviction.cs",
         "src/Harbor.Tui.CellForge/Chat/Widgets/TimelineLayoutCache.cs",
     ];
 
     /// <summary>
     ///     THE load-bearing guard. The layout path must stay synchronous: no
     ///     <c>async</c>, <c>await</c> or <c>Task</c> in the files that own the
-    ///     anchor, the follow-tail state and the layout. If this goes red, layout can
-    ///     genuinely complete out of order — and THAT is when #416's
+    ///     anchor, the follow-tail state, the resident-history ledger and the
+    ///     layout. If this goes red, layout can genuinely complete out of order —
+    ///     and THAT is when #416's
     ///     <c>TaskCompletionSource</c>-gated interleave test becomes writable. Until
     ///     then such a test would be a simulation of a race that cannot happen.
     /// </summary>
