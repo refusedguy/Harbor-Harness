@@ -10,8 +10,20 @@
     AccessViolation was exactly such a blind spot).
 
     Discipline:
-      * All scenario classes carry [NotInParallel("pty")] — process spawn +
-        real PTYs are slow and must not contend.
+      * No scenario class carries a [NotInParallel] key (#1789). The project
+        used to share one "pty" key across 40 classes, which serialized the
+        whole project (parallelism factor 1.00). Nothing here is shared: every
+        scenario spawns its own PTY, its own child process, its own mock server
+        and its own temp $HOME, and no scenario writes process-wide state:
+        the fixture hands the child its HOME explicitly instead of swapping
+        the process environment.
+      * Concurrency is bounded by [ParallelLimiter<PtyScenarioLimit>] on
+        CellForgePtyScenarioBase. One semaphore per LIMIT TYPE, so two
+        permits for the whole assembly: a scenario is a spawned child
+        process, and two at a time is what a four-core runner carries.
+      * One key survives: "quit-gesture", held by CtrlCScenarioTests and
+        CtrlCGestureScenarioTests, because the product's 2 000 ms quit window
+        is measured on the app's own clock.
       * Every wait is bounded; per-test budget ~30 s.
       * Linux-only by design (CI platform); off-Linux runs are Skipped, the
         Windows ConPTY port is an explicit follow-up.

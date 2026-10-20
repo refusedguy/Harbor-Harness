@@ -25,7 +25,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     pattern as <c>ToolErrorScenarioTests</c> / <c>PermissionDenyScenarioTests</c>
 ///     (#1163) and the diff trio (#1122). Only tests; the product is untouched.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class WriteErrorScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

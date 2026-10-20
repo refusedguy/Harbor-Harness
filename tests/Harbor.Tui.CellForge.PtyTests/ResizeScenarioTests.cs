@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     ScreenSession), кадр перерисован в новых границах; settled-кадр —
 ///     golden. Grow обратно 100 — полная перерисовка без потери контента.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

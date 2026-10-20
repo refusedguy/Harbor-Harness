@@ -30,7 +30,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>PatchErrorScenarioTests</c> (#1411). Only tests; the product is
 ///     untouched.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class GrepErrorScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

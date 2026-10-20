@@ -22,7 +22,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     as <c>ToolCallStreamingScenarioTests</c> (#1056) and the diff trio
 ///     (#1122). Only tests; the product is untouched.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class PermissionDenyScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

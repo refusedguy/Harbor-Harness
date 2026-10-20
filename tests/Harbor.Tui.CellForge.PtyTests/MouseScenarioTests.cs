@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     resolved by a left SGR press/route through the REPL bridge (routes
 ///     presses into <c>TryRouteApprovalClick</c> BEFORE wheel handling).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class MouseScenarioTests : CellForgePtyScenarioBase
 {
     private const string WheelUpSeq = "\x1b[<64;10;5M";  // SGR wheel up @ col10,row5
@@ -168,23 +167,46 @@ public sealed class MouseScenarioTests : CellForgePtyScenarioBase
         // Ensure app still responsive after wheel — soft check
         Server.SetResponse("test-model", "WHEEL-OK");
         SubmitLine("wheel-check");
-        bool ok = await Session.WaitForOutputAsync(
-            t => t.Contains("WHEEL-OK", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(15)).ConfigureAwait(false);
-        if (!ok)
+
+        // The app's answer is the responsiveness probe, and the LIVE signal for
+        // it is the mock's recorded request, not the raw byte stream: the
+        // master stream is cursor-positioned, so the literal "WHEEL-OK" never
+        // appears in it contiguously. A raw needle for it therefore ALWAYS
+        // burned its whole timeout and asserted nothing (the TRX of four runs
+        // carries "WARN: WHEEL-OK not in raw" every time, with the request
+        // count at 5, i.e. the turn had happened and the needle still missed).
+        // The mock signals the request the moment it records it, so this wait
+        // costs the turn's latency instead of 15 s of dead time.
+        bool serverGot = await Server.WaitForRequestAsync(
+            r => r.RawBody.Contains("wheel-check", StringComparison.Ordinal),
+            TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        if (!serverGot)
         {
-            TestContext.Current?.Output.WriteLine($"WARN: WHEEL-OK not in raw, checking server received: {Server.RequestCount}, screen:\n{ScreenText}");
-            // Condition fallback: the mock records the request only when it
-            // actually arrives — wait for THAT (the mock signals every
-            // recorded request) instead of polling on a fixed interval.
-            bool serverGot = await Server.WaitForRequestAsync(
-                r => r.RawBody.Contains("wheel-check", StringComparison.Ordinal),
-                TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            if (!serverGot)
-            {
-                TestContext.Current?.Output.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
-            }
+            TestContext.Current?.Output.WriteLine($"WARN: wheel-check not received by mock, treating as soft pass (app still alive)");
         }
+
+        // The answer itself is asked for on the emulated screen, best effort
+        // and bounded: the viewport is scrolled up at this point (the wheel
+        // test scrolled it there on purpose), so the answer can legitimately be
+        // out of view. A WARN, never a failure: this scenario is best effort
+        // by design, and the responsiveness check above is the real one.
+        bool answered = true;
+        try
+        {
+            _ = await WaitForScreenAsync(
+                l => l.Any(x => x.Contains("WHEEL-OK", StringComparison.Ordinal)),
+                TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            answered = false;
+        }
+
+        if (!answered)
+        {
+            TestContext.Current?.Output.WriteLine($"WARN: WHEEL-OK not on screen, screen:\n{ScreenText}");
+        }
+
         // Always pass if app still alive — wheel is best-effort
         await Assert.That(!Session.HasExited).IsTrue();
     }

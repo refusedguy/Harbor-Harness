@@ -18,14 +18,18 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>esc close</c>) before asserting timeline markers. Marker asserts
 ///     only (streaming cadence is nondeterministic — celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
     [Timeout(150_000)]
     public async Task NewSession_WhileRunning_Rejected_ThenFreshSessionWorks()
     {
-        // ~1600 chars at the mock's 4-chars/50ms cadence ≈ a ~20 s turn.
+        // ~1600 chars at the mock's 4-chars/10ms cadence ≈ a ~4 s turn: long
+        // enough to type /new into it, and a quarter of the ~20 s the default
+        // 50 ms cadence cost. The mock's cadence IS this scenario's clock
+        // (#1789): the turn has to outlast the palette interaction (open,
+        // filter, commit, close), and 4 s leaves that interaction room.
+        Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
         Server.SetResponse("test-model", new string('х', 1600));
         await StartAppAsync(100, 30).ConfigureAwait(false);
         _ = await WaitForScreenAsync(

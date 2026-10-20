@@ -11,7 +11,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     paste-only контракт §3.1 мёртв; (b) focus-события и DSR-запросы
 ///     от терминала игнорируются без влияния на сессию.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class TerminalModesScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

@@ -13,7 +13,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>maxSteps</c> cap. Marker asserts only (streaming cadence is
 ///     nondeterministic — celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

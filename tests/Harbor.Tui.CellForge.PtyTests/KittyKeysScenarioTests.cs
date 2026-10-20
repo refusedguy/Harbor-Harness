@@ -7,7 +7,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     вставляет newline в композер, НЕ отправляет промпт; обычный \r потом
 ///     уходит одним сообщением, содержащим обе строки.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class KittyKeysScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

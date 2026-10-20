@@ -22,7 +22,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     not paint on the settled timeline (stale 1-row layout when the card
 ///     is not last — see #1137). Only tests; the product is untouched.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ToolErrorScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

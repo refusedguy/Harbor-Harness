@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     (b) большой paste (2.5 KB, дробится ядром PTY на куски) целиком
 ///     попадает в композер — watchdog-границы чанков не теряют текст.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class PasteEdgeScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

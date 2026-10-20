@@ -8,7 +8,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     §4: payload не ре-парсится), НЕ выполняется как slash-команда; после
 ///     очистки буфера Ctrl+C×2 выходит штатно (exit 0 + leave-alt-screen).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class PasteInjectionScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

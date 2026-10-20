@@ -24,7 +24,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     header (tool + ok pill) stays on the settled timeline next to the
 ///     approval trail, and the file lands on disk.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class WriteResultScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

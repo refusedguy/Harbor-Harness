@@ -31,7 +31,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>EditErrorScenarioTests</c> (#1403). Only tests; the product is
 ///     untouched.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class PatchErrorScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

@@ -8,8 +8,15 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     НЕ считает жестом выхода — следующее нажатие даёт подсказку, а не выход;
 ///     (b) жест выхода живёт в окне 2000 мс: второе нажатие ПОСЛЕ окна даёт
 ///     подсказку снова, второе ВНУТРИ окна — штатный выход.
+///     <para />
 /// </summary>
-[NotInParallel("pty")]
+// The "quit-gesture" key is the one key this project keeps (#1789). It names a
+// real shared resource: the product's 2 000 ms quit window is measured by the
+// APP's own clock, so the second Ctrl+C has to be read within 2 s of the first.
+// Two classes exercise that window, and running them at the same time puts one
+// child's boot and streaming load in the middle of the other's timing budget.
+// The key is held by these two classes and by nothing else.
+[NotInParallel("quit-gesture")]
 public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
