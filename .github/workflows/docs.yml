@@ -84,6 +84,13 @@ on:
       # measures.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1847. `check-dup-jscpd.py` scans `src/`, `apps/` and `tests/` and
+      # compares the result against its committed baseline, so a PR that
+      # edits the gate, the config or the baseline must run it — and so must
+      # a PR that edits the tree it measures.
+      - 'tools/check-dup-jscpd.py'
+      - 'tools/jscpd-baseline.json'
+      - '.jscpd.json'
       # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
       # compares the result against its committed exceptions file, so a PR
       # that edits the gate or the exceptions must run it — and so must a PR
@@ -157,6 +164,13 @@ on:
       # the baseline — must run it.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
+      # #1847. Same trigger as above: the second duplication gate measures
+      # `src/`, `apps/` and `tests/` and compares the result against its
+      # committed baseline, so a PR that edits the tree it measures — or the
+      # gate, the config, or the baseline — must run it.
+      - 'tools/check-dup-jscpd.py'
+      - 'tools/jscpd-baseline.json'
+      - '.jscpd.json'
       # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
       # compares the result against its committed exceptions file, so a PR
       # that edits the gate or the exceptions must run it — and so must a PR
@@ -272,6 +286,15 @@ jobs:
       # a same-shape body that shares no identifiers with it.
       - name: Duplicate-test-body gate fails on a planted duplicate
         run: python3 tools/check-test-dup.py --self-test
+      # #1847. The second duplication detector, the one that scans the
+      # PRODUCT code and the duplication that is not a method body. Its
+      # failure path is tested for the same reason as the others, and its
+      # load-bearing fixture is the EMPTY scan: a scan that analysed nothing
+      # must not be green, because a gate that measured nothing protects
+      # nothing. The second fixture is the growth: a tree that duplicated
+      # more than the baseline allows must fail.
+      - name: Second duplication gate fails on an empty scan and on growth
+        run: python3 tools/check-dup-jscpd.py --self-test
       # #1823. The ninth gate is the only one that asks whether a test
       # project is claimed by a CI list AT ALL. The other gates read the
       # contents of the test tree; this one reads the lists that decide
@@ -509,6 +532,94 @@ jobs:
         with:
           name: test-dup-groups
           path: test-dup-groups.json
+          retention-days: 7
+
+  # #1847. The SECOND duplication detector, and the one that covers the
+  # ground the python gate above cannot see.
+  #
+  # `check-test-dup.py` matches duplicated TEST METHOD BODIES, and only
+  # method bodies: it slices a body out of the file, normalises it and
+  # hashes it. What it cannot see is duplication that is not a method body —
+  # a duplicated record declaration, a duplicated nested class, a duplicated
+  # interface implementation, a duplicated file header — and what it cannot
+  # see at all is the PRODUCT code: it scans `tests/` and nothing else.
+  #
+  # jscpd 5.4.1 (MIT, a self-contained Rust binary) is the second detector:
+  # it matches token windows, so a whole block of code that was copied is one
+  # clone, and it scans the whole maintained C# surface. Measured on
+  # `origin/dev`: the python gate finds 206 groups / 2987 duplicated lines
+  # in `tests/`, jscpd finds 286 clones / 8353 duplicated lines over
+  # `src/` + `apps/` + `tests/`, and the two overlap on 1965 lines. Neither
+  # is a subset of the other: jscpd flags 397 files the python gate does
+  # not, the python gate flags 72 files jscpd does not.
+  #
+  # WHY THE RULE IS A TOTAL AND NOT jscpd's OWN `--fail-on-new-clones`
+  # jscpd ships a baseline gate, and it was measured on 13 real commits of
+  # `dev` before it was ruled out. Its baseline is keyed on a CONTENT HASH
+  # of each clone, so editing a duplicated body changes the hash and the
+  # edit is reported as new duplication: commit 8bde0944 changed one line
+  # in each of two files that already duplicated each other and jscpd
+  # reported 4 new clones, 3 of them pairs that were already clones BEFORE
+  # the commit. The gate was red on 1 of those 13 commits (3 with the
+  # `renamed` configuration), and every one of them was ordinary work that
+  # added no duplication. The python gate was written to avoid exactly
+  # that: it compares the MEMBERS of a group, never the text of the bodies.
+  #
+  # So the rule here is the aggregate one the python gate also has
+  # (DUP-GROWTH): the tree's duplicated LINES must not exceed the number
+  # `tools/jscpd-baseline.json` records. Measured on the same 13 commits,
+  # that number moved only when the tree really changed, and it did not
+  # move at all when a duplicated body was edited — which is the property
+  # the fingerprint baseline lacks.
+  #
+  # The floors are a ratchet, like the ones above. 1971 files are analysed
+  # today; the floor is 1700, because the programme is about to REMOVE test
+  # code, and a floor set AT the measured count would go red on the removal
+  # PRs themselves. A PR that really removes files lowers it in the same
+  # diff, where a reviewer sees it.
+  #
+  # The binary is downloaded from the release, sha256-pinned per platform
+  # inside `tools/check-dup-jscpd.py`, and it is a build-time tool: it never
+  # reaches the product, and no `PackageReference` is added, so the
+  # dependency gate does not see it.
+  dupjscpd:
+    name: duplication (jscpd)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The base ref is the PR's base commit, and the new-clone delta is
+          # measured against it. Depth 1 has no base commit.
+          fetch-depth: 0
+      - name: Measure the duplicated code with jscpd
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ -n "$PR_BASE_SHA" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -n "$base" ]; then
+            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json --baseline-ref "$base"
+          else
+            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json
+          fi
+      # The report is the work list: every clone with its file, its line
+      # range and its size, which is what the next duplication ticket needs.
+      # It is uploaded even when the gate is red — that is exactly when
+      # somebody needs it.
+      - name: Upload the clone report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jscpd-clones
+          path: jscpd-report.json
           retention-days: 7
 
   # #1822. Tenth question, and the only one about the SERIALIZER the test

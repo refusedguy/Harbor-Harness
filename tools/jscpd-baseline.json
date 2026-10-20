@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "generator": "tools/check-dup-jscpd.py",
+  "tool": {
+    "name": "jscpd",
+    "version": "5.4.1",
+    "license": "MIT"
+  },
+  "policy": {
+    "scope": "the repository root, **/*.cs, minus bin/, obj/, contrib/, samples/, tools/, build/, analyzers/ and tests/Harbor.Architecture.Tests/",
+    "min_tokens": 100,
+    "min_lines": 6,
+    "mode": "weak",
+    "format": "csharp"
+  },
+  "config_fingerprint": "5453beebc0b3bed7",
+  "census": {
+    "files": 1971,
+    "lines": 412683,
+    "tokens": 2030205
+  },
+  "metrics": {
+    "clones": 286,
+    "duplicated_lines": 8353,
+    "duplicated_tokens": 48651,
+    "percentage": 2.02
+  },
+  "floors": {
+    "files": 1700,
+    "duplicated_lines": 8353
+  }
+}

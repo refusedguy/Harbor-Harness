@@ -1,0 +1,22 @@
+{
+  "path": ["."],
+  "format": ["csharp"],
+  "pattern": "**/*.cs",
+  "ignore": [
+    "**/bin/**",
+    "**/obj/**",
+    "contrib/**",
+    "samples/**",
+    "tools/**",
+    "build/**",
+    "analyzers/**",
+    "tests/Harbor.Architecture.Tests/**"
+  ],
+  "mode": "weak",
+  "minLines": 6,
+  "minTokens": 100,
+  "gitignore": true,
+  "reporters": ["json"],
+  "reportName": "jscpd-report",
+  "failOnEmpty": true
+}

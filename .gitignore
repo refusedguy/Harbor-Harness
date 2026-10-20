@@ -158,3 +158,8 @@ __pycache__/
 # the two differ, so a reviewer can diff the two files (issue #1795). It is a
 # diagnostic, never a baseline — the goldens workflow does not commit it.
 *.golden.txt.actual.txt
+
+# The jscpd duplication scan writes its report next to the checkout, and the
+# report is a measurement, never a baseline (issue #1847). The committed
+# baseline is tools/jscpd-baseline.json.
+jscpd-report.json
