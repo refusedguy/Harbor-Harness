@@ -63,7 +63,11 @@ public class MessageConverterTests
 
         var result = converter.ToLlmMessages(new AgentMessage[] { assistant });
 
-        await Assert.That(result.Count).IsEqualTo(1);
+        // #1751: the tool call has no result in this history, so the conversion
+        // closes it with a synthesized one — a tool_use without a tool_result is
+        // a provider 400. The assistant message itself is still the first
+        // message, and the closure follows it.
+        await Assert.That(result.Count).IsEqualTo(2);
         await Assert.That(result[0]).IsTypeOf<LlmAssistantMessage>();
         var llm = (LlmAssistantMessage)result[0];
         await Assert.That(llm.Role).IsEqualTo("assistant");
@@ -83,6 +87,12 @@ public class MessageConverterTests
 
         // StopReason is serialized as the wire-format lowercase string (snake_case).
         await Assert.That(llm.StopReason).IsEqualTo("tool_use");
+
+        await Assert.That(result[1]).IsTypeOf<LlmToolResultMessage>();
+        var closure = (LlmToolResultMessage)result[1];
+        await Assert.That(closure.ToolCallId).IsEqualTo("call-1");
+        await Assert.That(closure.IsError).IsTrue();
+        await Assert.That(closure.Output).Contains(UnresolvedToolCall.OutcomeUnknownCode);
     }
 
     [Test]

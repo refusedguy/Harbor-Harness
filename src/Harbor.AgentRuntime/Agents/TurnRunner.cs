@@ -229,8 +229,14 @@ internal sealed class TurnRunner(
                 tokenTracker.RecordAppendedMessage(degraded);
             }
             await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
+            // #1751: the degraded turn can carry tool calls the dispatcher never
+            // reached. Close them here, or the transcript holds a tool_use with
+            // no tool_result — a provider 400 on the next turn and a session
+            // that cannot be resumed.
+            IReadOnlyList<ToolResultMessage> degradedResults = await CloseUnansweredCallsAsync(
+                degraded, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
             await eventBus.PublishAsync(
-                new TurnEndEvent(degraded, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
+                new TurnEndEvent(degraded, degradedResults, session.Session.Id), ct).ConfigureAwait(false);
             // #259: single collapsed-card error for the exhausted budget —
             // per-attempt publishes are suppressed above, so this is the only
             // AgentErrorEvent for the storm (never N duplicates).
@@ -275,8 +281,13 @@ internal sealed class TurnRunner(
             // then publishes the Cancelled terminal event, and no tool executes
             // after the stop.
             logger.LogDebug("Turn {Turn} end (cancelled after stream)", turn);
+            // #1751: the cancelled turn can carry tool calls the dispatcher
+            // never reached — close them so the transcript stays paired.
+            IReadOnlyList<ToolResultMessage> cancelledResults = await CloseUnansweredCallsAsync(
+                partial, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
             await eventBus.PublishAsync(
-                new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), CancellationToken.None).ConfigureAwait(false);
+                new TurnEndEvent(partial, cancelledResults, session.Session.Id),
+                CancellationToken.None).ConfigureAwait(false);
             return new TurnStepResult(truncationFallback, EndRun: true);
         }
 
@@ -299,8 +310,12 @@ internal sealed class TurnRunner(
         if ((toolCalls.Count == 0 && malformedCalls.Count == 0) || stopReason == StopReason.Aborted)
         {
             TurnRunnerLog.TurnEndNoToolCalls(logger, turn);
+            // #1751: an aborted turn can carry tool calls the dispatcher never
+            // reached — close them so the transcript stays paired.
+            IReadOnlyList<ToolResultMessage> abortedResults = await CloseUnansweredCallsAsync(
+                partial, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
             await eventBus.PublishAsync(
-                new TurnEndEvent(partial, Array.Empty<ToolResultMessage>(), session.Session.Id), ct).ConfigureAwait(false);
+                new TurnEndEvent(partial, abortedResults, session.Session.Id), ct).ConfigureAwait(false);
             // #404: a capped text-only turn is a limit stop, not a finish
             // (the #403 shape on the budget axis). Cancel still wins: an
             // aborted stream ends as a cancel, never as a cap.
@@ -721,6 +736,74 @@ internal sealed class TurnRunner(
     ///     pairing providers require.
     /// </summary>
     private static JsonElement EmptyJsonArgs() => EmptyMalformedArgsElement;
+
+    /// <summary>
+    ///     Close the tool calls an assistant message opened and the turn never
+    ///     answered (#1751).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A <c>tool_use</c> without a matching <c>tool_result</c> is a
+    ///         provider error: Anthropic wants every tool_use answered in the
+    ///         next message, OpenAI wants a <c>tool</c> role message with the
+    ///         same id. The transcript would be invalid and the session
+    ///         unresumable.
+    ///     </para>
+    ///     <para>
+    ///         The turn runner is the only place that KNOWS the call never
+    ///         started — the dispatcher was never reached — so the closure
+    ///         carries <see cref="UnresolvedToolCall.NotStartedCode" />: the
+    ///         call had no effect and the model may retry it. (The repairer in
+    ///         the message converter cannot know this and says
+    ///         <see cref="UnresolvedToolCall.OutcomeUnknownCode" /> instead.)
+    ///     </para>
+    ///     <para>
+    ///         The closure is persisted, so the transcript pairs every tool_use
+    ///         with a tool_result, and published as one
+    ///         <see cref="ToolExecutionEndEvent" /> per call — the event the
+    ///         dispatcher publishes for a call that failed, so a renderer shows
+    ///         WHICH call is unresolved instead of leaving a card spinning.
+    ///     </para>
+    /// </remarks>
+    /// <param name="assistant">The assistant message whose calls went unanswered.</param>
+    /// <param name="session">The session the closure belongs to.</param>
+    /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
+    /// <returns>
+    ///     The persisted closure — one tool-result message holding an error
+    ///     entry per unanswered call — or an empty list when the message asked
+    ///     for no tool at all (nothing to close).
+    /// </returns>
+    private async Task<IReadOnlyList<ToolResultMessage>> CloseUnansweredCallsAsync(
+        AssistantMessage assistant,
+        ISessionContext session,
+        string code)
+    {
+        ToolResultMessage? closure = UnresolvedToolCallRepair.Close(assistant, code);
+        if (closure is null)
+        {
+            return Array.Empty<ToolResultMessage>();
+        }
+
+        // The closure is already-produced work: it rides None so a cancel
+        // racing the persist cannot throw OCE into the run and lose the
+        // pairing the provider needs.
+        await session.AppendMessageAsync(closure, CancellationToken.None).ConfigureAwait(false);
+        tokenTracker.RecordAppendedMessage(closure);
+
+        // One end event per call — the unresolved call is named, not hidden.
+        // The end of a call is a terminal FACT: it rides None (the same rule
+        // the dispatcher's terminal publishes follow), so a cancel racing the
+        // publish cannot swallow the fact that a call never got its result.
+        for (int i = 0; i < closure.Results.Count; i++)
+        {
+            ToolResultEntry entry = closure.Results[i];
+            await eventBus.PublishAsync(
+                new ToolExecutionEndEvent(entry.ToolCallId, ToolResult.Error(entry.Output), true),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
+        return new[] { closure };
+    }
 
     /// <summary>
     ///     Linear scan for the requested model — avoids LINQ FirstOrDefault delegate allocation.

@@ -13,9 +13,20 @@ public sealed class MessageConverter
     /// <returns>An ordered list of <see cref="LlmMessage" /> instances.</returns>
     public IReadOnlyList<LlmMessage> ToLlmMessages(IReadOnlyList<AgentMessage> messages)
     {
+        // #1751: the ids of the tool calls the history already answers. A
+        // tool_use without a tool_result is a provider 400 (Anthropic wants
+        // every tool_use answered in the next message, OpenAI wants a `tool`
+        // role message with the same id), so the conversion closes the gap
+        // instead of shipping an invalid transcript. The set is built only
+        // when the history holds a tool call at all — a text-only
+        // conversation pays nothing for the repair.
+        HashSet<string>? answeredCallIds = CollectAnsweredCallIds(messages);
+
         // First pass: count the maximum number of LlmMessages we may produce.
         // Each AssistantMessage / UserMessage yields exactly 1 LlmMessage, but a
-        // ToolResultMessage expands to one LlmMessage per ToolResultEntry.
+        // ToolResultMessage expands to one LlmMessage per ToolResultEntry —
+        // and an assistant message with unanswered calls yields one more per
+        // such call (#1751).
         int capacity = 0;
         for (int i = 0; i < messages.Count; i++)
         {
@@ -26,6 +37,10 @@ public sealed class MessageConverter
             else
             {
                 capacity++;
+                if (messages[i] is AssistantMessage assistant)
+                {
+                    capacity += CountUnansweredCalls(assistant, answeredCallIds);
+                }
             }
         }
 
@@ -34,16 +49,86 @@ public sealed class MessageConverter
         // #461: the per-kind dispatch lives in the visitor, not in a switch that
         // every consumer had to re-type. An unhandled message kind now throws
         // instead of silently vanishing from the model context.
-        new ToLlmMessagesVisitor(result).Walk(messages);
+        new ToLlmMessagesVisitor(result, answeredCallIds).Walk(messages);
 
         return result;
+    }
+
+    /// <summary>
+    ///     The ids of the tool calls that already have a result (#1751), or
+    ///     <see langword="null" /> when the history holds no tool call at all.
+    /// </summary>
+    /// <param name="messages">The domain messages to inspect.</param>
+    /// <returns>
+    ///     The answered call ids, or <see langword="null" /> for a history with
+    ///     no tool call — the case where the repair has nothing to do and the
+    ///     set would be a pure allocation.
+    /// </returns>
+    private static HashSet<string>? CollectAnsweredCallIds(IReadOnlyList<AgentMessage> messages)
+    {
+        bool hasToolCall = false;
+        for (int i = 0; i < messages.Count && !hasToolCall; i++)
+        {
+            if (messages[i] is AssistantMessage assistant)
+            {
+                for (int p = 0; p < assistant.Parts.Count; p++)
+                {
+                    if (assistant.Parts[p] is ToolCallPart)
+                    {
+                        hasToolCall = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!hasToolCall)
+        {
+            return null;
+        }
+
+        var answered = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < messages.Count; i++)
+        {
+            if (messages[i] is ToolResultMessage tr)
+            {
+                for (int j = 0; j < tr.Results.Count; j++)
+                {
+                    answered.Add(tr.Results[j].ToolCallId);
+                }
+            }
+        }
+
+        return answered;
+    }
+
+    /// <summary>
+    ///     How many of an assistant message's tool calls the history never
+    ///     answered (#1751) — the number of results the repair has to add.
+    /// </summary>
+    /// <param name="assistant">The assistant message to inspect.</param>
+    /// <param name="answeredCallIds">The ids that already have a result.</param>
+    /// <returns>The count of unanswered tool calls.</returns>
+    private static int CountUnansweredCalls(AssistantMessage assistant, HashSet<string>? answeredCallIds)
+    {
+        int count = 0;
+        for (int p = 0; p < assistant.Parts.Count; p++)
+        {
+            if (assistant.Parts[p] is ToolCallPart call
+                && (answeredCallIds is null || !answeredCallIds.Contains(call.Id)))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     /// <summary>
     ///     Message-level arm of the conversion: the three roles, nothing else.
     ///     Part-level behaviour lives in <see cref="PartsToLlmBlocks" />.
     /// </summary>
-    private sealed class ToLlmMessagesVisitor(List<LlmMessage> sink)
+    private sealed class ToLlmMessagesVisitor(List<LlmMessage> sink, HashSet<string>? answeredCallIds)
         : AgentMessageVisitor<ToLlmMessagesVisitor>
     {
         public override ToLlmMessagesVisitor Visit(UserMessage message)
@@ -57,7 +142,41 @@ public sealed class MessageConverter
             sink.Add(new LlmAssistantMessage(
                 ConvertParts(message.Parts),
                 StopReasonToLower(message.StopReason)));
+            // #1751: every tool_use needs a tool_result. A call the history
+            // never answered gets one here, so the request stays valid for the
+            // provider even when the transcript was cut short — a killed
+            // process, a turn that degraded, a session written by an older
+            // build. The code tells the model what it may do about it: the
+            // outcome is unknown, so a blind retry is not safe.
+            AppendUnansweredResults(message);
             return this;
+        }
+
+        /// <summary>
+        ///     One synthesized error result per tool call the history never
+        ///     answered (#1751).
+        /// </summary>
+        /// <param name="message">The assistant message that opened the calls.</param>
+        private void AppendUnansweredResults(AssistantMessage message)
+        {
+            for (int i = 0; i < message.Parts.Count; i++)
+            {
+                if (message.Parts[i] is not ToolCallPart call)
+                {
+                    continue;
+                }
+
+                if (answeredCallIds is not null && answeredCallIds.Contains(call.Id))
+                {
+                    continue;
+                }
+
+                sink.Add(new LlmToolResultMessage(
+                    call.Id,
+                    call.ToolName,
+                    UnresolvedToolCallRepair.OutcomeUnknownText(call.ToolName),
+                    true));
+            }
         }
 
         public override ToLlmMessagesVisitor Visit(ToolResultMessage message)
