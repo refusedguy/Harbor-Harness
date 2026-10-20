@@ -1344,6 +1344,12 @@ All notable changes to Harbor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### #1555 — агрегат usage-сабагента едет по рельсе Result, деградацию в ноль решает вызывающий
+
+`SubAgentRunner.TryAggregateChildUsageAsync` больше не ловит исключение вокруг чтения истории. Чтение едет по канонической связке `Result.Try` + `ResultErrors.Message` (библия §4.5) и отдаёт `Result<Usage>`; что делать с отказом, решает вызывающий — сейчас это терминальный `Match` на месте вызова, который деградирует в нулевой usage.
+
+**Поведение при ошибке не изменилось.** Сбой хранилища по-прежнему не маскирует исходную ошибку прогона, usage-сумма остаётся нулевой, и отмена по-прежнему пробрасывается, а не превращается в тихий ноль. Изменилось одно наблюдаемое: отказ хранилища теперь логируется (`Warning`, с текстом ошибки), а раньше этот путь проглатывался молча; лог исключения поднят с `Debug` до `Warning`, потому что недособранный usage ребёнка — это недособранные итоги родителя. Покрыто тестами `tests/Harbor.Application.Tests/SubAgentUsageAggregateTests.cs`: успешный агрегат, отказ-значение, исключение на границе, отмена.
+
 ## [0.1.0-alpha] - 2026-07-16
 
 Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage, and 65 tests.
