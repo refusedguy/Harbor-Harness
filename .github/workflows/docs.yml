@@ -1076,7 +1076,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
-        run: python3 tools/check-gate-policy.py --min-gates 37
+        run: python3 tools/check-gate-policy.py --min-gates 38
 
   # #1558. The chain census, and the ratchet on it.
   #

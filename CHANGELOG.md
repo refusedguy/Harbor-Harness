@@ -1090,7 +1090,7 @@ that swap requires no call-site changes.
 
 **Что ещё поправлено.** Три места в дереве утверждали, что сюита исполняется дважды (`ci.yml`, `test-os.yml`, шапка `LayerTableDocAgreementRules.cs`). Теперь они говорят правду.
 
-**Проверено.** Локальный `dotnet build` на этой машине запрещён (OOM), поэтому компиляция и тесты проверены только на CI. Python-гейты проходят локально: `check-arch-suite-once.py` (self-test и прогон на дереве), `check-gate-policy.py --min-gates 37` (38 строк в таблице), `check-md-links.py`, `md-lint.py`.
+**Проверено.** Локальный `dotnet build` на этой машине запрещён (OOM), поэтому компиляция и тесты проверены только на CI. Python-гейты проходят локально: `check-arch-suite-once.py` (self-test и прогон на дереве), `check-gate-policy.py --min-gates 38` (38 строк в таблице), `check-md-links.py`, `md-lint.py`.
 
 ## [0.1.0-alpha] - 2026-07-16
 

@@ -15,15 +15,15 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `10c4bf6a`), the tree the
-table was last reconciled against:
+Measured on this branch (one commit on `dev` at `9b0eebd4`, plus the gate this
+branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 37 files, 29 282 lines |
-| of them, the `check-*.py` family | 19 files, 20 306 lines |
+| python tools in `tools/` | 38 files, 29 950 lines |
+| of them, the `check-*.py` family | 20 files, 20 904 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
-| gates that block a build | 22 |
+| gates that block a build | 23 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
@@ -249,7 +249,7 @@ The modes are:
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 37` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 38` |
 | `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
@@ -332,7 +332,7 @@ Run it:
 
 ```bash
 ./tools/check-gate-policy.py --self-test
-./tools/check-gate-policy.py --min-gates 37
+./tools/check-gate-policy.py --min-gates 38
 ```
 
 Its own `--self-test` plants one defect per rule in a synthetic tree and
