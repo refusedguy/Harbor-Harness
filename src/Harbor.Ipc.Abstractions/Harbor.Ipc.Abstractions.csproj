@@ -39,8 +39,14 @@
       reset) are also downgraded — they fire on every positional record
       even after the parameterless ctor shim is added, and the runtime
       behavior is correct.
+
+      NU1902/NU1903 are NOT suppressed here. They used to be, while the
+      MessagePack pin sat at 3.1.8 (inside the affected range of
+      GHSA-qhrr-8q5h-9q3h) — the suppression hid the advisory. The pin is
+      3.1.12 now, which carries no advisory, so the NuGet audit gate stays
+      live in this project: a new vulnerable transitive is a build error.
     -->
-    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;NU1902;NU1903;MsgPack007;MsgPack017</NoWarn>
+    <NoWarn>$(NoWarn);MPK0002;MPK0003;MPK0004;MsgPack007;MsgPack017</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

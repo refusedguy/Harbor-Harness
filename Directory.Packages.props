@@ -174,12 +174,15 @@
     <PackageVersion Include="CSharpFunctionalExtensions" Version="3.7.0" />
     <!-- ── MessagePack (cross-platform binary serialization for IPC) ───────── -->
     <!--
-      MessagePack 2.5.x has known advisories (NU1902/NU1903) but they all
-      concern the typeless deserialization path, which the IPC layer only
-      uses on locally-trusted payloads (same-machine pipe/socket transport).
-      Suppressed per-project in Harbor.Ipc.* via <NoWarn>NU1902;NU1903</NoWarn>.
+      MessagePack 3.1.12 is the last release of the 3.1.x line and carries 0
+      advisories in the GitHub Advisory DB. The pin sat at 3.1.8, which is
+      inside the affected range >= 3.0.0, < 3.1.9 of GHSA-qhrr-8q5h-9q3h
+      (medium, NU1902/NU1903: nested arrays can blow past the buffer length
+      limits). The advisory was invisible because NU1902/NU1903 were suppressed
+      in the three Harbor.Ipc.* projects; that suppression is gone now, so the
+      NuGet audit gate is live again in the IPC graph.
     -->
-    <PackageVersion Include="MessagePack" Version="3.1.8" />
+    <PackageVersion Include="MessagePack" Version="3.1.12" />
     <!-- ── SQLite native driver ──────────────────────────────────────────── -->
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3" />
     <!-- ── CLI parsing (sourcegen, AOT-first) ─────────────────────────────── -->
