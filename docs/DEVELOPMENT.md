@@ -113,6 +113,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
+| `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 
 Three things make this a real gate rather than decoration:
@@ -189,6 +190,92 @@ an edit is not new duplication. The baseline only ever goes **down**: as
 issues #1769–#1777 land, `--update` lowers it, and the floor tightens with
 it. Zones other programmes own are exempted explicitly, with a reason and an
 expiry date, and an expired exemption fails the gate.
+
+## The second duplication detector — issue 1847
+
+`tools/check-dup-jscpd.py` is a **second** detector. It does not replace
+`check-test-dup.py`, and it is not a second copy of it: the two engines
+answer different questions, and the answers only partly overlap.
+
+```bash
+./tools/check-dup-jscpd.py --run                  # download the pinned binary, scan, compare
+./tools/check-dup-jscpd.py --self-test            # prove the gate still fails on an empty scan
+./tools/check-dup-jscpd.py --update               # re-measure the baseline after the tree changes
+./tools/check-dup-jscpd.py --run --baseline-ref origin/dev   # add the new-clone delta
+```
+
+**What it is.** jscpd 5.4.1 (MIT, a self-contained Rust binary) matches
+duplicated **token windows** rather than duplicated method bodies, over the
+whole maintained C# surface: `src/`, `apps/` and `tests/`, minus `bin/`,
+`obj/`, `contrib/` (unmaintained, not compiled by CI), `samples/`, `tools/`,
+`build/`, `analyzers/` and `tests/Harbor.Architecture.Tests/` (the zone of
+programme #1724). The thresholds are in [`.jscpd.json`](../.jscpd.json):
+`--min-tokens 100`, `--min-lines 6`, `--mode weak` (comments are prose, not
+code) and the `exact` kind, so a clone is a block that was copied byte for
+byte.
+
+**What it finds that the python gate cannot.** The python gate slices a
+METHOD BODY out of the file, so duplication that is not a method body is
+invisible to it: a duplicated record declaration, a duplicated nested class, a
+duplicated interface implementation, a duplicated file header. And the python
+gate scans `tests/` only, so the product code has no duplication gate at all.
+
+**The measured comparison** (both tools on the same tree, `origin/dev`):
+
+| | files | clones / groups | duplicated lines | wall |
+|---|---|---|---|---|
+| `check-test-dup.py` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
+| `check-dup-jscpd.py` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
+
+Over the test tree the two overlap on 1965 lines: 30.0% of the python gate's
+duplicated lines, 23.7% of jscpd's. 37 of the python gate's 206 groups sit
+entirely inside a jscpd clone, 25 partly and 144 not at all. Neither is a
+subset of the other — jscpd flags 397 files the python gate does not, and the
+python gate flags 72 files jscpd does not. jscpd is also seven times faster,
+which is why it is affordable to run on every PR that touches the tree.
+
+**Why the rule is a total and not jscpd's own `--fail-on-new-clones`.** jscpd
+ships a baseline gate, and issue #1847 proposed it. It was measured on 13 real
+commits of `dev` before it was ruled out, and it does not work on this tree:
+the baseline is keyed on a **content hash** of each clone, so editing a
+duplicated body changes the hash and the edit is reported as new duplication.
+Commit `8bde0944` changed one line in each of two files that already
+duplicated each other, and jscpd reported 4 new clones — 3 of them pairs that
+were already clones BEFORE the commit. The gate was red on 1 of the 13 commits
+with the `exact` configuration and on 3 with the `renamed` one, and every one
+of those was ordinary work that added no duplication. The python gate was
+written to avoid exactly this: it compares the **members** of a group, never
+the text of the bodies.
+
+So the rule here is the aggregate one the python gate also has
+(`DUP-GROWTH`): the tree's duplicated **lines** must not exceed the number
+`tools/jscpd-baseline.json` records. Editing a duplicated body does not
+change that total; adding a copy of it does. Measured on the same 13
+commits, the total moved only when the tree really changed, and it did not
+move at all when a duplicated body was edited — which is the property the
+fingerprint baseline lacks.
+
+**The rules.**
+
+| Rule | What it does |
+|---|---|
+| `DUP-FLOOR` | the scan analysed fewer than 1700 files — a scan that measured nothing must not be green |
+| `DUP-GROWTH` | the tree's duplicated lines are above the baseline's |
+| `DUP-BASELINE-STALE` | the tree's duplicated lines are below the baseline's: the tree got cleaner, and `--update` lowers the baseline |
+| `DUP-MEASUREMENT` | the config or the tool version moved since the baseline was written, so the two numbers are not comparable |
+| `DUP-NEW-CLONES` | the clones that are new relative to the base ref — reported, and blocking only with `--fail-on-new-clones`, because the number is edit-sensitive |
+
+The floors are a ratchet: 1971 files are analysed today and the floor is
+1700, because the programme is about to REMOVE test code, and a floor set at
+the measured count would go red on the removal PRs themselves. A PR that
+really removes files lowers it in the same diff, where a reviewer sees it.
+
+**The binary.** It is fetched from the release, sha256-pinned per platform
+inside the tool, and it is a build-time tool: it never reaches the product and
+no `PackageReference` is added, so the dependency gate does not see it. The
+report is uploaded as the job's artifact — it is the work list the next
+duplication ticket needs, with the file, the line range and the size of every
+clone.
 
 ## Reflection-JSON gate — issue 1822
 
