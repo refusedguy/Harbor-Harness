@@ -6,6 +6,8 @@
   href: AMBIENT_MASCOT_EXTENSION_ASSESSMENT.md
 - name: Analyzers
   href: ANALYZERS.md
+- name: Analyzers Authoring
+  href: ANALYZERS_AUTHORING.md
 - name: Antipatterns
   href: ANTIPATTERNS.md
 - name: Aot Publish

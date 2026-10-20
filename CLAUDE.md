@@ -1253,6 +1253,7 @@ See `specs/` for the full design rationale. Key decisions:
 - [ ] **Layering:** no concrete impl type (`AnthropicLlmClient`, `JsonlSessionStore`, `AgentLoop`, `DefaultAgent`, `InMemoryEventBus`, `SharpTsScriptEngine`, `JintScriptEngine`, `RoslynPluginCompiler`, …) is `new`'d outside `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` and `src/Harbor.Hosting/Modules/`. `Program.cs` resolves services by interface from DI.
 - [ ] **Layering:** new interfaces go in `Harbor.Abstractions` (or `Harbor.Terminal.Abstractions` for UI-only contracts), never in `Harbor.Application` / `Harbor.Registries`.
 - [ ] **Layering:** new value objects / records go in `Harbor.Abstractions/Models`, never in `Harbor.Application` / `Harbor.Registries`.
+- [ ] **New rule or gate:** written per [docs/ANALYZERS_AUTHORING.md](./docs/ANALYZERS_AUTHORING.md) — placement, one diagnostic id per rule, a message that names the symbol, and the non-vacuity controls (a planted offender, a planted near-miss, and a gate proven live).
 
 ## When in doubt
 

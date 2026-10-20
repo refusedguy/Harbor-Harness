@@ -21,6 +21,11 @@ source, and it is gated by a baseline rather than by a severity table. It is
 catalogued in [§4](#4-reference-trimmer-the-unused-reference-gate) and
 measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 
+> **Writing a new rule?** [ANALYZERS_AUTHORING.md](./ANALYZERS_AUTHORING.md) is
+> the guide: where the file goes, how the diagnostic is shaped, how the rule is
+> waived, and the controls that prove the rule can fail. Read it before writing
+> the first rule.
+
 ---
 
 ## 1. Roslyn analyzers
