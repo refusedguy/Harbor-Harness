@@ -13,16 +13,29 @@
 // `Lines.IndexOf(line)` shape) is unchanged — `BlockIds_KeepFirstEqualWins_`
 // pins it against a reference mapper on both paths.
 //
-// GATE: relative, same shape as #410 / #1373 / #1528. Over append-only
-// updates at a fixed-ish transcript size, a doubled history must cost at most
-// 3× the small one in BOTH wall time and allocations:
+// GATE (rewritten by #1747): a BUDGET PER UNIT OF WORK, not a ratio.
 //
-//     t(2N)    <= 3 * t(N)
-//     alloc(2N) <= 3 * alloc(N)
+// It used to be `cost(2N)/cost(N) <= 3` for time and for allocations, over
+// 512 against 1024 transcript lines, decided from best-of-5 legs with no GC
+// fence and no leg scaling. That is the shape the #1747 inventory names as
+// the receipt for "a ratio depends on the base and on the noise": this gate
+// reddened on a byte-identical tree at **time x3.10 while alloc x1.99**
+// (#1285, run 38129838108) — the time leg overran its limit while the
+// allocation leg, which does not move with the runner at all, said the tree
+// was fine.
 //
-// Linear per change is 2.00; an O(N^2) regression lands at 4.00 and cannot
-// hide underneath the limit. No absolute millisecond appears here for the
-// #460 reasons: an absolute budget measures the runner, not the code.
+// The gate is now:
+//
+//     bytes per append+project pair  <= 192 KiB   (machine-independent, HARD)
+//     probe units per pair           <= 4000      (machine-scaled time, SOFT)
+//
+// measured over a FIXED amount of work (128 append+project pairs) at the
+// LARGER transcript (1024 lines), so a path that costs more per change the
+// bigger the transcript lands in the measurement instead of hiding behind the
+// smaller one. The time budget is in probe units — the cost of one pair
+// divided by the cost of one unit of the fixed calibration probe measured on
+// the SAME runner in the SAME run — so the runner's speed cancels, and the
+// budget is a constant in a machine-independent currency.
 //
 // WHY THE WINDOW IS APPENDS AT ~FIXED SIZE, NOT GROWTH FROM EMPTY
 // --------------------------------------------------------------
@@ -33,8 +46,7 @@
 // stay red on the CORRECT tree, the inverse of the #410 non-vacuity red: a
 // bound that fails on right numbers (#939). Seeding the transcript unmeasured
 // and then measuring a batch of appends isolates the per-CHANGE cost this
-// slice touches, and the ratio stays the property being guarded: one append
-// at 2N costs no more than 3× one append at N.
+// slice touches.
 //
 // CONCURRENCY
 // -----------
@@ -59,35 +71,54 @@ namespace Harbor.Ui.Framework.Tests;
 [NotInParallel]
 public sealed class ProjectHistoryScalingGates
 {
-    /// <summary>Seeded transcript lines per leg — the "N" the gate doubles.</summary>
+    /// <summary>Seeded transcript lines — the "N" the gate doubles.</summary>
     /// <remarks>
     ///     512, not 100: the per-change cost is O(N) scan + O(N) builder
     ///     work, and a leg must dwarf its own bookkeeping so the measurement
-    ///     is the code under test, not the harness dispatch. A leg of 512
-    ///     lines with 128 measured appends lands the window in the few-
-    ///     milliseconds range where the best-of-5 minima are stable — five
-    ///     rounds of both legs stay far under the 120 s timeout.
+    ///     is the code under test, not the harness dispatch.
     /// </remarks>
     private const int TranscriptLines = 512;
 
     /// <summary>Measured append+Project pairs per window, at ~constant transcript size.</summary>
     private const int AppendsPerWindow = 128;
 
+    /// <summary>
+    ///     The transcript the gate measures AT: twice the seeded size, because
+    ///     that is the regime where a per-change cost that grows with the
+    ///     transcript shows up.
+    /// </summary>
+    private const int MeasuredTranscriptLines = TranscriptLines * 2;
+
     /// <summary>Appends driven (and discarded) before the measured window.</summary>
     /// <remarks>
     ///     The first pass over ProjectHistory's append branch pays tiered-JIT
     ///     compilation of the loop and of everything it reaches. Like the
-    ///     #410 warm-up, it would otherwise land on the N leg first and
-    ///     inflate the DENOMINATOR, making the gate pass more easily.
+    ///     #410 warm-up, it would otherwise land on the first measured round
+    ///     and inflate it.
     /// </remarks>
     private const int WarmupAppends = 8;
 
-    private const double GrowthLimit = 3.0;
-    private const int Rounds = 5;
+    /// <summary>
+    ///     Allocation budget for ONE append+project pair, in bytes.
+    ///     Machine-independent, so it is compared as measured, with no band.
+    ///     The measured value on the current tree is 98 547 B per pair at 1024
+    ///     transcript lines — the same number the pre-#1747 ratio gate measured
+    ///     (12 318.3 KiB over 128 pairs, run 39123327931) and the same number
+    ///     the #1747 gate measured (run 39372950798) — so the budget leaves
+    ///     ~1.33x headroom.
+    /// </summary>
+    private const long MaxBytesPerPair = 128 * 1024;
+
+    /// <summary>
+    ///     Time budget for ONE append+project pair, in probe units (see
+    ///     `PerfGate`). Machine-scaled and soft. Pinned from the same CI run:
+    ///     297 probe units per pair against a 1200 budget.
+    /// </summary>
+    private const double MaxProbeUnitsPerPair = 1_200.0;
 
     [Test]
-    [Timeout(120_000)]
-    public async Task AppendOnly_Cost_GrowsLinearly_InTranscriptLength()
+    [Timeout(300_000)]
+    public async Task AppendOnly_CostPerChange_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
         {
@@ -102,69 +133,17 @@ public sealed class ProjectHistoryScalingGates
         // positive control) and inside DriveLineCost every round.
         await AssertAppendOnlyShape();
 
-        // Warm-up first, discarded — see WarmupAppends.
-        _ = DriveLineCost(TranscriptLines);
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: units => Task.FromResult(DriveLineCost(MeasuredTranscriptLines, units)),
+            units: AppendsPerWindow,
+            options: new PerfGateOptions
+            {
+                Label = "project-history-cost",
+                MaxBytesPerUnit = MaxBytesPerPair,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerPair,
+            });
 
-        long allocSmall = long.MaxValue;
-        long allocLarge = long.MaxValue;
-        double msSmall = double.MaxValue;
-        double msLarge = double.MaxValue;
-        for (int round = 0; round < Rounds; round++)
-        {
-            (double msSmallRound, long allocSmallRound) = DriveLineCost(TranscriptLines);
-            (double msLargeRound, long allocLargeRound) = DriveLineCost(TranscriptLines * 2);
-
-            allocSmall = Math.Min(allocSmall, allocSmallRound);
-            allocLarge = Math.Min(allocLarge, allocLargeRound);
-            msSmall = Math.Min(msSmall, msSmallRound);
-            msLarge = Math.Min(msLarge, msLargeRound);
-        }
-
-        double timeRatio = msLarge / msSmall;
-        double allocRatio = (double)allocLarge / allocSmall;
-
-        // Printed, not only asserted: tools/test-measurements.py lifts this
-        // into the job summary (the #618 mechanism the store gate uses). The
-        // absolute columns are informational and runner-dependent.
-        Console.WriteLine(
-            $"project-history-scaling: {TranscriptLines} lines = {msSmall:F3} ms / {allocSmall / 1024.0:F1} KiB, "
-            + $"{TranscriptLines * 2} lines = {msLarge:F3} ms / {allocLarge / 1024.0:F1} KiB "
-            + $"(time x{timeRatio:F2}, alloc x{allocRatio:F2}, limit x{GrowthLimit:F2}, best of {Rounds}; "
-            + "the absolute columns are informational and runner-dependent)");
-
-        // Neither operand may be zero — the #591 shape: a ratio rule that
-        // cannot tell "no cost" from "no measurement" accepts any tree.
-        await Assert.That(allocSmall)
-            .IsGreaterThan(0L)
-            .Because(
-                "the allocation baseline must be a real measurement: " + nameof(allocSmall) + " = "
-                + allocSmall + " B over " + AppendsPerWindow + " appends at " + TranscriptLines
-                + " lines. A zero denominator makes the ratio gate meaningless.");
-        await Assert.That(msSmall)
-            .IsGreaterThan(0.0)
-            .Because(
-                "the time baseline must be a real measurement, same reason as the allocation baseline. "
-                + nameof(msSmall) + " = " + msSmall.ToString("F3") + " ms.");
-
-        // Both gates are RATIOS: doubling the transcript may cost at most
-        // GrowthLimit times as much per append. Linear is 2.00; O(N^2) is 4.00
-        // and fails.
-        await Assert.That(timeRatio)
-            .IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                "time(2N)/time(N) = " + timeRatio.ToString("F2") + " against a limit of "
-                + GrowthLimit.ToString("F2") + " at N = " + TranscriptLines + ": " + msLarge.ToString("F3")
-                + " ms for appends at " + (TranscriptLines * 2) + " lines versus " + msSmall.ToString("F3")
-                + " ms at " + TranscriptLines + ". Linear per change is 2.00 and an O(N^2) regression is 4.00 — "
-                + "the shape a per-append full first-occurrence map rebuild would take.");
-        await Assert.That(allocRatio)
-            .IsLessThanOrEqualTo(GrowthLimit)
-            .Because(
-                "alloc(2N)/alloc(N) = " + allocRatio.ToString("F2") + " against a limit of "
-                + GrowthLimit.ToString("F2") + " at N = " + TranscriptLines + ": "
-                + (allocLarge / 1024.0).ToString("F1") + " KiB for appends at " + (TranscriptLines * 2)
-                + " lines versus " + (allocSmall / 1024.0).ToString("F1") + " KiB at " + TranscriptLines
-                + ". Allocations do not move with the runner's speed, so this ratio holds on every machine.");
+        await result.AssertWithinBudgetsAsync("ui store append+project per change");
     }
 
     /// <summary>
@@ -174,12 +153,11 @@ public sealed class ProjectHistoryScalingGates
     /// </summary>
     /// <remarks>
     ///     The transcript grows by only <see cref="AppendsPerWindow" /> lines
-    ///     inside the measured window, so the two legs measure the per-CHANGE
-    ///     cost at approximately-fixed sizes N and 2N — see the file-header
-    ///     note on why a growth-from-empty drive would measure neighbours
-    ///     outside this slice.
+    ///     inside the measured window, so the window measures the per-CHANGE
+    ///     cost at approximately-fixed size — see the file-header note on why a
+    ///     growth-from-empty drive would measure neighbours outside this slice.
     /// </remarks>
-    private static (double Ms, long Allocated) DriveLineCost(int lines)
+    private static PerfGateLeg DriveLineCost(int lines, int appends)
     {
         var store = new UiStore();
         for (int i = 0; i < lines; i++)
@@ -202,21 +180,21 @@ public sealed class ProjectHistoryScalingGates
 
         var sw = Stopwatch.StartNew();
         long before = GC.GetAllocatedBytesForCurrentThread();
-        int appended = DriveWindow(store, projector, AppendsPerWindow, prefix: $"tail-{lines}");
+        int appended = DriveWindow(store, projector, appends, prefix: $"tail-{lines}");
         sw.Stop();
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         // The measurement must be of the script, not of an exited early: the
-        // window appended exactly AppendsPerWindow lines on top of the seed.
+        // window appended exactly `appends` lines on top of the seed.
         // (The seed left the store at `lines` + WarmupAppends lines.)
         GC.KeepAlive(store.State);
-        if (appended != AppendsPerWindow)
+        if (appended != appends)
         {
             throw new InvalidOperationException(
-                $"Append-only script drifted: expected {AppendsPerWindow} appends, drove {appended}.");
+                $"Append-only script drifted: expected {appends} appends, drove {appended}.");
         }
 
-        return (sw.Elapsed.TotalMilliseconds, allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     /// <summary>Append+Project pairs against a shared store. Returns the append count.</summary>

@@ -994,12 +994,11 @@ The BDN absolute columns live in the `benchmark` workflow (`CachingPromptBenchma
 dominated by the `ComputeKey` pass either way, so the PR-marginal claim moves
 with the ratio above, not with those absolute numbers.
 
-### ProjectHistory first-occurrence map (#1535) — **RELATIVE**, CI merge gate
+### ProjectHistory first-occurrence map (#1535) — **PER-UNIT BUDGET**, CI merge gate
 
 `Harbor.Ui.Framework.Tests.ProjectHistoryScalingGates`, in the `test (ui)` merge-gate shard.
 
-Same relative convention as #410: N against 2N inside one run, no absolute
-budgets. The slice: `DefaultUiProjector.ProjectHistory` rebuilt a
+The slice: `DefaultUiProjector.ProjectHistory` rebuilt a
 `Dictionary<ChatLine,int>` over the WHOLE transcript on every history change —
 O(history) dictionary + N hash inserts per fold, per frame batch — even for a
 pure append (the `MessageEnd` fold), whose unchanged prefix the map already
@@ -1014,20 +1013,125 @@ The window is measured APPENDS at approximately-fixed transcript size, seeded
 unmeasured — deliberately not a growth-from-empty drive: the common-prefix
 scan and the per-fold builders are O(n) per change too and are OUT of this
 slice (#97 slices them separately), so a growth drive would show ×4 to the
-correct tree and read the #939 shape, a bound that fails on right numbers. What
-the gate guards is the regression this slice would take worst: a per-change
-map rebuild scaling with the transcript on every append.
+correct tree and read the #939 shape, a bound that fails on right numbers.
 
-| Test | Relative claim | Gate | Measured (run 39123327931, PR #1685) |
+**The gate is a BUDGET PER UNIT OF WORK since #1747, not a ratio.** It used to
+be `time(2N)/time(N) ≤ 3` and `alloc(2N)/alloc(N) ≤ 3` over 512 against 1024
+transcript lines, decided from best-of-5 legs with no GC fence and no leg
+scaling — and it reddened on a byte-identical tree at **time ×3.10 while alloc
+×1.99** (#1285, run 38129838108). The allocation leg said the tree was fine;
+the time leg said otherwise; the tree was the same. A ratio's denominator is
+the same order of magnitude as its numerator, so a scheduling wobble moves it
+by whole multiples, and its base is not a fixed amount of work.
+
+| Test | Claim | Gate | Measured |
 |---|---|---|---|
-| `AppendOnly_Cost_GrowsLinearly_InTranscriptLength` | time over 128 append+`Project` pairs at ~512 vs ~1024 transcript lines — seed unmeasured, append sieve warmed, best-of-5 | ratio ≤ 3.0 (linear ≈ 2.0; O(N²) ≈ 4.0) | **1.82** (6.482 → 11.814 ms) |
-| `AppendOnly_Cost_GrowsLinearly_InTranscriptLength` | allocations over the same windows, thread-local `GC.GetAllocatedBytesForCurrentThread` | ratio ≤ 3.0 | **1.84** (6688.2 → 12318.3 KiB) |
+| `AppendOnly_CostPerChange_StaysWithinBudget` | allocation per append+`Project` pair at 1024 transcript lines — the size where a per-change cost that grows with the transcript shows up | ≤ 128 KiB per pair (machine-independent, HARD) | **98 547 B** per pair (run 39372950798, PR #1807) — the same number the pre-#1747 ratio gate measured (12 318.3 KiB over 128 pairs) |
+| `AppendOnly_CostPerChange_StaysWithinBudget` | time per append+`Project` pair, in **probe units** — the cost of one pair divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 1200 probe units per pair (machine-scaled, SOFT — stands down when the measurement is not trusted) | **297** probe units per pair — 0.118 ms/unit against a probe that costs 0.000398 ms/unit (run 39372950798) |
 
-Per-change before/after shape (structural, not re-measured on the runner): the
-per-append cost carried a fresh O(history) dictionary on the pre-slice tree
-and carries none after — the O(1)-per-append extension replaced the
-O(history)-per-append rebuild, which is also what keeps the measured ratio
-near linear at ×1.82/×1.84.
+The byte budget is **pinned from the CI measurement** — 98 547 B per pair at
+1024 transcript lines, which is the same number the pre-#1747 ratio gate
+measured (12 318.3 KiB over 128 pairs) — so the budget leaves ~1.33× headroom,
+and a per-append full-map rebuild (the regression this gate exists for) lands
+several times above it.
+
+> The `[perf-gate] project-history-cost: measured 128 unit(s) …` report line
+> prints into the `test (ui)` job log on every run — cite THAT run's values
+> when filling the Measured column, never the local absolute milliseconds.
+
+### Sqlite append cost gate (#1534) — **PER-UNIT BUDGET**, CI merge gate
+
+`Harbor.Storage.Tests.SqliteAppendCostGate`, in the `test (platform)` merge-gate shard.
+
+The slice: every appended row used to pay 2× `ToString("O")` (the message
+stamp plus the `session.updated_at` touch) and one `AddWithValue` per
+parameter, with each value-type argument (`long created_at_ms`) boxing and
+having its `SqliteType` inferred from the runtime type on every call.
+
+**The gate is a BUDGET PER UNIT OF WORK since #1747, not a ratio.** It used to
+be `cost(2N)/cost(N) ≤ 3` for time and for allocations over 1024 against 2048
+appended messages, decided from best-of-3 legs with no GC fence, no leg
+scaling and a per-thread allocation counter read across `await`s. It is the
+gate the #1747 inventory names as the receipt for "a ratio depends on the base
+and on the noise": **it reddened on a loaded runner at "ratio 3.102 vs limit
+3.00"** — a 3% overshoot on a tree nobody had touched.
+
+| Test | Claim | Gate | Measured |
+|---|---|---|---|
+| `Append_CostPerMessage_IsWithinBudget` | allocation per appended message, over a FIXED 512 appended messages into a session that already holds 512 rows — so a cost that grows with the session's size lands in the measurement | ≤ 16 KiB per message (machine-independent, HARD) | **7 816 B** per message (run 39372950798, PR #1807) |
+| `Append_CostPerMessage_IsWithinBudget` | time per appended message, in **probe units** — the cost of one append divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 1500 probe units per message (machine-scaled, SOFT) | **444** probe units per message — 0.169 ms/unit against a probe that costs 0.000380 ms/unit (run 39372950798) |
+
+The byte budget's reference point is `docs/BENCHMARKS.md`'s own row — "Sqlite
+WAL Append ×10 | 2.2–2.6 ms | 155 KB", i.e. ~15.5 KB per append — with 2×
+headroom for the runtime's own bookkeeping inside the measured window. The
+The shape this gate was written for (#1534) cost two extra `ToString("O")` strings
+and two boxes per row; the report line prints the measured number on every
+run, so the constant can be tightened against what the runner actually does.
+
+The measurement uses the PROCESS-WIDE allocation counter and a keyless
+`[NotInParallel]`: the append path awaits, and a per-thread counter sampled
+across a thread hop is the difference between two unrelated counters (#741);
+the keyless attribute is the only form that actually delivers "nothing else in
+this assembly allocates while the window is open".
+
+### Perf-gate inventory (#1747) — every gate, one verdict
+
+The discipline #1747 asks for, in one table: **measure → report → assert
+softly**; **scale only time** (bytes are a machine-independent constant);
+**budget = a constant per unit of work**, not a "≤ 3×" ratio. The verdicts use
+four words: **keep** (the gate already has the right shape), **convert to a
+constant** (a budget per unit of work), **convert to a relative share of
+work** (a fraction of a same-run reference), **replace the methodology** (the
+measurement, not the claim, is what is wrong).
+
+| Gate | Shape today | Compares | Verdict |
+|---|---|---|---|
+| `Harbor.Ui.Framework.Tests.StorePathScalingGates.Cost_GrowsSubLinearly_InDeltas` | ratio | `time(2N)/time(N)` and `alloc(2N)/alloc(N)` ≤ 3.0 over 1000/2000 deltas; GC-fenced legs, best-of-3 | **keep** — fenced legs, measured 1.99 against a 3.00 limit (run 36860503050). Next in line for the constant conversion, but its `TheRatioRuleAnswersTheDeclaredQuestion` positive control is written around the ratio rule, so that conversion is its own change |
+| `Harbor.Ui.Framework.Tests.ProjectHistoryScalingGates` | ratio | `time(2N)/time(N)` ≤ 3.0 over 512/1024 transcript lines; best-of-5, no fence, no leg scaling | **convert to a constant** — done in #1747. This was the ×3.10 red (#1285) |
+| `Harbor.Storage.Tests.SqliteAppendScalingGate` | ratio | `time(2N)/time(N)` ≤ 3.0 over 1024/2048 appends; best-of-3, no fence | **convert to a constant** — done in #1747, as `SqliteAppendCostGate`. This was the "ratio 3.102 vs limit 3.00" red |
+| `Harbor.Application.Tests.ToolDispatcherResolveOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — the ratio's measurement is already hardened (legs scaled toward ~100 ms, medians of 5, GC fence, ×1.05 band on the time branch) |
+| `Harbor.Application.Tests.TurnRunnerToolTableReuseTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Core.Tests.CompactionPolicyMaterializeScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **keep** — same |
+| `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **keep** — same |
+| `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **keep** — the exact-zero form is the strongest shape a byte claim can take |
+| `Harbor.Domain.Tests.BashArgMatcherScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Providers.Tests.OpenAiCompatibleRequestBuildScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Providers.Tests.SsePumpScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Update_HeaderEditOnABigSession_…` | differential | `(big − baseline) ≥ 0` **and** `< 2 MiB` | **replace the methodology** — done in #1747. The `≥ 0` floor was a FALSE premise: both operands come from one monotonic counter, so their difference can legitimately be negative (a saving), and the observed value was exactly that (−15 384 B). A broken measurement is a negative SINGLE window, and that shape is refused inside `AllocationProbe`. The ceiling is now a constant per MiB of bulk rewritten |
+| `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Read_ThousandRecordSession_…` | absolute + blanket `[Retry(3)]` | `allocated < graph + fileBytes` — a ceiling ~1.5% under the measured number | **replace the methodology** — done in #1747. The measurement is now a minimum over three reads (the process-wide counter's noise only ever inflates a reading), the budget is a constant per record, and the blanket retry is gone |
+| `Harbor.Storage.Jsonl.Tests.JsonlAllocationBudgetTests` | absolute bytes | ≤ 8 KB/line, ≤ 512 KB/read | **keep** — a byte budget is already machine-independent and already per unit of work |
+| `Harbor.Registries.Tests.EventBusAllocationTests` / `ToolRegistryAllocationTests` (file `AllocationBudgetTests.cs`) | absolute bytes | 0 B on the fast paths, ≤ 1–2 KB/publish on the fan-out | **keep** — same |
+| `Harbor.Tui.CellForge.Tests.AllocationBudgetTests` | absolute bytes | 0 B per event | **keep** — same |
+| `Harbor.Tui.CellForge.Tests.PerfBudgetTests` | absolute bytes, time reported | 0 B per frame; frame time printed, never gated (#996) | **keep** — the model of the discipline |
+| `Harbor.Ui.Framework.Tests.StoreDispatchAllocTests` | differential bytes | per-dispatch cost of the store, measured against a bare store | **keep** — machine-independent and per unit of work |
+| `Harbor.Application.Tests.AgentLoopAllocationTests` | absolute bytes | ≤ 512 KB / ≤ 2560 KB per turn, each with a `≥ 0` floor (#741) | **keep** — same |
+| `Harbor.Ui.Framework.Tests.StatusBarFitPerfTests` | ratio, self-calibrating | ratio < 8 / < 2.0, but only after the harness proves it can reproduce its own baseline (spread ≤ 1.15×) | **keep** — the model for the "assert softly" rule #1747 generalises |
+| `Harbor.Tui.PerfTests.RendererBenchmarkTests.Backend_MeetsAbsoluteContract` | absolute time | events/s, p99 latency, allocation ceiling against a declared contract | **keep** — an absolute wall-clock contract is machine-dependent by construction, which is why the file already gates it strictly only under `HARBOR_PERF_BASELINE_STRICT=1` |
+| `Harbor.Tui.PerfTests.RendererBenchmarkTests` relative tail-render gate | ratio | `t(2N) ≤ 3·t(N)` in the same run | **keep** — the runner's speed cancels |
+| `Harbor.LoadTests.MultiSessionLoadTests` | counts, time report-only | admissions double exactly when sessions double; both stopwatches printed | **keep** — the model of "gate the counts, report the time" |
+
+### The shared helper (#1747) — `Harbor.TestKit.PerfGate`
+
+`tests/Harbor.TestKit/PerfGate.cs` is the ONE way to write a per-unit-of-work
+performance gate. Projects that must not drag `Harbor.Application` in keep a
+documented internal copy (grep `PerfGate.cs — #1747` under `tests/`).
+
+It answers a different question from `TestScalingGate` (#1652), which asks
+"does doubling the input cost at most 3×?" — a RATIO, whose denominator is the
+same order of magnitude as its numerator (so runner noise moves it by whole
+multiples) and whose base is not a fixed amount of work. `PerfGate` asks "how
+much does ONE UNIT OF WORK cost, and is that within a reviewed constant?".
+
+| Piece | What it does |
+|---|---|
+| **Budgets** | `MaxBytesPerUnit` — a byte count per unit of work. Machine-independent, so it is compared as measured, with no band. This is the branch that can be a hard gate on any runner. `MaxProbeUnitsPerUnit` — a time budget per unit of work, in PROBE UNITS |
+| **Probe units** | The cost of one unit of work divided by the cost of one unit of a fixed, deterministic, allocation-free CPU probe measured on the SAME runner in the SAME run. The runner's speed appears in both operands and cancels, so the budget is a constant in a machine-independent currency instead of a number of milliseconds that only means something on the box that produced it. **Only time is scaled this way; bytes never are** |
+| **Measure** | The workload runs `Rounds` times behind a GC fence; the MEDIAN of each series is the measurement, and the relative spread across rounds is kept |
+| **Report** | The report line is printed on every run, PASS OR FAIL, and says `measured` explicitly. `tools/test-measurements.py` lifts it into the job summary (the #618 mechanism), so a gate that measures and reports without failing is still evidence |
+| **Assert softly** | The allocation branch asserts hard. The time branch asserts ONLY when the measurement is TRUSTED — the spread across rounds is within `MaxTrustedSpread` and the leg was long enough to measure. A runner that cannot reproduce its own baseline is not evidence about the code, so the time branch reports and stands down instead of failing the build (the `StatusBarFitPerfTests` #487 precedent) |
+| **Non-vacuity** | A leg that measured nothing is a failure, not a pass: a zero millisecond reading is refused before any budget is read, and a zero byte reading is refused too — a byte count of zero satisfies every ceiling, so a mis-wired probe would make the gate pass on any tree (#591). A workload that legitimately allocates nothing per unit opts out with `RequirePositiveBytes = false` |
 
 ### JsonlMessagePayload serialization gate (#1531) — **RELATIVE**, CI merge gate ⏳ first run pending
 
