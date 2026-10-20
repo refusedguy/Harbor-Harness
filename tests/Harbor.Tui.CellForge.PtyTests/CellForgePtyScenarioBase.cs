@@ -80,6 +80,24 @@ public abstract class CellForgePtyScenarioBase
     /// <summary><see cref="Environment.TickCount64" /> of the last repaint.</summary>
     private long _lastRepaintTick;
 
+    // ── Terminal state ──────────────────────────────────────────────────────
+    // The pump publishes the moment it stops: the child has exited, the
+    // reader has seen EOF (so the child's output is FINAL), and the pump has
+    // written every byte of it to the grid. At that point no further repaint
+    // can arrive, so a screen wait must END there instead of waiting out its
+    // deadline (#2001). The deadline stays as the emergency bound for a child
+    // that is still alive and simply quiet.
+    private bool _pumpStopped;
+    private TaskCompletionSource _pumpStoppedSignal = NewSignal();
+
+    /// <summary>
+    ///     Which child the running pump belongs to. A scenario may relaunch
+    ///     the app (the alias-equivalence scenarios boot twice in one test),
+    ///     and the pump of the FIRST child must not publish a terminal state
+    ///     for the second one.
+    /// </summary>
+    private int _pumpGeneration;
+
     /// <summary>
     ///     The per-test mock server + temp <c>$HOME</c>. <see cref="PtyScenarioFixture" />
     ///     and not <c>MockServerFixture</c>: the latter also swaps the PROCESS
@@ -129,7 +147,10 @@ public abstract class CellForgePtyScenarioBase
     protected async Task StartAppAsync(int cols = 100, int rows = 30, string tui = "consoleex")
     {
         // Relaunch support (alias-equivalence scenarios boot twice in one test):
-        // reap the previous child and its pump before replacing them.
+        // reap the previous child and its pump before replacing them. The
+        // generation is bumped FIRST, so the old pump can no longer publish a
+        // terminal state that the new child's waits would read.
+        int generation = Interlocked.Increment(ref _pumpGeneration);
         if (_pumpCts is not null)
         {
             await _pumpCts.CancelAsync().ConfigureAwait(false);
@@ -157,6 +178,11 @@ public abstract class CellForgePtyScenarioBase
         Interlocked.Increment(ref _screenVersion);
         Volatile.Write(ref _lastRepaintTick, Environment.TickCount64);
 
+        // The new child has not exited yet, so the terminal state is reset:
+        // the waits of this child must not read the previous one's.
+        Volatile.Write(ref _pumpStopped, false);
+        Volatile.Write(ref _pumpStoppedSignal, NewSignal());
+
         string dll = ResolveCliDllPath();
         var spec = new PtyStartSpec(
             FileName: ResolveDotnetHost(),
@@ -167,7 +193,7 @@ public abstract class CellForgePtyScenarioBase
         Session = PtySession.Start(spec);
 
         _pumpCts = new CancellationTokenSource();
-        _ = Task.Run(() => PumpLoopAsync(_pumpCts.Token));
+        _ = Task.Run(() => PumpLoopAsync(generation, _pumpCts.Token));
     }
 
     /// <summary>Current visible grid as raw text (emulated terminal state).</summary>
@@ -247,6 +273,20 @@ public abstract class CellForgePtyScenarioBase
     ///     condition was not met — the caller's own predicate expression is
     ///     captured by the compiler and quoted back — instead of only how
     ///     long we waited.
+    ///     <para />
+    ///     THE WAIT ENDS ON THE STATE, NOT ONLY ON THE DEADLINE (#2001). When
+    ///     the child has exited and the pump has drained its output, no further
+    ///     repaint can arrive: the wait is already decided, and the rest of
+    ///     the bound is waste. The 10 s diagnostic window, multiplied by the
+    ///     scenarios that hit it and serialized by the assembly's two-permit
+    ///     limiter, was the bill. That case raises <see cref="PtyChildExitedException" />
+    ///     ("the process exited, there will be no repaint") instead of hanging
+    ///     until the bound expires.
+    ///     <para />
+    ///     The predicate is evaluated FIRST, against the grid as it stands, so
+    ///     a condition the dead child DID paint is still a pass: the change
+    ///     can only make a failing scenario fail sooner, never turn a passing
+    ///     one red.
     /// </summary>
     /// <param name="predicate">Condition over the normalized visible lines.</param>
     /// <param name="timeout">Bound on the whole wait. Defaults to 10 s.</param>
@@ -272,6 +312,15 @@ public abstract class CellForgePtyScenarioBase
                 return lines;
             }
 
+            // The child is gone and its output is drained, so the grid is
+            // final and the condition can never become true. The predicate
+            // above was evaluated against that final grid, so this is the
+            // decided answer, not a guess.
+            if (PumpStopped)
+            {
+                throw new PtyChildExitedException(DescribeChildExit(sw.Elapsed, predicateSource));
+            }
+
             TimeSpan remaining = deadline - sw.Elapsed;
             if (remaining <= TimeSpan.Zero)
             {
@@ -283,6 +332,11 @@ public abstract class CellForgePtyScenarioBase
             {
                 break;
             }
+        }
+
+        if (PumpStopped)
+        {
+            throw new PtyChildExitedException(DescribeChildExit(sw.Elapsed, predicateSource));
         }
 
         throw new TimeoutException(DescribeScreenTimeout(deadline, sw.Elapsed, predicateSource));
@@ -321,6 +375,13 @@ public abstract class CellForgePtyScenarioBase
             long quietMs = Environment.TickCount64 - Volatile.Read(ref _lastRepaintTick);
             bool childDrained = PendingRawBytes == 0;
             if (childDrained && quietMs >= stable.TotalMilliseconds)
+            {
+                break;
+            }
+
+            // The child is gone and the grid is final: a final grid is
+            // settled by definition, so there is nothing left to wait for.
+            if (PumpStopped)
             {
                 break;
             }
@@ -398,6 +459,13 @@ public abstract class CellForgePtyScenarioBase
                 break;
             }
 
+            // The child is gone: the turn will never finish, so there is
+            // nothing left to answer and nothing left to wait for.
+            if (PumpStopped)
+            {
+                break;
+            }
+
             TimeSpan remaining = timeout - sw.Elapsed;
             if (remaining <= TimeSpan.Zero)
             {
@@ -416,6 +484,12 @@ public abstract class CellForgePtyScenarioBase
     /// <summary>
     /// Wait until the emulated grid is repainted, or the timeout elapses.
     /// Returns <see langword="true" /> when a repaint was observed.
+    /// <para />
+    /// Returns <see langword="false" /> when the pump stopped: the child is
+    /// gone, so no repaint can arrive and the caller must stop waiting
+    /// (#2001). The waiters that poll on this signal break out on the
+    /// terminal state instead of spinning on a signal that will never fire
+    /// again.
     /// </summary>
     protected Task<bool> WaitForRepaintAsync(TimeSpan timeout, CancellationToken cancellationToken = default) =>
         WaitForRepaintAsync(ScreenVersion, timeout, cancellationToken);
@@ -425,6 +499,14 @@ public abstract class CellForgePtyScenarioBase
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
+        // The pump has stopped: no repaint can arrive. Say so BEFORE arming
+        // a timer, so a caller that polls on this signal does not spin on an
+        // already-completed one.
+        if (PumpStopped)
+        {
+            return false;
+        }
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (true)
         {
@@ -440,8 +522,12 @@ public abstract class CellForgePtyScenarioBase
                 return false;
             }
 
+            // The pump's stop is a wake-up too: the wait must end when the
+            // child is gone, not when the deadline arrives.
+            var stopped = Volatile.Read(ref _pumpStoppedSignal);
             var expiry = Task.Delay(remaining, cancellationToken);
-            if (await Task.WhenAny(signal.Task, expiry).ConfigureAwait(false) != signal.Task)
+            Task woke = await Task.WhenAny(signal.Task, stopped.Task, expiry).ConfigureAwait(false);
+            if (woke == expiry || woke == stopped.Task)
             {
                 return false;
             }
@@ -450,6 +536,21 @@ public abstract class CellForgePtyScenarioBase
 
     /// <summary>Monotonic version of the emulated grid; bumped on every repaint.</summary>
     private long ScreenVersion => Volatile.Read(ref _screenVersion);
+
+    /// <summary>
+    /// True once the pump has stopped: the child exited, the reader saw EOF,
+    /// and the pump wrote the child's whole output to the grid. The grid is
+    /// final, so no further repaint can arrive (#2001).
+    /// </summary>
+    private bool PumpStopped => Volatile.Read(ref _pumpStopped);
+
+    /// <summary>
+    /// True when the child process is gone and the grid is final. A polling
+    /// loop that waits for a repaint must stop on it: no repaint can arrive
+    /// any more, so the loop would spin on a signal that will never fire
+    /// (#2001).
+    /// </summary>
+    protected bool ChildIsGone => PumpStopped;
 
     /// <summary>Bytes the child produced that the pump has not written to the grid yet.</summary>
     private int PendingRawBytes
@@ -473,6 +574,29 @@ public abstract class CellForgePtyScenarioBase
     }
 
     /// <summary>
+    /// Publish the terminal state and wake the waiters: the grid is final, so
+    /// a wait that is still looking for a repaint must end now (#2001).
+    /// <para />
+    /// The signal is STICKY: the current task is completed, not replaced. A
+    /// waiter that reads the signal after the stop must find a COMPLETED
+    /// task. A fresh one would send it back to waiting out the very deadline
+    /// the terminal state exists to avoid.
+    /// <para />
+    /// The generation guard keeps a pump that has been replaced (the app was
+    /// relaunched) from publishing a terminal state for the NEW child.
+    /// </summary>
+    private void SignalPumpStopped(int generation)
+    {
+        if (generation != Volatile.Read(ref _pumpGeneration))
+        {
+            return;
+        }
+
+        Volatile.Write(ref _pumpStopped, true);
+        Volatile.Read(ref _pumpStoppedSignal).TrySetResult();
+    }
+
+    /// <summary>
     /// The timeout message: what was expected (the caller's predicate), what
     /// was seen (the grid), and the raw tail the child produced.
     /// </summary>
@@ -492,6 +616,40 @@ public abstract class CellForgePtyScenarioBase
         return sb.ToString();
     }
 
+    /// <summary>
+    /// The child-exit message (#2001): the wait ended because the process is
+    /// GONE, so the screen condition can never be met. It says so in the
+    /// first line, because that is the difference from a timeout: a timeout
+    /// means "the child is still out there and did not paint it", and this
+    /// means "there is nothing left that could paint it".
+    /// </summary>
+    private string DescribeChildExit(TimeSpan waited, string? predicateSource)
+    {
+        var sb = new StringBuilder();
+        sb.Append("the child process exited and its output is drained: no further repaint can arrive, ")
+            .Append("so the screen condition can never be met (waited ")
+            .Append(waited.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture))
+            .AppendLine("s).");
+        sb.Append("expected: ").AppendLine(predicateSource ?? "<predicate>");
+        sb.Append("child exit code: ").AppendLine(DescribeChildExitCode());
+        sb.AppendLine("Raw tail:");
+        sb.AppendLine(Tail(Session.RawText, 4000));
+        sb.AppendLine("Screen:");
+        sb.Append(ScreenText);
+        return sb.ToString();
+    }
+
+    /// <summary>The child's exit code, or the fact that it is not known.</summary>
+    private string DescribeChildExitCode()
+    {
+        if (!Session.HasExited)
+        {
+            return "<the child has not exited>";
+        }
+
+        return Session.ExitCode.ToString(CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Type text + Enter into the composer (raw byte '\r' = Enter in raw mode).</summary>
     protected void SubmitLine(string text) => Session.WriteLine(text);
 
@@ -504,13 +662,28 @@ public abstract class CellForgePtyScenarioBase
     protected void WriteHomeConfig(string json) =>
         File.WriteAllText(Path.Combine(TempHome, ".harbor", "config.json"), json);
 
-    private async Task PumpLoopAsync(CancellationToken ct)
+    private async Task PumpLoopAsync(int generation, CancellationToken ct)
     {
         // Decoder state is pump-private; only screen writes take the lock.
         var chunkBuf = new char[8192];
-        bool drainedAfterExit = false;
         while (!ct.IsCancellationRequested)
         {
+            // A newer child replaced this one (the alias-equivalence
+            // scenarios boot twice): this pump's state is stale, and its
+            // terminal state must not be published for the new child.
+            if (generation != Volatile.Read(ref _pumpGeneration))
+            {
+                return;
+            }
+
+            // The child's output is FINAL once the reader has seen EOF. The
+            // flag is read BEFORE the delta, so a delta read after it sees
+            // every byte the child produced: the reader appends the last
+            // chunk and only THEN reports the EOF, so a delta read that
+            // follows the flag cannot miss the tail.
+            bool outputFinal = Session.IsOutputClosed;
+            bool childExited = Session.HasExited;
+
             byte[] delta;
             lock (_screenLock)
             {
@@ -519,12 +692,17 @@ public abstract class CellForgePtyScenarioBase
 
             if (delta.Length == 0)
             {
-                if (Session.HasExited && drainedAfterExit)
+                // THE TERMINAL STATE (#2001). The child has exited, the
+                // reader has seen EOF, so the child's output is FINAL, and
+                // the pump has written all of it to the grid (the delta above
+                // is empty). No further repaint can arrive: the wait of a
+                // scenario that is still looking for one is already decided,
+                // and the rest of its bound is waste.
+                if (outputFinal && childExited)
                 {
+                    SignalPumpStopped(generation);
                     return;
                 }
-
-                drainedAfterExit = Session.HasExited;
 
                 // Sleep on the child's NEXT BYTE instead of on a fixed tick.
                 // The old Thread.Sleep(20) added up to 20 ms of latency to
@@ -537,7 +715,6 @@ public abstract class CellForgePtyScenarioBase
                 continue;
             }
 
-            drainedAfterExit = false;
             int chars = _decoder.GetChars(delta, 0, delta.Length, chunkBuf, 0);
             if (chars <= 0)
             {

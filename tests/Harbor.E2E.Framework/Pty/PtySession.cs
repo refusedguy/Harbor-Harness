@@ -57,6 +57,15 @@ public sealed class PtySession : IAsyncDisposable
     // that already landed.
     private TaskCompletionSource _outputArrived = NewSignal();
 
+    /// <summary>
+    ///     Set by the reader thread when it has seen EOF (or EIO) on the master
+    ///     fd. The child closed its side, so <see cref="RawOutput" /> is final
+    ///     and no further byte can arrive. That is the state a consumer of the
+    ///     stream needs to know that "the output is complete" rather than "the
+    ///     output is complete so far".
+    /// </summary>
+    private volatile bool _outputClosed;
+
     private PtySession(int masterFd, int slaveFd, int pid, byte[] initialTermios)
     {
         _masterFd = masterFd;
@@ -99,6 +108,19 @@ public sealed class PtySession : IAsyncDisposable
     public string RawText => Encoding.UTF8.GetString(RawOutput);
 
     public bool HasExited => _exitTask.IsCompleted;
+
+    /// <summary>
+    ///     True once the reader thread has seen EOF (or EIO) on the master fd:
+    ///     the child closed its side, so <see cref="RawOutput" /> is FINAL and
+    ///     no further byte can arrive.
+    ///     <para />
+    ///     This is the state that makes "the child's output has been fully
+    ///     read" a fact rather than a guess. <see cref="HasExited" /> alone is
+    ///     not enough: the child can be reaped while the reader thread is
+    ///     still blocked in <c>read</c> with the last bytes in flight, so a
+    ///     consumer that stops on the exit alone can miss the tail.
+    /// </summary>
+    public bool IsOutputClosed => _outputClosed;
 
     /// <summary>Exit code once exited; throws before that. -1 when SIGKILLed on timeout.</summary>
     public int ExitCode => _exitTask.IsCompleted ? _exitTask.Result : throw new InvalidOperationException("Process has not exited.");
@@ -427,6 +449,10 @@ public sealed class PtySession : IAsyncDisposable
 
             if (n <= 0)
             {
+                // EOF (or EIO after the hangup): the child closed its side.
+                // The flag is set AFTER the last chunk was appended, so a
+                // reader that sees it closed also sees every byte.
+                _outputClosed = true;
                 return; // EOF/EIO after hangup or dispose — normal teardown
             }
 
