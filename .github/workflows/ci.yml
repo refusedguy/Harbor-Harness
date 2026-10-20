@@ -695,6 +695,9 @@ jobs:
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -870,6 +873,9 @@ jobs:
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
