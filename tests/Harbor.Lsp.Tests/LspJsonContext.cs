@@ -59,8 +59,8 @@ public sealed record LspEmptyParams();
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     WriteIndented = false)]
 [JsonSerializable(typeof(string), TypeInfoPropertyName = "String")]
-[JsonSerializable(typeof(int), TypeInfoPropertyName = "Int")]
-[JsonSerializable(typeof(bool), TypeInfoPropertyName = "Bool")]
+[JsonSerializable(typeof(int), TypeInfoPropertyName = "Int32")]
+[JsonSerializable(typeof(bool), TypeInfoPropertyName = "Boolean")]
 [JsonSerializable(typeof(object[]), TypeInfoPropertyName = "ObjectArray")]
 [JsonSerializable(typeof(Dictionary<string, object?>), TypeInfoPropertyName = "DictionaryStringObject")]
 [JsonSerializable(typeof(LspInitializeParams), TypeInfoPropertyName = "LspInitializeParams")]

@@ -80,8 +80,8 @@ namespace Harbor.TestKit;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = false)]
 [JsonSerializable(typeof(string), TypeInfoPropertyName = "String")]
-[JsonSerializable(typeof(int), TypeInfoPropertyName = "Int")]
-[JsonSerializable(typeof(bool), TypeInfoPropertyName = "Bool")]
+[JsonSerializable(typeof(int), TypeInfoPropertyName = "Int32")]
+[JsonSerializable(typeof(bool), TypeInfoPropertyName = "Boolean")]
 [JsonSerializable(typeof(JsonElement), TypeInfoPropertyName = "JsonElement")]
 [JsonSerializable(typeof(Usage), TypeInfoPropertyName = "Usage")]
 [JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "DictionaryStringString")]
