@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Tools.Builtin.Tests;
@@ -39,15 +40,8 @@ public class SessionSupervisionToolTests
         new Usage(1, 1),
         "test-model");
 
-    private static ToolContext Context(string sessionId, IReadOnlyList<AgentMessage>? messages = null) => new(
-        sessionId,
-        "message-1",
-        "call-1",
-        "code",
-        CancellationToken.None,
-        messages ?? Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static ToolContext Context(string sessionId, IReadOnlyList<AgentMessage>? messages = null) =>
+        TestToolContext.Create(sessionId: sessionId, messageId: "message-1", callId: "call-1", messages: messages);
 
     private static JsonElement Args(Dictionary<string, object?> values) =>
         JsonDocument.Parse(JsonSerializer.Serialize(values)).RootElement.Clone();

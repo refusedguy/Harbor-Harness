@@ -15,7 +15,7 @@
 
 | What you're testing | Where the file lives | Key helpers |
 |---|---|---|
-| A builtin `ITool` | `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs` | `CreateContext()`, `Args()` |
+| A builtin `ITool` | `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs` | `TestToolContext.Create()`, `Args()` |
 | The agent loop | `tests/Harbor.Core.Tests/AgentLoopTests.cs` | `CreateLoop()`, `MockLlmClient`, `ScriptedLlmClient`, `TestSessionContext` |
 | Permissions | `tests/Harbor.Application.Tests/PermissionBypassTests.cs` | `FakeAgentRegistry`, `PermissionService` |
 | Storage (JSONL/SQLite/Memory) | `tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreTests.cs` | `CreateStore()`, temp-dir cleanup |
@@ -32,6 +32,7 @@
 ```csharp
 using System.Text.Json;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -64,7 +65,7 @@ public class MyToolTests
         var tool = new MyTool(NullLogger<MyTool>.Instance);
         var args = JsonDocument.Parse("""{"input": "hello"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("hello");
@@ -76,7 +77,7 @@ public class MyToolTests
         var tool = new MyTool(NullLogger<MyTool>.Instance);
         var args = JsonDocument.Parse("""{"input": "/nonexistent/path"}""").RootElement;
 
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not found");
@@ -86,24 +87,38 @@ public class MyToolTests
 
 ### Shared helpers
 
-There is no built-in factory for `ToolContext` — every test project defines a
-small `CreateContext()` local helper. Copy the one that already exists at the
-bottom of `tests/Harbor.Tools.Builtin.Tests/ToolTests.cs`:
+`ToolContext` has ONE factory: `Harbor.TestKit.TestToolContext.Create()`. Do
+not copy the 8-argument literal into a test file — a copy is a hand-written
+contract that drifts from the record the moment the record changes (#1775).
 
 ```csharp
-private static ToolContext CreateContext() => new(
-    "test-session",
-    "test-message",
-    "test-call",
-    "code",
-    CancellationToken.None,
-    Array.Empty<AgentMessage>(),
-    (_, _) => Task.CompletedTask,
-    (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-    null!);
+using Harbor.TestKit;
+
+var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 ```
 
-**Before (no helper — repeated in 5 tool classes):**
+The defaults are the canonical ones: session `"test-session"`, message
+`"test-message"`, call `"test-call"`, agent `"code"`, no abort token, no
+messages, a progress callback that drops updates, and a permission callback
+that **allows without persisting**. Every value that ever differed between the
+copies is a parameter, so nothing is lost by using the factory:
+
+```csharp
+// a different session / message / call id
+TestToolContext.Create(sessionId: "s1", messageId: "m1", callId: "c1");
+
+// a conversation snapshot
+TestToolContext.Create(messages: [message]);
+
+// a tool that resolves relative paths against a directory
+TestToolContext.Create(workingDirectory: worktree);
+
+// a permission answer other than "allow, do not persist"
+TestToolContext.Create(ask: (_, _) =>
+    Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
+```
+
+**Before (the literal, repeated in every tool class):**
 ```csharp
 private static ToolContext CreateContext() => new(
     "test-session", "test-message", "test-call", "code",
@@ -113,9 +128,9 @@ private static ToolContext CreateContext() => new(
     null!);
 ```
 
-**After (one shared `CreateContext()` helper per class, 1 line at call sites):**
+**After (one shared factory, 1 line at call sites):**
 ```csharp
-var result = await tool.ExecuteAsync(args, CreateContext());
+var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 ```
 
 ### Building args
@@ -139,7 +154,7 @@ private static JsonElement Args(params (string key, string value)[] pairs)
 
 // usage
 await tool.ExecuteAsync(Args(("action", "set"), ("key", "todo"), ("content", "buy milk")),
-    CreateContext());
+    TestToolContext.Create());
 ```
 
 ### Temp-file / temp-dir teardown pattern
@@ -170,8 +185,9 @@ and `File.Delete` in `finally`.
   `WriteToolTests`, `EditToolTests`, `GlobToolTests`, `GrepToolTests`,
   `BashToolTests`). Create a new `.cs` per tool only if the test surface is
   large enough to warrant it (e.g. `NotebookToolTests.cs`, `PatchToolTests.cs`).
-- Each tool gets its own test class; add a shared private `CreateContext`/`NewTool`
-  helper at the bottom of the class.
+- Each tool gets its own test class; add a shared private `NewTool` helper at
+  the bottom of the class, and take the `ToolContext` from
+  `Harbor.TestKit.TestToolContext.Create()`.
 
 ---
 

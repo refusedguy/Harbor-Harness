@@ -2,10 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.ChangeTracking.Tests;
@@ -247,7 +246,7 @@ public class WorkspaceMaterializerTests
                     var bash = new Harbor.Tools.Builtin.BashTool(
                         new Harbor.Tools.Builtin.SystemProcessProxy(), NullLogger<Harbor.Tools.Builtin.BashTool>.Instance);
                     using var pwdDoc = JsonDocument.Parse("""{"command":"pwd"}""");
-                    var pwd = await bash.ExecuteAsync(pwdDoc.RootElement, Ctx(worktree));
+                    var pwd = await bash.ExecuteAsync(pwdDoc.RootElement, TestToolContext.Create(workingDirectory: worktree));
                     await Assert.That(pwd.IsError).IsFalse();
                     // Windows CI shells (git-bash) print MSYS paths
                     // (`/c/Users/...`) for a `C:\Users\...` cwd — normalize
@@ -256,7 +255,7 @@ public class WorkspaceMaterializerTests
 
                     var write = new Harbor.Tools.Builtin.WriteTool(NullLogger<Harbor.Tools.Builtin.WriteTool>.Instance);
                     using var writeDoc = JsonDocument.Parse("""{"path":"from-tool.txt","content":"tool-wrote\n"}""");
-                    var written = await write.ExecuteAsync(writeDoc.RootElement, Ctx(worktree));
+                    var written = await write.ExecuteAsync(writeDoc.RootElement, TestToolContext.Create(workingDirectory: worktree));
                     await Assert.That(written.IsError).IsFalse();
                     await Assert.That(File.Exists(Path.Combine(worktree, "from-tool.txt"))).IsTrue();
                     await Assert.That(File.Exists(Path.Combine(dir, "from-tool.txt"))).IsFalse();
@@ -289,17 +288,6 @@ public class WorkspaceMaterializerTests
             n = char.ToLowerInvariant(n[0]) + n.Substring(1);
         return n;
     }
-
-    private static ToolContext Ctx(string workingDirectory) => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)),
-        WorkingDirectory: workingDirectory);
 
     /// <summary>Fresh repo on <c>s2-test</c> with one committed file.</summary>
     private static string InitRepo()

@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -130,7 +128,7 @@ public class FsModelTests
             var tool = new LsTool(NullLogger<LsTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"path":"{{root.Replace("\\", "\\\\")}}"}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             var outD = result.Output;
@@ -150,14 +148,4 @@ public class FsModelTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

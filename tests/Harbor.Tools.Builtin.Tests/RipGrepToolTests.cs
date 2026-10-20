@@ -1,7 +1,6 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Tools.Builtin.Tests;
 /// <summary>
@@ -85,7 +84,7 @@ public class RipGrepToolTests
             var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"pattern":"foo","path":"{{root.Replace("\\", "\\\\")}}"}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("foo");
@@ -111,7 +110,7 @@ public class RipGrepToolTests
             var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"pattern":"zzz-not-present","path":"{{root.Replace("\\", "\\\\")}}"}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("No matches");
@@ -134,7 +133,7 @@ public class RipGrepToolTests
         var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
         var args = JsonDocument.Parse(
             $$"""{"pattern":"foo","path":"/tmp/harbor-rg-missing-{{Guid.NewGuid():N}}"}""").RootElement;
-        var result = await tool.ExecuteAsync(args, CreateContext());
+        var result = await tool.ExecuteAsync(args, TestToolContext.Create());
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not found");
     }
@@ -153,7 +152,7 @@ public class RipGrepToolTests
             var tool = new RipGrepTool(NullLogger<RipGrepTool>.Instance);
             var args = JsonDocument.Parse(
                 $$"""{"pattern":"foo","path":"{{root.Replace("\\", "\\\\")}}","glob":"*.cs"}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(result.Output).Contains("a.cs");
@@ -176,7 +175,7 @@ public class RipGrepToolTests
         {
             var args = JsonDocument.Parse(
                 $$"""{"pattern":"foo","path":"{{root.Replace("\\", "\\\\")}}"}""").RootElement;
-            var result = await tool.ExecuteAsync(args, CreateContext());
+            var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
             await Assert.That(result.IsError).IsTrue();
             await Assert.That(result.Output).Contains("rg");
@@ -187,16 +186,6 @@ public class RipGrepToolTests
             if (Directory.Exists(root)) Directory.Delete(root, true);
         }
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
 
 /// <summary>

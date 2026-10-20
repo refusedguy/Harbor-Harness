@@ -1,7 +1,5 @@
 using System.Text.Json;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using Harbor.Tools.Mcp;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -150,7 +148,7 @@ public class McpWireAllocTests
         var tool = new McpToolAdapter(registry, "srv", "tool");
 
         using var argsDoc = JsonDocument.Parse("{}");
-        var result = await tool.ExecuteAsync(argsDoc.RootElement, CreateContext());
+        var result = await tool.ExecuteAsync(argsDoc.RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(registry.LastMethod).IsEqualTo("tools/call");
@@ -165,7 +163,7 @@ public class McpWireAllocTests
         var tool = new McpPromptTool(registry, NullLogger<McpPromptTool>.Instance);
 
         using var argsDoc = JsonDocument.Parse("""{"server":"s","name":"we\"ird"}""");
-        var result = await tool.ExecuteAsync(argsDoc.RootElement, CreateContext());
+        var result = await tool.ExecuteAsync(argsDoc.RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         using var sent = JsonDocument.Parse(registry.LastArgsJson!);
@@ -180,20 +178,10 @@ public class McpWireAllocTests
         var tool = new McpResourceTool(registry, NullLogger<McpResourceTool>.Instance);
 
         using var argsDoc = JsonDocument.Parse("""{"server":"s","uri":"file:///a\"b.md"}""");
-        var result = await tool.ExecuteAsync(argsDoc.RootElement, CreateContext());
+        var result = await tool.ExecuteAsync(argsDoc.RootElement, TestToolContext.Create());
 
         await Assert.That(result.IsError).IsFalse();
         using var sent = JsonDocument.Parse(registry.LastArgsJson!);
         await Assert.That(sent.RootElement.GetProperty("uri").GetString()).IsEqualTo("file:///a\"b.md");
     }
-
-    private static ToolContext CreateContext() => new(
-        "test-session",
-        "test-message",
-        "test-call",
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }
