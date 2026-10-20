@@ -861,6 +861,15 @@ front-matter (`name:`, `description:`). The tool accepts a NAME only, never a pa
 so a crafted name cannot escape the skills roots. Bodies over 12 000 chars are
 truncated with a pointer to the file.
 
+**Invocation policy.** A skill declares who may call it, in its own front-matter:
+`model-invocable: false` keeps it from the model (it is not listed in
+`<available_skills>` and the `skill` tool refuses it with the reason), and
+`user-invocable: false` keeps it from the human. A skill that declares neither is
+callable by both. The decision is made once, in the skill registry
+(`Harbor.SessionContext/Skills/SkillRegistry.cs`), and the model-facing catalog and
+this tool read that same registry — so the two cannot disagree about which skills
+exist.
+
 **Args schema.**
 
 ```jsonc

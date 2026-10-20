@@ -70,8 +70,18 @@ internal sealed class TurnRunner(
     // direct-construction caller keeps compiling unchanged; null keeps the
     // shipped default (see UpdateFlushPolicy.Default).
     UpdateFlushPolicy? updateFlushPolicy = null,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    // #1735: the skill registry — the one place that decides which skills the
+    // model may see and which it may call. Optional so every
+    // direct-construction caller keeps compiling unchanged; null keeps the
+    // workspace discovery and no policy.
+    ISkillRegistry? skillRegistry = null)
 {
+    // #1735: the registry the model-facing catalog comes from. Null keeps the
+    // pre-registry behaviour (every discovered skill is offered), which is
+    // what a directly-constructed runner gets.
+    private readonly ISkillRegistry? _skillRegistry = skillRegistry;
+
     // C7: bounded retry budget for the LLM streaming call site only.
     // #270: 429s draw from a separate minutes-scale budget (10 attempts from a
     // 5s root, 2-minute single-sleep cap, 5-minute Retry-After clamp) instead of
@@ -188,7 +198,16 @@ internal sealed class TurnRunner(
         // 3. Build system prompt
         var resolvedTools = tools.ResolveTools(agent.Name.Value, agent.Permission);
         // Cached per-directory: avoids File.Exists/Directory.GetFiles on every turn (50x regression).
-        var (contextFiles, skills) = WorkspaceContextSource.GetOrLoadCached(session.Session.Directory);
+        var (contextFiles, workspaceSkills) = WorkspaceContextSource.GetOrLoadCached(session.Session.Directory);
+        // #1735: the model-facing catalog comes from the skill registry, which
+        // merges the providers and applies the invocation policy. A skill the
+        // policy keeps from the model is not in the prompt's
+        // <available_skills> block at all — the model is never told about it,
+        // so it cannot ask for it by name. The mode is the agent's name, the
+        // axis a policy row can narrow on.
+        IReadOnlyList<SkillDescriptor> skills = _skillRegistry is null
+            ? workspaceSkills
+            : _skillRegistry.GetSkills(session.Session.Directory, SkillCaller.Model, agent.Name.Value);
         var promptContext = new SystemPromptContext(
             agent,
             model,

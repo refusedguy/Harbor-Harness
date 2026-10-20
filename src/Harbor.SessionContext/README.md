@@ -44,17 +44,59 @@ keeping them behind would have flipped the assembly edge into a cycle:
 `CompactionPolicy` statics) and `SkillProvider` (the default `ISkillProvider`,
 which reads the workspace context through `WorkspaceContextSource`).
 
+Added by #1735, in the same folder and namespace:
+
+```csharp
+public sealed class SkillRegistry : ISkillRegistry;   // Skills/ — merges the providers, applies the policy
+public sealed class SkillPolicyMatrix;                  // Skills/ — the invocation matrix (data, not code)
+public sealed record SkillPolicyRule;                   // Skills/ — one row of that matrix
+```
+
+## The skill registry (#1735)
+
+`ISkillProvider` is a SOURCE of skills, not a skill: the filesystem today, a
+plugin's bundled catalog or a remote service tomorrow. `SkillRegistry` is the
+single answer for all of them:
+
+- **Merge.** Providers are ordered by their DECLARED `ISkillProvider.Priority`
+  (higher first) and, at equal priority, by the provider name (ordinal). The
+  first provider to offer a name keeps it; a later one is shadowed and logged.
+  The order never depends on registration order, so adding a second source
+  cannot change which skill wins on the existing ones. The project-over-global
+  rule stays inside the workspace provider, which owns the two roots.
+- **Policy.** Every skill carries an invocation policy — `ModelInvocable` and
+  `UserInvocable` — declared where the skill is declared: the front-matter of
+  the skill file (`model-invocable:` / `user-invocable:`), read by the
+  workspace provider. A skill that declares neither is invocable by both, so
+  the flags change nothing for the skills that do not ask for it.
+- **Matrix.** `SkillPolicyMatrix` narrows by request context — source, mode,
+  category — as DATA (a list of rows), never as code. It narrows and never
+  widens: a skill the provider kept from a caller stays kept. A request no row
+  matches is not narrowed at all, so "no policy for this context" and "a policy
+  for this context" are two different, predictable answers. The product ships
+  the empty matrix; the per-skill declaration is what narrows a skill today.
+- **One answer for both surfaces.** The model-facing catalog (the prompt's
+  `<available_skills>` block) and the model-facing call (the `skill` tool) go
+  through the same registry, so a skill the policy keeps from the model is
+  neither listed to it nor loadable by it.
+
 ## Wiring
 
 Registered by the default DI graph in
 `Harbor.Hosting/Modules/CoreModule.cs`: `ITokenTracker` → `TokenTracker`,
 `ISystemPromptBuilder` → `SystemPromptBuilder`, `IWorkspaceContextSource` →
-`WorkspaceContextSource.Instance`, `ISkillProvider` → `SkillProvider`,
-`MessageConverter` → `MessageConverter`; `ICompactionService` →
-`CompactionService` in `Harbor.Hosting/Modules/IntelligenceModule.cs`. No
-`HARBOR_*` env var — activation is purely the DI graph of the host app; the
-CLI (`apps/Harbor.App.Cli`) and desktop apps reference the assembly through
-Harbor.Hosting.
+`WorkspaceContextSource.Instance`, `MessageConverter` → `MessageConverter`;
+`ICompactionService` → `CompactionService` in
+`Harbor.Hosting/Modules/IntelligenceModule.cs`. The skill provider and the
+skill registry are built EAGERLY by
+`Harbor.Hosting/Modules/RegistryFacade.cs` (`ISkillProvider` → `SkillProvider`,
+`ISkillRegistry` → `SkillRegistry` over it) — the skill tool is constructed
+while the tool registry is being built and needs the registry, and both are
+plain objects that need no container. One instance of each is published, so
+the registry the tool holds and the registry the agent loop resolves are the
+same object. No `HARBOR_*` env var — activation is purely the DI graph of the
+host app; the CLI (`apps/Harbor.App.Cli`) and desktop apps reference the
+assembly through Harbor.Hosting.
 
 ## Usage
 

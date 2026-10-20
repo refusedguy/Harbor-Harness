@@ -38,6 +38,7 @@ public sealed partial class SkillTool : ITool
     private readonly ISessionStore? _store;
     private readonly string? _projectSkillsDir;
     private readonly string? _globalSkillsDir;
+    private readonly ISkillRegistry? _registry;
 
     /// <summary>
     ///     Construct a <see cref="SkillTool" /> with no session store: skills
@@ -46,7 +47,7 @@ public sealed partial class SkillTool : ITool
     /// </summary>
     /// <param name="logger">Logger for diagnostics.</param>
     public SkillTool(ILogger<SkillTool> logger)
-        : this(null, logger, null, null)
+        : this(null, logger, null, null, null)
     {
     }
 
@@ -58,7 +59,7 @@ public sealed partial class SkillTool : ITool
     /// <param name="store">The session store to resolve working directories from.</param>
     /// <param name="logger">Logger for diagnostics.</param>
     public SkillTool(ISessionStore? store, ILogger<SkillTool> logger)
-        : this(store, logger, null, null)
+        : this(store, logger, null, null, null)
     {
     }
 
@@ -76,11 +77,39 @@ public sealed partial class SkillTool : ITool
         ILogger<SkillTool> logger,
         string? projectSkillsDir,
         string? globalSkillsDir)
+        : this(store, logger, projectSkillsDir, globalSkillsDir, null)
+    {
+    }
+
+    /// <summary>
+    ///     Construct a <see cref="SkillTool" /> with pinned skills roots and
+    ///     the invocation registry (#1735).
+    /// </summary>
+    /// <remarks>
+    ///     The registry is the gate: it is where the invocation policy is
+    ///     decided, and it is the SAME object the agent loop resolves, so the
+    ///     skills the model is shown and the skills the model may load are one
+    ///     decision. A null registry keeps the tool's own discovery and no
+    ///     gate — the shape a host that composes the tool without a registry
+    ///     gets.
+    /// </remarks>
+    /// <param name="store">The session store to resolve working directories from (unused when roots are pinned).</param>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="projectSkillsDir">Project <c>.harbor/skills</c> directory (preferred scope).</param>
+    /// <param name="globalSkillsDir">Global <c>~/.harbor/skills</c> directory (fallback scope).</param>
+    /// <param name="registry">The invocation registry; null disables the policy gate.</param>
+    public SkillTool(
+        ISessionStore? store,
+        ILogger<SkillTool> logger,
+        string? projectSkillsDir,
+        string? globalSkillsDir,
+        ISkillRegistry? registry)
     {
         _store = store;
         _logger = logger;
         _projectSkillsDir = projectSkillsDir;
         _globalSkillsDir = globalSkillsDir;
+        _registry = registry;
     }
 
     /// <inheritdoc />
@@ -134,6 +163,22 @@ public sealed partial class SkillTool : ITool
                 new { name });
 
         var roots = await ResolveRootsAsync(context, cancellationToken).ConfigureAwait(false);
+
+        // #1735: the policy gate. The registry is the same object the agent
+        // loop resolves, so the catalog the model was shown and the call the
+        // model is making are one decision: a skill the policy keeps from the
+        // model is refused here with the reason, not silently loaded.
+        if (_registry is not null && roots.WorkingDirectory is not null)
+        {
+            CSharpFunctionalExtensions.Result<SkillDescriptor> gate =
+                _registry.ResolveForCall(roots.WorkingDirectory, name, SkillCaller.Model);
+            if (gate.IsFailure)
+            {
+                SkillToolLog.SkillRefused(_logger, name, gate.Error);
+                return ToolResult.Error(gate.Error, new { name, scope });
+            }
+        }
+
         string? body = null;
         string? foundScope = null;
         string? foundPath = null;
@@ -177,11 +222,11 @@ public sealed partial class SkillTool : ITool
         return !name.Contains("..", StringComparison.Ordinal);
     }
 
-    private async Task<(string? Project, string? Global)> ResolveRootsAsync(
+    private async Task<SkillRoots> ResolveRootsAsync(
         ToolContext context, CancellationToken cancellationToken)
     {
         if (_projectSkillsDir is not null || _globalSkillsDir is not null)
-            return (_projectSkillsDir, _globalSkillsDir);
+            return new SkillRoots(_projectSkillsDir, _globalSkillsDir, WorkingDirectoryOf(_projectSkillsDir));
 
         string? projectDir = null;
         // #470: injected by the composition root. The per-call lookup on the
@@ -198,10 +243,42 @@ public sealed partial class SkillTool : ITool
         projectDir ??= Environment.CurrentDirectory;
         string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string? globalDir = string.IsNullOrEmpty(userProfile) ? null : userProfile;
-        return (
+        return new SkillRoots(
             Path.Combine(projectDir, ".harbor", SkillsDirName),
-            globalDir is null ? null : Path.Combine(globalDir, ".harbor", SkillsDirName));
+            globalDir is null ? null : Path.Combine(globalDir, ".harbor", SkillsDirName),
+            projectDir);
     }
+
+    /// <summary>
+    ///     The working directory a pinned project skills root belongs to:
+    ///     <c>&lt;workdir&gt;/.harbor/skills</c> → <c>&lt;workdir&gt;</c>. Null
+    ///     when the root does not carry that shape — there is no directory to
+    ///     ask the registry about, so the policy gate is skipped rather than
+    ///     asked about the wrong one.
+    /// </summary>
+    private static string? WorkingDirectoryOf(string? projectSkillsDir)
+    {
+        if (string.IsNullOrEmpty(projectSkillsDir))
+        {
+            return null;
+        }
+
+        string? harborDir = Path.GetDirectoryName(projectSkillsDir);
+        if (string.IsNullOrEmpty(harborDir))
+        {
+            return null;
+        }
+
+        string? workingDirectory = Path.GetDirectoryName(harborDir);
+        return string.IsNullOrEmpty(workingDirectory) ? null : workingDirectory;
+    }
+
+    /// <summary>
+    ///     The roots the tool reads, plus the working directory they belong
+    ///     to. The working directory is null when the roots are pinned in a
+    ///     shape the registry cannot be asked about.
+    /// </summary>
+    private sealed record SkillRoots(string? Project, string? Global, string? WorkingDirectory);
 
     /// <summary>
     ///     Load <c>&lt;root&gt;/&lt;name&gt;/SKILL.md</c> (preferred) or the legacy
@@ -263,4 +340,7 @@ internal static partial class SkillToolLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Skill loaded: name={Name} scope={Scope} chars={Chars}")]
     public static partial void SkillLoaded(ILogger logger, string name, string? scope, int chars);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Skill refused by the invocation policy: name={Name} reason={Reason}")]
+    public static partial void SkillRefused(ILogger logger, string name, string reason);
 }

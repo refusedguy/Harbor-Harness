@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Providers;
+using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Telemetry;
 using Harbor.Ui.Framework.Panels;
@@ -66,7 +67,31 @@ internal static class RegistryFacade
         var lspService = new Harbor.Lsp.LspManager(
             ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
         services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions);
+
+        // #1735: the skill provider and the registry over it are built HERE,
+        // eagerly, for the same reason the tool registry is: the skill tool
+        // is constructed in the next step and needs the registry, and the
+        // registry needs its providers. Both are plain objects — neither the
+        // provider (it reads the workspace roots through the shared
+        // WorkspaceContextSource) nor the registry (it merges what its
+        // providers hand it) needs the container.
+        //
+        // One instance each, published as singletons: the registry the tool
+        // holds and the registry the agent loop resolves are the same object,
+        // so the model-facing catalog and the model-facing call cannot drift
+        // apart. The product ships the EMPTY invocation matrix here — the
+        // per-skill policy in each skill file's front-matter is what narrows a
+        // skill today; the matrix is the layer that narrows by request
+        // context once a host has rows to give it.
+        var skillProvider = new Harbor.Application.Skills.SkillProvider();
+        services.AddSingleton<ISkillProvider>(skillProvider);
+        var skillRegistry = new Harbor.Application.Skills.SkillRegistry(
+            [skillProvider],
+            Harbor.Application.Skills.SkillPolicyMatrix.Empty,
+            ctx.LoggerFactory.CreateLogger<Harbor.Application.Skills.SkillRegistry>());
+        services.AddSingleton<ISkillRegistry>(skillRegistry);
+
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup
