@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -39,6 +39,11 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     // JsonlCheckpointStore (verbatim move); this store keeps thin forwarders
     // so the ISessionCheckpointStore impl site stays where it is.
     private readonly JsonlCheckpointStore _checkpoints;
+
+    // #1746: the feedback axis lives in JsonlFeedbackStore; the store keeps
+    // the forwarders so the ISessionFeedbackStore impl site stays here, the
+    // way the checkpoint axis does.
+    private readonly JsonlFeedbackStore _feedback;
 
     /// <summary>
     ///     Parsed-message cache. Architecture audit v2 §3.3: keyed by session id,
@@ -69,6 +74,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         _rootDirectory = rootDirectory;
         _logger = logger;
         _checkpoints = new JsonlCheckpointStore(this, rootDirectory, logger);
+        _feedback = new JsonlFeedbackStore(this, rootDirectory, logger);
 
         if (!Directory.Exists(_rootDirectory))
         {
@@ -729,6 +735,70 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         _checkpoints.RewindToCheckpointAsync(sessionId, checkpointId, ct);
 
     /// <summary>
+    ///     Record the user's rating of one message (#1746): the rating line
+    ///     is appended to the session file, so it survives a restart and
+    ///     stays out of the message history the model reads.
+    /// </summary>
+    /// <remarks>
+    ///     Forwarder over <see cref="JsonlFeedbackStore" /> — the feedback
+    ///     axis has one home; the <see cref="ISessionFeedbackStore" /> impl
+    ///     site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">The rated message id.</param>
+    /// <param name="rating">The value the user gave.</param>
+    /// <param name="category">The axis the value was given on.</param>
+    /// <param name="note">Optional free-text note from the user.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The recorded rating, or failure if the session/message is not found.</returns>
+    public Task<Result<MessageRating>> RecordMessageRatingAsync(
+        string sessionId,
+        string messageId,
+        FeedbackRating rating,
+        FeedbackCategory category,
+        string? note = null,
+        CancellationToken ct = default) =>
+        _feedback.RecordMessageRatingAsync(sessionId, messageId, rating, category, note, ct);
+
+    /// <summary>
+    ///     Record a remark about the session as a whole (#1746): the remark
+    ///     line is appended to the session file, so it survives a restart
+    ///     and stays out of the message history the model reads.
+    /// </summary>
+    /// <remarks>
+    ///     Forwarder over <see cref="JsonlFeedbackStore" /> — the feedback
+    ///     axis has one home; the <see cref="ISessionFeedbackStore" /> impl
+    ///     site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="text">The user's text; it must not be blank.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The recorded remark, or failure if the session is not found.</returns>
+    public Task<Result<SessionRemark>> RecordSessionRemarkAsync(
+        string sessionId,
+        string text,
+        CancellationToken ct = default) =>
+        _feedback.RecordSessionRemarkAsync(sessionId, text, ct);
+
+    /// <summary>
+    ///     Read the session's feedback (#1746): the ratings in force and the
+    ///     remarks, both recorded in the session file and both invisible to
+    ///     the message history.
+    /// </summary>
+    /// <remarks>
+    ///     Forwarder over <see cref="JsonlFeedbackStore" /> — the feedback
+    ///     axis has one home; the <see cref="ISessionFeedbackStore" /> impl
+    ///     site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The feedback, or failure if the session is not found.</returns>
+    public Task<Result<SessionFeedback>> GetFeedbackAsync(
+        string sessionId,
+        CancellationToken ct = default) =>
+        _feedback.GetFeedbackAsync(sessionId, ct);
+
+    /// <summary>
     ///     Aggregate per-session stats from the message history. Every fallible
     ///     step (<see cref="GetMessagesAsync" />) already returns a
     ///     <see cref="Result{T}" /> and nothing here throws, so no try boundary
@@ -864,4 +934,22 @@ internal static partial class JsonlSessionStoreLog
 
     [LoggerMessage(EventId = 13, Level = LogLevel.Error, Message = "Failed to update session {SessionId}: {Error}")]
     public static partial void UpdateSessionFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning, Message = "Skipping malformed feedback line in session {SessionId}.")]
+    public static partial void SkippingMalformedFeedbackLine(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Feedback line in session {SessionId} is missing its ids.")]
+    public static partial void FeedbackLineMissingIds(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Warning, Message = "Skipping feedback line in session {SessionId}: unknown rating '{Rating}' or category '{Category}'.")]
+    public static partial void SkippingUnknownFeedbackValue(ILogger logger, string sessionId, string rating, string category);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Error, Message = "Failed to record a message rating in session {SessionId}: {Error}")]
+    public static partial void RecordMessageRatingFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Error, Message = "Failed to record a session remark in session {SessionId}: {Error}")]
+    public static partial void RecordSessionRemarkFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 19, Level = LogLevel.Error, Message = "Failed to read the feedback of session {SessionId}: {Error}")]
+    public static partial void ReadFeedbackFailed(ILogger logger, string sessionId, string error);
 }

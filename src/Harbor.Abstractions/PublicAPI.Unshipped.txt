@@ -2,3 +2,78 @@
 Harbor.Abstractions.Sessions.ISessionStore.GetTranscriptAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionTranscript!>>!
 *REMOVED*static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> Harbor.Abstractions.Agents.SubAgentResumeHint?
 static Harbor.Abstractions.Agents.SubAgentFailureFormat.TryExtractResumeHint(string! error, string! agentName) -> CSharpFunctionalExtensions.Maybe<Harbor.Abstractions.Agents.SubAgentResumeHint!>
+Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.InstructionFollowing = 1 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.Other = 6 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.ProductInteraction = 2 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.ResourceCost = 4 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.SecurityPrivacyPermission = 5 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.ServiceStability = 3 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackCategory.TaskResult = 0 -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.FeedbackRating
+Harbor.Abstractions.Sessions.FeedbackRating.Helpful = 2 -> Harbor.Abstractions.Sessions.FeedbackRating
+Harbor.Abstractions.Sessions.FeedbackRating.Neutral = 1 -> Harbor.Abstractions.Sessions.FeedbackRating
+Harbor.Abstractions.Sessions.FeedbackRating.Unhelpful = 0 -> Harbor.Abstractions.Sessions.FeedbackRating
+Harbor.Abstractions.Sessions.ISessionFeedbackStore
+Harbor.Abstractions.Sessions.ISessionFeedbackStore.GetFeedbackAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionFeedback!>>!
+Harbor.Abstractions.Sessions.ISessionFeedbackStore.RecordMessageRatingAsync(string! sessionId, string! messageId, Harbor.Abstractions.Sessions.FeedbackRating rating, Harbor.Abstractions.Sessions.FeedbackCategory category, string? note = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.MessageRating!>>!
+Harbor.Abstractions.Sessions.ISessionFeedbackStore.RecordSessionRemarkAsync(string! sessionId, string! text, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SessionRemark!>>!
+Harbor.Abstractions.Sessions.MessageRating
+Harbor.Abstractions.Sessions.MessageRating.<Clone>$() -> Harbor.Abstractions.Sessions.MessageRating!
+Harbor.Abstractions.Sessions.MessageRating.Category.get -> Harbor.Abstractions.Sessions.FeedbackCategory
+Harbor.Abstractions.Sessions.MessageRating.Category.init -> void
+Harbor.Abstractions.Sessions.MessageRating.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.MessageRating.CreatedAt.init -> void
+Harbor.Abstractions.Sessions.MessageRating.Deconstruct(out string! Id, out string! SessionId, out string! MessageId, out Harbor.Abstractions.Sessions.FeedbackRating Rating, out Harbor.Abstractions.Sessions.FeedbackCategory Category, out System.DateTimeOffset CreatedAt, out string? Note) -> void
+Harbor.Abstractions.Sessions.MessageRating.Equals(Harbor.Abstractions.Sessions.MessageRating? other) -> bool
+Harbor.Abstractions.Sessions.MessageRating.Id.get -> string!
+Harbor.Abstractions.Sessions.MessageRating.Id.init -> void
+Harbor.Abstractions.Sessions.MessageRating.MessageId.get -> string!
+Harbor.Abstractions.Sessions.MessageRating.MessageId.init -> void
+Harbor.Abstractions.Sessions.MessageRating.MessageRating(string! Id, string! SessionId, string! MessageId, Harbor.Abstractions.Sessions.FeedbackRating Rating, Harbor.Abstractions.Sessions.FeedbackCategory Category, System.DateTimeOffset CreatedAt, string? Note = null) -> void
+Harbor.Abstractions.Sessions.MessageRating.Note.get -> string?
+Harbor.Abstractions.Sessions.MessageRating.Note.init -> void
+Harbor.Abstractions.Sessions.MessageRating.Rating.get -> Harbor.Abstractions.Sessions.FeedbackRating
+Harbor.Abstractions.Sessions.MessageRating.Rating.init -> void
+Harbor.Abstractions.Sessions.MessageRating.SessionId.get -> string!
+Harbor.Abstractions.Sessions.MessageRating.SessionId.init -> void
+override Harbor.Abstractions.Sessions.MessageRating.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.MessageRating.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.MessageRating.ToString() -> string!
+static Harbor.Abstractions.Sessions.MessageRating.operator !=(Harbor.Abstractions.Sessions.MessageRating? left, Harbor.Abstractions.Sessions.MessageRating? right) -> bool
+static Harbor.Abstractions.Sessions.MessageRating.operator ==(Harbor.Abstractions.Sessions.MessageRating? left, Harbor.Abstractions.Sessions.MessageRating? right) -> bool
+Harbor.Abstractions.Sessions.SessionFeedback
+Harbor.Abstractions.Sessions.SessionFeedback.<Clone>$() -> Harbor.Abstractions.Sessions.SessionFeedback!
+Harbor.Abstractions.Sessions.SessionFeedback.Deconstruct(out string! SessionId, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.MessageRating!>! Ratings, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRemark!>! Remarks) -> void
+Harbor.Abstractions.Sessions.SessionFeedback.Equals(Harbor.Abstractions.Sessions.SessionFeedback? other) -> bool
+Harbor.Abstractions.Sessions.SessionFeedback.Ratings.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.MessageRating!>!
+Harbor.Abstractions.Sessions.SessionFeedback.Ratings.init -> void
+Harbor.Abstractions.Sessions.SessionFeedback.RatingFor(string! messageId) -> Harbor.Abstractions.Sessions.MessageRating?
+Harbor.Abstractions.Sessions.SessionFeedback.Remarks.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRemark!>!
+Harbor.Abstractions.Sessions.SessionFeedback.Remarks.init -> void
+Harbor.Abstractions.Sessions.SessionFeedback.SessionFeedback(string! SessionId, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.MessageRating!>! Ratings, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionRemark!>! Remarks) -> void
+Harbor.Abstractions.Sessions.SessionFeedback.SessionId.get -> string!
+Harbor.Abstractions.Sessions.SessionFeedback.SessionId.init -> void
+override Harbor.Abstractions.Sessions.SessionFeedback.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionFeedback.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionFeedback.ToString() -> string!
+static Harbor.Abstractions.Sessions.SessionFeedback.operator !=(Harbor.Abstractions.Sessions.SessionFeedback? left, Harbor.Abstractions.Sessions.SessionFeedback? right) -> bool
+static Harbor.Abstractions.Sessions.SessionFeedback.operator ==(Harbor.Abstractions.Sessions.SessionFeedback? left, Harbor.Abstractions.Sessions.SessionFeedback? right) -> bool
+Harbor.Abstractions.Sessions.SessionRemark
+Harbor.Abstractions.Sessions.SessionRemark.<Clone>$() -> Harbor.Abstractions.Sessions.SessionRemark!
+Harbor.Abstractions.Sessions.SessionRemark.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.SessionRemark.CreatedAt.init -> void
+Harbor.Abstractions.Sessions.SessionRemark.Deconstruct(out string! Id, out string! SessionId, out string! Text, out System.DateTimeOffset CreatedAt) -> void
+Harbor.Abstractions.Sessions.SessionRemark.Equals(Harbor.Abstractions.Sessions.SessionRemark? other) -> bool
+Harbor.Abstractions.Sessions.SessionRemark.Id.get -> string!
+Harbor.Abstractions.Sessions.SessionRemark.Id.init -> void
+Harbor.Abstractions.Sessions.SessionRemark.SessionId.get -> string!
+Harbor.Abstractions.Sessions.SessionRemark.SessionId.init -> void
+Harbor.Abstractions.Sessions.SessionRemark.SessionRemark(string! Id, string! SessionId, string! Text, System.DateTimeOffset CreatedAt) -> void
+Harbor.Abstractions.Sessions.SessionRemark.Text.get -> string!
+Harbor.Abstractions.Sessions.SessionRemark.Text.init -> void
+override Harbor.Abstractions.Sessions.SessionRemark.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionRemark.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionRemark.ToString() -> string!
+static Harbor.Abstractions.Sessions.SessionRemark.operator !=(Harbor.Abstractions.Sessions.SessionRemark? left, Harbor.Abstractions.Sessions.SessionRemark? right) -> bool
+static Harbor.Abstractions.Sessions.SessionRemark.operator ==(Harbor.Abstractions.Sessions.SessionRemark? left, Harbor.Abstractions.Sessions.SessionRemark? right) -> bool

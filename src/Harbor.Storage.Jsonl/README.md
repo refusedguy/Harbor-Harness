@@ -41,6 +41,21 @@ The invariant is what makes the rewind symmetric: a rewind to a message that was
 
 The read path is separate from the file order: the reader keeps the arrival order and sorts by `CreatedAt` only when the file is not append-linear in time. So a moved record could still read back in the right order while the FILE said otherwise — the guard for this invariant is about the file (`tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreUpdatePositionTests.cs`).
 
+## Feedback records
+
+**The feedback is the USER's, and it is not history.**
+
+A session file may carry two kinds of feedback record, appended to the same file beside the messages:
+
+- `{"type":"messageRating",...}` — the user's rating of ONE message: a value (`Helpful`, `Neutral`, `Unhelpful`), the axis it was given on (`TaskResult`, `InstructionFollowing`, `ProductInteraction`, `ServiceStability`, `ResourceCost`, `SecurityPrivacyPermission`, `Other`), and an optional note.
+- `{"type":"sessionRemark",...}` — free text about the session as a whole.
+
+The message read path skips both, exactly as it skips the checkpoint markers. That is what makes "the feedback never reaches the model" a property of the format: the messages the model context is built from carry no feedback, and a session file written before the feedback axis existed reads as it always did.
+
+The records are append-only, like the rest of the store. A second rating of the same message is appended, not overwritten: the effective rating is the newest one, and the older one stays in the log. A rating of a message the session does not hold is refused before anything is written, so the feedback never names a message that is not there.
+
+Read them back through `ISessionFeedbackStore` — the seam the JSONL store implements beside `ISessionStore` (the SQLite and memory backends do not implement it yet).
+
 ## See also
 
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)

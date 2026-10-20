@@ -69,6 +69,65 @@ internal static class SessionFileReader
         return line.IndexOf("\"type\":\"checkpoint\""u8) >= 0;
     }
 
+    /// <summary>
+    ///     True when the line is a message rating (<c>"type":"messageRating"</c>).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The probe is deliberately NOT a bare "does the line contain the
+    ///         literal" test: a message whose payload carries a nested JSON
+    ///         object with that "type" — a tool call whose arguments are
+    ///         <c>{"type":"messageRating"}</c> — would be taken for a
+    ///         feedback line and DROPPED from the history, silently. So the
+    ///         probe asks the second question too: is this line a MESSAGE
+    ///         record? A message record never is a feedback record.
+    ///     </para>
+    ///     <para>
+    ///         The "is it a message?" question is asked only for the lines
+    ///         that carry the literal, so the cost stays off the hot path:
+    ///         the message read path asks it for every line, and the answer
+    ///         for a feedback line is a byte probe away (the message probe
+    ///         needs the closing quote, so <c>"type":"messageRating"</c> does
+    ///         not match <c>"type":"message"</c>).
+    ///     </para>
+    /// </remarks>
+    internal static bool IsMessageRatingLine(ReadOnlySpan<byte> line) =>
+        CarriesTypeValue(line, "\"messageRating\""u8);
+
+    /// <summary>
+    ///     True when the line is a session remark (<c>"type":"sessionRemark"</c>).
+    ///     Same argument as <see cref="IsMessageRatingLine" />.
+    /// </summary>
+    internal static bool IsSessionRemarkLine(ReadOnlySpan<byte> line) =>
+        CarriesTypeValue(line, "\"sessionRemark\""u8);
+
+    /// <summary>
+    ///     True when the line carries feedback — a rating or a remark. The
+    ///     feedback is what the USER said about the agent's work, and it is
+    ///     not history: the message read path drops these lines here, so the
+    ///     messages the model context is built from carry no feedback at all
+    ///     (#1746).
+    /// </summary>
+    internal static bool IsFeedbackLine(ReadOnlySpan<byte> line) =>
+        IsMessageRatingLine(line) || IsSessionRemarkLine(line);
+
+    /// <summary>
+    ///     Whether the line carries the given "type" value and is not itself
+    ///     a message record.
+    /// </summary>
+    /// <param name="line">The record.</param>
+    /// <param name="typeValue">The type value, quoted.</param>
+    /// <returns>True when the line is a record of that type.</returns>
+    private static bool CarriesTypeValue(ReadOnlySpan<byte> line, ReadOnlySpan<byte> typeValue)
+    {
+        if (line.IndexOf(typeValue) < 0)
+        {
+            return false;
+        }
+
+        return !IsAnyMessageEntry(line);
+    }
+
     /// <summary>True when the line is a <c>"message"</c> entry with any id.</summary>
     internal static bool IsAnyMessageEntry(ReadOnlySpan<byte> line)
     {
@@ -396,6 +455,20 @@ internal static class SessionFileReader
         }
 
         if (IsCheckpointLine(record))
+        {
+            return true;
+        }
+
+        // #1746: the feedback lines are metadata too — what the user said
+        // ABOUT the agent's work, never part of the work itself. They are
+        // dropped here, before the message parser sees them, so the history
+        // the model context is built from cannot carry a rating or a remark.
+        //
+        // `true`, like the header and the checkpoint markers: the record
+        // decoded fine and is deliberately not a message. `false` would say
+        // "this record is a truncated tail" (#1744), which a feedback line
+        // never is.
+        if (IsFeedbackLine(record))
         {
             return true;
         }
