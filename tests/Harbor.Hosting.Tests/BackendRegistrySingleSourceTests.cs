@@ -6,6 +6,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Hosting.Rendering;
 using Harbor.Storage.Memory;
 using Harbor.Terminal.Abstractions;
+using Harbor.TestKit;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.Hosting.Tests;
@@ -39,21 +40,6 @@ public class BackendRegistrySingleSourceTests
 
     private static HarborComposeOptions BaselineOptions() =>
         new() { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory", DefaultTuiRenderer = "plain" };
-
-    private static async Task WithEnv(string name, string? value, Func<Task> action)
-    {
-        string? previous = Environment.GetEnvironmentVariable(name);
-        Environment.SetEnvironmentVariable(name, value);
-        try
-        {
-            await action();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, previous);
-        }
-    }
-
     /// <summary>
     ///     Compose with <paramref name="envName" /> set to a value no registry can resolve,
     ///     and pull the "Expected one of: …" id list back out of the thrown message. The
@@ -63,13 +49,13 @@ public class BackendRegistrySingleSourceTests
     private static async Task<string[]> ReportedIdsFor(string envName, string bogusValue)
     {
         string[] reported = [];
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_STORAGE", null, async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
             {
-                await WithEnv("HARBOR_TUI", null, async () =>
+                await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
                 {
-                    await WithEnv(envName, bogusValue, () =>
+                    await EnvScope.WithAsync(envName, bogusValue, () =>
                     {
                         try
                         {
@@ -204,11 +190,11 @@ public class BackendRegistrySingleSourceTests
     [Test]
     public async Task Tui_SwapTable_IsExactlyTheRegisteredBackendSet()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_STORAGE", null, async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
             {
-                await WithEnv("HARBOR_TUI", "plain", async () =>
+                await EnvScope.WithAsync("HARBOR_TUI", "plain", async () =>
                 {
                     using var sp = Compose();
                     IRendererPipeline pipeline = sp.GetRequiredService<IRendererPipeline>();
@@ -240,11 +226,11 @@ public class BackendRegistrySingleSourceTests
     [Test]
     public async Task Tui_StartupBackend_IsSwappableAndIdMatchesTheRenderer()
     {
-        await WithEnv("HARBOR_MODE", null, async () =>
+        await EnvScope.WithAsync("HARBOR_MODE", null, async () =>
         {
-            await WithEnv("HARBOR_STORAGE", null, async () =>
+            await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
             {
-                await WithEnv("HARBOR_TUI", "consoleex", async () =>
+                await EnvScope.WithAsync("HARBOR_TUI", "consoleex", async () =>
                 {
                     using var sp = Compose();
                     IRendererPipeline pipeline = sp.GetRequiredService<IRendererPipeline>();

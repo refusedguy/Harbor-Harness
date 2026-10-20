@@ -40,34 +40,6 @@ namespace Harbor.Application.Tests;
 public class DanglingToolCall1751Tests
 {
     /// <summary>
-    ///     Clock that never waits: the retry budget is exercised, not the
-    ///     backoff sleep between the attempts.
-    /// </summary>
-    private sealed class InstantTimeProvider : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
-
-        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
-        {
-            callback(state);
-            return NoopTimer.Instance;
-        }
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-
-            public void Dispose()
-            {
-            }
-
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
-    /// <summary>
     ///     Context that presses Stop as the first persist lands — the cancel
     ///     between the stream and the tool execution.
     /// </summary>
@@ -117,7 +89,7 @@ public class DanglingToolCall1751Tests
             new StubSystemPromptBuilder(),
             new FakeCompactionService(),
             new FakeTokenTracker(),
-            new RetryPolicy(new InstantTimeProvider()),
+            new RetryPolicy(new ManualTimeProvider(fireTimerOnCreate: true)),
             bus,
             new PermissionService(agents, NullLogger<PermissionService>.Instance),
             new MessageConverter(),

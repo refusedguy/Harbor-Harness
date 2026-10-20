@@ -11,6 +11,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 
@@ -64,14 +65,6 @@ public static class LoadTestFakes
         "mock",
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
 }
-
-/// <summary>Auth resolver that always yields the fixed test key (ROP-A ПР.6 seam).</summary>
-public sealed class FixedAuthResolver(string key) : IAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
-        Task.FromResult(Result.Success(key));
-}
-
 /// <summary>Catalog serving exactly the mock model, no HTTP.</summary>
 public sealed class StaticModelCatalog : IModelCatalog
 {

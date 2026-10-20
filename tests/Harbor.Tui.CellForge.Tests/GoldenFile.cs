@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -62,21 +63,12 @@ internal static class Golden
     /// <summary>Shared fixture directory (celldiff goldens + baselines manifest).</summary>
     internal static string FixtureDir => _fixtureDir.Value;
 
-    private static string ResolveFixtureDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-        }
-
-        return Path.Combine(dir.FullName, "tests", "fixtures", "celldiff");
-    }
+    /// <summary>
+    ///     The fixture directory under the repository root. The root is found
+    ///     once, by the shared helper, instead of by a walk-up this file owns.
+    /// </summary>
+    private static string ResolveFixtureDir() =>
+        Path.Combine(RepoPaths.Root, "tests", "fixtures", "celldiff");
 }
 
 /// <summary>Formats the standard three-layer golden document.</summary>

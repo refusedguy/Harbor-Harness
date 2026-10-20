@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;

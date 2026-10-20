@@ -1,5 +1,6 @@
 namespace Harbor.Tui.RendererTests;
 
+using Harbor.TestKit;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.RendererTests.Support;
@@ -21,7 +22,7 @@ public class CellForgeGoldenFrameTests
     [Test]
     public async Task CellForge_RendersCanonicalStream_ThroughInMemoryBackend()
     {
-        var backend = new InMemoryTerminalBackend();
+        var backend = new RecordingBackend();
         var renderer = new CellForgeTuiRenderer(
             NullLogger<CellForgeTuiRenderer>.Instance, backend);
 
@@ -38,7 +39,7 @@ public class CellForgeGoldenFrameTests
             renderer.Dispose();
         }
 
-        await Assert.That(backend.Output).IsNotEmpty();
-        await GoldenFrames.AssertGoldenAsync("cellforge", backend.Output);
+        await Assert.That(backend.Text).IsNotEmpty();
+        await GoldenFrames.AssertGoldenAsync("cellforge", backend.Text);
     }
 }

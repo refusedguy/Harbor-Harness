@@ -16,6 +16,10 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
+    <!-- #1772: the shared terminal-backend doubles. The sibling references
+         Harbor.Tui.CellForge.Engine only, which this project already has,
+         so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge\Harbor.Tui.CellForge.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>

@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
@@ -114,28 +115,6 @@ public abstract class CompactionTestBase
             TailTurns = tailTurns,
         };
     }
-
-    /// <summary>
-    ///     Log capture for the #1582 observability tests: records the formatted
-    ///     message of every entry, warnings included.
-    /// </summary>
-    protected sealed class CapturingLogger : ILogger<CompactionService>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
-    }
-
     /// <summary>Capturing client bound to a fixed provider id and catalog.</summary>
     protected sealed class CapturingLlmClient(string summary, ModelInfo[] catalog) : ILlmClient
     {

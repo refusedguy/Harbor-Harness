@@ -16,6 +16,10 @@
     <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Runtime\Harbor.Plugins.Runtime.csproj"/>
+    <!-- #1773: the shared test helpers (the repository-root locator among
+         them). The sibling references Harbor.Abstractions only, which this
+         project already has, so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

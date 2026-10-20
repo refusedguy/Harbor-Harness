@@ -9,6 +9,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using CompatProviderArgs = CompatWire::Harbor.Providers.Internal.ProviderArguments;
 
@@ -536,11 +537,11 @@ public class ProviderPayloadWireTests
             using var arguments = JsonDocument.Parse(argsJson);
             LlmRequest request = ToolCallRequest(arguments.RootElement);
 
-            var handler = new StubHttpHandler(_ => SseStop());
+            var handler = new StubHttpMessageHandler(_ => SseStop());
             var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
                 new HttpClient(handler),
                 new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-                StubAuthResolver.Instance,
+                new TestAuthResolver(),
                 StubModelCatalog.Instance,
                 NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 

@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Benchmarks;
@@ -34,12 +35,6 @@ namespace Harbor.Benchmarks;
 [SimpleJob(warmupCount: 3, iterationCount: 5)]
 public class CellSimdBenchmark
 {
-    private sealed class NullBackend : ITerminalBackend
-    {
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-            ValueTask.CompletedTask;
-    }
-
     [Params(80, 120, 200)]
     public int Cols { get; set; }
 
@@ -51,7 +46,7 @@ public class CellSimdBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        var writer = new AnsiWriter(new NullBackend(), syncUpdates: false);
+        var writer = new AnsiWriter(new NullTerminalBackend(), syncUpdates: false);
         var engine = new DiffEngine(Cols, 50);
         var back = new ScreenBuffer(Cols, 50);
         for (int y = 0; y < 50; y++)
@@ -64,7 +59,7 @@ public class CellSimdBenchmark
         _engine = engine;
         _back = back;
 
-        _writer = new AnsiWriter(new NullBackend(), syncUpdates: false);
+        _writer = new AnsiWriter(new NullTerminalBackend(), syncUpdates: false);
         _text = new string('a', 120);
     }
 

@@ -8,6 +8,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Repl.Commands;
 using Harbor.Application.Configuration;
 using Harbor.Hosting.Rendering;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -149,17 +150,6 @@ public class SlashPanelsCommandTests
         await Assert.That(host.Switched).Contains("ccc33333dddd4444");
         await Assert.That(host.Palette.Visible).IsFalse();
     }
-
-    private sealed class StubPanel(string id, string title) : IPanelProvider
-    {
-        public string Id => id;
-        public string Title => title;
-        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
-        public int DefaultSize => 10;
-        public object? Build(PanelContext ctx) => "stub";
-        public bool OnKey(UiKey key, PanelContext ctx) => false;
-    }
-
     private static PanelRegistry RegistryWith(params IPanelProvider[] panels)
     {
         var registry = new PanelRegistry();
@@ -186,7 +176,7 @@ public class SlashPanelsCommandTests
     {
         var host = new FakeHost(current, store, new AuthStore(new JsonConfigStore()), SeededPanelsState())
         {
-            PanelRegistry = RegistryWith(new StubPanel("todo", "Todo"), new StubPanel("logs", "Logs")),
+            PanelRegistry = RegistryWith(new TestPanelProvider("todo", "Todo", "stub"), new TestPanelProvider("logs", "Logs", "stub")),
         };
         return host;
     }
@@ -288,31 +278,6 @@ public class SlashPanelsCommandTests
         await pending!.Value.Handler(pending.Value.Item, CancellationToken.None);
         await Assert.That(host.Palette.Visible).IsFalse();
     }
-
-    // ── /jump (#857) ──────────────────────────────────────────────────────
-    //
-    // The jump palette's panel-plane route is unreachable: Ctrl+J resolved to
-    // `ChatAction.JumpPalette`, which toggles a `Center`-placed
-    // IPanelProvider whose `OnKey` no host can enter, so it painted nothing
-    // and took no query. These tests drive the route that IS live — the frame
-    // stack `ReplInputLoop` keys directly — so a break here is a real break
-    // and not the #857 shape of a green test over a dead path.
-
-    /// <summary>Git query returning a fixed worktree list, recording the directory asked for.</summary>
-    private sealed class FakeGit(params GitWorktreeInfo[] worktrees) : IGitQuery
-    {
-        public string? AskedFor { get; private set; }
-
-        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default)
-        {
-            AskedFor = directory;
-            return worktrees;
-        }
-
-        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
-            GitWorkspaceStatus.None;
-    }
-
     [Test]
     public async Task Jump_OpensFrame_WithSessionRows()
     {
@@ -368,11 +333,11 @@ public class SlashPanelsCommandTests
         var t0 = new DateTimeOffset(2026, 5, 4, 0, 0, 0, TimeSpan.Zero);
         var store = new FakeStore();
         store.Add(Make("ccc00003", "Only session", t0) with { Directory = "/wts/one" });
-        var git = new FakeGit(
+        var git = new TestGitQuery(worktrees: [
             new GitWorktreeInfo("/wts/one", "main", IsBare: false),
             new GitWorktreeInfo("/wts/scratch", "wip", IsBare: false),
             // A bare store is never a jump target — the seeder drops it.
-            new GitWorktreeInfo("/wts/bare.git", null, IsBare: true));
+            new GitWorktreeInfo("/wts/bare.git", null, IsBare: true)]);
         var host = new FakeHost(store.Sessions["ccc00003"], store, new AuthStore(new JsonConfigStore())) { Git = git };
 
         await new JumpCommand().ExecuteAsync(new ReplCommandContext(host, "jump"), CancellationToken.None);

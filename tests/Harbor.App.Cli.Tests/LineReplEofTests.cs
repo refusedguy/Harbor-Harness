@@ -202,7 +202,7 @@ public class LineReplEofTests
             // assertion that it does not.
             cellForgeScreens: static () => throw new InvalidOperationException(
                 "Line REPL must not resolve the CellForge screen graph."),
-            rendererHost: EmptyServiceProvider.Instance);
+            rendererHost: new EmptyServiceProvider());
     }
 
     // ── Fakes ──────────────────────────────────────────────────────────────
@@ -284,13 +284,5 @@ public class LineReplEofTests
         {
             public void Dispose() { }
         }
-    }
-
-    /// <summary>Resolves nothing — the line REPL only forwards the host to renderers.</summary>
-    private sealed class EmptyServiceProvider : IServiceProvider
-    {
-        public static readonly EmptyServiceProvider Instance = new();
-
-        public object? GetService(Type serviceType) => null;
     }
 }

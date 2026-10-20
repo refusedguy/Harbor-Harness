@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.State;
 
@@ -307,21 +308,6 @@ private static UiState StoreAt(int offset) => new()
 {
     Ui = TerminalUiState.Empty with { ScrollOffset = offset, ViewportLines = 10 },
 };
-
-    // ── The fence-shaped property: no async layout seam exists ─────────────────
-
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-            ?? throw new InvalidOperationException("Repo root (Harbor.slnx) not found above the test bin dir.");
-    }
-
     private static string[] LayoutSources(string root) =>
     [
         "src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.cs",
@@ -345,7 +331,7 @@ private static UiState StoreAt(int offset) => new()
     [Test]
     public async Task NoAsyncWorkInTheLayoutPath()
     {
-        string root = RepoRoot();
+        string root = RepoPaths.Root;
         var offenders = new List<string>();
 
         foreach (string rel in LayoutSources(root))
@@ -387,7 +373,7 @@ private static UiState StoreAt(int offset) => new()
     [Test]
     public async Task EveryProductHostPumpsEventsOnTheRenderThread()
     {
-        string root = RepoRoot();
+        string root = RepoPaths.Root;
         var offenders = new List<string>();
 
         foreach (string dir in new[] { "apps", "src" })

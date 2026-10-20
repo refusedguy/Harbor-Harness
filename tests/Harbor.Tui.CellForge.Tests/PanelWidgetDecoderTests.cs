@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
@@ -11,16 +12,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PanelWidgetDecoderTests
 {
-    private sealed class StubPanel(object? widget) : IPanelProvider
-    {
-        public string Id => "stub-decoder";
-        public string Title => "Stub Decoder";
-        public TuiPanelPlacement DefaultPlacement => TuiPanelPlacement.Right;
-        public int DefaultSize => 10;
-        public object? Build(PanelContext ctx) => widget;
-        public bool OnKey(UiKey key, PanelContext ctx) => false;
-    }
-
     private sealed record ProbeWidget(string Value);
 
     private sealed class ProbeDecoder(int priority, string row) : IPanelWidgetDecoder
@@ -42,7 +33,7 @@ public class PanelWidgetDecoderTests
 
     private static string Joined(object? widget) =>
         string.Join("\n", CellForgePanelAdapter.RenderToRows(
-            new StubPanel(widget), new PanelContext(new UiState(), 80, 24)));
+            new TestPanelProvider("stub-decoder", "Stub Decoder", widget), new PanelContext(new UiState(), 80, 24)));
 
     [Test]
     public async Task LegacyForms_Still_Pass_Through()

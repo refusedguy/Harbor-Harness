@@ -56,28 +56,6 @@ namespace Harbor.Application.Tests;
 /// </remarks>
 public class RunWallClockLimitTests
 {
-    /// <summary>Controllable clock: the run's elapsed time counts advances, not wall-clock.</summary>
-    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
-    {
-        private DateTimeOffset _now = start;
-
-        public void Advance(TimeSpan delta) => _now += delta;
-
-        public override DateTimeOffset GetUtcNow() => _now;
-
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
-            NoopTimer.Instance;
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     /// <summary>Tool that burns one clock delta per execution, so the budget trip is exact.</summary>
     private sealed class ClockAdvancingTool(ManualTimeProvider clock, TimeSpan step) : ITool
     {

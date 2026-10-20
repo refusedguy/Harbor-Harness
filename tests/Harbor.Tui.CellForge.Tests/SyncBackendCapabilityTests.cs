@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -319,20 +320,5 @@ public class SyncBackendCapabilityTests
         context.WriteLine("hello");
 
         await Assert.That(backend.Text).Contains("hello");
-    }
-
-    // ── Fixtures ───────────────────────────────────────────────────────────
-
-    /// <summary>Implements the async contract only — the shape that used to
-    /// compile against the sync sinks and throw at paint time.</summary>
-    private sealed class AsyncOnlyBackend : ITerminalBackend
-    {
-        public int Writes { get; private set; }
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            Writes++;
-            return ValueTask.CompletedTask;
-        }
     }
 }

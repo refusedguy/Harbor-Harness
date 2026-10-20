@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Core.Tests;
@@ -10,7 +11,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MiddlewarePipeline_PassThrough_EventReachesSubscriber()
     {
-        var mw = new PassThroughMiddleware();
+        var mw = new PassThroughEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -25,7 +26,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MiddlewarePipeline_Drop_EventDoesNotReachSubscriber()
     {
-        var mw = new DropMiddleware();
+        var mw = new DropEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -40,7 +41,7 @@ public class EventBusMiddlewareTests
     public async Task MiddlewarePipeline_Transform_SubscriberSeesTransformedEvent()
     {
         var replacement = new TurnStartEvent(42);
-        var mw = new TransformMiddleware(replacement);
+        var mw = new TransformEventBusMiddleware(replacement);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -54,7 +55,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MiddlewarePipeline_Exception_EventDropped_BusNotBroken()
     {
-        var mw = new ThrowingMiddleware();
+        var mw = new ThrowingEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -67,7 +68,7 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MiddlewarePipeline_Exception_SubsequentEventsStillDelivered()
     {
-        var mw = new ThrowingMiddleware();
+        var mw = new ThrowingEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -87,9 +88,9 @@ public class EventBusMiddlewareTests
     public async Task MultipleMiddlewares_ExecutedInOrder()
     {
         var order = new List<string>();
-        var mw1 = new RecordingMiddleware("mw1", order);
-        var mw2 = new RecordingMiddleware("mw2", order);
-        var mw3 = new RecordingMiddleware("mw3", order);
+        var mw1 = new RecordingEventBusMiddleware("mw1", EventBusSinkKind.Mandatory, order);
+        var mw2 = new RecordingEventBusMiddleware("mw2", EventBusSinkKind.Mandatory, order);
+        var mw3 = new RecordingEventBusMiddleware("mw3", EventBusSinkKind.Mandatory, order);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw1, mw2, mw3 });
         bus.Subscribe(async (evt, ct) => { });
 
@@ -101,9 +102,9 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MultipleMiddlewares_ShortCircuitOnDrop()
     {
-        var mw1 = new PassThroughMiddleware();
-        var mw2 = new DropMiddleware();
-        var mw3 = new PassThroughMiddleware();
+        var mw1 = new PassThroughEventBusMiddleware();
+        var mw2 = new DropEventBusMiddleware();
+        var mw3 = new PassThroughEventBusMiddleware();
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new IEventBusMiddleware[] { mw1, mw2, mw3 });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
@@ -271,49 +272,5 @@ public class EventBusMiddlewareTests
 
         await Assert.That(result).IsTrue();
         await Assert.That(after - before).IsEqualTo(0);
-    }
-
-    // ── Helper middleware implementations ──
-
-    private sealed class PassThroughMiddleware : IEventBusMiddleware
-    {
-        public string Name => "pass-through";
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default) =>
-            ValueTask.FromResult(true);
-    }
-
-    private sealed class DropMiddleware : IEventBusMiddleware
-    {
-        public string Name => "drop";
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default) =>
-            ValueTask.FromResult(false);
-    }
-
-    private sealed class TransformMiddleware(AgentEvent replacement) : IEventBusMiddleware
-    {
-        private readonly AgentEvent _replacement = replacement;
-        public string Name => "transform";
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-        {
-            @event = _replacement;
-            return ValueTask.FromResult(true);
-        }
-    }
-
-    private sealed class ThrowingMiddleware : IEventBusMiddleware
-    {
-        public string Name => "throwing";
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default) =>
-            throw new InvalidOperationException("boom");
-    }
-
-    private sealed class RecordingMiddleware(string name, List<string> order) : IEventBusMiddleware
-    {
-        public string Name => name;
-        public ValueTask<bool> ProcessAsync(ref AgentEvent @event, CancellationToken ct = default)
-        {
-            order.Add(name);
-            return ValueTask.FromResult(true);
-        }
     }
 }

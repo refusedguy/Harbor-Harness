@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Ui.Framework.Projection;
 using Microsoft.Extensions.Logging.Abstractions;

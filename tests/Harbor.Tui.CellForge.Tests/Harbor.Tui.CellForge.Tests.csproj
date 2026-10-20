@@ -22,6 +22,10 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Abstractions\Harbor.Ui.Framework.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!-- #1772: the shared terminal-backend doubles. The sibling references
+         Harbor.Tui.CellForge.Engine only, which this project already has,
+         so the reference adds no product assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
     <!--
       #536: `ThemeFileWatcherTests` drives the widget against the REAL
       IThemeStore implementation (4 of its 7 tests) so the file path and mtime

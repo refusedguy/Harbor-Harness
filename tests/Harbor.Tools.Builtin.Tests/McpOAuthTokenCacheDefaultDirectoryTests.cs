@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tools.Mcp;
 using TUnit.Assertions;
 
@@ -31,21 +32,13 @@ public class McpOAuthTokenCacheDefaultDirectoryTests
     [Test]
     public async Task DefaultDirectory_HangsOffHarborHome()
     {
-        string scratch = Directory.CreateTempSubdirectory("harbor-mcp-oauth-defaultdir").FullName;
-        string? previousHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
-        try
-        {
-            Environment.SetEnvironmentVariable("HARBOR_HOME", scratch);
+        // The scope owns both halves of the state: the directory it created
+        // and the variable it read before it wrote.
+        using var scratch = new TempDirScope("harbor-mcp-oauth-defaultdir");
+        using var env = new EnvScope("HARBOR_HOME");
+        env.Set("HARBOR_HOME", scratch.Path);
 
-            await Assert.That(McpOAuthTokenCache.DefaultDirectory())
-                .IsEqualTo(Path.Combine(scratch, "mcp-oauth"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("HARBOR_HOME", previousHome);
-            try { Directory.Delete(scratch, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-        }
+        await Assert.That(McpOAuthTokenCache.DefaultDirectory())
+            .IsEqualTo(Path.Combine(scratch.Path, "mcp-oauth"));
     }
 }

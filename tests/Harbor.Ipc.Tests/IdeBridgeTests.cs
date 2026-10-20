@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Ide;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -214,7 +215,7 @@ public class IdeBridgeTests
         // AbandonedHandlerFaulted (EventId 7), not die unobserved. Deleting
         // the `_ = ObserveAbandonedAsync(...)` detach removes the only
         // observer — this test then times out waiting for the log entry.
-        var logger = new AbandonCapturingLogger();
+        var logger = new CapturingLogger();
         var gate = new TaskCompletionSource<JsonElement?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         Task<JsonElement?> handler(string method, JsonElement? parameters, CancellationToken ct) => gate.Task;
@@ -263,7 +264,7 @@ public class IdeBridgeTests
     }
 
     private static async Task<string> WaitAbandonLogAsync(
-        AbandonCapturingLogger logger, int eventId, TimeSpan timeout)
+        CapturingLogger logger, int eventId, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
@@ -275,38 +276,6 @@ public class IdeBridgeTests
 
         throw new TimeoutException($"No log entry with EventId {eventId} was recorded.");
     }
-
-    /// <summary>Thread-safe <see cref="ILogger" /> capturing event ids + messages.</summary>
-    private sealed class AbandonCapturingLogger : ILogger
-    {
-        private readonly Lock _gate = new();
-        private readonly List<(int EventId, string Message)> _entries = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            lock (_gate) _entries.Add((eventId.Id, formatter(state, exception)));
-        }
-
-        public string MessagesFor(int eventId)
-        {
-            lock (_gate)
-            {
-                return string.Join(
-                    "\n", _entries.Where(e => e.EventId == eventId).Select(e => e.Message));
-            }
-        }
-    }
-
     /// <summary>Lock-guarded writer: the server writes under its own semaphore
     /// while the test thread polls, so capture and snapshot share one lock.</summary>
     private sealed class SyncCapture : StringWriter

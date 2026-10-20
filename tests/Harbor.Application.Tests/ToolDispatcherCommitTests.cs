@@ -7,11 +7,11 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
-using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -110,30 +110,6 @@ public class ToolDispatcherCommitTests
         TimeSpan? abandonGrace, TimeProvider? clock) =>
         new(new FakeToolRegistry(tool), permissions, new FakeEventBus(),
             NullLogger<ToolDispatcher>.Instance, coordinator, null, abandonGrace, clock);
-
-    /// <summary>
-    ///     Frozen clock — the grace timer never fires, so the best-effort
-    ///     cancel path cannot lose a 250ms wall-clock race on a loaded runner
-    ///     (macos red on #1117; same 250ms class as the #1055s3 Windows flake,
-    ///     see #401). Mirrors <c>ToolDispatcherRetryTests.FrozenTimeProvider</c>
-    ///     (#1088): <c>Task.Delay(grace, clock)</c> only completes if the test
-    ///     advances it — which this test never does. BCL only.
-    /// </summary>
-    private sealed class FrozenTimeProvider : TimeProvider
-    {
-        public override ITimer CreateTimer(
-            TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
-            NoopTimer.Instance;
-
-        private sealed class NoopTimer : ITimer
-        {
-            public static readonly NoopTimer Instance = new();
-            public bool Change(TimeSpan dueTime, TimeSpan period) => false;
-            public void Dispose() { }
-            public ValueTask DisposeAsync() => default;
-        }
-    }
-
     private static async Task WaitForAsync(Func<bool> condition, string what)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -203,7 +179,7 @@ public class ToolDispatcherCommitTests
         // clock, not from raising the 250ms product default (#996, #1088).
         var dispatcher = NewDispatcher(
             permissions, tool, coordinator,
-            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new FrozenTimeProvider());
+            abandonGrace: TimeSpan.FromMilliseconds(250), clock: new ManualTimeProvider());
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortToken);
 
         var run = dispatcher.ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);

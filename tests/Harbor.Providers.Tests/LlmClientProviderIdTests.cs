@@ -2,6 +2,7 @@ using Harbor.Providers.Anthropic;
 using Harbor.Providers.Ollama;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Providers.Tests;
 /// <summary>
@@ -16,7 +17,7 @@ public class LlmClientProviderIdTests
         var client = new AnthropicLlmClient(
             new HttpClient(),
             new AnthropicConfig(),
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<AnthropicLlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("anthropic");
@@ -28,7 +29,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAILlmClient(
             new HttpClient(),
             new OpenAIConfig(),
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("openai");
@@ -58,7 +59,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAiCompatibleLlmClient(
             new HttpClient(),
             config,
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
@@ -79,7 +80,7 @@ public class LlmClientProviderIdTests
         var client = new OpenAiCompatibleLlmClient(
             new HttpClient(),
             config,
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 

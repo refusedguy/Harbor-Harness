@@ -8,6 +8,7 @@ using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests;
@@ -110,7 +111,7 @@ public sealed class DllRealWorldPluginsTests
     [Test]
     public async Task DllCacheHit_ProductionCachingCompiler_LoadsFromDiskAndRegisters()
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(
             Path.Combine(repoRoot, "tests", "Plugins", "RealWorld", "DiToolPlugin.cs")).ConfigureAwait(false);
 
@@ -172,7 +173,7 @@ public sealed class DllRealWorldPluginsTests
     private static async Task<(FakePluginLoadHost Host, IReadOnlyList<LoadedPlugin> Loaded)> LoadDllAsync(
         string fileName, string dllName)
     {
-        string repoRoot = LocateRepoRoot();
+        string repoRoot = RepoPaths.Root;
         string source = await File.ReadAllTextAsync(
             Path.Combine(repoRoot, "tests", "Plugins", "RealWorld", fileName)).ConfigureAwait(false);
 
@@ -272,23 +273,4 @@ public sealed class DllRealWorldPluginsTests
         Array.Empty<AgentMessage>(),
         (_, _) => Task.CompletedTask,
         (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
-
-    /// <summary>
-    ///     Walk up from the test binaries to the repository root (the directory
-    ///     that contains <c>tests/Plugins/RealWorld</c>).
-    /// </summary>
-    private static string LocateRepoRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            string probe = Path.Combine(dir.FullName, "tests", "Plugins", "RealWorld");
-            if (Directory.Exists(probe))
-                return dir.FullName;
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Repository root with tests/Plugins/RealWorld not found above {AppContext.BaseDirectory}.");
-    }
 }

@@ -1,5 +1,6 @@
 using Harbor.Application.Sessions;
 using Harbor.ChangeTracking;
+using Harbor.TestKit;
 
 namespace Harbor.ChangeTracking.Tests;
 
@@ -259,31 +260,6 @@ public class RunRejectTests
 
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
-        string? savedHarborHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
-        string home = Path.Combine(Path.GetTempPath(), $"harbor-home-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(home);
-        Environment.SetEnvironmentVariable("HARBOR_HOME", home);
-        try
-        {
-            await body(home).ConfigureAwait(false);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("HARBOR_HOME", savedHarborHome);
-            DeleteDir(home);
-        }
-    }
-
-    private static void DeleteDir(string dir)
-    {
-        try
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
-        {
-            // Test cleanup is best-effort.
-            _ = ex;
-        }
-    }
+        using var home = new TempDirScope("harbor-home");
+        await EnvScope.WithAsync("HARBOR_HOME", home.Path, () => body(home.Path));    }
 }

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;

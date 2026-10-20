@@ -38,7 +38,7 @@ public class CellForgeReplSmokeTests
     [Test]
     public async Task FullTurn_ScriptedInput_MockAgent_GoldenFrame()
     {
-        var backend = new FrameCaptureBackend();
+        var backend = new AsyncOnlyBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
         var composer = new ComposerController();
@@ -126,7 +126,7 @@ public class CellForgeReplSmokeTests
     [Test]
     public async Task CtrlJ_PaintsTheJumpPalette()
     {
-        var backend = new FrameCaptureBackend();
+        var backend = new AsyncOnlyBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
         var composer = new ComposerController();
@@ -211,7 +211,7 @@ public class CellForgeReplSmokeTests
     [Test]
     public async Task FirstRun_OpensSetupOverlayWithoutInput()
     {
-        var backend = new FrameCaptureBackend();
+        var backend = new AsyncOnlyBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var session = new ScreenSession(writer, Cols, Rows, sizeSource: () => (Cols, Rows));
         var composer = new ComposerController();
@@ -301,22 +301,6 @@ public class CellForgeReplSmokeTests
 
         return sb.ToString();
     }
-
-    /// <summary>Async-only capture backend on purpose: the REPL frame loop
-    /// flushes through <c>FlushFrameAsync</c>, so this proves the async
-    /// contract stands alone (issue #468 — the sync path no longer accepts
-    /// it).</summary>
-    private sealed class FrameCaptureBackend : ITerminalBackend
-    {
-        public List<byte[]> Writes { get; } = [];
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            Writes.Add(bytes.ToArray());
-            return ValueTask.CompletedTask;
-        }
-    }
-
     private sealed class ScriptedAgent : IAgent
     {
         private readonly InMemoryEventBus _bus;
@@ -467,19 +451,10 @@ internal static class Golden
     public static string Normalize(string s) =>
         s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
-    private static string ResolveFixtureDir()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-        }
-
-        return Path.Combine(dir.FullName, "tests", "fixtures", "celldiff");
-    }
+    /// <summary>
+    ///     The fixture directory under the repository root. The root is found
+    ///     once, by the shared helper, instead of by a walk-up this file owns.
+    /// </summary>
+    private static string ResolveFixtureDir() =>
+        Path.Combine(RepoPaths.Root, "tests", "fixtures", "celldiff");
 }

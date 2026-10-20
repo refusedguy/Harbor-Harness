@@ -6,6 +6,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.Ollama;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -51,7 +52,7 @@ public class ProviderStreamTests
         new(
             new HttpClient(handler),
             new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
@@ -70,7 +71,7 @@ public class ProviderStreamTests
     {
         // Server sends the tool-call id only on the first chunk; delta chunks
         // omit it. Before ПР.3 every chunk got a fresh Guid → args lost.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_X","function":{"name":"read","arguments":"{\"pa"}}]}}]}""",
             """{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\":\"a"}}]}}]}""",
             """{"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":7,"completion_tokens":3}}""",
@@ -79,7 +80,7 @@ public class ProviderStreamTests
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig(),
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -98,14 +99,14 @@ public class ProviderStreamTests
     [Test]
     public async Task OpenAIChat_IdMissingEntirely_FallsBackToPositionalId()
     {
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"ls","arguments":"{}"}}]}}]}""",
             "[DONE]"));
 
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig(),
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -132,7 +133,7 @@ public class ProviderStreamTests
         }
 
         var client = new OllamaLlmClient(
-            new HttpClient(new StubHttpHandler(responder)),
+            new HttpClient(new StubHttpMessageHandler(responder)),
             new OllamaConfig(),
             NullLogger<OllamaLlmClient>.Instance);
 
@@ -148,7 +149,7 @@ public class ProviderStreamTests
     {
         // ROP-A ПР.4: one unparseable line must NOT terminate the stream
         // (previously the compat adapter emitted a terminal ErrorEvent here).
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"content":"before"}}]}""",
             "{NOT VALID JSON",
             """{"choices":[{"delta":{"content":"after"}}],"finish_reason":"stop"}""",
@@ -158,7 +159,7 @@ public class ProviderStreamTests
         var client = new OpenAiCompatible.OpenAiCompatibleLlmClient(
             new HttpClient(handler),
             config,
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
@@ -178,7 +179,7 @@ public class ProviderStreamTests
         // `StartsWith("data: ")` filter dropped such lines silently (lost
         // tool-call deltas). The padded `[DONE]` here also exercises the
         // sentinel trim.
-        var handler = new StubHttpHandler(_ => SseRaw(
+        var handler = new StubHttpMessageHandler(_ => SseRaw(
             """data:{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_Y","function":{"name":"read","arguments":"{\"pa"}}]}}]}""",
             """data:{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\"}"}}]}}]}""",
             """data:{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}""",
@@ -205,7 +206,7 @@ public class ProviderStreamTests
         // Issue #86: `data: [DONE]   ` (trailing whitespace) must still end
         // the stream. The trailing "after" line is the discriminator: if the
         // sentinel is missed it gets parsed and the text becomes "beforeafter".
-        var handler = new StubHttpHandler(_ => SseRaw(
+        var handler = new StubHttpMessageHandler(_ => SseRaw(
             """data: {"choices":[{"delta":{"content":"before"}}]}""",
             "data: [DONE]   ",
             """data: {"choices":[{"delta":{"content":"after"}}]}"""));
@@ -226,7 +227,7 @@ public class ProviderStreamTests
         // Issue #86: ReadUsage used GetInt32() which throws on float/string
         // wire values, discarding the whole chunk (incl. finish_reason).
         // Floats truncate, numeric strings parse, garbage falls back to 0.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":7.5,"completion_tokens":"3"}}""",
             "[DONE]"));
 
@@ -249,7 +250,7 @@ public class ProviderStreamTests
     {
         // Issue #86 (adjacent): a numeric wire `id` made GetString() throw,
         // discarding the tool-call chunk. It must fall back to `tc{index}`.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"tool_calls":[{"index":0,"id":123,"function":{"name":"ls","arguments":"{}"}}]}}]}""",
             "[DONE]"));
 
@@ -270,7 +271,7 @@ public class ProviderStreamTests
         // #203 E3: with stream_options.include_usage the usage arrives on a
         // trailing chunk (empty choices, no finish_reason) AFTER the bare
         // finish chunk. It must deliver token stats, not vanish silently.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}""",
             """{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}""",
             "[DONE]"));
@@ -295,7 +296,7 @@ public class ProviderStreamTests
     {
         // The synthesized trailing finish reuses the remembered reason: a
         // fresh "stop" here would flip the stop reason and skip execution.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"ls","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}""",
             """{"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}""",
             "[DONE]"));
@@ -318,7 +319,7 @@ public class ProviderStreamTests
         // #203 E5: input_json deltas carry only the block index; they must
         // resolve the wire block id from content_block_start. Before the fix
         // every delta went out under "0" and the coalescer dropped the args.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"type":"message_start","message":{"id":"msg_1","model":"m","usage":{"input_tokens":3,"output_tokens":0}}}""",
             """{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"read"}}""",
             """{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}""",
@@ -329,7 +330,7 @@ public class ProviderStreamTests
         var client = new AnthropicLlmClient(
             new HttpClient(handler),
             new AnthropicConfig(),
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<AnthropicLlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -353,7 +354,7 @@ public class ProviderStreamTests
     {
         // #203 E5, Responses-API flavour: argument deltas key on output_index
         // while the start carries the wire call_id — resolve, don't mismatch.
-        var handler = new StubHttpHandler(_ => Sse(
+        var handler = new StubHttpMessageHandler(_ => Sse(
             """{"type":"response.created","response":{"id":"r1"}}""",
             """{"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_9","name":"bash"}}""",
             """{"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"cmd\":"}""",
@@ -364,7 +365,7 @@ public class ProviderStreamTests
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig { ForceResponsesApi = true },
-            StubAuthResolver.Instance,
+            new TestAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
@@ -399,7 +400,7 @@ public class ProviderStreamTests
         }
 
         var client = new OllamaLlmClient(
-            new HttpClient(new StubHttpHandler(responder)),
+            new HttpClient(new StubHttpMessageHandler(responder)),
             new OllamaConfig(),
             NullLogger<OllamaLlmClient>.Instance);
 
@@ -424,7 +425,7 @@ public class ProviderStreamTests
             lines[i] = """{"choices":[{"delta":{"content":"x"}}]}""";
         lines[Count] = "[DONE]";
 
-        var client = CreateCompatClient(new StubHttpHandler(_ => Sse(lines)));
+        var client = CreateCompatClient(new StubHttpMessageHandler(_ => Sse(lines)));
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest(
             "m1", [LlmUserMessage.Text("hello")], "", [])));
@@ -441,7 +442,7 @@ public class ProviderStreamTests
         // #1104: the pump must run (and complete the writer) even when the
         // token is already cancelled — Task.Run must not swallow the
         // delegate. The stream terminates instead of hanging.
-        var client = CreateCompatClient(new StubHttpHandler(_ => Sse(
+        var client = CreateCompatClient(new StubHttpMessageHandler(_ => Sse(
             """{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}""",
             "[DONE]")));
 

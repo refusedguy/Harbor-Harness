@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 
 namespace Harbor.Tui.CellForge.Tests;
@@ -11,28 +12,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class FrameDiffAllocationTests
 {
-    /// <summary>Backend that counts writes/bytes without copying — keeps
-    /// allocation probes clean while exercising the full encode path.</summary>
-    private sealed class CountingBackend : ISyncTerminalBackend
-    {
-        public int Writes { get; private set; }
-
-        public long Bytes { get; private set; }
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            Writes++;
-            Bytes += bytes.Length;
-            return ValueTask.CompletedTask;
-        }
-
-        public void Write(ReadOnlySpan<byte> bytes)
-        {
-            Writes++;
-            Bytes += bytes.Length;
-        }
-    }
-
     private static (DiffEngine Engine, EngineCells.ScreenBuffer BackA, EngineCells.ScreenBuffer BackB, AnsiWriter Writer, CountingBackend Backend)
         MakeSteadyPair(int cols = 80, int rows = 24)
     {

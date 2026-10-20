@@ -21,20 +21,6 @@ public class WebFetchSsrfNegativeTests
 {
     private static JsonElement Args(string url) =>
         JsonDocument.Parse($"{{\"url\":\"{url}\"}}").RootElement.Clone();
-
-    private sealed class CountingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
-        : HttpMessageHandler
-    {
-        public int Calls { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            return Task.FromResult(responder(request));
-        }
-    }
-
     private static HttpResponseMessage Html(string body = "<p>x</p>") => new(HttpStatusCode.OK)
     {
         Content = new StringContent(body, System.Text.Encoding.UTF8, "text/html")
@@ -55,7 +41,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_LoopbackLiteral_IsBlocked_BeforeHttp()
     {
-        var handler = new CountingHandler(_ => Html());
+        var handler = new StubHttpMessageHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
         var result = await tool.ExecuteAsync(Args("http://127.0.0.1:9/x"), TestToolContext.Create());
@@ -68,7 +54,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_Rfc1918_TenEightLiteral_IsBlocked()
     {
-        var handler = new CountingHandler(_ => Html());
+        var handler = new StubHttpMessageHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
         var result = await tool.ExecuteAsync(Args("http://10.1.2.3/x"), TestToolContext.Create());
@@ -80,7 +66,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_LinkLocalMetadataService_IsBlocked()
     {
-        var handler = new CountingHandler(_ => Html());
+        var handler = new StubHttpMessageHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
         var result = await tool.ExecuteAsync(
@@ -94,7 +80,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_Ipv6Loopback_IsBlocked()
     {
-        var handler = new CountingHandler(_ => Html());
+        var handler = new StubHttpMessageHandler(_ => Html());
         var tool = new WebFetchTool(NullLogger<WebFetchTool>.Instance, () => new HttpClient(handler));
 
         var result = await tool.ExecuteAsync(Args("http://[::1]/x"), TestToolContext.Create());
@@ -115,7 +101,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_AllowedHostBypass_ReachesHandler()
     {
-        var handler = new CountingHandler(_ => Html("<p>local ok</p>"));
+        var handler = new StubHttpMessageHandler(_ => Html("<p>local ok</p>"));
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
@@ -133,7 +119,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_RedirectToPrivateIp_IsBlockedOnHop()
     {
-        var handler = new CountingHandler(_ => Redirect("http://127.0.0.1:9/steal"));
+        var handler = new StubHttpMessageHandler(_ => Redirect("http://127.0.0.1:9/steal"));
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
@@ -148,7 +134,7 @@ public class WebFetchSsrfNegativeTests
     [Test]
     public async Task Execute_RedirectSchemeDowngradeToFile_IsBlocked()
     {
-        var handler = new CountingHandler(_ => Redirect("file:///etc/passwd"));
+        var handler = new StubHttpMessageHandler(_ => Redirect("file:///etc/passwd"));
         var tool = new WebFetchTool(
             NullLogger<WebFetchTool>.Instance,
             () => new HttpClient(handler),
@@ -164,7 +150,7 @@ public class WebFetchSsrfNegativeTests
     public async Task Execute_RedirectLoop_CountExceeded_IsBlocked()
     {
         int hits = 0;
-        var handler = new CountingHandler(_ =>
+        var handler = new StubHttpMessageHandler(_ =>
         {
             hits++;
             return Redirect($"http://example.com/loop{hits}");

@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Events;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
@@ -17,31 +18,6 @@ public class MascotReviveTests
 {
     private static StatusViewModel IdleStatus(AgentPhase phase = AgentPhase.Auto) =>
         new() { Model = "m", Mode = StatusBarMode.Idle, Phase = phase };
-
-    /// <summary>
-    /// Manual clock (#1007): the test owns the passage of time, so a latch
-    /// assertion is a function of the elapsed time this test declares and
-    /// cannot be perturbed by how fast the runner is. BCL only, no new
-    /// package — the shape <c>RetryPolicyTests</c> established for
-    /// <c>RetryPolicy</c> (#54).
-    /// </summary>
-    private sealed class ManualTimeProvider : TimeProvider
-    {
-        /// <summary>
-        /// One timestamp tick is one millisecond, so the director's scale
-        /// factor is exactly 1.0 and every deadline below is exact integer
-        /// arithmetic instead of a rounded conversion.
-        /// </summary>
-        public override long TimestampFrequency => 1_000;
-
-        public override long GetTimestamp() => ElapsedMs;
-
-        /// <summary>Milliseconds this clock has been advanced by the test.</summary>
-        public long ElapsedMs { get; private set; }
-
-        public void AdvanceMs(long ms) => ElapsedMs += ms;
-    }
-
     [Test]
     public async Task Latch_Expires_ByTime_NotByTicks()
     {

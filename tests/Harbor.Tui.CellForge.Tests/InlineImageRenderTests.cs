@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Capabilities;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;

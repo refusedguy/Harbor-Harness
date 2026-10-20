@@ -150,7 +150,7 @@ public sealed class GateGlowAgingTests
     [Test]
     public async Task APulsingGate_ArmsExactlyOneSlot_AndThePipelineTransformsInsideIt()
     {
-        var backend = new CapturingBackend();
+        var backend = new AsyncOnlyBackend();
         var screen = new ScreenSession(new AnsiWriter(backend), Cols, Rows);
         var (runner, _) = BuildRunner(backend, screen);
         var timeline = runner._timeline;
@@ -252,7 +252,7 @@ public sealed class GateGlowAgingTests
     [Test]
     public async Task AfterTheDecision_TheSlotTheLedgerStoppedFeeding_IsDrainedAndTheCellGoesPlain()
     {
-        var backend = new CapturingBackend();
+        var backend = new AsyncOnlyBackend();
         var screen = new ScreenSession(new AnsiWriter(backend), Cols, Rows);
         var (runner, gate) = BuildRunner(backend, screen);
         var timeline = runner._timeline;
@@ -380,7 +380,7 @@ public sealed class GateGlowAgingTests
     /// re-invented, so a change to the runner's shape breaks in one place.
     /// </summary>
     private static (CellForgeReplRunner Runner, ApprovalGateView Gate) BuildRunner(
-        CapturingBackend backend,
+        AsyncOnlyBackend backend,
         ScreenSession screen)
     {
         var configStore = new StubConfigStore();
@@ -429,41 +429,6 @@ public sealed class GateGlowAgingTests
 
         return (runner, new ApprovalGateView("bash", "ls -la /tmp"));
     }
-
-    /// <summary>In-memory <see cref="ITerminalBackend" /> capturing every frame write.</summary>
-    private sealed class CapturingBackend : ITerminalBackend
-    {
-        private readonly List<byte[]> _writes = [];
-
-        public string Text
-        {
-            get
-            {
-                var combined = new List<byte>();
-                foreach (byte[] w in _writes)
-                {
-                    combined.AddRange(w);
-                }
-
-                return Encoding.UTF8.GetString([.. combined]);
-            }
-        }
-
-        /// <summary>Control characters rendered visible so a failure message is readable.</summary>
-        public string Escaped => Text
-            .Replace("\u001B", "\\e", StringComparison.Ordinal)
-            .Replace("\r", "\\r", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal);
-
-        public void Reset() => _writes.Clear();
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            _writes.Add(bytes.ToArray());
-            return ValueTask.CompletedTask;
-        }
-    }
-
     /// <summary>Nothing here reads configuration; the runner only needs a live store reference.</summary>
     private sealed class StubConfigStore : IConfigStore
     {

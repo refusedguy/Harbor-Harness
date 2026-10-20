@@ -20,6 +20,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ipc.Protocol;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Ipc.Tests;
@@ -343,7 +344,7 @@ public class AgentEventProjectionCoverageTests
     [Test]
     public async Task IpcHosts_DoNotConstructHarborEventsThemselves()
     {
-        string? root = FindRepoRoot();
+        RepoPaths.TryGetRoot(out string? root);
         if (root is null)
         {
             // Published / trimmed test host: the sources are not on disk next to the
@@ -377,20 +378,4 @@ public class AgentEventProjectionCoverageTests
             .Where(type => type is { IsAbstract: false, IsInterface: false })
             .Where(baseType.IsAssignableFrom)
             .ToList();
-
-    private static string? FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        return null;
-    }
 }

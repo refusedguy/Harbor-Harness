@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Core;
@@ -339,7 +340,7 @@ public class PanelChromeTests
     [Test]
     public async Task BoxCorners_AreSpelledInExactlyOneFile()
     {
-        string widgets = Path.Combine(RepoRoot(), "src", "Harbor.Tui.CellForge");
+        string widgets = Path.Combine(RepoPaths.Root, "src", "Harbor.Tui.CellForge");
         var offenders = new List<string>();
         foreach (string file in Directory.EnumerateFiles(widgets, "*.cs", SearchOption.AllDirectories))
         {
@@ -399,7 +400,7 @@ public class PanelChromeTests
         foreach (string file in overlays)
         {
             string text = File.ReadAllText(
-                Path.Combine(RepoRoot(), "src", "Harbor.Tui.CellForge", "Chat", "Widgets", file));
+                Path.Combine(RepoPaths.Root, "src", "Harbor.Tui.CellForge", "Chat", "Widgets", file));
             if (!text.Contains("PanelChrome.PaintBorderBox"))
             {
                 missing.Add(file);
@@ -476,18 +477,5 @@ public class PanelChromeTests
         }
 
         await Assert.That(string.Join(" ", strays)).IsEqualTo(string.Empty);
-    }
-
-    /// <summary>Walks up from the test binaries to the repo root (<c>Harbor.slnx</c>).</summary>
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir?.FullName
-               ?? throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
     }
 }

@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
@@ -20,25 +21,6 @@ public class StatusPanelMascotTests
     /// <c>Latch_Expires_ByTime_NotByTicks</c> test asserts at.
     /// </summary>
     private const int FramesPastBudget = 250;
-
-    /// <summary>
-    /// Manual clock (#1026): the same shape <c>MascotReviveTests</c> owns for
-    /// <c>MascotDirector</c> (#1007) — one timestamp tick is one millisecond,
-    /// so every deadline is exact integer arithmetic. Threaded through
-    /// <c>ChatScreen.Build</c> into both mascot directors and never advanced
-    /// here, so a latch assertion is a function of declared (zero) time and
-    /// not of how fast 250 paints finish on the runner.
-    /// </summary>
-    private sealed class ManualTimeProvider : TimeProvider
-    {
-        public override long TimestampFrequency => 1_000;
-
-        public override long GetTimestamp() => ElapsedMs;
-
-        /// <summary>Milliseconds this clock has been advanced by the test.</summary>
-        public long ElapsedMs { get; private set; }
-    }
-
     private static string PaintStatusRow(int cols, StatusBarMode mode)
     {
         var composer = new ComposerController();

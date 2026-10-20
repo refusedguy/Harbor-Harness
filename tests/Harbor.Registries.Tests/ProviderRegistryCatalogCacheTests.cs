@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using Harbor.Registries.Providers;
@@ -32,20 +33,6 @@ namespace Harbor.Registries.Tests;
 /// </remarks>
 public class ProviderRegistryCatalogCacheTests
 {
-    /// <summary>
-    ///     Controllable clock (#1878): the catalogue TTL is read through the
-    ///     registry's injected <see cref="TimeProvider" />, so a test ages the
-    ///     cache by moving this clock instead of sleeping.
-    /// </summary>
-    private sealed class ManualTimeProvider(DateTimeOffset start) : TimeProvider
-    {
-        private DateTimeOffset _now = start;
-
-        public void Advance(TimeSpan delta) => _now += delta;
-
-        public override DateTimeOffset GetUtcNow() => _now;
-    }
-
     private sealed class CountingCatalogClient : FakeLlmClientBase
     {
         public CountingCatalogClient(ProviderId providerId, Result<IReadOnlyList<ModelInfo>> modelsResult)

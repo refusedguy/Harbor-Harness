@@ -5,6 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Providers.Anthropic;
 using Harbor.Providers.OpenAI;
 using Harbor.Providers.OpenAiCompatible;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
@@ -18,25 +19,6 @@ namespace Harbor.Providers.Tests;
 /// </summary>
 public class LlmClientAuthFailureTests
 {
-    private sealed class FailingAuthResolver : IAuthResolver
-    {
-        public static readonly FailingAuthResolver Instance = new();
-
-        public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Failure<string>($"No API key for '{providerId}'."));
-    }
-
-    private sealed class ExplodingHandler : HttpMessageHandler
-    {
-        public int Calls { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Calls++;
-            throw new InvalidOperationException("HTTP must not be called when API-key resolution failed.");
-        }
-    }
-
     private static async Task<List<LlmEvent>> CollectAsync(IAsyncEnumerable<LlmEvent> stream)
     {
         var events = new List<LlmEvent>();
@@ -47,7 +29,7 @@ public class LlmClientAuthFailureTests
         return events;
     }
 
-    private static async Task AssertSingleAuthErrorAsync(List<LlmEvent> events, ExplodingHandler handler)
+    private static async Task AssertSingleAuthErrorAsync(List<LlmEvent> events, StubHttpMessageHandler handler)
     {
         var errors = events.OfType<ErrorEvent>().ToList();
         await Assert.That(events.Count).IsEqualTo(1);
@@ -60,11 +42,12 @@ public class LlmClientAuthFailureTests
     [Test]
     public async Task CompatStream_AuthFailure_EmitsSingleAuthErrorWithoutHttp()
     {
-        var handler = new ExplodingHandler();
+        var handler = new StubHttpMessageHandler(_ => throw new InvalidOperationException(
+            "HTTP must not be called when API-key resolution failed."));
         var client = new OpenAiCompatibleLlmClient(
             new HttpClient(handler),
             new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
-            FailingAuthResolver.Instance,
+            new FailingAuthResolver(),
             StubModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
@@ -76,11 +59,12 @@ public class LlmClientAuthFailureTests
     [Test]
     public async Task AnthropicStream_AuthFailure_EmitsSingleAuthErrorWithoutHttp()
     {
-        var handler = new ExplodingHandler();
+        var handler = new StubHttpMessageHandler(_ => throw new InvalidOperationException(
+            "HTTP must not be called when API-key resolution failed."));
         var client = new AnthropicLlmClient(
             new HttpClient(handler),
             new AnthropicConfig { BaseUrl = "http://stub" },
-            FailingAuthResolver.Instance,
+            new FailingAuthResolver(),
             NullLogger<AnthropicLlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));
@@ -91,11 +75,12 @@ public class LlmClientAuthFailureTests
     [Test]
     public async Task OpenAIStream_AuthFailure_EmitsSingleAuthErrorWithoutHttp()
     {
-        var handler = new ExplodingHandler();
+        var handler = new StubHttpMessageHandler(_ => throw new InvalidOperationException(
+            "HTTP must not be called when API-key resolution failed."));
         var client = new OpenAILlmClient(
             new HttpClient(handler),
             new OpenAIConfig { BaseUrl = "http://stub" },
-            FailingAuthResolver.Instance,
+            new FailingAuthResolver(),
             NullLogger<OpenAILlmClient>.Instance);
 
         var events = await CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));

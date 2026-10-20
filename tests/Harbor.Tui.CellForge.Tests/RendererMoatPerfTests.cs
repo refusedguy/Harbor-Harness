@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
@@ -18,21 +19,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class RendererMoatPerfTests
 {
-    /// <summary>Backend that counts bytes without copying — keeps allocation
-    /// probes clean while still exercising the full write path.</summary>
-    private sealed class CountingBackend : ISyncTerminalBackend
-    {
-        public long Bytes { get; private set; }
-
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
-        {
-            Bytes += bytes.Length;
-            return ValueTask.CompletedTask;
-        }
-
-        public void Write(ReadOnlySpan<byte> bytes) => Bytes += bytes.Length;
-    }
-
     private sealed class Probe
     {
         public readonly ScreenSession Screen;

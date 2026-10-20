@@ -123,6 +123,13 @@
         <!-- #1769: the test-double generator (a Roslyn component) and its guard. -->
         <Project Path="tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj"/>
         <Project Path="tests/Harbor.TestKit.Generators.Tests/Harbor.TestKit.Generators.Tests.csproj"/>
+        <!-- #1772/#1773: the TestKit family. `Support` and `Tui` are the two
+             siblings that keep the shared helpers reachable from test projects
+             whose product-assembly closure does not cover the whole TestKit
+             family; `Tests` is where the helpers are exercised. -->
+        <Project Path="tests/Harbor.TestKit.Support/Harbor.TestKit.Support.csproj"/>
+        <Project Path="tests/Harbor.TestKit.Tui/Harbor.TestKit.Tui.csproj"/>
+        <Project Path="tests/Harbor.TestKit.Tests/Harbor.TestKit.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj"/>
         <Project Path="tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj"/>
         <Project Path="tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj"/>

@@ -7,6 +7,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Tui;
 using Harbor.Terminal.Abstractions;
+using Harbor.TestKit;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Rendering;
@@ -165,16 +166,5 @@ public static class RendererBenchmarkSuite
         }
 
         return ticks;
-    }
-
-    /// <summary>CellForge capture backend: absorbs frames without I/O.</summary>
-    private sealed class NullTerminalBackend : ISyncTerminalBackend
-    {
-        public ValueTask WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default) =>
-            ValueTask.CompletedTask;
-
-        public void Write(ReadOnlySpan<byte> bytes)
-        {
-        }
     }
 }

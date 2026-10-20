@@ -513,6 +513,7 @@ jobs:
               Harbor.Terminal.Pty.Tests
               Harbor.Telemetry.Tests
               Harbor.TestKit.Generators.Tests
+              Harbor.TestKit.Tests
           - shard: platform
             guard: true
             projects: >-

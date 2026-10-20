@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Harbor.Terminal.Abstractions.ViewModels;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Generic;
 using Harbor.Ui.Framework.Panels;

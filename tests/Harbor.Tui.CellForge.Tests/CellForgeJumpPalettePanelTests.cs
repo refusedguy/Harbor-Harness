@@ -4,6 +4,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
@@ -137,29 +138,6 @@ public class CellForgeJumpPalettePanelTests
         new("/repo/.worktrees/jump-palette", "feat/jump-palette", false),
         new("/repo/.worktrees/worddiff", "feat/word-diff", false),
     ];
-
-    /// <summary>
-    ///     The #666 seam. Counts calls and records the directory asked about, so
-    ///     a test can prove both that the panel reaches the port and that it does
-    ///     NOT reach it on a frame that changed nothing.
-    /// </summary>
-    private sealed class FakeGitQuery(IReadOnlyList<GitWorktreeInfo>? worktrees = null) : IGitQuery
-    {
-        public int ListWorktreesCalls { get; private set; }
-
-        public List<string> AskedDirectories { get; } = new();
-
-        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default)
-        {
-            ListWorktreesCalls++;
-            AskedDirectories.Add(directory);
-            return worktrees ?? Array.Empty<GitWorktreeInfo>();
-        }
-
-        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
-            GitWorkspaceStatus.None;
-    }
-
     private static CellForgeJumpPalettePanel WithModel(out WorktreeJumpPaletteModel model)
     {
         model = new WorktreeJumpPaletteModel();
@@ -383,7 +361,7 @@ public class CellForgeJumpPalettePanelTests
         var model = new WorktreeJumpPaletteModel();
         var panel = new CellForgeJumpPalettePanel(model);
         var store = VisibleJumpStore();
-        var services = new PanelServices { Store = store, Git = new FakeGitQuery(Worktrees()) };
+        var services = new PanelServices { Store = store, Git = new TestGitQuery(worktrees: Worktrees()) };
         var ctx = Ctx(new UiState(), services);
 
         _ = panel.Build(ctx);
@@ -412,7 +390,7 @@ public class CellForgeJumpPalettePanelTests
     [Test]
     public async Task OnKey_R_Reseeds_KeepingQuery()
     {
-        var git = new FakeGitQuery(Worktrees());
+        var git = new TestGitQuery(worktrees: Worktrees());
         var services = new PanelServices { Git = git };
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
@@ -433,7 +411,7 @@ public class CellForgeJumpPalettePanelTests
     [Test]
     public async Task Build_VisiblePalette_DoesNotReseed_OrAskGit()
     {
-        var git = new FakeGitQuery([new GitWorktreeInfo("/repo/.worktrees/other", null, false)]);
+        var git = new TestGitQuery(worktrees: [new GitWorktreeInfo("/repo/.worktrees/other", null, false)]);
         var services = new PanelServices { Git = git };
         var model = new WorktreeJumpPaletteModel();
         model.Show(Entries);
@@ -540,7 +518,7 @@ public class CellForgeJumpPalettePanelTests
         var manager = new FakeSessionManager();
         manager.AddContext(session);
         var state = StateWithSessions(Info("s1", "Jump Palette"));
-        var git = new FakeGitQuery([new GitWorktreeInfo("/repo/.worktrees/jump-palette", "feat/jump-palette", false)]);
+        var git = new TestGitQuery(worktrees: [new GitWorktreeInfo("/repo/.worktrees/jump-palette", "feat/jump-palette", false)]);
         var services = new PanelServices { Sessions = manager, Git = git };
         var panel = new CellForgeJumpPalettePanel { WorktreeDirectory = "/repo" };
 
@@ -606,14 +584,5 @@ public class CellForgeJumpPalettePanelTests
         string text = Joined(panel.Build(Ctx(state, services)));
 
         await Assert.That(text).Contains("Main");
-    }
-
-    private sealed class ThrowingGitQuery : IGitQuery
-    {
-        public IReadOnlyList<GitWorktreeInfo> ListWorktrees(string directory, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("git is having a day");
-
-        public GitWorkspaceStatus GetStatus(string directory, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("git is having a day");
     }
 }

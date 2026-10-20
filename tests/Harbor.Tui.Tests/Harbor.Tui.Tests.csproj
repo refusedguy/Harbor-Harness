@@ -11,6 +11,10 @@
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
+    <!-- #1772/#1773: the shared test doubles and the three scopes. This
+         project already has every product assembly the library needs, so the
+         reference adds none. -->
+    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -13,6 +13,11 @@
     <ProjectReference Include="..\..\src\Harbor.Providers.OpenAiCompatible\Harbor.Providers.OpenAiCompatible.csproj">
       <Aliases>CompatWire,global</Aliases>
     </ProjectReference>
+    <!-- #1772: the shared test doubles (the capturing logger and the HTTP
+         stub among them). The sibling references Harbor.Abstractions only,
+         which this project already has, so the reference adds no product
+         assembly. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
