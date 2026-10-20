@@ -138,14 +138,22 @@ public class ToolDispatcherSchedulingTests
     public async Task CapOfOne_SerialisesTheBatch()
     {
         var log = new ScheduleLog();
-        var probe = new ProbeTool("probe", ExecutionMode.Parallel, log, CallDelayMs);
-        var dispatcher = NewDispatcher(new FakeToolRegistry(probe), AllowAll(), cap: 1);
 
-        var batch = new List<ToolCallPart>();
-        for (int i = 0; i < 3; i++)
+        // Three DISTINCT tools, so the timeline names each call: the peak of
+        // one would also be true of a batch that ran them concurrently by
+        // accident, and the ordering below is what says "one at a time".
+        var registry = new FakeToolRegistry(
+            new ProbeTool("probe0", ExecutionMode.Parallel, log, CallDelayMs),
+            new ProbeTool("probe1", ExecutionMode.Parallel, log, CallDelayMs),
+            new ProbeTool("probe2", ExecutionMode.Parallel, log, CallDelayMs));
+        var dispatcher = NewDispatcher(registry, AllowAll(), cap: 1);
+
+        var batch = new List<ToolCallPart>
         {
-            batch.Add(Call($"c{i}", "probe"));
-        }
+            Call("c0", "probe0"),
+            Call("c1", "probe1"),
+            Call("c2", "probe2"),
+        };
 
         ToolResultMessage result = await dispatcher.ExecuteAsync(
             batch, NewSession(), AssistantMessage.Empty("s", "m"), TestAgents.AllowAll(), CancellationToken.None);
@@ -154,6 +162,10 @@ public class ToolDispatcherSchedulingTests
         await Assert.That(log.MaxRunning).IsEqualTo(1)
             .Because("a cap of one means one call at a time; the observed peak was "
                    + $"{log.MaxRunning}.");
+        await Assert.That(log.IndexOf("end:probe0")).IsLessThan(log.IndexOf("start:probe1"))
+            .Because("with a cap of one the calls run in sequence, not side by side.");
+        await Assert.That(log.IndexOf("end:probe1")).IsLessThan(log.IndexOf("start:probe2"))
+            .Because("with a cap of one the calls run in sequence, not side by side.");
     }
 
     // ── (b) the barrier ───────────────────────────────────────────────────
