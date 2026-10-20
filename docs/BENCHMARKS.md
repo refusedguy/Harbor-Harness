@@ -1978,6 +1978,40 @@ wall of the heaviest shard is now the architecture suite's own wall, which is
 a cost with an owner (the tree scan and the analyzer compile behind it)
 rather than a layout accident.
 
+**What the change measured, on the two runs of the pull request that carries
+it** (the `Run shard <shard>` step, the same one the table above reads). The
+before column is the dev push of run 39504714459; the two after columns are
+the same tree measured twice, and a runner's own speed moves a shard, so
+they are two samples of one number and not a floor:
+
+| shard | projects | wall before | wall after (run 39513678361) | wall after (run 39515982740) |
+|---|---:|---:|---:|---:|
+| `arch` | 1 | (inside `core`) | **97 s** | **94 s** |
+| `core` | 13 | 143 s | 45 s | 44 s |
+| `ui` | 8 | 62 s | 56 s | 66 s |
+| `platform` | 9 | 35 s | 31 s | 30 s |
+| `e2e` | 6 | 24 s | 32 s | 26 s |
+| **heaviest** | | **143 s** | **97 s** | **94 s** |
+| **max/min** | | **5.96×** | 3.13× | 3.62× |
+
+Three readings in that table are worth naming rather than smoothing over.
+
+*The model under-predicts the architecture shard by 0.5-3.4 s.* The suite
+reported 96.83 s in its own shard on the first run and 93.11 s on the second,
+against 91.01 s inside `core` (1 094 tests in all three). The difference is
+not the layout: the suite is now the FIRST project of its shard, so it pays
+the JIT warm-up that the 2.0 s per-shard constant only partly covers. The
+measured 94-97 s, not the computed 93.6 s, is what the run cost.
+
+*The `e2e` shard moved by 6 s between the two runs, and it is the runner,
+not the layout.* Its headless Avalonia project's critical path was 20.1 s on
+the first run and 15.2 s on the second (the same 107 tests, the same three
+processes, `tests/Harbor.E2E.App.Avalonia/e2e-shards.json`).
+
+*The `ui` shard moved by 10 s between the two runs* for the same reason: the
+runner's own speed, not the layout. The layout is what the gate judges, and
+the gate judges it by a recorded measurement on purpose.
+
 **What the gate is, and why it is not a timing gate.** `tools/check-shard-balance.py`
 reads the shard lists out of their one source (`tools/ci-project-lists.json`,
 issue #1800) and the recorded cost of every project
