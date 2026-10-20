@@ -40,7 +40,7 @@ internal sealed class BackgroundDrain(
             var (output, isError) = completion.Result.Match(
                 run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
                 err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
-            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
+            entries.Add(new ToolResultEntry(completion.Id, WellKnownTools.Task, output, isError));
             BackgroundDrainLog.BackgroundTaskDrained(logger, completion.Id, completion.AgentName);
         }
 

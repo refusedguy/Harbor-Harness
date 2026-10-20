@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
@@ -37,7 +38,7 @@ internal sealed class ToolCardTracker
     }
 
     /// <summary>Tool name carrying a sub-agent run ([UX5] #265).</summary>
-    internal const string TaskToolName = "task";
+    internal static readonly ToolName TaskToolName = WellKnownTools.Task;
 
     internal static bool IsTaskTool(string toolName) =>
         string.Equals(toolName, TaskToolName, StringComparison.Ordinal);
@@ -498,7 +499,7 @@ internal sealed class ToolCardTracker
 
         if (ts.RetryAttempt is { } attempt && ts.RetryMax is { } max)
         {
-            string tool = ts.LastChildTool.Length > 0 ? ts.LastChildTool : TaskToolName;
+            string tool = ts.LastChildTool.Length > 0 ? ts.LastChildTool : TaskToolName.Value;
             card.Block.LiveSuffix = $"↻ {tool} {attempt}/{max}";
             card.Block.LiveSuffixIsError = true;
         }

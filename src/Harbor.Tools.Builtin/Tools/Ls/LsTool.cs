@@ -121,7 +121,7 @@ public sealed partial class LsTool : ITool
         catch (OperationCanceledException oce)
         {
             // ROP-A П.13: single boundary classifier.
-            return ToolResult.Error(ToolErrors.Handler("ls", ct)(oce));
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Ls, ct)(oce));
         }
 
         if (state.Count == 0)

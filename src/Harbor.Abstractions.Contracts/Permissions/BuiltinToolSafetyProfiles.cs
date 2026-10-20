@@ -1,3 +1,5 @@
+using Harbor.Abstractions.Models.Identifiers;
+
 namespace Harbor.Abstractions.Permissions;
 
 /// <summary>
@@ -32,43 +34,43 @@ public static class BuiltinToolSafetyProfiles
     [
         // Path-taking: a glob Allow rule (e.g. new("write", "src/*", Allow)) must not
         // authorise a traversal escape or an absolute path for any of these.
-        new("read", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("write", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
-        new("edit", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
-        new("patch", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
-        new("ls", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("tree", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("lsp", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("glob", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("grep", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("ripgrep", ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
-        new("notebook", ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
-        new("mcp", ToolSafetyProfile.Path()) { Category = ToolCategory.Mcp },
+        new(WellKnownTools.Read, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Write, ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new(WellKnownTools.Edit, ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new(WellKnownTools.Patch, ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new(WellKnownTools.Ls, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Tree, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Lsp, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Glob, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Grep, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.RipGrep, ToolSafetyProfile.Path()) { Category = ToolCategory.Read },
+        new(WellKnownTools.Notebook, ToolSafetyProfile.Path()) { Category = ToolCategory.Write },
+        new(WellKnownTools.Mcp, ToolSafetyProfile.Path()) { Category = ToolCategory.Mcp },
 
         // Shell: destructive-command deny + token-wise allow prefix, no path guard.
-        new("bash", ToolSafetyProfile.Command()) { Category = ToolCategory.Exec },
+        new(WellKnownTools.Bash, ToolSafetyProfile.Command()) { Category = ToolCategory.Exec },
 
         // Explicit opt-outs — a name, a URL or a free-form blob, never a path.
         // The category is stated here (#595) even though the ARGUMENT is not a path:
         // the two are independent questions. `webfetch` is Opaque because its
         // argument is a URL, and Network because reaching the network is what its
         // approval class is about.
-        new("webfetch", ToolSafetyProfile.Opaque) { Category = ToolCategory.Network },
-        new("task", ToolSafetyProfile.Opaque) { Category = ToolCategory.Exec },
-        new("skill", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
-        new("mcp_prompt", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
-        new("read_mcp_resource", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
+        new(WellKnownTools.WebFetch, ToolSafetyProfile.Opaque) { Category = ToolCategory.Network },
+        new(WellKnownTools.Task, ToolSafetyProfile.Opaque) { Category = ToolCategory.Exec },
+        new(WellKnownTools.Skill, ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        new(WellKnownTools.McpPrompt, ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
+        new(WellKnownTools.ReadMcpResource, ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         // Peer supervision (#793). The system-prompt recipe used to string-match
         // these two names inline, so a rename silently stopped it rendering. The
         // role is what the recipe actually needs — "can observe a peer" and "can
         // direct a peer" — and it lives here because this table is the one place
         // `Harbor.Application` can read a tool's declared facts from.
-        new("session_read", ToolSafetyProfile.Opaque)
+        new(WellKnownTools.SessionRead, ToolSafetyProfile.Opaque)
         {
             Category = ToolCategory.Read,
             PeerSupervision = PeerSupervisionRole.Observe
         },
-        new("session_steer", ToolSafetyProfile.Opaque)
+        new(WellKnownTools.SessionSteer, ToolSafetyProfile.Opaque)
         {
             Category = ToolCategory.Write,
             PeerSupervision = PeerSupervisionRole.Direct
@@ -93,8 +95,8 @@ public static class BuiltinToolSafetyProfiles
         // rather than an oversight: a leg the recipe has no sentence for is a
         // claim nothing can check, and the builtin host never registers these two,
         // so a role here would name a capability the recipe cannot describe.
-        new("session_broadcast", ToolSafetyProfile.Opaque),
-        new("session_inbox", ToolSafetyProfile.Opaque),
+        new(WellKnownTools.SessionBroadcast, ToolSafetyProfile.Opaque),
+        new(WellKnownTools.SessionInbox, ToolSafetyProfile.Opaque),
     ];
 
     /// <summary>
