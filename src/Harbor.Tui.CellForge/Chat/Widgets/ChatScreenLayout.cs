@@ -1,3 +1,4 @@
+using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework.Panels;

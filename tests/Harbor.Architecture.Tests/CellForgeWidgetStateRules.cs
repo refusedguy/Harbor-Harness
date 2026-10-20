@@ -62,6 +62,10 @@ public sealed class CellForgeWidgetStateRules
         // move-out; its ListPromptItem.Parent exemption stays recorded in this
         // table, so the tree follows the file.
         "src/Harbor.Tui.CellForge.Prompts/Widgets",
+        // #1619: the mascot cluster (MascotPanel is a Panel) lives in its own
+        // area after the move-out; the tree follows the file so the widget
+        // surface stays governed where it moved to.
+        "src/Harbor.Tui.CellForge/Chat/Mascot",
     ];
 
     /// <summary>

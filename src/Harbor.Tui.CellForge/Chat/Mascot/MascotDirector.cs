@@ -1,8 +1,13 @@
 using Harbor.Tui.CellForge.Rendering;
+// #1619: the mascot's own area. StatusPanel (the chat's status row) and the
+// engine-hosted MascotMode/MascotModeEnv (#1620) still live in the Widgets
+// namespace, so the director names that namespace explicitly now that it is
+// no longer a member of it.
+using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.Rendering.Widgets;
 
-namespace Harbor.Tui.CellForge.Widgets;
+namespace Harbor.Tui.CellForge.Mascot;
 
 public sealed class MascotDirector
 {

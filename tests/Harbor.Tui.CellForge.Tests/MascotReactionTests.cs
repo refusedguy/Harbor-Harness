@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.DesignSystem;
+using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
