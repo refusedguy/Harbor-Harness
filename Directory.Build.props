@@ -94,6 +94,26 @@
     <NuGetAuditLevel>moderate</NuGetAuditLevel>
   </PropertyGroup>
 
+  <!--
+    The project-file analyzer's severity table reaches the compiler through
+    this item (#1857). `EditorConfigFiles` is what the C# task passes to the
+    compiler as /analyzerconfig:, and the file is added HERE rather than left
+    to the SDK's discovery, because the SDK discovers a `.globalconfig` by
+    walking up from the COMPILED SOURCES: a project that compiles no source
+    file of its own (a meta-package, a test project whose sources moved into
+    Harbor.TestKit) would discover nothing, and every rule in the table would
+    fall back to its shipped default — which is Warning, and
+    TreatWarningsAsErrors promotes that to an error.
+
+    The file is named `Directory.Build.globalconfig` rather than
+    `.globalconfig` so the SDK's discovery does not add the same file twice
+    (two copies make Roslyn report a duplicate-key warning for every key in
+    it, and that warning is an error here).
+  -->
+  <ItemGroup>
+    <EditorConfigFiles Include="$(MSBuildThisFileDirectory)Directory.Build.globalconfig" />
+  </ItemGroup>
+
   <!-- NativeAOT opt-in per project; default off -->
   <PropertyGroup>
     <PublishAot>false</PublishAot>
@@ -255,7 +275,7 @@
     The IncludeAssets list itself stays: it enumerates the asset kinds an
     analyzer package contributes (analyzers, buildtransitive). Rule Proj0026
     ("remove IncludeAssets when redundant") disagrees and is switched off with
-    a reason in /.globalconfig.
+    a reason in /Directory.Build.globalconfig.
   -->
   <ItemGroup>
     <!-- Code style + quality -->
@@ -354,15 +374,16 @@
       Project-file analyzer (#1857) — 190+ rules over the MSBuild project files
       rather than over C#. Only three of them are adopted (Proj0037,
       Proj0040, Proj0041) and they are errors; the rest are off with a written
-      reason, family by family, in /.globalconfig.
+      reason, family by family, in /Directory.Build.globalconfig.
 
       The severity table cannot live in .editorconfig: a diagnostic reported on
       a project file reaches the compiler as an ADDITIONAL FILE, and Roslyn
       applies syntax-tree level editor config only to diagnostics that have a
       source tree. A global analyzer config is the only per-rule mechanism that
-      reaches them, which is why /.globalconfig exists. The .NET SDK discovers
-      a file named .globalconfig by walking up from the compiled sources, so
-      nothing has to be wired here for it to be picked up.
+      reaches them, which is why /Directory.Build.globalconfig exists, and it
+      is wired to the compiler by hand in this file (see the EditorConfigFiles
+      item above) because the SDK's own discovery of a `.globalconfig` walks up
+      from the compiled sources and misses every project that compiles none.
     -->
     <PackageReference Include="DotNetProjectFile.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -387,12 +408,18 @@
     <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
   </PropertyGroup>
 
+  <!--
+    The Condition below is ONE line on purpose. An attribute value that spans
+    several lines crashes the project-file analyzer (#1857) with
+    `AD0001: ... 'end' must not be less than 'start'`: the analyzer looks for
+    the closing quote on the attribute's first line only, and a value that
+    continues on the next line leaves it with an end position of (0,0).
+    MSBuild has no way to express several conditions on one attribute without
+    a multi-line value, so the conjunction is one long line.
+  -->
   <Target Name="HarborArchitectureGate"
           AfterTargets="Build"
-          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true'
-                     AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'
-                     AND '$(DesignTimeBuild)' != 'true'
-                     AND '$(BuildingInsideVisualStudio)' != 'true'">
+          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true' AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests' AND '$(DesignTimeBuild)' != 'true' AND '$(BuildingInsideVisualStudio)' != 'true'">
     <!-- Evaluated HERE, at execution time: at Directory.Build.props import
          time $(IntermediateOutputPath) is still empty, which used to scatter
          the gate log into the project dir instead of obj/. -->

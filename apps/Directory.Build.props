@@ -17,7 +17,14 @@
     Excubo.Analyzers.DependencyInjectionValidation is the analyzer that enforces it.
   -->
 
-  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+  <!--
+    Imported by RELATIVE path, not by the GetPathOfFileAbove function: MSBuild
+    evaluates both to the same file (this directory's parent), but the
+    project-file analyzer (#1857) can only follow an import it can resolve on
+    disk, and a property function is not resolvable to it. With the function
+    form the analyzer never sees the solution-wide props.
+  -->
+  <Import Project="../Directory.Build.props"/>
 
   <ItemGroup>
     <!-- Annotation attribute (compile-time only) — needed so composition roots

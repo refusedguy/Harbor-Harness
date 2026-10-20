@@ -1,8 +1,9 @@
 is_global = true
+global_level = 100
 
 #
-# .globalconfig — severity table for the analyzer families whose diagnostics are
-# NOT reported on a C# source tree.
+# Directory.Build.globalconfig — severity table for the analyzer families whose
+# diagnostics are NOT reported on a C# source tree.
 #
 # WHY THIS FILE EXISTS AND WHY IT IS NOT .editorconfig
 # ----------------------------------------------
@@ -20,13 +21,28 @@ is_global = true
 # (`dotnet_analyzer_diagnostic.category-<X>.severity`), which is gated on
 # diagnostic.Location.SourceTree as well. A global analyzer config is the only
 # per-rule mechanism that reaches them, which is why the package's own
-# documentation points at .globalconfig rather than .editorconfig.
+# documentation points at a global config rather than .editorconfig.
 #
-# The .NET SDK discovers a file named .globalconfig by walking up from the compiled
-# sources (Microsoft.Managed.Core.targets: GlobalAnalyzerConfigFiles), so no
-# extra wiring is needed. `global_level` is left unset: a file named .globalconfig
-# gets level 100, the highest, and this file must win over anything a package
-# ships.
+# WHY THE FILE IS NAMED Directory.Build.globalconfig AND NOT .globalconfig
+# -----------------------------------------------------------------------
+# The .NET SDK discovers a file named exactly `.globalconfig` by walking up from
+# the COMPILED SOURCES (Microsoft.Managed.Core.targets: _AllDirectoriesAbove is
+# built from @(Compile)). A project that compiles no source file of its own —
+# a meta-package like src/Harbor.Ui.Framework, a test project whose sources
+# moved into Harbor.TestKit — therefore discovers NO global config at all, and
+# every rule in this table silently falls back to its shipped default (Warning,
+# which TreatWarningsAsErrors promotes to an error). That is not hypothetical:
+# the second CI run of this branch reported forty-odd rules at their shipped
+# default on exactly those projects.
+#
+# So the file is added to `EditorConfigFiles` explicitly in Directory.Build.props
+# — that is the item the C# task passes to the compiler as /analyzerconfig: —
+# and it is named so the SDK's own discovery does not add it a second time
+# (two copies of one file would make Roslyn report a duplicate-key warning for
+# every key in it, and that warning is an error here).
+#
+# `global_level = 100` puts this file above anything a package ships: the
+# dotnet-project-file-analyzers package's own global config sits at -1.
 #
 # WHAT IS IN HERE
 # --------------

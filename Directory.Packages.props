@@ -194,10 +194,11 @@
 
       190+ rules over MSBuild project files rather than over C#. Three of them
       are adopted (Proj0037, Proj0040, Proj0041) and are errors; the rest are
-      off with a written reason, family by family, in /.globalconfig — NOT in
-      .editorconfig, because a diagnostic reported on a project file reaches the
-      compiler as an additional file and Roslyn does not apply syntax-tree
-      level editor config to those. /.globalconfig carries the reason.
+      off with a written reason, family by family, in
+      /Directory.Build.globalconfig — NOT in .editorconfig, because a
+      diagnostic reported on a project file reaches the compiler as an
+      additional file and Roslyn does not apply syntax-tree level editor config
+      to those. Directory.Build.globalconfig carries the reason.
 
       The package's own `build/DotNetProjectFile.Analyzers.props` points
       `GlobalAnalyzerConfigFiles` at a file name the package does not ship

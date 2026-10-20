@@ -28,7 +28,7 @@ Harbor runs three layers of static analysis + DI validation:
 | `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
-| **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/.globalconfig`](../.globalconfig), not here — see §Project-file rules) |
+| **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 
@@ -362,7 +362,7 @@ and the `.resx` files — and reports on them. The package ships 193 rules
 | Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. |
 
 **Everything else is off, family by family, with the reason written next to it**
-in [`/.globalconfig`](../.globalconfig).
+in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig).
 
 #### Why the severity table is not in `.editorconfig`
 
@@ -381,11 +381,24 @@ A `dotnet_diagnostic.ProjXXXX.severity` line in `.editorconfig` is therefore
 thing. A **global analyzer config** is the only per-rule mechanism that reaches
 them — which is what the package's own documentation points at.
 
-The .NET SDK discovers a file named `.globalconfig` by walking up from the
-compiled sources (`Microsoft.Managed.Core.targets`), so nothing has to be wired
-for it to be picked up. The file sits at the repository root and is the only
-place in this repository where a diagnostic severity is written down outside
-`.editorconfig`.
+The file is added to `EditorConfigFiles` in `Directory.Build.props` — the
+item the C# task passes to the compiler as `/analyzerconfig:` — rather than
+left to the SDK's discovery, because the SDK discovers a `.globalconfig` by
+walking up from the **compiled sources**: a project that compiles no source
+file of its own (a meta-package like `src/Harbor.Ui.Framework`, a test
+project whose sources moved into `Harbor.TestKit`) discovers nothing at all,
+and every rule in the table falls back to its shipped default, which is
+`Warning` — promoted to an error by `TreatWarningsAsErrors`.
+
+It is named `Directory.Build.globalconfig` rather than `.globalconfig` so the
+SDK's discovery does not add the same file a second time: two copies of one
+file make Roslyn report a duplicate-key warning for every key in it, and that
+warning is an error here. `global_level = 100` puts it above anything a
+package ships (the dotnet-project-file-analyzers package's own global config
+sits at `-1`).
+
+The file sits at the repository root and is the only place in this repository
+where a diagnostic severity is written down outside `.editorconfig`.
 
 #### The one place Proj0037 is scoped instead of fixed
 
