@@ -32,7 +32,7 @@ namespace Harbor.TestKit.Tests;
 ///     A synthetic closed enum for the totality checks. Two members is
 ///     enough: a table that names one of them is a table with a hole.
 /// </summary>
-internal enum SyntheticClosedEnum
+public enum SyntheticClosedEnum
 {
     /// <summary>The member the incomplete table names.</summary>
     First,

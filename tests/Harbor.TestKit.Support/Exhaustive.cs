@@ -261,6 +261,7 @@ public static class Exhaustive
     /// <summary>
     ///     The missing members, as one readable list.
     /// </summary>
-    private static string Describe<TEnum>(IReadOnlyList<TEnum> missing) =>
+    private static string Describe<TEnum>(IReadOnlyList<TEnum> missing)
+        where TEnum : struct, Enum =>
         string.Join(", ", missing.Select(member => member.ToString()));
 }
