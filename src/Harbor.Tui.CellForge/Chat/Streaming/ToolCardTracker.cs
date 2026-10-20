@@ -84,6 +84,22 @@ internal sealed class ToolCardTracker
     /// ToolCallStart, and durations measure from execution).</summary>
     public void EnsureCard(string id, string toolName, JsonElement args, bool restampStarted = false)
     {
+        // #1139: the LLM's ToolCallStart opens the card BEFORE the tool runs,
+        // so by the time the ToolExecutionStart arrives (with the args) the
+        // card is already there — and the string overload below discards the
+        // shaped args for a card that exists. Shaping them anyway materialized
+        // the args JSON (GetRawText) plus the summary on EVERY tool call, for
+        // a result nobody reads. Same card, same args, no copy.
+        if (_cards.TryGetValue(id, out var existing))
+        {
+            if (restampStarted)
+            {
+                existing.StartedMs = NowMs;
+            }
+
+            return;
+        }
+
         ShapeArgs(args, out string summary, out string full);
         EnsureCard(id, toolName, summary, full, restampStarted);
     }

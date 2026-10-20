@@ -136,4 +136,69 @@ public class ToolOutputCollapseTests
         await Assert.That(art).Contains("line-10");
         await Assert.That(art).DoesNotContain("earlier lines");
     }
+
+    // ── #1139: the span shapes the paint path uses ──────────────────────────
+    //
+    // The paint/measure path asks for the OVERFLOW FLAG over a span and for
+    // the tail over a span, so the whole tool body is never copied. These
+    // pins are the equivalence: the span shapes answer exactly what the
+    // string shapes answered.
+
+    [Test]
+    public async Task Span_Overflow_Flag_Matches_The_Collapse_Flag()
+    {
+        string[] samples =
+        [
+            string.Empty,
+            "ok",
+            "a\nb",
+            "a\nb\nc\nd\ne\nf",
+            "0123456789",
+            "trailing newline\n",
+        ];
+
+        foreach (string sample in samples)
+        {
+            foreach (int maxLines in new[] { 1, 4, 10 })
+            {
+                foreach (int maxChars in new[] { 5, 100, 1000 })
+                {
+                    var collapsed = ToolOutputCollapse.Collapse(sample, maxLines, maxChars);
+                    bool overSpan = ToolOutputCollapse.IsOverflow(sample.AsSpan(), maxLines, maxChars);
+                    await Assert.That(overSpan).IsEqualTo(collapsed.Overflow)
+                        .Because(
+                            $"the span predicate must be the flag Collapse reports: sample {sample.Length} char(s), "
+                            + $"budget {maxLines} line(s)/{maxChars} char(s).");
+                }
+            }
+        }
+    }
+
+    [Test]
+    public async Task Span_CollapseTail_Matches_The_String_Tail()
+    {
+        string[] samples =
+        [
+            string.Empty,
+            "one line",
+            string.Join("\n", Enumerable.Range(1, 10).Select(i => $"line-{i:00}")),
+            string.Join("\n", Enumerable.Range(1, 10).Select(i => $"line-{i:00}")) + "\n",
+        ];
+
+        foreach (string sample in samples)
+        {
+            foreach (int maxLines in new[] { 1, 4, 10 })
+            {
+                foreach (int maxChars in new[] { 20, 100, 1000 })
+                {
+                    string fromString = ToolOutputCollapse.CollapseTail(sample, maxLines, maxChars);
+                    string fromSpan = ToolOutputCollapse.CollapseTail(sample.AsSpan(), maxLines, maxChars);
+                    await Assert.That(fromSpan).IsEqualTo(fromString)
+                        .Because(
+                            $"the span tail must be the string tail: sample {sample.Length} char(s), budget "
+                            + $"{maxLines} line(s)/{maxChars} char(s).");
+                }
+            }
+        }
+    }
 }

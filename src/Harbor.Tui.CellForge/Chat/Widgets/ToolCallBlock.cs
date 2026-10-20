@@ -196,19 +196,17 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// expand affordance — Enter/click reveals the full body.
     /// </summary>
     public bool HasOverflowAtWidth(int width) =>
-        _body.HasValue && ToolOutputCollapse.Collapse(
-            _body.Value.Output.TrimEnd('\n'),
+        _body.HasValue && ToolOutputCollapse.IsOverflow(
+            _body.Value.Output.AsSpan().TrimEnd('\n'),
             IsExpanded ? ExpandedBodyLines : Math.Max(0, MaxBodyLines),
-            IsExpanded ? MaxCharsFor(ExpandedBodyLines, width) : MaxCharsFor(Math.Max(0, MaxBodyLines), width))
-        .Overflow;
+            IsExpanded ? MaxCharsFor(ExpandedBodyLines, width) : MaxCharsFor(Math.Max(0, MaxBodyLines), width));
 
     /// <summary>Whether this card paints the collapsed shell tail at <paramref name="width"/> (O11 #1180).</summary>
     public bool UsesShellTailAtWidth(int width) => !IsExpanded && _body.HasValue && IsShellTool(Info.ToolName)
-        && ToolOutputCollapse.Collapse(
-            _body.Value.Output.TrimEnd('\n'),
+        && ToolOutputCollapse.IsOverflow(
+            _body.Value.Output.AsSpan().TrimEnd('\n'),
             Math.Max(0, MaxBodyLines),
-            MaxCharsFor(Math.Max(0, MaxBodyLines), width))
-        .Overflow;
+            MaxCharsFor(Math.Max(0, MaxBodyLines), width));
 
     /// <summary>
     /// Whether the card is expanded (feed Enter/click toggles via
@@ -570,7 +568,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         if (!IsExpanded && IsShellTool(Info.ToolName) && UsesShellTailAtWidth(Math.Max(1, width)))
         {
             string tail = ToolOutputCollapse.CollapseTail(
-                body.Output.TrimEnd('\n'), Math.Max(0, maxLines), MaxCharsFor(Math.Max(0, maxLines), width));
+                body.Output.AsSpan().TrimEnd('\n'), Math.Max(0, maxLines), MaxCharsFor(Math.Max(0, maxLines), width));
             PaintTailLines(buffer, x, y, rows, tail, style);
             return;
         }
@@ -580,12 +578,12 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
         // marker (nothing was line-cut), so append the "…" affordance row here
         // to match BodyLineCount's logical + 1. Line overflow already carries
         // its marker inside PaintBodyLines.
-        string trimmed = body.Output.TrimEnd('\n');
+        ReadOnlySpan<char> trimmed = body.Output.AsSpan().TrimEnd('\n');
         if (trimmed.Length > 0 && maxLines > 0)
         {
-            int logical = ICollapsibleChatBlock.CountLogicalLines(trimmed.AsSpan());
+            int logical = ICollapsibleChatBlock.CountLogicalLines(trimmed);
             if (logical <= maxLines
-                && ToolOutputCollapse.Collapse(trimmed, maxLines, MaxCharsFor(maxLines, width)).Overflow
+                && ToolOutputCollapse.IsOverflow(trimmed, maxLines, MaxCharsFor(maxLines, width))
                 && logical < rows)
             {
                 buffer.SetText(x, y + logical, "…", ChatPalette.Dim);
@@ -641,11 +639,9 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             return 0;
         }
 
-        string trimmed = _body.Value.Output.TrimEnd('\n');
-        var output = trimmed.AsSpan();
+        ReadOnlySpan<char> output = _body.Value.Output.AsSpan().TrimEnd('\n');
         int budget = Math.Max(0, MaxBodyLines);
-        bool overflow = ToolOutputCollapse.Collapse(
-            trimmed, budget, MaxCharsFor(budget, width)).Overflow;
+        bool overflow = ToolOutputCollapse.IsOverflow(output, budget, MaxCharsFor(budget, width));
         if (!overflow)
         {
             return ICollapsibleChatBlock.ClampedBodyLineCount(output, MaxBodyLines);
@@ -675,11 +671,10 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
             return 0;
         }
 
-        string trimmed = _body.Value.Output.TrimEnd('\n');
-        var output = trimmed.AsSpan();
+        ReadOnlySpan<char> output = _body.Value.Output.AsSpan().TrimEnd('\n');
         // Expanded keeps the head preview; the char budget only forces the
         // marker row via the shared overflow flag (line geometry unchanged).
-        bool overflow = ToolOutputCollapse.Collapse(trimmed, ExpandedBodyLines, MaxCharsFor(ExpandedBodyLines, width)).Overflow;
+        bool overflow = ToolOutputCollapse.IsOverflow(output, ExpandedBodyLines, MaxCharsFor(ExpandedBodyLines, width));
         int clamped = ICollapsibleChatBlock.ClampedBodyLineCount(output, ExpandedBodyLines);
         if (!overflow)
         {

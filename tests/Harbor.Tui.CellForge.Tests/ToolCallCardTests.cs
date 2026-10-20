@@ -72,6 +72,45 @@ public class ToolCallCardTests
         }
     }
 
+    /// <summary>
+    ///     #1139: the LLM's ToolCallStart opens the card BEFORE the tool
+    ///     runs, so the ToolExecutionStart finds the card there — and the
+    ///     shaped args are DISCARDED for a card that already exists (the old
+    ///     shape shaped them and dropped them). The card the user sees is the
+    ///     same either way; what changed is that the args JSON is no longer
+    ///     materialized for a result nobody reads.
+    /// </summary>
+    [Test]
+    public async Task ToolStart_On_An_Open_Card_Keeps_The_Card_It_Opened()
+    {
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var tracker = new ToolCardTracker(panel);
+
+        tracker.EnsureCard("tc1", "bash", argsSummary: null);
+        tracker.EnsureCard("tc1", "bash", Args("{\"cmd\":\"make\"}"), restampStarted: true);
+
+        var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
+        await Assert.That(card.Info.ArgsSummary).IsEqualTo(string.Empty);
+        await Assert.That(card.Info.ArgsFull).IsNull();
+    }
+
+    /// <summary>
+    ///     #1139: a card that is NOT open yet still gets its shaped args —
+    ///     the skip is only for the card the LLM already opened.
+    /// </summary>
+    [Test]
+    public async Task ToolStart_On_A_New_Card_Shapes_Its_Args()
+    {
+        var panel = new ChatTimelinePanel("chat", 20, 4);
+        var tracker = new ToolCardTracker(panel);
+
+        tracker.EnsureCard("tc1", "bash", Args("{\"cmd\":\"make\"}"));
+
+        var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
+        await Assert.That(card.Info.ArgsSummary).IsEqualTo("{\"cmd\":\"make\"}");
+        await Assert.That(card.Info.ArgsFull).IsEqualTo("{\"cmd\":\"make\"}");
+    }
+
     [Test]
     public async Task ToggleExpanded_Flips_State_And_Grows_Measure()
     {
