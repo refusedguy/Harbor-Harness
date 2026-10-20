@@ -1,8 +1,9 @@
+using Harbor.E2E.Framework;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 
-namespace Harbor.E2E.Framework;
+namespace Harbor.E2E.Framework.Tests;
 
 /// <summary>
 ///     Unit tests for <see cref="StateTestRunner" /> — the renderer-agnostic
@@ -11,10 +12,20 @@ namespace Harbor.E2E.Framework;
 ///     display server, so they run in any CI environment.
 /// </summary>
 /// <remarks>
-///     The harness was created in the e2e-state-coverage plan (Task 5.1) but had
-///     no test coverage. These tests exercise the core extraction logic and
-///     factory methods to ensure the state-to-text mapping is correct for all
-///     renderer-agnostic <see cref="UiState" /> snapshots.
+///     <para>
+///         The harness was created in the e2e-state-coverage plan (Task 5.1) but had
+///         no test coverage. These tests exercise the core extraction logic and
+///         factory methods to ensure the state-to-text mapping is correct for all
+///         renderer-agnostic <see cref="UiState" /> snapshots.
+///     </para>
+///     <para>
+///         <b>Why this file lives in its own project.</b> These tests used to sit
+///         in <c>tests/Harbor.E2E.Framework/</c>, beside the code they test. TUnit
+///         discovers the test classes of a referenced TEST PROJECT inside every
+///         project that references it, and six test projects reference the E2E
+///         framework, so these 26 tests ran six times per CI run — 156 executions
+///         of 26 tests. Here, in a project nothing references, they run once.
+///     </para>
 /// </remarks>
 public class StateTestRunnerTests
 {

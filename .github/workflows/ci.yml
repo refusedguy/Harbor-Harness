@@ -978,6 +978,16 @@ jobs:
             # neither the OS matrix's 6-project list (test-os.yml) nor
             # coverage's 19 contains any of them, and fail-on-empty: false
             # never notices an empty TRX.
+            #
+            # Harbor.E2E.Framework.Tests is the SIXTH project here, and it is
+            # here because it is the ONLY home of the E2E framework's own 26
+            # tests: TUnit runs the test classes of a referenced test project
+            # inside every project that references it, so while those tests
+            # lived in Harbor.E2E.Framework they ran SIX times per CI run (in
+            # this shard's four E2E projects, in the ui shard's
+            # Harbor.Tui.CellForge.PtyTests, and in the platform shard's
+            # Harbor.Ipc.Tests). They live in their own project now, so this
+            # list is where they run — once.
             guard: true
             projects: >-
               Harbor.E2E.Cli
@@ -985,6 +995,7 @@ jobs:
               Harbor.Tui.E2E.Tests
               Harbor.App.Cli.Tests
               Harbor.LoadTests
+              Harbor.E2E.Framework.Tests
     steps:
       - uses: actions/checkout@v7
         with:

@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.E2E.Framework.Tests — the unit tests for Harbor.E2E.Framework itself.
+
+    WHY THIS PROJECT EXISTS AT ALL
+    -----------------------------
+    TUnit discovers the test classes of a REFERENCED TEST PROJECT inside every
+    project that references it. `StateTestRunnerTests` used to live in
+    `tests/Harbor.E2E.Framework/`, and six test projects reference that
+    framework, so its 26 tests ran six times per CI run — 156 executions of 26
+    tests, in six different modules, for one behaviour.
+
+    Moving the file here ends that: nothing references this project, so its
+    tests are discovered exactly once, in exactly one module, and they cannot
+    be dropped by a `--treenode-filter` that names some other project's classes.
+
+    The rule that keeps this shape is
+    `tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs`:
+
+      * a test project must not reference another test project unless it uses
+        its types, and
+      * a test project that another test project references must not declare
+        test methods at all.
+
+    The second half is the one this project exists to satisfy: the framework
+    is referenced by six projects, so it may hold helpers but not tests.
+
+    The tests themselves are pure: they exercise `StateTestRunner`'s state
+    factories and its `ExtractExpectedText` mapper, with no PTY, no display
+    server and no mock LLM server. That is why they are a separate project
+    rather than one more class in an E2E suite.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;CA1707;CA1861;S5445;S3011</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The subject under test. Declared explicitly, not leaned on transitively. -->
+    <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <!--
+      The types the assertions are written against: ChatRole/ChatLine live in
+      Harbor.Abstractions.Contracts, UiState/TerminalUiState/ChatDomainState in
+      Harbor.Ui.Framework.State, TuiPanelState/FocusMode in
+      Harbor.Ui.Framework.State too. The framework references the Harbor.Ui.Framework
+      meta-package, so these would compile without the two lines below — but
+      "would compile" is not "is declared", and the repo's own rule (see
+      tests/Harbor.TestKit/Harbor.TestKit.csproj) is that a load-bearing
+      reference is written down rather than inherited by luck.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
+  </ItemGroup>
+
+</Project>

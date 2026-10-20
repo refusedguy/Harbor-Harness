@@ -1,5 +1,3 @@
-using Harbor.E2E.Framework;
-
 namespace Harbor.E2E.App.Avalonia;
 
 /// <summary>
@@ -112,15 +110,20 @@ public static class E2eShards
     ///     <see cref="Shard0" />, with this shard's filter.
     ///     <para>
     ///         The filter, verbatim:
-    ///         <c>/*/*/(ToastTests)|(ChatViewTests)|(CommandPaletteTests)|(ComponentGoldenFramesTests)|(FocusSessionTests)|(GoldenFrameTests)|(MicroControlsTests)|(OnboardingTests)|(OverlaySurfacesTests)|(SettingsTests)|(ShellChromeTests)|(StatusBarTests)|(StateTestRunnerTests)/*</c>
+    ///         <c>/*/*/(ToastTests)|(ChatViewTests)|(CommandPaletteTests)|(ComponentGoldenFramesTests)|(FocusSessionTests)|(GoldenFrameTests)|(MicroControlsTests)|(OnboardingTests)|(OverlaySurfacesTests)|(SettingsTests)|(ShellChromeTests)|(StatusBarTests)/*</c>
     ///     </para>
     ///     <para>
-    ///         <c>StateTestRunnerTests</c> lives in the REFERENCED
-    ///         <c>Harbor.E2E.Framework</c> project, not in this one — but TUnit
+    ///         <c>StateTestRunnerTests</c> used to be in this list. It lived in
+    ///         the REFERENCED <c>Harbor.E2E.Framework</c> project, and TUnit
     ///         discovers and runs a referenced test project's classes in every
-    ///         project that references it, so those 26 tests are part of this
-    ///         process today and a filter that did not name them would DROP
-    ///         them from CI. They cost 0.2s in total, so they ride along here.
+    ///         project that references it — so those 26 tests were part of this
+    ///         process, and a filter that did not name them would have DROPPED
+    ///         them from CI. They have since moved to
+    ///         <c>tests/Harbor.E2E.Framework.Tests</c>, a project nothing
+    ///         references, so they run exactly once, in their own process, and no
+    ///         filter in THIS project can drop them. That is also why the
+    ///         entry is gone: naming a class this process does not discover
+    ///         would be a lie the filter would silently tolerate.
     ///     </para>
     /// </summary>
     public static IReadOnlyList<string> Shard1 { get; } =
@@ -137,7 +140,6 @@ public static class E2eShards
         nameof(ComponentTests.SettingsTests),
         nameof(ComponentTests.ShellChromeTests),
         nameof(ComponentTests.StatusBarTests),
-        nameof(StateTestRunnerTests),
     ];
 
     /// <summary>Both shards, in order.</summary>
