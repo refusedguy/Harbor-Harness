@@ -192,40 +192,74 @@ jobs:
               - 'Directory.Packages.props'
               - 'Directory.Build.props'
 
-  # #428 (second slice). Public-API snapshot gate for the frozen interface
-  # facade.
+  # #428 / #1845. The public-API freeze of the two frozen assemblies.
   #
-  # The baseline `src/Harbor.Abstractions/PublicAPI.Baseline.txt` is the
-  # reviewed surface: 413 effectively-public types/members as
-  # `Qualified.Type :: normalized declaration`, with no file paths and no
-  # line numbers, so moves and re-wraps do not fail the gate. Any added,
-  # removed or re-signed member fails it — additions regenerate the baseline
-  # in the same diff (`--update`, reviewed), removals/re-signs are breaking
-  # and need a major bump + CHANGELOG entry decided outside this gate.
-  # The sibling gate (tools/check-public-api.py, docs.yml) covers
-  # Harbor.Abstractions.Contracts; together they are the full #428 freeze.
-  # No dotnet, no packages: stdlib python only, always runs (no `needs`),
-  # and it is blocking, not advisory.
+  # The freeze itself is a COMPILE-time gate now, not a job:
+  # Microsoft.CodeAnalysis.PublicApiAnalyzers is referenced by
+  # Harbor.Abstractions and Harbor.Abstractions.Contracts and by nothing
+  # else, so RS0016 (a public symbol that is not in the declared API) and
+  # RS0017 (a declared API symbol that is not in the code) fail the build
+  # of the `build` job above. No runner, no python, no second copy of the
+  # surface: the compiler already has the symbol table.
   #
-  # The floor is a ratchet. Measured on this tree: 413 members. It is set
-  # AT that value, not below: a floor with slack cannot tell "the surface
-  # got smaller" from "the matcher stopped matching". The non-vacuity proof
-  # is the gate's own --self-test (added/removed member each fail naming
-  # it), run as the first step below.
-  public-api-abstractions:
-    name: public-api snapshot (Abstractions)
+  # What the analyzer cannot see is WHICH COMMIT carried a change, so the
+  # re-signing half of the freeze lives here: a commit that edits the
+  # frozen baseline must edit the assembly's sources with it, and a commit
+  # that changes a public declaration must re-sign the baseline with it.
+  # tools/check-public-api-resign.py reads the PR's commit range and says
+  # so. Its --self-test is the non-vacuity proof of the python half, and it
+  # runs in the docs.yml `selftest` job.
+  #
+  # The second step is the non-vacuity proof of the COMPILE-time half, and
+  # it is here because it needs an SDK: a throwaway project with one public
+  # member and an empty baseline must FAIL the build with `error RS0016`,
+  # must PASS once the analyzer's own requested row is added, and must FAIL
+  # again with `error RS0017` when the member is deleted while the baseline
+  # still names it. A gate that stopped firing is indistinguishable from a
+  # surface nobody changed, and this job is what tells the two apart.
+  public-api:
+    name: public-api freeze
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
-      - name: Public-API snapshot gate fails on an unreviewed change
-        run: python3 tools/check-public-api-abstractions.py --self-test
-      - name: Check the frozen facade surface against its baseline
-        run: python3 tools/check-public-api-abstractions.py --min-members 413
+        with:
+          fetch-depth: 0
+
+      # The floors are ratchets on the ROWS of the frozen baselines: 1896 for
+      # the contract assembly, 1269 for the facade. They are set AT the
+      # measured values, not below — a floor with slack cannot tell "the
+      # baseline was truncated" from "the surface got smaller". The numbers
+      # are not comparable with the python gate's (491 / 413): the analyzer
+      # counts implicit constructors, property accessors and the members the
+      # compiler synthesises for a record, none of which have a `public`
+      # keyword in the source for a line scan to find.
+      - name: "Re-signing gate: every change to the frozen surface is re-signed with it"
+        run: |
+          set -eu
+          base="$(git merge-base HEAD origin/dev 2>/dev/null || true)"
+          if [ -z "$base" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          fi
+          if [ -z "$base" ]; then
+            echo "::error::cannot resolve the base commit of this range" >&2
+            exit 1
+          fi
+          python3 tools/check-public-api-resign.py --base "$base" \
+            --min-rows src/Harbor.Abstractions.Contracts=1896 \
+            --min-rows src/Harbor.Abstractions=1269
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: "Non-vacuity: an unreviewed public member fails the build, a re-signed one passes"
+        run: bash tools/public-api-nonvacuity.sh
 
   # #1882. Package-set gate for the test and sample projects.
   #
