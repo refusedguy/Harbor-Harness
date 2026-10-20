@@ -199,7 +199,7 @@
 //
 // STATUS: written without being compiled. Local dotnet is forbidden in this
 // repository and CI is the first build, exactly as recorded in
-// `DefaultModelDocClaimTests.cs:60-64` and in the two rule files above.
+// `DefaultModelDocClaimTests`'s STATUS block and in the two rule files above.
 //
 // Author: refusedguy (#922).
 

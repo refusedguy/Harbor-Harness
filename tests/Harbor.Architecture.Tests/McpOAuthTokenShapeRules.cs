@@ -10,7 +10,7 @@
 //   2. `TryGetAccessTokenAsync`   -> `Task<string?>`, null
 //   3. `TryGetAccessTokenResultAsync` -> `Task<Result<string>>`
 //
-// Only #2 was ever wired (`McpRegistry.GetTransport` at :548), so #1's callers
+// Only #2 was ever wired (`McpRegistry.GetTransport`), so #1's callers
 // were zero and #3's only consumer was #2 itself. But #1 was the one left in
 // the PUBLIC surface, which makes it the one new code reaches for — and it is
 // the shape that crashes a transport on a server the user simply has not

@@ -162,7 +162,7 @@ public class MaybeAbsenceTests
             + "Converted the moment that decision lands; the recipe is in #591. "
             + "Conversion note for whoever does it: CSE's Maybe<T> is a STRUCT, so `?.` and "
             + "`is not { }` do not bind to its value. The single caller, "
-            + "src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs:142, becomes "
+            + "ScreenSession.CheckAutoSize, becomes "
             + "`offer.HasValue ? offer.Value : <re-check next frame>`."
     };
 

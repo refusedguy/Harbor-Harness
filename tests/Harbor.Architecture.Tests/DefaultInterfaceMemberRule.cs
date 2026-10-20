@@ -477,7 +477,7 @@ public sealed class DefaultInterfaceMemberRule
             DimDirection.Conservative,
             "Returns false: the key falls through to the next view. Conservative (#579 row 5) — but "
             + "the hook has ZERO callers, since key handling moved to the reducer "
-            + "(AppMsg.KeyInput via KeyEventAdapter.cs:23-27), so it is also dead.",
+            + "(AppMsg.KeyInput via KeyEventAdapter.ToKeyInput), so it is also dead.",
             ""),
         new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",

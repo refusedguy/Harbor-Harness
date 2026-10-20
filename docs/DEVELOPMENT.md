@@ -89,6 +89,24 @@ every markdown change, in CI and locally:
 ./tools/md-lint.py --self-test          # prove the lint still fails on bad input
 ```
 
+A third stdlib-only gate asks a different question, about the architecture rule
+tree rather than about markdown: **may an architecture rule anchor on a line
+number?** A `file:line` is a coordinate, and every line inserted above it moves
+the coordinate, so the anchor stops naming what its author meant. The
+architecture tree was converted to symbolic anchors (`Type.Member`, plus the
+condition that makes the site the one being talked about) in #1728, and this
+gate is what keeps it converted.
+
+```bash
+./tools/check-arch-anchors.py          # may an arch rule point at a line number?
+./tools/check-arch-anchors.py --self-test   # prove the gate still fails on a planted anchor
+```
+
+The anchors it excuses are the ones where the number **is** the checked fact,
+and each one carries a reason in
+[`tools/arch-anchor-exceptions.txt`](../tools/arch-anchor-exceptions.txt) — a
+ratchet in both directions, so an exception the tree no longer produces is red.
+
 `check-md-links.py` resolves every relative link, `#anchor` and
 `path/File.cs:123` reference in the tracked markdown and reports the ones that
 do not exist; external URLs are skipped on purpose (network flakiness is worse

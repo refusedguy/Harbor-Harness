@@ -5,8 +5,8 @@
 // `IdentityConfig` declared the default model id TWICE, seven lines apart, and the
 // two copies did not agree:
 //
-//   public const string FallbackModel = "kilocode/tencent/hy3:free";   // :13
-//   ModelRef.Create(pid, "tencent/hy3:free".Split('/')[1]),           // :20
+//   public const string FallbackModel = "kilocode/tencent/hy3:free";
+//   ModelRef.Create(pid, "tencent/hy3:free".Split('/')[1]),
 //
 // `"tencent/hy3:free".Split('/')[1]` is `"hy3:free"`, so the value a default
 // install actually carried (the typed half, read by `HarborConfig.Model`) was not

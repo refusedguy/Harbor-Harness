@@ -16,12 +16,14 @@
 //
 //   * QuestionFormView is BOTH families at once — the custom row is answer
 //     TEXT, the option rows are navigation — and which one applies is decided
-//     by WHERE THE CURSOR IS, i.e. mutable per-instance state (:512 vs :571).
+//     by WHERE THE CURSOR IS, i.e. mutable per-instance state
+//     (QuestionFormView.HandleKey vs QuestionFormView.AcceptsTypedChar).
 //   * DialogOverlay is BOTH families at once — Select/Radio hold no buffer,
 //     Prompt/Multiline/Approval do — decided by `_kind`, again instance state.
 //   * ComposerController is a buffer, but VimComposerMode turns the SAME rune
 //     into a command in normal mode, and the composer's OWN chord table
-//     (:196-252) tests modifiers to decide chords. A widget that is a buffer
+//     (`ComposerController.KeyBinding`) tests modifiers to decide chords. A widget that
+//     is a buffer
 //     still needs a command gate on a different key.
 //
 // So "has a text buffer" is not a boolean any widget could declare. It is a
@@ -36,55 +38,58 @@
 // key ENCODING, not about any widget, and it is written out in eight places in
 // two vocabularies. #833's own table lists four spellings; measured on dev it is
 // eight sites across THREE modifier vocabularies, and the polarity flips
-// without the type changing (`!= 0` means "refuse" at DialogOverlay:649 and
-// QuestionFormView:571; the same expression inverted IS ComposerController:194).
+// without the type changing (`!= 0` means "refuse" at
+// DialogOverlay.HandleKey(ConsoleKeyInfo) and QuestionFormView.AcceptsTypedChar;
+// the same expression inverted IS ComposerController.HandleKey).
 //
 // The full measured inventory — this is the deliverable of the issue:
 //
 //   BUFFER (a rune can reach a buffer; Shift types, Ctrl/Meta/Alt refuse)
-//     src/Harbor.Tui.CellForge/Chat/Rendering/ComposerController.cs:282 == 0            (kitty)
-//     DialogOverlay.cs:683                    != 0            (kitty)
-//     DialogOverlay.cs:752                    == 0 && !IsControl   (legacy ConsoleKeyInfo)
-//     QuestionFormView.cs:571                 != 0            (custom row only)
-//     FilePickerView.cs:172                   is None or Shift
-//     CommandPaletteView.cs:276               is None or Shift
-//     CellForgeJumpPalettePanel.cs:317        is None or Shift && !IsControl
-//     ReplInputLoop.cs:461                    is None or Shift
+//     ComposerController.HandleCharKey         == 0            (kitty)
+//     DialogOverlay.HandleKey(KeyEvent)        != 0            (kitty)
+//     DialogOverlay.AcceptsTypedChar           == 0 && !IsControl   (legacy ConsoleKeyInfo)
+//     QuestionFormView.AcceptsTypedChar        != 0            (custom row only)
+//     FilePickerView.HandleKey                 is None or Shift
+//     CommandPaletteView.HandleKey             is None or Shift
+//     CellForgeJumpPalettePanel.OnKey          is None or Shift && !IsControl
+//     ReplInputLoop.HandleKeyAsync             is None or Shift
 //
 //   COMMAND (no buffer; runes are h/j/k/l or a y/n/a vote; Shift refused)
-//     QuestionFormView.cs:512 + :576          != None / == None  (option rows)
-//     ApprovalGateView.cs:254                 != None
-//     TreeView.cs:296                         != None
-//     Tabs.cs:143                             != None
-//     ToolCardTracker.cs:747 + :790           != None
-//     LeaderKeyRouter.cs:134                  != None  (consume-and-disarm)
-//     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 == None  (NORMAL MODE ONLY)
+//     QuestionFormView.HandleKey               != None / == None  (option rows)
+//     QuestionFormView.AcceptsTypedChar        == None  (option rows)
+//     ApprovalGateView.HandleKey               != None
+//     TreeView.HandleKey                       != None
+//     Tabs.HandleKey                           != None
+//     ToolCardTracker.TryRouteToolCardKey      != None
+//     ToolCardTracker.TryOpenImageViewer       != None
+//     LeaderKeyRouter.HandleKey                != None  (consume-and-disarm)
+//     VimComposerMode.HandleKey                == None  (NORMAL MODE ONLY)
 //
 //   BUFFER, BUT NOT A TEXT BUFFER — the taxonomy's sharpest edge, and the
 //   reason the two families are not a spectrum. These sites hold no text
 //   buffer, yet they correctly ADMIT Shift, because Shift means something at
-//   THEM: DiffViewerOverlay binds `G` (:310), ImageViewerOverlay binds `_`
-//   (:139), and VimComposerMode FALLS THROUGH to the composer for any key its
-//   own command gate rejects (:37 → composer :173). So "I have no buffer" does
-//   NOT imply "refuse Shift".
-//     DiffViewerOverlay.cs:282 + :210         (Ctrl|Alt|Meta) != 0
-//     ImageViewerOverlay.cs:124               (Ctrl|Alt|Meta) != 0
-// check-doc-cites: record-drift ImageViewerOverlay.cs:124 now="case KeyCode.Left:" [#947: written over `if (key.Modifiers.IsCommandModifier())`; repair deferred to the owner's symbol-rename decision] -->
-//     src/Harbor.Tui.CellForge/Chat/Rendering/VimComposerMode.cs:37 (fall-through)    delegates to the composer
+//   THEM: DiffViewerOverlay binds `G` (HandleKey), ImageViewerOverlay binds `_`
+//   (HandleKey), and VimComposerMode FALLS THROUGH to the composer for any key
+//   its own command gate rejects (VimComposerMode.HandleKey →
+//   ComposerController.HandleKey). So "I have no buffer" does NOT imply
+//   "refuse Shift".
+//     DiffViewerOverlay.HandleKey(ConsoleKeyInfo)  (Ctrl|Alt|Meta) != 0
+//     DiffViewerOverlay.HandleKey(KeyEvent)         (Ctrl|Alt|Meta) != 0
+//     ImageViewerOverlay.HandleKey                  (Ctrl|Alt|Meta) != 0
+//     VimComposerMode.HandleKey (fall-through)      delegates to the composer
 //
 //   UNGATED — a third state the issue's two-family taxonomy cannot name, and the
 //   reason a guard that counts only the two families is not enough. Six sites
 //   matched a rune with NO modifier test at all, so a chord modifier rode
-//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.cs:437 calls
+//   straight through. ONE WAS A LIVE DEFECT: ReplInputLoop.HandleKeyAsync calls
 //   SetupChecklistController.HandleKey, so Ctrl+q closed the setup guide AND was
 //   consumed — the chord never reached the composer behind it.
-//     SetupChecklistOverlay.cs:95     product input loop — LIVE
-//     WhichKeyHelpOverlay.cs:178      '?', legacy ConsoleKeyInfo
-//     CellForgeHelpPanel.cs:88        mounted panel
-//     CellForgeFileTreePanel.cs:135   mounted panel
-//     CellForgeDiagnosticsPanel.cs:57 mounted panel
-//     CellForgeSubagentsPanel.cs:164  mounted panel
-// check-doc-cites: record-drift CellForgeSubagentsPanel.cs:164 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+//     SetupChecklistOverlay.HandleKey        product input loop — LIVE
+//     WhichKeyHelpOverlay.HandleKey          '?', legacy ConsoleKeyInfo
+//     CellForgeHelpPanel.OnKey               mounted panel
+//     CellForgeFileTreePanel.OnKey           mounted panel
+//     CellForgeDiagnosticsPanel.OnKey        mounted panel
+//     CellForgeSubagentsPanel.OnKey          mounted panel
 //
 //   THE SIXTH CORRECTION, AND IT OVERTURNED THE MODEL: those six are NOT a third
 //   family. Measured, none of the six holds a text buffer, and five of the six
@@ -99,7 +104,7 @@
 //   #824's guard enumerates three sites by hand and therefore cannot see any
 //   of these.
 //
-//   ChatKeyMap.cs:244 is a site the issue does not list at all: an unmatched
+//   ChatKeyMap.Resolve is a site the issue does not list at all: an unmatched
 //   printable rune becomes ChatAction.Char, which is the tree deciding "this
 //   is text" in a sixth vocabulary position.
 //
@@ -126,10 +131,11 @@
 //       and mapped Meta onto "no flag" — ConsoleKeyInfo has no Meta slot, so
 //       the probe tested a gesture that path cannot express.
 //     * the LeaderKeyRouter row read "returned true" as "resolved the chord";
-//       the router returns true to CONSUME AND DISARM (:96).
+//       the router returns true to CONSUME AND DISARM (LeaderKeyRouter.HandleKey).
 //
 //   run 36726768405
-//     * VimComposerMode filed as COMMAND. Its gate at :37 is the command one,
+//     * VimComposerMode filed as COMMAND. Its gate in VimComposerMode.HandleKey is the
+//       command one,
 //       but anything that FAILS that gate falls through to the composer, which
 //       types it — so Shift+j is consumed as TEXT. It is a fourth widget
 //       wearing both families, split by NormalMode.
@@ -143,8 +149,9 @@
 // ---------------------------------------------------
 // A source scan was tried and abandoned: key-routing-shaped code also lives in
 // the key VOCABULARY (KeyEvent.cs, KeyCode.cs, KeyEventMapper.cs, UiKey.cs),
-// which is not a site, and in the composer's CHORD TABLE (ComposerController
-// :196-252), where a 2-flag mask like `(Meta | Alt)` is a legitimate chord
+// which is not a site, and in the composer's CHORD TABLE
+// (`ComposerController.KeyBinding`), where a 2-flag mask like `(Meta | Alt)` is a
+// legitimate chord
 // matcher and not the typing gate at all. Distinguishing "a widget routing a
 // key" from "a type declaring what a key is" by regex is a guess, and a guard
 // built on a guess cries wolf on the next honest edit.
@@ -175,7 +182,8 @@
 // everything) — so a call site says which family it is in instead of writing a
 // bare `!= KeyModifiers.None` a reader has to interpret.
 //
-// NOT refactored, deliberately: the composer's chord TABLE (:196-252) and the
+// NOT refactored, deliberately: the composer's chord TABLE
+// (`ComposerController.KeyBinding`) and the
 // remaining `(mods & KeyModifiers.Ctrl) != 0` forms. Those match a SPECIFIC
 // chord, which is a different question from "is this a command or text" — Ctrl+C
 // means "clear", not "this is a command" — and routing them through the gate
@@ -291,7 +299,7 @@ public class KeyGateFamilyRules
         new("ListPromptEngine", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge.Prompts/Widgets/ListPromptEngine.cs"),
 
         // The host key map, found by the coverage grep and NOT on the issue's
-        // list: ChatKeyMap.cs:244 turns an unmatched printable rune into
+        // list: ChatKeyMap.Resolve turns an unmatched printable rune into
         // ChatAction.Char, i.e. it is the place the tree decides "this is
         // text". It is a buffer site by the same test as the composer.
         new("ChatKeyMap", KeyGateFamily.Buffer, "src/Harbor.Ui.Framework.State/State/ChatKeyMap.cs"),
@@ -346,8 +354,9 @@ public class KeyGateFamilyRules
         new("ReplInputLoop(ctrl+j jump, #857)", KeyGateFamily.Command, "apps/Harbor.App.Cli/Repl/ReplInputLoop.cs"),
 
         // Neither of these holds a text buffer, yet both ADMIT Shift — and they
-        // are right to. DiffViewerOverlay binds `G` (:310) and ImageViewerOverlay
-        // binds `_` (:139), so Shift+<rune> is a bound gesture here, exactly as a
+        // are right to. DiffViewerOverlay binds `G` (DiffViewerOverlay.HandleKey) and
+        // ImageViewerOverlay binds `_` (ImageViewerOverlay.HandleKey), so Shift+<rune>
+        // is a bound gesture here, exactly as a
         // capital is in a text buffer. "No buffer" does not imply "refuse Shift";
         // what decides it is whether Shift means something AT THIS SITE. That is
         // why the two families are not a spectrum, and why the first draft of
@@ -357,16 +366,17 @@ public class KeyGateFamilyRules
         new("ImageViewerOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlay.cs"),
 
         // MarkupOverlay (#400) is the viewer shape with a buffer added:
-        // Shift+arrows resize in EVERY tool state (:82-94), the text tool
-        // feeds PendingText (:300), and command chords are refused at the
-        // gate (:267) — so the family is Buffer, not Command. Ctrl+R redo
-        // (:273) is the one consumed chord, claimed the way the viewer's
-        // own shifted rune is.
+        // Shift+arrows resize in EVERY tool state (HandleKey), the text tool
+        // feeds PendingText (HandleChar, the `MarkupSetPendingText` branch),
+        // and command chords are refused at the gate (HandleChar, the
+        // `IsCommandModifier` branch) — so the family is Buffer, not Command.
+        // Ctrl+R redo (HandleChar, the Ctrl+R branch) is the one consumed
+        // chord, claimed the way the viewer's own shifted rune is.
         new("MarkupOverlay", KeyGateFamily.Buffer, "src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs"),
 
         // ---- UNGATED: no modifier test at all (#833's real finding) ------------
         // SetupChecklistOverlay is REACHED from the product input loop
-        // (ReplInputLoop.cs:437 → SetupChecklistController), so its missing
+        // (ReplInputLoop.HandleKeyAsync → SetupChecklistController), so its missing
         // gate is a live chord-swallowing defect. The rest are reachable only
         // from tests today; they are listed because the gate is absent in code
         // regardless of who calls it, and because a wiring change is exactly
@@ -397,23 +407,25 @@ public class KeyGateFamilyRules
     [Test]
     public async Task Every_Buffer_Site_Types_A_Capital_Under_Shift()
     {
-        // QuestionFormView: the custom row is answer TEXT (:571, #824).
+        // QuestionFormView: the custom row is answer TEXT
+// (QuestionFormView.AcceptsTypedChar, #824).
         var custom = OnQuestionCustomRow();
         await Assert.That(custom.HandleKey(ShiftCapitalA())).IsTrue();
         await Assert.That(custom.CustomAnswer(0)).IsEqualTo("A");
 
-        // ComposerController: the composer body (:173).
+        // ComposerController: the composer body (ComposerController.HandleKey).
         var composer = new ComposerController();
         _ = composer.HandleKey(ShiftCapitalA());
         await Assert.That(composer.Buffer.SnapshotText()).IsEqualTo("A");
 
-        // DialogOverlay: the prompt input (:649, kitty path).
+        // DialogOverlay: the prompt input (DialogOverlay.HandleKey(KeyEvent), kitty path).
         var dialog = new DialogOverlay();
         dialog.ShowPrompt("t", "m");
         await Assert.That(dialog.HandleKey(ShiftCapitalA())).IsTrue();
         await Assert.That(dialog.Input).IsEqualTo("A");
 
-        // DialogOverlay: the LEGACY ConsoleKeyInfo path (:718) — a second
+        // DialogOverlay: the LEGACY ConsoleKeyInfo path (DialogOverlay.HandleKey(ConsoleKeyInfo))
+// — a second
         // vocabulary for the same rule, and the reason the issue counts four
         // spellings where there are eight sites.
         var legacy = new DialogOverlay();
@@ -421,7 +433,8 @@ public class KeyGateFamilyRules
         await Assert.That(legacy.HandleKey(CapitalAKey())).IsTrue();
         await Assert.That(legacy.Input).IsEqualTo("A");
 
-        // FilePickerView (:153) and CommandPaletteView (:254) — the query buffers.
+        // FilePickerView (FilePickerView.HandleKey) and CommandPaletteView
+// (CommandPaletteView.HandleKey) — the query buffers.
         await Assert.That(OpenFilePicker().HandleKey(ShiftCapitalA())).IsTrue();
         await Assert.That(OpenPalette().HandleKey(ShiftCapitalA())).IsTrue();
     }
@@ -466,7 +479,7 @@ public class KeyGateFamilyRules
 
             await Assert.That(legacy.HandleKey(new ConsoleKeyInfo(
                 'A', ConsoleKey.A, shift: true, alt: alt, control: control))).IsFalse()
-                .Because($"{name}+A is a command on the legacy path (:718 tests Control|Alt) and must not be typed");
+                .Because($"{name}+A is a command on the legacy path (DialogOverlay.HandleKey(ConsoleKeyInfo) tests Control|Alt) and must not be typed");
             await Assert.That(legacy.Input).IsEqualTo(string.Empty);
         }
     }
@@ -554,7 +567,7 @@ public class KeyGateFamilyRules
         // On an option row the same rune is navigation, and Shift is refused.
         var onOption = OnQuestionOptionRow();
         await Assert.That(onOption.HandleKey(ShiftCapitalA())).IsFalse()
-            .Because("off the custom row the same rune is navigation (:512/:576), not answer text");
+            .Because("off the custom row the same rune is navigation (QuestionFormView.HandleKey / QuestionFormView.AcceptsTypedChar), not answer text");
 
         // So the family is a function of (widget, state, key) — three things,
         // not one. A declared boolean could not carry it. Three widgets are in
@@ -585,7 +598,7 @@ public class KeyGateFamilyRules
     /// <summary>
     /// The six sites that had NO modifier gate at all, which is the finding
     /// #833's two-family taxonomy could not name. One of them was a LIVE defect:
-    /// <c>ReplInputLoop.cs:437</c> calls <c>SetupChecklistController.HandleKey</c>,
+    /// <c>ReplInputLoop.HandleKeyAsync</c> calls <c>SetupChecklistController.HandleKey</c>,
     /// so <c>Ctrl+q</c> closed the setup guide AND was consumed — the chord never
     /// reached the composer behind it.
     /// <para>
@@ -793,7 +806,8 @@ public class KeyGateFamilyRules
     /// <summary>
     /// <see cref="VimComposerMode" /> is a FOURTH widget wearing both families,
     /// and the split is a mode flag rather than a cursor. In NORMAL mode a rune
-    /// is a command and the gate is <c>Modifiers == None</c> (:37); anything
+    /// is a command and the gate is <c>Modifiers == None</c> (VimComposerMode.HandleKey);
+/// anything
     /// that fails that test FALLS THROUGH to the composer, which is a text
     /// buffer and types the rune.
     /// <para>
@@ -811,7 +825,7 @@ public class KeyGateFamilyRules
         var normalComposer = new ComposerController();
         _ = normal.HandleKey(KeyEvent.Char(new Rune('j')), normalComposer);
         await Assert.That(normalComposer.Buffer.SnapshotText()).IsEqualTo(string.Empty)
-            .Because("in normal mode 'j' is history recall, not text (:76)");
+            .Because("in normal mode 'j' is history recall, not text (VimComposerMode.HandleNormal)");
 
         // Same widget, normal mode, Shift held: the command gate is skipped and
         // the key falls through to the composer, which TYPES it.
@@ -828,14 +842,15 @@ public class KeyGateFamilyRules
         var ctrlComposer = new ComposerController();
         _ = ctrl.HandleKey(KeyEvent.Char(new Rune('j'), KeyModifiers.Ctrl), ctrlComposer);
         await Assert.That(ctrlComposer.Buffer.SnapshotText()).IsEqualTo(string.Empty)
-            .Because("Ctrl+j is a chord the composer's gate refuses (:173)");
+            .Because("Ctrl+j is a chord the composer's gate refuses (ComposerController.HandleKey)");
     }
 
     /// <summary>
     /// The sites that hold NO buffer yet still admit Shift, because they bind
     /// shifted RUNES of their own: <c>DiffViewerOverlay</c> binds <c>G</c>
-    /// (DiffViewerOverlay.cs:310) and <c>ImageViewerOverlay</c> binds <c>_</c>
-    /// (:139). Their gate is the buffer one — <c>(Ctrl|Alt|Meta) != 0</c> →
+    /// (DiffViewerOverlay.HandleKey) and <c>ImageViewerOverlay</c> binds <c>_</c>
+    /// (ImageViewerOverlay.HandleKey). Their gate is the buffer one —
+    /// <c>(Ctrl|Alt|Meta) != 0</c> →
     /// refuse — so <c>Shift+G</c> and <c>Shift+_</c> are gestures they are
     /// supposed to consume.
     /// <para>
@@ -849,12 +864,13 @@ public class KeyGateFamilyRules
     [Test]
     public async Task A_Shifted_Command_Is_Not_A_Text_Buffer_And_Vice_Versa()
     {
-        // Shift+G is a bound command on the diff viewer (:310), not a stray
+        // Shift+G is a bound command on the diff viewer (DiffViewerOverlay.HandleKey), not a
+// stray
         // capital, so the buffer-family gate admits it.
         await Assert.That(ShownDiff().HandleKey(KeyEvent.Char(new Rune('G'), KeyModifiers.Shift))).IsTrue()
             .Because("DiffViewerOverlay binds 'G' as a command; refusing Shift here would make it unreachable");
 
-        // Shift+_ is a bound command on the image viewer (:139).
+        // Shift+_ is a bound command on the image viewer (ImageViewerOverlay.HandleKey).
         await Assert.That(ShownImage().HandleKey(KeyEvent.Char(new Rune('_'), KeyModifiers.Shift))).IsTrue()
             .Because("ImageViewerOverlay binds '_' as zoom-out; the same Shift rule as the composer");
 
@@ -866,7 +882,8 @@ public class KeyGateFamilyRules
 
     /// <summary>
     /// <see cref="LeaderKeyRouter" /> returns TRUE for an armed key that is not
-    /// a plain char — it consumes the key to DISARM (:94-97). So "handled" here
+    /// a plain char — it consumes the key to DISARM (LeaderKeyRouter.HandleKey). So
+/// "handled" here
     /// means "swallowed", not "resolved as a chord", and it is a command site by
     /// a different route: it holds no buffer and refuses Shift in order not to
     /// let a shifted rune resolve a chord. Asserting it in the command table
@@ -885,9 +902,9 @@ public class KeyGateFamilyRules
         _ = router.HandleKey(KeyEvent.Char(new Rune('g'), KeyModifiers.Shift), nowMs: 500);
 
         await Assert.That(fired).IsEqualTo(0)
-            .Because("Shift+g must not resolve the chord — the gate is 'Modifiers != None' (:94)");
+            .Because("Shift+g must not resolve the chord — the gate is 'Modifiers != None' (LeaderKeyRouter.HandleKey)");
         await Assert.That(router.IsPending).IsFalse()
-            .Because("the router consumed the key to disarm, which is its documented behaviour (:96)");
+            .Because("the router consumed the key to disarm, which is its documented behaviour (LeaderKeyRouter.HandleKey)");
 
         // Control: the unmodified rune DOES resolve it.
         int firedPlain = 0;
@@ -1004,7 +1021,7 @@ public class KeyGateFamilyRules
     ///   routed-site grep the way the Rendering originals do — a key arrives,
     ///   a rune is judged inside the factories — and they gate nothing.
     ///
-    /// ChatKeyMap.cs is deliberately NOT here: :156 is a real gate (an
+    /// `ChatKeyMap` is deliberately NOT here: `ChatKeyMap.Resolve` is a real gate (an
     /// unmatched printable rune becomes <c>ChatAction.Char</c>, i.e. text), so
     /// it is a site and is in the table.
     /// </summary>

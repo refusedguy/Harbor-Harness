@@ -20,7 +20,7 @@
 // subjects that bound the IDENTICAL registry fan-out through the IDENTICAL
 // AsyncFeed<T> kept the old name and their own copy of the number:
 //
-//   ProviderBrowserViewModel.cs:22   ModelFetchTimeout = 5s   (live surface)
+//   ProviderBrowserViewModel          ModelFetchTimeout = 5s   (live surface)
 //   ProviderModelPickerViewModelBase ModelFetchTimeout = 5s   (unreferenced)
 //
 // The second line was a base with no implementor at all: #1835 removed it (the

@@ -22,7 +22,7 @@
 //     and three live overrides;
 //   * `OverlayStack.RouteKey` is a real public method, correctly implemented and
 //     covered by `OverlayModalTests`;
-//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:180` prints the host pattern in a `<code>` block.
+//   * `OverlayStack.TopModal` prints the host pattern in a `<code>` block.
 //
 // A contributor greps "keys route top-down through OnKey", finds all of that,
 // writes a layer with an `OnKey` — and it is never called. The adapter test
@@ -33,16 +33,15 @@
 // -------------------------------------------------------------
 // The one product key ingress IS live and IS walked on every keystroke:
 //
-//   Program.cs:99/138 -> InteractiveVerb.RunAsync (:29 RunInteractiveAsync)
-// check-doc-cites: record-drift Program.cs:99 now="ambiguous:9" [9 tracked files share this basename, so the citation does not identify one] -->
-//     -> ReplRunner.RunInteractiveAsync (:124; :162 TuiMode.IsCellForgeSelected
-//        is the default backend) -> RunCellForgeAsync (:174) -> :383 RunAsync
-//     -> CellForgeReplRunner.RunAsync:369 -> ReplLifecycle.RunAsync
-//     -> ReplLifecycle.cs:253 host.Input.HandleInputAsync
-//     -> ReplInputLoop.cs:95 HandleKeyAsync
+//   Program.Main -> InteractiveVerb.RunAsync
+//     -> ReplRunner.RunInteractiveAsync -> RunCellForgeAsync -> RunAsync
+//     -> CellForgeReplRunner.RunAsync -> ReplLifecycle.RunAsync
+//     -> ReplLifecycle.LoopAsync host.Input.HandleInputAsync
+//     -> ReplInputLoop.HandleInputAsync HandleKeyAsync
 //
 // and `HandleKeyAsync` is a working router — it just routes AROUND the stack.
-// `ReplInputLoop.cs:354 host.Images.HandleKey(key)` and `:437 host.Setup.HandleKey(key)`
+// `ReplInputLoop.HandleKeyAsync` calls `host.Images.HandleKey(key)` and
+// `host.Setup.HandleKey(key)`
 // call the two live overlays directly. The same objects, a different hop: not
 // `ImageViewerOverlayLayer.OnKey`. That asymmetry is why #857's `JumpCommand`
 // could correctly say the panel `OnKey` has "no product host [that can] reach" it.
@@ -73,10 +72,10 @@
 // so the scan is `src/` + `apps/` + `docs/` + root markdown.
 //
 // Two neighbours are deliberately left alone:
-//   * `SetupChecklistOverlayLayer.cs:12-13` — already carries the conditional
+//   * `SetupChecklistOverlayLayer.OnKey` — already carries the conditional
 //     phrasing #858 wants ("for hosts that route through ..."). It is the model,
 //     not a violation.
-//   * `docs/PATTERNS.md:373` — cites `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:51,57` for the DEFAULTS
+//   * `docs/PATTERNS.md:373` — cites `IOverlayLayer.IsModal + IOverlayLayer.OnKey` for the DEFAULTS
 //     (`IsModal => false`, `OnKey => false`). True, and about the interface's
 //     shape rather than the product's routing.
 //
@@ -380,7 +379,7 @@ public sealed class OverlayKeyRouteClaimRule
             + "green because it drives the adapter directly. Fix by saying what the product "
             + "does (the hand-written cascade in ReplInputLoop.HandleKeyAsync, which reaches "
             + "the live overlays DIRECTLY rather than through their layers), not by deleting "
-            + "the note. The model sentence is SetupChecklistOverlayLayer.cs:12-13, which "
+            + "the note. The model sentence is SetupChecklistOverlayLayer.OnKey, which "
             + "already reads \"for hosts that route through OverlayStack.RouteKey\". Claims "
             + "asserting the overlay key route: "
             + (offenders.Count == 0 ? "(none)" : string.Join(" | ", offenders)));

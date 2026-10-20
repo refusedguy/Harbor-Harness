@@ -7,12 +7,10 @@
 // survived is worse than a duplicate: the two model pickers answer the SAME
 // question about the SAME model with two different answers.
 //
-//   ProviderModelPickerViewModel.cs:377 — a private FormatPricing helper, which
-// check-doc-cites: record-drift ProviderModelPickerViewModel.cs:377 now="ambiguous:2" [2 tracked files share this basename, so the citation does not identify one] -->
+//   ProviderModelPickerViewModel.FormatPricing — a private helper, which
 //     returned the literal "pricing unknown" when both rates were zero, and
 //     otherwise spelled "$X in / $Y out per 1M" with an F2 format on each rate.
-//   ProviderBrowserViewModel.cs:197 — a PricingLabel property that spelled the same
-// check-doc-cites: record-drift ProviderBrowserViewModel.cs:197 now="{" [#947: written over `public string Features =>`; repair deferred to the owner's symbol-rename decision] -->
+//   ModelRowViewModel.PricingLabel — a property that spelled the same
 //     sentence, and had no zero case at all.
 //
 // Both are LIVE, and #686's own caveat ("if one copy is in a test or a dead
@@ -20,9 +18,9 @@
 // disprove — a duplicate nobody can reach is not a defect. Reachability was
 // traced to the XAML, in the same app:
 //
-//   apps/Harbor.App.Avalonia/Views/Controls/ProviderModelPicker.axaml:124
+//   the ProviderModelPicker view's `PricingText` binding
 //       <TextBlock Text="{Binding PricingText}" …>            (PickerModelViewModel)
-//   apps/Harbor.App.Avalonia/Views/ProviderBrowserView.axaml:84
+//   the ProviderBrowserView view's `PricingLabel` binding
 //       <TextBlock Text="{Binding PricingLabel}" …>           (ModelRowViewModel)
 //
 // So a user who opens the picker dropdown and the provider browser sees the same

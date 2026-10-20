@@ -8,12 +8,12 @@
 //
 // Both halves of that comment were false, and the consequence is a crash
 // rather than a stale frame: the projector's only mutable state is the field
-// `private ProjectionCache? _cache;` (DefaultUiProjector.cs:61), published
+// `private ProjectionCache? _cache;` (`DefaultUiProjector._cache`), published
 // unsynchronised at the end of Project and read at the top. Without a
 // release/acquire pair a second thread can observe the ProjectionCache
 // *reference* while its fields are still at their defaults — which is how the
 // #562 `null!` class would turn a publication race into a
-// NullReferenceException at the reuse sites (Project lines 70, 112, 134).
+// NullReferenceException at the reuse sites (`Project`'s three reads).
 //
 // The fix made the singleton honest: `_cache` is `volatile`, so the cache is
 // safely published and concurrent `Project` calls return a stale-but-non-null

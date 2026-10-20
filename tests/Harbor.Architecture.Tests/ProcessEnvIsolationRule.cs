@@ -18,8 +18,7 @@
 // WHY A NAMED KEY AND NOT THE BARE FORM
 // -------------------------------------
 // Read from TUnit 1.61.0's scheduler, not from the XML docs.
-// `TestScheduler.ExecuteAllPhasesAsync` (TestScheduler.cs:194-219) starts the
-// check-doc-cites: record-drift TestScheduler.cs:194 now="unresolved" [no tracked file, and none in git history: the citation names a DEPENDENCY's source (TUnit / CSharpFunctionalExtensions), which no rule in this repo can resolve] -->
+// `TestScheduler.ExecuteAllPhasesAsync` (in TUnit) starts the
 // unconstrained `Parallel` bucket and the `KeyedNotInParallel` bucket and joins
 // them with `RunPhasesConcurrentlyAsync` — the two buckets run CONCURRENTLY.
 // Bare `[NotInParallel]` is the only form that takes the `NotInParallelLock`
@@ -32,7 +31,7 @@
 // `Harbor.App.Avalonia.Tests` alone for the whole of every one of its test
 // methods, forever. #700 priced exactly that and refused it, and it was right.
 // Its conclusion was "prefer not writing process state at all", which is not
-// available for this subject: `AppHost.ResolveHarborDir` (AppHost.cs:124-129)
+// available for this subject: `AppHost.ResolveHarborDir`
 // resolves the home from `GetFolderPath(SpecialFolder.UserProfile)` with a
 // `$HOME` fallback and takes no parameter.
 //
@@ -50,7 +49,7 @@
 //     of their own. `Harbor.E2E.App.Avalonia` is the worked example
 //     — `HeadlessAvaloniaDriver` writes `HOME` and `MockServerFixture` writes
 //     `HOME`/`USERPROFILE`, neither has a test, and every consumer is already
-//     tagged `e2e-framework` (`AvaloniaUiTests.cs:54` plus eight more).
+//     tagged `e2e-framework` (`AvaloniaUiTests` plus eight more).
 //     `Harbor.Tui.CellForge.PtyTests` stopped being a consumer in #1789: the
 //     PTY scenarios use their own fixture, which starts a mock server and
 //     makes a temp home WITHOUT touching the process environment (the child
@@ -97,10 +96,10 @@
 // set/restore pair and is in fact a claim it can no longer honour.
 //
 // That `OLLAMA_API_KEY` is not a test-only name is what makes this cost more
-// than a flaky suite. `AuthStore.FromConventionalEnv` (AuthStore.cs:65-74)
+// than a flaky suite. `AuthStore.FromConventionalEnv`
 // derives `<PROVIDER>_API_KEY` from the provider id and reads the process
 // environment for it, and the onboarding wizard reaches that through
-// `_authStore.GetApiKeyAsync` (OnboardingWizard.cs:244, re-anchored after the
+// `_authStore.GetApiKeyAsync` (OnboardingWizard.PromptApiKeyAsync, re-anchored after the
 // #1614 extraction to Harbor.Onboarding). The variable is read by
 // PRODUCT code, in the same process, after the test that destroyed it has
 // returned and passed. The failure therefore belongs to whoever runs next, which
@@ -284,7 +283,7 @@ public class ProcessEnvIsolationRule
             "ViewInflationTests",
             "HOME. AppHostDiTests writes it in a process-lifetime Lazy and never restores it; "
             + "ViewInflationTests writes and restores it. Both call AppHost.BuildAsync, which reaches "
-            + "AppHost.ResolveHarborDir (AppHost.cs:124-129) — GetFolderPath(UserProfile) with a $HOME "
+            + "AppHost.ResolveHarborDir — GetFolderPath(UserProfile) with a $HOME "
             + "fallback. ViewInflationTests already held `avalonia-headless`, which AppHostDiTests does "
             + "not, so the two sat in different scheduler buckets and overlapped."),
 
@@ -294,8 +293,8 @@ public class ProcessEnvIsolationRule
             "McpTransportFactoryTests",
             "HARBOR_MCP_OAUTH_TOKEN. McpRemoteTransportTests pins it to null so the no-token path is "
             + "real; McpTransportFactoryTests reaches McpRegistry.GetTransport through "
-            + "registry.InvokeAsync (:245,262,278,295), and that branch reads the variable "
-            + "(McpRegistry.cs:573)."),
+            + "registry.InvokeAsync, and that branch reads the variable "
+            + "(ServerEntry.GetTransport)."),
 
         (
             "Harbor.App.Cli.Tests",
@@ -303,8 +302,8 @@ public class ProcessEnvIsolationRule
             "McpLoginRunnerTests",
             "HARBOR_MCP_CONFIG and HARBOR_HOME. McpLoginRunnerTests points the first at a temp mcp.json; "
             + "HostBuilderDiTests reaches ToolsCatalog.CreateMcpRegistry through HostBuilder.Build → "
-            + "Registration.AddHarbor → AddHarborRegistries (Registration.cs:25) → RegistriesModule.cs:53, "
-            + "and that reads the first (ToolsCatalog.cs:72) and the second (HostBuilder.cs:160). "
+            + "Registration.AddHarbor → RegistriesModule.AddHarborRegistries, "
+            + "and that reads the first (ToolsCatalog.CreateMcpRegistry) and the second (HostBuilder.EnsureHarborLayout). "
             + "McpLoginRunnerTests already documented the resulting flake at its own line 61."),
 
         (
@@ -314,7 +313,7 @@ public class ProcessEnvIsolationRule
             "ANTHROPIC_API_KEY, plus the whole-environment enumeration. AuthStoreTests clears it in four "
             + "places; OnboardingWizardTests clears it in eight and OLLAMA_API_KEY in twenty-four, and it "
             + "is not in #823's list. Both classes reach AuthStore.ListApiKeysAsync, which enumerates the "
-            + "entire process environment (AuthStore.cs:140)."),
+            + "entire process environment (AuthStore.RemoveApiKeyAsync)."),
 
         (
             "Harbor.Config.Tests",
@@ -322,7 +321,7 @@ public class ProcessEnvIsolationRule
             "SetupChecklistDetectorTests",
             "The whole-environment enumeration, from the other direction. This class writes nothing, so "
             + "nothing in #823's method would have found it, but it constructs an AuthStore and "
-            + "SetupChecklistDetector.DetectAsync calls ListApiKeysAsync (SetupChecklistDetector.cs:175) "
+            + "SetupChecklistDetector.DetectAsync calls ListApiKeysAsync (SetupChecklistDetector.HasStoredKeyAsync) "
             + "— the whole process environment, same as above. Stated honestly: today's assertion cannot "
             + "be flipped by a concurrent write, because ProviderKeyStored is true whenever ANY key is "
             + "present and this test stores one in config. It is listed anyway because that is a property "
@@ -426,7 +425,7 @@ public class ProcessEnvIsolationRule
             "HostBuilderDiTests",
             "HARBOR_HOME",
             "The third leg of the same swap, and the one HarborPaths reads directly "
-            + "(HarborPaths.cs:29). It exists because the other two are not sufficient on Windows; it "
+            + "(HarborPaths.HarborHomeVariable). It exists because the other two are not sufficient on Windows; it "
             + "is not an independent write."),
     ];
 
@@ -564,7 +563,7 @@ public class ProcessEnvIsolationRule
             .Because(
                 "Issue #847. ReplRunnerConfigLoadTests sets OLLAMA_API_KEY to null and its finally sets "
                 + "it to null again — a restore that restores nothing, because nothing was read. "
-                + "AuthStore.FromConventionalEnv (AuthStore.cs:65-74) derives OLLAMA_API_KEY from the "
+                + "AuthStore.FromConventionalEnv derives OLLAMA_API_KEY from the "
                 + "provider id and reads the process environment for it, so the product reads this "
                 + "variable in the same process, AFTER this test has returned and passed. A keyed "
                 + "NotInParallel cannot help: it orders writers against each other while they run and "

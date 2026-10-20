@@ -637,8 +637,8 @@ public sealed class PresentationCapabilityRules
         // re-baselined, and the `["Harbor.Desktop.Shared"]` entry with them,
         // because an entry with no rows is still a claim that the assembly is
         // dirty. That type persisted ~/.harbor/recent.json (File.Exists /
-        // ReadAllText / WriteAllText at :89,:90,:117, Directory.CreateDirectory
-        // at :110) and found the path with Environment.GetFolderPath at :45.
+        // ReadAllText / WriteAllText, Directory.CreateDirectory
+        // and Environment.GetFolderPath(UserProfile).
         //
         // It was not moved the way #536 moved the theme store, and the reason
         // is a fact rather than a preference: it was CONSTRUCTED NOWHERE. The
@@ -734,8 +734,7 @@ public sealed class PresentationCapabilityRules
         {
             ["Harbor.Tui.CellForge.Engine"] = new(StringComparer.Ordinal)
             {
-                // Input/TerminalInputStream.cs:26 — FileStream over the inherited
-                // check-doc-cites: record-drift Input/TerminalInputStream.cs:26 now="unresolved" [resolver blind spot — src/Harbor.Tui.CellForge.Engine/Input/TerminalInputStream.cs is in the tree and PROJECT_ROOTS cannot reach it] -->
+                // `TerminalInputStream.Open` — FileStream over the inherited
                 // fd 0. Not a violation and not fixable: fd 0 is the renderer's
                 // input medium and reading the console is renderer work, so the
                 // only refactor that removes this deletes the renderer.

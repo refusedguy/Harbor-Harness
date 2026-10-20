@@ -301,7 +301,7 @@ public sealed class CostUnpricedBitRules
                 <TextBlock Text="{Binding TotalCostUsd, StringFormat='{}${0:F4}'}" />
                 """, Rules[0].Id),
             // A binding to an already-spelled cell is the SHAPE this rule asks
-            // for, not a violation of it — StatusBarView.axaml:98 is that line.
+            // for, not a violation of it — the StatusBarView `CostText` binding is that shape.
             new ScanControl("NearMiss/SpelledCellBinding.axaml", """
                 <TextBlock Text="{Binding CostText, StringFormat='${0:F2}'}" />
                 """, null),
@@ -347,12 +347,12 @@ public sealed class CostUnpricedBitRules
                 rows.Add($"total {n}  {StatusBarText.CostToUsd(cost)}");
                 """, Rules[1].Id),
             // Calling the bit-aware home is the fix, not a violation of it —
-            // StatusBarFacts.cs:103 is that line.
+            // the `StatusBarFacts.Of` factory is that call.
             new ScanControl("Fixed/BitAwareHomeCall.cs", """
                 Cost = StatusBarText.CostCell(cost.CostUsd, cost.IsCostUnpriced);
                 """, null),
             // A ternary that consults the bit is the honest shape every layer
-            // can reach — TuiViewModels.cs:131-133 is that line.
+            // can reach — the `StatusBarViewModel.Formatted` property is that ternary.
             new ScanControl("Fixed/HonestTernary.cs", """
                 CostText => IsCostKnown ? UsdCell.ToUsd(Cost) : UsdCell.Unpriced;
                 """, null),
@@ -544,7 +544,7 @@ public sealed class CostUnpricedBitRules
         await Assert.That(FindXamlIn(["<TextBlock Text=\"{Binding CostText, StringFormat='${0:F2}'}\""]).Count)
             .IsEqualTo(0)
             .Because("a binding to an already-spelled cell is the SHAPE this rule asks for, "
-                     + "not a violation of it — StatusBarView.axaml:98 is that line");
+                     + "not a violation of it — the StatusBarView `CostText` binding is that shape");
         await Assert.That(FindXamlIn(["<TextBlock Text=\"{Binding TotalCostText}\""])
                 .Count)
             .IsEqualTo(0)
@@ -552,11 +552,11 @@ public sealed class CostUnpricedBitRules
         await Assert.That(FindIn(["        Cost = StatusBarText.CostCell(cost.CostUsd, cost.IsCostUnpriced);"]).Count)
             .IsEqualTo(0)
             .Because("calling the bit-aware home is the fix, not a violation of it — "
-                     + "StatusBarFacts.cs:103 is that line");
+                     + "not a violation of it — the `StatusBarFacts.Of` factory is that call");
         await Assert.That(FindIn(["        CostText => IsCostKnown ? UsdCell.ToUsd(Cost) : UsdCell.Unpriced;"]).Count)
             .IsEqualTo(0)
             .Because("a ternary that consults the bit is the honest shape every layer can "
-                     + "reach — TuiViewModels.cs:131-133 is that line");
+                     + "reach — the `StatusBarViewModel.Formatted` property is that ternary");
         await Assert.That(FindIn(["        // rows.Add($\"total {n}  {StatusBarText.CostToUsd(cost)}\");"]).Count)
             .IsEqualTo(0)
             .Because("comment prose is not an implementation");

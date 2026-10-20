@@ -2,7 +2,7 @@
 //
 // Read the reasoning in SessionStatusFrameReachabilityRules.cs first; the short
 // version: the #687 frame test is named after a guarantee its own project cannot
-// reach, and the production comment at ChatViewModel.cs:139-141 makes the same
+// reach, and the production comment at ChatViewModel.RenderFrameTick makes the same
 // claim with nothing behind it. If the frame inlines a status the presenter dies
 // and the suite stays green.
 //
@@ -37,10 +37,10 @@ public class SessionStatusFrameReachabilityTests
             + "file must say so");
 
         await Assert.That(reader!.IsReachable).IsTrue().Because(
-            "ChatViewModel.RenderFrameTick (apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs:142) "
+            "ChatViewModel.RenderFrameTick "
             + "writes _renderEngine.DeriveStatus(state) into the tracker on every 16 ms frame, and "
             + "UiRenderEngine.DeriveStatus forwards to the presenter "
-            + "(apps/Harbor.App.Avalonia/Services/UiRenderEngine.cs:156). That is the chain #687 "
+            + "`ChatStreamingPresenter.DeriveStatus`. That is the chain #687 "
             + "built, and the frame-named test could never have checked it. If this fails, the "
             + "rewritten line is _sessionManager.SetStatus(activeSession.Id, SessionStatus.Idle) "
             + "— an inline verdict — and the presenter is now dead code with a green suite around "

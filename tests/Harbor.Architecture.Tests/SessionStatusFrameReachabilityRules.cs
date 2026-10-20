@@ -6,13 +6,13 @@
 // and made the reducer the single source of a session's status. The product side
 // is correct and this file does not dispute it:
 //
-//   src/Harbor.Ui.Framework.Projection/Rendering/ChatStreamingPresenter.cs:50
+//   ChatStreamingPresenter.DeriveStatus
 //       public SessionStatus DeriveStatus(UiState state) => state.Chat.SessionStatus;
 //
 // What #861 reports is that the TEST named after that fix could never have caught
 // its regression:
 //
-//   tests/Harbor.Ui.Framework.Tests/SessionStatusSingleSourceTests.cs:108
+//   SessionStatusSingleSourceTests.CleanRunEndingOnAToolResult_IsDone_NotIdle
 //       public async Task WhateverTheReducerDecided_IsWhatTheNextFramePushes()
 //
 // The name and the comment promise a FRAME guarantee — "ChatViewModel.RenderFrameTick
@@ -24,14 +24,14 @@
 //
 // Both assertions are true. `DeriveStatus` really is a read. And that is exactly
 // the problem: the assertions cannot fail if the frame is deleted. The production
-// code makes the same unverified claim (ChatViewModel.cs:139-141: "This is the
+// code makes the same unverified claim (ChatViewModel.RenderFrameTick: "This is the
 // last writer standing on the tracker's value, so anything that recomputed a
 // verdict here … became a second opinion"), and NOTHING in the suite checks that
 // the writer is still there.
 //
 // THE DEATH THIS FILE MAKES UNREACHABLE
 // ------------------------------------
-// Rewrite one line, at apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs:142:
+// Rewrite one line, at ChatViewModel.RenderFrameTick:
 //
 //     _sessionManager.SetStatus(activeSession.Id, SessionStatus.Idle);
 //
@@ -109,7 +109,7 @@
 // WHAT IS DELIBERATELY NOT RULED
 // ------------------------------
 //   * `SessionLifecycleService` writes `SessionStatus.Idle`/`.Error` straight into
-//     the tracker at `:91`, `:160`, `:243`, bypassing the store. That writer is
+//     the tracker (in `SessionLifecycleService`), bypassing the store. That writer is
 //     REAL, it is a known-open debt of #687 (the test file's own header records
 //     it), and fixing it is a behaviour change. This file does not rule on it and
 //     does not pretend to — `TrackerWriters` names it so the debt is visible

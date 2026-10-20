@@ -48,7 +48,7 @@
 // `services.GetRequiredService<…>`. Nothing called `FromServices` — it was
 // unreachable product code whose body was a service locator, which is #470's
 // shape in a third file. #776 deleted both, leaving exactly one construction
-// site, at the root (`CliInfrastructure.cs:73`), still fed by those same nine
+// site, at the root (`CliInfrastructure.CreateRunner`), still fed by those same nine
 // registered services. So neither wiring was substitutable: a test that wants a
 // different dispatcher must build nine real collaborators first, which is why
 // all three ReplRunner test call sites pass `new FakeToolRegistry()` and
@@ -89,7 +89,7 @@
 //       IEventBus, ITokenTracker, IAgent, ILogger<>, PluginReloadService,
 //       IProviderHealthCheck)
 //    6  MEMBERS OF ONE AGGREGATE THE ROOT ALREADY BUILDS — `CellForgeScreens`
-//       (ReplRunner.cs:592), which the composition root constructs as a single
+//       (`CellForgeScreens`), which the composition root constructs as a single
 //       value and then hands over PIECE BY PIECE: ScreenSession, ChatScreen,
 //       ChatScreenBridge, TerminalInputSource, ITerminalBackend,
 //       IApprovalCoordinator. Six of the twenty-four parameters are one
@@ -102,7 +102,7 @@
 //       `RunCellForgeAsync` just created, and the `ITerminalModeController`
 //       `CreateModeController()` picked for this OS
 //    1  container-owned adapter, built by the ROOT from five registered
-//       services (`CliInfrastructure.cs:92`) and handed in — it used to be
+//       services (`CliInfrastructure.CreateRunner`) and handed in — it used to be
 //       `new LegacySlashRunner(_slashes, _agentRegistry, _configStore,
 //       _authStore, _providers)` written out by hand inside the consumer that
 //       serves it, which is finding 2's shape one level down
