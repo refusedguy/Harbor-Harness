@@ -20,7 +20,7 @@
 // WHY "UNSET" IS THE ASSERTION, NOT A DETAIL
 // -------------------------------------------
 // CommonConfig.StorageBackend = "" is documented as "not chosen; the composition
-// preset decides" (ADR-008: CLI jsonl, desktop memory — AppHost.cs:99 sets
+// preset decides" (ADR-008: CLI jsonl, desktop memory — AppHost.cs:102 sets
 // "memory"). The old view-model turned that "" into "jsonl" on load AND on
 // save, so a desktop install could never reach its own preset, and reopening
 // the wizard wrote "jsonl" straight back. Every assertion below is therefore
@@ -113,7 +113,7 @@ public class ConfigDefaultsComeFromCoreTests
                 .Because(
                     "StorageBackend = \"\" means the composition preset decides (ADR-008: CLI jsonl, desktop "
                     + "memory). The UI used to substitute \"jsonl\", which is the value the DESKTOP preset exists "
-                    + "to override — the substitution made AppHost.cs:99 unreachable.");
+                    + "to override — the substitution made AppHost.cs:102 unreachable.");
             await Assert.That(vm.LogLevel).IsEmpty();
             await Assert.That(vm.FontFamily).IsEmpty();
             await Assert.That(vm.ThemeSettings.Theme).IsEmpty()

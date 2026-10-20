@@ -57,6 +57,14 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
     private readonly IMessenger _messenger;
     private readonly ProjectFileTreeScanner _fileTreeScanner;
     private readonly ILogger _logger;
+
+    /// <summary>
+    ///     The clock the toast auto-dismiss delay reads. Production reads
+    ///     <see cref="TimeProvider.System" />; the headless E2E host injects a
+    ///     manual clock so a dismissal is an instant instead of a four-second
+    ///     wait.
+    /// </summary>
+    private readonly TimeProvider _clock;
     private readonly Lock _scanGate = new();
     private CancellationTokenSource? _fileTreeScan;
     private bool _disposed;
@@ -222,7 +230,8 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         ShellInfrastructure shell,
         CommandPaletteViewModel commandPalette,
         ProjectFileTreeScanner fileTreeScanner,
-        IOverlayStack? overlayStack = null)
+        IOverlayStack? overlayStack = null,
+        TimeProvider? timeProvider = null)
         : base(shell.Dispatcher, shell.Logger)
     {
         _contentHost = (AvaloniaContentHost)contentHost;
@@ -243,6 +252,12 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         // scanner, the scanner asks the Domain ports, and the only thing left in
         // the view-model is "which scan owns the state right now".
         _fileTreeScanner = fileTreeScanner;
+
+        // #1945: the clock seam. `TimeProvider.System` is the production
+        // default; a test host passes a manual clock so the toast dismissal
+        // can be driven instead of waited for. Same shape as AgentLoop,
+        // ToolDispatcher, RetryPolicy and MascotDirector.
+        _clock = timeProvider ?? TimeProvider.System;
 
         _overlayController.Register(OverlayIds.Palette, v => IsCommandPaletteOpen = v);
         _overlayController.Register(OverlayIds.Settings, v => IsSettingsOpen = v);
@@ -476,6 +491,18 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
         IsRightDrawerOpen = !IsRightDrawerOpen;
     }
 
+    /// <summary>
+    ///     How long a toast stays on screen before the shell removes it.
+    /// </summary>
+    /// <remarks>
+    ///     The production contract: four seconds, read by
+    ///     <see cref="RemoveToastAfterDelayAsync" /> through the injected
+    ///     <see cref="TimeProvider" />. Tests that assert the auto-dismiss
+    ///     quote this constant instead of repeating the literal, so the
+    ///     four-second promise stays visible on both sides of the seam.
+    /// </remarks>
+    public static readonly TimeSpan ToastAutoDismissDelay = TimeSpan.FromSeconds(4);
+
     public void AddToast(ToastNotification toast)
     {
         Dispatcher.Post(() =>
@@ -494,7 +521,13 @@ public sealed partial class MainViewModel : StoreSubscriberViewModel
 
     private async Task RemoveToastAfterDelayAsync(ToastNotification toast)
     {
-        await Task.Delay(TimeSpan.FromSeconds(4)).ConfigureAwait(false);
+        // #1945: the delay reads the injected clock, so the E2E suite can drive
+        // the dismissal instead of waiting four real seconds per toast test.
+        // `Task.Delay(delay, clock, ct)` is the BCL's TimeProvider-aware
+        // overload. With `TimeProvider.System` it takes exactly the same
+        // TimerQueueTimer path `Task.Delay(TimeSpan)` took, so the shipped
+        // behaviour (a toast leaves after four seconds) is unchanged.
+        await Task.Delay(ToastAutoDismissDelay, _clock, CancellationToken.None).ConfigureAwait(false);
         Dispatcher.Post(() => Toasts.Remove(toast));
     }
 

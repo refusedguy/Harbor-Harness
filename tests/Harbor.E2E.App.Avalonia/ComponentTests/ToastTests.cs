@@ -1,4 +1,5 @@
 using Harbor.App.Avalonia.Services;
+using Harbor.App.Avalonia.ViewModels;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
@@ -14,6 +15,14 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         (peach), error toast (red), multiple stacked toasts, auto-dismiss
 ///         after 4s, and a long-message toast. Each test pushes a toast via
 ///         <see cref="MainViewModel.AddToast"/> and captures a screenshot.
+///     </para>
+///     <para>
+///         <b>The auto-dismiss is observed on a virtual clock.</b> The shell
+///         reads the four-second delay from an injected
+///         <see cref="TimeProvider"/>, so these tests step
+///         <see cref="ToastClock"/> instead of waiting four real seconds.
+///         The four-second contract itself is still asserted, against
+///         <see cref="MainViewModel.ToastAutoDismissDelay"/>.
 ///     </para>
 /// </remarks>
 [NotInParallel("e2e-framework")]
@@ -78,8 +87,12 @@ public sealed class ToastTests : ComponentTestBase
 
         var path = await CaptureAsync("toast-multiple-stacked").ConfigureAwait(false);
 
-        // Wait for auto-dismiss so the next test starts clean.
-        await Driver.WaitForTextAbsentAsync("First toast body", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
+        // Dismiss the stack so the next test starts clean, on the virtual
+        // clock, so this costs no wall-clock time.
+        ToastClock.AdvancePastToastDeadline();
+        bool dismissed = await Driver.WaitForTextAbsentAsync("First toast body", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(dismissed).IsTrue().Because(Driver.LastWaitDiagnostic);
     }
 
     /// <summary>
@@ -98,11 +111,27 @@ public sealed class ToastTests : ComponentTestBase
             .ConfigureAwait(false);
         await Assert.That(hasToastBefore).IsTrue().Because(Driver.LastWaitDiagnostic);
 
-        // Wait for auto-dismiss (4s) — poll until the toast is actually gone.
-        await Driver.WaitForTextAbsentAsync("Auto-dismiss test", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
+        // The shipped contract, quoted from the product: the shell removes a
+        // toast after MainViewModel.ToastAutoDismissDelay. The delay reads the
+        // injected clock, so "four seconds later" is an instant the test steps
+        // to. The four-second promise is still asserted, against the
+        // production constant.
+        await Assert.That(MainViewModel.ToastAutoDismissDelay)
+            .IsEqualTo(TimeSpan.FromSeconds(4))
+            .Because("the shipped toast lifetime is four seconds");
 
-        var stillThere = Driver.GetAllVisibleText().Contains("Auto-dismiss test", StringComparison.Ordinal);
-        await Assert.That(stillThere).IsFalse();
+        // One tick short of the deadline the toast is still on screen: the
+        // dismissal happens AT the deadline, not before it.
+        ToastClock.Advance(MainViewModel.ToastAutoDismissDelay - TimeSpan.FromMilliseconds(1));
+        bool stillVisible = Driver.GetAllVisibleText().Contains("Auto-dismiss test", StringComparison.Ordinal);
+        await Assert.That(stillVisible).IsTrue()
+            .Because("the toast must survive right up to the deadline");
+
+        // At the deadline it is gone. No wall-clock wait, the clock was stepped.
+        ToastClock.Advance(TimeSpan.FromMilliseconds(1));
+        bool dismissed = await Driver.WaitForTextAbsentAsync("Auto-dismiss test", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(dismissed).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("toast-auto-dismissed").ConfigureAwait(false);
     }
@@ -129,7 +158,11 @@ public sealed class ToastTests : ComponentTestBase
 
         var path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
 
-        // Wait for auto-dismiss.
-        await Driver.WaitForTextAbsentAsync("deliberately long toast", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
+        // Dismiss on the virtual clock. The long toast follows the same
+        // four-second rule as every other toast.
+        ToastClock.AdvancePastToastDeadline();
+        bool dismissed = await Driver.WaitForTextAbsentAsync("deliberately long toast", TimeSpan.FromSeconds(2))
+            .ConfigureAwait(false);
+        await Assert.That(dismissed).IsTrue().Because(Driver.LastWaitDiagnostic);
     }
 }

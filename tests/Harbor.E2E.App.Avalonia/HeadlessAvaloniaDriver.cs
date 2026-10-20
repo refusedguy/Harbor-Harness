@@ -286,12 +286,19 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
             // populated so it can resolve MainViewModel + AvaloniaConfig + ThemeService.
             // We mirror the AfterSetup callback from Program.cs.
             //
+            // #1945: the toast auto-dismiss delay reads a TimeProvider, so the
+            // host is built with a manual clock. The shell's four-second wait
+            // becomes an instant the test steps to. The substitution is scoped
+            // to MainViewModel (see ToastClock.ApplyTo); everything else keeps
+            // the system clock.
+            //
             // AppHost.BuildAsync is async but uses .ConfigureAwait(false) on every
             // await, so its continuations land on threadpool threads — no
             // SynchronizationContext needed. GetAwaiter().GetResult() blocks the
             // test thread until the host is built; the UI thread is already
             // running its MainLoop in parallel so it doesn't deadlock.
-            _host = AppHost.BuildAsync(args: Array.Empty<string>()).GetAwaiter().GetResult();
+            _host = AppHost.BuildAsync(args: Array.Empty<string>(), configureServices: ToastClock.ApplyTo)
+                .GetAwaiter().GetResult();
             HarborApp.Services = _host.Services;
             HarborApp.Host = _host;
 

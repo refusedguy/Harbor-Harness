@@ -602,8 +602,8 @@ public sealed class AvaloniaUiTests
     /// <summary>
     ///     Pushing a toast through MainViewModel.AddToast makes the toast
     ///     message visible in the bottom-right toast container. Captures
-    ///     <c>10-toast-shown.png</c> then waits 5s for auto-dismiss and
-    ///     captures <c>11-toast-dismissed.png</c>.
+    ///     <c>10-toast-shown.png</c>, then steps the shell's clock past the
+    ///     auto-dismiss deadline and captures <c>11-toast-dismissed.png</c>.
     /// </summary>
     [Test]
     [Category("E2E")]
@@ -625,12 +625,19 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("10-toast-shown").ConfigureAwait(false);
 
-        // Auto-dismiss fires after 4s — poll deterministically until the
-        // toast disappears instead of a fixed 5s delay.
-        await Driver.WaitForConditionAsync(
+        // Auto-dismiss fires after MainViewModel.ToastAutoDismissDelay, four
+        // seconds, read from the clock the shell was given. Step the clock to
+        // that instant instead of waiting four real seconds, then poll for
+        // the render to catch up.
+        await Assert.That(MainViewModel.ToastAutoDismissDelay)
+            .IsEqualTo(TimeSpan.FromSeconds(4))
+            .Because("the shipped toast lifetime is four seconds");
+        ToastClock.AdvancePastToastDeadline();
+        bool dismissed = await Driver.WaitForConditionAsync(
             () => !Driver.GetAllVisibleText().Contains("Hello toast", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(6),
+            TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
+        await Assert.That(dismissed).IsTrue().Because(Driver.LastWaitDiagnostic);
         await Driver.ScreenshotAsync("11-toast-dismissed").ConfigureAwait(false);
 
         bool stillThere = Driver.GetAllVisibleText().Contains("Hello toast", StringComparison.Ordinal);
@@ -822,11 +829,14 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("18-multiple-toasts").ConfigureAwait(false);
 
-        // Wait for auto-dismiss deterministically so the next test starts clean.
-        await Driver.WaitForConditionAsync(
+        // Dismiss the stack on the virtual clock so the next test starts
+        // clean. The shell's four-second rule, stepped instead of waited for.
+        ToastClock.AdvancePastToastDeadline();
+        bool dismissed = await Driver.WaitForConditionAsync(
             () => !Driver.GetAllVisibleText().Contains("First toast body", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(6),
+            TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
+        await Assert.That(dismissed).IsTrue().Because(Driver.LastWaitDiagnostic);
     }
 
     /// <summary>

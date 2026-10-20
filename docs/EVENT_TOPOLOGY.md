@@ -182,7 +182,7 @@ is the subscriber's business, and the live branches are:
   (`IPluginLoadHost.EventBus` hands a live bus to out-of-tree plugin code,
   `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:60`, and the desktop app
   declares `[Exposes(typeof(IEventBus))]`
-  (`apps/Harbor.App.Avalonia/AppHost.cs:38`) as a validated DI capability).
+  (`apps/Harbor.App.Avalonia/AppHost.cs:39`) as a validated DI capability).
   "No production callers" is therefore **not a provable claim**
   here, and the ring was not deleted. What *was* wrong is the cost: arming
   retention by capacity made a ring nobody read cost a slot write under a lock

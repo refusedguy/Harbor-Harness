@@ -72,6 +72,13 @@ internal static class ViewModelRegistration
         // so MainViewModel keeps it updated.
         services.AddSingleton<ShellStatus>();
 
+        // #1945: the clock the toast auto-dismiss delay reads. MainViewModel
+        // is container-activated, so the container owns the default rather
+        // than the view-model's own fallback: production gets the system
+        // clock, and a test host can substitute a manual one before the
+        // container is built.
+        services.AddSingleton(TimeProvider.System);
+
         services.AddSingleton<OverlayController>();
         services.AddSingleton<CostAnimator>();
 

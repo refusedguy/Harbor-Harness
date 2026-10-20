@@ -146,7 +146,7 @@ DI registration is split under `Hosting/` (`ConfigRegistration`, `ServiceRegistr
 `[Exposes(typeof(...))]` surface (`IEventBus`, `ISessionStore`, `IToolRegistry`,
 `IProviderRegistry`, `IAgentRegistry`, `UiStore`, `TuiEffectHost`). The tool registry is
 built through `Harbor.Hosting`'s `ToolsCatalog.CreateToolRegistry` with
-`HarborToolSetKind.Standard10` (`AppHost.cs:100`); provider discovery registers the JSON
+`HarborToolSetKind.Standard10` (`AppHost.cs:103`); provider discovery registers the JSON
 provider presets via `JsonProviderDiscovery.RegisterJsonProviders`
 (`src/Harbor.Hosting/Modules/ProviderFactories.cs:61`), Ollama always available, API keys
 resolved through `AuthStore`. The built `IServiceProvider` reaches `MainViewModel` during

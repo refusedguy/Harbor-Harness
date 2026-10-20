@@ -43,7 +43,7 @@ namespace Harbor.App.Avalonia.Tests;
 // restores it, and AppHostDiTests writes the same variable without restoring it
 // at all. `avalonia-headless` named only this class's peers, so the two were
 // scheduled in different buckets and overlapped on AppHost.ResolveHarborDir
-// (AppHost.cs:121-126). Two keys, because TUnit intersects on either.
+// (AppHost.cs:124-129). Two keys, because TUnit intersects on either.
 //
 // The array form, not `[NotInParallel("a", "b")]`: TUnit 1.61.0 declares
 // exactly three constructors — `()`, `(string)` and `(string[])` — and the
