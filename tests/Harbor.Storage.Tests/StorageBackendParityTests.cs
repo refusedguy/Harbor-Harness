@@ -61,7 +61,7 @@ public class StorageBackendParityTests
         foreach (ContentPart part in parts)
         {
             object dto = JsonlMessageCodec.SerializePart(part);
-            string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlMessageCodec.JsonOptions);
+            string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlCodecContext.JsonOptions);
             // NOT JsonSerializer.Serialize(part, options): ContentPart carries
             // [JsonPolymorphic], and the declared-type generic overload needs a
             // metadata-capable converter to build its PolymorphicTypeResolver — the
@@ -98,7 +98,7 @@ public class StorageBackendParityTests
         foreach (ContentPart part in parts)
         {
             object dto = JsonlMessageCodec.SerializePart(part);
-            string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlMessageCodec.JsonOptions);
+            string jsonlJson = JsonSerializer.Serialize(dto, dto.GetType(), JsonlCodecContext.JsonOptions);
             string sqliteJson = WriteViaRowConverter(part);
 
             ContentPart codecOverJsonl = ReadViaElementCodec(jsonlJson);

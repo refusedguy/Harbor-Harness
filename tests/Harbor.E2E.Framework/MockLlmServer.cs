@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Harbor.E2E.Framework;
 /// <summary>
 ///     In-process HTTP server that emulates an OpenAI-compatible LLM provider
@@ -266,6 +268,28 @@ public sealed class MockLlmServer : IAsyncDisposable
     ///     will emit a single tool-call chunk requesting <paramref name="toolName" />
     ///     with the given JSON-encoded <paramref name="args" />.
     /// </summary>
+    /// <remarks>
+    ///     #1822 — this is the ONE call in the mock that still rides the
+    ///     reflection serializer, and it is the honest limit of the approach
+    ///     rather than an oversight. <paramref name="args" /> is an open
+    ///     <see cref="object" />: its runtime type is chosen by the CALLER, and
+    ///     eighteen call sites across the PTY scenario suite and the CLI E2E
+    ///     suite pass anonymous types (<c>new { path = probe }</c> and friends).
+    ///     A source-generated context registers types BY NAME, and an anonymous
+    ///     type has no name to register — the generator cannot emit metadata for
+    ///     a type it cannot be told about, and the runtime's "nearest ancestor"
+    ///     fallback would resolve it to <see cref="object" /> and silently drop
+    ///     every member.
+    ///     <para>
+    ///         The way out is for the callers to pass a NAMED payload (the
+    ///         shared kit's <c>ToolPathArgs</c> and its siblings), which makes
+    ///         this method generic over the payload type. That is a change to
+    ///         the PTY scenario suite, so it is left to the slice that owns
+    ///         those files rather than smuggled in here. The gate
+    ///         (<c>tools/check-test-json-reflection.py</c>) carries this call
+    ///         as its single documented exception.
+    ///     </para>
+    /// </remarks>
     public void SetToolCallResponse(string model, string toolName, object args)
     {
         string argsJson = JsonSerializer.Serialize(args);
@@ -307,7 +331,7 @@ public sealed class MockLlmServer : IAsyncDisposable
             if (string.IsNullOrWhiteSpace(raw))
                 continue;
 
-            var entry = JsonSerializer.Deserialize<RecordedCompletion>(raw);
+            var entry = JsonSerializer.Deserialize(raw, MockLlmJsonContext.Default.RecordedCompletion);
             if (entry is null)
                 continue;
 
@@ -413,16 +437,14 @@ public sealed class MockLlmServer : IAsyncDisposable
     {
         // Minimal OpenAI-shaped models list. Tests don't depend on the exact
         // contents — only that the request succeeds.
-        var payload = new
-        {
-            @object = "list",
-            data = new object[]
+        var payload = new MockModelListPayload(
+            "list",
+            new[]
             {
-                new { id = "mock/test-model", @object = "model", created = 0, owned_by = "mock" },
-                new { id = "mock/other-model", @object = "model", created = 0, owned_by = "mock" }
-            }
-        };
-        string json = JsonSerializer.Serialize(payload);
+                new MockModelListEntry("mock/test-model", "model", 0, "mock"),
+                new MockModelListEntry("mock/other-model", "model", 0, "mock"),
+            });
+        string json = JsonSerializer.Serialize(payload, MockLlmJsonContext.Default.MockModelListPayload);
         byte[] body = Encoding.UTF8.GetBytes(json);
         resp.ContentType = "application/json";
         resp.ContentLength64 = body.Length;
@@ -618,99 +640,83 @@ public sealed class MockLlmServer : IAsyncDisposable
             ToolArgs: canned.ToolArgs,
             ErrorMessage: canned.ErrorMessage);
 
-        string line = JsonSerializer.Serialize(entry);
+        string line = JsonSerializer.Serialize(entry, MockLlmJsonContext.Default.RecordedCompletion);
         File.AppendAllText(_recordingPath!, line + "\n");
     }
 
-    private sealed record RecordedCompletion(
-        string Model,
-        string Kind,
-        string? Text,
-        string? ToolName,
-        string? ToolArgs,
-        string? ErrorMessage);
+    // #1822: the source-generated context in this assembly registers this
+    // record, and a generator can only name a type it can reach from the
+    // assembly the context lives in — so the record is internal rather than
+    // private. The JSON shape is pinned member by member so the recorded
+    // file does not depend on a naming policy.
+    internal sealed record RecordedCompletion(
+        [property: JsonPropertyName("Model")] string Model,
+        [property: JsonPropertyName("Kind")] string Kind,
+        [property: JsonPropertyName("Text")] string? Text,
+        [property: JsonPropertyName("ToolName")] string? ToolName,
+        [property: JsonPropertyName("ToolArgs")] string? ToolArgs,
+        [property: JsonPropertyName("ErrorMessage")] string? ErrorMessage);
 
     private static string BuildTextDeltaChunk(string model, string deltaText)
     {
-        var chunk = new
-        {
-            id = "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
-            @object = "chat.completion.chunk",
-            created = 0,
+        var chunk = new MockChatCompletionChunk(
+            "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+            "chat.completion.chunk",
+            0,
             model,
-            choices = new[]
+            new[]
             {
-                new
-                {
-                    index = 0,
-                    delta = new { content = deltaText },
-                    finish_reason = (string?)null
-                }
-            }
-        };
-        return JsonSerializer.Serialize(chunk);
+                new MockChatCompletionChoice(
+                    0,
+                    new MockChatCompletionDelta(deltaText),
+                    null),
+            });
+        return JsonSerializer.Serialize(chunk, MockLlmJsonContext.Default.MockChatCompletionChunk);
     }
 
     private static string BuildFinishChunk(string model, string finishReason)
     {
         // Final chunk: empty delta + finish_reason + usage (the client looks
         // for prompt_tokens / completion_tokens to surface usage stats).
-        var chunk = new
-        {
-            id = "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
-            @object = "chat.completion.chunk",
-            created = 0,
+        var chunk = new MockChatCompletionChunk(
+            "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+            "chat.completion.chunk",
+            0,
             model,
-            choices = new[]
+            new[]
             {
-                new
-                {
-                    index = 0,
-                    delta = new { content = "" },
-                    finish_reason = finishReason
-                }
+                new MockChatCompletionChoice(
+                    0,
+                    new MockChatCompletionDelta(""),
+                    finishReason),
             },
-            usage = new
-            {
-                prompt_tokens = 8,
-                completion_tokens = 4,
-                total_tokens = 12
-            }
-        };
-        return JsonSerializer.Serialize(chunk);
+            new MockChatCompletionUsage(8, 4, 12));
+        return JsonSerializer.Serialize(chunk, MockLlmJsonContext.Default.MockChatCompletionChunk);
     }
 
     private static string BuildToolCallChunk(string model, string toolName, string argsJson)
     {
-        var chunk = new
-        {
-            id = "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
-            @object = "chat.completion.chunk",
-            created = 0,
+        var chunk = new MockToolCallChunk(
+            "chatcmpl-mock-" + Guid.NewGuid().ToString("N").Substring(0, 8),
+            "chat.completion.chunk",
+            0,
             model,
-            choices = new[]
+            new[]
             {
-                new
-                {
-                    index = 0,
-                    delta = new
-                    {
-                        tool_calls = new[]
+                new MockToolCallChoice(
+                    0,
+                    new MockToolCallDelta(
+                        new[]
                         {
-                            new
-                            {
-                                index = 0,
-                                id = "call_mock_" + Guid.NewGuid().ToString("N").Substring(0, 6),
-                                type = "function",
-                                function = new { name = toolName, arguments = argsJson }
-                            }
-                        }
-                    },
-                    finish_reason = (string?)null
-                }
-            }
-        };
-        return JsonSerializer.Serialize(chunk);
+                            new MockToolCall(
+                                0,
+                                "call_mock_" + Guid.NewGuid().ToString("N").Substring(0, 6),
+                                "function",
+                                new MockToolCallFunction(toolName, argsJson)),
+                        }),
+                    null),
+            });
+        return JsonSerializer.Serialize(chunk, MockLlmJsonContext.Default.MockToolCallChunk);
     }
 
     private readonly record struct CannedResponse(

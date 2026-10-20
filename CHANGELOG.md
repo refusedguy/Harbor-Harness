@@ -28,6 +28,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Итог по строкам.** Удалено 1212 строк python (два гейта) и два старых baseline-файла в старом формате; добавлено 569 строк (`check-public-api-resign.py`) и 162 (`public-api-nonvacuity.sh`) — то, что анализатор закрыть не может. Чистый итог по python: −481 строка, и это при том, что гейт теперь ловит на порядок больше классов изменений. Baseline'ы выросли с 917 строк старого формата до 3165 строк формата анализатора (1896 строк контрактной сборки и 1269 строк фасада): анализатор считает и неявные конструкторы, и аксессоры свойств, и то, что компилятор синтезирует для record'а, — а у текстового скана нет ни одного ключевого слова `public` в исходнике, на который он мог бы посмотреть.
 
+### #1822 — тесты сериализуют через source-generated контекст, как это делает продукт
+
+**Продуктовая сторона System.Text.Json уже едет на source generation (21 `JsonSerializerContext` в `src/`). Тестовая — нет: 62 вызова `JsonSerializer.*` в `tests/` брали reflection-резолвер, пока 22 соседних вызова в тех же файлах уже ехали на `JsonlCodecContext.Default.*` / `RemoteJsonContext.Default.*` / `McpJsonSerializerContext.Default.*`. Теперь едут все, кроме одного — и тот описан.**
+
+**Что это даёт помимо скорости.** Reflection-вызов **не проверяется на компиляции**: опечатка в имени члена DTO компилируется, сериализуется в ДРУГОЙ ключ, и тест проверяет не то поле — оставаясь зелёным. Source-generated контекст называет тип и его члены, поэтому компилятор их видит. Это тот класс ложно-зелёных тестов, о котором тикет.
+
+**Где живёт контекст.** Общий — `Harbor.TestKit.TestJsonContext` в `tests/Harbor.TestKit.Support/`. Именно этот sibling, а не `Harbor.TestKit` (ядро) и не `Harbor.TestKit.Tui`: только `Support` закрыт по closure (достигает `Harbor.Abstractions` и ничего сверх того), поэтому подключение контекста к потребителю не добавляет ему ни одной продуктовой сборки. Проектные контексты — там, где DTO принадлежит проекту: `DomainModelsJsonContext` (доменные модели), `MockLlmJsonContext` (проводные формы мок-сервера), `LspJsonContext`, `ChatCompletionJsonContext`, `BenchmarkJsonContext`, `GoldenFrameJsonContext`.
+
+**Чего контекст не может.** Анонимный тип: `[JsonSerializable]` принимает `Type`, а у анонимного типа нет имени. Поэтому `new { path = ..., content = ... }` стал именованной записью (`ToolPathArgs`, `ToolPathContentArgs`, …) с `[JsonPropertyName]` на каждом члене — байты на проводе те же. Открытый `object` — честный предел: `MockLlmServer.SetToolCallResponse` принимает `object`, чей рантайм-тип выбирает ВЫЗЫВАЮЩИЙ (18 мест в PTY-наборе и в CLI E2E передают анонимные типы); этот вызов остался на reflection и стоит первым рядом в `tools/test-json-reflection-exceptions.txt` вместе с причиной.
+
+**Доказательство паритета.** `tests/Harbor.TestKit.Tests/TestJsonContextParityTests.cs` прибивает байты каждой полезной нагрузки к литералу (переименование, перестановка или выпадение члена роняет тест) и доказывает, что за контекстом НЕТ reflection-фолбэка: незарегистрированный тип через `TestJsonContext.Default.Options` бросает `InvalidOperationException`. `tests/Harbor.Storage.Jsonl.Tests/SourceGenContextParityTests.cs` сравнивает вывод ТЕСТОВОГО контекста с выводом ПРОДУКТОВОГО (`JsonlCodecContext`) байт в байт — это и есть утверждение «тест едет по тому же пути, что и продукт».
+
+**Контроль дрейфа.** `tools/check-test-json-reflection.py` (в `tools/`, а не в арх-суite #1724 — как и `check-test-dup.py` из #1778) падает на любом вызове `JsonSerializer.*` в `tests/`, который не называет source-generated type info. Файл исключений — ратчет: исключение, которого дерево больше не производит, роняет гейт. `--self-test` доказывает, что гейт всё ещё падает на подсаженном reflection-вызове.
+
 ### #1921 — три проекта из 112 собирались в Debug внутри Release-сборки
 
 **Механизм оказался не в этом репозитории, а в MSBuild: проект, которого нет строкой в `Harbor.slnx`, получает `Configuration` по умолчанию — `Debug` — а его Debug-вывод копируется в Release-`bin` зависимых. Исправлено одним свойством MSBuild, закрыто новым гвардом в арх-суite.**

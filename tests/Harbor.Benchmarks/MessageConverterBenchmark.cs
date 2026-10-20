@@ -3,6 +3,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks the <see cref="MessageConverter" /> JSON hot path used by
@@ -144,7 +145,9 @@ public class MessageConverterBenchmark
                 new TextPart(code),
                 new TextPart(code),
                 new ThinkingPart(code),
-                new ToolCallPart("tc_1", "write", JsonSerializer.SerializeToElement(new Dictionary<string, object?> { ["path"] = "Calculator.cs", ["content"] = code }))
+                new ToolCallPart("tc_1", "write", JsonSerializer.SerializeToElement(
+                    new Dictionary<string, object?> { ["path"] = "Calculator.cs", ["content"] = code },
+                    TestJsonContext.Default.DictionaryStringObject))
             },
             StopReason.Stop,
             new Usage(20_480, 5_120),

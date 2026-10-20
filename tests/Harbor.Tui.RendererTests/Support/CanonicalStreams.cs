@@ -3,6 +3,7 @@ namespace Harbor.Tui.RendererTests.Support;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 
 /// <summary>
 ///     The canonical event stream every renderer golden frame is built from
@@ -19,7 +20,9 @@ public static class CanonicalStreams
     public static IEnumerable<AgentEvent> ChatWithToolRoundTrip()
     {
         var partial = AssistantMessage.Empty("s1", "stub-1");
-        var args = JsonSerializer.SerializeToElement(new { path = "README.md", limit = 10 });
+        var args = JsonSerializer.SerializeToElement(
+            new ToolPathLimitArgs("README.md", 10),
+            TestJsonContext.Default.ToolPathLimitArgs);
 
         yield return new AgentStartEvent("s1", []);
         yield return new MessageStartEvent(partial);

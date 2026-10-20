@@ -47,7 +47,7 @@ public class ToolDependencyInjectionTests
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path)}}}"""), Ctx());
+            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("class Plain");
@@ -60,7 +60,7 @@ public class ToolDependencyInjectionTests
         var tool = new EditTool(NullLogger<EditTool>.Instance);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path)}},"oldString":"Old","newString":"New"}"""), Ctx());
+            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Old","newString":"New"}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).DoesNotContain("LSP:");
@@ -74,7 +74,7 @@ public class ToolDependencyInjectionTests
         var tool = new ReadTool(NullLogger<ReadTool>.Instance, lsp);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path)}}}"""), Ctx());
+            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Opened).Contains(path);
@@ -89,7 +89,7 @@ public class ToolDependencyInjectionTests
         var tool = new EditTool(NullLogger<EditTool>.Instance, lsp);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path)}},"oldString":"Noted","newString":"Noted2"}"""), Ctx());
+            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Noted","newString":"Noted2"}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("LSP: 1 diagnostic(s)");

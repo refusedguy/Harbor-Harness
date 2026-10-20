@@ -18,7 +18,8 @@ public class LspClientTests
 
         JsonElement? result = await server.Client.SendRequestAsync(
             "initialize",
-            JsonSerializer.SerializeToElement(new { processId = (int?)1, rootUri = "file:///tmp" }),
+            JsonSerializer.SerializeToElement(
+                new LspInitializeParams(1, "file:///tmp"), LspJsonContext.Default.LspInitializeParams),
             cancellationToken);
 
         await Assert.That(result is not null).IsTrue();

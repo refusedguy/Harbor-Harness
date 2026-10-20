@@ -56,9 +56,9 @@ internal sealed class EagerAnswerPipe : Stream
 
         // The answer goes out BEFORE this write returns: the client is still
         // inside its own write call, which is the window that used to lose it.
-        await WriteFrameAsync(_toClient, Encode(new { jsonrpc = "2.0", id, result = new { ok = true } }), cancellationToken)
+        await WriteFrameAsync(_toClient, Encode(new LspResponseFrame("2.0", id, new LspResponseResult(true))), cancellationToken)
             .ConfigureAwait(false);
-        await WriteFrameAsync(_toClient, Encode(new { jsonrpc = "2.0", method = PingMethod, @params = new { } }), cancellationToken)
+        await WriteFrameAsync(_toClient, Encode(new LspNotificationFrame("2.0", PingMethod, new LspEmptyParams())), cancellationToken)
             .ConfigureAwait(false);
 
         // Hold the writer until the client has read the answer AND the
@@ -148,7 +148,11 @@ internal sealed class EagerAnswerPipe : Stream
         throw new FormatException("no Content-Length header in " + headers);
     }
 
-    private static byte[] Encode(object message) => Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
+    private static byte[] Encode(LspResponseFrame message) =>
+        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message, LspJsonContext.Default.LspResponseFrame));
+
+    private static byte[] Encode(LspNotificationFrame message) =>
+        Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message, LspJsonContext.Default.LspNotificationFrame));
 
     private static async Task WriteFrameAsync(MemPipeStream output, byte[] body, CancellationToken ct)
     {

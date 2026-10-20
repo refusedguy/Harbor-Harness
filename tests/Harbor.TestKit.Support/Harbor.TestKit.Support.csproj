@@ -27,6 +27,14 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj" />
+    <!--
+      #1822: the shared source-generated JSON context registers `Usage`, a
+      `Harbor.Abstractions.Contracts` type. Contracts is ALREADY in this
+      project's transitive closure (Harbor.Abstractions references it), so the
+      explicit edge adds no assembly to any consumer — it states the
+      dependency instead of leaning on the chain.
+    -->
+    <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

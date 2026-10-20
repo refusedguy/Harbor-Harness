@@ -63,7 +63,7 @@ public class PatchToolTests
                            """;
             var tool = new PatchTool(NullLogger<PatchTool>.Instance);
             var args = JsonDocument.Parse(
-                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
+                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch, TestJsonContext.Default.String)}}}""").RootElement;
 
             var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
@@ -96,7 +96,7 @@ public class PatchToolTests
                            """;
             var tool = new PatchTool(NullLogger<PatchTool>.Instance);
             var args = JsonDocument.Parse(
-                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
+                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch, TestJsonContext.Default.String)}}}""").RootElement;
 
             var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
@@ -129,7 +129,7 @@ public class PatchToolTests
                            """;
             var tool = new PatchTool(NullLogger<PatchTool>.Instance);
             var args = JsonDocument.Parse(
-                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
+                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch, TestJsonContext.Default.String)}}}""").RootElement;
 
             var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
@@ -159,7 +159,7 @@ public class PatchToolTests
                            """;
             var tool = new PatchTool(NullLogger<PatchTool>.Instance);
             var args = JsonDocument.Parse(
-                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
+                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch, TestJsonContext.Default.String)}}}""").RootElement;
 
             var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
@@ -187,7 +187,7 @@ public class PatchToolTests
                            """;
             var tool = new PatchTool(NullLogger<PatchTool>.Instance);
             var args = JsonDocument.Parse(
-                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch)}}}""").RootElement;
+                $$"""{"path":"{{tempFile.Replace("\\", "\\\\")}}","patch":{{JsonSerializer.Serialize(patch, TestJsonContext.Default.String)}}}""").RootElement;
 
             var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 

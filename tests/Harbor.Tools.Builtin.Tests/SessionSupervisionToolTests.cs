@@ -44,7 +44,7 @@ public class SessionSupervisionToolTests
         TestToolContext.Create(sessionId: sessionId, messageId: "message-1", callId: "call-1", messages: messages);
 
     private static JsonElement Args(Dictionary<string, object?> values) =>
-        JsonDocument.Parse(JsonSerializer.Serialize(values)).RootElement.Clone();
+        JsonDocument.Parse(JsonSerializer.Serialize(values, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
 
     [Test]
     public async Task Read_Name_IsSessionRead()

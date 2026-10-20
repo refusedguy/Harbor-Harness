@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Storage;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 namespace Harbor.Plugins.Runtime.Tests.Storage;
 
@@ -129,7 +130,7 @@ public sealed class TrustCapabilityTests : IDisposable
         File.WriteAllText(_store, $$"""
             [
               {
-                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path), TestJsonContext.Default.String).Trim('"')}}",
                 "hash": "{{script.Hash}}"
               }
             ]
@@ -168,7 +169,7 @@ public sealed class TrustCapabilityTests : IDisposable
         File.WriteAllText(_store, $$"""
             [
               {
-                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path), TestJsonContext.Default.String).Trim('"')}}",
                 "hash": "{{script.Hash}}",
                 "capabilities": ["read_files", "run_processes", "http_requests"]
               }
@@ -195,7 +196,7 @@ public sealed class TrustCapabilityTests : IDisposable
         File.WriteAllText(_store, $$"""
             [
               {
-                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path)).Trim('"')}}",
+                "path": "{{JsonSerializer.Serialize(Path.GetFullPath(path), TestJsonContext.Default.String).Trim('"')}}",
                 "hash": "{{script.Hash}}",
                 "capabilities": ["read_files", "nuke_everything"]
               }

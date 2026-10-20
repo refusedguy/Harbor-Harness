@@ -9,6 +9,7 @@ using Harbor.Ui.Framework.State;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 /// <summary>
 ///     UiStore write-path regression for the unified AnsiPlain renderer
@@ -59,7 +60,9 @@ public class AnsiPlainUiStoreTests
         try
         {
             await renderer.InitializeAsync();
-            var args = JsonSerializer.SerializeToElement(new { path = "README.md", limit = 10 });
+            var args = JsonSerializer.SerializeToElement(
+                new ToolPathLimitArgs("README.md", 10),
+                TestJsonContext.Default.ToolPathLimitArgs);
             await renderer.RenderAsync(new ToolExecutionStartEvent("tc_1", "read", args));
             await renderer.RenderAsync(new ToolExecutionEndEvent("tc_1", ToolResult.Success("[0001] # Harbor"), IsError: false));
         }

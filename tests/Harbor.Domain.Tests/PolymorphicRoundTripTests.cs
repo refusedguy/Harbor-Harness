@@ -16,8 +16,6 @@ namespace Harbor.Domain.Tests;
 /// </summary>
 public class PolymorphicRoundTripTests
 {
-    private static readonly JsonSerializerOptions WebOptions = new(JsonSerializerDefaults.Web);
-
     private static readonly DateTimeOffset When = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private static JsonElement OwnedArgs(string json)
@@ -28,8 +26,8 @@ public class PolymorphicRoundTripTests
 
     private static async Task<AgentMessage> StjRoundTripAsync(AgentMessage message)
     {
-        string json = JsonSerializer.Serialize<AgentMessage>(message, WebOptions);
-        AgentMessage? back = JsonSerializer.Deserialize<AgentMessage>(json, WebOptions);
+        string json = JsonSerializer.Serialize(message, DomainModelsJsonContext.Default.AgentMessage);
+        AgentMessage? back = JsonSerializer.Deserialize(json, DomainModelsJsonContext.Default.AgentMessage);
 
         await Assert.That(back).IsNotNull();
         return back!;
@@ -37,8 +35,8 @@ public class PolymorphicRoundTripTests
 
     private static async Task<ToolChoice> StjRoundTripAsync(ToolChoice choice)
     {
-        string json = JsonSerializer.Serialize<ToolChoice>(choice, WebOptions);
-        ToolChoice? back = JsonSerializer.Deserialize<ToolChoice>(json, WebOptions);
+        string json = JsonSerializer.Serialize(choice, DomainModelsJsonContext.Default.ToolChoice);
+        ToolChoice? back = JsonSerializer.Deserialize(json, DomainModelsJsonContext.Default.ToolChoice);
 
         await Assert.That(back).IsNotNull();
         return back!;
