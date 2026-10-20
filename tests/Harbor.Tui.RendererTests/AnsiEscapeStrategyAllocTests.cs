@@ -133,6 +133,8 @@ public class AnsiEscapeStrategyAllocTests
     [Test]
     public async Task Style_MatchesTheDocumentedSgrTable_ForEveryCombination()
     {
+        using var scope = Assert.Multiple();
+
         IEscapeCodeStrategy strategy = AnsiEscapeStrategy.Instance;
 
         // Spot the documented order, since a swap here is invisible in a
@@ -153,7 +155,14 @@ public class AnsiEscapeStrategyAllocTests
                 mismatches.Add($"(TuiStyle){bits} = {style}: expected \"{expected}\", got \"{actual}\"");
         }
 
-        await Assert.That(mismatches).IsEmpty();
+        // #1859: one failure per mismatching combination, so a single run
+        // names every one of them instead of only the first. The mismatch's
+        // own text rides along as the failure's reason, so the "why" survives.
+        foreach (string mismatch in mismatches)
+        {
+            await Assert.That(mismatches.Count).IsEqualTo(0)
+                .Because(mismatch);
+        }
     }
 
     [Test]
@@ -161,6 +170,8 @@ public class AnsiEscapeStrategyAllocTests
     {
         // The plain/pipes path shares the same Style() contract; collapsing to
         // the empty string must not depend on which combination is asked for.
+        using var scope = Assert.Multiple();
+
         IEscapeCodeStrategy strategy = NullEscapeStrategy.Instance;
         var styled = new List<int>();
         for (int bits = 1; bits < StyleCombinations; bits++)
@@ -169,7 +180,13 @@ public class AnsiEscapeStrategyAllocTests
                 styled.Add(bits);
         }
 
-        await Assert.That(styled).IsEmpty();
+        // #1859: one failure per offending combination, so a single run names
+        // every one of them instead of only the first.
+        foreach (int bits in styled)
+        {
+            await Assert.That(styled.Count).IsEqualTo(0)
+                .Because($"(TuiStyle){bits} = {(TuiStyle)bits} must render as the empty string");
+        }
     }
 
     /// <summary>Total SGR parameter length across the whole style space — the sweep's own checksum.</summary>

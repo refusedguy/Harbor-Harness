@@ -78,6 +78,8 @@ public class StatusBarFitPerfTests
         // Same invariant across the whole width sweep, including the narrow
         // widths where pass 2 character-cuts run. Truncation reports the width
         // it produced, so even the cut path must not re-measure.
+        using var scope = Assert.Multiple();
+
         const int segments = 12;
         var problems = new List<string>();
         foreach (int width in new[] { 0, 1, 2, 5, 9, 13, 21, 34, 55, 89, 144, 400 })
@@ -92,8 +94,15 @@ public class StatusBarFitPerfTests
             }
         }
 
-        await Assert.That(problems).IsEmpty()
-            .Because("the width of the row is a post-measurement decision; it must not change how much measuring costs");
+        // #1859: one failure per width that mis-measured, so a single run
+        // names every offender instead of only the first. The width's own text
+        // rides along as the failure's reason, so the "why" survives.
+        foreach (string problem in problems)
+        {
+            await Assert.That(problems.Count).IsEqualTo(0)
+                .Because($"{problem}: the width of the row is a post-measurement decision; "
+                    + "it must not change how much measuring costs");
+        }
     }
 
     [Test]
