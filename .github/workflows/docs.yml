@@ -34,6 +34,9 @@
 #             gate is red on dated records and green on the live defect. The
 #             `facts` job's comment carries the measurement.
 #   lint      markdown structural invariants, with a file/line floor.
+#   testdup   duplicated test bodies in tests/ (#1778), with a scan-size floor.
+#             It lives here rather than in ci.yml because it needs no .NET
+#             SDK and because ci.yml is the workflow the dotnet matrix owns.
 #
 # THE FLOORS ARE THE POINT
 #
@@ -74,6 +77,12 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
+      # result against its committed baseline, so a PR that edits the gate or
+      # the baseline must run it — and so must a PR that edits the tree it
+      # measures.
+      - 'tools/check-test-dup.py'
+      - 'tools/test-dup-baseline.json'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -116,6 +125,12 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
+      # #1778. Same trigger as above: the duplicate-body gate measures
+      # `tests/**/*.cs` and compares the result against its committed
+      # baseline, so a PR that edits the tree it measures — or the gate, or
+      # the baseline — must run it.
+      - 'tools/check-test-dup.py'
+      - 'tools/test-dup-baseline.json'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
@@ -200,6 +215,15 @@ jobs:
       # type counted as API, a re-wrapped signature read as a change).
       - name: Public-API snapshot gate fails on an unreviewed change
         run: python3 tools/check-public-api.py --self-test
+      # #1778. The eighth gate is the only one that reads the TEST tree, and
+      # the only one that asks whether a test body is a copy of another test
+      # body. Its failure path is tested here for the same reason as the
+      # others: a rule edited until it matches nothing is indistinguishable
+      # from a rule that found nothing, and the load-bearing fixture is the
+      # planted duplicate — the gate MUST fail on it, and MUST stay quiet on
+      # a same-shape body that shares no identifiers with it.
+      - name: Duplicate-test-body gate fails on a planted duplicate
+        run: python3 tools/check-test-dup.py --self-test
 
   links:
     name: internal links
@@ -349,6 +373,53 @@ jobs:
       # session-context cohort out of the same perimeter (--report: 13 / 7 / 130).
       - name: Check the guarded projects' declared dependencies
         run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 130
+
+  # #1778. Sixth question, and the only one about the TEST tree: not "do the
+  # links resolve", not "is the file shaped right", not "does the file:line
+  # exist", not "does the count match", not "is every dependency declared",
+  # but "is this test body a copy of that test body".
+  #
+  # Epic #1808 removes ~21 000 lines of duplicated test code and #1778 is the
+  # gate that stops it coming back: the rule 6 of the epic makes the
+  # detector the condition for calling the programme closed. The gate runs in
+  # BASELINE MODE — the whole `tests/` tree is scanned every time, the
+  # duplication that exists today is recorded in
+  # `tools/test-dup-baseline.json` and allowed to stay, and only NEW or GROWN
+  # duplication fails. A gate that is red on today's tree is a gate nobody
+  # lands, and a gate nobody lands protects nothing.
+  #
+  # The floors are a ratchet, like the ones above. Measured on this tree:
+  # 938 .cs files and 10 645 method bodies. They are set ~15% below those
+  # numbers, because the programme is about to REMOVE test methods: a floor
+  # set AT the measured count would go red on the removal PRs themselves.
+  # Lower them in the same diff as a legitimate removal, where a reviewer
+  # sees it.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a planted duplicate
+  # fails, a same-shape body with unrelated identifiers does not), run in the
+  # `selftest` job above.
+  testdup:
+    name: test duplication
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # `--json-out` writes the group list (file, line range, copy count,
+      # removable lines) next to the verdict, so the next duplication ticket
+      # takes its work list from the artifact instead of re-measuring by
+      # hand. The artifact is uploaded even when the gate is red — that is
+      # exactly when somebody needs it.
+      - name: Check the test tree for duplicated bodies
+        run: python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json
+      - name: Upload the duplicate-group list
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-dup-groups
+          path: test-dup-groups.json
+          retention-days: 7
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

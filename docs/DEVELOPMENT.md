@@ -112,6 +112,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `checker self-test` | both gates still **fail** on fixtures that are known-broken |
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
+| `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
 
 Three things make this a real gate rather than decoration:
 
@@ -150,6 +151,43 @@ template sections — so a failure always names exactly one gate to fix. Keep it
 that way: adding a link check to `ReadmeCoverageTests`, or a section check to
 `md-lint.py`, would give two gates an opinion about the same fact, and two
 gates that can disagree are worse than one.
+
+## Test duplication gate — issue 1778
+
+`tools/check-test-dup.py` finds duplicated **test bodies** in `tests/` and
+fails when a NEW one appears. It is the mandatory tail of epic #1808: that
+epic removes ~21 000 lines of copy-pasted test code, and without this gate the
+copy-paste comes straight back.
+
+```bash
+./tools/check-test-dup.py --report        # census + every duplicate group, exit 0
+./tools/check-test-dup.py --self-test     # prove the gate still fails on a planted duplicate
+./tools/check-test-dup.py --update        # regenerate the baseline after the programme lands
+./tools/check-test-dup.py --new-since origin/dev   # only groups touching files this branch changed
+```
+
+**How it matches.** Every method body in `tests/**/*.cs` (minus `bin/`, `obj/`
+and `tests/Harbor.Architecture.Tests/`, which belongs to programme #1724) is
+lexed, then normalised: comments dropped, string literals → `S`, char literals
+→ `C`, numeric literals → `N`, identifiers → `I`. Bodies with the same
+normalised shape form a group. A group only counts as duplication when its
+members also share at least half their **identifier vocabulary** — two bodies
+can be shaped alike and have nothing to do with each other, and a coincidence
+is not a duplicate. The thresholds are `--min-lines 6` (a body must carry six
+code lines; a three-line assert helper is a legitimate small overlap) and
+`--min-similarity 0.50`.
+
+**Why it is in baseline mode.** The tree carries duplication today: the census
+in `tools/test-dup-baseline.json` records 228 groups and 4 232 removable code
+lines. A gate that is red on the current tree is a gate nobody lands, so the
+gate fails only on duplication that is NEW relative to that baseline or that
+GREW past the copy count the baseline recorded. The comparison is on the
+**members** of a group — the paths and names of the methods in it — and never
+on the text of their bodies: editing a duplicated test changes its text, and
+an edit is not new duplication. The baseline only ever goes **down**: as
+issues #1769–#1777 land, `--update` lowers it, and the floor tightens with
+it. Zones other programmes own are exempted explicitly, with a reason and an
+expiry date, and an expired exemption fails the gate.
 
 ## Running the CLI
 

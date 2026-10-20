@@ -1,0 +1,2715 @@
+{
+  "version": 1,
+  "generator": "tools/check-test-dup.py",
+  "policy": {
+    "scope": "tests/**/*.cs minus bin/, obj/ and tests/Harbor.Architecture.Tests",
+    "min_body_lines": 6,
+    "min_members": 2,
+    "min_similarity": 0.5,
+    "normalisation": "comments dropped; string literals -> S; char literals -> C; numeric literals -> N; identifiers -> I; whitespace collapsed"
+  },
+  "census": {
+    "files": 938,
+    "lines": 198187,
+    "methods": 10645,
+    "test_methods": 6756
+  },
+  "metrics": {
+    "groups": 228,
+    "intra_file_groups": 114,
+    "cross_file_groups": 114,
+    "exact_groups": 138,
+    "duplicate_lines": 4232,
+    "group_lines": 6661,
+    "shape_coincidences": 0,
+    "files": 938,
+    "lines": 198187,
+    "methods": 10645,
+    "test_methods": 6756
+  },
+  "blocking_duplicate_lines": 3988,
+  "groups": {
+    "00c25fe277a33905527cc4696dd798419f502485": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeBuiltinPanelsTests.cs::StateWithLines#0",
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs::StateWithSessions#0",
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeSubagentsPanelTests.cs::StateWithActive#0",
+        "tests/Harbor.Tui.CellForge.Tests/HunkVirtualizerTests.cs::StateWithLines#0",
+        "tests/Harbor.Tui.CellForge.Tests/JumpPaletteSuggestedTests.cs::StateWithSessions#0"
+      ],
+      "count": 5,
+      "lines": 7,
+      "files": 5,
+      "exact": 4,
+      "shape": "1ffe4de7831a29887fce1ccb28c8b380694ff50b"
+    },
+    "013348453b0635b0daedba50e6e2b20fb2781239": {
+      "members": [
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::ChangeSetFreezer_TryLoad_Missing_FailsNamingFreezeStage#0",
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::CheckRunner_TryLoad_Missing_FailsNamingChecksStage#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "15b69084eab8c82e2ea0288d4788c3a41fb71f4c"
+    },
+    "017435bdfa75e47b5813fee3641e65217ad470a8": {
+      "members": [
+        "tests/Harbor.Domain.Tests/BashArgMatcherTests.cs::Evaluate_CompoundSegmentWithDoubleQuoteDanger_EscalatesToAsk#0",
+        "tests/Harbor.Registries.Tests/RegistriesTests.cs::PermissionRuleset_PathSpecificRule_Evaluate_ReturnsCorrectAction#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 0,
+      "shape": "5f97deaab32775c57196a80f1e7cf51f530aa33b"
+    },
+    "01ee12370dafd1677bfb6ee92438bd29e18f2eb9": {
+      "members": [
+        "tests/Harbor.Providers.Tests/LlmClientProviderIdTests.cs::AnthropicLlmClient_ProviderId_IsAnthropic#0",
+        "tests/Harbor.Providers.Tests/LlmClientProviderIdTests.cs::OpenAILlmClient_ProviderId_IsOpenAI#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "a23cf37508a492e585b2903c34ae7b44a314e652"
+    },
+    "02a3ce56fb8fa7980b58ec04a101461d6d7a8f85": {
+      "members": [
+        "tests/Harbor.Ipc.Tests/InProcessClientTests.cs::ListProviders_Returns_Empty_List_When_No_Providers_Registered#0",
+        "tests/Harbor.Ipc.Tests/InProcessClientTests.cs::ListTools_Returns_Empty_List_When_No_Tools_Registered#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 1,
+      "exact": 0,
+      "shape": "088d23717c0ffd8e883f5b1139af09a9551dbafd"
+    },
+    "02b769ad5cd5e2e08888876750c003a28fb05090": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/LayoutSessionRoutingTests.cs::Minimums_ClampRatio#0",
+        "tests/Harbor.Tui.CellForge.Tests/LayoutSessionRoutingTests.cs::Solve_HonorsRatio#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "0f671b67dbeef2a75f8ab8138caf9f49256b929c"
+    },
+    "03f3f3141d677fe991fcdc4aa93964e015587a7d": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_DenyHook_ReturnsDenyWithReason#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_Timeout_DeniesFailClosed#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "a492314dc7e38a68846839c0265dc56df28f6ade"
+    },
+    "05dd32429e3c8a969a75d2e77e91b0d0179f543d": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/BufferDiffR1Tests.cs::WriteText_AsciiRun_KeepsPenElision#0",
+        "tests/Harbor.Tui.CellForge.Tests/BufferDiffR1Tests.cs::WriteText_Vs16Run_InvalidatesPen#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "2ec737cdfd7fa1bc6894902057725ba8c8822a25"
+    },
+    "063cf57305fe324e15ce986bb2e942b74207e858": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs::Joined#0",
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeSubagentsPanelTests.cs::Joined#0",
+        "tests/Harbor.Tui.CellForge.Tests/JumpPaletteNavStateTests.cs::Joined#0",
+        "tests/Harbor.Tui.CellForge.Tests/JumpPaletteSuggestedTests.cs::Joined#0"
+      ],
+      "count": 4,
+      "lines": 6,
+      "files": 4,
+      "exact": 3,
+      "shape": "e25e01b4b028626fc3b33e77b56116bf7b47a01e"
+    },
+    "093b8dc9429d3fe74dec5ba2f53cc8f9f54845e7": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_ExternalState_DrivesHighlight#0",
+        "tests/Harbor.Tui.CellForge.Tests/FilePickerNavStateTests.cs::Picker_ExternalState_DrivesHighlight#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 0,
+      "shape": "52797dc44efdcbf35f0344f8dd4549bd0fca4a04"
+    },
+    "0b32e5feae3b480145faa0fd0753a2e69e503510": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/ProjectionCoalescingAllocationTests.cs::Many#0",
+        "tests/Harbor.Tui.CellForge.Tests/ProjectionCoalescingAllocationTests.cs::SessionList#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "80cb1e2ebfdbd2564ca23cab1406b222b7f495ee"
+    },
+    "0b7453335bf238923609cb6f94be7b2335344254": {
+      "members": [
+        "tests/Harbor.Application.Tests/ToolDispatcherCommitTests.cs::WaitForAsync#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherRetryTests.cs::WaitForAsync#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "feab177fbe6c7655092cf8c8ac8e0b1a6de5c358"
+    },
+    "0d589a467ce290ddf4ed4bf2b024c2924fd9e680": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs::Painted#0",
+        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripUnreadTests.cs::Painted#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "4c835a22a3bfde48438b056fa08b78d1456b8e38"
+    },
+    "0d9fbffc31cd9ecf463c58fb589a6faabe0aa631": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
+        "tests/Harbor.Domain.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
+        "tests/Harbor.Providers.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
+        "tests/Harbor.TestKit/TestScalingGate.cs::AssertWithinLimitsAsync#0",
+        "tests/Harbor.Tui.PerfTests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
+        "tests/Harbor.Ui.Framework.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0"
+      ],
+      "count": 6,
+      "lines": 31,
+      "files": 6,
+      "exact": 6,
+      "shape": "711dfaedf58d9ffb106b9a44cb8d0030494ec36d"
+    },
+    "0db764a36a42be09dca211fbf72d15d44c94d5d8": {
+      "members": [
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::CheckAsync_AbsolutePath_EscapesToDeny_WithoutAsker#0",
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::CheckAsync_AllowRule_ReturnsAllow#0",
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::CheckAsync_AskRule_NoAskerConfigured_DefaultsToDeny#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "6556e1e928b7def8ec5c04395fecb5b775fe57e7"
+    },
+    "0dddb42b1a4bfa32ffabfe96c18467755d18a513": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/DialogFormTests.cs::Radio_Enter_SubmitsToHost_Escape_Dismisses#0",
+        "tests/Harbor.Tui.CellForge.Tests/DialogFormTests.cs::Select_Enter_SubmitsToHost_Escape_Dismisses#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "ac2a40c25b6c644804deb0096392c6cfa4b9b055"
+    },
+    "0deb0b7c4386879173bcbe29fcfe59be735a4d16": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::WideRow_ThinkingPhase_ShowsThinkingMascot#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::WideRow_ToolCallPhase_ShowsToolCallMascot#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "37572369c2eb549bb82532a3f8cee7bda5714697"
+    },
+    "0e06c37dd4aca991ce45e68a7b234d32e48565e8": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlCheckpointsTests.cs::Msg#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlDeleteMessagesAfterTests.cs::Msg#0",
+        "tests/Harbor.Storage.Tests/SqliteAppendScalingGate.cs::NewMessage#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 3,
+      "exact": 2,
+      "shape": "e945d7070f4859e62e70903b46da63418e54a67a"
+    },
+    "0e1dd26ea1b6ba96ba33be5fbbd2eea0027cfb48": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/SgrMouseDecoderTests.cs::Clean_Press_Release_Synthesizes_Click_And_Clears_Context#0",
+        "tests/Harbor.Tui.CellForge.Tests/SgrMouseDecoderTests.cs::Wheel_Up_Decodes_Without_Touching_Press_Context#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "c37f7e5418144ef05fa44503f1a2a10a560d8242"
+    },
+    "0f1bf78dd74ff83d2bc5ad377d6e2233f9272e1a": {
+      "members": [
+        "tests/Harbor.Application.Tests/ToolDispatcherRetryTests.cs::FatalError_NoRetry_MessageUnchanged#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherRetryTests.cs::RetryExhausted_ReportsAttempts#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "637f74deeb41cb354e2b6fbe7986f8ec3401e32d"
+    },
+    "0f42c0e0d14662f1a88cbfe9f806804ef78fdf8c": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/StatusBarFactsParityTests.cs::State#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusProjectorPanelTests.cs::MockState#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusSegmentOrderTests.cs::State#0"
+      ],
+      "count": 3,
+      "lines": 17,
+      "files": 3,
+      "exact": 3,
+      "shape": "13d36b4340e709f5b78238d3b76d16516cd254db"
+    },
+    "0f9f8a59d8c198bb0ea32b7bebc301e00343efcd": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/PatchToolTests.cs::ExecuteAsync_FileNotFound_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/RipGrepToolTests.cs::ExecuteAsync_PathNotFound_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::ExecuteAsync_NonExistentDir_ReturnsError#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 3,
+      "exact": 0,
+      "shape": "cfb0fc2193f1a19e8b5e57c3d1a185c3a553b993"
+    },
+    "111b43dddb28bd87540721a0a5e2075b94e708e3": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherAskFailClosedTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherAskUserTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherCommitTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherFailClosedTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherResolveOnceTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherRetryTests.cs::CodeAgent#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherToolContextScalingTests.cs::CodeAgent#0"
+      ],
+      "count": 8,
+      "lines": 7,
+      "files": 8,
+      "exact": 8,
+      "shape": "9c0b5223f78c514024208bfa4573387b7c0eae44"
+    },
+    "11a66fa2d31c81a152c1a1cbc6547fdfc15595f7": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreCompact_RunsCommand#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::SessionStart_RunsCommand#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "6ed0a50b41dab31528da0825784ed90cdb18a16e"
+    },
+    "12217e024d4d423e5b135ec8b83a6c76565aa10c": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/ScreenProjectorRegistryTests.cs::Project_Routes_ByScreenId#0",
+        "tests/Harbor.Tui.CellForge.Tests/ScreenProjectorRegistryTests.cs::Register_SameId_Replaces#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "56ac047867a624883847bd0e478e3cf4ceaac404"
+    },
+    "12b997a6362e15e2f5a5cda5d19440802ee038cb": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/ChildContainerTests.cs::Column_FixedFillFixed_StacksAlongY#0",
+        "tests/Harbor.Tui.CellForge.Tests/ChildContainerTests.cs::Row_FixedFillFixed_AssignsChildRects#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 1,
+      "exact": 0,
+      "shape": "acb014d426f8b1ce29403db6501d10bc6f355fbd"
+    },
+    "13341b906f815125d9f46843741aa905daa20242": {
+      "members": [
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CheckAsync_CompoundRmRfDotPath_IsDeniedWithoutPrompt#0",
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CheckAsync_DirectRmRfRootCommand_IsDeniedWithoutPrompt#0",
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CheckAsync_DirectSudoCommand_IsDeniedWithoutPrompt#0",
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CheckAsync_RmRfSlashWithSwappedFlags_IsDeniedWithoutPrompt#0",
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CheckAsync_SudoViaAbsolutePath_IsDeniedWithoutPrompt#0"
+      ],
+      "count": 5,
+      "lines": 12,
+      "files": 1,
+      "exact": 5,
+      "shape": "6c17ee4889a73e5211fdbb9e89a1fc66d1094c03"
+    },
+    "136e393d8ff76a1145da28e90b03ec43a442407b": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/RunVerificationRecordTests.cs::Contract#0",
+        "tests/Harbor.Storage.Tests/RunOutcomeTests.cs::VerificationContract#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 0,
+      "shape": "57bd1a3f0d69971f5274c494ba69663128e62287"
+    },
+    "137a65525989a04fd6b2306e4df8813f4902568d": {
+      "members": [
+        "tests/Harbor.Plugins.Runtime.Tests/Storage/TrustCapabilityTests.cs::LegacyV1Entry_WithoutStoredCapabilities_GrantsNothing#0",
+        "tests/Harbor.Plugins.Runtime.Tests/Storage/TrustCapabilityTests.cs::StoredCapabilities_WithUnknownName_GrantsNothing#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 2,
+      "shape": "03b8838684a36f967bb1e2c255049c4390e0bd05"
+    },
+    "142e5b8cd0a34c947629e1e06d02faa35dfc725a": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafDaemonIpcServeMcpTests.cs::Daemon_Bare_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Run_Bare_MatchesManualByteForByte#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 0,
+      "shape": "7b1d74473ebd4ddc6cdba48c39b55ac5e4e54fd7"
+    },
+    "1484479afbd59efd78d056f4b546f720149cbc4f": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::Chat_ShowStreamingBuffer#0",
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::Chat_ShowThinkingBuffer#0"
+      ],
+      "count": 2,
+      "lines": 21,
+      "files": 1,
+      "exact": 0,
+      "shape": "42c576fcf6c1df1f9121f3f709b9050ee5f9b679"
+    },
+    "14d12496ad0e3aca82ff83219ecc6c83c1ce3842": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/MascotReactionTests.cs::PaintLastFrame#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::PaintLastFrame#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 2,
+      "exact": 2,
+      "shape": "7a5102a58d4adefc4f0c58b6fe3b03efedb141d6"
+    },
+    "150f3b09ea63c53bb12657f8c69dcaa1043013b4": {
+      "members": [
+        "tests/Harbor.Application.Tests/PermissionBypassTests.cs::CreateService#0",
+        "tests/Harbor.Application.Tests/PermissionPersistDecisionTests.cs::CreateService#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "94f1169d6bf8f1dcbc52d2fe20f9836a54e7cfb6"
+    },
+    "15ef6855aa709aad62a8c35b0d64d6b9829102c7": {
+      "members": [
+        "tests/Harbor.Ui.Framework.Tests/FileTreeLoaderTests.cs::StartedFor#0",
+        "tests/Harbor.Ui.Framework.Tests/FileTreeLoaderTests.cs::StartedFor#1"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 2,
+      "shape": "3e959ec1d425bc01d8f7d8b791bf55ba9c910295"
+    },
+    "16393856410048050cf177e91347ca305bda5ebd": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Column_FixedFillFixed_StacksAlongY#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Row_FixedFillFixed_SplitsRemainderWithGap#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 0,
+      "shape": "954efe9586b9621d3fdfc25425ec89079d972821"
+    },
+    "1679f0b55d0b586ffc53297d15da45bed28f56cc": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_InvalidAgentName_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_NoSubAgentsRegistered_ListsEmpty#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "0e064a48a26c548b8c34e4bba0ab7f17b96a96b5"
+    },
+    "16f292b78cd2774134f004b1fe0c163f6b72e323": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/GateGlowAgingTests.cs::HotTone#0",
+        "tests/Harbor.Tui.CellForge.Tests/PostFxTests.cs::HotTone#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "28af19d66f8ab97477d36edc659fdf5a3c36045e"
+    },
+    "16f5de2db127a201546f46166db4d184223743e7": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Lsp_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::McpPrompt_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::McpResource_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Mcp_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::RipGrep_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Skill_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Tree_GlueMatchesDeletedHandwrittenMembers#0"
+      ],
+      "count": 7,
+      "lines": 11,
+      "files": 1,
+      "exact": 0,
+      "shape": "e01b2344c2480c1011e30b3aacc99be59644e7ca"
+    },
+    "19f1e030491e78d74fac0ab31b71d8dbc2832f1a": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/ScrollbarTests.cs::HorizontalTop_UsesTopRow#0",
+        "tests/Harbor.Tui.CellForge.Tests/ScrollbarTests.cs::VerticalLeft_UsesLeftColumn#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "4d99aa740155c69155274d781667d07f638255a3"
+    },
+    "1b96d3ff6a43cab28ec0a6eb932d4874dc935bff": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/WidgetMeasureTests.cs::Row_ExpandChild_AbsorbsRemainder_WithMeasuredFloor#0",
+        "tests/Harbor.Tui.CellForge.Tests/WidgetMeasureTests.cs::Row_FixedChildren_TakeMeasuredFit_LeaveRemainder#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "848d4cf30026d81df18b3007be5a8aec0e3ba88d"
+    },
+    "1bdd73c1982a77d9f769c3cc2bcc249e4070df24": {
+      "members": [
+        "tests/Harbor.Application.Tests/ApprovalCoordinatorTupleTests.cs::TupleGenerationMismatch_Rejected_GateUntouched#0",
+        "tests/Harbor.Application.Tests/ApprovalCoordinatorTupleTests.cs::TupleInvocationMismatch_Rejected_GateUntouched#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 2,
+      "shape": "bb9a2eb1beb584e9f0a11e54d461f68ab2f3336c"
+    },
+    "1c5244caa7cc36a1c8161dd722b7954d35d7c4ab": {
+      "members": [
+        "tests/Harbor.Registries.Tests/ToolSafetyPolicyDerivationTests.cs::Registered_PathTool_PathInsideSrc_IsStillAllowed#0",
+        "tests/Harbor.Registries.Tests/ToolSafetyPolicyDerivationTests.cs::Tool_Declaring_Opaque_IsNot_PathGuarded#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "da49e384f1bf178643b2e93bd0408fd3ccf462aa"
+    },
+    "1ce2b451b5228847c3f12ccd2283007b4a6e26a8": {
+      "members": [
+        "tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs::CompactAsync_SecondaryInvalid_FallsBackToPrimaryClient#0",
+        "tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs::CompactAsync_SecondaryUnresolvable_FallsBackToPrimary#0"
+      ],
+      "count": 2,
+      "lines": 17,
+      "files": 1,
+      "exact": 2,
+      "shape": "c51f050de86ddae3d6216213f823fcdfc3827202"
+    },
+    "1edc7de80debd0e6d293e449873acdb026c9423c": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/AvaloniaWorkspaceCommandsTests.cs::BranchSession_DelegatesToSessionListViewModel#0",
+        "tests/Harbor.App.Avalonia.Tests/AvaloniaWorkspaceCommandsTests.cs::NewSession_DelegatesToSessionListViewModel#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 1,
+      "exact": 0,
+      "shape": "32219f80dc60e6a35e5066b34365535b391ed4c3"
+    },
+    "1ff5d109504e0bdcf341459572ec1d983e1e313a": {
+      "members": [
+        "tests/Harbor.Core.Tests/EventBusTests.cs::GetScrollback_ReturnsRecentEvents#0",
+        "tests/Harbor.Core.Tests/EventTopologySemanticsTests.cs::Scrollback_EvictsOldest_NoLossBelowCapacity#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 0,
+      "shape": "c61836ca0bab8a1dad0aaff4e2a8b7e455c51fec"
+    },
+    "2045d76f12a44388479f3ce2d317b20482e7711f": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/BackendRegistrySingleSourceTests.cs::Mode_ReportedIds_AreExactlyTheResolvableSet#0",
+        "tests/Harbor.Hosting.Tests/BackendRegistrySingleSourceTests.cs::Storage_ReportedIds_AreExactlyTheResolvableSet#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 1,
+      "exact": 0,
+      "shape": "59a02be27dc9ef1a6b9ea611c8db0f0b9d47079c"
+    },
+    "20656581f326f8c03fde7ec1a97830dea4549b79": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/SessionForkRunnerTests.cs::SeedAsync#0",
+        "tests/Harbor.App.Cli.Tests/SessionSearchRunnerTests.cs::SeedAsync#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 2,
+      "exact": 2,
+      "shape": "c09c7bc315bedf309764d0e7c84506514b032e43"
+    },
+    "2079f09fd160b15212e0c81ebed1db94e9ddd062": {
+      "members": [
+        "tests/Harbor.Application.Tests/WorkspaceInspectorTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/ChangeApplierTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/ChangeSetFreezerTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/CheckRunnerTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/RunChangeChainTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/RunRejectTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::DeleteDir#0",
+        "tests/Harbor.ChangeTracking.Tests/WorkspaceMaterializerTests.cs::DeleteDir#0"
+      ],
+      "count": 8,
+      "lines": 8,
+      "files": 8,
+      "exact": 8,
+      "shape": "eaa37f79891ac846bbf585dcebae65ca168758ea"
+    },
+    "2135bb0b6551e682e0336105749e4fe59e9e3036": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Legacy_AllFixed_ExcessGoesToLast#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Legacy_FillWeakest_AbsorbsMaxCapHeadroom#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::SpaceAround_HalfShareEdges_FullShareGaps#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::SpaceEvenly_SlotsIncludingEdges#0"
+      ],
+      "count": 4,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "95ae0ba05bd4c2010f74c9ca606704f1e4355626"
+    },
+    "2204ff501d0691f752af4758b1111e258584c9c6": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs::Execute_LinkLocalMetadataService_IsBlocked#0",
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs::Execute_LoopbackLiteral_IsBlocked_BeforeHttp#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "943220ad75ddb874d6ed21289c555f3607ac6927"
+    },
+    "23a021a36f23d6b00c006b1d711c99b14327c3c7": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/HdsThemeCatalogParityTests.cs::IsPalette#0",
+        "tests/Harbor.App.Avalonia.Tests/ThemeParityTests.cs::IsPalette#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "8d9f877fc508446cba805933e67e08ec3e70dc9c"
+    },
+    "250eebb96f77b43a102fb3e98b355eafbf16020d": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::Plugin_InstallNoArg_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::Plugin_UnknownSub_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::Skill_InstallNoArg_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::Skill_UnknownSub_MatchesManualByteForByte#0"
+      ],
+      "count": 4,
+      "lines": 7,
+      "files": 1,
+      "exact": 4,
+      "shape": "529c191648940343a0ea2bb77d7e3bf2ba1ad050"
+    },
+    "25ba559913b2bcb36f7bc07f731e6381675b4496": {
+      "members": [
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::CheckAsync_ExtractsCommandForBashTool#0",
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::CheckAsync_ExtractsPathForFileTools#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 2,
+      "shape": "f9d67db70d9acd550602e6f848db39ffad65e2c9"
+    },
+    "25c09fda88da466cde9abef0fae350f4052ab1cf": {
+      "members": [
+        "tests/Harbor.Providers.Tests/LlmClientAuthFailureTests.cs::AnthropicStream_AuthFailure_EmitsSingleAuthErrorWithoutHttp#0",
+        "tests/Harbor.Providers.Tests/LlmClientAuthFailureTests.cs::OpenAIStream_AuthFailure_EmitsSingleAuthErrorWithoutHttp#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "12b9ca7d4d43cadbf19606a7f3644eb8cad073cd"
+    },
+    "25dfb882cf72ced99a600351b9966c3fbba6ecf6": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/SlashCommandFailureSurfacesTests.cs::AuthList_ConfigFailure_ReportsTheReasonToTheUser#0",
+        "tests/Harbor.App.Cli.Tests/SlashCommandFailureSurfacesTests.cs::PermissionsClear_SaveFailure_ReportsTheReasonToTheUser#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "1d4339c715171bc6d71bd858dfb230e27d388550"
+    },
+    "2836edec34ff8f454dfe6dfe1f7752c06b97c3f9": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/OnboardingViewModelLiveModelsTests.cs::StreamAsync#0",
+        "tests/Harbor.Application.Tests/Providers/ProviderHealthCheckTests.cs::StreamAsync#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "8b1a98413cb5e02daf5aafddd75a109594d0029e"
+    },
+    "28805c0efeabd43b05716ba42c697bd30dd4cb86": {
+      "members": [
+        "tests/Harbor.Registries.Tests/AllocationBudgetTests.cs::CreateFrozenRegistry#0",
+        "tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs::CreateFrozenRegistry#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 0,
+      "shape": "254084549a97f2fe406c3350043818504b5f5168"
+    },
+    "28e6103141d4763a9ad47b70bed54fec0fa9348a": {
+      "members": [
+        "tests/Harbor.Application.Tests/AgentUninitializedBehaviourTests.cs::PromptAsync_PreBuiltMessage_BeforeInitialize_FailsWithoutPersisting#0",
+        "tests/Harbor.Application.Tests/DefaultAgentBoundStateResultTests.cs::PromptAsync_PreBuiltMessage_BeforeInitialize_ReturnsFailure_AndDoesNotThrow#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "2389e25803d590d5c7027d1d20616652437dc0fa"
+    },
+    "2de06e9d04453cd885c0e63fd0bd73dc8441cc03": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/AnchorGenerationGuardTests.cs::RepoRoot#0",
+        "tests/Harbor.Tui.CellForge.Tests/DialogKeyReleaseTests.cs::RepoRoot#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "40c17fb580a80cdeb4c44222953a58535751cde9"
+    },
+    "2e5a7957c079e5aea4c08a6aa23e4e7a30861f60": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/FileTreeIconCategoryTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/HdsThemeCatalogParityTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/IconTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/ResourceTypeTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/ThemeParityTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/ThemeResourceResolutionTests.cs::FindRepoRoot#0",
+        "tests/Harbor.App.Avalonia.Tests/ThemeTokenDuplicationGuardTests.cs::FindRepoRoot#0",
+        "tests/Harbor.E2E.Framework/HarborAppLocator.cs::FindRepoRoot#0"
+      ],
+      "count": 8,
+      "lines": 8,
+      "files": 8,
+      "exact": 8,
+      "shape": "463b9305abfec2ef47b4a208f807715085dca094"
+    },
+    "32501d8e4a5775adbd0f4d17cc592aa0bbe4f4e8": {
+      "members": [
+        "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::AlwaysCallsATool#0",
+        "tests/Harbor.Application.Tests/RunWallClockLimitTests.cs::AlwaysCallsATool#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "c238105d5b4e43b7190a732d9b29527425bc8194"
+    },
+    "3311b216d31826bb111f23dd94da7798bd7686af": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_ExternalState_ScrollsToSelection#0",
+        "tests/Harbor.Tui.CellForge.Tests/DialogSelectListNavStateTests.cs::List_ExternalState_ScrollsToSelection#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 0,
+      "shape": "5089894c8d6e205c8885efb7631beab9e986f811"
+    },
+    "341269109fd65f8c95d23bf93634212bd7c8f329": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::ExecuteAsync_NotFound_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::ExecuteAsync_ReadsFileContent#0"
+      ],
+      "count": 2,
+      "lines": 15,
+      "files": 1,
+      "exact": 0,
+      "shape": "b44cfdf151e5b1a48c73a815b1a69d56a4b439cc"
+    },
+    "35fbca90a9bd4d0af8a29bf67fc850c704c05308": {
+      "members": [
+        "tests/Harbor.Ipc.Tests/HostsCatalogTests.cs::Load_MalformedJson_Fails#0",
+        "tests/Harbor.Ipc.Tests/HostsCatalogTests.cs::Load_TcpWithoutHost_Fails#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 1,
+      "exact": 2,
+      "shape": "f09679b161efb2c1bc7f7652b6b1f50723ff0c3b"
+    },
+    "37c49338c689769a3fe0b0f25b8bd909e41d0eb8": {
+      "members": [
+        "tests/Harbor.Providers.Tests/LlmClientProviderIdTests.cs::OpenAiCompatibleLlmClient_ProviderId_MatchesConfig#0",
+        "tests/Harbor.Providers.Tests/LlmClientProviderIdTests.cs::OpenAiCompatibleLlmClient_ProviderId_NormalizesCase#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 1,
+      "exact": 2,
+      "shape": "b11db39274d402396cb3a71cd734ba0448854bee"
+    },
+    "3abfd8f2d753d13a2af2c8bce55c23af09e5e72f": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/LocatorConventionTests.cs::ShowPlaceholder_ParseSettingsToken#0",
+        "tests/Harbor.App.Avalonia.Tests/LocatorConventionTests.cs::ShowPlaceholder_ParseVmToken#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "650ab689d5f91e2302236635edac18db6615bf9c"
+    },
+    "3ac3bf25f53e1379fecd79284c084c6bcefb55fd": {
+      "members": [
+        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::Seed#0",
+        "tests/Harbor.Application.Tests/SubAgentCostPropagationTests.cs::Seed#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "669e2c75c724b8a0b8be068408c553ad04163405"
+    },
+    "3bce34eba8b746ec710b4d1116747c86420c298f": {
+      "members": [
+        "tests/Harbor.Application.Tests/Fakes/DefaultAgentFakes.cs::AwaitGateThenAppend#0",
+        "tests/Harbor.TestKit/Fakes.cs::AwaitGateThenAppend#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "c8f2d02dcc62c81081b98da0cf5fd3558a321c57"
+    },
+    "3cafa1cf8ea2f9c872cebb5390bf36250c6bd7cc": {
+      "members": [
+        "tests/Harbor.Tui.Tests/PluginPanelModelTests.cs::RowText_TitleFirst_DetailDimmedSecond#0",
+        "tests/Harbor.Tui.Tests/ProviderPanelModelTests.cs::RowText_DisplayNameFirst_IdDimmedSecond#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 0,
+      "shape": "499d9e4b58af03b116edbd250e7aea98e7ac8e0e"
+    },
+    "3e70555fda05475f1a38839d4ea7db49227b5836": {
+      "members": [
+        "tests/Harbor.Ui.Framework.Tests/LineDiffTests.cs::ARegionOfFourHundredChangedLines_IsStillSearchedExactly#0",
+        "tests/Harbor.Ui.Framework.Tests/LineDiffTests.cs::ARegionPastTheEditDistanceBound_DegradesToARemoveRunThenAnAddRun#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 2,
+      "shape": "d5911ee8b18b2ab1d187793dc8ffdbf96c22b08a"
+    },
+    "3ef9afa478662480a60a6e78fa93b415ba9530e3": {
+      "members": [
+        "tests/Harbor.ChangeTracking.Tests/ChangeApplierTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/ChangeSetFreezerTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/CheckRunnerTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/RunChangeChainTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/RunRejectTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::WithIsolatedHome#0",
+        "tests/Harbor.ChangeTracking.Tests/WorkspaceMaterializerTests.cs::WithIsolatedHome#0"
+      ],
+      "count": 7,
+      "lines": 13,
+      "files": 7,
+      "exact": 7,
+      "shape": "dcf4829f741a345084e9454fc0b6820e9cb20bf8"
+    },
+    "406cd7e1587f39abdaa2335d12055309dc941974": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::ExecuteAsync_ReplaceAll_ReplacesAllOccurrences#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::ExecuteAsync_ReplacesString#0"
+      ],
+      "count": 2,
+      "lines": 15,
+      "files": 1,
+      "exact": 2,
+      "shape": "dd242a972e893f5386db5e7943101c894f1fc774"
+    },
+    "40ec29378aaadf0453282341ee03d6f23ed902da": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Error_RedAccent#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Info_BlueAccentAndMessage#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Success_GreenAccent#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Warning_PeachAccent#0"
+      ],
+      "count": 4,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "dfb9ac17871dba32708de4db2b7b1de79cdae06b"
+    },
+    "41ca6a8e4873c9f7e27a7e8c9b63594a675abde8": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ArgValidationMessageTests.cs::McpPrompt_Messages#0",
+        "tests/Harbor.Tools.Builtin.Tests/ArgValidationMessageTests.cs::McpTool_Messages#0",
+        "tests/Harbor.Tools.Builtin.Tests/ArgValidationMessageTests.cs::WebFetch_Messages#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "d83e20f28b49f519cb8dd8111e2e9ab40554409d"
+    },
+    "44b81af747cb727f9d94c62504330acca655d1f9": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/McpConfigTests.cs::RegisterFromConfig_LoadsServers_FromValidJson#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpConfigTests.cs::RegisterFromConfig_ParsesCommandWithArgs#0"
+      ],
+      "count": 2,
+      "lines": 15,
+      "files": 1,
+      "exact": 2,
+      "shape": "71984fec28999c68f3d8cc2039b9aac5e9a319da"
+    },
+    "4618d55941f54d1305388d3e20a9dde3a734b051": {
+      "members": [
+        "tests/Harbor.DesignSystem.Tests/ThemeJsonTests.cs::TryParseHex_AcceptsShortLongBareAndRejects#0",
+        "tests/Harbor.Tui.CellForge.Tests/JsonThemeLoaderTests.cs::TryParseHex_AcceptsShortLongAndRejects#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 0,
+      "shape": "1dea48340cbbf49004f42c989be53a7e7e267dae"
+    },
+    "47dfa97539166194c9cd8165d482ed0f16f3d46b": {
+      "members": [
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::AgentIdleState#0",
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::AgentRunningState#0"
+      ],
+      "count": 2,
+      "lines": 17,
+      "files": 1,
+      "exact": 0,
+      "shape": "bdd9b86bddcb9d0b04e84af6e8bd958b3eae833c"
+    },
+    "4ce741607a4bdd97acf10101bf957841b2a79718": {
+      "members": [
+        "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_ExtractsFilePaths#0",
+        "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_NonObjectJson_FallsBackToUnknown#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 2,
+      "shape": "889155c75176ab8fb615c2950e0631dee9485321"
+    },
+    "4fec01030e240d2745a03be65c8770d4c9d5be79": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/SkillFreshnessStatusPillTests.cs::Find#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusProjectorPanelTests.cs::Find#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "3431695633377f37188b33eb2a21da5550646f66"
+    },
+    "517331c11ac4e40789459b00fcfd540ab73b7174": {
+      "members": [
+        "tests/Harbor.Storage.Tests/MemorySessionStoreRopTests.cs::NewUserMessage#0",
+        "tests/Harbor.Storage.Tests/MemorySessionStoreTests.cs::NewUserMessage#0",
+        "tests/Harbor.Storage.Tests/SqliteSessionStoreTests.cs::NewUserMessage#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 3,
+      "exact": 3,
+      "shape": "01776c9e3a6fd1d335f15974e5455f7851db53c4"
+    },
+    "5201da7fec6cafefcd9eb3d56a6623e9fc4842b8": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/PluginGracefulAbsenceTests.cs::Dispose#0",
+        "tests/Harbor.Hosting.Tests/PluginOutOfProcDefaultTests.cs::Dispose#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "4640d876c27035582f4ac477ac29f3e35737c27a"
+    },
+    "521902540fd75870d95bde1c21f52fbfc86df383": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/LayoutTreeRowColumnTests.cs::AddColumn_ThreePanels_StacksHeightWithGap#0",
+        "tests/Harbor.Tui.CellForge.Tests/LayoutTreeRowColumnTests.cs::AddRow_ThreePanels_TilesWidthWithGap#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 0,
+      "shape": "9871b9f22044862f19391208663e9623f763e74d"
+    },
+    "5449b660fe4cbe7a671161f08d651fa893a9d23a": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_Rename_MissingArgs_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_Search_MissingQuery_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_UnknownSub_MatchesManualByteForByte#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 1,
+      "exact": 3,
+      "shape": "c8eb578546e25192ce9d217d4fab99c0c81e4f6a"
+    },
+    "56168acd46ca01ad919963bc04570be83c063938": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/RipGrepToolTests.cs::ExecuteAsync_GlobFilterLimitsFileTypes_WhenRgInstalled#0",
+        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::ExecuteAsync_HidesHiddenFilesByDefault#0"
+      ],
+      "count": 2,
+      "lines": 18,
+      "files": 2,
+      "exact": 0,
+      "shape": "d8df98b8a170a1d0d62e0a6f4935dc446f73dab4"
+    },
+    "577ee4c01234bc96b86523c0ef18af341dfd434b": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_MismatchedState_FallsBackToLegacy#0",
+        "tests/Harbor.Tui.CellForge.Tests/FilePickerNavStateTests.cs::Picker_MismatchedState_FallsBackToLegacy#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 0,
+      "shape": "44cf0b09c516cd94bfc36b6fa1aab9bde35e92b2"
+    },
+    "5e4891943383aec466a0d75769e52351e4f4a577": {
+      "members": [
+        "tests/Harbor.Benchmarks/EventBroadcasterThroughputBenchmark.cs::Setup#0",
+        "tests/Harbor.Benchmarks/EventBroadcasterThroughputBenchmark.cs::Setup#1"
+      ],
+      "count": 2,
+      "lines": 17,
+      "files": 1,
+      "exact": 2,
+      "shape": "f181e7d8f1c77ca4ea1da2673bcc16f83eff7b02"
+    },
+    "5e71e9fac8b5ab0ffebe2a2d9be10fabc4ad7fec": {
+      "members": [
+        "tests/Harbor.Application.Tests/Fakes/DefaultAgentFakes.cs::AppendMessageAsync#0",
+        "tests/Harbor.TestKit/Fakes.cs::AppendMessageAsync#0"
+      ],
+      "count": 2,
+      "lines": 16,
+      "files": 2,
+      "exact": 2,
+      "shape": "d07af64038e0700e54af5e31889d221f21d07bc2"
+    },
+    "5eab22da395c2d6e968e497dbbfba919063a1010": {
+      "members": [
+        "tests/Harbor.Config.Tests/OnboardingWizardTests.cs::RunAsync_CustomModelName_GetsProviderPrefix#0",
+        "tests/Harbor.Config.Tests/OnboardingWizardTests.cs::RunAsync_CustomModelName_WithWhitespace_IsTrimmed#0",
+        "tests/Harbor.Config.Tests/OnboardingWizardTests.cs::RunAsync_FullyQualifiedModelName_IsPreserved#0"
+      ],
+      "count": 3,
+      "lines": 18,
+      "files": 1,
+      "exact": 3,
+      "shape": "627140912387cbef533911a629f4a940926f917b"
+    },
+    "63b0437f7e304173faca679423b33223c5787d8b": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/MicroControlsTests.cs::AppendVisible#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/StandaloneControlsTests.cs::AppendVisible#0"
+      ],
+      "count": 2,
+      "lines": 20,
+      "files": 2,
+      "exact": 2,
+      "shape": "847329334d09b8cd8eccc77d65c7128fa2ce3180"
+    },
+    "683b9bfb5194f97103ffa63712e0a85cbfe2076d": {
+      "members": [
+        "tests/Harbor.Domain.Tests/ToolCallArgsLifetimeTests.cs::ToolCallEndEvent_Create_SurvivesDocumentDisposal#0",
+        "tests/Harbor.Domain.Tests/ToolCallArgsLifetimeTests.cs::ToolExecutionStartEvent_Create_SurvivesDocumentDisposal#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "bfe9d4abdf116696a9cece27df61beac9b2a30d0"
+    },
+    "6a4e3797030d054c4143950773c82fc9e19cf04d": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::AppendText#0",
+        "tests/Harbor.E2E.App.Avalonia/HeadlessAvaloniaDriver.cs::AppendText#0"
+      ],
+      "count": 2,
+      "lines": 16,
+      "files": 2,
+      "exact": 2,
+      "shape": "d23910480f75348fbdde1a893904ca49cecf45a5"
+    },
+    "6ba78a12fc731447f224c765daaafaed5f6420cb": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::CaptureOut#0",
+        "tests/Harbor.App.Cli.Tests/CafPilotTests.cs::CaptureOut#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 2,
+      "exact": 2,
+      "shape": "a89b8a9a266fc252303d9b2832a5aca4d5f37ebf"
+    },
+    "6c34babe0bcb239dbd2827ac428ea466ee40a972": {
+      "members": [
+        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::MainAgent#0",
+        "tests/Harbor.Core.Tests/SystemPromptSupervisionTests.cs::Agent#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 0,
+      "shape": "41e75b0390d4b01ef0da1d8ea6c14374d3335e6b"
+    },
+    "6c3947495aeda86fe3d51fc35f715fecd4c55296": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutDocTests.cs::Doc_Legacy_FillWeakest#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutDocTests.cs::Doc_SpaceAround_And_SpaceEvenly#0"
+      ],
+      "count": 2,
+      "lines": 24,
+      "files": 1,
+      "exact": 0,
+      "shape": "fab0bb50d771295cbc0ecadb4cf78841b06f95e0"
+    },
+    "6de1803ae0856d288df1b940268d462e7da8f56a": {
+      "members": [
+        "tests/Harbor.Tui.Tests/BuiltinViewTests.cs::Render_Entries_RendersAllEntries#0",
+        "tests/Harbor.Tui.Tests/Eng12SnapshotTests.cs::Render_RendersSnapshotEntries_UnchangedOutput#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "0707a5049b0c92b0594ce2ef1f41ec442f7d137a"
+    },
+    "6eb29ec119cb68e46dc15f8e35ffcb54fca3551d": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.PtyTests/PtyBufferAsserts.cs::BufferView#0",
+        "tests/Harbor.Tui.CellForge.Tests/TestBackend.cs::BufferViewLines#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "8be4bb82f46ea575e67d724a259c4f2f19d5a1d7"
+    },
+    "6f97554da9b49c122dc6a4eebe6dfeaf1eadd318": {
+      "members": [
+        "tests/Harbor.Plugins.Runtime.Tests/Compilation/RealSourceCompilationTests.cs::LocateRepoRoot#0",
+        "tests/Harbor.Plugins.Runtime.Tests/SamplePluginsIntegrationTests.cs::LocateRepoRoot#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 2,
+      "exact": 2,
+      "shape": "83591ed47abfd0698b4397af70fd75bc562e55b3"
+    },
+    "7031a3c5190961fe4fd8bf17e2226c303920d691": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Ratio_Degenerate_ZeroDen_And_ClampedOverflow#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Ratio_Halves_ShareGapSubtractedExtent#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Ratio_Overflow_ScalesDownProportionally#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 1,
+      "exact": 3,
+      "shape": "9697ca6921d828e969a5722e0fdcc0281a80c357"
+    },
+    "7238899395ade0bce9d8551ff731681aa99bf192": {
+      "members": [
+        "tests/Harbor.Application.Tests/AgentUninitializedBehaviourTests.cs::WaitUntilAsync#0",
+        "tests/Harbor.Application.Tests/WaitForIdleFaultTests.cs::WaitUntilAsync#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "bfda1c2bb829de3d7e218491c7ef480a4e4ffdab"
+    },
+    "72ce6aa7a989d1644928edc54a012cb71c30f868": {
+      "members": [
+        "tests/Harbor.Application.Tests/WorkspaceContextSourceTests.cs::LoadSkills_FrontMatterEmptyValues_FallBack#0",
+        "tests/Harbor.Application.Tests/WorkspaceContextSourceTests.cs::LoadSkills_FrontMatterFields_IndentedValue_Parsed#0",
+        "tests/Harbor.Application.Tests/WorkspaceContextSourceTests.cs::LoadSkills_SkillDirectory_FallsBackToDirectoryName#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 1,
+      "exact": 3,
+      "shape": "1de546eb67261e5be1d916ac9cee59b0e26da48e"
+    },
+    "72e44894eb40e29a7ec49b753c1284ce27ed0e01": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::OpenMany#0",
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteViewportTests.cs::OpenMany#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "1fdc412c07d9294c437c2b7a538eb42a11d014b1"
+    },
+    "753a50b60b6fbcce0ab1ec7feb0098f6dbb6c2e7": {
+      "members": [
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::ResolveApiKeyAsync_EnvVarUsedWhenNoOverride#0",
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::ResolveApiKeyAsync_NormalizesDashesToUnderscores#0"
+      ],
+      "count": 2,
+      "lines": 14,
+      "files": 1,
+      "exact": 2,
+      "shape": "48b5f7fdc4bb3587b822afdf21f5135742b635f9"
+    },
+    "75c7eb9f57b14d0a61b41e1da8b409f24bcb3a9b": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/StreamingHoldbackTests.cs::GrowingTable_HeldBack_UntilTerminated#0",
+        "tests/Harbor.Tui.CellForge.Tests/StreamingHoldbackTests.cs::UnclosedMath_HeldBack_UntilClosed#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 1,
+      "exact": 2,
+      "shape": "9c30d931fab20d59a551902ea3790d9c2293c2f6"
+    },
+    "75e6fabe1c9be4ec8473daf1915af3e808c26174": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/PanelChromeTests.cs::RepoRoot#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusBarFactsParityTests.cs::RepoRoot#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "cd368a5319632d51f4bfd99c41bafa3947ec5767"
+    },
+    "78f69ad43a6ac1acd36b3e3a04956a79fb76fd67": {
+      "members": [
+        "tests/Harbor.Config.Tests/JsonConfigStoreTests.cs::LoadAsync_LegacyRootCellForge_StillHonored#0",
+        "tests/Harbor.Config.Tests/JsonConfigStoreTests.cs::LoadAsync_MissingCellForgeSection_AppliesDefaults#0"
+      ],
+      "count": 2,
+      "lines": 23,
+      "files": 1,
+      "exact": 0,
+      "shape": "54ec81eeb0a6300ec6abeb97525db8f44749f21d"
+    },
+    "7ac58ae9917437c0cdfcc9fd5518c9bbaa732ee5": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/McpWireAllocTests.cs::PromptTool_ExecuteAsync_EscapesName#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpWireAllocTests.cs::ResourceTool_ExecuteAsync_EscapesUri#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "47c4f532d7f7fca1b5dc52c9f3845810bd5490d2"
+    },
+    "7adbccd35538e7765fbdf2754c68767dfc0c70c6": {
+      "members": [
+        "tests/Harbor.E2E.Cli/CliE2ETests.cs::HelpCommand_ListsCommands#0",
+        "tests/Harbor.E2E.Cli/CliE2ETests.cs::StorageCommand_ListsBackends#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "75631ac65ac4e34dae65e277eb524cf2410802df"
+    },
+    "7b9827e15ac371228d871bddd9e2e76d448233e8": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/UiStageCounterTests.cs::Materialization_FiresAgain_WhenWidthChangeInvalidatesTheMemo#0",
+        "tests/Harbor.Tui.CellForge.Tests/UiStageCounterTests.cs::Materialization_IgnoresTheMemoHit_SoMeasurePaintPairCountsOnce#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 1,
+      "exact": 2,
+      "shape": "9f3b31e1c926bcd6f25dd8e8f2ab1674138c468b"
+    },
+    "7c03754f049431be1b5d4ed5e710b803c48e0c02": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/MascotReactionTests.cs::ApprovalWiggle_PlaysThreeFrames_ThenMoodResumes#0",
+        "tests/Harbor.Tui.CellForge.Tests/MascotReactionTests.cs::SuccessBounce_PlaysThreeFrames_ThenMoodResumes#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 0,
+      "shape": "719140c1260ee18a31a0a57807aa51c043fff984"
+    },
+    "7c98022406c75b367f8fa6c59d9c576ea3e28dc1": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Run_List_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Run_UnknownSub_MatchesManualByteForByte#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "6ba131721c6f1a9235e4e0c2975d7928be06d34c"
+    },
+    "7e4ae7144899ba821fd993648e1e328f2c6a6ef6": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Error#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Running#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Toolcall_Success#0"
+      ],
+      "count": 3,
+      "lines": 25,
+      "files": 1,
+      "exact": 0,
+      "shape": "3bcd7391e6f52ec4f7dabc1f38e493a5e16495b3"
+    },
+    "7f01a1db1fff338ee1140ffb99e29c1805c5dff9": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlForeignPartTagTests.cs::Sample#0",
+        "tests/Harbor.Storage.Tests/SqliteForeignPartTagTests.cs::Sample#0"
+      ],
+      "count": 2,
+      "lines": 14,
+      "files": 2,
+      "exact": 2,
+      "shape": "5bf60180a0ef631f550e547fda64bab3d825f740"
+    },
+    "8072ea3a3a966c97933bd2000557629d3412594c": {
+      "members": [
+        "tests/Harbor.Application.Tests/RunBudgetTests.cs::Loop#0",
+        "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::Loop#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 2,
+      "exact": 2,
+      "shape": "1a7f4f3fa9ed842f34b5ea29cb9a90003d587903"
+    },
+    "81ab454a4b2cf6135b84f78cdc7817507e7ceb73": {
+      "members": [
+        "tests/Harbor.Ui.Framework.Tests/TabModelKeyBindingTests.cs::StoreWithTabs#0",
+        "tests/Harbor.Ui.Framework.Tests/TabStripKeyBindingTests.cs::StoreWithTabs#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "be7a4f80beaacf5ed7c908abe38a2bdefb70f5a4"
+    },
+    "81e3ac85743f47b3765ed1cb6b1b2ea0094a8e5d": {
+      "members": [
+        "tests/Harbor.ChangeTracking.Tests/ChangeReportTests.cs::FindRepoFile#0",
+        "tests/Harbor.Tui.CellForge.Tests/OnboardingFlowTests.cs::FindRepoFile#0",
+        "tests/Harbor.Tui.CellForge.Tests/ToolCallBlockMapperTests.cs::FindRepoFile#0"
+      ],
+      "count": 3,
+      "lines": 9,
+      "files": 3,
+      "exact": 3,
+      "shape": "34ca55aa9d4367e6dbbf333b65aa8bcddb8bac24"
+    },
+    "830ad0210810c03099e73a8a41b06b181bdc54ac": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/PatternRegexCacheTests.cs::BoundedCache_RejectsNonPositiveCapacity#0",
+        "tests/Harbor.Tools.Builtin.Tests/GrepRegexCacheTests.cs::BoundedCache_RejectsNonPositiveCapacity#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 0,
+      "shape": "0380201868e32152f4c8907fccd2836ba85dfd9e"
+    },
+    "85761e6b37beadc531c95460b51a2f2abaaa533f": {
+      "members": [
+        "tests/Harbor.Ipc.Tests/MultiClientIsolationTests.cs::ReadOneFrameWithin#0",
+        "tests/Harbor.Ipc.Tests/ReconnectReplayTests.cs::TryReadAnyFrameAsync#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 2,
+      "exact": 2,
+      "shape": "08cb3f19045c56f60e23dcff3ccfa458c756e8cc"
+    },
+    "8645312ecc1e39d4bff72ea9d3b5749745d722e4": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/SessionSearchRunnerTests.cs::Assistant#0",
+        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::MultiPartAssistant#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 0,
+      "shape": "daeb02f1bda30c3a853ee0c1336897935e73463d"
+    },
+    "8a02fcf3bf943038b054955446583295460794bb": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/CommandPaletteTests.cs::CommandPalette_Open_ShowsSearchInputAndAllCommands#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/SettingsTests.cs::Settings_ProviderConfig_ShowsApiKeyInputsAndTestButtons#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 0,
+      "shape": "347df62109a57e0d04de337166865fda128c6890"
+    },
+    "8a90023d44c97c2c5d56d8b971bd609eaaa515bc": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlImageAttachmentTests.cs::OnePixelPng#0",
+        "tests/Harbor.Storage.Jsonl.Tests/MarkupSendRoundTripTests.cs::OnePixelPng#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 2,
+      "exact": 2,
+      "shape": "8cf3e585845818b587829218afe2cda5584e05f5"
+    },
+    "8ba35d5776315030ee73aa73bfe3a841761a964c": {
+      "members": [
+        "tests/Harbor.Application.Tests/BashDenyEndToEndTests.cs::DefaultCtx#0",
+        "tests/Harbor.TestKit/TestAgents.cs::CreateToolContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/BashToolBehaviorTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/BashToolProxyTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/FsModelTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/LspHookTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpToolToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpWireAllocTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/OutputLimitToolDecoratorTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/PatchToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/RipGrepToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/SkillToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolCostTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolDependencyInjectionTests.cs::Ctx#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#1",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#2",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#3",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#4",
+        "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::CreateContext#5",
+        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs::Ctx#0",
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchToolTests.cs::CreateContext#0",
+        "tests/Harbor.Tools.Builtin.Tests/WriteEditBypassTests.cs::CreateContext#0"
+      ],
+      "count": 26,
+      "lines": 9,
+      "files": 21,
+      "exact": 26,
+      "shape": "59326db809dd4b1f7387f2f6d600fa6943340bb3"
+    },
+    "8ba6e71da75ff943451f2a87bd0d4d60669f5ce2": {
+      "members": [
+        "tests/Harbor.Plugins.Runtime.Tests/DllRealWorldPluginsTests.cs::MakeContext#0",
+        "tests/Harbor.Plugins.Runtime.Tests/RealWorldPluginsTests.cs::MakeContext#0",
+        "tests/Harbor.Plugins.Runtime.Tests/SubdirectoryPluginTests.cs::MakeContext#0"
+      ],
+      "count": 3,
+      "lines": 9,
+      "files": 3,
+      "exact": 3,
+      "shape": "05cbd86915fcc7d69b3b53762f71df36de406ee9"
+    },
+    "8d396413f32f6c3d151c98135e641063f47269c8": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreTests.cs::GetAsync_PreCancelledToken_ExistingFile_PropagatesCancellation#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreTests.cs::GetMessagesAsync_PreCancelledToken_ExistingFile_PropagatesCancellation#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreTests.cs::GetStatsAsync_PreCancelledToken_ExistingFile_PropagatesCancellation#0"
+      ],
+      "count": 3,
+      "lines": 17,
+      "files": 1,
+      "exact": 0,
+      "shape": "5b9af84c10f2492508bc43853ec65da8becc7b92"
+    },
+    "8e64f65d5a3272cdd410e5d10502c8474fb68ec8": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs::Contract_Id_Title_Placement_Size#0",
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeSubagentsPanelTests.cs::Contract_Id_Title_Placement_Size#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 0,
+      "shape": "e5ef99708d8a9e9464e5ef56fe9f6626548b1d68"
+    },
+    "8f119f3efc89b8b86dabc93ec770a4b27ddea3a1": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::SessionRead_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::SessionSteer_GlueMatchesDeletedHandwrittenMembers#0"
+      ],
+      "count": 2,
+      "lines": 12,
+      "files": 1,
+      "exact": 0,
+      "shape": "adf9fdf62170a6d5923cb072a947cc21ce9db1c0"
+    },
+    "8f498d3209c46890cea1067e10e03eded8e4bdd1": {
+      "members": [
+        "tests/Harbor.Core.Tests/CompactionErrorPathTests.cs::FourLongMessages#0",
+        "tests/Harbor.Core.Tests/CompactionSummaryRetryTests.cs::FourLongMessages#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "8e3683c31592ed2e8ad60ba2cff3c07ca89d52db"
+    },
+    "90758b77dd79f589aabfa44e1baebc6d1748a8ca": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_NonSubAgent_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_UnknownAgent_ReturnsErrorListingAvailable#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::ExecuteAsync_ValidSubAgent_NoRunnerWired_FailsHonest#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "7c48f60fc8bd1a09e8662b7cccbde968c8d53140"
+    },
+    "92a1a815d62240b0db3ed3af74b9391be768881a": {
+      "members": [
+        "tests/Harbor.Application.Tests/ErrorRouting259Tests.cs::FatalStreamError_PublishesSingleAgentError#0",
+        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::FatalStreamError_StillFailsTerminally#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 0,
+      "shape": "89c2c8520e73b6dcc90737a18a7c7fb895c27125"
+    },
+    "93590e486a43f51a3bfb6eb529ead0118fce070a": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs::Execute_AllowedHostBypass_ReachesHandler#0",
+        "tests/Harbor.Tools.Builtin.Tests/WebFetchSsrfNegativeTests.cs::Execute_RedirectToPrivateIp_IsBlockedOnHop#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "02b405b332a511c8853e0ff0a71ffede2fc22e3d"
+    },
+    "95d1ada5abf08da4414d3c6e9481242e83c18e80": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/OverlaySurfacesTests.cs::ProviderBrowser_Open_ShowsBrowserChrome#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/OverlaySurfacesTests.cs::TokenUsage_Open_ShowsTotalsLabels#0"
+      ],
+      "count": 2,
+      "lines": 15,
+      "files": 1,
+      "exact": 0,
+      "shape": "2c0f0b421efa405a0ef02ddaf00ecb5d14630250"
+    },
+    "9638fb39b9e567f63ab6ed017459c51f9851587f": {
+      "members": [
+        "tests/Harbor.Tui.Tests/PluginPanelModelTests.cs::MoveDown_MoveUp_ClampAtBounds#0",
+        "tests/Harbor.Tui.Tests/ProviderPanelModelTests.cs::MoveDown_MoveUp_ClampAtBounds#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "fe4577d3d780d211dc2cfb9494ad2da998ecd303"
+    },
+    "970933eb5ebf712478d860371e32b6e8d7c7c6d2": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_LegacyPaint_UnchangedByStatefulPaint#0",
+        "tests/Harbor.Tui.CellForge.Tests/DialogSelectListNavStateTests.cs::List_LegacyPaint_UnchangedByStatefulPaint#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 2,
+      "exact": 0,
+      "shape": "646fdb15ed33970f5b9db6420ae6a86f98d3d721"
+    },
+    "9993fbbfcf3302c2eea3a0576f6df167f18747ef": {
+      "members": [
+        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::SubAgent#0",
+        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::SubAgent#0",
+        "tests/Harbor.Application.Tests/SubAgentCostPropagationTests.cs::SubAgent#0",
+        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::SubAgent#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolCostTests.cs::SubAgent#0",
+        "tests/Harbor.Tools.Builtin.Tests/TaskToolTests.cs::SubAgent#0"
+      ],
+      "count": 6,
+      "lines": 9,
+      "files": 6,
+      "exact": 6,
+      "shape": "ab1f5fae195bf012522b9dbe1fc17372b8b52167"
+    },
+    "9aec177832a1f1a62e28debe4b627c6a5cf191d7": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeJumpPalettePanelTests.cs::Info#0",
+        "tests/Harbor.Tui.CellForge.Tests/JumpPaletteSuggestedTests.cs::Info#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "2ec75e13a51116187a5ae51a055171bc2b5a277d"
+    },
+    "9c5d3098f9eb364085ed8630e62c3b3398bd3e9a": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::Demo_BadScene_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::Demo_BadTui_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::Demo_ShortSceneAlias_MatchesManualByteForByte#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 1,
+      "exact": 3,
+      "shape": "1a628ed18c4dc465bba6973f705733029d0d059e"
+    },
+    "9cbddaa230dd6bee17bcf8ab9f8f888b57886ae1": {
+      "members": [
+        "tests/Harbor.Benchmarks/StatusBarLayoutFitBenchmark.cs::BuildRow#0",
+        "tests/Harbor.Ui.Framework.Tests/StatusBarFitPerfTests.cs::StandardRow#0",
+        "tests/Harbor.Ui.Framework.Tests/StatusBarFitTests.cs::StandardRow#0",
+        "tests/Harbor.Ui.Framework.Tests/StatusBarFitTests.cs::WideRuneRow#0"
+      ],
+      "count": 4,
+      "lines": 8,
+      "files": 3,
+      "exact": 3,
+      "shape": "63a9e9074899aae04d4a4045d91ebd1eb1df0fd9"
+    },
+    "9dccb8950c9d1a5f992046b8e68168b3cb00aa2d": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/SlashPanelsCatalogTests.cs::Catalog_ResolvesPanels_AndAlias#0",
+        "tests/Harbor.App.Cli.Tests/SlashPanelsCatalogTests.cs::Catalog_ResolvesPlugins_AndAlias_AsTogglePanel#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 2,
+      "shape": "13807f2590e7a79e7e227047f409c2c425d480a9"
+    },
+    "9e082a353bd36907146f3580a32aac208dcee69f": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripPanelTests.cs::Row#0",
+        "tests/Harbor.Tui.CellForge.Tests/SessionTabStripUnreadTests.cs::Row#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "84628ee4880ea27ecc7d3abe5c58d0d11a098536"
+    },
+    "9eda147bdf3078e5a8db487e1b952272f548ff91": {
+      "members": [
+        "tests/Harbor.Application.Tests/CompactionViewTests.cs::Msg#0",
+        "tests/Harbor.Core.Tests/CompactionCacheStrategyTests.cs::User#0",
+        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::User#0",
+        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::User#0",
+        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::User#0",
+        "tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs::User#0"
+      ],
+      "count": 6,
+      "lines": 7,
+      "files": 6,
+      "exact": 6,
+      "shape": "b0f31ade2c957d42c0b864f270caa61b49f34ce7"
+    },
+    "a2dd3b105a57970f8e492827d8892a31c4092fbc": {
+      "members": [
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::GetModelsAsync_EntryWithoutId_IsSkippedAndCounted#0",
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::GetModelsAsync_ParsesModelsArray_WhenNoDataField#0"
+      ],
+      "count": 2,
+      "lines": 27,
+      "files": 1,
+      "exact": 2,
+      "shape": "97654851f0c21737be93f26b2092295f268b2921"
+    },
+    "a46b9b3d1369f0dab9aab6c2f7dd793e91725a09": {
+      "members": [
+        "tests/Harbor.Application.Tests/ApprovalCoordinatorTupleTests.cs::TupleDeny_Accepted_WaiterGetsDeny#0",
+        "tests/Harbor.Application.Tests/ApprovalCoordinatorTupleTests.cs::TupleHappyPath_Accepted_WaiterGetsDecision#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "9277a3ec9d16e555017029f86cd928ccf29746ba"
+    },
+    "a54122a778e975be63008d93aa14b92ba53be34e": {
+      "members": [
+        "tests/Harbor.Providers.Tests/SpanParserTests.cs::OpenAiWire_EmptyChoicesUsageChunk_EmitsStopFinishWithUsage#0",
+        "tests/Harbor.Providers.Tests/SpanParserTests.cs::OpenAiWire_UsageOnlyChunk_EmitsStopFinish#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 2,
+      "shape": "8e6aa0ec78a0df58b08ae44934ea2c97bc5dd633"
+    },
+    "a74e9ee729b369252f779c5ef1a86281359e3842": {
+      "members": [
+        "tests/Harbor.TestKit/TestAsserts.cs::Failed#0",
+        "tests/Harbor.TestKit/TestAsserts.cs::Failed#1"
+      ],
+      "count": 2,
+      "lines": 16,
+      "files": 1,
+      "exact": 2,
+      "shape": "14df808ae6ee4accac9578639c29edfe524c5262"
+    },
+    "a881deb9f35b8a522814fa03d390daa1786e43fe": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_SharedState_DrivesTwoPalettes#0",
+        "tests/Harbor.Tui.CellForge.Tests/DialogSelectListNavStateTests.cs::List_SharedState_DrivesTwoLists#0",
+        "tests/Harbor.Tui.CellForge.Tests/FilePickerNavStateTests.cs::Picker_SharedState_DrivesTwoPickers#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 3,
+      "exact": 3,
+      "shape": "d0212af24dd724e3c71f11272dc70f2df3ad7d25"
+    },
+    "a8c4bf7a8a1fe5a4d4e5405347c15d4e489be558": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_State_MirrorsSelectableCount#0",
+        "tests/Harbor.Tui.CellForge.Tests/FilePickerNavStateTests.cs::Picker_State_MirrorsResultCount#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 0,
+      "shape": "577c6cc33af1d558b6cdeac73741504cea93d9ed"
+    },
+    "a91487dfb7be01f863888d968c8571c356e284c8": {
+      "members": [
+        "tests/Harbor.Application.Tests/ToolDispatcherResolveOnceTests.cs::DispatchLegAsync#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherToolContextScalingTests.cs::DispatchLegAsync#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "c1e6ffa3b961646da009fc00b2bfe547ab482fd8"
+    },
+    "a91fc3093d9d5ba703722804804c55b86fc2a153": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::CommandPalette_OpensWithCtrlP#0",
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::ProviderBrowser_Opens#0",
+        "tests/Harbor.E2E.App.Avalonia/AvaloniaUiTests.cs::SettingsDialog_OpensAndShowsOptions#0"
+      ],
+      "count": 3,
+      "lines": 19,
+      "files": 1,
+      "exact": 0,
+      "shape": "b01494aa4be93795fcbfc5e8b0af3ef8bada3b1b"
+    },
+    "a982337a5eb0d1420be2b7ae5cfd5a6b8cbb8a81": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/DiffViewerOverlayTests.cs::Paint#0",
+        "tests/Harbor.Tui.CellForge.Tests/OverlayModalTests.cs::Paint#0",
+        "tests/Harbor.Tui.CellForge.Tests/WhichKeyHelpOverlayTests.cs::Paint#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 3,
+      "exact": 3,
+      "shape": "bacf98ad304f3528308984f829adeb7e5a78c4ac"
+    },
+    "aa64d6c7b3e32d749cfcb3b44e0123c4498f56e5": {
+      "members": [
+        "tests/Harbor.Terminal.Abstractions.Tests/ViewRegistryFreezeTests.cs::ViewModelRegistry_GetAll_Frozen_AllocatesZeroBytes#0",
+        "tests/Harbor.Terminal.Abstractions.Tests/ViewRegistryFreezeTests.cs::ViewRegistry_GetAll_Frozen_AllocatesZeroBytes#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "ea256caf2cff513d43d40e584caca6f4cdd4eec8"
+    },
+    "aa9cdd6570fe6c78decda280b4f8ba1c1f18fe06": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/MimeTypesTests.cs::IsAudio_MatchesAudioFamilyOnly#0",
+        "tests/Harbor.Abstractions.Tests/MimeTypesTests.cs::IsImage_MatchesImageFamilyOnly#0",
+        "tests/Harbor.Abstractions.Tests/MimeTypesTests.cs::IsVideo_MatchesVideoFamilyOnly#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "aa44da3244ed68a29d2026fa93bad4b68672ee9a"
+    },
+    "abc2edc7c5c8405c0c2d02fc93e571a86d368283": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/DiffViewerOverlayTests.cs::Layer_Hidden_StaysNoopOnStack#0",
+        "tests/Harbor.Tui.CellForge.Tests/WhichKeyHelpOverlayTests.cs::Layer_Hidden_StaysNoopOnStack#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 0,
+      "shape": "7aad958fa30707db84076790184bf5354a5ab36f"
+    },
+    "ac0df135f7499964f2bf9e2fbc57f110bd863f0c": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/MascotPanelTests.cs::Paint#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::PaintFrames#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 2,
+      "exact": 2,
+      "shape": "f15ae5d9b1a0a3b85d3dd7ba5c440c571589fea8"
+    },
+    "ac6fff35c28ea36cfd3d2b671ab7bd6979db059a": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.PtyTests/ReadErrorScenarioTests.cs::ReadCall_MissingPath_StreamsError_AndTurnSettles#0",
+        "tests/Harbor.Tui.CellForge.PtyTests/ToolErrorScenarioTests.cs::ToolCall_ReadMissingFile_StreamsError_AndTurnSettles#0"
+      ],
+      "count": 2,
+      "lines": 31,
+      "files": 2,
+      "exact": 2,
+      "shape": "a010c483786a86ad5093d2410506cb827cea4255"
+    },
+    "ad24d4ce3a66f5b1062007b2094bf2b178d9a793": {
+      "members": [
+        "tests/Harbor.Application.Tests/WorkspaceInspectorTests.cs::GitOut#0",
+        "tests/Harbor.ChangeTracking.Tests/ChangeApplierTests.cs::GitOut#0",
+        "tests/Harbor.ChangeTracking.Tests/ChangeSetFreezerTests.cs::GitOut#0",
+        "tests/Harbor.ChangeTracking.Tests/RunChangeChainTests.cs::GitOut#0",
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::GitOut#0",
+        "tests/Harbor.ChangeTracking.Tests/WorkspaceMaterializerTests.cs::GitOut#0"
+      ],
+      "count": 6,
+      "lines": 29,
+      "files": 6,
+      "exact": 6,
+      "shape": "ef7c5e681356ac86747d5c198a187335b1aa1241"
+    },
+    "ad2b7241d8f2583007473ef863a1b8774290651b": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/BackendRegistrySingleSourceTests.cs::WithEnv#0",
+        "tests/Harbor.Hosting.Tests/HostingStrategyRegistryTests.cs::WithEnv#0",
+        "tests/Harbor.Hosting.Tests/RegistrationCompositionTests.cs::WithEnv#0",
+        "tests/Harbor.Hosting.Tests/RegistryResolveAbsenceTests.cs::WithEnv#0"
+      ],
+      "count": 4,
+      "lines": 10,
+      "files": 4,
+      "exact": 3,
+      "shape": "bd904ae75a13e99854f506153a174fc961543b9b"
+    },
+    "ada290ed9bdadd56bb05047a71941bb12ed17c84": {
+      "members": [
+        "tests/Harbor.Tui.Tests/BuiltinViewTests.cs::Render_StreamingText_AppendedAsAssistantEntry#0",
+        "tests/Harbor.Tui.Tests/BuiltinViewTests.cs::Render_ThinkingText_RendersThinkingPrefix#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "8b62eadd93b965933089a05d4ff9fbd8707d9380"
+    },
+    "adfef29397e1d6cf4bee3416c1ce4cd14845e24c": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/SessionNullRailwayTests.cs::TestUserMessage#0",
+        "tests/Harbor.Application.Tests/SteeringCrossSessionTests.cs::SteerFor#0",
+        "tests/Harbor.Application.Tests/TokenTrackerTests.cs::Msg#1",
+        "tests/Harbor.TestKit/TestMessages.cs::User#0",
+        "tests/Harbor.Tools.Builtin.Tests/SessionSupervisionToolTests.cs::User#0"
+      ],
+      "count": 5,
+      "lines": 7,
+      "files": 5,
+      "exact": 5,
+      "shape": "de764c519bd6aabe01624011beec88d06e792876"
+    },
+    "b2da74164c4f98fec28402c03fefb8b0b9097a3b": {
+      "members": [
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::LoadFromFile_MissingBaseUrl_ReturnsFailure#0",
+        "tests/Harbor.Providers.Tests/ProviderConfigTests.cs::LoadFromFile_MissingId_ReturnsFailure#0"
+      ],
+      "count": 2,
+      "lines": 13,
+      "files": 1,
+      "exact": 2,
+      "shape": "5c6bdba968b2a2d8f1b647cda89f84f2a5be39a5"
+    },
+    "b3639e0e05d34516d5dbc8df1e8aab85ba0ad8f1": {
+      "members": [
+        "tests/Harbor.Registries.Tests/ToolRegistryResolveShapeTests.cs::Names#0",
+        "tests/Harbor.Registries.Tests/ToolRegistrySnapshotTests.cs::SortedNames#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "2f77431cf807a4bf713ba21905d9d5173fc5fb62"
+    },
+    "b62e3200b3f14411ae5d0462316ce3b40b7a4c35": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CostBarsBlockTests.cs::Empty_MeasuresOne_PaintsPlaceholder#0",
+        "tests/Harbor.Tui.CellForge.Tests/SparklineBlockTests.cs::Empty_MeasuresOne_PaintsPlaceholder#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 0,
+      "shape": "a6a38fc1855dc7c5bf420b366212cce03a79041a"
+    },
+    "b75a2174d482c95017feaba4988b814604c9254e": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.PtyTests/LsErrorScenarioTests.cs::LsCall_MissingPath_StreamsError_AndTurnSettles#0",
+        "tests/Harbor.Tui.CellForge.PtyTests/TreeErrorScenarioTests.cs::TreeCall_MissingPath_StreamsError_AndTurnSettles#0"
+      ],
+      "count": 2,
+      "lines": 32,
+      "files": 2,
+      "exact": 2,
+      "shape": "168a37002ed088e45717fd97133f1dce2c4be554"
+    },
+    "b80536df3c7a4cedb6859bdb13d4379f4f50b151": {
+      "members": [
+        "tests/Harbor.Core.Tests/PermissionPathPolicyPerToolTests.cs::AgentWithRuleset#0",
+        "tests/Harbor.Core.Tests/PermissionPathPolicyTests.cs::AgentWithRuleset#0",
+        "tests/Harbor.Core.Tests/PermissionServiceTests.cs::AgentWithRuleset#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 3,
+      "exact": 3,
+      "shape": "12c4274a5ebe34104d869e0e8e3e2285dcda98ab"
+    },
+    "b9129d411068c497cf7683ffd07b057042fb96f1": {
+      "members": [
+        "tests/Harbor.Application.Tests/ToolDispatcherResolveOnceTests.cs::Batch#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherToolContextScalingTests.cs::Batch#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "5bc1ac67c38e780c45553d2df31c1b4ec045e682"
+    },
+    "bc23a14c90b09cba7098f01ea2052f73d73403bc": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.PtyTests/PasteEdgeScenarioTests.cs::LastUserContent#0",
+        "tests/Harbor.Tui.CellForge.PtyTests/SubmitScenarioTests.cs::LastUserContent#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "52008813a9a17292a3444c6cf5f3f4e5c7a648ec"
+    },
+    "bd32517cfd2e506ed5ed8631cf26c56c1418a6c6": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_NonSearch_WithSessionFlag_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_Search_SessionFlag_MissingQuery_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::Sessions_Search_ShortSessionFlag_MissingQuery_MatchesManualByteForByte#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 1,
+      "exact": 3,
+      "shape": "fe394351d320f05142eb219b5c197019f4efa342"
+    },
+    "bec4fdb7d00e4180156bd67a76cd0be7cdd6d298": {
+      "members": [
+        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::GetAsync#0",
+        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::GetStatsAsync#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "28201aa93e994c3a95e856716adb600aa1b2a860"
+    },
+    "bff69cf3c24dc577ae4de63a1381abadaacae1a9": {
+      "members": [
+        "tests/Harbor.Storage.Tests/SqliteSessionStoreTests.cs::DeleteAsync_UnknownId_ReturnsFailure#0",
+        "tests/Harbor.Storage.Tests/SqliteSessionStoreTests.cs::GetMessagesAsync_UnknownSession_ReturnsFailure#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 1,
+      "exact": 0,
+      "shape": "7841128db6396755eafc981bb2fc5f8131dc5589"
+    },
+    "c0076f05b272e0bbd325bd7715740a0034467e88": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/OverlayStackTests.cs::FullyCoveredByTransparentSibling_StillPaints#0",
+        "tests/Harbor.Tui.CellForge.Tests/OverlayStackTests.cs::TransparentLayerAbove_DoesNotClipLower#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 2,
+      "shape": "26de38096601490be6e7813c486dfbadabe8f655"
+    },
+    "c04584012f8bb353010d6753810333463a3eb7b3": {
+      "members": [
+        "tests/Harbor.Plugins.Runtime.Tests/DllRealWorldPluginsTests.cs::LocateRepoRoot#0",
+        "tests/Harbor.Plugins.Runtime.Tests/RealWorldPluginsTests.cs::LocateRepoRoot#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "f9a78a668c6a20d15becb27275c00561fe0f16b6"
+    },
+    "c152640a36445c9022e1f44a13d75052d98a6491": {
+      "members": [
+        "tests/Harbor.Application.Tests/ExecutionTreeTests.cs::AssistantWithUsage#0",
+        "tests/Harbor.Application.Tests/SubAgentCostPropagationTests.cs::AssistantWithUsage#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "4d15729bc1828f85d9d0de02cba011a92a6c7aee"
+    },
+    "c231de93b2c9a41351b869f4dfeeccc660c5907c": {
+      "members": [
+        "tests/Harbor.Providers.Tests/LlmClientAuthFailureTests.cs::CollectAsync#0",
+        "tests/Harbor.Providers.Tests/ProviderStreamTests.cs::CollectAsync#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "2d40f0eb85ca33fba620f05fad4add4016766316"
+    },
+    "c31d1a9415df62e32b406fff7ebc0c9e8b815f0a": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeBuiltinPanelsTests.cs::Rows#0",
+        "tests/Harbor.Tui.CellForge.Tests/CellForgeSkillFreshnessPanelTests.cs::Rows#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "1cafba24b0721ff456202595e8075f5b23c8b762"
+    },
+    "c374ff0b85e7fa722226d1ebbb91a080a6b8f094": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/WordDiffTests.cs::DeletionWithinLine_MarksDeletedRunOnly#0",
+        "tests/Harbor.Tui.CellForge.Tests/WordDiffTests.cs::InsertionWithinLine_MarksAddedRunOnly#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "8657a6f1f8b40338d8819d146ecf1df5fcc1157e"
+    },
+    "c6cae28f18650c11dc0775a05c7c796b6fad7d95": {
+      "members": [
+        "tests/Harbor.Domain.Tests/MessageVisitorTests.cs::Every_AgentMessage_Subtype_Has_A_Visitor_Arm#0",
+        "tests/Harbor.Domain.Tests/MessageVisitorTests.cs::Every_ContentPart_Subtype_Has_A_Visitor_Arm#0"
+      ],
+      "count": 2,
+      "lines": 22,
+      "files": 1,
+      "exact": 0,
+      "shape": "9c2cb998e99844dde4a992c3a5d344829f4bb4a6"
+    },
+    "c798db8dd7deca44227c14f4b2191763db3e5d8c": {
+      "members": [
+        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::Summary#0",
+        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::Summary#0",
+        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::Summary#0"
+      ],
+      "count": 3,
+      "lines": 10,
+      "files": 3,
+      "exact": 3,
+      "shape": "0da826abb1d501c370851310283b9bac032ea84e"
+    },
+    "c83573ed20619604c11ad3b005f0ed4b5166e592": {
+      "members": [
+        "tests/Harbor.Application.Tests/WorkspaceInspectorTests.cs::InitRepo#0",
+        "tests/Harbor.ChangeTracking.Tests/WorkspaceMaterializerTests.cs::InitRepo#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "cc2de053dadbb7a51202b8575a9d0d93f582a882"
+    },
+    "c8c1d8467deaeb5027b015c079cf5ff83ffc8dac": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::PromptTool_ValidateArguments_Theory#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::ResourceTool_ValidateArguments_Theory#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "2d78f03fb4af1060cd08cfdbe472498188f47e2f"
+    },
+    "c9c6acacf0333ec8606d260d0b76fce01a6aa861": {
+      "members": [
+        "tests/Harbor.Ipc.Tests/BroadcasterTurnIsolationTests.cs::CollectFramesAsync#0",
+        "tests/Harbor.Ipc.Tests/ReconnectReplayTests.cs::CollectFramesAsync#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "9eea870e69d5e4919b5c3d79c83c39e2554195a3"
+    },
+    "ca2637f16f84862aa7a76337e3f83d52377467b1": {
+      "members": [
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::AssistantMessageState#0",
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::ErrorState#0",
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::ToolResultState#0",
+        "tests/Harbor.E2E.Framework/StateTestRunner.cs::UserMessageState#0"
+      ],
+      "count": 4,
+      "lines": 17,
+      "files": 1,
+      "exact": 0,
+      "shape": "67527265ff1ce6ecfdee3c34f80688b392a80b97"
+    },
+    "cb4c9718e2026f979781695629626bc8234dafdc": {
+      "members": [
+        "tests/Harbor.Plugins.Host.Tests/PluginHostJsonRpcTests.cs::ToolsCall_MissingName_ReturnsInvalidParams#0",
+        "tests/Harbor.Plugins.Host.Tests/PluginHostJsonRpcTests.cs::ToolsCall_UnknownTool_ReturnsInvalidParams#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "5a9d74d65349da2c4209934512ddd4df924ce06b"
+    },
+    "cba9084688f7e7f0624c80e7c70fbcd601e0e2b0": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/ThemeTokenDuplicationGuardTests.cs::ColorLiteralsInAppCSharp#0",
+        "tests/Harbor.App.Avalonia.Tests/ThemeTokenDuplicationGuardTests.cs::IconPathLiteralsInAppCSharp#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "d9920bde167f346799f72940d107f162a9559690"
+    },
+    "cf08c403221ed9416a0cfa513443bda90c9f224c": {
+      "members": [
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Sparkline_Flat#0",
+        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ComponentGoldenFramesTests.cs::Frames_Sparkline_Ramp#0"
+      ],
+      "count": 2,
+      "lines": 20,
+      "files": 1,
+      "exact": 2,
+      "shape": "a57ce647fc28d8be5a6a24324d19f792dc16f8d0"
+    },
+    "d109bce049cd06aab706b3b0b6c3dd6df9a2103c": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/SessionForkRunnerTests.cs::Assistant#0",
+        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::Assistant#0",
+        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::Assistant#0",
+        "tests/Harbor.Application.Tests/SubAgentRunnerTests.cs::ThinkingOnlyAssistant#0"
+      ],
+      "count": 4,
+      "lines": 8,
+      "files": 3,
+      "exact": 2,
+      "shape": "f9f5bda9f48bd183088ef71af29753e798458556"
+    },
+    "d133303974ce05feb02a203c31c40b36d1fb48b9": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/HostingStrategyRegistryTests.cs::Tui_CellforgeCanonicalId_ResolvesCellForge#0",
+        "tests/Harbor.Hosting.Tests/HostingStrategyRegistryTests.cs::Tui_ConsoleexAlias_ResolvesCellForge#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 1,
+      "exact": 2,
+      "shape": "573aa05807532d0bc3d766be493375c719090d38"
+    },
+    "d2224ddc2bc1c01706300b894c8f68062f27cfbc": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafDaemonIpcServeMcpTests.cs::Daemon_UnknownSub_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafDaemonIpcServeMcpTests.cs::Mcp_UnknownSub_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafLogsTests.cs::Logs_UnknownSub_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::Events_UnknownPositional_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::Demo_UnknownPositional_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::Tui_UnknownSub_MatchesManualByteForByte#0"
+      ],
+      "count": 6,
+      "lines": 7,
+      "files": 4,
+      "exact": 0,
+      "shape": "493e828683c70cc5b68e64eb02086be176f1f690"
+    },
+    "d27e08b506dd1bd0df4492a437c8cd00aab29a94": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Column_TwoPercents_ShareGapSubtractedExtent#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::OversizedGap_Collapses_AllTracksZeroSize#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 1,
+      "exact": 0,
+      "shape": "77bb52619ba3ceacab3e70a6de75518e969b7fd3"
+    },
+    "d2e824408bbc9186745a934714dea05ced924e0b": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/NotebookToolTests.cs::ValidateArguments_Theory#0",
+        "tests/Harbor.Tools.Builtin.Tests/SkillToolTests.cs::ValidateArguments_Theory#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 2,
+      "shape": "0cbab1066eb7ec41bd2b75f0d836d70a2e69671e"
+    },
+    "d41c72c9c336a0e3633e52ed9790490283ea3f96": {
+      "members": [
+        "tests/Harbor.Ipc.Tests/IpcRoundTripTests.cs::Ipc_ListProviders_Returns_List#0",
+        "tests/Harbor.Ipc.Tests/IpcRoundTripTests.cs::Ipc_ListTools_Returns_List#0"
+      ],
+      "count": 2,
+      "lines": 17,
+      "files": 1,
+      "exact": 0,
+      "shape": "1125352e9bef4fa270b912e6fa044fdacbc53209"
+    },
+    "d664a24cc27a06b9c6694575d67c1e30af2aa394": {
+      "members": [
+        "tests/Harbor.ChangeTracking.Tests/RunRejectTests.cs::Decide_UndoApply_PendingSlice_FailClosed_Exit4#0",
+        "tests/Harbor.ChangeTracking.Tests/RunRejectTests.cs::Decide_Worktree_PendingSlice_LeavesCopy_Exit4#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "5fd8c11b09ddb299a67b443b8dfbe7f8f1215849"
+    },
+    "d6a8cd9d185ad82e4fe152f2805563957f44870d": {
+      "members": [
+        "tests/Harbor.Core.Tests/PermissionPathPolicyPerToolTests.cs::PathTool_AnchoredAllow_AllowsInsidePath#0",
+        "tests/Harbor.Core.Tests/PermissionPathPolicyPerToolTests.cs::PathTool_TraversalOutsideWorkspace_DeniesWithoutAsker#0",
+        "tests/Harbor.Core.Tests/PermissionPathPolicyPerToolTests.cs::PathTool_UnmatchedPath_FallsThroughToDeny#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 1,
+      "exact": 2,
+      "shape": "c94bfb4cbe4782b22b76564ab7699519079c338b"
+    },
+    "d7230ce116489c5447da5636ced338227c56bc7b": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/PluginGracefulAbsenceTests.cs::Compose#0",
+        "tests/Harbor.Hosting.Tests/PluginOutOfProcDefaultTests.cs::Compose#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 2,
+      "exact": 2,
+      "shape": "094f610254172f80ac1f9f395ad68689342111e6"
+    },
+    "d7ace552e88bab8b6c3853fe92197126a6a39725": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafDaemonIpcServeMcpTests.cs::CaptureAsync#0",
+        "tests/Harbor.App.Cli.Tests/CafLogsTests.cs::CaptureAsync#0",
+        "tests/Harbor.App.Cli.Tests/CafMiscTests.cs::CaptureAsync#0",
+        "tests/Harbor.App.Cli.Tests/CafProvidersAuthConfigTests.cs::CaptureAsync#0",
+        "tests/Harbor.App.Cli.Tests/CafSessionRunTests.cs::CaptureAsync#0",
+        "tests/Harbor.App.Cli.Tests/CafSetupTuiDemoTests.cs::CaptureAsync#0"
+      ],
+      "count": 6,
+      "lines": 16,
+      "files": 6,
+      "exact": 6,
+      "shape": "446e0e491848ace2ec39b9627ef93816832cace7"
+    },
+    "d85f6b5c1c2793203615a6e877643ff476026619": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.PtyTests/GlobErrorScenarioTests.cs::GlobCall_MissingPath_StreamsError_AndTurnSettles#0",
+        "tests/Harbor.Tui.CellForge.PtyTests/GrepErrorScenarioTests.cs::GrepCall_MissingPath_StreamsError_AndTurnSettles#0"
+      ],
+      "count": 2,
+      "lines": 32,
+      "files": 2,
+      "exact": 2,
+      "shape": "da4614a4ec97583c475b4e5e6c26f3eff6e0bd5c"
+    },
+    "d9b0a700133c7b11fcaeeed516e3bd04f2480140": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/SelectionEngineTests.cs::Drag_Backwards_NormalizesRectangle#0",
+        "tests/Harbor.Tui.CellForge.Tests/SelectionEngineTests.cs::MultiRow_Drag_JoinsRowsAndTrimsEach#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "1c7d7aaefbf9485344b647cfeb6075ffa0de2d80"
+    },
+    "da332da1ba1532585f356133c2f245a7c1f4e8df": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::ErroredPhase_Latch_IsTimeBased_HoldsAcrossFastFrames#0",
+        "tests/Harbor.Tui.CellForge.Tests/StatusPanelMascotTests.cs::SucceededPhase_Latch_IsTimeBased_HoldsAcrossFastFrames#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 0,
+      "shape": "52901f98c679ab34b6748b35476fa64991517850"
+    },
+    "da3467bc8ec298ad3c9b52366c52f847d82d6fb4": {
+      "members": [
+        "tests/Harbor.Core.Tests/CompactionCacheStrategyTests.cs::Assistant#0",
+        "tests/Harbor.Core.Tests/CompactionPolicyInvariantTests.cs::Assistant#0",
+        "tests/Harbor.Core.Tests/CompactionPolicyMaterializeScalingTests.cs::Assistant#0",
+        "tests/Harbor.Core.Tests/CompactionServiceTests.cs::Assistant#0",
+        "tests/Harbor.Core.Tests/SecondaryCompactionModelTests.cs::Assistant#0"
+      ],
+      "count": 5,
+      "lines": 8,
+      "files": 5,
+      "exact": 5,
+      "shape": "9b27efaef0bccf00c5dafc9fffdc9228fc8c47b4"
+    },
+    "dab6a33a784eb66563a13ec47b2cf0e53c65b2c2": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/ScreenBuilderTests.cs::AttachLeaf_Horizontal_ReservesExactColumns#0",
+        "tests/Harbor.Tui.CellForge.Tests/ScreenBuilderTests.cs::AttachLeaf_Oversize_DegradesToSliverInsteadOfCollapsing#0",
+        "tests/Harbor.Tui.CellForge.Tests/ScreenBuilderTests.cs::AttachLeaf_Vertical_ReservesExactRows#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "a54518000b338f674ae48542172b96ed06e80a44"
+    },
+    "de6f37cf712b13e1af981f61131a1c48ac8520ef": {
+      "members": [
+        "tests/Harbor.DesignSystem.Tests/ChatPaletteToolPillTests.cs::ToolPillError_MatchesErrorTokenAndGlyphStyle#0",
+        "tests/Harbor.DesignSystem.Tests/ChatPaletteToolPillTests.cs::ToolPillOk_MatchesSuccessTokenAndGlyphStyle#0",
+        "tests/Harbor.DesignSystem.Tests/ChatPaletteToolPillTests.cs::ToolPillRunning_MatchesWarningTokenAndGlyphStyle#0"
+      ],
+      "count": 3,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "fdfcd2bd9e6c492135bd182c00e7346fd103b6da"
+    },
+    "df44ef20657eb4b5ed16ed12cbbe118fe952918a": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/LineReplEofTests.cs::CreateRunner#0",
+        "tests/Harbor.App.Cli.Tests/LineReplExitWordTests.cs::CreateRunner#0"
+      ],
+      "count": 2,
+      "lines": 30,
+      "files": 2,
+      "exact": 2,
+      "shape": "849ee552187952e058d14065e1313661b738725a"
+    },
+    "e0c45467814d5de60a93073f8fa0f729919003ea": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::PromptTool_ExecuteAsync_RoutesPromptsGet_AndRendersRoles#0",
+        "tests/Harbor.Tools.Builtin.Tests/McpResourcePromptToolTests.cs::ResourceTool_ExecuteAsync_RoutesResourcesRead_AndReturnsText#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 1,
+      "exact": 0,
+      "shape": "43ad1f28807667c4476424cf48e3539e499066b6"
+    },
+    "e14a9aa2d0d9df02ab7699d9208d7385e392fd70": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/RegistryResolveAbsenceTests.cs::KnownHarborMode_StillResolves#0",
+        "tests/Harbor.Hosting.Tests/RegistryResolveAbsenceTests.cs::KnownHarborStorage_StillResolves#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "44087599800b2e7d5ba69d30a8f6f555c8f93d99"
+    },
+    "e56ee364e86cd5a7c79b80c79642dde65a55c0eb": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/LayoutTreeSpringTests.cs::AnimateMinWidth_UnknownPanel_Throws#0",
+        "tests/Harbor.Tui.CellForge.Tests/LayoutTreeSpringTests.cs::AnimateRatio_UnknownPanel_Throws#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "dc8ab5f06c4df5e7fb103cee0577cf83a3edddfb"
+    },
+    "e603409e4d84236d41ea8a246bdcb575a03d2e0b": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_InvalidVerdictJson_DeniesFailClosed#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_SilentNonZeroExit_DeniesFailClosed#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_SilentSuccess_Allows#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::PreToolUse_UnknownDecision_DeniesFailClosed#0"
+      ],
+      "count": 4,
+      "lines": 7,
+      "files": 1,
+      "exact": 3,
+      "shape": "4c6417f0e93cba2d678ff0b7088301f33d50e66a"
+    },
+    "e79dffc6a0c39c79436ac23d7ebcead622ee8897": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/StatusMappersTests.cs::IsTerminal_Classifies_Each_State_Once#0",
+        "tests/Harbor.Tui.CellForge.Tests/ToolCallBlockMapperTests.cs::Terminal_States_Are_Classified_Once#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "cbd5395f1eadfd1ead0eefb7b6542c4f8e10d1be"
+    },
+    "e89208f10eb8e752f36e73bfe7d8ee9704b74234": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/StreamingHoldbackTests.cs::Flatten#0",
+        "tests/Harbor.Tui.CellForge.Tests/StreamingMarkdownTests.cs::Flatten#0"
+      ],
+      "count": 2,
+      "lines": 11,
+      "files": 2,
+      "exact": 2,
+      "shape": "e2579c88368e299c9d7978735534ffa4c0e83184"
+    },
+    "e91f84eb618ddf556107829b1bc41299a863d81b": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CafLogsTests.cs::Logs_Last_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafLogsTests.cs::Logs_List_MatchesManualByteForByte#0",
+        "tests/Harbor.App.Cli.Tests/CafLogsTests.cs::Logs_ShortList_MatchesManualByteForByte#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 1,
+      "exact": 3,
+      "shape": "e119d2956aee941f782e70a0a78fb7dcea92f230"
+    },
+    "ea3fab546c383aecfd52947dcd8e333afeaebfa9": {
+      "members": [
+        "tests/Harbor.Application.Tests/MessageSnapshotTests.cs::UserMsg#0",
+        "tests/Harbor.Application.Tests/UserHookGatesTests.cs::UserMsg#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 2,
+      "shape": "78c54dc47613f589488478559f21ab7c5c719cd2"
+    },
+    "ec145c71726b113f91bb656741d3ce9f9d5a79a0": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/IdentifiersTests.cs::ProviderId_Rejects_InvalidCharacters#0",
+        "tests/Harbor.Abstractions.Tests/IdentifiersTests.cs::ToolName_Rejects_InvalidPattern#0"
+      ],
+      "count": 2,
+      "lines": 16,
+      "files": 1,
+      "exact": 0,
+      "shape": "85ed20eb3b61274fcccdb0120a8d32695a04d566"
+    },
+    "ecfc8f1ca11739e44d238b67aee69f0c92c6c157": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolDependencyInjectionTests.cs::Edit_WithoutLsp_AppliesTheEdit_AndOmitsTheDiagnosticsNote#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolDependencyInjectionTests.cs::Read_WithoutLsp_ReadsTheFile_AndNeverThrows#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 1,
+      "exact": 0,
+      "shape": "1b66c6f7ccc1f321ecc171fdd301caaab7cc500c"
+    },
+    "ed394136583844260be261824bd658e34f4b1f91": {
+      "members": [
+        "tests/Harbor.App.Cli.Tests/CellForgeReplSmokeTests.cs::ResolveFixtureDir#0",
+        "tests/Harbor.Tui.CellForge.Tests/GenericGalleryGoldenTests.cs::FixtureDir#0",
+        "tests/Harbor.Tui.CellForge.Tests/GoldenFile.cs::ResolveFixtureDir#0"
+      ],
+      "count": 3,
+      "lines": 10,
+      "files": 3,
+      "exact": 3,
+      "shape": "2a503c424dc58b7de70c25e4f2ce8507f60294a7"
+    },
+    "eeb24d613435bfbf78b634c39d64cc6eadd5a0fb": {
+      "members": [
+        "tests/Harbor.Application.Tests/ToolDispatcherResolveOnceTests.cs::GetAllTools#0",
+        "tests/Harbor.Application.Tests/ToolDispatcherToolContextScalingTests.cs::GetAllTools#0",
+        "tests/Harbor.TestKit/Fakes.cs::Snapshot#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 3,
+      "exact": 3,
+      "shape": "dfe76e26aedf5e7e31dd6b2366a9a136063b4677"
+    },
+    "efb941d240075640a44ae26eb99a012eba01832f": {
+      "members": [
+        "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::Agent#0",
+        "tests/Harbor.Application.Tests/RunWallClockLimitTests.cs::Agent#0",
+        "tests/Harbor.Application.Tests/TurnRunnerToolTableReuseTests.cs::ToolAgent#0"
+      ],
+      "count": 3,
+      "lines": 8,
+      "files": 3,
+      "exact": 3,
+      "shape": "7a7282867d3f47f66135af01e37b98163f025301"
+    },
+    "f109e678ab55a81bd3c39f9f2924e290a14af86c": {
+      "members": [
+        "tests/Harbor.Registries.Tests/ToolRegistryDescribeOnceTests.cs::CreateFrozenRegistry#0",
+        "tests/Harbor.Terminal.Abstractions.Tests/ViewRegistryFreezeTests.cs::NewFrozenViewModelRegistry#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 2,
+      "exact": 0,
+      "shape": "4115333aa4161d3c3bf54ceba9185ffc8d5c2d40"
+    },
+    "f251d7418dbc1a17c8c2414190bb3a0c53d1cda2": {
+      "members": [
+        "tests/Harbor.Benchmarks/JsonlSessionStoreBenchmark.cs::IterationCleanup#0",
+        "tests/Harbor.Benchmarks/MessageConverterBenchmark.cs::IterationCleanup#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "6745b16e9f6a7b3cf8736fcd883d24e78cab8944"
+    },
+    "f37f532488e8f6b8ccd08d854f12dc7e21ad1d55": {
+      "members": [
+        "tests/Harbor.E2E.Framework/HeadlessAvaloniaDriver.cs::StartXvfbAsync#0",
+        "tests/Harbor.E2E.Framework/TuiDriver.cs::StartXvfbAsync#0"
+      ],
+      "count": 2,
+      "lines": 26,
+      "files": 2,
+      "exact": 2,
+      "shape": "d1d67c9eeb7f588fa08b2149e78002014af26dd7"
+    },
+    "f3a4b5bd9069d46cb9a06ec4b92e248a53d8f74e": {
+      "members": [
+        "tests/Harbor.Tui.E2E.Tests/Shrink/DdminShrinkerTests.cs::FindRepoRoot#0",
+        "tests/Harbor.Ui.Framework.Tests/CostAnimatorGuardTests.cs::FindRepoRoot#0"
+      ],
+      "count": 2,
+      "lines": 10,
+      "files": 2,
+      "exact": 2,
+      "shape": "fb626370512677e837571e889621e5ac768abb06"
+    },
+    "f45f575ae69a890ef0666ae0a222f6219ff4444e": {
+      "members": [
+        "tests/Harbor.Application.Tests/ErrorRouting259Tests.cs::LoopWithClock#0",
+        "tests/Harbor.Application.Tests/RateLimitRetryTests.cs::LoopWithClock#0"
+      ],
+      "count": 2,
+      "lines": 14,
+      "files": 2,
+      "exact": 2,
+      "shape": "f2351461da8f55df98e81b4239e48695007c4432"
+    },
+    "f576005d532c109a48257edb6434aae7d46790e4": {
+      "members": [
+        "tests/Harbor.Abstractions.Tests/TestScalingGate.cs::MeasureAsync#0",
+        "tests/Harbor.Domain.Tests/TestScalingGate.cs::MeasureAsync#0",
+        "tests/Harbor.Providers.Tests/TestScalingGate.cs::MeasureAsync#0",
+        "tests/Harbor.TestKit/TestScalingGate.cs::MeasureAsync#0",
+        "tests/Harbor.Tui.PerfTests/TestScalingGate.cs::MeasureAsync#0",
+        "tests/Harbor.Ui.Framework.Tests/TestScalingGate.cs::MeasureAsync#0"
+      ],
+      "count": 6,
+      "lines": 74,
+      "files": 6,
+      "exact": 6,
+      "shape": "f590cf4d3a188296c394fb09fbd7bfbc13346fe7"
+    },
+    "f68ad3815ea88719d6c93620b99544fe0925ea6e": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Edit_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Glob_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Grep_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Ls_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Patch_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Read_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::WebFetch_GlueMatchesDeletedHandwrittenMembers#0",
+        "tests/Harbor.Tools.Builtin.Tests/ToolGlueSpikeTests.cs::Write_GlueMatchesDeletedHandwrittenMembers#0"
+      ],
+      "count": 8,
+      "lines": 11,
+      "files": 1,
+      "exact": 0,
+      "shape": "f22c3ce5b5d336747f09ddf784b328e33a6764d6"
+    },
+    "f6e891c1d0cd1a3ca3f4a4ce939959452b7b49a8": {
+      "members": [
+        "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_ToolTextWithTrailingWhitespace_ParsesPath#0",
+        "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_UsesUnknownWhenPathMissing#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 2,
+      "shape": "259611d4d288821989496ce457c3440ee9eb2d1d"
+    },
+    "f9411a988841d445d6b461e376c33c9ac8c7e7ff": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::UserPromptSubmit_EditVerdict_ReadsAsAllow#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::UserPromptSubmit_InvalidVerdictJson_DeniesFailClosed#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::UserPromptSubmit_SilentSuccess_Allows#0"
+      ],
+      "count": 3,
+      "lines": 6,
+      "files": 1,
+      "exact": 2,
+      "shape": "4ccfdb45c996d3756af663830dde9c195669c1a1"
+    },
+    "f9bac17da94bc141ec82b6db4560bc844d6b20de": {
+      "members": [
+        "tests/Harbor.Application.Tests/WorkspaceInspectorTests.cs::GitAvailable#0",
+        "tests/Harbor.ChangeTracking.Tests/SkipWhenGitMissing.cs::Available#0"
+      ],
+      "count": 2,
+      "lines": 18,
+      "files": 2,
+      "exact": 2,
+      "shape": "cd675316043f4cf327b15ace49434bce7cfc5be1"
+    },
+    "fa098888d204635e9fa1acb3668f3760ec337cbb": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/BufferDiffR1Tests.cs::Drain#0",
+        "tests/Harbor.Tui.CellForge.Tests/BufferDiffR1Tests.cs::Drain#1"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 2,
+      "shape": "f9c2de7221d8aa262a43645384390f8caa39c2ba"
+    },
+    "fa3f45338f7455c8be5989b320ec3687f7e6899b": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::FillWeights_SplitRemainderProportionally#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::MaxCap_Honored_HeadroomStaysLeftover#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::MinFloor_Honored_TrailingFlexAbsorbsOverflow#0",
+        "tests/Harbor.Tui.CellForge.Tests/FlexLayoutTests.cs::Overflow_FixedTracks_ScaleDownProportionally#0"
+      ],
+      "count": 4,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "7c0f05b6bc46c6fc243a15c1f65b67ce5910a9ed"
+    },
+    "fa7db4db853cd99fea3e92f35e6fa833bfa5d630": {
+      "members": [
+        "tests/Harbor.Tui.CellForge.Tests/TableBlockTests.cs::SelectColumn_ClampsAndClears#0",
+        "tests/Harbor.Tui.CellForge.Tests/TableBlockTests.cs::SelectRow_ClampsAndClears#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 0,
+      "shape": "a6b4fa0227e077258b94720aa524ed8a9b937327"
+    },
+    "fc3391f3db6bda00ac1d124c0828af2bffc43bf8": {
+      "members": [
+        "tests/Harbor.ChangeTracking.Tests/ChangeApplierTests.cs::InitRepo#0",
+        "tests/Harbor.ChangeTracking.Tests/RunChangeChainTests.cs::InitRepo#0",
+        "tests/Harbor.ChangeTracking.Tests/RunReportTests.cs::InitRepo#0"
+      ],
+      "count": 3,
+      "lines": 9,
+      "files": 3,
+      "exact": 3,
+      "shape": "2af3b7e5c692a767bd0288a185d42fa37a2eefce"
+    },
+    "fd83cfb897d8ccf942e5759d742bd5b67d7a50ec": {
+      "members": [
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::SessionEnd_RunsCommand#0",
+        "tests/Harbor.Application.Tests/HookRunnerTests.cs::SessionStart_NoToolToMatch_EntryStillRuns#0"
+      ],
+      "count": 2,
+      "lines": 8,
+      "files": 1,
+      "exact": 0,
+      "shape": "be2e05ee476f91136a2ed8c1942b1f955e95efe4"
+    },
+    "fde7810f28ec49a2f7f05b012bd6ab9a5e97d421": {
+      "members": [
+        "tests/Harbor.Hosting.Tests/RegistrationCompositionTests.cs::AddHarbor_CellForgeWrites_IntoSharedUiStore_RestoreReplaysOneLine#0",
+        "tests/Harbor.Hosting.Tests/RegistrationCompositionTests.cs::AddHarbor_PlainWrites_IntoSharedUiStore_RestoreReplaysOneLine#0"
+      ],
+      "count": 2,
+      "lines": 26,
+      "files": 1,
+      "exact": 0,
+      "shape": "b8f76be8a59d1fd0e82dde2e284e8209f16c51b6"
+    }
+  },
+  "exemptions": [
+    {
+      "paths": [
+        "tests/Harbor.Ui.Framework.Tests/**"
+      ],
+      "reason": "#1549 owns the fixture migration in this project; #1778 says the gate reports this zone and does not block it until that ticket lands",
+      "expires": "2026-12-31"
+    },
+    {
+      "paths": [
+        "tests/Harbor.Storage.Jsonl.Tests/**",
+        "tests/Harbor.Storage.Tests/**"
+      ],
+      "reason": "#1534/#1686 own the storage test migration; #1778 says the gate reports this zone and does not block it until those tickets land",
+      "expires": "2026-12-31"
+    },
+    {
+      "paths": [
+        "tests/Harbor.Tui.CellForge.PtyTests/**"
+      ],
+      "reason": "#1777 rewrites the CellForge render harness; the pty tree is inside that zone until the harness lands",
+      "expires": "2026-12-31"
+    }
+  ]
+}
