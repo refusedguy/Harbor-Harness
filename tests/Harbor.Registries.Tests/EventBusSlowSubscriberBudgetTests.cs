@@ -23,7 +23,8 @@ public class EventBusSlowSubscriberBudgetTests
     ///     contract as the <c>WhenAny</c> race it bypasses.
     /// </summary>
     [Test]
-    public async Task PublishAsync_SyncCancellingSubscriberWithBudget_StrikesThenEvicts()
+    [Timeout(30_000)]
+    public async Task PublishAsync_SyncCancellingSubscriberWithBudget_StrikesThenEvicts(CancellationToken cancellationToken)
     {
         var bus = new InMemoryEventBus(
             NullLogger<InMemoryEventBus>.Instance,
@@ -40,10 +41,9 @@ public class EventBusSlowSubscriberBudgetTests
             return new ValueTask(Task.FromCanceled(new CancellationToken(canceled: true)));
         });
 
-        using var cts = new CancellationTokenSource();
         for (int i = 0; i < 4; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i), cts.Token);
+            await bus.PublishAsync(new TurnStartEvent(i), cancellationToken);
         }
 
         await Assert.That(calls).IsEqualTo(3)

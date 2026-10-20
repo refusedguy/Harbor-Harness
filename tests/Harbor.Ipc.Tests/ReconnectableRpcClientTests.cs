@@ -18,7 +18,8 @@ namespace Harbor.Ipc.Tests;
 public class ReconnectableRpcClientTests
 {
     [Test]
-    public async Task Client_SurvivesConnectionCut_AndCatchesUpWithoutDuplicates()
+    [Timeout(60_000)]
+    public async Task Client_SurvivesConnectionCut_AndCatchesUpWithoutDuplicates(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var bus = sp.GetRequiredService<IEventBus>();
@@ -39,7 +40,6 @@ public class ReconnectableRpcClientTests
             var received = new List<EventFrame>();
             var gotSix = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var gotFirst = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            using var consumeCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
             // Consumer: collect everything; resolve after six distinct turns.
             _ = Task.Run(async () =>
@@ -52,7 +52,7 @@ public class ReconnectableRpcClientTests
                             Interlocked.Increment(ref snapshotCalls);
                             return Task.CompletedTask;
                         },
-                        consumeCts.Token))
+                        cancellationToken))
                     {
                         lock (received)
                         {

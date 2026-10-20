@@ -75,7 +75,8 @@ public class PtyStartBoundaryTests
     }
 
     [Test]
-    public async Task TryStart_ShellExitZero_SucceedsAndReaps()
+    [Timeout(60_000)]
+    public async Task TryStart_ShellExitZero_SucceedsAndReaps(CancellationToken cancellationToken)
     {
         if (!PtyProcess.IsSupported || !File.Exists("/bin/sh"))
         {
@@ -90,8 +91,7 @@ public class PtyStartBoundaryTests
         await Assert.That(result.IsSuccess).IsTrue();
 
         await using PtyProcess pty = result.Value;
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        int exitCode = await pty.WaitForExitAsync(cts.Token);
+        int exitCode = await pty.WaitForExitAsync(cancellationToken);
 
         await Assert.That(exitCode).IsEqualTo(0);
     }

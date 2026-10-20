@@ -67,25 +67,24 @@ public sealed class MultiSessionLoadTests
     [Timeout(300_000)]
     public async Task ScenarioMatrix_Fast_CompletesWithoutCorruptionOrDeadlock(
         [Matrix(1, 10)] int sessions,
-        [Matrix(1, 3)] int agents)
+        [Matrix(1, 3)] int agents,
+        CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
-        await DriveAndVerifyAsync(sessions, agents, LoadStoreBackend.Memory, bucketCapacity: 6, cts.Token);
+        await DriveAndVerifyAsync(sessions, agents, LoadStoreBackend.Memory, bucketCapacity: 6, cancellationToken);
     }
 
     [Arguments(50, 1)]
     [Arguments(100, 1)]
     [Test]
     [Timeout(600_000)]
-    public async Task ScenarioMatrix_Heavy_CompletesWithoutCorruptionOrDeadlock(int sessions, int agents)
+    public async Task ScenarioMatrix_Heavy_CompletesWithoutCorruptionOrDeadlock(int sessions, int agents, CancellationToken cancellationToken)
     {
         if (!FullMatrixEnabled)
         {
             return;
         }
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
-        await DriveAndVerifyAsync(sessions, agents, LoadStoreBackend.Memory, bucketCapacity: 6, cts.Token);
+        await DriveAndVerifyAsync(sessions, agents, LoadStoreBackend.Memory, bucketCapacity: 6, cancellationToken);
     }
 
     [Arguments("memory")]
@@ -93,52 +92,48 @@ public sealed class MultiSessionLoadTests
     [Arguments("sqlite")]
     [Test]
     [Timeout(300_000)]
-    public async Task BackendMatrix_Fast_ParityAcrossStores(string backendName)
+    public async Task BackendMatrix_Fast_ParityAcrossStores(string backendName, CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         LoadStoreBackend backend = MultiSessionLoadHarness.ParseBackend(backendName);
-        await DriveAndVerifyAsync(4, 1, backend, bucketCapacity: 4, cts.Token);
+        await DriveAndVerifyAsync(4, 1, backend, bucketCapacity: 4, cancellationToken);
     }
 
     [Arguments("jsonl")]
     [Arguments("sqlite")]
     [Test]
     [Timeout(600_000)]
-    public async Task BackendMatrix_Heavy_FiftySessionsPerFileBackend(string backendName)
+    public async Task BackendMatrix_Heavy_FiftySessionsPerFileBackend(string backendName, CancellationToken cancellationToken)
     {
         if (!FullMatrixEnabled)
         {
             return;
         }
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
         LoadStoreBackend backend = MultiSessionLoadHarness.ParseBackend(backendName);
-        await DriveAndVerifyAsync(50, 1, backend, bucketCapacity: 6, cts.Token);
+        await DriveAndVerifyAsync(50, 1, backend, bucketCapacity: 6, cancellationToken);
     }
 
     [Arguments(1)]
     [Arguments(4)]
     [Test]
     [Timeout(300_000)]
-    public async Task RateLimiter_CapacityLadder_AdmitsAllDropsNone(int capacity)
+    public async Task RateLimiter_CapacityLadder_AdmitsAllDropsNone(int capacity, CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
-        await DriveAndVerifyAsync(4, 1, LoadStoreBackend.Memory, capacity, cts.Token);
+        await DriveAndVerifyAsync(4, 1, LoadStoreBackend.Memory, capacity, cancellationToken);
     }
 
     [Test]
     [Timeout(300_000)]
-    public async Task CapacityOne_StrictlySerializesStreams()
+    public async Task CapacityOne_StrictlySerializesStreams(CancellationToken cancellationToken)
     {
         const int sessions = 2;
         const int agents = 2;
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
             sessions, agents, bucketCapacity: 1, TimeSpan.FromMilliseconds(1));
-        await harness.CreateSessionsAsync(sessions, cts.Token);
+        await harness.CreateSessionsAsync(sessions, cancellationToken);
 
-        SessionRunResult[] results = await harness.RunAllAsync(cts.Token);
+        SessionRunResult[] results = await harness.RunAllAsync(cancellationToken);
 
         foreach (SessionRunResult result in results)
         {
@@ -157,15 +152,14 @@ public sealed class MultiSessionLoadTests
 
     [Test]
     [Timeout(300_000)]
-    public async Task EventBus_TurnOrdering_NoBleedNoReorder()
+    public async Task EventBus_TurnOrdering_NoBleedNoReorder(CancellationToken cancellationToken)
     {
         const int sessions = 6;
         const int agents = 2;
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
             sessions, agents, bucketCapacity: 6, TimeSpan.FromMilliseconds(1));
-        await harness.CreateSessionsAsync(sessions, cts.Token);
+        await harness.CreateSessionsAsync(sessions, cancellationToken);
 
         var recorder = new TurnOrderRecorder(harness.Contexts.Select(c => c.Session.Id));
         using IDisposable _ = harness.Bus.Subscribe((AgentEvent evt, CancellationToken _) =>
@@ -174,7 +168,7 @@ public sealed class MultiSessionLoadTests
             return ValueTask.CompletedTask;
         });
 
-        SessionRunResult[] results = await harness.RunAllAsync(cts.Token);
+        SessionRunResult[] results = await harness.RunAllAsync(cancellationToken);
 
         foreach (SessionRunResult result in results)
         {
@@ -202,7 +196,7 @@ public sealed class MultiSessionLoadTests
     /// </summary>
     [Test]
     [Timeout(600_000)]
-    public async Task SessionCountScaling_PairedSameRun_CountsScaleLinearly()
+    public async Task SessionCountScaling_PairedSameRun_CountsScaleLinearly(CancellationToken cancellationToken)
     {
         const int smallSessions = 4;
         const int largeSessions = 8;
@@ -211,7 +205,7 @@ public sealed class MultiSessionLoadTests
 
         // Warm-up drive, discarded: pays tiered-JIT compilation so it lands
         // in neither leg.
-        await MeasureDriveAsync(smallSessions, agents, capacity);
+        await MeasureDriveAsync(smallSessions, agents, capacity, cancellationToken);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -222,7 +216,7 @@ public sealed class MultiSessionLoadTests
         int smallPeak = 0;
         for (int r = 0; r < ScalingRounds; r++)
         {
-            (int admissions, double ms, int peak) = await MeasureDriveAsync(smallSessions, agents, capacity);
+            (int admissions, double ms, int peak) = await MeasureDriveAsync(smallSessions, agents, capacity, cancellationToken);
             await Assert.That(admissions).IsEqualTo(smallSessions * agents);
             smallAdmissions = admissions;
             smallMs = Math.Min(smallMs, ms);
@@ -235,7 +229,7 @@ public sealed class MultiSessionLoadTests
         int largePeak = 0;
         for (int r = 0; r < ScalingRounds; r++)
         {
-            (int admissions, double ms, int peak) = await MeasureDriveAsync(largeSessions, agents, capacity);
+            (int admissions, double ms, int peak) = await MeasureDriveAsync(largeSessions, agents, capacity, cancellationToken);
             await Assert.That(admissions).IsEqualTo(largeSessions * agents);
             largeAdmissions = admissions;
             largeMs = Math.Min(largeMs, ms);
@@ -309,15 +303,14 @@ public sealed class MultiSessionLoadTests
     ///     wall-clock milliseconds plus limiter peak (timing and peak are
     ///     report-only, never gated).
     /// </summary>
-    private static async Task<(int Admissions, double ElapsedMs, int PeakInFlight)> MeasureDriveAsync(int sessions, int agents, int capacity)
+    private static async Task<(int Admissions, double ElapsedMs, int PeakInFlight)> MeasureDriveAsync(int sessions, int agents, int capacity, CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(4));
         await using MultiSessionLoadHarness harness = await MultiSessionLoadHarness.StartAsync(
             sessions, agents, capacity, TimeSpan.FromMilliseconds(1), LoadStoreBackend.Memory);
-        await harness.CreateSessionsAsync(sessions, cts.Token);
+        await harness.CreateSessionsAsync(sessions, cancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
-        SessionRunResult[] results = await harness.RunAllAsync(cts.Token);
+        SessionRunResult[] results = await harness.RunAllAsync(cancellationToken);
         stopwatch.Stop();
 
         int total = sessions * agents;

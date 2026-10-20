@@ -143,10 +143,10 @@ public class ToolHelperTests
     }
 
     [Test]
-    public async Task ToolErrors_Handler_TimeoutWithoutSpan_FallsBackToCancelledText()
+    [Timeout(30_000)]
+    public async Task ToolErrors_Handler_TimeoutWithoutSpan_FallsBackToCancelledText(CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource();
-        var handler = ToolErrors.Handler("grep", cts.Token);
+        var handler = ToolErrors.Handler("grep", cancellationToken);
 
         await Assert.That(handler(new OperationCanceledException())).IsEqualTo("grep cancelled");
     }
@@ -154,12 +154,11 @@ public class ToolHelperTests
     // ── ResultErrors ──
 
     [Test]
-    public async Task ResultErrors_Message_RethrowsOceAndUnwrapsOthers()
+    [Timeout(30_000)]
+    public async Task ResultErrors_Message_RethrowsOceAndUnwrapsOthers(CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource();
-
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-            await Task.Run(() => ResultErrors.Message(new OperationCanceledException(cts.Token))));
+            await Task.Run(() => ResultErrors.Message(new OperationCanceledException(cancellationToken))));
 
         await Assert.That(ResultErrors.Message(new InvalidOperationException("disk full")))
             .IsEqualTo("disk full");

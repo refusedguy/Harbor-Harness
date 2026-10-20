@@ -13,17 +13,17 @@ namespace Harbor.Tui.CellForge.Tests;
 public class TerminalInputSourceTests
 {
     [Test]
-    public async Task Preloaded_Stream_Flows_Through_Parser_To_Channel()
+    [Timeout(30_000)]
+    public async Task Preloaded_Stream_Flows_Through_Parser_To_Channel(CancellationToken cancellationToken)
     {
         using var source = new TerminalInputSource(
             new MemoryStream("\u001B[<64;3;3Ma\u001B[13;2u\u001B["u8.ToArray()));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var run = source.RunAsync(cts.Token);
+        var run = source.RunAsync(cancellationToken);
 
-        var wheel = await ReadOne(source.Events, cts.Token);
-        var letter = await ReadOne(source.Events, cts.Token);
-        var shiftEnter = await ReadOne(source.Events, cts.Token);
+        var wheel = await ReadOne(source.Events, cancellationToken);
+        var letter = await ReadOne(source.Events, cancellationToken);
+        var shiftEnter = await ReadOne(source.Events, cancellationToken);
 
         await Assert.That(wheel.Mouse.Type).IsEqualTo(MouseEventType.WheelUp);
         await Assert.That(letter.Key.Character).IsEqualTo(new Rune('a'));
@@ -36,7 +36,8 @@ public class TerminalInputSourceTests
     }
 
     [Test]
-    public async Task EscFlush_Timer_Emits_Lone_Escape_At_Chunk_Boundary()
+    [Timeout(30_000)]
+    public async Task EscFlush_Timer_Emits_Lone_Escape_At_Chunk_Boundary(CancellationToken cancellationToken)
     {
         using var stream = new PulsedStream();
         using var source = new TerminalInputSource(
@@ -47,23 +48,23 @@ public class TerminalInputSourceTests
                 PasteAbortTimeout = TimeSpan.Zero,
             });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        _ = source.RunAsync(cts.Token);
+        _ = source.RunAsync(cancellationToken);
 
         stream.Push([(byte)0x1B]);
 
-        var evt = await ReadOne(source.Events, cts.Token);
+        var evt = await ReadOne(source.Events, cancellationToken);
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
         await Assert.That(evt.Key.Key).IsEqualTo(EngineInput.KeyCode.Escape);
 
         // Continuation afterwards still decodes as its own sequence.
         stream.Push("\u001B[A"u8.ToArray());
-        var arrow = await ReadOne(source.Events, cts.Token);
+        var arrow = await ReadOne(source.Events, cancellationToken);
         await Assert.That(arrow.Key.Key).IsEqualTo(EngineInput.KeyCode.Up);
     }
 
     [Test]
-    public async Task Paste_Watchdog_Aborts_Unclosed_Paste()
+    [Timeout(30_000)]
+    public async Task Paste_Watchdog_Aborts_Unclosed_Paste(CancellationToken cancellationToken)
     {
         using var stream = new PulsedStream();
         using var source = new TerminalInputSource(
@@ -74,19 +75,19 @@ public class TerminalInputSourceTests
                 PasteAbortTimeout = TimeSpan.FromMilliseconds(40),
             });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        _ = source.RunAsync(cts.Token);
+        _ = source.RunAsync(cancellationToken);
 
         stream.Push("\u001B[200~stuck payload"u8.ToArray());
 
-        var evt = await ReadOne(source.Events, cts.Token);
+        var evt = await ReadOne(source.Events, cancellationToken);
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Paste);
         await Assert.That(evt.Paste.Text).IsEqualTo("stuck payload");
         await Assert.That(evt.Paste.WasTruncated).IsTrue();
     }
 
     [Test]
-    public async Task Resize_Polling_Emits_ResizeSignal_On_Size_Change()
+    [Timeout(30_000)]
+    public async Task Resize_Polling_Emits_ResizeSignal_On_Size_Change(CancellationToken cancellationToken)
     {
         // Deterministic probe: first two calls report the old viewport,
         // every later call reports the resized one (baseline capture is
@@ -101,27 +102,26 @@ public class TerminalInputSourceTests
                 SizeProvider = () => ++probes <= 2 ? (80, 24) : (100, 30),
             });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        _ = source.RunAsync(cts.Token);
+        _ = source.RunAsync(cancellationToken);
 
-        var evt = await ReadOne(source.Events, cts.Token);
+        var evt = await ReadOne(source.Events, cancellationToken);
         await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Resize);
         await Assert.That(evt.Resize.Width).IsEqualTo(100);
         await Assert.That(evt.Resize.Height).IsEqualTo(30);
     }
 
     [Test]
-    public async Task Dispose_Stops_The_Reader_Thread()
+    [Timeout(30_000)]
+    public async Task Dispose_Stops_The_Reader_Thread(CancellationToken cancellationToken)
     {
         var stream = new PulsedStream();
         var source = new TerminalInputSource(
             stream,
             new TerminalInputSourceOptions { EscFlushTimeout = TimeSpan.Zero, PasteAbortTimeout = TimeSpan.Zero });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var run = source.RunAsync(cts.Token);
+        var run = source.RunAsync(cancellationToken);
         stream.Push("idle"u8.ToArray());
-        _ = await ReadOne(source.Events, cts.Token); // reader is alive
+        _ = await ReadOne(source.Events, cancellationToken); // reader is alive
 
         source.Dispose();
 
@@ -139,7 +139,8 @@ public class TerminalInputSourceTests
     }
 
     [Test]
-    public async Task Rapid_Chunks_Preserve_Event_Order()
+    [Timeout(30_000)]
+    public async Task Rapid_Chunks_Preserve_Event_Order(CancellationToken cancellationToken)
     {
         // Control for the lock-free input path: the single reader thread must
         // deliver every byte in arrival order even when chunks arrive back-to-back.
@@ -148,8 +149,7 @@ public class TerminalInputSourceTests
             stream,
             new TerminalInputSourceOptions { EscFlushTimeout = TimeSpan.Zero, PasteAbortTimeout = TimeSpan.Zero });
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        _ = source.RunAsync(cts.Token);
+        _ = source.RunAsync(cancellationToken);
 
         const string payload = "abcdefgh";
         foreach (var ch in payload)
@@ -158,7 +158,7 @@ public class TerminalInputSourceTests
         var sb = new StringBuilder();
         for (int i = 0; i < payload.Length; i++)
         {
-            var evt = await ReadOne(source.Events, cts.Token);
+            var evt = await ReadOne(source.Events, cancellationToken);
             await Assert.That(evt.Kind).IsEqualTo(InputEventKind.Key);
             sb.Append(evt.Key.Character.ToString());
         }
@@ -167,16 +167,16 @@ public class TerminalInputSourceTests
     }
 
     [Test]
-    public async Task Double_Start_Is_Rejected()
+    [Timeout(30_000)]
+    public async Task Double_Start_Is_Rejected(CancellationToken cancellationToken)
     {
         var source = new TerminalInputSource(
             new MemoryStream([1]));
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            _ = source.RunAsync(cts.Token);
+            _ = source.RunAsync(cancellationToken);
 
-            await Assert.That(() => source.RunAsync(cts.Token))
+            await Assert.That(() => source.RunAsync(cancellationToken))
                 .Throws<InvalidOperationException>();
         }
         finally

@@ -25,10 +25,10 @@ public class BroadcasterTurnIsolationTests
 
     /// <summary>Subscribe and drain until at least <paramref name="count" /> frames arrive.</summary>
     private static async Task<List<EventFrame>> CollectFramesAsync(
-        MessagePackRpcClient client, int count, CancellationTokenSource cts)
+        MessagePackRpcClient client, int count, CancellationToken cancellationToken)
     {
         var frames = new List<EventFrame>();
-        await foreach (var frame in client.EventFrames.ReadAllAsync(cts.Token))
+        await foreach (var frame in client.EventFrames.ReadAllAsync(cancellationToken))
         {
             frames.Add(frame);
             if (frames.Count >= count) break;
@@ -38,7 +38,8 @@ public class BroadcasterTurnIsolationTests
     }
 
     [Test]
-    public async Task TwoInterleavedRuns_TurnEndCarriesOwnSessionTurn()
+    [Timeout(60_000)]
+    public async Task TwoInterleavedRuns_TurnEndCarriesOwnSessionTurn(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var bus = sp.GetRequiredService<IEventBus>();
@@ -53,8 +54,7 @@ public class BroadcasterTurnIsolationTests
             var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
             await client.ConnectAsync();
 
-            var subscribeCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), subscribeCts.Token));
+            _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), cancellationToken));
             await server.SubscriptionReady;
 
             const string runA = "session-a";
@@ -75,7 +75,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, runA));
 
             // 2 AgentStart + 4 TurnStart + 2 TurnEnd = 8 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 8, subscribeCts);
+            List<EventFrame> frames = await CollectFramesAsync(client, 8, cancellationToken);
 
             var endB = frames[6].Event as HarborEvent.TurnEnd;
             var endA = frames[7].Event as HarborEvent.TurnEnd;
@@ -91,7 +91,8 @@ public class BroadcasterTurnIsolationTests
     }
 
     [Test]
-    public async Task RunRestart_ResetsTurnPerSession()
+    [Timeout(60_000)]
+    public async Task RunRestart_ResetsTurnPerSession(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         var bus = sp.GetRequiredService<IEventBus>();
@@ -106,8 +107,7 @@ public class BroadcasterTurnIsolationTests
             var client = new MessagePackRpcClient(transport, lf.CreateLogger<MessagePackRpcClient>());
             await client.ConnectAsync();
 
-            var subscribeCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), subscribeCts.Token));
+            _ = Task.Run(async () => await client.SendAsync(new SubscribeToEventsRequest(), cancellationToken));
             await server.SubscriptionReady;
 
             const string session = "session-reset";
@@ -122,7 +122,7 @@ public class BroadcasterTurnIsolationTests
             await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, session));
 
             // 2 AgentStart + 2 TurnStart + 2 TurnEnd = 6 projected frames.
-            List<EventFrame> frames = await CollectFramesAsync(client, 6, subscribeCts);
+            List<EventFrame> frames = await CollectFramesAsync(client, 6, cancellationToken);
 
             var firstEnd = frames[2].Event as HarborEvent.TurnEnd;
             var secondEnd = frames[5].Event as HarborEvent.TurnEnd;

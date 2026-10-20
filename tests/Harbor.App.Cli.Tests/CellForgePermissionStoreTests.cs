@@ -46,7 +46,8 @@ public class CellForgePermissionStoreTests
     }
 
     [Test]
-    public async Task CreatePermissionService_AppliesPersistedRule_WithoutAsking()
+    [Timeout(30_000)]
+    public async Task CreatePermissionService_AppliesPersistedRule_WithoutAsking(CancellationToken cancellationToken)
     {
         var registry = new AgentRegistry();
         registry.Register(new AgentDefinition(
@@ -75,9 +76,8 @@ public class CellForgePermissionStoreTests
 
         PermissionService svc = CellForgeModule.CreatePermissionService(provider);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var doc = JsonDocument.Parse("""{"command":"make build"}""");
-        var result = await svc.CheckAsync("code", "bash", doc.RootElement, cts.Token);
+        var result = await svc.CheckAsync("code", "bash", doc.RootElement, cancellationToken);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);

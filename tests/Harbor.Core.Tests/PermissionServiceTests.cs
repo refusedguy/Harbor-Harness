@@ -318,13 +318,13 @@ public class PermissionServiceTests
     }
 
     [Test]
-    public async Task Ctor_WithSlowConfigStore_ReturnsWithoutBlocking()
+    [Timeout(30_000)]
+    public async Task Ctor_WithSlowConfigStore_ReturnsWithoutBlocking(CancellationToken cancellationToken)
     {
         var registry = new AgentRegistry();
         registry.Register(AgentWithRuleset(new PermissionRule("read", "*", PermissionAction.Allow)));
         var store = new GatedConfigStore(ConfigWith(new PermissionRule("read", "*", PermissionAction.Allow)));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var ctorTask = Task.Run(
             () => new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store),
             CancellationToken.None);
@@ -334,19 +334,19 @@ public class PermissionServiceTests
         var svc = await ctorTask.ConfigureAwait(false);
         await Assert.That(store.LoadCalls).IsEqualTo(1);
         store.Release();
-        _ = await svc.SaveAsync(cts.Token).ConfigureAwait(false);
+        _ = await svc.SaveAsync(cancellationToken).ConfigureAwait(false);
     }
 
     [Test]
-    public async Task CheckAsync_WaitsForBackgroundPersistedLoad()
+    [Timeout(30_000)]
+    public async Task CheckAsync_WaitsForBackgroundPersistedLoad(CancellationToken cancellationToken)
     {
         var registry = new AgentRegistry();
         registry.Register(AgentWithRuleset(new PermissionRule("bash", "*", PermissionAction.Ask)));
         var store = new GatedConfigStore(ConfigWith(new PermissionRule("bash", "make build", PermissionAction.Allow)));
         var svc = new PermissionService(registry, NullLogger<PermissionService>.Instance, configStore: store);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var checkTask = svc.CheckAsync("code", "bash", Args(("command", "make build")), cts.Token);
+        var checkTask = svc.CheckAsync("code", "bash", Args(("command", "make build")), cancellationToken);
         await Task.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None).ConfigureAwait(false);
         store.Release();
         var result = await checkTask.ConfigureAwait(false);

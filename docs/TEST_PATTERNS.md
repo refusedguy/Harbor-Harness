@@ -725,11 +725,39 @@ public class MyMessageTests
 | `[NotInParallel]` | Runs the test **completely alone** — no other test in the process overlaps it. |
 | `[NotInParallel("group")]` | Serializes against other tests carrying an **overlapping key only**. Not a global lock — see below. |
 | `[RunOn(OS.Linux)]` | Run only on Linux; skipped elsewhere. Also `[ExcludeOn(OS.Windows \| OS.MacOs)]` for the inverse. |
+| `[Timeout(ms)]` | Per-test wall-clock budget. The runner cancels the test's token when the budget elapses and fails the test as a timeout. |
 
 Every row above is a TUnit type that resolves in any test project. The one
 bespoke attribute this file used to list here, `[SkipWhenNotLinux]`, is
 `internal` to `tests/Harbor.Tools.Builtin.Tests` and resolves nowhere else —
 copying it into another project is CS0246, not a skip.
+
+### Timeouts and cancellation
+
+A test that needs a bound takes the runner-injected `CancellationToken` and
+declares `[Timeout(ms)]`:
+
+```csharp
+[Test]
+[Timeout(30_000)]
+public async Task Store_Appends_And_Reads(CancellationToken cancellationToken)
+{
+    var store = new JsonlSessionStore(path);
+    await store.AppendAsync(msg, cancellationToken);
+}
+```
+
+`CancellationToken` must be the **last** parameter (TUnit0062). TUnit creates one
+`CancellationTokenSource` per test attempt, links it to the `[Timeout]` budget and
+cancels it when the budget elapses. An operation that honours the token aborts
+at once and the test is reported as a timeout; the runner does not sit on a hung
+test until the shard's own limit. A hand-rolled `new CancellationTokenSource(...)`
+does the opposite: it fires its token but the runner keeps waiting for the test,
+so the failure shows up as a slow shard rather than a failed test.
+
+Keep a manual CTS only when the test drives the cancellation itself: a
+pre-cancelled token, a token the test cancels mid-run, or a bounded negative
+probe whose window is the assertion.
 
 ### Parallelism: what each `[NotInParallel]` form actually guarantees
 

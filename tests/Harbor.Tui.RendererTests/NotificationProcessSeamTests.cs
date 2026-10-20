@@ -151,19 +151,19 @@ public class NotificationProcessSeamTests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task Backends_ForwardTheCallersCancellationToken_Unchanged()
+    [Timeout(30_000)]
+    public async Task Backends_ForwardTheCallersCancellationToken_Unchanged(CancellationToken cancellationToken)
     {
-        using var cts = new CancellationTokenSource();
         var runner = new RecordingNotificationRunner();
 
-        new LinuxNotifySendBackend(runner).Notify("t", "b", isError: false, cts.Token);
-        new MacOsascriptBackend(runner).Notify("t", "b", isError: false, cts.Token);
-        new WindowsToastBackend(runner).Notify("t", "b", isError: false, cts.Token);
+        new LinuxNotifySendBackend(runner).Notify("t", "b", isError: false, cancellationToken);
+        new MacOsascriptBackend(runner).Notify("t", "b", isError: false, cancellationToken);
+        new WindowsToastBackend(runner).Notify("t", "b", isError: false, cancellationToken);
 
         await Assert.That(runner.Count).IsEqualTo(3);
         foreach (RecordingNotificationRunner.Launch launch in runner.Launches)
         {
-            await Assert.That(launch.CancellationToken).IsEqualTo(cts.Token)
+            await Assert.That(launch.CancellationToken).IsEqualTo(cancellationToken)
                 .Because("#665's second half: IAgentEventHandler.HandleAsync is handed a "
                        + "token and the pre-fix code discarded it, so a renderer shutting "
                        + "down could not stop a notifier it had already started. A backend "
@@ -190,16 +190,16 @@ public class NotificationProcessSeamTests
     // ---------------------------------------------------------------------
 
     [Test]
-    public async Task Renderer_FiresTheNotification_ThroughTheInjectedRunner()
+    [Timeout(30_000)]
+    public async Task Renderer_FiresTheNotification_ThroughTheInjectedRunner(CancellationToken cancellationToken)
     {
         var runner = new RecordingNotificationRunner();
-        using var cts = new CancellationTokenSource();
         using var renderer = new NotificationTuiRenderer(
             NullLogger<NotificationTuiRenderer>.Instance,
             runner);
 
-        await renderer.InitializeAsync(cts.Token);
-        await renderer.RenderAsync(new AgentEndEvent([]), cts.Token);
+        await renderer.InitializeAsync(cancellationToken);
+        await renderer.RenderAsync(new AgentEndEvent([]), cancellationToken);
 
         await Assert.That(runner.Count).IsEqualTo(1)
             .Because("this is what makes the five tests above statements about the "
@@ -208,7 +208,7 @@ public class NotificationProcessSeamTests
                    + "have to line up for the recording runner to see a launch at all. It "
                    + "also means this assertion holds on every OS, because it checks that "
                    + "a launch happened, not which notifier it was");
-        await Assert.That(runner.Single.CancellationToken).IsEqualTo(cts.Token)
+        await Assert.That(runner.Single.CancellationToken).IsEqualTo(cancellationToken)
             .Because("RenderAsync's token has to reach the runner, not just the backends' "
                    + "own default");
     }

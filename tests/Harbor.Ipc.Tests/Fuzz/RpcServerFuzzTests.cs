@@ -36,41 +36,40 @@ internal sealed class SkipUnlessIpcFuzzEnabledAttribute : SkipAttribute
 public class RpcServerFuzzTests
 {
     [Test]
+    [Timeout(60_000)]
     [SkipUnlessIpcFuzzEnabled]
-    public async Task GarbageFrames_SkippedByServer_ConnectionAndServerStayAlive()
+    public async Task GarbageFrames_SkippedByServer_ConnectionAndServerStayAlive(CancellationToken cancellationToken)
     {
         var sp = TestHost.Build();
         string pipe = TestHost.UniquePipeName("harbor-ipc-fuzz");
         await using var server = new HarborIpcServer(sp, pipe, sp.GetService<ILoggerFactory>());
         await server.StartAsync();
 
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-
         // 1. Raw adversarial connection.
-        await using (Stream raw = await ConnectRawAsync(pipe, timeoutCts.Token))
+        await using (Stream raw = await ConnectRawAsync(pipe, cancellationToken))
         {
             byte[] garbagePayload = [0xC1, 0xDE, 0xAD, 0xBE, 0xEF]; // never-valid msgpack start
             for (int i = 0; i < 3; i++)
-                await raw.WriteAsync(new byte[4], timeoutCts.Token);          // zero-length frame
+                await raw.WriteAsync(new byte[4], cancellationToken);          // zero-length frame
 
             for (int i = 0; i < 3; i++)
             {
-                await raw.WriteAsync(ResilientFrameReaderProbe.LengthHeader((uint)garbagePayload.Length), timeoutCts.Token);
-                await raw.WriteAsync(garbagePayload, timeoutCts.Token);       // undecodable frame
+                await raw.WriteAsync(ResilientFrameReaderProbe.LengthHeader((uint)garbagePayload.Length), cancellationToken);
+                await raw.WriteAsync(garbagePayload, cancellationToken);       // undecodable frame
             }
 
             // 2. Same connection must still complete a valid request/response round-trip.
             var request = new ListToolsRequest();
-            await WireCodec.WriteRequestAsync(raw, request, timeoutCts.Token);
-            var response = await WireCodec.ReadResponseAsync(raw, timeoutCts.Token)
-                .WaitAsync(TimeSpan.FromSeconds(10), timeoutCts.Token);
+            await WireCodec.WriteRequestAsync(raw, request, cancellationToken);
+            var response = await WireCodec.ReadResponseAsync(raw, cancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
 
             var ok = response as OkResponse;
             await Assert.That(ok).IsNotNull();
             await Assert.That(ok!.RequestId).IsEqualTo(request.RequestId);
 
             // 3. Abrupt mid-frame disconnect must not poison the server.
-            await raw.WriteAsync(ResilientFrameReaderProbe.LengthHeader(1000), timeoutCts.Token);
+            await raw.WriteAsync(ResilientFrameReaderProbe.LengthHeader(1000), cancellationToken);
         }
 
         // 4. A fresh well-behaved client proves the server/accept loop stayed alive.
@@ -79,7 +78,7 @@ public class RpcServerFuzzTests
         await client.ConnectAsync();
 
         var create = await client.CreateSessionAsync("/tmp/fuzz", "code", "ollama", "qwen2.5-coder:7b")
-            .WaitAsync(TimeSpan.FromSeconds(15), timeoutCts.Token);
+            .WaitAsync(TimeSpan.FromSeconds(15), cancellationToken);
         await Assert.That(create.IsSuccess).IsTrue();
 
         await server.StopAsync();

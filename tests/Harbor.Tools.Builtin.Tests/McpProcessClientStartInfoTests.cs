@@ -109,7 +109,8 @@ public class McpProcessClientStartInfoTests
     // step, so the test is fast and deterministic. Guarded by HARBOR_E2E per repo convention.
 
     [Test]
-    public async Task EndToEnd_SampleMcpServer_InitializeListAndCall()
+    [Timeout(120_000)]
+    public async Task EndToEnd_SampleMcpServer_InitializeListAndCall(CancellationToken cancellationToken)
     {
         if (Environment.GetEnvironmentVariable("HARBOR_E2E") is null)
             return;
@@ -122,18 +123,16 @@ public class McpProcessClientStartInfoTests
         var register = registry.Register("sample", fixture.Value.StartInfo);
         await Assert.That(register.IsSuccess).IsTrue();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-
-        var init = await registry.InvokeAsync("sample", "initialize", JsonDocument.Parse("{}").RootElement, cts.Token);
+        var init = await registry.InvokeAsync("sample", "initialize", JsonDocument.Parse("{}").RootElement, cancellationToken);
         await Assert.That(init.IsSuccess).IsTrue();
         await Assert.That(init.Value).Contains("2024-11-05");
 
-        var list = await registry.InvokeAsync("sample", "tools/list", JsonDocument.Parse("{}").RootElement, cts.Token);
+        var list = await registry.InvokeAsync("sample", "tools/list", JsonDocument.Parse("{}").RootElement, cancellationToken);
         await Assert.That(list.IsSuccess).IsTrue();
         await Assert.That(list.Value).Contains("\"echo\"");
 
         using var callDoc = JsonDocument.Parse("{\"name\":\"echo\",\"arguments\":{\"text\":\"hello harbor\"}}");
-        var call = await registry.InvokeAsync("sample", "tools/call", callDoc.RootElement.Clone(), cts.Token);
+        var call = await registry.InvokeAsync("sample", "tools/call", callDoc.RootElement.Clone(), cancellationToken);
         await Assert.That(call.IsSuccess).IsTrue();
         await Assert.That(call.Value).Contains("hello harbor");
     }

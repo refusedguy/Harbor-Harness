@@ -6,7 +6,8 @@ namespace Harbor.Lsp.Tests;
 public class LspClientTests
 {
     [Test]
-    public async Task Request_Response_RoundTrips()
+    [Timeout(30_000)]
+    public async Task Request_Response_RoundTrips(CancellationToken cancellationToken)
     {
         await using var server = new FakeLspServer();
         server.OnRequest = (method, _) => method == "initialize"
@@ -15,28 +16,27 @@ public class LspClientTests
         server.Run();
         server.Client.Start();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         JsonElement? result = await server.Client.SendRequestAsync(
             "initialize",
             JsonSerializer.SerializeToElement(new { processId = (int?)1, rootUri = "file:///tmp" }),
-            cts.Token);
+            cancellationToken);
 
         await Assert.That(result is not null).IsTrue();
         await Assert.That(result!.Value.TryGetProperty("capabilities", out _)).IsTrue();
     }
 
     [Test]
-    public async Task ErrorResponse_ThrowsLspRequestException()
+    [Timeout(30_000)]
+    public async Task ErrorResponse_ThrowsLspRequestException(CancellationToken cancellationToken)
     {
         await using var server = new FakeLspServer();
         server.OnError = (_, _) => "boom";
         server.Run();
         server.Client.Start();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Task requestTask = server.Client.SendRequestAsync(
             "textDocument/definition", null,
-            cts.Token);
+            cancellationToken);
 
         try
         {
@@ -79,7 +79,8 @@ public class LspClientTests
     }
 
     [Test]
-    public async Task ServerExit_RaisesDisconnected_AndCancelsPending()
+    [Timeout(30_000)]
+    public async Task ServerExit_RaisesDisconnected_AndCancelsPending(CancellationToken cancellationToken)
     {
         await using var server = new FakeLspServer();
         server.Run();
@@ -88,9 +89,8 @@ public class LspClientTests
         TaskCompletionSource disconnected = new(TaskCreationOptions.RunContinuationsAsynchronously);
         server.Client.Disconnected += (_, _) => disconnected.TrySetResult();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         Task requestTask = server.Client.SendRequestAsync(
-            "initialize", null, cts.Token);
+            "initialize", null, cancellationToken);
         await server.DisposeAsync(); // pull the pipes
 
         await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));

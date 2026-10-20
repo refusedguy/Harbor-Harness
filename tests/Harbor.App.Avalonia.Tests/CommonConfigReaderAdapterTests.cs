@@ -166,15 +166,15 @@ public sealed class CommonConfigReaderAdapterTests
     ///     actually be cancelled.
     /// </summary>
     [Test]
-    public async Task Adapter_ForwardsTheCancellationToken()
+    [Timeout(30_000)]
+    public async Task Adapter_ForwardsTheCancellationToken(CancellationToken cancellationToken)
     {
         var store = new TokenWatchingConfigStore();
         ICommonConfigModelRefReader adapter = new CommonConfigReaderAdapter(store);
 
-        using var cts = new CancellationTokenSource();
-        await adapter.ReadModelRefAsync(cts.Token);
+        await adapter.ReadModelRefAsync(cancellationToken);
 
-        await Assert.That(store.SeenToken).IsEqualTo(cts.Token);
+        await Assert.That(store.SeenToken).IsEqualTo(cancellationToken);
     }
 
     /// <summary>An <see cref="ICommonConfigStore" /> that answers from a fixture instead of the disk.</summary>
