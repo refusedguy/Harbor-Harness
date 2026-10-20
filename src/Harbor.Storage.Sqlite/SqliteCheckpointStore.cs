@@ -73,7 +73,7 @@ internal sealed class SqliteCheckpointStore : ISessionCheckpointStore
     /// <summary>
     ///     Logger of the owning store — the log category stays the store's.
     /// </summary>
-    private readonly ILogger<SqliteSessionStore> _logger;
+    private readonly ILogger _logger;
 
     /// <summary>
     ///     Bind the axis to its store. The store's own state (lock strip,
@@ -81,7 +81,7 @@ internal sealed class SqliteCheckpointStore : ISessionCheckpointStore
     /// </summary>
     /// <param name="owner">The store that owns the database file.</param>
     /// <param name="logger">Logger of the owning store.</param>
-    internal SqliteCheckpointStore(SqliteSessionStore owner, ILogger<SqliteSessionStore> logger)
+    internal SqliteCheckpointStore(SqliteSessionStore owner, ILogger logger)
     {
         _owner = owner;
         _logger = logger;
