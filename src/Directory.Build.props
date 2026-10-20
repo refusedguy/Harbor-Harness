@@ -19,7 +19,6 @@
     is still set for every project under src/.
 
     WHY A SEPARATE FILE AT ALL
-    --------------------------
     MSBuild imports the NEAREST Directory.Build.props and stops. Before this
     file existed, the nearest one for a src/ project was the repository root,
     so a package that must not reach tests/ had no home: the root file would
@@ -27,7 +26,6 @@
     the tree to reach src/.
 
     MICROSOFT.VISUALSTUDIO.THREADING.ANALYZERS (vs-threading, 18.12.1)
-    -------------------------------------------------------------------
     29 rules; MIT; a build-time analyzer, so nothing from it reaches a
     product binary. Exactly ONE rule is on — VSTHRD110, "observe the result of
     async calls", at `suggestion` — and every other rule is `none` with a
