@@ -9,9 +9,10 @@
 
 > Историческое имя проекта — `Harbor.Tui.ConsoleEx` (MVP CE-0…CE-4). Канонический
 > id бэкенда — `cellforge`, `consoleex` остался legacy-алиасом (принимается везде,
-> где выбирается рендер). Не путать с `Harbor.Tui.NickConsoleEx` — это отдельный
-> ADDITIVE-бэкенд (`HARBOR_TUI=nickconsoleex`) поверх nickprotop/ConsoleEx
-> (SharpConsoleUI).
+> где выбирается рендер). Раньше рядом жил отдельный ADDITIVE-бэкенд
+> `Harbor.Tui.NickConsoleEx` (`HARBOR_TUI=nickconsoleex`) поверх
+> nickprotop/ConsoleEx (SharpConsoleUI). Он убран из продукта и переехал в
+> `contrib/` (ADR-019), так что `nickconsoleex` больше ничего не выбирает.
 
 ## Как включить
 

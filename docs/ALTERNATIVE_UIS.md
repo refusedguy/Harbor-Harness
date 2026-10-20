@@ -10,9 +10,7 @@ one for your workflow.
 
 > **Расположение проектов:** in-solution рендереры —
 > `src/Harbor.Tui.AnsiPlain/` (`ansi` + `plain`), `src/Harbor.Tui.CellForge/` +
-> `CellForge.Engine/` (`cellforge`, legacy-алиас `consoleex`),
-> `src/Harbor.Tui.NickConsoleEx/` (`nickconsoleex` — только при инициализированном
-> сабмодуле `external/ConsoleEx` и `HarborWithRenderer=all|nickconsoleex`) и
+> `CellForge.Engine/` (`cellforge`, legacy-алиас `consoleex`) и
 > `src/Harbor.Tui.Notifications/` (не скомпонован в CLI). Рендереры семейства Spectre +
 > TerminalGui/Termina/RazorConsole живут в `contrib/tui/` и комплируются только когда
 > `Harbor.Hosting` собран с `HarborWithSpectreTui=true` (NUKE/distro-сборки либо
@@ -24,6 +22,15 @@ one for your workflow.
 > `Harbor.slnx` и в CLI не комплируются вовсе — их строки ниже описывают код
 > в `contrib/`, а не доступные id (`harbor tui` честно говорит, что для них нужна
 > ручная правка `Harbor.App.Cli.csproj`).
+>
+> **SharpConsoleUI-рендерер убран из продукта (ADR-019).** `Harbor.Tui.NickConsoleEx`
+> (id `nickconsoleex`) и вендоренный сабмодуль `nickprotop/ConsoleEx` переехали в
+> `contrib/` (`contrib/tui/Harbor.Tui.NickConsoleEx/` + `contrib/external/ConsoleEx/`):
+> не поддерживаются, не собираются CI, не публикуются, не подключены к `src/` и
+> `apps/`. `HARBOR_TUI=nickconsoleex` больше ничего не выбирает — id не в реестре
+> бэкендов, поэтому срабатывает общее правило fallback с предупреждением в логе.
+> Тот, кому нужен этот рендерер, собирает вендоренное дерево сам. Подробности:
+> [ADR-019](./adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
 >
 > **Сводка для русскоязычных читателей:** каждый рендерер реализует
 > `ITuiRenderer`/`IInteractiveTuiRenderer`, читает из общего `UiStore`, и

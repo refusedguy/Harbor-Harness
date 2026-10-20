@@ -40,7 +40,12 @@ HARBOR_PERF_REPORT=report.txt dotnet run --project tests/Harbor.Tui.PerfTests -c
 | `ansi` (AnsiPlain, ANSI strategy) | 1000 | 693 193 | 0.002 | 0.374 |
 | `plain` (AnsiPlain, null strategy) | 1000 | 635 728 | 0.006 | 0.355 |
 | `cellforge` (CellForge adapter, in-memory backend) | 1000 | 549 179 | 0.007 | 0.347 |
-| `nickconsoleex` (nickprotop/ConsoleEx, headless 120×40) | 1000 | 154 010 | 0.014 | 2.971 |
+
+> **The `nickconsoleex` row is gone (ADR-019, 2026-10-20).** The SharpConsoleUI
+> renderer left the product, so it has no contract and no baseline any more.
+> The measurement it had on 2026-08-28 was 154 010 ev/s, 0.014 ms p99 and
+> 2.971 MB/1k ev — the slowest of the four and by far the hungriest, which is
+> what a non-differential markup backend costs.
 
 Committed machine-readable baseline: `tests/Harbor.Tui.PerfTests/baseline.csv`
 (the strict-mode CI step enforces a **5 %-regression rule** against it; strict
@@ -79,7 +84,7 @@ blocks, not on document size**. Frozen blocks are restored from
 ## Visual regression (Phase 5)
 
 `tests/Harbor.Tui.RendererTests/` pins golden frames per backend
-(`cellforge`, `nickconsoleex`, `ansiplain-ansi`, `ansiplain-plain`) over one
+(`cellforge`, `ansiplain-ansi`, `ansiplain-plain`) over one
 canonical event stream, plus a strategy-parity contract: ANSI output with
 escape sequences stripped must equal the plain-mode output byte-for-byte.
 Regenerate after an intentional visual change with
@@ -91,8 +96,15 @@ the golden diff in the PR.
 | Backend id | Project | Selection |
 |---|---|---|
 | `cellforge` (alias `consoleex`) | `Harbor.Tui.CellForge` | `HARBOR_TUI=cellforge` / `defaultTuiRenderer` |
-| `nickconsoleex` | `Harbor.Tui.NickConsoleEx` (vendored nickprotop/ConsoleEx submodule) | `HARBOR_TUI=nickconsoleex` / `defaultTuiRenderer` |
 | `ansi`, `plain` | `Harbor.Tui.AnsiPlain` (merged; escape-code strategy per mode) | `HARBOR_TUI=ansi|plain` / `defaultTuiRenderer` |
+
+> **Update 2026-10-20: `nickconsoleex` is not a backend of this product any
+> more.** The SharpConsoleUI renderer and the vendored `nickprotop/ConsoleEx`
+> submodule moved to `contrib/` (ADR-019): unmaintained, not built by CI, not
+> published, and not referenced by `src/` or `apps/`. There is no
+> `HARBOR_TUI=nickconsoleex` selection any more, and the id resolves to the
+> fallback backend with a warning. A contract row, a baseline row and a golden
+> frame for a renderer the product does not ship would be a guard over nothing.
 
 Runtime hot-swap (Phase 6.3): `/renderer <backend>` mid-session, guarded by
 `ui.runtime_swappable` (CLI: `runtimeSwappable`) and `HARBOR_TUI_RUNTIME_SWAP`;

@@ -31,13 +31,15 @@
 - `Memory` (tests)
 - `Sqlite` (indexed queries)
 
-### ✅ Completed — UI (2 apps in `apps/` + 6 TUI projects in src/ + optional contrib components)
+### ✅ Completed — UI (2 apps in `apps/` + TUI projects in src/ + optional contrib components)
 
 - **TUI (in `Harbor.slnx`)**: `Harbor.Terminal.Abstractions` (contracts) +
   `Harbor.Tui.AnsiPlain` (ids `plain`, `ansi`), `Harbor.Tui.CellForge` (+`.Engine`,
-  id `cellforge`, legacy alias `consoleex`; alt-screen cell-diff MVP, CE-0…CE-5),
-  `Harbor.Tui.NickConsoleEx` (id `nickconsoleex`; only when the vendored ConsoleEx
-  submodule is initialized), `Harbor.Tui.Notifications`
+  `.Syntax`, `.Prompts`; id `cellforge`, legacy alias `consoleex`; alt-screen
+  cell-diff MVP, CE-0…CE-5), `Harbor.Tui.Notifications`. The SharpConsoleUI
+  renderer (`Harbor.Tui.NickConsoleEx`, id `nickconsoleex`) is **not** in this
+  list any more: it moved to `contrib/` (ADR-019), so `HARBOR_TUI=nickconsoleex`
+  selects nothing.
 - **TUI (optional, `contrib/tui/`, NOT in the default build)**: Spectre,
   Spectre.Fullscreen, SpectreTui, TerminalGui, Termina, RazorConsole, Sixel —
   compiled in only with `HarborWithSpectreTui=true` (see `src/Harbor.Hosting/Harbor.Hosting.csproj`;
@@ -233,6 +235,18 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 
 ### Architectural debt
 
+- [x] **The vendored SharpConsoleUI renderer is out of the product (ADR-019).**
+  `Harbor.Tui.NickConsoleEx` (id `nickconsoleex`) and the vendored
+  `nickprotop/ConsoleEx` submodule moved to `contrib/`: unmaintained, not
+  built by CI, not published, not referenced by `src/` or `apps/`. What it
+  cost is measured: issue #1921 read the Release compile timeline and found
+  the vendored tree on the critical path of every build (a 28.3 s window) with
+  its **Debug** output landing in the shipped CLI, because the Release build
+  produced no Release build of the third-party kit. The product now ships two
+  renderers, CellForge and AnsiPlain, and `HARBOR_TUI=nickconsoleex` selects
+  nothing. A user who wants SharpConsoleUI clones the tree, builds the wrapper
+  and wires it in by hand. This closes one of the three projects in #1921;
+  `Harbor.CodeGen` and `apps/Harbor.App.Avalonia` stay open there.
 - [ ] **`Harbor.Application` split, variant A, two slices left (ADR-018).** The
   owner decided on 2026-10-16 to decompose `Harbor.Application` (14 areas, 19.5k
   lines; Sessions 44% + Agents 27%) into **five assemblies**, the maximal plan,
@@ -299,12 +313,13 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
   and drop its entry in the same PR. Audit trail and false-positive list:
   [`standards/README-AUDIT.md`](./standards/README-AUDIT.md).
 - [x] Architecture decision records exist: [`docs/adr/`](adr/): `DECISIONS.md` is the log
-  (ADR-001…ADR-018: production stabilization, ROP rails, ConsoleEx, sub-agent `task`,
+  (ADR-001…ADR-019: production stabilization, ROP rails, ConsoleEx, sub-agent `task`,
   plugin hosting split, MCP adapter, ProviderPresets catalog, F1 Abstractions.Contracts
   decoupling, config-model-ref reader, token notation, doc-example gate, vendored HTML
   pair, CellForge widget axis, `Sessions` staying in Ui.Framework, i18n catalogue home,
-  Roslyn plugin-host split, DocFX docs site, and the `Harbor.Application` split,
-  variant A). The long-form records are the `ADR-0NN-*.md` files beside the log.
+  Roslyn plugin-host split, DocFX docs site, the `Harbor.Application` split
+  (variant A), and the vendored SharpConsoleUI renderer leaving the product).
+  The long-form records are the `ADR-0NN-*.md` files beside the log.
 
 ---
 
@@ -353,7 +368,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | E2E tests passing | 12 + CellForge PTY suite |
 | Builtin tools | 20 (`HarborToolSetKind.Full14` — enum name predates the count) |
 | Sample plugins | 4 CS-source + 4 DLL legacy |
-| TUI renderers | 6 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.NickConsoleEx, Tui.Notifications) → 4 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`), `nickconsoleex`) + 7 in contrib/tui |
+| TUI renderers | 7 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.CellForge.Syntax, Tui.CellForge.Prompts, Tui.Notifications) → 3 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`)) + 8 in contrib/tui |
 | Desktop platforms | Avalonia (`apps/`); WPF / MAUI (`contrib/apps/`) |
 | Web platforms | Blazor Server (`contrib/apps/`) |
 | Native LLM providers | 4 |
@@ -377,6 +392,10 @@ grep -h 'ToolName.Create(' src/Harbor.Tools.Builtin/Tools/*/*.cs | wc -l   # 20 
 Test counts come from the CI run log, not from a local enumeration — they move
 with every merge. Benchmark numbers are **not** in this table; they live only in
 [BENCHMARKS.md](./BENCHMARKS.md).
+
+> The **TUI renderers** row was re-measured on 2026-10-20, after ADR-019 moved
+> the SharpConsoleUI renderer out of the product. Every other row still carries
+> the 2026-09-28 measurement and has drifted with it.
 
 </details>
 

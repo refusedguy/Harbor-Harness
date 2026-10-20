@@ -101,7 +101,6 @@ but an id that was not compiled in falls back to `plain` with a warning at runti
 HARBOR_TUI=ansi        harbor     # streaming renderer (always compiled in)
 HARBOR_TUI=plain       harbor     # no colors, pipe-safe (always compiled in)
 HARBOR_TUI=cellforge   harbor     # cell-diff renderer, own input pipeline (kitty/mouse/paste)
-HARBOR_TUI=nickconsoleex harbor   # SharpConsoleUI backend (only with the external/ConsoleEx submodule checked out)
 HARBOR_TUI=spectre-tui harbor     # official Spectre widget framework (full builds only, see below)
 HARBOR_TUI=spectre     harbor     # rich panels (full builds only)
 HARBOR_TUI=fullscreen  harbor     # spectre fullscreen mode (full builds only)
@@ -116,6 +115,12 @@ when `Harbor.Hosting` is built with `HarborWithSpectreTui=true` (NUKE/distro bui
 them — those ids fall back to `plain`). `sixel`, `wpf`, `avalonia`, `maui`, `blazor`
 and `notifications` are never compiled into the CLI.
 One-shot commands (`ask`, `providers`, …) are always non-interactive regardless of `HARBOR_TUI`.
+
+> **There is no `nickconsoleex` any more.** The SharpConsoleUI backend left the
+> product and moved to `contrib/` (ADR-019): unmaintained, not built by CI, not
+> published. `HARBOR_TUI=nickconsoleex` now resolves to the fallback backend
+> with a warning naming the id it did not recognise. See
+> [docs/adr/ADR-019](../../docs/adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
 
 #### Interactive renderer notes
 

@@ -78,6 +78,12 @@ contrib/tui/                           — extra interactive shells, NOT compile
                                          Hosting-side group needs HarborWithSpectreTui=true, which has no
                                          global default — AGENTS.md project map is authoritative here):
                                          SpectreTui shell, Spectre.Fullscreen, TerminalGui, Termina, RazorConsole
+contrib/tui/Harbor.Tui.NickConsoleEx/   — the SharpConsoleUI renderer, moved OUT of the product (ADR-019):
+                                         not built by CI, not published, not referenced by src/ or apps/
+contrib/external/ConsoleEx/            — the vendored nickprotop/ConsoleEx git submodule + the three
+                                         boundary files (Directory.Build.props/.targets,
+                                         Directory.Packages.props) that keep the root build props out of
+                                         third-party source
 contrib/apps/, contrib/scripting/      — WPF/Maui/Blazor apps + scripting stack (own Contrib.slnx)
 
 samples/plugins/                       — 4 DLL-based sample plugins (WebSearch, TodoWrite, GitTools, FileTree)
@@ -107,7 +113,7 @@ gate: `tools/check-abstractions-contract.py`).
 | **Domain**       | `Harbor.Abstractions` (+ `.Contracts`), `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions`, `Harbor.Ipc.Abstractions`, `Harbor.Ui.Framework.Abstractions` | BCL + gated NuGet only, except the Domain→Domain edge `Harbor.Abstractions` → `Harbor.Abstractions.Contracts` |
 | **Application**  | `Harbor.Application`, `Harbor.Registries`, `Harbor.Plugins.Abstractions`, `Harbor.AgentRuntime`, `Harbor.SessionContext`, `Harbor.ChangeTracking`, `Harbor.Hooks`, `Harbor.Permissions`, `Harbor.Onboarding` | Domain, plus the Application→Application sibling edges the matrix grants (NOT Infrastructure, NOT Presentation) |
 | **Infrastructure** | `Harbor.Storage.*`, `Harbor.Providers.*`, `Harbor.Tools.Builtin`, `Harbor.Ipc.{Client,InProcess,Server}`, `Harbor.Plugins.{Compilation,Hosting,Instantiation,Registration,Runtime,Storage}` | Domain only (NOT Application, NOT each other) |
-| **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,NickConsoleEx,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
+| **Presentation** | `Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework` (+ `.State`/`.ViewModels`/`.Projection`/`.Rendering`/`.Services`/`.Sessions`), `Harbor.Desktop.*`, `Harbor.DesignSystem`, `Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,Notifications}`, `Harbor.App.Avalonia` | Domain only, plus Presentation→Presentation siblings (NOT Application, NOT Infrastructure) |
 | **Composition Root** | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` (+ `src/Harbor.Hosting/Modules/*`, `src/Harbor.Plugins.Host`) | Everything — the ONLY place that `new`s concrete impls |
 
 `Harbor.Tui.Abstractions` and `Harbor.Scripting` are named nowhere above because they

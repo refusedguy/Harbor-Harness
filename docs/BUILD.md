@@ -83,15 +83,12 @@ is the legacy shorthand forcing all of them off. The NUKE build
 ### Renderer selection (build-time, slice A of #1144)
 
 The runtime renderer stays `HARBOR_TUI` (untouched). The build-time selection
-is `-p:HarborWithRenderer=all|cellforge|ansiplain|nickconsoleex`
+is `-p:HarborWithRenderer=all|cellforge|ansiplain`
 (default `all`) or `./build.sh Publish --with-renderer <value>`:
 
 ```bash
-# CLI without the SharpConsoleUI subtree (NickConsoleEx backend excluded)
+# CLI without the optional renderer families
 ./build.sh Publish --with-renderer cellforge --dry-run
-
-# Fail fast when the ConsoleEx submodule is missing (also a doctor check)
-./build.sh doctor --check renderer.deps
 ```
 
 What each value excludes today:
@@ -99,8 +96,7 @@ What each value excludes today:
 | Value | Effect |
 |---|---|
 | `all` (default) | Every backend (status quo). |
-| `cellforge`, `ansiplain` | Only the NickConsoleEx backend (+ vendored SharpConsoleUI). |
-| `nickconsoleex` | Keeps NickConsoleEx; requires the submodule (`git submodule update --init external/ConsoleEx`). |
+| `cellforge`, `ansiplain` | The exclusion values of the #1144 slice. `HarborWithRenderer` gated exactly one optional family, the SharpConsoleUI backend, and that family is gone (ADR-019), so today all three values compose the same graph. |
 
 CellForge and AnsiPlain stay in every CLI build on purpose: the agent-turn
 driver (`apps/Harbor.App.Cli/Repl/ReplRunner.cs`, used by both `ask` and the
@@ -110,6 +106,14 @@ into composable backends is the tracked remainder of #1144 gap (1) — the issue
 stays open until then. Unknown values fail the build via the `Error` guards in
 `src/Harbor.Hosting/Harbor.Hosting.csproj`; `Publish`/`Release`/`PublishIpc*`
 targets forward the flag automatically.
+
+**The `nickconsoleex` value is gone.** The SharpConsoleUI renderer left the
+product and moved to `contrib/` (ADR-019), so there is no third-party submodule
+to fetch and no vendored tree to compose. `HarborWithRenderer` accepts `all`,
+`cellforge` and `ansiplain`; `nickconsoleex` is not one of them any more, and
+passing it fails the build the same way any other unknown value does. A build
+that wants that renderer has to point at the wrapper project in
+`contrib/tui/Harbor.Tui.NickConsoleEx/` by hand.
 
 ### Daemon on/off (build-time, slice A of #1144)
 
@@ -321,12 +325,13 @@ harbor/
 │   ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
 │   │                    Hosting,Runtime,Storage}/ # Roslyn CS-source plugin system
 │   ├── Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ # daemon/remote IPC
-│   ├── Harbor.Terminal.Abstractions/ + Harbor.Tui.{Ansi,Plain,ConsoleEx,Notifications}
+│   ├── Harbor.Terminal.Abstractions/ + Harbor.Tui.{AnsiPlain,CellForge,Notifications}
 │   └── ...                           # Ui.Framework*, Desktop.*, Telemetry.*, Logging, ...
 ├── apps/
 │   ├── Harbor.App.Cli/               # CLI entry point (PackageId Harbor.App.Cli)
 │   └── Harbor.App.Avalonia/          # cross-platform desktop GUI
-├── contrib/                          # optional renderers/apps/scripting (Contrib.slnx)
+├── contrib/                          # optional renderers/apps/scripting (Contrib.slnx),
+│                                     # plus the unbuilt vendored ConsoleEx tree (ADR-019)
 ├── samples/plugins/                  # 4 legacy DLL-based sample plugins
 ├── samples/plugins-cs/               # CS-source sample plugin(s)
 ├── samples/mcp/                      # sample MCP servers

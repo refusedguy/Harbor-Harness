@@ -28,9 +28,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - contrib/apps/: Harbor.App.Wpf / App.Maui / App.Blazor        │
 │  - In-solution TUI renderers: Tui.AnsiPlain (unified ANSI +     │
 │    plain) / Tui.CellForge (+ .Engine/.Syntax/.Prompts) /      │
-│    Tui.NickConsoleEx / Tui.Notifications                     │
+│    Tui.Notifications                                            │
 │  - Optional contrib/tui renderers: Spectre / .Fullscreen /      │
-│    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel    │
+│    SpectreTui / TerminalGui / Termina / RazorConsole / Sixel /  │
+│    Tui.NickConsoleEx (SharpConsoleUI — moved out of the         │
+│    product, ADR-019)                                            │
 │  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
 │    ICommonConfigStore; desktop VM bases)                        │
 │  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
@@ -144,6 +146,18 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 > variant A's own minus-column names. The plan runs under #555's standing rule
 > that the guard lands before the rewrite. A split is not a new extension axis: it
 > adds no marker interface and no `Register*` door.
+
+> **Update 2026-10-20: the PRESENTATION box lost a renderer.**
+> `Harbor.Tui.NickConsoleEx` (the SharpConsoleUI wrapper) and the vendored
+> `nickprotop/ConsoleEx` submodule moved to `contrib/`: unmaintained, not built
+> by CI, not published, and no `ProjectReference` from `src/` or `apps/` points
+> at them any more. The wrapper had a matrix row here
+> (`["Harbor.Tui.NickConsoleEx"] = new(Layer.Presentation, …)`), and that row is
+> gone with the project: the matrix classifies src assemblies, and this is no
+> longer one. The product ships two renderers, CellForge and AnsiPlain, and
+> `HARBOR_TUI=nickconsoleex` selects nothing. The decision and the measured cost
+> are recorded in
+> [ADR-019](adr/ADR-019-vendored-sharpconsoleui-renderer-leaves-the-product.md).
 
 > **Two of this box's entries were wrong until #751, and they were wrong from the
 > start, not out of date.** `Harbor.Desktop.Abstractions` and
@@ -321,7 +335,7 @@ flowchart TB
     subgraph Pres["Presentation (UI / CLI)"]
         Cli["Harbor.App.Cli<br/>(Composition Root)"]
         TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
-        TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine / .Syntax / .Prompts)<br/>/ .NickConsoleEx (cell-diff backends)"]
+        TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine / .Syntax / .Prompts)<br/>(cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
         DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, desktop VM bases)"]
     end
@@ -445,7 +459,7 @@ The matrix below is a **coarse-grain summary** of allowed `<ProjectReference>` e
 | **Harbor.Storage.Jsonl / Memory / Sqlite**     | ✅  | ❌  | ❌  | —   | ❌  | ❌  | ❌  | ❌  |
 | **Harbor.Providers.OpenAiCompatible / .Anthropic / .OpenAI / .Ollama** | ✅  | ❌  | ❌  | ❌  | —   | ❌  | ❌  | ❌  |
 | **Harbor.Tools.Builtin**                       | ✅  | ❌  | ❌  | ❌  | ❌  | —   | ❌  | ❌  |
-| **Tui renderers (Ansi / Plain / ConsoleEx / Notifications; contrib Spectre-family и др.)** | ✅  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌ (не друг друга) | ❌  |
+| **Tui renderers (AnsiPlain / CellForge / Notifications; contrib Spectre-family, SharpConsoleUI и др.)** | ✅  | ❌  | ❌  | ❌  | ❌  | ❌  | ❌ (не друг друга) | ❌  |
 | **apps/Harbor.App.Cli**                        | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | ✅  | —   |
 
 `❌*` Application layer (Core/Application) may not depend on UI vocabulary

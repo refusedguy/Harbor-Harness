@@ -174,7 +174,7 @@ mid-session has no effect until restart — there is no config-file watcher
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `ui.tui` | `"ansi"` | Preferred TUI renderer id (only `consoleex` honors this file; `cli.json` wins for others). |
+| `ui.tui` | `"ansi"` | Preferred TUI renderer id (only `cellforge` and its legacy alias `consoleex` honor this file; `cli.json` wins for others). |
 | `ui.storage` | `"jsonl"` | Storage backend presentation default. |
 | `ui.onboarded` | `false` | Onboarding completion marker. |
 | `ConfigFileName` | `string` | `"config.json"` | Filename (no dir). |
@@ -182,6 +182,25 @@ mid-session has no effect until restart — there is no config-file watcher
 
 Persistence: `ICommonConfigStore` / `JsonCommonConfigStore` — same
 atomic-write + thread-safe pattern as `IAppConfigStore<T>`.
+
+### `tui` values after the SharpConsoleUI removal
+
+`nickconsoleex` is not a renderer id any more. The SharpConsoleUI renderer
+left the product and moved to `contrib/` (ADR-019), so the id is not in the
+backend registry. What a config that still carries it does:
+
+- `HARBOR_TUI=nickconsoleex` and `"defaultTuiRenderer": "nickconsoleex"` in
+  `~/.harbor/cli.json` both reach the backend registry. The id is not in it,
+  so the value resolves to the fallback backend the build ships with (`plain`,
+  or `ansi` in a build that has the Spectre shells compiled in) and Harbor
+  logs one warning: `Unknown HARBOR_TUI 'nickconsoleex'; falling back to
+  'plain'`.
+- `"tui": "nickconsoleex"` in `~/.harbor/config.json` is inert, and was inert
+  before the removal too: that file's `tui` value is honored only when it
+  names CellForge.
+- The config normalizer does not reject the value. It copies `tui` verbatim,
+  and the only validation on it is that it is not empty, so the config file
+  still loads.
 
 ---
 
