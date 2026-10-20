@@ -25,11 +25,46 @@ Harbor runs three layers of static analysis + DI validation:
 | `SonarAnalyzer.CSharp` | solution-wide | S0xxx |
 | `Microsoft.CodeAnalysis.NetAnalyzers` | solution-wide | CA0xxx |
 | `AsyncFixer` | solution-wide | AsyncFixer01–05 |
-| `ReflectionAnalyzers` | solution-wide | REL0001–0002 |
+| `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
+
+### Reflection rules (ReflectionAnalyzers 0.3.1)
+
+46 diagnostics, `REFL001`–`REFL046`, all member-by-member correctness rules:
+binding flags, overloads, `nameof`, generic type arguments, `InvokeMember`
+targets. **None of them is about dynamic code** — the shipped analyzer
+assembly contains no `Assembly.Load`, `AssemblyLoadContext`, `Reflection.Emit`,
+`TypeBuilder` or `DynamicMethod` rule, so the ban on the dynamic-code family
+in `src/` + `apps/` is held by `ReflectionConventionRule` alone.
+
+Measured on this tree (#1905, CI build log of a green run): nine rules fire,
+216 instances, and every one of them is in `tests/`:
+
+| ID | What it says | Instances |
+|----|--------------|-----------|
+| REFL008 | Specify binding flags | 84 |
+| REFL039 | Prefer `typeof(T)` over `instance.GetType` | 30 |
+| REFL016 | Use `nameof` | 30 |
+| REFL029 | Specify the parameter types | 24 |
+| REFL003 | The member does not exist | 24 |
+| REFL005 | The binding flags match nothing | 6 |
+| REFL006 | The binding flags can be more precise | 6 |
+| REFL009 | The referenced member is not known to exist | 6 |
+| REFL037 | The type does not exist | 6 |
+
+`src/` and `apps/` are silent: the zero-warning bar
+(`TreatWarningsAsErrors=true`) would have turned a hit there into a build
+error, and the build is green. `tests/` sets
+`TreatWarningsAsErrors=false` (`tests/Directory.Build.props`), so those 216
+warnings are warnings nobody reads.
+
+> The two `.editorconfig` lines that used to configure `REL0001` / `REL0002`
+> configured ids that do not exist in the package — they were dead
+> configuration, and the real rules have always run at their default
+> severity. See #1905.
 
 ### DI lifetime rules (DependencyInjection.Lifetime.Analyzers 2.18.24)
 

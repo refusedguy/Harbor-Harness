@@ -345,7 +345,7 @@ The project uses these analyzers (configured in `Directory.Build.props` and `.ed
 - **Microsoft.CodeAnalysis.NetAnalyzers** — performance, async
 - **Microsoft.CodeAnalysis.BannedApiAnalyzers** — banned APIs (see `BannedApi.txt`)
 - **AsyncFixer** — async best practices
-- **ReflectionAnalyzers** — AOT-friendliness
+- **ReflectionAnalyzers** — reflection correctness (binding flags, overloads, `nameof`); not a dynamic-code rule — see [`docs/ANALYZERS.md`](./ANALYZERS.md#reflection-rules-reflectionanalyzers-031)
 - **Meziantou.Analyzer** — comprehensive code quality
 
 All warnings are treated as errors.

@@ -413,8 +413,16 @@ dotnet_diagnostic.AsyncFixer04.severity = suggestion # Fire-and-forget async voi
 dotnet_diagnostic.AsyncFixer05.severity = suggestion # Not used CancellationToken
 
 # --- Reflection ---
-dotnet_diagnostic.REL0001.severity = suggestion # Use overload with Type
-dotnet_diagnostic.REL0002.severity = suggestion # Use overload
+# ReflectionAnalyzers 0.3.1 ships 46 rules, REFL001-REFL046. The two
+# lines that used to sit here configured REL0001 and REL0002 — ids that
+# do not exist in the package (measured against the shipped
+# analyzers/dotnet/cs/ReflectionAnalyzers.dll), so they configured
+# nothing at all. The real rules run at their default severity.
+#
+# Measured on this tree (CI build log of a green run, #1905): nine rules
+# fire, 216 instances, and every one of them is in tests/ — src/ and
+# apps/ are silent, because the zero-warning bar would have turned a hit
+# there into a build error.
 
 # ============================================================================
 # DEPENDENCY INJECTION ANALYZERS (Task A3)

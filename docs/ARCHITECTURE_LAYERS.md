@@ -949,10 +949,14 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 > the `src/Harbor.Plugins.*` family, which needs it deliberately.**
 
 Until [#626](https://github.com/refusedguy/Harbor-Harness/issues/626) this existed only as
-an emergent property of the `ReflectionAnalyzers` (`REFL*`) diagnostics plus the
-zero-warning bar. Nothing in the repo said it was a rule, so a contributor adding
-`Assembly.Load` somewhere new had no way to know it was the thing the codebase is built to
-avoid. Enforced by `ReflectionConventionRule`.
+an emergent property of the zero-warning bar. The `ReflectionAnalyzers` (`REFL*`) diagnostics
+did not contribute to it: all 46 rules are member-by-member correctness rules (binding flags,
+overloads, `nameof`), and the shipped analyzer contains no rule for `Assembly.Load`,
+`AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder` or `DynamicMethod` — measured in
+issue #1905. The dynamic-code ban was held by `ReflectionConventionRule` and by nothing
+else. Nothing in the repo said it was a rule, so a contributor adding `Assembly.Load`
+somewhere new had no way to know it was the thing the codebase is built to avoid. Enforced
+by `ReflectionConventionRule`.
 
 **What is banned, and where.** The dynamic-code family — `Assembly.Load` / `LoadFrom` /
 `LoadFile`, `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`, `DynamicMethod`,
