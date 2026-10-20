@@ -122,6 +122,20 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
     private const int PollIntervalMs = 20;
 
     /// <summary>
+    ///     How long the driver waits for the app's startup to open its session
+    ///     before the first test's body runs. Bounded: a configuration that
+    ///     opens no session pays this ONCE per process and carries on.
+    /// </summary>
+    private const int StartupSettleTimeoutMs = 3000;
+
+    /// <summary>
+    ///     How long the driver lets the dispatcher run after the startup's
+    ///     session open landed, so the work posted alongside it drains here
+    ///     rather than in a test.
+    /// </summary>
+    private const int StartupDrainMs = 250;
+
+    /// <summary>
     ///     What the last wait gave up on: the text it expected and the text
     ///     it actually saw. Assertion messages quote it, so a failure says
     ///     WHAT was missing ("expected 'Send ▶'") instead of only
@@ -339,6 +353,67 @@ public sealed class HeadlessAvaloniaDriver : IAsyncDisposable
         // the UI thread; the dedicated UI thread's MainLoop pumps the queued
         // work automatically — no manual RunJobs needed.
         await ShowMainWindowAsync().ConfigureAwait(false);
+
+        // The app opens its session ASYNCHRONOUSLY at STARTUP, and the
+        // continuation that switches the active session is POSTED to the
+        // dispatcher (SessionListViewModel.OpenAsync). A test that runs while
+        // that continuation is still in flight finds its chat replaced by the
+        // opened session's transcript — the "orphaned dispatcher continuations
+        // from previously-initialized hosts" the SettingsTests skip names.
+        //
+        // It is ORDER-SENSITIVE in exactly the way a per-process run exposes:
+        // a class that happens to run FIRST in a fresh process loses its chat,
+        // while the same class in the middle of the chain passes. So the
+        // driver lets the startup land before the first test's body runs.
+        //
+        // Bounded on purpose: a configuration that opens no session must not
+        // hang the suite, it must pay the timeout ONCE per process.
+        await WaitForStartupToSettleAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Wait for the app's startup continuations to land, so they cannot
+    ///     land during a test.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The startup POSTS three things to the dispatcher, and the last
+    ///         one is the disruptive one: the session open switches the
+    ///         transcript and shows the "Opened: ..." toast
+    ///         (<c>SessionListViewModel.OpenAsync</c>). A test that runs while
+    ///         that post is still in flight finds its chat replaced by the
+    ///         opened session's transcript — the "orphaned dispatcher
+    ///         continuations from previously-initialized hosts" the
+    ///         <c>SettingsTests</c> skip names.
+    ///     </para>
+    ///     <para>
+    ///         The signal is that toast, because it is raised in the SAME
+    ///         dispatcher post as the transcript switch — so seeing it means
+    ///         the switch has happened. (The active session is NOT the signal:
+    ///         the startup sets it once already, when it creates the session,
+    ///         a post earlier.) The wait is bounded: a suite with no session
+    ///         to open pays the timeout ONCE per process and carries on.
+    ///     </para>
+    /// </remarks>
+    private async Task WaitForStartupToSettleAsync()
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMilliseconds(StartupSettleTimeoutMs);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            bool settled = OnUIThread(() =>
+                MainWindow.DataContext is MainViewModel vm
+                && vm.Toasts.Any(t => t.Message.StartsWith("Opened: ", StringComparison.Ordinal)));
+            if (settled)
+            {
+                break;
+            }
+
+            await Task.Delay(PollIntervalMs).ConfigureAwait(false);
+        }
+
+        // Drain what the startup posted, so it lands here and not in a test.
+        await Task.Delay(StartupDrainMs).ConfigureAwait(false);
+        OnUIThread(() => { });
     }
 
     /// <summary>
