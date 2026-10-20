@@ -432,6 +432,18 @@ jobs:
           path: |
             **/obj
             **/bin
+            # The runtime assets (the native libraries of every RID) and the
+            # satellite assemblies are COPIES of what the NuGet folder already
+            # holds: nothing in MSBuild's up-to-date check reads them, and the
+            # build re-copies them from the packages. They are the bulk of the
+            # payload, and the repository's 10 GB cache budget cannot hold
+            # them — the first version of this cache (1,921 MiB per entry)
+            # was evicted within minutes of being written, because the NuGet
+            # caches already fill the budget. The debug symbols go for the
+            # same reason: the artifacts do not carry them either.
+            !**/runtimes/**
+            !**/*.resources.dll
+            !**/*.pdb
           key: ${{ steps.cache-key.outputs.key }}
           restore-keys: |
             ${{ steps.cache-key.outputs.prefix }}-
@@ -1056,6 +1068,9 @@ jobs:
           path: |
             **/obj
             **/bin
+            !**/runtimes/**
+            !**/*.resources.dll
+            !**/*.pdb
           key: ${{ steps.cache-key.outputs.key }}
 
   test:

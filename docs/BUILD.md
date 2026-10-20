@@ -295,6 +295,12 @@ environment. That IS the runner default; it is written down explicitly so
 that the key and the restore agree by construction, and a runner that moves
 the folder gets a cold build instead of a wrong one.
 
+The cached payload is `obj/` and `bin/` minus the runtime assets (the native
+libraries of every RID), the satellite assemblies and the debug symbols:
+those are copies of what the NuGet folder already holds, nothing in
+MSBuild's up-to-date check reads them, and the build re-copies them. They
+were the bulk of the payload, and the repository's cache budget is 10 GB.
+
 ### The mtime trap, and what the cache does about it
 
 `actions/checkout` writes every source file with the CURRENT clock — git does
