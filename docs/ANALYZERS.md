@@ -27,7 +27,6 @@ Harbor runs three layers of static analysis + DI validation:
 | `AsyncFixer` | solution-wide | AsyncFixer01–05 |
 | `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
-| **`Microsoft.CodeAnalysis.PublicApiAnalyzers`** | **two frozen assemblies** | **RS0016, RS0017, RS0022, RS0024–RS0027, RS0036, RS0037, RS0041, RS0048, RS0050** |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
@@ -69,7 +68,7 @@ API.
 | `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
 | `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 are `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 5.6.0 | MIT | ADOPT, staged (PR #1944, issue #1845) | Replaces 1212 lines of python public-API gate with the compiler, on the two frozen projects only. The pull request is open, so this row records the decision, not the merge. |
-| `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | ADOPT with scope (issue #1848, open) | EX003 (a lost inner exception), EX021 (an exception type with no `(message, inner)` constructor) and EX011 (an empty catch) are the findings worth taking; the rest overlaps CA and Sonar. |
+| `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | REJECT the package, ADOPT the findings (#1848) | The two findings were real and both are fixed, and the rule that finds them is now a house rule (`InnerExceptionRules.cs`). The package itself is not consumable here: its nuspec declares its Roslyn dependencies with `exclude="Build,Analyzers"`, and every version of the Roslyn packages carries EXACT version constraints (`[3.3.1, 3.3.1]`), so against this repository's central Roslyn pin (5.6.0) the restore fails with NU1608 on every product project, and the same edges leave the compile and runtime assets of `Microsoft.CodeAnalysis.CSharp` in the closure of every project that references the package. The nine analyzer packages this repository already uses declare NO dependencies at all, because the Roslyn assemblies come from the compiler. |
 | `NetArchTest.Rules` | 1.3.2 | MIT | IN the tree, the replacement is open | The layer gate runs on it, and its last release was 2021-05-23. The replacement is tracked in #1841 (ArchUnitNET) and #1864 (aweXpect.Reflection). |
 | `aweXpect.Reflection` | 3.1.0 | MIT | SPIKE, the live pilot (#1864, #1879) | The successor `Testably.Architecture.Rules` names, with no transitive Newtonsoft and no TUnit pin. It covers exactly one of our tasks: the shape of an interface and the dead surface. |
 | `ErrorProne.NET.CoreAnalyzers` | 0.9.0-beta.4 | MIT (a `licenseUrl`, no SPDX expression) | REJECT (#1849) | Measured on this tree: 2 product findings, both duplicating EX003. The unique rules give 0 (EPC32, EPC19, EPC16, EPC17, EPC26, EPC30, EPC23, EPC11), and EPC27 gives 4 false positives on the `async void` handlers `docs/ANTIPATTERNS.md` §13 blesses. |
@@ -123,7 +122,7 @@ state:
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | a candidate with an open decision | ADOPT, staged | #1845 is decided and PR #1944 is open. The python public-API gate it replaces is still in the tree until that pull request merges. |
 | `IDisposableAnalyzers` | REJECT, it duplicates what CA1001 and CA1063 already say | REJECT the package, ADOPT the findings | IDISP014 is not covered by CA1001 or CA1063. The package is still dead; the two `HttpClient` sites it named were fixed by hand, a house rule now guards them (`HttpClientReuseRules.cs`), and both landed (#1854). |
 | `ErrorProne.NET.CoreAnalyzers` | REJECT, measured | REJECT, measured | The verdict stands, but the version the audit recorded (`0.1.5898.41180`) is not a version this package ever published. The measured version is `0.9.0-beta.4`, and it is the one the verdict applies to (#1849). |
-| `TheExceptionator.Analyzers` | not rejected, resolved separately in #1848 | ADOPT with scope, still open | #1848 has not merged, so the package is not in the tree. The scope is the three rules the table names. |
+| `TheExceptionator.Analyzers` | not rejected, resolved separately in #1848 | REJECT the package, ADOPT the findings | #1848 merged. The two lost inner exceptions are fixed, and the rule that finds them is a house rule (`InnerExceptionRules.cs`) rather than the package's EX003 and EX021. The package is not in the tree, and the reason is in the row above: its dependency edges break the restore. |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | already connected, not a candidate | ADOPT, and it now carries the dynamic-code ban | Since #1844 the second ban file, `BannedSymbols.DynamicCode.txt`, is enforced by RS0030 as well, so the package does more than the "What NOT to do" list. |
 
 Re-check this table when a package releases a new version, when Roslyn moves a
@@ -360,129 +359,52 @@ method named `…Async` that returns `int`. The pattern matcher it replaced
 (`AvaloniaFireAndForgetRules.cs`) survives as the non-gating **oracle** the
 differential compares against; see that file's header. Issue #1852.
 
-### Public API freeze (`Microsoft.CodeAnalysis.PublicApiAnalyzers` 5.6.0)
+### Exception rules (house gate, not a package)
 
-The public-API freeze of #428 is a **compile-time** gate. The package is
-referenced by exactly two projects — `Harbor.Abstractions` and
-`Harbor.Abstractions.Contracts`, the two assemblies #428 freezes — with
-`PrivateAssets=all`, so the RS00xx diagnostics exist in no other project in
-the tree. There is no CI job for the freeze itself: the compiler runs it
-while those two assemblies build, in the ordinary `build` job.
+The rule that a new exception thrown inside a catch must carry the caught
+exception, and the rule that a custom exception type must be able to carry one
+at all, are enforced by
+[`tests/Harbor.Architecture.Tests/InnerExceptionRules.cs`](../tests/Harbor.Architecture.Tests/InnerExceptionRules.cs).
+They are house rules rather than an analyzer package's rules, and the reason is
+in the candidate table above: the package that shipped them
+(`TheExceptionator.Analyzers`, rules EX003 and EX021) is not consumable here.
 
-The baseline is the analyzer's own format, next to the code it describes:
+| Rule | What it catches |
+|------|-----------------|
+| `lost-inner-exception` | a `throw new X(…)` inside a catch that names the exception it caught, where the new exception does not receive that exception as an argument |
+| `exception-without-inner-constructor` | a custom exception type that declares neither `(string message)` nor `(string message, Exception innerException)` |
 
-| File | What it holds |
-|---|---|
-| `src/Harbor.Abstractions/PublicAPI.Shipped.txt` | the frozen surface |
-| `src/Harbor.Abstractions/PublicAPI.Unshipped.txt` | the pending changes |
-| `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | the frozen surface |
-| `src/Harbor.Abstractions.Contracts/PublicAPI.Unshipped.txt` | the pending changes |
+**The two findings, and what was done about them.** Both were the same defect:
+the message survived, the cause did not.
 
-Both are picked up as analyzer additional files by the package's own
-`buildTransitive` targets; nothing lists them in a `.csproj`. The first line
-of each is `#nullable enable` — without it the analyzer cannot track
-nullability at all (RS0037).
+| Site | Before | After |
+|------|--------|-------|
+| `src/Harbor.Application/Configuration/ConfigStore.cs` | `throw new InvalidDataException($"config.json is corrupt: {je.Message}")` | the same message, with `je` as the inner exception: the stack trace and the JSON position of the malformed key survive |
+| `src/Harbor.Ipc.Client/Ide/IdeSessionBridge.cs` | `throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}")` | the same message and code, with `ex` as the inner exception |
 
-| Rule | What it says | Severity | Where it is configured | Why |
-|---|---|---|---|---|
-| RS0016 | a public symbol is not in the declared API | error | `.editorconfig` | the gate's core: an added member fails the build until the baseline names it |
-| RS0017 | a declared API symbol is not in the code | error | `<WarningsAsErrors>` | the other half: a removed or renamed member fails the build until the baseline says so |
-| RS0022 | a constructor makes a non-inheritable base inheritable | error | `.editorconfig` | it exposes the base's `protected` members |
-| RS0024 | the public API files are invalid | error | `<WarningsAsErrors>` | a malformed baseline is not a baseline |
-| RS0025 | a symbol appears twice in the public API files | error | `<WarningsAsErrors>` | a duplicate row is a row nobody reviewed twice |
-| RS0026 | do not add several public overloads with optional parameters | error | `.editorconfig` | breaks compatibility when the API is extended |
-| RS0027 | an API with optional parameters must have the most parameters among its overloads | error | `.editorconfig` | same back-compat family |
-| RS0036 | a declared API symbol is missing its nullability annotations | error | `.editorconfig` | nullability is part of the signature a consumer compiles against |
-| RS0037 | the API files must carry `#nullable enable` | error | `.editorconfig` | without it the analyzer tracks nothing about nullability |
-| RS0041 | a public member uses an oblivious reference type | none | `.editorconfig` | off until the tree is fully annotated, per the analyzer's own guidance |
-| RS0048 | an API file is missing or is not an analyzer additional file | error | `<WarningsAsErrors>` | without it the analyzer would silently track nothing |
-| RS0050 | a symbol is marked removed but still exists in the code | error | `<WarningsAsErrors>` | the removal marker and the code must agree |
+Both fixes keep the text a user or an IDE sees: `ResultErrors.Message` reads
+`ex.Message`, and the JSON-RPC error writer reads `ex.Message`.
 
-**Why two places, and not one.** Roslyn applies a per-rule `.editorconfig`
-severity to a diagnostic **only when the diagnostic's location has a syntax
-tree** (`AnalyzerDriver.GetFilteredDiagnostic` tests
-`diagnostic.Location.SourceTree`). Six of the twelve rules are reported at a
-symbol and are configured in `.editorconfig` as usual. The other five —
-RS0017, RS0024, RS0025 and RS0050, which are reported **inside
-`PublicAPI.*.txt`**, and RS0048, which is reported at **no location at
-all** — cannot be reached that way: a `.editorconfig` row for them would
-read like policy and change nothing. They are configured in the two frozen
-projects' `.csproj` files with `<WarningsAsErrors>`, which the compiler
-applies to a diagnostic **by its id, wherever it is reported**.
+**The control.** The rule's planted controls are the load-bearing part. The
+offender (a catch that throws without the caught exception, in both the
+interpolated-message spelling and the plain one) must be reported **exactly
+once**, and the near-misses must be reported **not at all**: the throw that
+carries the caught exception, the bare rethrow, the throw outside a catch, the
+catch that names no variable, and the exception type that declares both
+constructors. The runner asserts the count and not only the presence, because
+"reports everything" and "reports nothing" are the same broken detector.
 
-This was found by the non-vacuity job, not by reading the documentation: with
-only the `.editorconfig` rows, the planted removal produced
-`warning RS0017` and the build succeeded. The same job would have missed it
-if it had been written to accept a warning.
-
-**Why `severity = error` and not the global warnings-as-errors.** The
-analyzer package's own `buildTransitive` props appends every RS id to
-`WarningsNotAsErrors` when `CodeAnalysisTreatWarningsAsErrors` is false, so
-relying on `TreatWarningsAsErrors=true` to promote them would make the gate
-depend on a property **inside a package** rather than on a decision recorded
-in this repository. The two mechanisms above do not go through that
-promotion, so the gate stays an error even if the warnings-as-errors policy
-is relaxed. The non-vacuity job proves it: it builds a throwaway project
-**outside** the repository (so `Directory.Build.props` does not apply and
-`TreatWarningsAsErrors` is **off**) with this repository's `.editorconfig`
-and the frozen projects' `<WarningsAsErrors>` list copied in, and the planted
-violation fails as `error RS0016`.
-
-**What the analyzer cannot do.** It sees one tree. The old gate's rule was
-about a diff — "commit the regenerated baseline in the SAME PR as the API
-change" — and the reviewer's half of it was about a *commit*. That half
-survived the migration as
-[`tools/check-public-api-resign.py`](../tools/check-public-api-resign.py):
-a commit that edits the frozen baseline must edit the assembly's sources
-with it, and a commit that changes a public declaration must re-sign the
-baseline with it. Its `--self-test` runs in the `docs.yml` `selftest` job;
-its non-vacuity companion for the compile half is
-[`tools/public-api-nonvacuity.sh`](../tools/public-api-nonvacuity.sh), run by
-the `ci.yml` `public-api` job.
-
-#### The parity contract (#1845)
-
-The two python gates this replaced — `tools/check-public-api.py` (607 lines,
-`Harbor.Abstractions.Contracts`) and `tools/check-public-api-abstractions.py`
-(605 lines, `Harbor.Abstractions`) — were the same program with a different
-scope. Their four rules were: a surface member with no baseline row fails
-(ADDED), a baseline row with no surface member fails (REMOVED), a missing
-baseline file fails (BASELINE-MISSING), and a scan that saw fewer members
-than the floor fails (FLOOR). This table is the contract: every row says
-what the python gate did and what covers it now.
-
-| What the python gate checked | What covers it now |
-|---|---|
-| a public type or member with no baseline row → fail | RS0016, at compile time |
-| a baseline row with no public member → fail (removal, re-sign) | RS0017, at compile time |
-| a missing baseline file → fail | RS0048, at compile time |
-| a malformed or duplicated baseline row → fail | RS0024, RS0025 |
-| a scan that stopped matching → fail | RS0017 (every shipped row would be reported missing) + the row floor in `check-public-api-resign.py` |
-| a `public` member of an `internal` type is not API | the analyzer computes effective accessibility, so it agrees |
-| moves and re-wraps must not fail the gate | the analyzer compares symbols, not text |
-| `const` values and enum values are part of the surface | the analyzer includes constant values in the API name |
-| an explicit interface implementation is one member | the analyzer knows it is one member and renders it |
-| `ref` / `out` / `in` / `params` are part of the signature | the analyzer renders them in the parameter list |
-| a default parameter value is part of the signature | the analyzer renders it, and reasons about it (RS0026, RS0027) |
-| generic arity is part of the signature | the analyzer renders `Foo<T>` and `Foo<T1, T2>` as different members |
-| an `init` accessor is part of the signature | the analyzer knows accessors from properties; the text scan dropped the accessor list entirely |
-| `readonly struct` / `record struct` are distinguishable | the analyzer knows the type kind |
-| — (nothing checked this) | nullability: `string` → `string?` is a signature change (RS0036, RS0037) |
-| — (nothing checked this) | a constructor that exposes the `protected` members of a non-inheritable base (RS0022) |
-| — (nothing checked this) | overloads with optional parameters (RS0026, RS0027) |
-| — (nothing checked this) | a `*REMOVED*` marker that disagrees with the code (RS0050) |
-| — (not a python rule) | the re-signing pairing per COMMIT (`tools/check-public-api-resign.py`) |
-| XML-doc coverage | unchanged: `tools/check-xml-doc-coverage.py`, which the analyzer has no rule for |
-
-The floor's MEANING changed, and the change is the point of stating it.
-Before: "the python scanner saw at least N members in the tree" — a ratchet
-against a matcher that had silently stopped matching. After: "the frozen
-baseline file still holds at least N rows" — a ratchet against a baseline
-that was truncated or rewritten. The blindness the old floor guarded against
-is now guarded by RS0017 itself. The two numbers are not comparable and were
-never meant to be: the analyzer's rows include implicit constructors and
-property accessors, which the text scan never counted because they have no
-`public` keyword in the source.
+**What the rule does not cover, stated rather than left for a reader to
+discover.** The first rule is syntactic: it sees a throw statement, an
+enclosing catch clause and the argument list of the creation, and nothing else.
+It does not see whether the exception that is passed is the one the catch
+named, so `throw new X(ex.InnerException)` is reported (correctly: that is the
+old exception's cause, not the one the catch named, and throwing it directly
+loses the stack trace). The second rule is syntactic too: it reads the base
+list and the constructor declarations, so a type that reaches `Exception`
+through a base this rule cannot see is out of scope. The tree has none: all
+four exception types under `src/` + `apps/` derive from `System.Exception`
+directly.
 
 ### Banned APIs (`BannedSymbols.txt`, `BannedSymbols.DynamicCode.txt`)
 
