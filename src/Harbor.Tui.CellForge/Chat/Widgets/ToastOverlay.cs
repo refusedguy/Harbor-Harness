@@ -170,6 +170,12 @@ public sealed class ToastOverlay
             return;
         }
 
+        // The accent is a PALETTE COLOUR, not a presentation key, so it does
+        // not come from the shared table: the table names theme resource keys
+        // and a glyph, and the colour it would have to name lives in
+        // Harbor.DesignSystem, which this project references and
+        // Harbor.Ui.Framework.Services does not. The kind still decides the
+        // colour; it just decides it here, next to the palette.
         var accentColor = toast.Kind switch
         {
             ToastKind.Success => ChatPalette.Success,
@@ -202,7 +208,13 @@ public sealed class ToastOverlay
         int len = 0;
         if (take > 0)
         {
-            row[len++] = Glyph(toast.Kind);
+            // The glyph comes from the shared table (#1543): the toast's
+            // leading character is a property of the KIND, and the table that
+            // says so is the one the Avalonia converters read too. A char and
+            // not a string, because the row is written into a caller-owned
+            // buffer and a one-character string per toast per frame would be
+            // an allocation for a constant.
+            row[len++] = ToastPresentations.Glyph(toast.Kind);
         }
         if (take > 1)
         {
@@ -231,17 +243,4 @@ public sealed class ToastOverlay
             _active.Add(_pending.Dequeue());
         }
     }
-
-    /// <summary>
-    ///     The row's leading glyph. A char, not a string: the row is written
-    ///     into a caller-owned buffer, and a one-character string per toast per
-    ///     frame would be an allocation for a constant.
-    /// </summary>
-    private static char Glyph(ToastKind kind) => kind switch
-    {
-        ToastKind.Success => '✓',
-        ToastKind.Warning => '!',
-        ToastKind.Error => '✗',
-        _ => 'ℹ',
-    };
 }
