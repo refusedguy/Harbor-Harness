@@ -53,11 +53,11 @@
 # ── WHICH ROWS ARE WAITING ON WHICH WORK ──────────────────────────────────
 #
 #   Harbor.Ipc.Tests -> Harbor.E2E.Framework   PR #1943 drops the
-#                                               reference.
+#                                               reference. CLOSED.
 #   TEST-DUPLICATED Harbor.E2E.Framework        PR #1943 moves the tests
 #                                               into their own project, so
 #                                               they stop running six
-#                                               times.
+#                                               times. CLOSED.
 #   SHARD-UNWIRED Harbor.E2E.App.Avalonia       PR #1946 wires the
 #                                               per-class process split.
 #
@@ -75,8 +75,8 @@
 # than asserting correctness. The trade is deliberate, so it is written
 # down rather than left for the next reader to guess at.
 #
-# The three rows about Harbor.E2E.Framework are the same defect seen from
-# three sides, and issue 1812 owns closing them.
+# The three rows that were about Harbor.E2E.Framework were the same defect
+# seen from three sides, and this PR closed all three.
 #
 # TUnit discovers a referenced test project's classes in every project that
 # references it. The repository states this in
@@ -88,19 +88,26 @@
 # are NOT dead code, and the first draft of this gate, which called them
 # dead, was wrong.
 #
-# What the same fact costs is duplication. Six listed projects reference the
-# framework, so its 26 tests run six times per CI run, 156 executions
-# instead of 26, for about 1.06 seconds of duplicated test time.
+# What the same fact cost was duplication. Six listed projects referenced the
+# framework, so its 26 tests ran six times per CI run, 156 executions
+# instead of 26, for about 1.06 seconds of duplicated test time. The fix is
+# structural: the framework keeps its helpers and its own tests move to
+# tests/Harbor.E2E.Framework.Tests, a project nothing references, so they
+# are discovered exactly once, in one module. The framework itself is now a
+# fixture library, and the rule that reports a test project with no tests
+# does not report a helper library a test project consumes.
 #
-# Harbor.Ipc.Tests is the concrete instance of the waste: it references the
-# framework and names none of its types, so the reference buys nothing. It
-# drags 13 product assemblies into the IPC test project's closure and makes
-# the framework's 26 tests run a sixth time inside the platform shard.
+# Harbor.Ipc.Tests was the concrete instance of the waste: it referenced the
+# framework and named none of its types, so the reference bought nothing. It
+# dragged 13 product assemblies into the IPC test project's closure and made
+# the framework's 26 tests run a sixth time inside the platform shard. The
+# reference is gone; the IPC closure is 10 projects smaller.
 #
-# Harbor.Terminal.Abstractions.Tests has the same shape with a different
-# target: it references Harbor.TestKit and names none of its types, which
-# drags 4 product assemblies into its closure. TestKit carries no tests,
-# so nothing is duplicated there; the cost is the closure alone.
+# Harbor.Terminal.Abstractions.Tests had the same shape with a different
+# target: it referenced Harbor.TestKit and named none of its types, which
+# dragged 4 product assemblies into its closure. TestKit carries no tests,
+# so nothing was duplicated there; the cost was the closure alone. That
+# reference is gone too.
 #
 # Harbor.TestKit.Tests is the third of that shape. The TestKit split
 # (#1834) moved the helpers it exercises into Harbor.TestKit.Support and
@@ -116,9 +123,6 @@
 # without a filter, so the partition is dead code and the classes it
 # separates run in a single process.
 #
-TEST-DUPLICATED | Harbor.E2E.Framework | Six listed projects reference it, so TUnit discovers its 26 tests in each of them and they run six times per CI run instead of once. PR 1943 moves them into their own project. | @refusedguy
 CLAIM-CONDITIONAL | Harbor.Tui.PerfTests | The perf-gate job runs it only when the PR touches the UI paths, because the suite measures renderer throughput against a committed baseline rather than asserting correctness. | @refusedguy
-TEST-REFERENCE-UNUSED | Harbor.Ipc.Tests -> Harbor.E2E.Framework | It names none of the framework's types, so the reference buys nothing while dragging 13 product assemblies into the IPC closure and duplicating 26 tests. PR 1943 drops it. | @refusedguy
-TEST-REFERENCE-UNUSED | Harbor.Terminal.Abstractions.Tests -> Harbor.TestKit | It names none of TestKit's types, so the reference buys nothing while dragging 4 product assemblies into the project's closure. | @refusedguy
 TEST-REFERENCE-UNUSED | Harbor.TestKit.Tests -> Harbor.TestKit | The 1834 TestKit split left the reference behind: the project exercises Support and Tui directly and names none of Harbor.TestKit's types, while the reference drags 16 product assemblies in. | @refusedguy
 SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. PR 1946 wires it. | @refusedguy
