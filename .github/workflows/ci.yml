@@ -54,8 +54,18 @@ on:
   push:
     branches: [dev, master]
     paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
+  # NO workflow-level path filter on pull_request. #1804: a required status
+  # check is satisfied only if a check run with that exact name exists on the
+  # head commit. With `paths-ignore` here, a docs-only PR produced NO ci.yml
+  # check run at all, so every ci.yml check name ("build", "aot-publish",
+  # "public-api snapshot (Abstractions)", ...) would have been reported as
+  # "Expected - waiting for status to be reported" and the PR would have been
+  # unmergeable forever. The job-level `changes` filter below already decides
+  # which jobs run, so removing the workflow-level filter costs a checkout and
+  # a path-filter evaluation on a docs-only PR and changes nothing else: the
+  # heavy jobs still skip themselves, they just report "skipped" (which
+  # GitHub counts as a successful check).
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
   workflow_dispatch:
 
 permissions: {}
@@ -1129,6 +1139,94 @@ jobs:
           path: "TestResults/**/*.trx"
           if-no-files-found: ignore
           retention-days: 7
+
+  # Task: the one always-reported check for the whole ci lane.
+  #
+  # #1804: a required status check is satisfied only when a check run with
+  # that exact name exists on the head commit, and none of the heavy jobs
+  # here can be required on its own:
+  #   - each of them skips itself when the diff does not touch it, and a
+  #     matrix job reports itself under two different names depending on
+  #     whether it ran: "test (core)" ... "test (e2e)" when the matrix ran,
+  #     and the bare "test" when the job was skipped (verified on PRs
+  #     #1942, #1949 and #1923, whose check runs list the bare "test" and
+  #     none of the four shard names).
+  # Requiring the four shard names hangs every PR whose matrix was skipped,
+  # because GitHub then waits for check runs that will never be created.
+  # Requiring the bare "test" hangs every PR whose matrix ran, because no
+  # run carries that name.
+  #
+  # So this job always runs and reports one name, "gate", and it reads the
+  # path filter to decide whether the lane outcomes are correct:
+  #   - the path filter must have run. If it did not, no lane ran, every
+  #     other check reports "skipped", and GitHub counts a skipped job as a
+  #     successful check, so a broken filter would let anything through.
+  #   - a diff that touches the .NET tree must have produced a passing
+  #     build, a passing test run, a passing AOT publish and a passing perf
+  #     gate. A skip there is a disagreement between the filter and the
+  #     outcome, not a pass.
+  #   - a diff that does not touch the .NET tree is allowed to skip them:
+  #     that is the filter working, not a hole.
+  #   - a diff that changes a package set must have passed the package-set
+  #     gate.
+  # A dependency bump skips the .NET lane on purpose (every lane's condition
+  # excludes dependabot), so the gate reports that case instead of failing
+  # it. The ruleset's bypass actor is what lets a hotfix through, not this
+  # job.
+  #
+  # The job results are read through `toJSON(needs)` rather than
+  # `needs.<id>.result` because two of the job ids contain a hyphen, which
+  # the expression language reads as a subtraction.
+  gate:
+    name: gate
+    needs: [changes, build, test, aot-publish, test-packages, perf-gate]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: The lane outcomes must agree with the path filter
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -uo pipefail
+          needs_json="$NEEDS"
+          result() { jq -r --arg j "$1" '.[$j].result // "absent"' <<<"$needs_json"; }
+          output() { jq -r --arg j "$1" --arg o "$2" '.[$j].outputs[$o] // ""' <<<"$needs_json"; }
+          fail() { echo "::error::gate: $1"; exit 1; }
+
+          dotnet="$(output changes dotnet)"
+          packages="$(output changes packages)"
+          ui="$(output changes ui)"
+          build="$(result build)"
+          shards="$(result test)"
+          aot="$(result 'aot-publish')"
+          package_gate="$(result 'test-packages')"
+          perf="$(result 'perf-gate')"
+
+          echo "gate: changes.dotnet=$dotnet changes.packages=$packages changes.ui=$ui"
+          echo "gate: build=$build test=$shards aot-publish=$aot test/sample package set=$package_gate perf-gate=$perf"
+
+          [ "$(result changes)" = "success" ] || fail "the path filter failed, so no lane ran at all."
+
+          if [ "$dotnet" = "true" ] || [ "$packages" = "true" ] || [ "$ui" = "true" ]; then
+            if [ "$GITHUB_ACTOR" = "dependabot[bot]" ]; then
+              echo "gate: the .NET lane is skipped for a dependency bump, which the lane conditions allow on purpose."
+            else
+              if [ "$dotnet" = "true" ]; then
+                [ "$build" = "success" ] || fail "the diff touches the .NET tree but 'build' finished as '$build'."
+                [ "$shards" = "success" ] || fail "the diff touches the .NET tree but the test shards finished as '$shards'."
+                [ "$aot" = "success" ] || fail "the diff touches the .NET tree but 'aot-publish' finished as '$aot'."
+              fi
+              if [ "$packages" = "true" ]; then
+                [ "$package_gate" = "success" ] || fail "the diff changes a package set but 'test/sample package set' finished as '$package_gate'."
+              fi
+              if [ "$ui" = "true" ]; then
+                [ "$perf" = "success" ] || fail "the diff touches the UI tree but 'perf-gate' finished as '$perf'."
+              fi
+            fi
+          fi
+
+          echo "gate: the lane outcomes agree with the path filter."
 
   # Task: coverage collection — REPORT-ONLY (issue #99). Runs the fast unit
   # suites (core + platform shard lists) under the MTP CodeCoverage extension

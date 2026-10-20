@@ -112,62 +112,24 @@ on:
       - 'docs/toc.yml'
       - 'api/**'
       - '.github/workflows/docs.yml'
+  # NO workflow-level path filter on pull_request. #1804: a required status
+  # check is satisfied only if a check run with that exact name exists on the
+  # head commit. With this `paths:` filter, a PR that touched none of the
+  # listed files produced NO docs.yml check run at all, so every docs gate
+  # name ("checker self-test", "internal links", "normative citations",
+  # "markdown lint", "guarded project dependencies", "test project
+  # coverage", "xml-doc coverage") would have been reported as "Expected -
+  # waiting for status to be reported" and the PR would have been
+  # unmergeable forever. The push block keeps its filter: a push has no
+  # required-check semantics to satisfy.
+  #
+  # Cost of running the gates on every PR, measured on run 39426596955: the
+  # eleven jobs take 5-13 s each (67 s for the citation gate), so about
+  # 2.3 runner-minutes and 67 s of wall clock per PR, against a baseline of
+  # 45.3 runner-minutes and 19.5 minutes of wall clock. The gates are
+  # idempotent and read-only, so running them when their inputs did not
+  # change costs minutes and catches nothing new.
   pull_request:
-    paths:
-      - '**.md'
-      # #947. TEST-CITE-DRIFT reads `tests/**/*.cs`, so a PR that inserts a
-      # line above a cited one — the only way this defect is ever created —
-      # touches none of the paths above unless .cs is here. Without these three
-      # the rule is unreachable on exactly the PRs it exists for, which is the
-      # #509 failure (a `paths-ignore` that made a gate green by never running)
-      # wearing a different hat.
-      - 'tests/**/*.cs'
-      - 'src/**/*.cs'
-      - 'apps/**/*.cs'
-      # #428. `check-abstractions-contract.py` reads four guarded projects'
-      # .csproj files and the .cs they compile. A csproj is how a dependency
-      # enters this repository, so a workflow that watched only .cs could not
-      # trigger on the change the gate exists to catch — the #509 failure (a
-      # gate made green by never running) wearing a different hat. Same for
-      # Directory.Packages.props, which is where a version is pinned.
-      - 'src/**/*.csproj'
-      - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
-      - 'tools/check-doc-cites.py'
-      - 'tools/check-doc-facts.py'
-      - 'tools/md_gate.py'
-      - 'tools/check-abstractions-contract.py'
-      # #1778. Same trigger as above: the duplicate-body gate measures
-      # `tests/**/*.cs` and compares the result against its committed
-      # baseline, so a PR that edits the tree it measures — or the gate, or
-      # the baseline — must run it.
-      - 'tools/check-test-dup.py'
-      - 'tools/test-dup-baseline.json'
-      # #1823. Same trigger as above: the completeness gate reads the test
-      # projects, the solution and the CI lists, so a PR that edits any of
-      # the three must run it.
-      - 'tests/**/*.csproj'
-      - 'Harbor.slnx'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
-      - 'tools/test-project-baseline.txt'
-      - 'build/_build/Targets/TestTarget.cs'
-      # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
-      # reads the frozen contract sources, so a PR touching the gate runs it.
-      - 'tools/check-xml-doc-coverage.py'
-      # #428 (first slice). Same trigger as above: the public-API snapshot
-      # reads the same sources plus its baseline, so a PR touching any of
-      # the three runs it.
-      - 'tools/check-public-api.py'
-      - 'src/Harbor.Abstractions.Contracts/PublicAPI.Baseline.txt'
-      # #431. Same trigger as above: the site manifest and its nav.
-      # api/** mirrors the push block for the same reason.
-      - 'docfx.json'
-      - 'docs/toc.yml'
-      - 'api/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions: {}
