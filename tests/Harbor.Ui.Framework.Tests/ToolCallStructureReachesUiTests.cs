@@ -121,7 +121,7 @@ public class ToolCallStructureReachesUiTests
     {
         UiState state = Reduce(
             EditStarted(),
-            new ToolExecutionEndEvent(EditCallId, ToolResult.Success("edited 1 line"), IsError: false));
+            TestEvents.ToolExecutionEnd(EditCallId, ToolResult.Success("edited 1 line")));
 
         Harbor.Ui.Framework.ViewModels.ToolCallViewModel card = Project(state).ToolCalls[0];
 
@@ -139,7 +139,7 @@ public class ToolCallStructureReachesUiTests
     {
         UiState state = Reduce(
             EditStarted(),
-            new ToolExecutionEndEvent(EditCallId, ToolResult.Error("no such file"), IsError: true));
+            TestEvents.ToolExecutionEnd(EditCallId, ToolResult.Error("no such file"), true));
 
         Harbor.Ui.Framework.ViewModels.ToolCallViewModel card = Project(state).ToolCalls[0];
 
@@ -210,7 +210,7 @@ public class ToolCallStructureReachesUiTests
         UiState state = Reduce(
             new ToolExecutionStartEvent(EditCallId, "edit", JsonDocument.Parse(EditArgs).RootElement.Clone()),
             EditStarted(),
-            new ToolExecutionEndEvent(EditCallId, ToolResult.Success("ok"), IsError: false));
+            TestEvents.ToolExecutionEnd(EditCallId, ToolResult.Success("ok")));
 
         await Assert.That(state.Chat.ToolCalls.Length).IsEqualTo(1)
             .Because("a second start for the same call id updates the entry rather than appending "
@@ -224,7 +224,7 @@ public class ToolCallStructureReachesUiTests
     public async Task OrphanResult_DoesNotProduceACard()
     {
         UiState state = Reduce(
-            new ToolExecutionEndEvent("tc_never_started", ToolResult.Success("ok"), IsError: false));
+            TestEvents.ToolExecutionEnd("tc_never_started", ToolResult.Success("ok")));
 
         await Assert.That(state.Chat.ToolCalls).IsEmpty()
             .Because("an end event carries no name, no glyph and no arguments; a card built from it "
@@ -247,7 +247,7 @@ public class ToolCallStructureReachesUiTests
         // A later transition that does not touch the tool calls.
         vm.TriggerStoreChanged(Reduce(
             EditStarted(),
-            new AgentStartEvent("s1", [])));
+            TestEvents.AgentStart()));
 
         await Assert.That(vm.ToolCalls.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(vm.ToolCalls[0], first)).IsTrue()
@@ -266,9 +266,7 @@ public class ToolCallStructureReachesUiTests
     public async Task NamedButNotExecuting_ShowsAPlaceholderCard()
     {
         UiState state = Reduce(
-            new MessageUpdateEvent(
-                new ToolCallStartEvent("tc_named", "edit"),
-                AssistantMessage.Empty("s1", "test-model")));
+            TestEvents.ToolCallStartUpdate("tc_named", "edit", AssistantMessage.Empty("s1", "test-model")));
 
         Harbor.Ui.Framework.ViewModels.ToolCallViewModel card = Project(state).ToolCalls[0];
 
@@ -293,9 +291,7 @@ public class ToolCallStructureReachesUiTests
     public async Task ExecutionUpgradesTheNamedPlaceholder()
     {
         UiState state = Reduce(
-            new MessageUpdateEvent(
-                new ToolCallStartEvent(EditCallId, "edit"),
-                AssistantMessage.Empty("s1", "test-model")),
+            TestEvents.ToolCallStartUpdate(EditCallId, "edit", AssistantMessage.Empty("s1", "test-model")),
             EditStarted());
 
         await Assert.That(state.Chat.ToolCalls.Length).IsEqualTo(1)

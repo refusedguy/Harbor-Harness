@@ -10,6 +10,7 @@ using System.Text.Json;
 using TUnit.Assertions;
 using TUnit.Core;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 
@@ -37,7 +38,7 @@ public class EventBusAllocationTests
         // scrollback, no subscriptions → synchronous return before any await,
         // so the async builder hands back the cached completed task.
         var bus = ZeroScrollbackBus();
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         for (int i = 0; i < 3_000; i++)
         {
@@ -63,7 +64,7 @@ public class EventBusAllocationTests
         // handlerBudget disabled: no per-publish linked-CTS on this path.
         var bus = ZeroScrollbackBus();
         bus.Subscribe(static (_, _) => ValueTask.CompletedTask);
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         for (int i = 0; i < 1_000; i++)
         {
@@ -96,7 +97,7 @@ public class EventBusAllocationTests
             bus.Subscribe(static (_, _) => ValueTask.CompletedTask);
         }
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         for (int i = 0; i < 1_000; i++)
         {

@@ -93,7 +93,7 @@ public class CancelMisclassification1103Tests
         // #1103 AgentLoop:277 — the run failed without TurnEnd/AgentEnd, so the
         // turn card hung and the IPC projection never learned the run ended.
         var client = new ScriptedLlmClient([
-            new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
+            TestEvents.LlmError("bad key", kind: ProviderErrorKind.Auth, statusCode: 401)]);
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), bus);
 
@@ -111,7 +111,7 @@ public class CancelMisclassification1103Tests
         // AgentStart publish against an already-cancelled token) surfaced as
         // AgentErrorEvent instead of a clean cancel.
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "never reached"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+            TestEvents.TextDelta(delta: "never reached"), TestEvents.StepFinish(usage: new Usage(1, 1))]);
         var bus = new CancelHonoringBus();
         var agent = TestAgents.AllowAll();
         var loop = LoopWithBus(client, bus, agent);
@@ -174,7 +174,7 @@ public class CancelMisclassification1103Tests
         // as a provider error (and the streamed output was lost). The persist
         // now rides None; the cancel still ends the run without tool execution.
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "hello"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+            TestEvents.TextDelta(delta: "hello"), TestEvents.StepFinish(usage: new Usage(1, 1))]);
         var bus = new FakeEventBus();
         var agent = TestAgents.AllowAll();
         var loop = LoopWithBus(client, bus, agent);
@@ -202,7 +202,7 @@ public class CancelMisclassification1103Tests
         // card never recorded. The boundary is a fact and rides None; the
         // cancel is still honored at the next await, with no Error event.
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "hello after stop"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+            TestEvents.TextDelta(delta: "hello after stop"), TestEvents.StepFinish(usage: new Usage(1, 1))]);
         using var cts = new CancellationTokenSource();
         var bus = new CancelOnTurnStartBus(cts);
         var agent = TestAgents.AllowAll();

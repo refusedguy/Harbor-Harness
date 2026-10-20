@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 /// <summary>
@@ -24,7 +25,7 @@ public class ChatAppReducerUnknownMessageTests
             "test-model");
         AgentMessage[] history = new[] { assistant };
 
-        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(new AgentStartEvent("s", history)));
+        var result = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 
         await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(1);
         await Assert.That(result.State.Chat.Lines[0].Role).IsEqualTo(ChatRole.Assistant);
@@ -37,7 +38,7 @@ public class ChatAppReducerUnknownMessageTests
         AgentMessage[] history = new[] { new RogueMessage("m1", "s", DateTimeOffset.UnixEpoch) };
 
         NotSupportedException ex = Assert.Throws<NotSupportedException>(
-            () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(new AgentStartEvent("s", history))));
+            () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history))));
 
         await Assert.That(ex.Message.Contains("RogueMessage", StringComparison.Ordinal)).IsTrue();
     }
@@ -56,7 +57,7 @@ public class ChatAppReducerUnknownMessageTests
         AgentMessage[] history = new[] { assistant };
 
         NotSupportedException ex = Assert.Throws<NotSupportedException>(
-            () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(new AgentStartEvent("s", history))));
+            () => ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history))));
 
         await Assert.That(ex.Message.Contains("RoguePart", StringComparison.Ordinal)).IsTrue();
     }

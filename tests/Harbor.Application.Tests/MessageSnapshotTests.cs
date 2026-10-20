@@ -19,7 +19,7 @@ public class MessageSnapshotTests
     public async Task RunAsync_AgentStartEvent_CarriesPreRunSnapshotNotLiveList()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "hi"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "hi"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), bus);
         var session = Session.Create("/tmp/harbor-message-snapshot-tests", "code", "test", "test-model");
@@ -48,7 +48,7 @@ public class MessageSnapshotTests
     public async Task RunAsync_AgentEndEvent_CarriesFullHistorySnapshotNotLiveList()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "hi"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "hi"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), bus);
         var session = Session.Create("/tmp/harbor-message-snapshot-tests", "code", "test", "test-model");

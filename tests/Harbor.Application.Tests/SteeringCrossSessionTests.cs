@@ -41,14 +41,14 @@ public class SteeringCrossSessionTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var agentDef = TestAgents.AllowAll();
@@ -85,14 +85,14 @@ public class SteeringCrossSessionTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var agentDef = TestAgents.AllowAll();
@@ -132,7 +132,7 @@ public class SteeringCrossSessionTests
         var sessionB = Session.Create("/tmp/harbor-steering-rebind-b", "code", "test", "test-model");
         var store = new MultiSessionStore(sessionA, sessionB);
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "done"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "done"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var agents = new FakeAgentRegistry(TestAgents.AllowAll());
         var realLoop = new AgentLoop(
             new FakeProviderRegistry(client),

@@ -4,6 +4,7 @@ using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
 using Harbor.Terminal.Abstractions.Views.Grouping;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.Tests;
 
@@ -517,12 +518,10 @@ public class ChatHistoryGroupingModelTests
     public async Task MessageEnd_FinalizesThinkingBeforeAssistant()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-            new ThinkingDeltaEvent("0", "let me think"), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-            new TextDeltaEvent("0", "answer"), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.ThinkingDeltaUpdate("0", "let me think"));
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", "answer"));
+        await vm.UpdateFromEventAsync(TestEvents.MessageEnd());
 
         await Assert.That(vm.Entries.Count).IsEqualTo(2);
         await Assert.That(vm.Entries[0].Role).IsEqualTo("thinking");
@@ -534,9 +533,8 @@ public class ChatHistoryGroupingModelTests
     public async Task ToolResult_NamesItsTool()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-            new ToolCallStartEvent("tc1", "read"), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", new ToolResult("ok", false), false));
+        await vm.UpdateFromEventAsync(TestEvents.ToolCallStartUpdate("tc1", "read"));
+        await vm.UpdateFromEventAsync(TestEvents.ToolExecutionEnd(result: new ToolResult("ok", false)));
 
         await Assert.That(vm.Entries[0].ToolCallId).IsEqualTo("tc1");
         await Assert.That(vm.Entries[0].ToolName).IsEqualTo("read");

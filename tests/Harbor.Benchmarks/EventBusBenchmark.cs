@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 
@@ -133,7 +134,7 @@ public class EventBusBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _event = new TurnStartEvent(42);
+        _event = TestEvents.TurnStart(42);
 
         _fastPathBus = new InMemoryEventBus(maxScrollback: 0);
         _drainOnlyBus = new InMemoryEventBus(maxScrollback: 0);
@@ -323,7 +324,7 @@ public class EventBusBenchmark
 
         for (int i = 0; i < ScrollbackCapacity; i++)
         {
-            bus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
+            bus.PublishAsync(TestEvents.TurnStart(i)).GetAwaiter().GetResult();
         }
     }
 }
@@ -403,7 +404,7 @@ public class EventBusBenchmarkFanout
     [GlobalSetup]
     public void Setup()
     {
-        _event = new TurnStartEvent(42);
+        _event = TestEvents.TurnStart(42);
 
         _drainOnlyBus = new InMemoryEventBus(maxScrollback: 0);
         _enqueueAndDrainBus = new InMemoryEventBus(maxScrollback: ScrollbackCapacity);
@@ -414,7 +415,7 @@ public class EventBusBenchmarkFanout
 
         for (int i = 0; i < ScrollbackCapacity; i++)
         {
-            _enqueueAndDrainBus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
+            _enqueueAndDrainBus.PublishAsync(TestEvents.TurnStart(i)).GetAwaiter().GetResult();
         }
 
         for (int i = 0; i < SubscriberCount; i++)
@@ -532,7 +533,7 @@ public class EventBusDeliveryBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _event = new TurnStartEvent(7);
+        _event = TestEvents.TurnStart(7);
 
         // No subscriber: this bus can only accept + retain.
         _enqueueBus = new InMemoryEventBus(maxScrollback: MaxScrollback);
@@ -560,7 +561,7 @@ public class EventBusDeliveryBenchmark
 
         for (int i = 0; i < MaxScrollback; i++)
         {
-            _steadyBus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
+            _steadyBus.PublishAsync(TestEvents.TurnStart(i)).GetAwaiter().GetResult();
         }
     }
 

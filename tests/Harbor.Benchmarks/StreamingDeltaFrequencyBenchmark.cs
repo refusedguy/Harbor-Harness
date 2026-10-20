@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 
@@ -49,7 +50,7 @@ public class StreamingDeltaFrequencyBenchmark
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("sess", "m");
 
-        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
         int dispatches = 1;
 
         int projects = 0;
@@ -63,7 +64,7 @@ public class StreamingDeltaFrequencyBenchmark
 
         for (int i = 0; i < DeltaCount; i++)
         {
-            store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.TextDeltaUpdate("m", chunk, partial)));
             dispatches++;
 
             var state = store.State;
@@ -91,7 +92,7 @@ public class StreamingDeltaFrequencyBenchmark
             prevScreen = screen;
         }
 
-        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
         dispatches++;
         var endScreen = projector.Project(store.State);
         projects++;

@@ -86,7 +86,7 @@ public class UserHookGatesTests
     public async Task RunAsync_PromptDenied_EndsRunBeforeFirstTurn()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "hi"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "hi"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var bus = new FakeEventBus();
         var hooks = new FakeHookRunner
         {
@@ -129,7 +129,7 @@ public class UserHookGatesTests
     public async Task RunAsync_PromptAllowed_FiresSessionStartAndEnd()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "hi"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "hi"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var bus = new FakeEventBus();
         var hooks = new FakeHookRunner();
         var loop = CreateLoop(client, bus, hooks);
@@ -148,7 +148,7 @@ public class UserHookGatesTests
     public async Task RunAsync_PromptHookThrows_FailsClosedToDeny()
     {
         var client = new ScriptedLlmClient(
-            [[new TextDeltaEvent("t", "hi"), new StepFinishEvent(0, "stop", new Usage(1, 1))]]);
+            [[TestEvents.TextDelta(delta: "hi"), TestEvents.StepFinish(usage: new Usage(1, 1))]]);
         var bus = new FakeEventBus();
         var hooks = new FakeHookRunner
         {

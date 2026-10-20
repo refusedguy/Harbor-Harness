@@ -90,7 +90,7 @@ public class RetryPolicyTests
     [Test]
     public async Task LlmStreamErrorException_CarriesKindAndStatus()
     {
-        var err = new ErrorEvent("OpenAI API error 429: slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429);
+        var err = TestEvents.LlmError("OpenAI API error 429: slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429);
         var ex = new LlmStreamErrorException(err);
 
         await Assert.That(ex.Kind).IsEqualTo(ProviderErrorKind.RateLimit);
@@ -102,7 +102,7 @@ public class RetryPolicyTests
     public async Task IsTypedStreamErrorException_RateLimit_IsTransient()
     {
         var ex = new LlmStreamErrorException(
-            new ErrorEvent("API error 503", Kind: ProviderErrorKind.ServerError, StatusCode: 503));
+            TestEvents.LlmError("API error 503", kind: ProviderErrorKind.ServerError, statusCode: 503));
 
         await Assert.That(RetryPolicy.IsTransient(ex, out _)).IsTrue();
     }
@@ -111,7 +111,7 @@ public class RetryPolicyTests
     public async Task IsTypedStreamErrorException_Auth_IsFatal()
     {
         var ex = new LlmStreamErrorException(
-            new ErrorEvent("Auth failed: set $OPENAI_API_KEY", Kind: ProviderErrorKind.Auth));
+            TestEvents.LlmError("Auth failed: set $OPENAI_API_KEY", kind: ProviderErrorKind.Auth));
 
         await Assert.That(RetryPolicy.IsTransient(ex, out _)).IsFalse();
     }
@@ -127,7 +127,7 @@ public class RetryPolicyTests
             {
                 calls++;
                 throw new LlmStreamErrorException(
-                    new ErrorEvent("429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429));
+                    TestEvents.LlmError("429", kind: ProviderErrorKind.RateLimit, statusCode: 429));
             },
             Opts(max: 3, delayMs: 1), CancellationToken.None));
 

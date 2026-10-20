@@ -15,7 +15,7 @@ public class SharedDoublesTests
     public async Task A_Recording_Middleware_Counts_And_Records()
     {
         var middleware = new RecordingEventBusMiddleware();
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         bool verdict = await middleware.ProcessAsync(ref evt);
 
@@ -30,7 +30,7 @@ public class SharedDoublesTests
         var order = new List<string>();
         var first = new RecordingEventBusMiddleware("first", EventBusSinkKind.Mandatory, order);
         var second = new RecordingEventBusMiddleware("second", EventBusSinkKind.Mandatory, order);
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         await first.ProcessAsync(ref evt);
         await second.ProcessAsync(ref evt);
@@ -42,7 +42,7 @@ public class SharedDoublesTests
     public async Task A_Dropping_Middleware_Drops()
     {
         var middleware = new DropEventBusMiddleware();
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         bool verdict = await middleware.ProcessAsync(ref evt);
 
@@ -53,7 +53,7 @@ public class SharedDoublesTests
     public async Task A_Pass_Through_Middleware_Passes()
     {
         var middleware = new PassThroughEventBusMiddleware();
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         bool verdict = await middleware.ProcessAsync(ref evt);
 
@@ -63,9 +63,9 @@ public class SharedDoublesTests
     [Test]
     public async Task A_Transforming_Middleware_Replaces_The_Event()
     {
-        var replacement = new AgentErrorEvent("replaced");
+        var replacement = TestEvents.AgentError("replaced");
         var middleware = new TransformEventBusMiddleware(replacement);
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         bool verdict = await middleware.ProcessAsync(ref evt);
 
@@ -77,7 +77,7 @@ public class SharedDoublesTests
     public void A_Throwing_Middleware_Throws()
     {
         var middleware = new ThrowingEventBusMiddleware();
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         Assert.Throws<InvalidOperationException>(() =>
         {
@@ -102,7 +102,7 @@ public class SharedDoublesTests
     {
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var middleware = new GatedEventBusMiddleware(gate.Task);
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         ValueTask<bool> pending = middleware.ProcessAsync(ref evt);
         await Assert.That(pending.IsCompleted).IsFalse();

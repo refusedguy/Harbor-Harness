@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -38,7 +39,7 @@ internal sealed class StubAgent : IAgent
         _state = state with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
         // Emit a minimal AgentStartEvent so event-subscription tests can observe it.
         // Use Task.Run + ContinueWith to await PublishAsync without making PromptAsync async.
-        _ = PublishAsync(new AgentStartEvent(state.SessionId, Array.Empty<AgentMessage>(), null), ct)
+        _ = PublishAsync(TestEvents.AgentStart(state.SessionId), ct)
             .AsTask();
         _state = state with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
         return Task.FromResult(Result.Success());

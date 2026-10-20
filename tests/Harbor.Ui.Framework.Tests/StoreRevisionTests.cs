@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -22,9 +23,9 @@ public class StoreRevisionTests
         var revisions = new List<long>();
         store.Changed += (_, e) => revisions.Add(e.Revision);
 
-        store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", Array.Empty<AgentMessage>())));
-        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1")));
-        store.Dispatch(new ChatAppMsg.Agent(new AgentErrorEvent("boom")));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.AgentStart()));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.CompactionStarted()));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.AgentError()));
 
         await Assert.That(revisions.Count).IsEqualTo(3);
         await Assert.That(revisions[0]).IsEqualTo(1);
@@ -40,7 +41,7 @@ public class StoreRevisionTests
         UiStateChangedEventArgs? last = null;
         store.Changed += (_, e) => last = e;
 
-        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1")));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.CompactionStarted()));
 
         await Assert.That(last).IsNotNull();
         await Assert.That(last!.Revision).IsEqualTo(last.State.Revision);
@@ -58,8 +59,8 @@ public class StoreRevisionTests
         var delivered = new List<UiStateChangedEventArgs>();
         store.Changed += (_, e) => delivered.Add(e);
 
-        store.Dispatch(new ChatAppMsg.Agent(new CompactionStartedEvent("s1"))); // revision 1
-        store.Dispatch(new ChatAppMsg.Agent(new AgentErrorEvent("boom"))); // revision 2
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.CompactionStarted())); // revision 1
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.AgentError())); // revision 2
 
         // Simulate cross-thread reorder: revision 2 arrives first, revision 1 late.
         long lastApplied = 0;
@@ -105,7 +106,7 @@ public class StoreRevisionTests
     {
         // Dispatch(AppMsg) is the single entry point — the store only adds the revision.
         var store = new UiStore();
-        var @event = new AgentStartEvent("s1", Array.Empty<AgentMessage>());
+        var @event = TestEvents.AgentStart();
         store.Dispatch(new ChatAppMsg.Agent(@event));
 
         var expected = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(@event)).State;

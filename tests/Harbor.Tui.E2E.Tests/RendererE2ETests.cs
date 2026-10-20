@@ -3,6 +3,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.AnsiPlain;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Tui.E2E.Tests;
 /// <summary>
 ///     End-to-end renderer tests: feed a realistic event stream to each concrete
@@ -20,11 +21,11 @@ public class RendererE2ETests
     private static IEnumerable<AgentEvent> BuildHelloEventStream()
     {
         var partial = AssistantMessage.Empty("s1", "stub-1");
-        yield return new AgentStartEvent("s1", Array.Empty<AgentMessage>());
-        yield return new MessageStartEvent(partial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial);
-        yield return new MessageEndEvent(partial);
-        yield return new AgentEndEvent(Array.Empty<AgentMessage>());
+        yield return TestEvents.AgentStart();
+        yield return TestEvents.MessageStart(partial);
+        yield return TestEvents.TextDeltaUpdate("0", "Hello", partial);
+        yield return TestEvents.MessageEnd(partial);
+        yield return TestEvents.AgentEnd();
     }
 
     [Test]

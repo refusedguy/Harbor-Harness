@@ -4,6 +4,7 @@ using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Renderers;
 using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Terminal.Abstractions.Views;
+using Harbor.TestKit;
 namespace Harbor.Tui.Tests;
 public class StatusBarViewModelTests
 {
@@ -22,7 +23,7 @@ public class StatusBarViewModelTests
     public async Task AgentStartEvent_SetsStatusRunning()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
+        await vm.UpdateFromEventAsync(TestEvents.AgentStart());
         await Assert.That(vm.Status).IsEqualTo("running");
     }
 
@@ -30,8 +31,8 @@ public class StatusBarViewModelTests
     public async Task AgentEndEvent_SetsStatusIdle()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new AgentStartEvent("s1", Array.Empty<AgentMessage>()));
-        await vm.UpdateFromEventAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await vm.UpdateFromEventAsync(TestEvents.AgentStart());
+        await vm.UpdateFromEventAsync(TestEvents.AgentEnd());
         await Assert.That(vm.Status).IsEqualTo("idle");
     }
 
@@ -40,13 +41,13 @@ public class StatusBarViewModelTests
     {
         var vm = new StatusBarViewModel();
         var usage = new Usage(100, 50);
-        var evt = new MessageUpdateEvent(new StepFinishEvent(0, "stop", usage), AssistantMessage.Empty("s1", "m"));
+        var evt = TestEvents.StepFinishUpdate(usage: usage);
         await vm.UpdateFromEventAsync(evt);
         await Assert.That(vm.TokensIn).IsEqualTo(100);
         await Assert.That(vm.TokensOut).IsEqualTo(50);
 
         var usage2 = new Usage(200, 75);
-        var evt2 = new MessageUpdateEvent(new StepFinishEvent(0, "stop", usage2), AssistantMessage.Empty("s1", "m"));
+        var evt2 = TestEvents.StepFinishUpdate(usage: usage2);
         await vm.UpdateFromEventAsync(evt2);
         await Assert.That(vm.TokensIn).IsEqualTo(300);
         await Assert.That(vm.TokensOut).IsEqualTo(125);
@@ -56,7 +57,7 @@ public class StatusBarViewModelTests
     public async Task AgentErrorEvent_SetsStatusError()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new AgentErrorEvent("boom"));
+        await vm.UpdateFromEventAsync(TestEvents.AgentError());
         await Assert.That(vm.Status).IsEqualTo("error");
     }
 
@@ -64,7 +65,7 @@ public class StatusBarViewModelTests
     public async Task CompactionStartedEvent_SetsStatusCompacting()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new CompactionStartedEvent("s1"));
+        await vm.UpdateFromEventAsync(TestEvents.CompactionStarted());
         await Assert.That(vm.Status).IsEqualTo("compacting");
     }
 
@@ -72,8 +73,8 @@ public class StatusBarViewModelTests
     public async Task CompactionCompletedEvent_SetsStatusRunning()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new CompactionStartedEvent("s1"));
-        await vm.UpdateFromEventAsync(new CompactionCompletedEvent("s1", "summary", 10, 1000, TimeSpan.FromSeconds(1)));
+        await vm.UpdateFromEventAsync(TestEvents.CompactionStarted());
+        await vm.UpdateFromEventAsync(TestEvents.CompactionCompleted(prunedMessageCount: 10, tokensSaved: 1000));
         await Assert.That(vm.Status).IsEqualTo("running");
     }
 
@@ -95,10 +96,10 @@ public class StatusBarViewModelTests
     public async Task CompactionFailedEvent_LeavesStatusCompacting()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new CompactionStartedEvent("s1"));
+        await vm.UpdateFromEventAsync(TestEvents.CompactionStarted());
         await Assert.That(vm.Status).IsEqualTo("compacting");
 
-        await vm.UpdateFromEventAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+        await vm.UpdateFromEventAsync(TestEvents.CompactionFailed(error: "summarizer timed out"));
 
         await Assert.That(vm.Status).IsEqualTo("running")
             .Because("compaction is over and the turn continues; \"compacting\" would be a "
@@ -125,7 +126,7 @@ public class StatusBarViewModelTests
     {
         var vm = new StatusBarViewModel();
         var usage = new Usage(100, 50);
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", usage), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: usage));
         vm.ResetCommand.Execute(null);
         await Assert.That(vm.TokensIn).IsEqualTo(0);
         await Assert.That(vm.TokensOut).IsEqualTo(0);
@@ -158,15 +159,12 @@ public class StatusBarViewModelTests
         {
             // The request actually sent this turn: unchanged at 30k. This is
             // the only event that carries the occupancy reading.
-            await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-                new StepFinishEvent(0, "stop", new Usage(RequestTokens, 500)),
-                AssistantMessage.Empty("s1", "m")));
+            await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: new Usage(RequestTokens, 500)));
 
             // Then the core publishes the session-cumulative spend — the running
             // total that used to be rendered as occupancy (30k, 60k, …, 150k).
             // The arm assigns TokensIn/TokensOut, so the last write wins.
-            await vm.UpdateFromEventAsync(new SessionStatsEvent(
-                "s1", new SessionMetadata(0.01m * turn, RequestTokens * turn, 500, 0, 0, 0, turn, null)));
+            await vm.UpdateFromEventAsync(TestEvents.SessionStats(metadata: new SessionMetadata(0.01m * turn, RequestTokens * turn, 500, 0, 0, 0, turn, null)));
 
             // Occupancy is the request just sent, never the cumulative total.
             await Assert.That(vm.RequestTokens).IsEqualTo(RequestTokens);
@@ -197,13 +195,10 @@ public class StatusBarViewModelTests
 
         var vm = new StatusBarViewModel();
         vm.SetModel(new ModelInfo("hy3", "kilocode", "Kilocode Hy3", Window, 4096, false, false, true, Pricing.Unknown, "openai"));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(RequestTokens, 500)),
-            AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: new Usage(RequestTokens, 500)));
 
         int occupancy = vm.ContextPct;
-        await vm.UpdateFromEventAsync(new SessionStatsEvent(
-            "s1", new SessionMetadata(1.5m, 150_000, 500, 0, 0, 0, 5, null)));
+        await vm.UpdateFromEventAsync(TestEvents.SessionStats(metadata: new SessionMetadata(1.5m, 150_000, 500, 0, 0, 0, 5, null)));
 
         // A running total is not an occupancy reading.
         await Assert.That(vm.ContextPct).IsEqualTo(occupancy);
@@ -219,7 +214,7 @@ public class StatusBarViewModelTests
     public async Task ContextPct_Zero_When_Window_Unknown()
     {
         var vm = new StatusBarViewModel();
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(3000, 500)), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.StepFinishUpdate(usage: new Usage(3000, 500)));
         await Assert.That(vm.ContextPct).IsEqualTo(0);
     }
 }
@@ -230,7 +225,7 @@ public class ChatHistoryViewModelTests
     public async Task MessageStartEvent_SetsStreaming()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
         await Assert.That(vm.IsStreaming).IsTrue();
         await Assert.That(vm.StreamingText).IsEqualTo(string.Empty);
     }
@@ -239,10 +234,10 @@ public class ChatHistoryViewModelTests
     public async Task TextDeltaEvent_AppendsToStreamingText()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new TextDeltaEvent("0", ", "), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "World!"), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", "Hello"));
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", ", "));
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", "World!"));
         await Assert.That(vm.StreamingText).IsEqualTo("Hello, World!");
     }
 
@@ -250,8 +245,8 @@ public class ChatHistoryViewModelTests
     public async Task ThinkingDeltaEvent_AppendsToThinkingText()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new ThinkingDeltaEvent("0", "Let me think..."), AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.ThinkingDeltaUpdate("0", "Let me think..."));
         await Assert.That(vm.IsThinking).IsTrue();
         await Assert.That(vm.ThinkingText).IsEqualTo("Let me think...");
     }
@@ -260,9 +255,9 @@ public class ChatHistoryViewModelTests
     public async Task MessageEndEvent_AddsEntryAndResets()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(new TextDeltaEvent("0", "Hello!"), AssistantMessage.Empty("s1", "m")));
-        await vm.UpdateFromEventAsync(new MessageEndEvent(AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.MessageStart());
+        await vm.UpdateFromEventAsync(TestEvents.TextDeltaUpdate("0", "Hello!"));
+        await vm.UpdateFromEventAsync(TestEvents.MessageEnd());
 
         await Assert.That(vm.IsStreaming).IsFalse();
         await Assert.That(vm.StreamingText).IsEqualTo(string.Empty);
@@ -275,9 +270,7 @@ public class ChatHistoryViewModelTests
     public async Task ToolCallStartEvent_AddsToolEntry()
     {
         var vm = new ChatHistoryViewModel();
-        await vm.UpdateFromEventAsync(new MessageUpdateEvent(
-            new ToolCallStartEvent("tc1", "read"),
-            AssistantMessage.Empty("s1", "m")));
+        await vm.UpdateFromEventAsync(TestEvents.ToolCallStartUpdate("tc1", "read"));
 
         await Assert.That(vm.Entries.Count).IsEqualTo(1);
         await Assert.That(vm.Entries[0].Role).IsEqualTo("tool");
@@ -289,7 +282,7 @@ public class ChatHistoryViewModelTests
     {
         var vm = new ChatHistoryViewModel();
         var userMsg = new UserMessage("u1", "s1", DateTimeOffset.UtcNow, "Hello agent", "code", "claude");
-        await vm.UpdateFromEventAsync(new AgentStartEvent("s1", new AgentMessage[] { userMsg }));
+        await vm.UpdateFromEventAsync(TestEvents.AgentStart(messages: new AgentMessage[] { userMsg }));
 
         await Assert.That(vm.Entries.Count).IsEqualTo(1);
         await Assert.That(vm.Entries[0].Role).IsEqualTo("user");
@@ -314,7 +307,7 @@ public class ChatHistoryViewModelTests
     {
         var vm = new ChatHistoryViewModel();
         var result = new ToolResult("output text", false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
+        await vm.UpdateFromEventAsync(TestEvents.ToolExecutionEnd(result: result));
 
         await Assert.That(vm.Entries.Count).IsEqualTo(1);
         await Assert.That(vm.Entries[0].Role).IsEqualTo("tool-result");
@@ -420,7 +413,7 @@ public class DiffPreviewViewModelTests
     {
         var vm = new DiffPreviewViewModel();
         var result = new ToolResult("Wrote 100 chars to /tmp/test.cs", false);
-        await vm.UpdateFromEventAsync(new ToolExecutionEndEvent("tc1", result, false));
+        await vm.UpdateFromEventAsync(TestEvents.ToolExecutionEnd(result: result));
         await Assert.That(vm.Diffs.Count).IsEqualTo(1);
     }
 }

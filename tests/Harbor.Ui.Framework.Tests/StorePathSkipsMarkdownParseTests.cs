@@ -4,6 +4,7 @@ using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.Rendering.Markdown;
 using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -61,16 +62,16 @@ public class StorePathSkipsMarkdownParseTests
             var store = new UiStore();
             var projector = new DefaultUiProjector();
             var partial = AssistantMessage.Empty("s", "m");
-            store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
 
             var chunk = new string('x', 24);
             for (int i = 0; i < DeltaCount; i++)
             {
-                store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+                store.Dispatch(new ChatAppMsg.Agent(TestEvents.TextDeltaUpdate("m", chunk, partial)));
                 _ = projector.Project(store.State);
             }
 
-            store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
             _ = projector.Project(store.State);
 
             parses = UiStageCounters.MarkdownParses;

@@ -342,24 +342,20 @@ public class CellForgeReplSmokeTests
                 var user = new UserMessage(
                     Guid.NewGuid().ToString("N"), _sessionId, DateTimeOffset.UtcNow,
                     text, "code", "mock-model");
-                await _bus.PublishAsync(new AgentStartEvent(_sessionId, [user])).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.AgentStart(_sessionId, [user])).ConfigureAwait(false);
 
                 var partial = AssistantMessage.Empty(_sessionId, "mock-model");
-                await _bus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
-                await _bus.PublishAsync(new MessageUpdateEvent(
-                    new TextDeltaEvent("0", "Готово: mock-ответ\n"), partial)).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.MessageStart(partial)).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.TextDeltaUpdate("0", "Готово: mock-ответ\n", partial)).ConfigureAwait(false);
 
                 var final = new AssistantMessage(
                     Guid.NewGuid().ToString("N"), _sessionId, DateTimeOffset.UtcNow,
                     [new TextPart("Готово: mock-ответ")], StopReason.Stop, new Usage(12, 5), "mock-model");
-                await _bus.PublishAsync(new MessageEndEvent(final)).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.MessageEnd(final)).ConfigureAwait(false);
 
-                await _bus.PublishAsync(new SessionStatsEvent(_sessionId, new SessionMetadata(
-                    Cost: 0.0001m, TokensInput: 12, TokensOutput: 5,
-                    TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0,
-                    MessageCount: 2, TimeCompacting: null))).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.SessionStats(_sessionId, new SessionMetadata(Cost: 0.0001m, TokensInput: 12, TokensOutput: 5, TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0, MessageCount: 2, TimeCompacting: null))).ConfigureAwait(false);
 
-                await _bus.PublishAsync(new AgentEndEvent([])).ConfigureAwait(false);
+                await _bus.PublishAsync(TestEvents.AgentEnd()).ConfigureAwait(false);
                 return Result.Success();
             }
             finally

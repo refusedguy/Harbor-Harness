@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -138,8 +139,8 @@ public class RunRecoveryTests
             NewUser("s-406", 1),
             NewTextAssistant("s-406", 2, "boom"),
         };
-        var end = new AgentEndEvent(observed, Cancelled: false);
-        var error = new AgentErrorEvent("provider died");
+        var end = TestEvents.AgentEnd(observed);
+        var error = TestEvents.AgentError("provider died");
 
         var outcome = RunOutcome.Reconstruct(RunId.New(), "s-406", observed, end, error);
         var report = UnfinishedRunDetector.Detect(
@@ -435,7 +436,7 @@ public class RunRecoveryTests
             NewUser("s-406", 1),
             NewTextAssistant("s-406", 2),
         };
-        var end = new AgentEndEvent(observed, Cancelled: true);
+        var end = TestEvents.AgentEnd(observed, true);
 
         var outcome = RunOutcome.Reconstruct(RunId.New(), "s-406", observed, end);
         var report = UnfinishedRunDetector.Detect(

@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.App.Cli.Tests;
 
@@ -142,13 +143,11 @@ public class TokenCounterSplitTests
 
     /// <summary>The provider accepted a request: one step finished, with its usage.</summary>
     private static void RequestAccepted(UiStore store, int index) =>
-        _ = store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(
-            new StepFinishEvent(index, "stop", PerRequest),
-            AssistantMessage.Empty("s1", "m"))));
+        _ = store.Dispatch(new ChatAppMsg.Agent(TestEvents.StepFinishUpdate(index, usage: PerRequest)));
 
     /// <summary>What the core published once the turn's tokens were folded in.</summary>
     private static void TotalsPublished(UiStore store, SessionMetadata stats) =>
-        _ = store.Dispatch(new ChatAppMsg.Agent(new SessionStatsEvent("s1", stats)));
+        _ = store.Dispatch(new ChatAppMsg.Agent(TestEvents.SessionStats(metadata: stats)));
 
     /// <summary>The status line, as a person reads it.</summary>
     private static string Footer(UiState state) => StatusProjector.ProjectFooter(state);

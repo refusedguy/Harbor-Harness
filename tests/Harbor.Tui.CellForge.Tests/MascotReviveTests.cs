@@ -126,13 +126,13 @@ public class MascotReviveTests
 
         await Assert.That(bridge.IsMascotAnimating).IsFalse();
 
-        await bus.PublishAsync(new AgentErrorEvent("boom"));
+        await bus.PublishAsync(TestEvents.AgentError());
         PaintAll(screen, buffer); // footer consumes the blink + arms the latch
         await Assert.That(bridge.IsMascotAnimating).IsTrue();
 
         // Next run boundary clears the stale latch; draining the blink ticks
         // settles the footer cat with no heartbeat debt left.
-        await bus.PublishAsync(new AgentStartEvent("s1", []));
+        await bus.PublishAsync(TestEvents.AgentStart());
         PaintAll(screen, buffer, MascotDirector.ReactionFrames * MascotDirector.ReactionFrameTicks + 2);
         await Assert.That(bridge.IsMascotAnimating).IsFalse();
     }
@@ -152,11 +152,11 @@ public class MascotReviveTests
         await Assert.That(screen.Mascot).IsNotNull();
         await Assert.That(bridge.IsMascotAnimating).IsFalse();
 
-        await bus.PublishAsync(new AgentErrorEvent("boom"));
+        await bus.PublishAsync(TestEvents.AgentError());
         PaintAll(screen, buffer); // panel consumes the blink + arms the latch
         await Assert.That(bridge.IsMascotAnimating).IsTrue();
 
-        await bus.PublishAsync(new AgentStartEvent("s1", []));
+        await bus.PublishAsync(TestEvents.AgentStart());
         PaintAll(screen, buffer, MascotDirector.ReactionFrames * MascotDirector.ReactionFrameTicks + 2);
         await Assert.That(bridge.IsMascotAnimating).IsFalse();
     }

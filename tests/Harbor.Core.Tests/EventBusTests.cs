@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 namespace Harbor.Core.Tests;
 public class EventBusTests
 {
@@ -15,7 +16,7 @@ public class EventBusTests
         bus.Subscribe(async (evt, ct) => received1.Add(evt));
         bus.Subscribe(async (evt, ct) => received2.Add(evt));
 
-        var testEvent = new TurnStartEvent(1);
+        var testEvent = TestEvents.TurnStart();
         await bus.PublishAsync(testEvent);
 
         await Assert.That(received1.Count).IsEqualTo(1);
@@ -33,9 +34,9 @@ public class EventBusTests
         bus.Subscribe<TurnStartEvent>(async (evt, ct) => turnEvents.Add(evt));
         bus.Subscribe<MessageStartEvent>(async (evt, ct) => messageEvents.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
-        await bus.PublishAsync(new TurnStartEvent(2));
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.TurnStart());
+        await bus.PublishAsync(TestEvents.TurnStart(2));
+        await bus.PublishAsync(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")));
 
         await Assert.That(turnEvents.Count).IsEqualTo(2);
         await Assert.That(messageEvents.Count).IsEqualTo(1);
@@ -48,10 +49,10 @@ public class EventBusTests
         var received = new List<AgentEvent>();
 
         var sub = bus.Subscribe(async (evt, ct) => received.Add(evt));
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         sub.Dispose();
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         await Assert.That(received.Count).IsEqualTo(1);
     }
@@ -67,7 +68,7 @@ public class EventBusTests
 
         for (int i = 0; i < 10; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         var scrollback = bus.GetScrollback(3);
@@ -94,7 +95,7 @@ public class EventBusTests
 
         for (int i = 0; i < 5; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         var first = bus.GetScrollback(5);
@@ -137,7 +138,7 @@ public class EventBusTests
         bus.Subscribe(async (evt, ct) => throw new InvalidOperationException("boom"));
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(received.Count).IsEqualTo(1);
     }
@@ -168,13 +169,9 @@ public class EventBusTests
 
         AgentEvent evt = shape switch
         {
-            0 => new MessageUpdateEvent(
-                new TextDeltaEvent("m1", "hello"),
-                AssistantMessage.Empty("s", "m")),
-            1 => new MessageUpdateEvent(
-                new ToolCallDeltaEvent("tc_1", "{\"path\":"),
-                AssistantMessage.Empty("s", "m")),
-            _ => new TurnStartEvent(7),
+            0 => TestEvents.TextDeltaUpdate("m1", "hello", AssistantMessage.Empty("s", "m")),
+            1 => TestEvents.ToolCallDeltaUpdate("tc_1", "{\"path\":", AssistantMessage.Empty("s", "m")),
+            _ => TestEvents.TurnStart(7),
         };
 
         await bus.PublishAsync(evt);
@@ -201,7 +198,7 @@ public class EventBusTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt);
 
         await Assert.That(received.Count).IsEqualTo(1);
@@ -231,7 +228,7 @@ public class EventBusTests
             await release.Task.ConfigureAwait(false);
         });
 
-        Task publish = bus.PublishAsync(new TurnStartEvent(1));
+        Task publish = bus.PublishAsync(TestEvents.TurnStart());
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(20);
 

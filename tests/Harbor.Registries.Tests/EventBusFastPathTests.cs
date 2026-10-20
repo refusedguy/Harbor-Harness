@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using TUnit.Assertions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Registries.Tests;
 
@@ -40,7 +41,7 @@ public class EventBusFastPathTests
     public async Task PublishAsync_ZeroSubscribersNoScrollback_TakesFastPath()
     {
         var bus = new InMemoryEventBus(maxScrollback: 0);
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         for (int i = 0; i < 3; i++)
         {
@@ -65,7 +66,7 @@ public class EventBusFastPathTests
     public async Task PublishAsync_ZeroSubscribersWithArmedScrollback_LeavesFastPath()
     {
         var bus = new InMemoryEventBus(maxScrollback: 8);
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         _ = bus.GetScrollback(8); // arm retention
         await bus.PublishAsync(evt);
@@ -85,7 +86,7 @@ public class EventBusFastPathTests
         var bus = new InMemoryEventBus(maxScrollback: 0);
         bus.Subscribe(static (_, _) => ValueTask.CompletedTask);
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.PublishedCount).IsEqualTo(1);
     }

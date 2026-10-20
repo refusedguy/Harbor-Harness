@@ -143,13 +143,13 @@ public static class RendererBenchmarkSuite
     {
         var ticks = new List<long>(events);
         var partial = AssistantMessage.Empty("perf-session", "perf-msg");
-        var start = new MessageStartEvent(partial);
+        var start = TestEvents.MessageStart(partial);
 
         for (int i = 0; i < events; i++)
         {
             AgentEvent evt = i % 20 == 0
                 ? start
-                : new MessageUpdateEvent(new TextDeltaEvent("0", token), partial);
+                : TestEvents.TextDeltaUpdate("0", token, partial);
 
             var sw = Stopwatch.StartNew();
             await renderer.RenderAsync(evt, ct);

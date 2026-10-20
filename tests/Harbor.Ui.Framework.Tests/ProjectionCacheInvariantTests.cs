@@ -21,6 +21,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -80,11 +81,11 @@ public class ProjectionCacheInvariantTests
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("s", "m");
 
-        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
         UiScreenModel first = projector.Project(store.State);
 
         store.Dispatch(new ChatAppMsg.Agent(
-            new MessageUpdateEvent(new TextDeltaEvent("m", new string('x', 32)), partial)));
+            TestEvents.TextDeltaUpdate("m", new string('x', 32), partial)));
         UiScreenModel second = projector.Project(store.State);
 
         await Assert.That(second).IsNotNull();

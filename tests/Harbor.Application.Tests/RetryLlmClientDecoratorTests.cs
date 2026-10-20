@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Resilience;
 using TUnit.Assertions;
+using Harbor.TestKit;
 using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 
@@ -36,7 +37,7 @@ public class RetryLlmClientDecoratorTests
     {
         var inner = new ScriptedLlmClient(
             ThenThrow(null, new HttpRequestException("no such host", null)),
-            Events(new FinishEvent()));
+            Events(TestEvents.LlmFinish()));
         var decorator = Make(inner);
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
@@ -57,8 +58,8 @@ public class RetryLlmClientDecoratorTests
     public async Task TransientErrorEvent_FirstEvent_IsConsumedAndRetried()
     {
         var inner = new ScriptedLlmClient(
-            Events(new ErrorEvent("HTTP 429: slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)),
-            Events(new TextDeltaEvent("t1", "ok"), new FinishEvent()));
+            Events(TestEvents.LlmError("HTTP 429: slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429)),
+            Events(TestEvents.TextDelta("t1", "ok"), TestEvents.LlmFinish()));
         var decorator = Make(inner);
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
@@ -80,7 +81,7 @@ public class RetryLlmClientDecoratorTests
     public async Task StreamException_AfterFirstDeliveredEvent_TheStreamIsNeverRestarted()
     {
         var inner = new ScriptedLlmClient(
-            ThenThrow(new TextDeltaEvent("t1", "once only"), new HttpRequestException("connection reset", null)));
+            ThenThrow(TestEvents.TextDelta("t1", "once only"), new HttpRequestException("connection reset", null)));
         var decorator = Make(inner);
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
@@ -102,7 +103,7 @@ public class RetryLlmClientDecoratorTests
     public async Task TransientErrorEvent_AfterFirstDeliveredEvent_IsDeliveredNotReplayed()
     {
         var inner = new ScriptedLlmClient(
-            Events(new TextDeltaEvent("t1", "once only"), new ErrorEvent("mid-stream 429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)));
+            Events(TestEvents.TextDelta("t1", "once only"), TestEvents.LlmError("mid-stream 429", kind: ProviderErrorKind.RateLimit, statusCode: 429)));
         var decorator = Make(inner);
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
@@ -125,8 +126,8 @@ public class RetryLlmClientDecoratorTests
     public async Task TransientPreflight_BudgetExhausted_DeliversSingleErrorEvent()
     {
         var inner = new ScriptedLlmClient(
-            Events(new ErrorEvent("down", Kind: ProviderErrorKind.Network)),
-            Events(new ErrorEvent("still down", Kind: ProviderErrorKind.Network)));
+            Events(TestEvents.LlmError("down", kind: ProviderErrorKind.Network)),
+            Events(TestEvents.LlmError("still down", kind: ProviderErrorKind.Network)));
         var decorator = Make(inner, new RetryOptions(2, TimeSpan.FromMilliseconds(1), false));
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));
@@ -148,8 +149,8 @@ public class RetryLlmClientDecoratorTests
     public async Task RateLimitPreflight_UsesSeparateBudget()
     {
         var inner = new ScriptedLlmClient(
-            Events(new ErrorEvent("HTTP 429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)),
-            Events(new ErrorEvent("HTTP 429", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)));
+            Events(TestEvents.LlmError("HTTP 429", kind: ProviderErrorKind.RateLimit, statusCode: 429)),
+            Events(TestEvents.LlmError("HTTP 429", kind: ProviderErrorKind.RateLimit, statusCode: 429)));
         var decorator = Make(inner, new RetryOptions(
             MaxAttempts: 1,
             BaseDelay: TimeSpan.FromMilliseconds(1),
@@ -175,7 +176,7 @@ public class RetryLlmClientDecoratorTests
     public async Task FatalErrorEvent_First_IsDeliveredImmediately()
     {
         var inner = new ScriptedLlmClient(
-            Events(new ErrorEvent("Invalid API key", Kind: ProviderErrorKind.Auth, StatusCode: 401)));
+            Events(TestEvents.LlmError("Invalid API key", kind: ProviderErrorKind.Auth, statusCode: 401)));
         var decorator = Make(inner);
 
         var (events, error) = await Capture(decorator.StreamAsync(NewRequest()));

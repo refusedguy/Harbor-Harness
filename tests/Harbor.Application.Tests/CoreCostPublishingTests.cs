@@ -55,7 +55,7 @@ public class CoreCostPublishingTests
     {
         var client = new ScriptedLlmClient(
             Model(pricing),
-            [[new TextDeltaEvent("t", "answer"), new StepFinishEvent(0, "stop", usage)]]);
+            [[TestEvents.TextDelta(delta: "answer"), TestEvents.StepFinish(usage: usage)]]);
 
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(

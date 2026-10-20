@@ -7,6 +7,7 @@ using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -21,16 +22,16 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
         // History replay on AgentStart.
-        await bus.PublishAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there"), WidgetFixtures.AssistantMsg("s1", "hello!")]));
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: [WidgetFixtures.UserMsg("s1", "hi there"), WidgetFixtures.AssistantMsg("s1", "hello!")]));
+        await bus.PublishAsync(TestEvents.MessageStart());
 
         long t0 = 100;
         bridge.Tick(t0);
-        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("id", "Answer **line**\n"), AssistantMessage.Empty("s1", "m")));
-        await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{\"path\":\"a.cs\"}").RootElement.Clone()));
-        await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
-        await bus.PublishAsync(new MessageEndEvent(WidgetFixtures.AssistantMsg("s1", "Answer line")));
-        await bus.PublishAsync(new AgentEndEvent([]));
+        await bus.PublishAsync(TestEvents.TextDeltaUpdate("id", "Answer **line**\n"));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart(argsJson: "{\"path\":\"a.cs\"}"));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("file body")));
+        await bus.PublishAsync(TestEvents.MessageEnd(WidgetFixtures.AssistantMsg("s1", "Answer line")));
+        await bus.PublishAsync(TestEvents.AgentEnd());
 
         var tl = panel.Timeline;
         await Assert.That(tl.Count).IsEqualTo(4); // user, assistant(history), stream-slot→markdown, toolcard
@@ -55,10 +56,10 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")));
 
         // Five complete source lines arrive at once.
-        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("i", "l1\nl2\nl3\nl4\nl5\n"), AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.TextDeltaUpdate("i", "l1\nl2\nl3\nl4\nl5\n", AssistantMessage.Empty("s", "m")));
 
         bridge.Tick(nowMs: 0);
         int afterTick1 = VisibleChars(panel);
@@ -79,11 +80,11 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")));
 
         // ≥ EnterDepth lines → CatchUp pressure.
         var burst = string.Join("", Enumerable.Range(1, CommitTickPacer.EnterDepth + 2).Select(i => $"line{i}\n"));
-        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("i", burst), AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.TextDeltaUpdate("i", burst, AssistantMessage.Empty("s", "m")));
 
         // Transition tick enters CatchUp but still reveals a single line…
         bridge.Tick(nowMs: 200);
@@ -118,7 +119,7 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 60, 8);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")));
 
         // Space-free 8-char lines: RawText joins rendered lines with '\n', so a
         // token that could wrap would make a Contains() check fail on layout
@@ -128,8 +129,7 @@ public class ChatScreenBridgeTests
         var partial = AssistantMessage.Empty("s", "m");
         for (int i = 0; i < Deltas; i++)
         {
-            await bus.PublishAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("i", $"burst-{i:D2}\n"), partial));
+            await bus.PublishAsync(TestEvents.TextDeltaUpdate("i", $"burst-{i:D2}\n", partial));
         }
 
         string Painted() => panel.Timeline.BlockAt(panel.Timeline.Count - 1).RawText();
@@ -182,15 +182,14 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 60, 8);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s", "m")));
+        await bus.PublishAsync(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")));
 
         // A backlog deep enough that the reveal is still going when the gate is
         // requested — the "burst of visual invalidations" of the criterion.
         var partial = AssistantMessage.Empty("s", "m");
         for (int i = 0; i < CommitTickPacer.EnterDepth + 2; i++)
         {
-            await bus.PublishAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("i", $"burst-{i:D2}\n"), partial));
+            await bus.PublishAsync(TestEvents.TextDeltaUpdate("i", $"burst-{i:D2}\n", partial));
         }
 
         var gate = bridge.RequestApprovalGate("bash", "cargo build");
@@ -234,9 +233,9 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tc9", "bash", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart("tc9", "bash"));
         bridge.Tick(50);
-        await bus.PublishAsync(new ToolExecutionEndEvent("tc9", ToolResult.Error("exit code 1"), IsError: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd("tc9", ToolResult.Error("exit code 1"), true));
 
         var tl = panel.Timeline;
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
@@ -257,7 +256,7 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tcX", "bash", System.Text.Json.JsonDocument.Parse("{\"cmd\":\"sleep 999\"}").RootElement.Clone()));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart("tcX", "bash", "{\"cmd\":\"sleep 999\"}"));
         bridge.Tick(40);
 
         var tl = panel.Timeline;
@@ -265,7 +264,7 @@ public class ChatScreenBridgeTests
         await Assert.That(card.Status).IsEqualTo(ToolCallState.Running);
         await Assert.That(card.Status.IsTerminal()).IsFalse();
 
-        await bus.PublishAsync(new AgentEndEvent([], Cancelled: true));
+        await bus.PublishAsync(TestEvents.AgentEnd(cancelled: true));
 
         await Assert.That(card.Status).IsEqualTo(ToolCallState.Cancelled);
         await Assert.That(card.Status.IsTerminal()).IsTrue();
@@ -282,12 +281,12 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tcDone", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart("tcDone"));
         bridge.Tick(10);
-        await bus.PublishAsync(new ToolExecutionEndEvent("tcDone", ToolResult.Success("file body"), IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd("tcDone", ToolResult.Success("file body")));
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tcLive", "bash", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
-        await bus.PublishAsync(new AgentEndEvent([], Cancelled: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart("tcLive", "bash"));
+        await bus.PublishAsync(TestEvents.AgentEnd(cancelled: true));
 
         var tl = panel.Timeline;
         var done = (ToolCallBlock)tl.BlockAt(tl.Count - 2);
@@ -307,7 +306,7 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
         string blob = "API error 429: " + new string('x', 2000);
-        await bus.PublishAsync(new AgentErrorEvent(blob));
+        await bus.PublishAsync(TestEvents.AgentError(blob));
 
         var tl = panel.Timeline;
         var card = (ToolCallBlock)tl.BlockAt(tl.Count - 1);
@@ -333,10 +332,7 @@ public class ChatScreenBridgeTests
         panel.Timeline.Append(new UserBlock("hi"));
 
         // The run republishes the full snapshot INCLUDING the echoed message.
-        await bus.PublishAsync(new AgentStartEvent("s1", [
-            WidgetFixtures.UserMsg("s1", "hi"),
-            WidgetFixtures.AssistantMsg("s1", "hello!"),
-        ]));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: [WidgetFixtures.UserMsg("s1", "hi"), WidgetFixtures.AssistantMsg("s1", "hello!"),]));
 
         var tl = panel.Timeline;
         await Assert.That(tl.Count).IsEqualTo(3); // echoed user + user from history + assistant
@@ -353,9 +349,9 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
         var history = new AgentMessage[] { WidgetFixtures.UserMsg("s1", "q1"), WidgetFixtures.AssistantMsg("s1", "a1") };
-        await bus.PublishAsync(new AgentStartEvent("s1", history));
-        await bus.PublishAsync(new AgentStartEvent("s1", history));
-        await bus.PublishAsync(new AgentStartEvent("s1", history));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: history));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: history));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: history));
 
         await Assert.That(panel.Timeline.Count).IsEqualTo(2); // user + assistant, once each
     }
@@ -368,10 +364,10 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel();
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", []));
+        await bus.PublishAsync(TestEvents.AgentStart());
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
 
-        await bus.PublishAsync(new AgentEndEvent([]));
+        await bus.PublishAsync(TestEvents.AgentEnd());
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Idle);
     }
 
@@ -387,7 +383,7 @@ public class ChatScreenBridgeTests
             Cost: 0.0123m, TokensInput: 1500, TokensOutput: 300,
             TokensReasoning: 0, TokensCacheRead: 0, TokensCacheWrite: 0,
             MessageCount: 2, TimeCompacting: null);
-        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: metadata));
 
         await Assert.That(status.Tokens).IsEqualTo("1.5k↑ 300↓");
         await Assert.That(status.Cost).IsEqualTo("$0.0123");
@@ -456,7 +452,7 @@ public class ChatScreenBridgeTests
                 new FilePart("shots/a.png", "image/png", 2048, ImageTestPng.Header(640, 480)),
             ], StopReason.Stop, new Usage(0, 0), "test-model");
 
-        await bus.PublishAsync(new AgentStartEvent("s1", [image]));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: [image]));
 
         await Assert.That(panel.Timeline.Count).IsEqualTo(2); // markdown + image card
         var card = (Harbor.Tui.CellForge.Widgets.ImageBlock)panel.Timeline.BlockAt(1);
@@ -568,11 +564,8 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1",
-            new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("shots/ok.png", "image/png", [1, 2, 3, 4])]),
-            IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart());
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("shots/ok.png", "image/png", [1, 2, 3, 4])])));
 
         var tl = panel.Timeline;
         await Assert.That(tl.BlockAt(tl.Count - 1).Kind).IsEqualTo("image");
@@ -591,11 +584,8 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone()));
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1",
-            new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("report.pdf", "application/pdf", [1, 2, 3])]),
-            IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionStart());
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: new ToolResult("saved", IsError: false, Attachments: [new FileAttachment("report.pdf", "application/pdf", [1, 2, 3])])));
 
         await Assert.That(bridge.TryTakePendingImage(out _)).IsFalse();
     }
@@ -612,7 +602,7 @@ public class ChatScreenBridgeTests
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
 
         var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
-        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+        await bus.PublishAsync(TestEvents.AgentStart(model: model));
 
         // Window alone invents no usage — still dark until a request reports one.
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
@@ -620,11 +610,10 @@ public class ChatScreenBridgeTests
         // #623: the ctx segment is fed by the request the provider just accepted.
         // Turn 1 → per-request prompt tokens and session-cumulative spend coincide
         // (7400 in / 700 out), so the stats event below agrees with the step.
-        await bus.PublishAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(7400, 700)), AssistantMessage.Empty("s1", "m")));
+        await bus.PublishAsync(TestEvents.StepFinishUpdate(usage: new Usage(7400, 700)));
 
         var metadata = new SessionMetadata(0.0123m, 7400, 700, 0, 0, 0, 2, null);
-        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: metadata));
 
         // Occupancy is the request's prompt tokens — output tokens of the step just
         // finished are not resident in the window until the next request carries them.
@@ -650,15 +639,14 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
         // A request that lands before the window is known is retained, not dropped.
-        await bus.PublishAsync(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(1000, 200)), AssistantMessage.Empty("s1", "m")));
+        await bus.PublishAsync(TestEvents.StepFinishUpdate(usage: new Usage(1000, 200)));
 
         var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
-        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: metadata));
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
 
         var model = new ModelInfo("hy3", "kilocode", "Kilocode Hy3", 10_000, 4096, false, false, true, Pricing.Unknown, "openai");
-        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+        await bus.PublishAsync(TestEvents.AgentStart(model: model));
 
         // The remembered request re-applies against the late window — no new
         // step finish needed.
@@ -675,10 +663,10 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
         var model = new ModelInfo("m", "p", "M", 0, 4096, false, false, true, Pricing.Unknown, "openai");
-        await bus.PublishAsync(new AgentStartEvent("s1", [], model));
+        await bus.PublishAsync(TestEvents.AgentStart(model: model));
 
         var metadata = new SessionMetadata(0.001m, 1000, 200, 0, 0, 0, 1, null);
-        await bus.PublishAsync(new SessionStatsEvent("s1", metadata));
+        await bus.PublishAsync(TestEvents.SessionStats(metadata: metadata));
 
         await Assert.That(status.TryGetContextTokens(out _)).IsFalse();
         // Token/cost text still flows — only the ctx segment stays dark.
@@ -706,8 +694,7 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel { Model = "m" };
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new ToolExecutionUpdateEvent(
-            "tc1", "working…", RetryAttempt: 1, RetryMaxAttempts: 3, RetryBackoffSeconds: 0.2));
+        await bus.PublishAsync(TestEvents.ToolExecutionUpdate(partialResult: "working…", retryAttempt: 1, retryMaxAttempts: 3, retryBackoffSeconds: 0.2));
         await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
 
         var composer = new ComposerController();
@@ -734,10 +721,10 @@ public class ChatScreenBridgeTests
         await Assert.That(GridDump.Art(buffer)).Contains("retry 1/3 in 1s");
 
         // Ordinary progress updates (no retry fields) must not touch the slot.
-        await bus.PublishAsync(new ToolExecutionUpdateEvent("tc1", "still working…"));
+        await bus.PublishAsync(TestEvents.ToolExecutionUpdate(partialResult: "still working…"));
         await Assert.That(status.Retry).IsEqualTo("retry 1/3 in 1s");
 
-        await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("recovered"), IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("recovered")));
         await Assert.That(status.Retry).IsNull();
     }
 
@@ -752,10 +739,10 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel { Model = "m" };
         using var bridge = new ChatScreenBridge(bus, panel, status, autoSubscribe: false);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there")]));
+        await bus.PublishAsync(TestEvents.AgentStart(messages: [WidgetFixtures.UserMsg("s1", "hi there")]));
         await Assert.That(panel.Timeline.Count).IsEqualTo(0);
 
-        await bridge.AcceptAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there")]));
+        await bridge.AcceptAsync(TestEvents.AgentStart(messages: [WidgetFixtures.UserMsg("s1", "hi there")]));
         await Assert.That(panel.Timeline.Count).IsEqualTo(1);
         await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
@@ -784,22 +771,22 @@ public class ChatScreenBridgeTests
             StopReason.Stop, new Usage(0, 0), "m");
 
         // ── Turn 1: user → assistant ──
-        await bus.PublishAsync(new AgentStartEvent(sid, [u1]));
-        await bus.PublishAsync(new MessageStartEvent(a1));
-        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("t1", "first answer\n"), a1));
-        await bus.PublishAsync(new MessageEndEvent(a1));
-        await bus.PublishAsync(new TurnEndEvent(a1, [], sid));
-        await bus.PublishAsync(new AgentEndEvent([u1, a1]));
+        await bus.PublishAsync(TestEvents.AgentStart(sid, [u1]));
+        await bus.PublishAsync(TestEvents.MessageStart(a1));
+        await bus.PublishAsync(TestEvents.TextDeltaUpdate("t1", "first answer\n", a1));
+        await bus.PublishAsync(TestEvents.MessageEnd(a1));
+        await bus.PublishAsync(TestEvents.TurnEnd(a1, sessionId: sid));
+        await bus.PublishAsync(TestEvents.AgentEnd([u1, a1]));
 
         await Assert.That(panel.Timeline.Count).IsEqualTo(2); // u1 + committed a1
 
         // ── Turn 2: AgentStart replays the full history incl. settled a1 ──
-        await bus.PublishAsync(new AgentStartEvent(sid, [u1, a1, u2]));
-        await bus.PublishAsync(new MessageStartEvent(a2));
-        await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("t2", "second answer\n"), a2));
-        await bus.PublishAsync(new MessageEndEvent(a2));
-        await bus.PublishAsync(new TurnEndEvent(a2, [], sid));
-        await bus.PublishAsync(new AgentEndEvent([u1, a1, u2, a2]));
+        await bus.PublishAsync(TestEvents.AgentStart(sid, [u1, a1, u2]));
+        await bus.PublishAsync(TestEvents.MessageStart(a2));
+        await bus.PublishAsync(TestEvents.TextDeltaUpdate("t2", "second answer\n", a2));
+        await bus.PublishAsync(TestEvents.MessageEnd(a2));
+        await bus.PublishAsync(TestEvents.TurnEnd(a2, sessionId: sid));
+        await bus.PublishAsync(TestEvents.AgentEnd([u1, a1, u2, a2]));
 
         var tl = panel.Timeline;
         await Assert.That(tl.Count).IsEqualTo(4); // u1, a1, u2, a2 — no repaint
@@ -847,11 +834,11 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel { Model = "m" };
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
-        await bus.PublishAsync(new CompactionStartedEvent("s1"));
+        await bus.PublishAsync(TestEvents.CompactionStarted());
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Compacting);
         await Assert.That(panel.Timeline.BlockAt(0).RawText()).IsEqualTo("compacting history…");
 
-        await bus.PublishAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+        await bus.PublishAsync(TestEvents.CompactionFailed(error: "summarizer timed out"));
 
         var tl = panel.Timeline;
         await Assert.That(tl.Count).IsEqualTo(2)
@@ -883,7 +870,7 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        await bus.PublishAsync(new CompactionFailedEvent("s1", "summarizer timed out"));
+        await bus.PublishAsync(TestEvents.CompactionFailed(error: "summarizer timed out"));
 
         string text = panel.Timeline.BlockAt(0).RawText();
         await Assert.That(text).DoesNotContain("history compacted")

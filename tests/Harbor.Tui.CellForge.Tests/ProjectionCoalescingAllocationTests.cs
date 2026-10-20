@@ -115,8 +115,8 @@ public class ProjectionCoalescingAllocationTests
         store.Dispatch(new ChatAppMsg.ConfigureRuntime("m-1", "prov-1", "code"));
         store.Dispatch(new ChatAppMsg.SyncSessions(SessionList(), SessionId.Create("session-7")));
         store.Dispatch(new AppMsg.InputText(new string('d', DraftChars)));
-        store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", [])));
-        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(Partial())));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.AgentStart()));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(Partial())));
         _ = renderer.PumpProjection();
         await Assert.That(renderer.PromptBuffer.Length).IsEqualTo(DraftChars);
         return renderer;
@@ -133,7 +133,7 @@ public class ProjectionCoalescingAllocationTests
             // Hoisted out of the measured region on purpose: the gate is about
             // what the notification costs, not what constructing an event costs.
             messages[i] = new ChatAppMsg.Agent(
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "token"), partial));
+                TestEvents.TextDeltaUpdate("t1", "token", partial));
         }
 
         return messages;
@@ -255,8 +255,8 @@ public class ProjectionCoalescingAllocationTests
             store.Dispatch(new ChatAppMsg.ConfigureRuntime("m-1", "prov-1", "code"));
             store.Dispatch(new ChatAppMsg.SyncSessions(SessionList(), SessionId.Create("session-7")));
             store.Dispatch(new AppMsg.InputText(new string('d', DraftChars)));
-            store.Dispatch(new ChatAppMsg.Agent(new AgentStartEvent("s1", [])));
-            store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.AgentStart()));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
 
             void LegacyProject(UiState state)
             {
@@ -352,8 +352,7 @@ public class ProjectionCoalescingAllocationTests
         {
             var partial = Partial();
             long before = renderer.ProjectionCount;
-            await renderer.RenderAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("t1", "frame"), partial));
+            await renderer.RenderAsync(TestEvents.TextDeltaUpdate("t1", "frame", partial));
             await Assert.That(renderer.HasPendingProjection).IsFalse();
             await Assert.That(renderer.ProjectionCount - before).IsEqualTo(1);
         }
@@ -365,8 +364,7 @@ public class ProjectionCoalescingAllocationTests
         var renderer = await CreateAsync();
         var store = PrivateStore(renderer);
         long before = renderer.ProjectionCount;
-        store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(
-            new TextDeltaEvent("t1", "last"), Partial())));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.TextDeltaUpdate("t1", "last", Partial())));
         await Assert.That(renderer.HasPendingProjection).IsTrue();
 
         renderer.Dispose();
@@ -391,18 +389,18 @@ public class ProjectionCoalescingAllocationTests
             var partial = Partial();
             AgentEvent[] stream =
             [
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "a"), partial),
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "b"), partial),
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "c"), partial),
-                new MessageUpdateEvent(new ThinkingDeltaEvent("h1", "hmm"), partial),
-                new MessageUpdateEvent(new StepFinishEvent(0, "stop", new Usage(1000, 500)), partial),
+                TestEvents.TextDeltaUpdate("t1", "a", partial),
+                TestEvents.TextDeltaUpdate("t1", "b", partial),
+                TestEvents.TextDeltaUpdate("t1", "c", partial),
+                TestEvents.ThinkingDeltaUpdate(delta: "hmm", partial: partial),
+                TestEvents.StepFinishUpdate(usage: new Usage(1000, 500), partial: partial),
                 // #653: the token/cost totals the sidebar caches arrive from the
                 // CORE, not from the step-finish event — that event is usage for
                 // the prompt bar only, and pricing it here is what the two
                 // deleted $3/$15 constants used to do.
-                new SessionStatsEvent("s1", new SessionMetadata(0.0105m, 1000, 500, 0, 0, 0, 1, null)),
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "d"), partial),
-                new MessageUpdateEvent(new TextDeltaEvent("t1", "e"), partial),
+                TestEvents.SessionStats(metadata: new SessionMetadata(0.0105m, 1000, 500, 0, 0, 0, 1, null)),
+                TestEvents.TextDeltaUpdate("t1", "d", partial),
+                TestEvents.TextDeltaUpdate("t1", "e", partial),
             ];
 
             foreach (var evt in stream)

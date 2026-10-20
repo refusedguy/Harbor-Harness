@@ -6,6 +6,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -157,7 +158,7 @@ public class ChatAppReducerTests
         };
 
         var result = ChatAppReducer.Update(state,
-            new ChatAppMsg.Agent(new AgentStartEvent("s", history)));
+            new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 
         await Assert.That(result.State.Ui.ScrollOffset).IsEqualTo(0);
         await Assert.That(result.State.Chat.Lines.Length).IsEqualTo(1);
@@ -169,14 +170,14 @@ public class ChatAppReducerTests
     {
         var partial = AssistantMessage.Empty("s", "m");
         var state = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new MessageStartEvent(partial))).State;
+            new ChatAppMsg.Agent(TestEvents.MessageStart(partial))).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new MessageUpdateEvent(new TextDeltaEvent("m", "hello"), partial))).State;
+            TestEvents.TextDeltaUpdate("m", "hello", partial))).State;
 
         await Assert.That(state.Chat.IsStreaming).IsTrue();
         await Assert.That(state.Chat.Active.TextBuffer).IsEqualTo("hello");
 
-        var ended = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+        var ended = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
         await Assert.That(ended.State.Chat.IsStreaming).IsFalse();
         await Assert.That(ended.State.Chat.Lines[^1].Role).IsEqualTo(ChatRole.Assistant);
         await Assert.That(ended.State.Chat.Lines[^1].Text).IsEqualTo("hello");
@@ -189,7 +190,7 @@ public class ChatAppReducerTests
         var state = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(
             ToolExecutionStartEvent.Create("tc1", "read", args.RootElement))).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new ToolExecutionEndEvent("tc1", new ToolResult("ok", false), false))).State;
+            TestEvents.ToolExecutionEnd(result: new ToolResult("ok", false)))).State;
 
         await Assert.That(state.Chat.Lines[0].Role).IsEqualTo(ChatRole.Tool);
         await Assert.That(state.Chat.Lines[0].ToolCallId).IsEqualTo("tc1");
@@ -200,7 +201,7 @@ public class ChatAppReducerTests
     public async Task Compaction_Started_SetsCompactingStatus()
     {
         var result = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new CompactionStartedEvent("s")));
+            new ChatAppMsg.Agent(TestEvents.CompactionStarted("s")));
         await Assert.That(result.State.Chat.Status).IsEqualTo("compacting");
     }
 
@@ -227,11 +228,11 @@ public class ChatAppReducerTests
     public async Task Compaction_Failed_LeavesCompacting_WarnsAboutTruncation()
     {
         var started = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new CompactionStartedEvent("s"))).State;
+            new ChatAppMsg.Agent(TestEvents.CompactionStarted("s"))).State;
         await Assert.That(started.Chat.Status).IsEqualTo("compacting");
 
         var failed = ChatAppReducer.Update(started,
-            new ChatAppMsg.Agent(new CompactionFailedEvent("s", "summarizer timed out"))).State;
+            new ChatAppMsg.Agent(TestEvents.CompactionFailed("s", "summarizer timed out"))).State;
 
         await Assert.That(failed.Chat.Status).IsEqualTo("running")
             .Because("the turn continues on truncated history — it is not a failed run, and "
@@ -259,10 +260,10 @@ public class ChatAppReducerTests
     public async Task Compaction_Failed_DoesNotTouchSessionStatus()
     {
         var started = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new CompactionStartedEvent("s"))).State;
+            new ChatAppMsg.Agent(TestEvents.CompactionStarted("s"))).State;
 
         var failed = ChatAppReducer.Update(started,
-            new ChatAppMsg.Agent(new CompactionFailedEvent("s", "summarizer timed out"))).State;
+            new ChatAppMsg.Agent(TestEvents.CompactionFailed("s", "summarizer timed out"))).State;
 
         await Assert.That(failed.Chat.SessionStatus).IsEqualTo(started.Chat.SessionStatus);
     }
@@ -300,9 +301,8 @@ public class ChatAppReducerTests
     {
         var partial = AssistantMessage.Empty("s", "m");
         var state = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new MessageStartEvent(partial))).State;
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new MessageUpdateEvent(
-            new StepFinishEvent(0, "stop", new Usage(61_600, 196)), partial))).State;
+            new ChatAppMsg.Agent(TestEvents.MessageStart(partial))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.StepFinishUpdate(usage: new Usage(61_600, 196), partial: partial))).State;
 
         await Assert.That(state.Chat.Cost.CostUsd).IsEqualTo(0m);
         await Assert.That(state.Chat.Cost.TokensIn).IsEqualTo(0);
@@ -362,14 +362,14 @@ public class ChatAppReducerTests
         Stats(new UiState(), sessionId, metadata);
 
     private static UiState Stats(UiState state, string sessionId, SessionMetadata metadata) =>
-        ChatAppReducer.Update(state, new ChatAppMsg.Agent(new SessionStatsEvent(sessionId, metadata))).State;
+        ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.SessionStats(sessionId, metadata))).State;
 
     [Test]
     public async Task AgentEnd_AfterError_KeepsErrorStatus()
     {
         var state = ChatAppReducer.Update(Running,
-            new ChatAppMsg.Agent(new AgentErrorEvent("boom"))).State;
-        var ended = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([])));
+            new ChatAppMsg.Agent(TestEvents.AgentError())).State;
+        var ended = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd()));
         await Assert.That(ended.State.Chat.Status).IsEqualTo("error");
         await Assert.That(ended.State.Chat.IsAgentRunning).IsFalse();
     }

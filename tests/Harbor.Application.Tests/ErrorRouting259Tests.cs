@@ -21,8 +21,8 @@ public class ErrorRouting259Tests
     public async Task RateLimitStorm_PublishesSingleAgentError_InsteadOfOnePerAttempt()
     {
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "partial-"),
-            new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
+            TestEvents.TextDelta(delta: "partial-"),
+            TestEvents.LlmError("slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429)]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
@@ -39,7 +39,7 @@ public class ErrorRouting259Tests
     public async Task FatalStreamError_PublishesSingleAgentError()
     {
         var client = new ScriptedLlmClient([
-            new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
+            TestEvents.LlmError("bad key", kind: ProviderErrorKind.Auth, statusCode: 401)]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
@@ -56,8 +56,8 @@ public class ErrorRouting259Tests
     public async Task TransientThenRecovery_PublishesNoAgentError()
     {
         var client = new ScriptedLlmClient(
-            [new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)],
-            [new TextDeltaEvent("t", "recovered"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+            [TestEvents.LlmError("slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429)],
+            [TestEvents.TextDelta(delta: "recovered"), TestEvents.StepFinish(usage: new Usage(1, 1))]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(

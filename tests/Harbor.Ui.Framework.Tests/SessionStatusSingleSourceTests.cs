@@ -57,6 +57,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Rendering;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -73,12 +74,11 @@ public class SessionStatusSingleSourceTests
     {
         UiState state = from ?? ChatAppReducer.Update(new UiState(), new ChatAppMsg.AgentStarted()).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new MessageStartEvent(AssistantMessage.Empty("s", "m")))).State;
+            TestEvents.MessageStart(AssistantMessage.Empty("s", "m")))).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new MessageUpdateEvent(new TextDeltaEvent("m", "the answer"),
-                AssistantMessage.Empty("s", "m")))).State;
+            TestEvents.TextDeltaUpdate("m", "the answer", AssistantMessage.Empty("s", "m")))).State;
         return ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new MessageEndEvent(AssistantMessage.Empty("s", "m")))).State;
+            TestEvents.MessageEnd(AssistantMessage.Empty("s", "m")))).State;
     }
 
     // ── 1. a clean finish is Done whatever the last line is ────────────────
@@ -95,7 +95,7 @@ public class SessionStatusSingleSourceTests
             ChatRole.Tool, "→ read")).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.AppendLine(
             ChatRole.ToolResult, "✓ file contents", "tc1")).State;
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
 
         await Assert.That(state.Chat.Lines[^1].Role).IsEqualTo(ChatRole.ToolResult)
             .Because("this test is about a transcript whose tail is NOT an assistant line. The old "
@@ -115,7 +115,7 @@ public class SessionStatusSingleSourceTests
         // read that as a completed turn and painted the session dot green.
         var state = StreamedAssistantMessage();
         state = ChatAppReducer.Update(state,
-            new ChatAppMsg.Agent(new AgentEndEvent([], Cancelled: true))).State;
+            new ChatAppMsg.Agent(TestEvents.AgentEnd(cancelled: true))).State;
 
         await Assert.That(state.Chat.Lines[^1].Role).IsEqualTo(ChatRole.Assistant)
             .Because("this test is about a transcript whose tail IS an assistant line — the exact "
@@ -151,7 +151,7 @@ public class SessionStatusSingleSourceTests
         // at ChatViewModel.cs:139-141 ("the last writer standing on the tracker's
         // value") gets a check behind it. This test keeps the pure read.
         var state = StreamedAssistantMessage();
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
 
         var decided = state with
         {
@@ -179,8 +179,8 @@ public class SessionStatusSingleSourceTests
     {
         var state = StreamedAssistantMessage();
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new AgentErrorEvent("provider exploded"))).State;
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+            TestEvents.AgentError("provider exploded"))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
 
         await Assert.That(state.Chat.SessionStatus).IsEqualTo(SessionStatus.Error);
     }
@@ -202,7 +202,7 @@ public class SessionStatusSingleSourceTests
     public async Task CleanRun_IsDone_AndTheHostClosingItOutDoesNotUndoIt()
     {
         var state = StreamedAssistantMessage();
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
         await Assert.That(state.Chat.SessionStatus).IsEqualTo(SessionStatus.Done);
 
         // TuiEffectHost.PromptAsync dispatches AgentEnded() from its finally
@@ -235,11 +235,11 @@ public class SessionStatusSingleSourceTests
         await Assert.That(viaHost.Chat.SessionStatus).IsEqualTo(SessionStatus.Working);
 
         var viaCore = ChatAppReducer.Update(new UiState(),
-            new ChatAppMsg.Agent(new AgentStartEvent("s", []))).State;
+            new ChatAppMsg.Agent(TestEvents.AgentStart("s"))).State;
         await Assert.That(viaCore.Chat.SessionStatus).IsEqualTo(SessionStatus.Working);
 
         var viaMessage = ChatAppReducer.Update(viaCore,
-            new ChatAppMsg.Agent(new MessageStartEvent(AssistantMessage.Empty("s", "m")))).State;
+            new ChatAppMsg.Agent(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")))).State;
         await Assert.That(viaMessage.Chat.SessionStatus).IsEqualTo(SessionStatus.Working);
     }
 
@@ -251,7 +251,7 @@ public class SessionStatusSingleSourceTests
         // reached the tail check — it was right by accident, not by design.
         var state = ChatAppReducer.Update(new UiState(), new ChatAppMsg.AgentStarted()).State;
         state = ChatAppReducer.Update(state,
-            new ChatAppMsg.Agent(new CompactionStartedEvent("s"))).State;
+            new ChatAppMsg.Agent(TestEvents.CompactionStarted("s"))).State;
 
         await Assert.That(state.Chat.Status).IsEqualTo("compacting");
         await Assert.That(state.Chat.SessionStatus).IsEqualTo(SessionStatus.Working);
@@ -294,7 +294,7 @@ public class SessionStatusSingleSourceTests
         // there was no value to lose: the status was a function of the
         // transcript, so clearing the transcript was how you changed it.
         var state = StreamedAssistantMessage();
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentEndEvent([]))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentEnd())).State;
 
         var cleared = ChatAppReducer.Update(state,
             new AppMsg.KeyInput(ChatAction.Clear, new UiKey(UiKeyCode.None))).State;

@@ -76,7 +76,7 @@ public class AgentReducerToolBoundaryTests
         // constructed success events and forced the ✓ glyph onto error lines.
         return AgentReducer.Reduce(
             state,
-            new ToolExecutionEndEvent("tc1", new ToolResult(output, isError), isError));
+            TestEvents.ToolExecutionEnd(result: new ToolResult(output, isError), isError: isError));
     }
 
     // ── tool-start: one payload, two consumers ────────────────────────────

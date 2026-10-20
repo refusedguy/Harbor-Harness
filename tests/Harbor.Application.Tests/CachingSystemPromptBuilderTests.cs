@@ -115,14 +115,14 @@ public class CachingSystemPromptBuilderTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", "{}"),
-                new StepFinishEvent(0, "tool_use", new Usage(4, 2))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(4, 2))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(1, 1))
             }
         ]);
         var inner = new CountingPromptBuilder();

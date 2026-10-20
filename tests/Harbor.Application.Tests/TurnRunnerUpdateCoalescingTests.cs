@@ -259,10 +259,10 @@ public class TurnRunnerUpdateCoalescingTests
         // run's batch must go out before the next run starts.
         LlmEvent[] script =
         [
-            new TextDeltaEvent("0", "first "),
-            new ThinkingDeltaEvent("0", "hmm"),
-            new TextDeltaEvent("0", "second"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1)),
+            TestEvents.TextDelta("0", "first "),
+            TestEvents.ThinkingDelta("0", "hmm"),
+            TestEvents.TextDelta("0", "second"),
+            TestEvents.StepFinish(usage: new Usage(1, 1)),
         ];
 
         var bus = new FakeEventBus();
@@ -451,10 +451,10 @@ public class TurnRunnerUpdateCoalescingTests
         var script = new LlmEvent[deltas + 1];
         for (int i = 0; i < deltas; i++)
         {
-            script[i] = new TextDeltaEvent("0", $"t{i:D6}");
+            script[i] = TestEvents.TextDelta("0", $"t{i:D6}");
         }
 
-        script[deltas] = new StepFinishEvent(0, "stop", new Usage(1, 1));
+        script[deltas] = TestEvents.StepFinish(usage: new Usage(1, 1));
         return script;
     }
 

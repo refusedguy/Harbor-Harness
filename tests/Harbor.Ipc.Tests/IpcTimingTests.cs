@@ -6,6 +6,7 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -86,7 +87,7 @@ namespace Harbor.Ipc.Tests;
         });
 
         await server.SubscriptionReady;
-        await eventBus.PublishAsync(new AgentStartEvent("timing-session", Array.Empty<AgentMessage>(), null));
+        await eventBus.PublishAsync(TestEvents.AgentStart("timing-session"));
 
         var received = await receivedTcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Assert.That(received).IsNotNull();

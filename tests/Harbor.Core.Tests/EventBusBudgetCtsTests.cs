@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -30,7 +31,7 @@ public class EventBusBudgetCtsTests
             return ValueTask.CompletedTask;
         });
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt);
         await bus.PublishAsync(evt);
 
@@ -55,7 +56,7 @@ public class EventBusBudgetCtsTests
         });
 
         using var outer = new CancellationTokenSource();
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         await bus.PublishAsync(evt, outer.Token);
         await bus.PublishAsync(evt, outer.Token);
 
@@ -83,7 +84,7 @@ public class EventBusBudgetCtsTests
             NullLogger<InMemoryEventBus>.Instance, maxScrollback: 0, handlerBudget: TimeSpan.Zero);
         unbudgeted.Subscribe((evt, ct) => ValueTask.CompletedTask);
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         // Warm up (JIT, first CancelAfter timer, pool priming).
         for (int i = 0; i < 50; i++)
@@ -142,7 +143,7 @@ public class EventBusBudgetCtsTests
             return ValueTask.CompletedTask;
         });
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
         for (int i = 0; i < publishes; i++)
         {
             await bus.PublishAsync(evt);
@@ -182,7 +183,7 @@ public class EventBusBudgetCtsTests
             NullLogger<InMemoryEventBus>.Instance, maxScrollback: 0, handlerBudget: TimeSpan.Zero);
         unbudgeted.Subscribe((evt, ct) => ValueTask.CompletedTask);
 
-        var evt = new TurnStartEvent(1);
+        var evt = TestEvents.TurnStart();
 
         // Warm up (JIT, first CancelAfter timer, pool priming).
         for (int i = 0; i < 50; i++)

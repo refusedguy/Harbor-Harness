@@ -16,7 +16,7 @@ public class EventBusMiddlewareTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        var testEvent = new TurnStartEvent(1);
+        var testEvent = TestEvents.TurnStart();
         await bus.PublishAsync(testEvent);
 
         await Assert.That(received.Count).IsEqualTo(1);
@@ -31,7 +31,7 @@ public class EventBusMiddlewareTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        var testEvent = new TurnStartEvent(1);
+        var testEvent = TestEvents.TurnStart();
         await bus.PublishAsync(testEvent);
 
         await Assert.That(received.Count).IsEqualTo(0);
@@ -40,13 +40,13 @@ public class EventBusMiddlewareTests
     [Test]
     public async Task MiddlewarePipeline_Transform_SubscriberSeesTransformedEvent()
     {
-        var replacement = new TurnStartEvent(42);
+        var replacement = TestEvents.TurnStart(42);
         var mw = new TransformEventBusMiddleware(replacement);
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw });
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(received.Count).IsEqualTo(1);
         await Assert.That(received[0]).IsEqualTo(replacement);
@@ -60,7 +60,7 @@ public class EventBusMiddlewareTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(received.Count).IsEqualTo(0);
     }
@@ -73,14 +73,14 @@ public class EventBusMiddlewareTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         await Assert.That(received.Count).IsEqualTo(0);
 
         // Now publish without the throwing middleware
         var bus2 = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000);
         var received2 = new List<AgentEvent>();
         bus2.Subscribe(async (evt, ct) => received2.Add(evt));
-        await bus2.PublishAsync(new TurnStartEvent(2));
+        await bus2.PublishAsync(TestEvents.TurnStart(2));
         await Assert.That(received2.Count).IsEqualTo(1);
     }
 
@@ -94,7 +94,7 @@ public class EventBusMiddlewareTests
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, 1000, new[] { mw1, mw2, mw3 });
         bus.Subscribe(async (evt, ct) => { });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(order).IsEquivalentTo(new[] { "mw1", "mw2", "mw3" });
     }
@@ -109,7 +109,7 @@ public class EventBusMiddlewareTests
         var received = new List<AgentEvent>();
         bus.Subscribe(async (evt, ct) => received.Add(evt));
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(received.Count).IsEqualTo(0);
     }
@@ -123,9 +123,7 @@ public class EventBusMiddlewareTests
 
         for (int i = 0; i < total; i++)
         {
-            AgentEvent evt = new MessageUpdateEvent(
-                new TextDeltaEvent("id", "delta"),
-                AssistantMessage.Empty("s", "m"));
+            AgentEvent evt = TestEvents.TextDeltaUpdate("id", "delta", AssistantMessage.Empty("s", "m"));
             bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
             if (result) passed++;
         }
@@ -142,9 +140,7 @@ public class EventBusMiddlewareTests
 
         for (int i = 0; i < total; i++)
         {
-            AgentEvent evt = new MessageUpdateEvent(
-                new TextDeltaEvent("id", "delta"),
-                AssistantMessage.Empty("s", "m"));
+            AgentEvent evt = TestEvents.TextDeltaUpdate("id", "delta", AssistantMessage.Empty("s", "m"));
             bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
             if (result) passed++;
         }
@@ -156,7 +152,7 @@ public class EventBusMiddlewareTests
     public async Task SamplingMiddleware_NonMessageUpdateEvent_PassThrough()
     {
         var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 0.0);
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
         await Assert.That(result).IsTrue();
     }
@@ -170,9 +166,7 @@ public class EventBusMiddlewareTests
 
         for (int i = 0; i < total; i++)
         {
-            AgentEvent evt = new MessageUpdateEvent(
-                new TextDeltaEvent("id", "delta"),
-                AssistantMessage.Empty("s", "m"));
+            AgentEvent evt = TestEvents.TextDeltaUpdate("id", "delta", AssistantMessage.Empty("s", "m"));
             bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
             if (result) passed++;
         }
@@ -188,7 +182,7 @@ public class EventBusMiddlewareTests
     {
         var mw = new TypeFilterMiddleware(
             NullLogger<TypeFilterMiddleware>.Instance, typeof(TurnStartEvent));
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
         await Assert.That(result).IsTrue();
     }
@@ -198,7 +192,7 @@ public class EventBusMiddlewareTests
     {
         var mw = new TypeFilterMiddleware(
             NullLogger<TypeFilterMiddleware>.Instance, typeof(TurnStartEvent));
-        AgentEvent evt = new MessageStartEvent(AssistantMessage.Empty("s", "m"));
+        AgentEvent evt = TestEvents.MessageStart(AssistantMessage.Empty("s", "m"));
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
         await Assert.That(result).IsFalse();
     }
@@ -228,17 +222,15 @@ public class EventBusMiddlewareTests
             typeof(TurnStartEvent),
             typeof(MessageStartEvent));
 
-        AgentEvent evt1 = new TurnStartEvent(1);
+        AgentEvent evt1 = TestEvents.TurnStart();
         bool result1 = await mw.ProcessAsync(ref evt1, CancellationToken.None);
         await Assert.That(result1).IsTrue();
 
-        AgentEvent evt2 = new MessageStartEvent(AssistantMessage.Empty("s", "m"));
+        AgentEvent evt2 = TestEvents.MessageStart(AssistantMessage.Empty("s", "m"));
         bool result2 = await mw.ProcessAsync(ref evt2, CancellationToken.None);
         await Assert.That(result2).IsTrue();
 
-        AgentEvent evt3 = new TurnEndEvent(
-            AssistantMessage.Empty("s", "m"),
-            Array.Empty<ToolResultMessage>());
+        AgentEvent evt3 = TestEvents.TurnEnd(AssistantMessage.Empty("s", "m"));
         bool result3 = await mw.ProcessAsync(ref evt3, CancellationToken.None);
         await Assert.That(result3).IsFalse();
     }
@@ -247,9 +239,7 @@ public class EventBusMiddlewareTests
     public async Task SamplingMiddleware_ProcessAsync_ZeroAlloc()
     {
         var mw = new SamplingMiddleware(NullLogger<SamplingMiddleware>.Instance, rate: 1.0);
-        AgentEvent evt = new MessageUpdateEvent(
-            new TextDeltaEvent("id", "delta"),
-            AssistantMessage.Empty("s", "m"));
+        AgentEvent evt = TestEvents.TextDeltaUpdate("id", "delta", AssistantMessage.Empty("s", "m"));
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);
@@ -264,7 +254,7 @@ public class EventBusMiddlewareTests
     {
         var mw = new TypeFilterMiddleware(
             NullLogger<TypeFilterMiddleware>.Instance, typeof(TurnStartEvent));
-        AgentEvent evt = new TurnStartEvent(1);
+        AgentEvent evt = TestEvents.TurnStart();
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         bool result = await mw.ProcessAsync(ref evt, CancellationToken.None);

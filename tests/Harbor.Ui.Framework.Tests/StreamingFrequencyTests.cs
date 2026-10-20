@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -19,7 +20,7 @@ public class StreamingFrequencyTests
         var store = new UiStore();
         var projector = new DefaultUiProjector();
         var partial = AssistantMessage.Empty("s", "m");
-        store.Dispatch(new ChatAppMsg.Agent(new MessageStartEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageStart(partial)));
 
         int projects = 0;
         int fast = 0;
@@ -32,7 +33,7 @@ public class StreamingFrequencyTests
 
         for (int i = 0; i < deltaCount; i++)
         {
-            store.Dispatch(new ChatAppMsg.Agent(new MessageUpdateEvent(new TextDeltaEvent("m", chunk), partial)));
+            store.Dispatch(new ChatAppMsg.Agent(TestEvents.TextDeltaUpdate("m", chunk, partial)));
             var state = store.State;
             var screen = projector.Project(state);
             projects++;
@@ -57,7 +58,7 @@ public class StreamingFrequencyTests
             prevScreen = screen;
         }
 
-        store.Dispatch(new ChatAppMsg.Agent(new MessageEndEvent(partial)));
+        store.Dispatch(new ChatAppMsg.Agent(TestEvents.MessageEnd(partial)));
         var endScreen = projector.Project(store.State);
         projects++;
         if (ReferenceEquals(endScreen, prevScreen))

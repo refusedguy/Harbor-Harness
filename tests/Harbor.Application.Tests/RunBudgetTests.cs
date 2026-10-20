@@ -67,9 +67,9 @@ public class RunBudgetTests
     [
         new LlmEvent[]
         {
-            new ToolCallStartEvent("call-1", "counter"),
-            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-            new StepFinishEvent(0, "tool_use", usage)
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: usage)
         }
     ]);
 
@@ -209,8 +209,8 @@ public class RunBudgetTests
         const int CapBytes = 3000;
         var script = new LlmEvent[Deltas + 1];
         for (int i = 0; i < Deltas; i++)
-            script[i] = new TextDeltaEvent($"t-{i}", new string('x', DeltaChars));
-        script[Deltas] = new StepFinishEvent(0, "stop", null);
+            script[i] = TestEvents.TextDelta($"t-{i}", new string('x', DeltaChars));
+        script[Deltas] = TestEvents.StepFinish();
         var client = new ScriptedLlmClient([script]);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxOutputBytes: CapBytes));
@@ -239,14 +239,14 @@ public class RunBudgetTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(10, 10))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(10, 10))
             },
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "finished"),
-                new StepFinishEvent(1, "stop", new Usage(10, 10))
+                TestEvents.TextDelta(delta: "finished"),
+                TestEvents.StepFinish(1, usage: new Usage(10, 10))
             }
         ]);
         var bus = new FakeEventBus();
@@ -299,8 +299,8 @@ public class RunBudgetTests
         const int CapBytes = 3000;
         var script = new LlmEvent[Deltas + 1];
         for (int i = 0; i < Deltas; i++)
-            script[i] = new TextDeltaEvent($"t-{i}", new string('x', DeltaChars));
-        script[Deltas] = new StepFinishEvent(0, "stop", null);
+            script[i] = TestEvents.TextDelta($"t-{i}", new string('x', DeltaChars));
+        script[Deltas] = TestEvents.StepFinish();
         var client = new TokenCapturingLlmClient(script);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxOutputBytes: CapBytes));
@@ -321,8 +321,8 @@ public class RunBudgetTests
         // the producer token — the fix cancels on the cap break, not always.
         var client = new TokenCapturingLlmClient(
         [
-            new TextDeltaEvent("t", "finished"),
-            new StepFinishEvent(1, "stop", new Usage(10, 10))
+            TestEvents.TextDelta(delta: "finished"),
+            TestEvents.StepFinish(1, usage: new Usage(10, 10))
         ]);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxTokens: 1_000_000, MaxCostUsd: 1000m, MaxOutputBytes: 1_000_000));

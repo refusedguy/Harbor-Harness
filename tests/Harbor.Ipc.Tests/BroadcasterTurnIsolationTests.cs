@@ -4,6 +4,7 @@ using Harbor.Ipc.Protocol;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -46,17 +47,17 @@ public class BroadcasterTurnIsolationTests
 
             // Interleave two runs so a shared turn counter would cross-contaminate:
             // A reaches turn 2, B reaches turn 3, and B's latest turn wins "last write".
-            await bus.PublishAsync(new AgentStartEvent(runA, []));
-            await bus.PublishAsync(new AgentStartEvent(runB, []));
-            await bus.PublishAsync(new TurnStartEvent(1, runA));
-            await bus.PublishAsync(new TurnStartEvent(2, runA));
-            await bus.PublishAsync(new TurnStartEvent(1, runB));
-            await bus.PublishAsync(new TurnStartEvent(3, runB));
+            await bus.PublishAsync(TestEvents.AgentStart(runA));
+            await bus.PublishAsync(TestEvents.AgentStart(runB));
+            await bus.PublishAsync(TestEvents.TurnStart(sessionId: runA));
+            await bus.PublishAsync(TestEvents.TurnStart(2, runA));
+            await bus.PublishAsync(TestEvents.TurnStart(sessionId: runB));
+            await bus.PublishAsync(TestEvents.TurnStart(3, runB));
 
             // Run B ends FIRST (turn 3), then run A (turn 2) — with the old shared
             // _currentTurn both TurnEnds would carry 3.
-            await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, runB));
-            await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, runA));
+            await bus.PublishAsync(TestEvents.TurnEnd(TurnAssistant, NoToolResults, runB));
+            await bus.PublishAsync(TestEvents.TurnEnd(TurnAssistant, NoToolResults, runA));
 
             // 2 AgentStart + 4 TurnStart + 2 TurnEnd = 8 projected frames.
             List<EventFrame> frames = await FrameCollector.CollectFramesAsync(client, 8, cancellationToken);
@@ -96,14 +97,14 @@ public class BroadcasterTurnIsolationTests
 
             const string session = "session-reset";
 
-            await bus.PublishAsync(new AgentStartEvent(session, []));
-            await bus.PublishAsync(new TurnStartEvent(5, session));
-            await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, session));
+            await bus.PublishAsync(TestEvents.AgentStart(session));
+            await bus.PublishAsync(TestEvents.TurnStart(5, session));
+            await bus.PublishAsync(TestEvents.TurnEnd(TurnAssistant, NoToolResults, session));
 
             // A fresh run in the SAME session restarts the turn counter at 1.
-            await bus.PublishAsync(new AgentStartEvent(session, []));
-            await bus.PublishAsync(new TurnStartEvent(1, session));
-            await bus.PublishAsync(new TurnEndEvent(TurnAssistant, NoToolResults, session));
+            await bus.PublishAsync(TestEvents.AgentStart(session));
+            await bus.PublishAsync(TestEvents.TurnStart(sessionId: session));
+            await bus.PublishAsync(TestEvents.TurnEnd(TurnAssistant, NoToolResults, session));
 
             // 2 AgentStart + 2 TurnStart + 2 TurnEnd = 6 projected frames.
             List<EventFrame> frames = await FrameCollector.CollectFramesAsync(client, 6, cancellationToken);

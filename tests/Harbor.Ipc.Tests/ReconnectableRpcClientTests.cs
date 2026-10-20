@@ -5,6 +5,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -72,7 +73,7 @@ public class ReconnectableRpcClientTests
             // client actually processed it — the cut must happen mid-stream,
             // not before the stream started.
             await server.SubscriptionReady;
-            await bus.PublishAsync(new TurnStartEvent(1));
+            await bus.PublishAsync(TestEvents.TurnStart());
             bool firstArrived = await gotFirst.Task.WaitAsync(TimeSpan.FromSeconds(10));
             await Assert.That(firstArrived).IsTrue();
             await wrapper.CutCurrentConnectionForTestAsync();
@@ -80,7 +81,7 @@ public class ReconnectableRpcClientTests
             // Events fired while the client is "offline" — must be replayed.
             for (int turn = 2; turn <= 6; turn++)
             {
-                await bus.PublishAsync(new TurnStartEvent(turn));
+                await bus.PublishAsync(TestEvents.TurnStart(turn));
             }
 
             bool gotAll = await gotSix.Task.WaitAsync(TimeSpan.FromSeconds(20));

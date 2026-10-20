@@ -24,19 +24,19 @@ public static class CanonicalStreams
             new ToolPathLimitArgs("README.md", 10),
             TestJsonContext.Default.ToolPathLimitArgs);
 
-        yield return new AgentStartEvent("s1", []);
-        yield return new MessageStartEvent(partial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("0", "Hello"), partial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("0", ", "), partial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("0", "world!"), partial);
-        yield return new MessageEndEvent(partial);
+        yield return TestEvents.AgentStart();
+        yield return TestEvents.MessageStart(partial);
+        yield return TestEvents.TextDeltaUpdate("0", "Hello", partial);
+        yield return TestEvents.TextDeltaUpdate("0", ", ", partial);
+        yield return TestEvents.TextDeltaUpdate("0", "world!", partial);
+        yield return TestEvents.MessageEnd(partial);
 
         var toolPartial = AssistantMessage.Empty("s1", "stub-2");
         yield return new ToolExecutionStartEvent("tc_1", "read", args);
-        yield return new ToolExecutionEndEvent("tc_1", ToolResult.Success("[0001] # Harbor"), IsError: false);
-        yield return new MessageStartEvent(toolPartial);
-        yield return new MessageUpdateEvent(new TextDeltaEvent("1", "Done."), toolPartial);
-        yield return new MessageEndEvent(toolPartial);
-        yield return new AgentEndEvent([]);
+        yield return TestEvents.ToolExecutionEnd("tc_1", ToolResult.Success("[0001] # Harbor"));
+        yield return TestEvents.MessageStart(toolPartial);
+        yield return TestEvents.TextDeltaUpdate("1", "Done.", toolPartial);
+        yield return TestEvents.MessageEnd(toolPartial);
+        yield return TestEvents.AgentEnd();
     }
 }

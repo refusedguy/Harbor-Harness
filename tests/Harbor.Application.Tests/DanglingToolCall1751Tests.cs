@@ -144,10 +144,10 @@ public class DanglingToolCall1751Tests
     /// </summary>
     private static ScriptedLlmClient DegradingClient() => new(
     [
-        new ToolCallStartEvent("call-1", "counter"),
-        new ToolCallDeltaEvent("call-1", "{}"),
-        new StepFinishEvent(0, "tool_use", new Usage(3, 4)),
-        new ErrorEvent("network blip", Kind: ProviderErrorKind.Network),
+        TestEvents.ToolCallStart(),
+        TestEvents.ToolCallDelta(),
+        TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4)),
+        TestEvents.LlmError("network blip", kind: ProviderErrorKind.Network),
     ]);
 
     [Test]
@@ -211,13 +211,13 @@ public class DanglingToolCall1751Tests
         var counter = new CountingTool();
         var client = new ScriptedLlmClient(
         [
-            new ToolCallStartEvent("call-1", "counter"),
-            new ToolCallDeltaEvent("call-1", "{}"),
-            new StepFinishEvent(0, "tool_use", new Usage(3, 4)),
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4)),
         ],
         [
-            new TextDeltaEvent("t", "done"),
-            new StepFinishEvent(1, "stop", new Usage(1, 1)),
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(1, usage: new Usage(1, 1)),
         ]);
         var bus = new FakeEventBus();
         var loop = LoopWithClock(client, bus, new FakeToolRegistry(counter));
@@ -245,9 +245,9 @@ public class DanglingToolCall1751Tests
         // persisted and the turn ended with no result for it.
         var client = new ScriptedLlmClient(
         [
-            new ToolCallStartEvent("call-1", "counter"),
-            new ToolCallDeltaEvent("call-1", "{}"),
-            new StepFinishEvent(0, "tool_use", new Usage(3, 4)),
+            TestEvents.ToolCallStart(),
+            TestEvents.ToolCallDelta(),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4)),
         ]);
         var bus = new FakeEventBus();
         var loop = LoopWithClock(client, bus);

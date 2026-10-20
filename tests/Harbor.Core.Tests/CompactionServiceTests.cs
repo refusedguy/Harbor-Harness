@@ -10,6 +10,7 @@ using Harbor.Application.Sessions;
 using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Providers;
+using Harbor.TestKit;
 using FakeLlmClientBase = Harbor.TestKit.Generated.FakeLlmClient; // #1769: generated double
 
 namespace Harbor.Core.Tests;
@@ -509,9 +510,9 @@ public class CompactionServiceTests
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             LastRequest = request;
-            yield return new TextDeltaEvent("0", _summary);
+            yield return TestEvents.TextDelta("0", _summary);
             await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
+            yield return TestEvents.StepFinish(usage: new Usage(0, _summary.Length / 4));
         }
     }
 
@@ -534,9 +535,9 @@ public class CompactionServiceTests
             LlmRequest request,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            yield return new TextDeltaEvent("0", _summary);
+            yield return TestEvents.TextDelta("0", _summary);
             await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            yield return new StepFinishEvent(0, "stop", new Usage(0, _summary.Length / 4));
+            yield return TestEvents.StepFinish(usage: new Usage(0, _summary.Length / 4));
         }
     }
 }

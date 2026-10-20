@@ -9,6 +9,7 @@ using ChatLineVm = Harbor.Ui.Framework.ViewModels.ChatLineViewModel;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core.Enums;
+using Harbor.TestKit;
 
 using ChatRole = Harbor.Abstractions.Models.ChatRole;
 
@@ -131,10 +132,8 @@ public sealed class ChatViewTests : ComponentTestBase
             Harbor.Abstractions.Models.Pricing.Unknown, "ollama");
         var partial = Harbor.Abstractions.Models.AssistantMessage.Empty("e2e-stream-session", "qwen2.5-coder:7b");
 
-        await eventBus.PublishAsync(new MessageStartEvent(partial)).ConfigureAwait(false);
-        await eventBus.PublishAsync(new MessageUpdateEvent(
-            new TextDeltaEvent("t1", "The model is streaming a response token by token, character by character…"),
-            partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.MessageStart(partial)).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.TextDeltaUpdate("t1", "The model is streaming a response token by token, character by character…", partial)).ConfigureAwait(false);
 
         var hasStreaming = await Driver.WaitForTextAsync("streaming", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
@@ -147,9 +146,7 @@ public sealed class ChatViewTests : ComponentTestBase
         var path = await CaptureAsync("chat-streaming").ConfigureAwait(false);
 
         // Reset through the matching production event.
-        await eventBus.PublishAsync(new MessageEndEvent(partial.WithFinish(
-            Harbor.Abstractions.Models.StopReason.Stop,
-            new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
+        await eventBus.PublishAsync(TestEvents.MessageEnd(partial.WithFinish(Harbor.Abstractions.Models.StopReason.Stop, new Harbor.Abstractions.Models.Usage(0, 0)))).ConfigureAwait(false);
     }
 
     /// <summary>

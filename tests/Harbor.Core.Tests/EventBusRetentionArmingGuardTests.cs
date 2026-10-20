@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Events;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -71,7 +72,7 @@ public class EventBusRetentionArmingGuardTests
 
         for (int i = 0; i < 200; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(bus.FastPathCount).IsEqualTo(200);
@@ -94,7 +95,7 @@ public class EventBusRetentionArmingGuardTests
 
         for (int i = 0; i < 200; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         // This call is the reader, and it is what arms retention. It returns the
@@ -124,7 +125,7 @@ public class EventBusRetentionArmingGuardTests
 
         for (int i = 0; i < 6; i++)
         {
-            await bus.PublishAsync(new TurnStartEvent(i));
+            await bus.PublishAsync(TestEvents.TurnStart(i));
         }
 
         await Assert.That(bus.PublishedCount).IsEqualTo(6)
@@ -157,7 +158,7 @@ public class EventBusRetentionArmingGuardTests
         await Assert.That(bus.FastPathEligible).IsFalse()
             .Because("an armed ring is the price of a reader, and GetScrollback(0) is a reader (#518)");
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.PublishedCount).IsEqualTo(1);
         await Assert.That(bus.GetScrollback(8).Count).IsEqualTo(1);
@@ -181,7 +182,7 @@ public class EventBusRetentionArmingGuardTests
         await Assert.That(bus.FastPathEligible).IsTrue()
             .Because("with no slots there is no ring to maintain, so nothing can observe the publish");
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         await Assert.That(bus.PublishedCount).IsEqualTo(0)
             .Because("the fast path is still the whole story for a bus with no ring");
     }

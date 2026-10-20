@@ -380,8 +380,8 @@ public class HookRunnerTests
         [
             new LlmEvent[]
             {
-                new TextDeltaEvent("t", "done"),
-                new StepFinishEvent(0, "stop", new Usage(1, 1))
+                TestEvents.TextDelta(delta: "done"),
+                TestEvents.StepFinish(usage: new Usage(1, 1))
             }
         ]);
         var loop = new AgentLoop(
@@ -591,8 +591,8 @@ public class HookRunnerTests
     {
         var client = new ScriptedLlmClient(
         [
-            new TextDeltaEvent("t", "done"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1))
+            TestEvents.TextDelta(delta: "done"),
+            TestEvents.StepFinish(usage: new Usage(1, 1))
         ]);
         var agent = CodeAgent();
         var loop = new AgentLoop(

@@ -110,10 +110,7 @@ public class DiagnosticsAggregatorTests
         var bus = new FakeEventBus();
         using var aggregator = new DiagnosticsAggregator(bus);
 
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1",
-            ToolResult.Success("error CS0246: The type or namespace name 'Foo' could not be found"),
-            IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("error CS0246: The type or namespace name 'Foo' could not be found")));
 
         IReadOnlyList<DiagnosticIssue> snapshot = aggregator.Snapshot;
         await Assert.That(snapshot.Count).IsEqualTo(1);
@@ -191,8 +188,7 @@ public class DiagnosticsAggregatorTests
             "src/a.cs",
             new LspDiagnostic("src/a.cs", 0, 0, 0, 0, LspSeverity.Error, "csharp", "broken"));
 
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1", ToolResult.Success("error CS0001: nope"), IsError: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("error CS0001: nope"), isError: true));
         await Assert.That(aggregator.Snapshot.Count).IsEqualTo(2);
 
         aggregator.Reset();
@@ -214,7 +210,7 @@ public class DiagnosticsAggregatorTests
         var bus = new FakeEventBus();
         using var aggregator = new DiagnosticsAggregator(bus);
 
-        await bus.PublishAsync(new AgentErrorEvent("the transport fell over mid-stream"));
+        await bus.PublishAsync(TestEvents.AgentError("the transport fell over mid-stream"));
 
         IReadOnlyList<DiagnosticIssue> snapshot = aggregator.Snapshot;
         await Assert.That(snapshot.Count).IsEqualTo(1);
@@ -229,8 +225,7 @@ public class DiagnosticsAggregatorTests
         var bus = new FakeEventBus();
         using var aggregator = new DiagnosticsAggregator(bus);
 
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1", ToolResult.Success("TypeError: boom"), IsError: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("TypeError: boom"), isError: true));
 
         await Assert.That(aggregator.Snapshot.Count).IsEqualTo(1)
             .Because("the two producers are independent by design. A host with no language server "
@@ -278,10 +273,8 @@ public class DiagnosticsAggregatorTests
         var received = new List<IReadOnlyList<DiagnosticIssue>>();
         aggregator.Changed += (_, args) => received.Add(args.Snapshot);
 
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc1", ToolResult.Success("error CS0001: one"), IsError: true));
-        await bus.PublishAsync(new ToolExecutionEndEvent(
-            "tc2", ToolResult.Success("error CS0002: two"), IsError: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("error CS0001: one"), isError: true));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd("tc2", ToolResult.Success("error CS0002: two"), true));
 
         await Assert.That(received.Count).IsEqualTo(2);
         await Assert.That(received[0].Count).IsEqualTo(1);

@@ -8,6 +8,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="CompactionService" /> — invoked at the start of every agent turn to
@@ -229,7 +230,7 @@ internal sealed class StubSummarizingLlmClient : ILlmClient
         LlmRequest request,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        yield return new TextDeltaEvent("0", "Compacted summary of the conversation so far.");
+        yield return TestEvents.TextDelta("0", "Compacted summary of the conversation so far.");
         await Task.Yield();
     }
 

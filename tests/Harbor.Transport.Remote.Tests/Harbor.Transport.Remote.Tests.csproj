@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- #1821: the shared event builders (TestEvents). The edge is
+         closure-neutral — that part references only Harbor.Abstractions
+         and Harbor.Abstractions.Contracts, and this project already has
+         both because it already publishes events. -->
+    <ProjectReference Include="../Harbor.TestKit.Support/Harbor.TestKit.Support.csproj"/>
     <ProjectReference Include="../../src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj"/>
   </ItemGroup>
 

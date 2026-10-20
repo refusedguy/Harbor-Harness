@@ -9,6 +9,7 @@ using Harbor.Ipc.Server;
 using Harbor.Ipc.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -133,7 +134,7 @@ public class MultiClientIsolationTests
             await Assert.That(leaseResp).IsTypeOf<OkResponse>();
 
             // Run-scoped event on the owned session.
-            await bus.PublishAsync(new AgentStartEvent(ownedSession.Id, Array.Empty<AgentMessage>(), null));
+            await bus.PublishAsync(TestEvents.AgentStart(ownedSession.Id));
 
             bool ownerGotIt = await ReadOneFrameWithin(owner, TimeSpan.FromSeconds(5));
             await Assert.That(ownerGotIt).IsTrue();
@@ -148,7 +149,7 @@ public class MultiClientIsolationTests
             bool outsiderGotBroadcast = false;
             for (int probe = 0; probe < 25 && !outsiderGotBroadcast; probe++)
             {
-                await bus.PublishAsync(new TurnStartEvent(probe));
+                await bus.PublishAsync(TestEvents.TurnStart(probe));
                 outsiderGotBroadcast = await ReadOneFrameWithin(outsider, TimeSpan.FromMilliseconds(300));
             }
 

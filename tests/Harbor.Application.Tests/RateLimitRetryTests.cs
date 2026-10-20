@@ -164,9 +164,9 @@ public class RateLimitRetryTests
         await Assert.That(RetryPolicy.IsRateLimit(
             new HttpRequestException("503", inner: null, HttpStatusCode.ServiceUnavailable))).IsFalse();
         await Assert.That(RetryPolicy.IsRateLimit(new LlmStreamErrorException(
-            new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)))).IsTrue();
+            TestEvents.LlmError("slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429)))).IsTrue();
         await Assert.That(RetryPolicy.IsRateLimit(new LlmStreamErrorException(
-            new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)))).IsFalse();
+            TestEvents.LlmError("bad key", kind: ProviderErrorKind.Auth, statusCode: 401)))).IsFalse();
         await Assert.That(RetryPolicy.IsRateLimit(new InvalidOperationException())).IsFalse();
     }
 
@@ -238,8 +238,8 @@ public class RateLimitRetryTests
         // Every attempt streams one text delta, then the provider reports 429.
         // ScriptedLlmClient repeats the last script, so the storm never lets up.
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "partial-"),
-            new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
+            TestEvents.TextDelta(delta: "partial-"),
+            TestEvents.LlmError("slow down", kind: ProviderErrorKind.RateLimit, statusCode: 429)]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
@@ -267,7 +267,7 @@ public class RateLimitRetryTests
     public async Task FatalStreamError_StillFailsTerminally()
     {
         var client = new ScriptedLlmClient([
-            new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
+            TestEvents.LlmError("bad key", kind: ProviderErrorKind.Auth, statusCode: 401)]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(

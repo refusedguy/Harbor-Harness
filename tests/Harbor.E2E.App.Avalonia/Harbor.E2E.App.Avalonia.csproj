@@ -62,6 +62,11 @@
     <!-- Framework + the app under test. The app project grants
          InternalsVisibleTo to Harbor.E2E.App.Avalonia so the driver can
          call AppHost.BuildAsync() directly — same pattern as the DI tests. -->
+    <!-- #1821: the shared event builders (TestEvents). The edge is
+         closure-neutral — that part references only Harbor.Abstractions
+         and Harbor.Abstractions.Contracts, and this project already has
+         both because it already publishes events. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
     <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
     <ProjectReference Include="..\..\apps\Harbor.App.Avalonia\Harbor.App.Avalonia.csproj"/>
   </ItemGroup>

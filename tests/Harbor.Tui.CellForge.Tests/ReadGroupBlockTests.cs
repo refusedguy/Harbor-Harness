@@ -31,7 +31,7 @@ public class ReadGroupBlockTests
     {
         await bus.PublishAsync(new ToolExecutionStartEvent(id, tool, TestArgs.FromJson(args)));
         bridge.Tick(tickMs);
-        await bus.PublishAsync(new ToolExecutionEndEvent(id, ToolResult.Success("ok-" + id), IsError: false));
+        await bus.PublishAsync(TestEvents.ToolExecutionEnd(id, ToolResult.Success("ok-" + id)));
     }
 
     [Test]
@@ -121,8 +121,8 @@ public class ReadGroupBlockTests
             var group = (ReadGroupBlock)panel.Timeline.BlockAt(0);
             await Assert.That(group.Members.Count).IsEqualTo(2);
 
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("a"), IsError: false));
-            await bus.PublishAsync(new ToolExecutionEndEvent("tc2", ToolResult.Success("b"), IsError: false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("a")));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd("tc2", ToolResult.Success("b")));
             await Assert.That(panel.Timeline.Count).IsEqualTo(1);
             await Assert.That(group.Members.Count).IsEqualTo(2);
         }

@@ -110,9 +110,9 @@ public class RunWallClockLimitTests
     [
         new LlmEvent[]
         {
-            new ToolCallStartEvent("call-1", "clock"),
-            new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-            new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+            TestEvents.ToolCallStart(toolName: "clock"),
+            TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+            TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
         }
     ]);
 
@@ -186,9 +186,9 @@ public class RunWallClockLimitTests
         [
             new LlmEvent[]
             {
-                new ToolCallStartEvent("call-1", "counter"),
-                new ToolCallDeltaEvent("call-1", """{"n":1}"""),
-                new StepFinishEvent(0, "tool_use", new Usage(2, 1))
+                TestEvents.ToolCallStart(),
+                TestEvents.ToolCallDelta(argsDelta: """{"n":1}"""),
+                TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(2, 1))
             }
         ]);
         var bus = new FakeEventBus();

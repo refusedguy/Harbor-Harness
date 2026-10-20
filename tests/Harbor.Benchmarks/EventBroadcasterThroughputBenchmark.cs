@@ -6,6 +6,7 @@ using Harbor.Ipc.Protocol;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 
 /// <summary>
@@ -113,7 +114,7 @@ public class EventBroadcasterThroughputBenchmark
         const int eventCount = 1000;
         for (int i = 0; i < eventCount; i++)
         {
-            await _eventBus.PublishAsync(new TurnStartEvent(i % 100)).ConfigureAwait(false);
+            await _eventBus.PublishAsync(TestEvents.TurnStart(i % 100)).ConfigureAwait(false);
         }
     }
 
@@ -124,9 +125,7 @@ public class EventBroadcasterThroughputBenchmark
         var partial = AssistantMessage.Empty("session-1", "stub-1");
         for (int i = 0; i < eventCount; i++)
         {
-            await _eventBus.PublishAsync(new MessageUpdateEvent(
-                new TextDeltaEvent("m1", $"Token {i} "),
-                partial)).ConfigureAwait(false);
+            await _eventBus.PublishAsync(TestEvents.TextDeltaUpdate("m1", $"Token {i} ", partial)).ConfigureAwait(false);
         }
     }
 }
@@ -252,7 +251,7 @@ public class EventBroadcasterDeliveryBenchmark
     {
         for (int i = 0; i < BurstSize; i++)
         {
-            await _eventBus.PublishAsync(new TurnStartEvent(i)).ConfigureAwait(false);
+            await _eventBus.PublishAsync(TestEvents.TurnStart(i)).ConfigureAwait(false);
         }
     }
 
@@ -290,7 +289,7 @@ public class EventBroadcasterDeliveryBenchmark
     {
         for (int i = 0; i < BurstSize; i++)
         {
-            await _eventBus.PublishAsync(new TurnStartEvent(i)).ConfigureAwait(false);
+            await _eventBus.PublishAsync(TestEvents.TurnStart(i)).ConfigureAwait(false);
         }
     }
 

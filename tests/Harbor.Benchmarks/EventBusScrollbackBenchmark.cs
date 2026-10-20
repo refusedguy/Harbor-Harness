@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Events;
 using Harbor.Registries.Events;
+using Harbor.TestKit;
 
 namespace Harbor.Benchmarks;
 
@@ -54,7 +55,7 @@ public class EventBusScrollbackBenchmark
 
         for (int i = 0; i < 1000; i++)
         {
-            _bus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
+            _bus.PublishAsync(TestEvents.TurnStart(i)).GetAwaiter().GetResult();
         }
 
         _emptyBus = new InMemoryEventBus(10);
@@ -87,7 +88,7 @@ public class EventBusScrollbackBenchmark
     [Benchmark(Description = "Publish_AfterFull_TailCopyUnderLock")]
     public async Task Publish_AfterFull()
     {
-        await _bus.PublishAsync(new TurnStartEvent(1001)).ConfigureAwait(false);
+        await _bus.PublishAsync(TestEvents.TurnStart(1001)).ConfigureAwait(false);
     }
 }
 
@@ -132,7 +133,7 @@ public class EventBusScrollbackDeliveryBenchmark
     [GlobalSetup]
     public void Setup()
     {
-        _event = new TurnStartEvent(1001);
+        _event = TestEvents.TurnStart(1001);
 
         // Saturated ring, zero subscribers — accept + overwrite only.
         _enqueueBus = CreateSaturatedBus(withConsumers: false);
@@ -190,7 +191,7 @@ public class EventBusScrollbackDeliveryBenchmark
 
         for (int i = 0; i < MaxScrollback; i++)
         {
-            bus.PublishAsync(new TurnStartEvent(i)).GetAwaiter().GetResult();
+            bus.PublishAsync(TestEvents.TurnStart(i)).GetAwaiter().GetResult();
         }
 
         return bus;
@@ -252,7 +253,7 @@ public class EventBusContentionBenchmark
             {
                 for (int i = 0; i < 250; i++)
                 {
-                    await _bus.PublishAsync(new TurnStartEvent(baseIdx + i)).ConfigureAwait(false);
+                    await _bus.PublishAsync(TestEvents.TurnStart(baseIdx + i)).ConfigureAwait(false);
                 }
             });
         }

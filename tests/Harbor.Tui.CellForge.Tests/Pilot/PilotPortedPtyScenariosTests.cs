@@ -52,12 +52,12 @@ public sealed class PilotPortedPtyScenariosTests
 
         var user = TestMessages.User("привет");
         var streaming = TestMessages.Assistant(string.Empty);
-        await pilot.PublishAsync(new AgentStartEvent("session-1", new AgentMessage[] { user }));
-        await pilot.PublishAsync(new MessageStartEvent(streaming));
+        await pilot.PublishAsync(TestEvents.AgentStart("session-1", new AgentMessage[] { user }));
+        await pilot.PublishAsync(TestEvents.MessageStart(streaming));
         foreach (var chunk in new[] { "Привет ", "из ", "mock!" })
-            await pilot.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("m1", chunk), streaming));
-        await pilot.PublishAsync(new MessageEndEvent(TestMessages.Assistant("Привет из mock!")));
-        await pilot.PublishAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+            await pilot.PublishAsync(TestEvents.TextDeltaUpdate("m1", chunk, streaming));
+        await pilot.PublishAsync(TestEvents.MessageEnd(TestMessages.Assistant("Привет из mock!")));
+        await pilot.PublishAsync(TestEvents.AgentEnd());
 
         // Block COMMITTED (survives past streaming end), composer cleared.
         string frame = pilot.FrameText();
@@ -81,17 +81,14 @@ public sealed class PilotPortedPtyScenariosTests
 
         var user = TestMessages.User("read the probe file");
         var streaming = TestMessages.Assistant(string.Empty);
-        await pilot.PublishAsync(new AgentStartEvent("session-1", new AgentMessage[] { user }));
-        await pilot.PublishAsync(new MessageStartEvent(streaming));
-        await pilot.PublishAsync(new MessageUpdateEvent(new ToolCallStartEvent("tc1", "read"), streaming));
+        await pilot.PublishAsync(TestEvents.AgentStart("session-1", new AgentMessage[] { user }));
+        await pilot.PublishAsync(TestEvents.MessageStart(streaming));
+        await pilot.PublishAsync(TestEvents.ToolCallStartUpdate("tc1", "read", streaming));
         await pilot.PublishAsync(ToolExecutionStartEvent.Create(
             "tc1", "read", TestArgs.FromJson("{\"path\":\"pty-tool-probe-423.txt\"}")));
-        await pilot.PublishAsync(new ToolExecutionEndEvent(
-            "tc1",
-            ToolResult.Success("pty-probe-line-alpha-423\npty-probe-line-beta-423\n"),
-            IsError: false));
-        await pilot.PublishAsync(new MessageEndEvent(TestMessages.Assistant("done")));
-        await pilot.PublishAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await pilot.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("pty-probe-line-alpha-423\npty-probe-line-beta-423\n")));
+        await pilot.PublishAsync(TestEvents.MessageEnd(TestMessages.Assistant("done")));
+        await pilot.PublishAsync(TestEvents.AgentEnd());
 
         // The tool card streamed with the call name and the executed result
         // (renderer vocabulary: "[tool] → read" + "[result] ✓ …").
@@ -120,23 +117,20 @@ public sealed class PilotPortedPtyScenariosTests
 
         var user = TestMessages.User("apply the edit to the probe file");
         var streaming = TestMessages.Assistant(string.Empty);
-        await pilot.PublishAsync(new AgentStartEvent("session-1", new AgentMessage[] { user }));
-        await pilot.PublishAsync(new MessageStartEvent(streaming));
-        await pilot.PublishAsync(new MessageUpdateEvent(new ToolCallStartEvent("tc1", "edit"), streaming));
+        await pilot.PublishAsync(TestEvents.AgentStart("session-1", new AgentMessage[] { user }));
+        await pilot.PublishAsync(TestEvents.MessageStart(streaming));
+        await pilot.PublishAsync(TestEvents.ToolCallStartUpdate("tc1", "edit", streaming));
         await pilot.PublishAsync(ToolExecutionStartEvent.Create(
             "tc1",
             "edit",
             TestArgs.FromJson("{\"path\":\"pty-edit-probe-1057.txt\",\"oldString\":\"oldmarker-line-1057\",\"newString\":\"newmarker-line-1057\"}")));
-        await pilot.PublishAsync(new ToolExecutionEndEvent(
-            "tc1",
-            ToolResult.Success("Edited pty-edit-probe-1057.txt\nDiff (context):\n- oldmarker-line-1057\n+ newmarker-line-1057"),
-            IsError: false));
+        await pilot.PublishAsync(TestEvents.ToolExecutionEnd(result: ToolResult.Success("Edited pty-edit-probe-1057.txt\nDiff (context):\n- oldmarker-line-1057\n+ newmarker-line-1057")));
         // The follow-up text streams as deltas (MessageEnd commits the
         // streamed buffer, not the message content — same as the live path).
         var followUp = TestMessages.Assistant(string.Empty);
-        await pilot.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("m2", "probe-edit-done-1057"), followUp));
-        await pilot.PublishAsync(new MessageEndEvent(TestMessages.Assistant("probe-edit-done-1057")));
-        await pilot.PublishAsync(new AgentEndEvent(Array.Empty<AgentMessage>()));
+        await pilot.PublishAsync(TestEvents.TextDeltaUpdate("m2", "probe-edit-done-1057", followUp));
+        await pilot.PublishAsync(TestEvents.MessageEnd(TestMessages.Assistant("probe-edit-done-1057")));
+        await pilot.PublishAsync(TestEvents.AgentEnd());
 
         string frame = pilot.FrameText();
         await Assert.That(frame).Contains("→ edit");

@@ -10,6 +10,7 @@ using Harbor.Application.Sessions;
 using Harbor.Registries.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Core.Tests;
 
@@ -55,8 +56,8 @@ public class CompactionSummaryRetryTests
     public async Task CompactAsync_TransientRateLimitThenSuccess_RetriesOnceAndSucceeds()
     {
         var client = new ScriptedLlmClient(
-            [new ErrorEvent("rate limited", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)],
-            [new TextDeltaEvent("0", "compressed summary of the pruned head")]);
+            [TestEvents.LlmError("rate limited", kind: ProviderErrorKind.RateLimit, statusCode: 429)],
+            [TestEvents.TextDelta("0", "compressed summary of the pruned head")]);
         var svc = CreateService(client, new ImmediateRetryPolicy());
 
         var result = await svc.CompactAsync("session-1", FourLongMessages(), HugeModel);
@@ -69,7 +70,7 @@ public class CompactionSummaryRetryTests
     public async Task CompactAsync_FatalAuthError_DoesNotRetry()
     {
         var client = new ScriptedLlmClient(
-            [new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
+            [TestEvents.LlmError("bad key", kind: ProviderErrorKind.Auth, statusCode: 401)]);
         var policy = new ImmediateRetryPolicy();
         var svc = CreateService(client, policy);
 
@@ -85,8 +86,8 @@ public class CompactionSummaryRetryTests
     public async Task CompactAsync_TransientBudgetExhausted_FailsAfterMaxAttempts()
     {
         var client = new ScriptedLlmClient(
-            [new ErrorEvent("overloaded", Kind: ProviderErrorKind.ServerError, StatusCode: 503)],
-            [new ErrorEvent("overloaded", Kind: ProviderErrorKind.ServerError, StatusCode: 503)]);
+            [TestEvents.LlmError("overloaded", kind: ProviderErrorKind.ServerError, statusCode: 503)],
+            [TestEvents.LlmError("overloaded", kind: ProviderErrorKind.ServerError, statusCode: 503)]);
         var svc = CreateService(client, new ImmediateRetryPolicy(maxAttempts: 2));
 
         var result = await svc.CompactAsync("session-1", FourLongMessages(), HugeModel);
@@ -100,7 +101,7 @@ public class CompactionSummaryRetryTests
     public async Task CompactAsync_NoPolicy_TransientFailsWithoutRetry()
     {
         var client = new ScriptedLlmClient(
-            [new ErrorEvent("rate limited", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
+            [TestEvents.LlmError("rate limited", kind: ProviderErrorKind.RateLimit, statusCode: 429)]);
         var svc = CreateService(client);
 
         var result = await svc.CompactAsync("session-1", FourLongMessages(), HugeModel);

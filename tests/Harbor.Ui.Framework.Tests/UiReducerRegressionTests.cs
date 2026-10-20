@@ -2,6 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Ui.Framework.Tests;
 
@@ -15,8 +16,8 @@ public class UiReducerRegressionTests
     public async Task AgentEnd_AfterError_PreservesErrorStatus()
     {
         var state = new UiState();
-        var errored = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new AgentErrorEvent("oops")));
-        var ended = ChatAppReducer.Update(errored.State, new ChatAppMsg.Agent(new AgentEndEvent([])));
+        var errored = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.AgentError("oops")));
+        var ended = ChatAppReducer.Update(errored.State, new ChatAppMsg.Agent(TestEvents.AgentEnd()));
 
         await Assert.That(ended.State.Chat.Status).IsEqualTo("error");
         await Assert.That(ended.State.Chat.IsAgentRunning).IsFalse();
@@ -38,9 +39,9 @@ public class UiReducerRegressionTests
     public async Task Abort_FoldsStreamedTextBeforeClearing()
     {
         var state = new UiState();
-        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(new MessageStartEvent(AssistantMessage.Empty("s", "m")))).State;
+        state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(TestEvents.MessageStart(AssistantMessage.Empty("s", "m")))).State;
         state = ChatAppReducer.Update(state, new ChatAppMsg.Agent(
-            new MessageUpdateEvent(new TextDeltaEvent("m", new string('x', 300)), AssistantMessage.Empty("s", "m")))).State;
+            TestEvents.TextDeltaUpdate("m", new string('x', 300), AssistantMessage.Empty("s", "m")))).State;
 
         var aborted = ChatAppReducer.Update(state, new AppMsg.KeyInput(ChatAction.Abort, new UiKey(UiKeyCode.Enter)));
 
@@ -64,7 +65,7 @@ public class UiReducerRegressionTests
             new ToolResultMessage("t1", "s", DateTimeOffset.UtcNow,
                 new[] { new ToolResultEntry("tc1", "read", "file contents", false) }, null),
         };
-        var started = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(new AgentStartEvent("s", history)));
+        var started = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 
         await Assert.That(started.State.Chat.Lines.Count(l => l.Role == ChatRole.User && l.Text == "hi")).IsEqualTo(1);
         await Assert.That(started.State.Chat.Lines.Any(l => l.Role == ChatRole.Assistant && l.Text.Contains("hello there"))).IsTrue();
@@ -83,7 +84,7 @@ public class UiReducerRegressionTests
         {
             new UserMessage("u1", "s", DateTimeOffset.UtcNow, "hi", "code", "m", null),
         };
-        var started = ChatAppReducer.Update(submitted.State, new ChatAppMsg.Agent(new AgentStartEvent("s", history)));
+        var started = ChatAppReducer.Update(submitted.State, new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 
         await Assert.That(started.State.Chat.Lines.Count(l => l.Role == ChatRole.User && l.Text == "hi")).IsEqualTo(1);
     }

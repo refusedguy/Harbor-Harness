@@ -7,6 +7,7 @@ using Harbor.Ipc.Client;
 using Harbor.Ipc.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 
 namespace Harbor.Ipc.Tests;
 
@@ -66,7 +67,7 @@ public class EventStreamingTests
 
         // Give the subscription a moment to attach, then publish.
         await client.SubscriptionReady;
-        await eventBus.PublishAsync(new AgentStartEvent("test-session-id", Array.Empty<AgentMessage>(), null));
+        await eventBus.PublishAsync(TestEvents.AgentStart("test-session-id"));
 
         var received = await enumerateTask.WaitAsync(TimeSpan.FromSeconds(3));
         await Assert.That(received).IsNotNull();
@@ -106,7 +107,7 @@ public class EventStreamingTests
 
             // Give the subscription a moment to attach on the server side.
             await server.SubscriptionReady;
-            await eventBus.PublishAsync(new AgentStartEvent("test-session-id", Array.Empty<AgentMessage>(), null));
+            await eventBus.PublishAsync(TestEvents.AgentStart("test-session-id"));
 
             var received = await enumerateTask.WaitAsync(TimeSpan.FromSeconds(5));
             await Assert.That(received).IsNotNull();
@@ -150,7 +151,7 @@ public class EventStreamingTests
 
             await server.SubscriptionReady;
             var expectedResult = Harbor.Abstractions.Models.ToolResult.Success("file contents here");
-            await eventBus.PublishAsync(new ToolExecutionEndEvent("tc-1", expectedResult, IsError: false));
+            await eventBus.PublishAsync(TestEvents.ToolExecutionEnd("tc-1", expectedResult));
 
             var received = await enumerateTask.WaitAsync(TimeSpan.FromSeconds(5));
             await Assert.That(received).IsNotNull();
