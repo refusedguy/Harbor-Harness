@@ -226,52 +226,58 @@ internal sealed class TurnRunner(
         //    Each attempt rebuilds its accumulators and re-publishes
         //    MessageStart → MessageUpdate… → MessageEnd for the turn,
         //    mirroring a fresh streaming pass.
-        TurnStreamResult streamed;
+        //    #1514: the attempt's verdict is a VALUE. The provider failure
+        //    travels back as a failed result carrying the transport
+        //    classification, the policy reads that classification to decide
+        //    whether another attempt is worth it, and the failure that ends
+        //    the turn is handled below as a value — no exception crosses the
+        //    attempt boundary for an expected provider failure.
         AssistantMessage? lastPartial = null;
-        try
+        Result<TurnStreamResult, StreamFailure> outcome = await retryPolicy.ExecuteValueAsync<TurnStreamResult>(
+            attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
+            StreamRetryOptions,
+            (streamFailure, attempt) => TurnRunnerLog.TransientStreamFailure(logger, streamFailure.Message, attempt),
+            ct).ConfigureAwait(false);
+
+        if (outcome.IsFailure)
         {
-            streamed = await retryPolicy.ExecuteAsync(
-                attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
-                StreamRetryOptions,
-                (ex, attempt) => TurnRunnerLog.TransientStreamFailure(logger, ex, attempt),
-                ct).ConfigureAwait(false);
-        }
-        catch (LlmStreamErrorException lex) when (RetryPolicy.IsTransient(lex, out _))
-        {
-            // #270: the transient budget (minutes-scale for 429s) is exhausted.
-            // Degrade instead of dying terminally: persist whatever streamed
-            // before the failure and end the run gracefully, so the session
-            // stays resumable and (sub-)callers receive partial output.
-            AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
-            TurnRunnerLog.StreamBudgetExhausted(logger, lex, turn, degraded.Parts.Count);
-            if (degraded.Parts.Count > 0)
+            StreamFailure failure = outcome.Error;
+            if (RetryPolicy.IsTransient(failure.Kind))
             {
-                await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
-                tokenTracker.RecordAppendedMessage(degraded);
+                // #270: the transient budget (minutes-scale for 429s) is exhausted.
+                // Degrade instead of dying terminally: persist whatever streamed
+                // before the failure and end the run gracefully, so the session
+                // stays resumable and (sub-)callers receive partial output.
+                AssistantMessage degraded = lastPartial ?? AssistantMessage.Empty(session.Session.Id, model.Id);
+                TurnRunnerLog.StreamBudgetExhausted(logger, failure.Message, turn, degraded.Parts.Count);
+                if (degraded.Parts.Count > 0)
+                {
+                    await session.AppendMessageAsync(degraded, ct).ConfigureAwait(false);
+                    tokenTracker.RecordAppendedMessage(degraded);
+                }
+                await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
+                // #1751: the degraded turn can carry tool calls the dispatcher never
+                // reached. Close them here, or the transcript holds a tool_use with
+                // no tool_result — a provider 400 on the next turn and a session
+                // that cannot be resumed.
+                IReadOnlyList<ToolResultMessage> degradedResults = await CloseUnansweredCallsAsync(
+                    degraded, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
+                await eventBus.PublishAsync(
+                    new TurnEndEvent(degraded, degradedResults, session.Session.Id), ct).ConfigureAwait(false);
+                // #259: single collapsed-card error for the exhausted budget —
+                // per-attempt publishes are suppressed above, so this is the only
+                // AgentErrorEvent for the storm (never N duplicates).
+                await eventBus.PublishAsync(new AgentErrorEvent(failure.Message, failure.Details), ct).ConfigureAwait(false);
+                return new TurnStepResult(truncationFallback, EndRun: true);
             }
-            await eventBus.PublishAsync(new MessageEndEvent(degraded), ct).ConfigureAwait(false);
-            // #1751: the degraded turn can carry tool calls the dispatcher never
-            // reached. Close them here, or the transcript holds a tool_use with
-            // no tool_result — a provider 400 on the next turn and a session
-            // that cannot be resumed.
-            IReadOnlyList<ToolResultMessage> degradedResults = await CloseUnansweredCallsAsync(
-                degraded, session, UnresolvedToolCall.NotStartedCode).ConfigureAwait(false);
-            await eventBus.PublishAsync(
-                new TurnEndEvent(degraded, degradedResults, session.Session.Id), ct).ConfigureAwait(false);
-            // #259: single collapsed-card error for the exhausted budget —
-            // per-attempt publishes are suppressed above, so this is the only
-            // AgentErrorEvent for the storm (never N duplicates).
-            await eventBus.PublishAsync(new AgentErrorEvent(lex.Message, lex.Details), ct).ConfigureAwait(false);
-            return new TurnStepResult(truncationFallback, EndRun: true);
-        }
-        catch (LlmStreamErrorException lex)
-        {
+
             // Terminal provider error — same outcome as the pre-extraction
             // inline early-return: fail the run without appending the
             // partial message or publishing turn/agent end events.
-            return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: lex.Message);
+            return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: failure.Message);
         }
 
+        TurnStreamResult streamed = outcome.Value;
         var partial = streamed.Partial;
         var toolCalls = streamed.ToolCalls;
         var malformedCalls = streamed.MalformedCalls;
@@ -429,10 +435,13 @@ internal sealed class TurnRunner(
     ///     outcome, exactly as before the extraction.
     ///     On a terminal stream error the flushed-so-far partial (stamped
     ///     <see cref="StopReason.Error" />) is handed to <paramref name="reportPartial" />
-    ///     before the throw, so budget exhaustion (#270) can degrade with the
-    ///     last attempt's output instead of losing it.
+    ///     before the failure travels back, so budget exhaustion (#270) can degrade
+    ///     with the last attempt's output instead of losing it.
+    ///     #1514: the attempt's verdict is a VALUE. A provider failure comes back
+    ///     as a failed result carrying the transport classification — the retry
+    ///     decision reads that value instead of catching an exception.
     /// </remarks>
-    private async Task<TurnStreamResult> ConsumeTurnStreamAsync(
+    private async Task<Result<TurnStreamResult, StreamFailure>> ConsumeTurnStreamAsync(
         ILlmClient client,
         LlmRequest request,
         ISessionContext session,
@@ -555,13 +564,17 @@ internal sealed class TurnRunner(
                         // would emit one AgentError per attempt (the same 429
                         // blob N times). Only fatal errors publish immediately,
                         // transient ones publish once when the budget is
-                        // exhausted (see the catch below), zero on recovery.
+                        // exhausted (see the caller), zero on recovery.
                         if (!ProviderErrors.IsTransient(err.Kind))
                         {
                             await eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
                         }
 
-                        throw new LlmStreamErrorException(err);
+                        // #1514: the provider failure is a VALUE. The retry
+                        // decision reads its classification instead of catching
+                        // an exception, and the caller receives the same message
+                        // and details the exception used to carry.
+                        return Result.Failure<TurnStreamResult, StreamFailure>(StreamFailure.From(err));
                 }
 
                 // #404: the output-size cap is enforced on the delta path —
@@ -610,7 +623,8 @@ internal sealed class TurnRunner(
         TurnRunnerLog.MessageEnd(logger, turn, stopReason);
         await eventBus.PublishAsync(new MessageEndEvent(partial), ct).ConfigureAwait(false);
 
-        return new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason);
+        return Result.Success<TurnStreamResult, StreamFailure>(
+            new TurnStreamResult(partial, toolCalls, malformedCalls, finalUsage, stopReason));
     }
 
     /// <summary>
@@ -931,11 +945,11 @@ internal static partial class TurnRunnerLog
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Turn {Turn} start: agent={Agent} model={Model}")]
     public static partial void TurnStart(ILogger logger, int turn, string agent, string model);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Transient LLM stream failure on attempt {Attempt}; retrying")]
-    public static partial void TransientStreamFailure(ILogger logger, Exception ex, int attempt);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Transient LLM stream failure on attempt {Attempt}; retrying: {FailureMessage}")]
+    public static partial void TransientStreamFailure(ILogger logger, string failureMessage, int attempt);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "LLM stream budget exhausted on turn {Turn}; degrading with partial output ({Parts} parts)")]
-    public static partial void StreamBudgetExhausted(ILogger logger, Exception ex, int turn, int parts);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "LLM stream budget exhausted on turn {Turn}; degrading with partial output ({Parts} parts): {FailureMessage}")]
+    public static partial void StreamBudgetExhausted(ILogger logger, string failureMessage, int turn, int parts);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Turn {Turn}: toolCalls={ToolCalls} malformed={Malformed} stopReason={StopReason}")]
     public static partial void TurnStats(ILogger logger, int turn, int toolCalls, int malformed, StopReason stopReason);
