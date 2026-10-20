@@ -6,15 +6,15 @@
     "tool": "tools/gen-e2e-shards.py",
     "classUniverseFrom": "the source tree (tests/Harbor.E2E.App.Avalonia + tests/Harbor.E2E.Framework)",
     "costsFrom": "the TRX durations of the CI run named below",
-    "measuredFromCiRun": "39404823168",
+    "measuredFromCiRun": "39436580540",
     "measuredFromArtifact": "test-results-e2e",
-    "measuredAtUtc": "2026-10-20T14:07:29Z",
+    "measuredAtUtc": "2026-10-20T14:32:52Z",
     "trxFiles": [
-      "Harbor.E2E.App.Avalonia.trx"
+      "shard-0.trx",
+      "shard-1.trx",
+      "shard-2.trx"
     ],
-    "classesInTheMeasurementButNotInTheTree": [
-      "StateTestRunnerTests"
-    ]
+    "classesInTheMeasurementButNotInTheTree": []
   },
   "totals": {
     "shards": 3,
@@ -22,38 +22,38 @@
       "SettingsTests"
     ],
     "measuredTests": 107,
-    "measuredTestSeconds": 58.42
+    "measuredTestSeconds": 25.42
   },
   "shards": [
     {
       "id": "shard-0",
       "classes": [
-        "AvaloniaUiTests",
-        "FocusSessionTests",
-        "MicroControlsTests",
-        "OnboardingTests",
-        "ShellChromeTests",
+        "ChatViewTests",
+        "CommandPaletteTests",
+        "SessionListTests",
         "StandaloneControlsTests",
-        "StatusBarTests"
+        "StatusBarTests",
+        "ToastTests"
       ],
       "dedicated": false,
-      "measuredSeconds": 28.27,
-      "measuredTests": 57
+      "measuredSeconds": 11.8,
+      "measuredTests": 41
     },
     {
       "id": "shard-1",
       "classes": [
-        "ChatViewTests",
-        "CommandPaletteTests",
+        "AvaloniaUiTests",
         "ComponentGoldenFramesTests",
+        "FocusSessionTests",
         "GoldenFrameTests",
+        "MicroControlsTests",
+        "OnboardingTests",
         "OverlaySurfacesTests",
-        "SessionListTests",
-        "ToastTests"
+        "ShellChromeTests"
       ],
       "dedicated": false,
-      "measuredSeconds": 28.24,
-      "measuredTests": 45
+      "measuredSeconds": 11.74,
+      "measuredTests": 61
     },
     {
       "id": "shard-2",
@@ -61,7 +61,7 @@
         "SettingsTests"
       ],
       "dedicated": true,
-      "measuredSeconds": 1.91,
+      "measuredSeconds": 1.87,
       "measuredTests": 5
     }
   ]

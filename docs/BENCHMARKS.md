@@ -2178,15 +2178,22 @@ it is the one a spike can be priced against today.
 ### 6.5 CI suite wall — the headless Avalonia E2E project, one process per shard (#1790) **[CI-short]**
 
 > **Provenance.** `test (e2e)` job, `ubuntu-latest` (4 vCPU), GitHub-hosted
-> runner. BEFORE: CI run **39404823168** (2026-10-20 10:00 UTC, TUnit 1.61).
-> AFTER: CI runs **39420115031** and **39423151864** (2026-10-20 12:28 and
-> 12:41 UTC, TUnit 1.75). The three runs are on the same runner CLASS but
-> not on the same runner, so read the AFTER column as "the same work in
-> half the wall", not as a machine-independent ratio — the two AFTER runs
-> differ by 3.8 s of noise on the critical path. §6.4 above measures the
-> SAME project on other runs (the toast-timer change, #1945); the two
-> sections are independent measurements of the same wall, and the
-> "before" rows differ because the runs differ.
+> runner. Three runs, each cited by its run id:
+>
+> * **A — before**, run **39404823168** (dev@03ce3070, TUnit 1.61): the whole
+>   project in ONE process.
+> * **B — after**, run **39420115031** (this branch, TUnit 1.75): three
+>   processes, before the toast-timer change of §6.4 landed. **A → B is this
+>   change alone.**
+> * **C — final**, run **39436580540** (this branch, after the toast-timer
+>   change of §6.4 and after `StateTestRunnerTests` moved to a project of its
+>   own): three processes, 107 tests instead of 133.
+>
+> The runs are on the same runner CLASS but not on the same runner, so read
+> the numbers as "the same work in about half the wall", not as a
+> machine-independent ratio. §6.4 above measures the SAME project across the
+> toast-timer change; the two sections are independent measurements of the same
+> wall, and the "before" rows differ because the runs differ.
 
 `tests/Harbor.E2E.App.Avalonia` cannot be parallelised IN-PROCESS: the
 driver keeps `Application.Current`, the desktop lifetime and the DI host in
@@ -2195,20 +2202,30 @@ driver also sets `$HOME` (not thread-local) and
 `CommonConfig.OverrideHarborHomeForTests` pins the Harbor home for the whole
 process. All three are process-wide, so the lever is the PROCESS.
 
-| | processes | critical path | project wall | tests discovered | tests skipped |
+| run | processes | critical path | project wall | tests discovered | tests skipped |
 |---|--:|--:|--:|--:|--:|
-| BEFORE (#1790), run 39404823168 | 1 | 58.59 s (the sum of the class durations) | **60.56 s** | 133 | 20 |
-| AFTER (#1790), run 39420115031 | 3 | **29.0 s** | **29.6 s** | 133 | 19 |
-| AFTER (#1790), run 39423151864 | 3 | **25.5 s** | **25.8 s** | 133 | 19 |
+| A, 39404823168 (before) | 1 | 58.59 s (the sum of the class durations) | **60.56 s** | 133 | 20 |
+| B, 39420115031 (this change) | 3 | **29.0 s** | **29.6 s** | 133 | 19 |
+| C, 39436580540 (final tree) | 3 | **18.7 s** | **19.4 s** | 107 | 19 |
 
-The AFTER wall is the three shard processes running side by side: 23.7 /
-20.1 s (shard-0, 56 tests), 29.0 / 25.5 s (shard-1, 72), 7.2 / 4.8 s
-(shard-2, 5). The critical path is the slowest shard; the sum of the shards
-is the project's total work — 58.59 s of class time, unchanged.
+**A → B is the change this section is about:** 60.56 s → 29.6 s, and the
+project's wall becomes the slowest shard (29.0 s) instead of the sum of the
+class durations (58.59 s). The B run's shards measured 23.7 s (shard-0, 56
+tests), 29.0 s (shard-1, 72) and 7.2 s (shard-2, 5) — 29.6 s of wall for
+58.59 s of class time, i.e. a parallelism factor of 1.98 over three
+processes.
 
-The e2e SHARD as a whole (its five projects, sequentially) went from
-**67.7 s** to **38.5 s** / **32.6 s**: the project above is 60.6 s of the
-67.7 s before, and 29.6 s / 25.8 s of the 38.5 s / 32.6 s after.
+**B → C is not this change:** it is the toast-timer change of §6.4 (which
+removed four five waits of ~4 s each, ~20.5 s of the project's wall) and
+`StateTestRunnerTests` moving to a project of its own (26 tests, 0.2 s).
+Run C's shards measured 18.7 s (shard-0, 57 tests), 14.9 s (shard-1, 45) and
+7.1 s (shard-2, 5) for 25.42 s of class time — the plan is regenerated from
+run C's TRX, so the next run's split is balanced against THOSE costs
+(11.80 / 11.74 / 1.87 s of measured class time).
+
+The e2e SHARD as a whole (its projects, sequentially) went from **67.7 s**
+(run A) to **38.5 s** (run B) to **29.0 s** (run C): the project above is
+60.6 s of the 67.7 s before, and 19.4 s of the 29.0 s after.
 
 **This is not the binding shard.** The `test` job's shard walls on the same
 lane: `core` 159.4 s, `ui` 126.3 s, `e2e` 60.0 s, `platform` 31.4 s — so the
