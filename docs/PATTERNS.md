@@ -84,7 +84,7 @@ Read the doc comment above it (`:51-61`) before you add a sink — it documents
 the **DIM-forwarder trap**, which is the single most instructive defect in this
 repo and is stated in full in §6.
 
-The composition-time decision, `src/Harbor.Registries/Events/InMemoryEventBus.cs:318-321`:
+The composition-time decision, `src/Harbor.Registries/Events/InMemoryEventBus.cs:274-277`:
 
 ```csharp
 // #47/S3: the mandatory set is computed ONCE, from each sink's own

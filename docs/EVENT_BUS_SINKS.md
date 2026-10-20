@@ -34,7 +34,7 @@ The verdict is declared by the sink (`IEventBusMiddleware.SinkKind`,
 `src/Harbor.Abstractions/Events/IEventBusMiddleware.cs:51`), **defaults to
 mandatory** so an unconsidered sink can never be bypassed by accident, and is
 read **once in the bus constructor**
-(`src/Harbor.Registries/Events/InMemoryEventBus.cs:346-360`). Nothing on the
+(`src/Harbor.Registries/Events/InMemoryEventBus.cs:302-315`). Nothing on the
 publish path re-derives it, and no sink type is special-cased by name.
 
 **Optional does not mean "may be skipped in silence."** On the fast path the bus
@@ -54,9 +54,9 @@ publish path re-derives it, and no sink type is special-cased by name.
 | 6 | `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | the one place a bus is constructed in production | **n/a (wiring)** | computes the mandatory set once and hands the bus to DI; the verdict never depends on DI order |
 | 7 | `src/Harbor.Registries/Events/TypeFilterMiddleware.cs` | type allowlist filter | **mandatory** | same reason as a filter should have: it is a contract on what the projections downstream may see, so bypassing it would push unapproved event types into rendered state. Since #478 the verdict is earned rather than assumed — the constructor rejects an empty allowlist, so a mandatory sink cannot be one that admits everything (`tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs` fails the build on a typeless product call site) |
 | 8 | `src/Harbor.Registries/Events/SamplingMiddleware.cs:34` | rate limiter for `MessageUpdateEvent` | **optional** | its own job is to drop events for cheaper rendering; nothing downstream becomes *wrong* without it, only less sampled. It is drained on the fast path anyway |
-| 9 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:398-450` | the publish guard itself | **n/a (decision)** | the only place a publish may be short-circuited; §3 |
-| 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:505-518`, counters at `:701-748` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
-| 11 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:519` | `LogDebug("Publishing event: …")` | **optional (diagnostic)** | a log line; not a record anyone reconciles against |
+| 9 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:353-405` | the publish guard itself | **n/a (decision)** | the only place a publish may be short-circuited; §3 |
+| 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:460-473`, counters at `:582-629` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
+| 11 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:474` | `LogDebug("Publishing event: …")` | **optional (diagnostic)** | a log line; not a record anyone reconciles against |
 | 12 | `src/Harbor.Plugins.Host/NullEventBus.cs:11` | no-op bus for the standalone MCP plugin host | **optional (all sinks absent by construction)** | there is no subscriber, no retention and no sink, so every publish is unobservable *by design of the host*, not by accident of a guard |
 | 13 | `contrib/apps/Harbor.App.Wpf/App.xaml.cs:176` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | no scrollback override → library default capacity. Listed for completeness only: `contrib/` is unmaintained and outside CI, so its composition is not exercised by anything in this repo |
 | 14 | `contrib/apps/Harbor.App.Maui/MauiProgram.cs:76` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | same as #13 |
@@ -119,10 +119,10 @@ fast path  ⇔  FastPathEligible
 ```
 
 - `HasMandatorySink` is computed **once in the constructor** from the sinks'
-  own `SinkKind` verdicts (`InMemoryEventBus.cs:346-360`). A sink that declares
+  own `SinkKind` verdicts (`InMemoryEventBus.cs:302-315`). A sink that declares
   nothing counts as mandatory, so an unconsidered sink keeps the full path.
 - `RetentionArmed` flips on the first `GetScrollback` call
-  (`InMemoryEventBus.cs:616`) and never flips back (#518).
+  (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:141`) and never flips back (#518).
 - `_subscriptions` is the live count; a single subscriber is enough to
   disqualify.
 

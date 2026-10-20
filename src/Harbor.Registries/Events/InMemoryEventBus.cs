@@ -157,10 +157,13 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     private readonly ILogger<InMemoryEventBus> _logger;
 
     /// <summary>
-    ///     Maximum number of events retained in scrollback. Zero disables
-    ///     scrollback retention entirely (publishes skip the ring buffer).
+    ///     Bounded scrollback for late-attaching subscribers: a fixed-capacity
+    ///     ring buffer plus the retention-arming contract that decides whether
+    ///     the ring is maintained at all. Extracted verbatim from this class
+    ///     (#1512, a #95 slice) — the bus delegates to it and keeps exactly
+    ///     the behaviour it always had.
     /// </summary>
-    private readonly int _maxScrollback;
+    private readonly EventBusScrollbackStore _scrollback;
 
     /// <summary>
     ///     Middleware pipeline. Evaluated in registration order before scrollback
@@ -177,53 +180,6 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     verdict, so an unconsidered sink always keeps the full path.
     /// </summary>
     private readonly bool _hasMandatorySink;
-
-    /// <summary>
-    ///     Whether the scrollback ring is currently being maintained (#518).
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         Retention used to be armed by capacity alone, which meant a ring
-    ///         that nobody ever read still cost a slot write under a lock on every
-    ///         publish <em>and</em> silently disqualified the fast path for every
-    ///         shipped preset (<c>EventBusScrollback = 1000</c> → 0/200 qualifying
-    ///         publishes on CLI and desktop).
-    ///     </para>
-    ///     <para>
-    ///         It is now armed by the first call to <see cref="GetScrollback" />.
-    ///         A ring is a potential, not an obligation: until somebody asks for
-    ///         history there is nothing to retain, and the publish is genuinely
-    ///         unobservable. The transition is one-way (<c>false</c> → <c>true</c>),
-    ///         so <c>volatile</c> is sufficient — no lock, no ABA, and the
-    ///         publish path stays a single lock-free read.
-    ///     </para>
-    ///     <para>
-    ///         Deleting the ring instead was rejected: <see cref="IEventBus" /> is
-    ///         public in the zero-dependency <c>Harbor.Abstractions</c> assembly
-    ///         every plugin references, and a live bus is handed to out-of-tree
-    ///         plugin code via <c>IPluginLoadHost.EventBus</c>. See
-    ///         <c>tests/Harbor.Core.Tests/EventBusRetentionArmingGuardTests.cs</c>.
-    ///     </para>
-    /// </remarks>
-    private volatile bool _retentionArmed;
-
-    /// <summary>
-    ///     Pre-allocated scrollback slots. Fixed capacity
-    ///     (<see cref="_maxScrollback" />); entries are overwritten oldest-first
-    ///     and never reallocated, so steady-state publishing allocates nothing.
-    ///     Events are immutable records, so handing out references after the
-    ///     slot is overwritten is safe (readers snapshot under the lock).
-    /// </summary>
-    private readonly AgentEvent[] _scrollbackRing;
-
-    /// <summary>Guards <see cref="_scrollbackRing" />, <see cref="_ringHead"/> and <see cref="_ringCount"/>.</summary>
-    private readonly object _scrollbackLock = new();
-
-    /// <summary>Index of the OLDEST entry currently held in <see cref="_scrollbackRing"/>.</summary>
-    private int _ringHead;
-
-    /// <summary>Number of valid entries in <see cref="_scrollbackRing"/> (≤ <see cref="_maxScrollback"/>).</summary>
-    private int _ringCount;
 
     /// <summary>
     ///     Subscriptions collection. <see cref="ImmutableArray{T}" /> gives us O(1) lock-free
@@ -344,9 +300,8 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         IEnumerable<IEventBusMiddleware>? middlewares)
     {
         _logger = logger;
-        _maxScrollback = maxScrollback > 0 ? maxScrollback : 0;
         _handlerBudget = handlerBudget < TimeSpan.Zero ? TimeSpan.Zero : handlerBudget;
-        _scrollbackRing = _maxScrollback > 0 ? new AgentEvent[_maxScrollback] : Array.Empty<AgentEvent>();
+        _scrollback = new EventBusScrollbackStore(maxScrollback);
         _middlewares = middlewares?.ToArray() ?? Array.Empty<IEventBusMiddleware>();
 
         // #47/S3: the mandatory set is computed ONCE, from each sink's own
@@ -365,7 +320,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         }
 
         // #518: no _fastPathEligible field any more. It is now
-        // `!_hasMandatorySink && !_retentionArmed` — a constant in
+        // `!_hasMandatorySink && !_scrollback.RetentionArmed` — a constant in
         // _hasMandatorySink, and a lock-free read of an unarmed ring, which
         // starts out true and latches false the first time a reader appears.
     }
@@ -392,7 +347,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     ///     <c>FastPathCount + PublishedCount</c> remains the measured fraction of
     ///     publishes that actually qualified.
     /// </remarks>
-    public bool FastPathEligible => !_hasMandatorySink && !_retentionArmed;
+    public bool FastPathEligible => !_hasMandatorySink && !_scrollback.RetentionArmed;
 
     /// <inheritdoc />
     public Task PublishAsync(AgentEvent @event, CancellationToken ct = default)
@@ -408,9 +363,9 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
         // configured capacity. "Nothing retained" has to mean "nothing to
         // retain", not "a ring with 1000 slots that nobody reads" — the latter
         // made this term false for every shipped preset and cost 0/200
-        // qualifying publishes in production. `_retentionArmed` latches false on
-        // the first GetScrollback call, so a reader still pays the full price.
-        if (!_hasMandatorySink && !_retentionArmed)
+        // qualifying publishes in production. `_scrollback.RetentionArmed` latches
+        // false on the first GetScrollback call, so a reader still pays the full price.
+        if (!_hasMandatorySink && !_scrollback.RetentionArmed)
         {
             // #1108: acquire-fenced read of the snapshot. ImmutableArray<T>
             // is reference-sized so a torn read is impossible, but a plain
@@ -540,7 +495,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
             @event = current;
 
             // 1. Append to scrollback ring buffer (in-place overwrite, short lock).
-            AppendScrollback(@event);
+            _scrollback.Append(@event);
 
             // 2. Lock-free snapshot — no List copy, no lock contention.
             // #1108: fenced read — same ARM-stale reasoning as the fast
@@ -608,81 +563,7 @@ public sealed class InMemoryEventBus : IEventBus, IEventBusQueueMetrics
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents)
-    {
-        if (_maxScrollback == 0)
-        {
-            return Array.Empty<AgentEvent>();
-        }
-
-        // #518: this call IS the reader, so it is what arms retention. The flag
-        // is set BEFORE the snapshot lock, never after: once armed, every
-        // publish that reads the flag appends to the ring, so history is
-        // complete from this point on. Publishes that raced the arm (they read
-        // the flag as false microseconds earlier) are the only ones a reader can
-        // miss — an acceptable, documented gap for a diagnostic pull, and the
-        // price of not maintaining a ring for nobody.
-        _retentionArmed = true;
-
-        if (maxEvents <= 0)
-        {
-            return Array.Empty<AgentEvent>();
-        }
-
-        // Copy the requested tail under the lock into an exact-size array.
-        // Readers get a stable point-in-time snapshot: repeated calls see the
-        // same history (§PERF-008 regression guarantee), and concurrent
-        // publishers can never observe a torn view. The allocation happens
-        // only on this (cold) diagnostic path — PublishAsync never allocates
-        // for scrollback.
-        lock (_scrollbackLock)
-        {
-            if (_ringCount == 0)
-            {
-                return Array.Empty<AgentEvent>();
-            }
-
-            int count = Math.Min(maxEvents, _ringCount);
-            var result = new AgentEvent[count];
-            int start = (_ringHead + _ringCount - count) % _maxScrollback;
-            for (int i = 0; i < count; i++)
-            {
-                result[i] = _scrollbackRing[(start + i) % _maxScrollback];
-            }
-
-            return result;
-        }
-    }
-
-    /// <summary>
-    ///     Overwrite-append an event into the fixed-capacity ring. When the
-    ///     buffer is at capacity the oldest slot is reused in place — no
-    ///     allocation, ever. The lock scope covers only the index arithmetic
-    ///     and the slot write; fan-out and logging stay outside.
-    /// </summary>
-    private void AppendScrollback(AgentEvent @event)
-    {
-        if (_maxScrollback == 0 || !_retentionArmed)
-        {
-            return; // scrollback disabled, or no reader has asked for history yet (#518)
-        }
-
-        lock (_scrollbackLock)
-        {
-            if (_ringCount < _maxScrollback)
-            {
-                // Under capacity — fill the next free slot.
-                _scrollbackRing[(_ringHead + _ringCount) % _maxScrollback] = @event;
-                _ringCount++;
-            }
-            else
-            {
-                // At capacity — overwrite the oldest entry and advance the head.
-                _scrollbackRing[_ringHead] = @event;
-                _ringHead = (_ringHead + 1) % _maxScrollback;
-            }
-        }
-    }
+    public IReadOnlyList<AgentEvent> GetScrollback(int maxEvents) => _scrollback.GetScrollback(maxEvents);
 
     private void RemoveDeadSubscriptions(Subscription[] dead, int deadCount)
     {
