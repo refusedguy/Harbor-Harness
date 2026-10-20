@@ -273,7 +273,7 @@ jobs:
               - 'Directory.Build.props'
             # The AOT surface: what the NativeAOT publish can break. The
             # publish recipe (-p:HarborWithAot=true) builds the CLI and the
-            # 58 projects its ProjectReference closure reaches, with the
+            # 59 projects its ProjectReference closure reaches, with the
             # default HarborWith* flags, so the conditional references are all
             # live (plugins, daemon, all-providers). Plus the properties that
             # decide the publish (Directory.Build.props carries the HarborWith*
@@ -317,6 +317,12 @@ jobs:
             # merge is the backstop.
             aot:
               - 'apps/Harbor.App.Cli/**'
+              - 'contrib/tui/Harbor.Tui.RazorConsole/**'
+              - 'contrib/tui/Harbor.Tui.Spectre/**'
+              - 'contrib/tui/Harbor.Tui.Spectre.Fullscreen/**'
+              - 'contrib/tui/Harbor.Tui.SpectreTui/**'
+              - 'contrib/tui/Harbor.Tui.Termina/**'
+              - 'contrib/tui/Harbor.Tui.TerminalGui/**'
               - 'src/Harbor.Abstractions/**'
               - 'src/Harbor.Abstractions.Contracts/**'
               - 'src/Harbor.AgentRuntime/**'
@@ -343,6 +349,7 @@ jobs:
               - 'src/Harbor.Plugins.Instantiation/**'
               - 'src/Harbor.Plugins.Registration/**'
               - 'src/Harbor.Plugins.Storage/**'
+              - 'src/Harbor.PolicyConfig/**'
               - 'src/Harbor.Providers.Anthropic/**'
               - 'src/Harbor.Providers.Ollama/**'
               - 'src/Harbor.Providers.OpenAI/**'
@@ -368,18 +375,6 @@ jobs:
               - 'src/Harbor.Ui.Framework.Sessions/**'
               - 'src/Harbor.Ui.Framework.State/**'
               - 'src/Harbor.Ui.Framework.ViewModels/**'
-              - 'contrib/tui/Harbor.Tui.RazorConsole/**'
-              - 'contrib/tui/Harbor.Tui.Spectre/**'
-              - 'contrib/tui/Harbor.Tui.Spectre.Fullscreen/**'
-              - 'contrib/tui/Harbor.Tui.SpectreTui/**'
-              - 'contrib/tui/Harbor.Tui.Termina/**'
-              - 'contrib/tui/Harbor.Tui.TerminalGui/**'
-              - 'Directory.Build.props'
-              - 'Directory.Packages.props'
-              - 'global.json'
-              - 'analyzers/**'
-              - '.github/aot-warning-baseline.txt'
-              - 'tools/aot-publish-gate.py'
 
   # #428 / #1845. The public-API freeze of the two frozen assemblies.
   #
