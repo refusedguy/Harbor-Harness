@@ -26,7 +26,10 @@ namespace Harbor.Benchmarks;
 ///          tracker; no per-call memoisation.</item>
 ///          <item><c>AwaitSemantics:</c> n/a — no async in any row.</item>
 ///          <item><c>AllocAttribution:</c> the check is compares under a lock — a non-zero
-///          value on a row is a regression, not overhead. The uncapped path (null tracker,
+///          value on a row is a regression, not overhead. The answer is a
+///          <c>Maybe&lt;RunLimitKind&gt;</c> (a struct, #1557), so the no-trip path
+///          allocates nothing: the <c>Or</c> chain is the eager overload, which
+///          costs three compares and no closure. The uncapped path (null tracker,
 ///          one null-branch per turn) is not benchmarked: there is nothing to measure.</item>
 /// </list>
 [MemoryDiagnoser]
@@ -42,11 +45,11 @@ public class RunBudgetBenchmark
     }
 
     [Benchmark(Description = "CheckCap (caps set, no trip)", Baseline = true)]
-    public RunLimitKind? CheckCap_NoTrip()
+    public Maybe<RunLimitKind> CheckCap_NoTrip()
         => _tracker.CheckCap();
 
     [Benchmark(Description = "RecordOutputBytes + CheckCap (streaming delta path)")]
-    public RunLimitKind? RecordOutputBytes_AndCheck()
+    public Maybe<RunLimitKind> RecordOutputBytes_AndCheck()
     {
         _tracker.RecordOutputBytes(24);
         return _tracker.CheckCap();

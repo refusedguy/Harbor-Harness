@@ -122,11 +122,11 @@ public sealed class RunBudgetTracker
 
     /// <summary>
     ///     The first exceeded ceiling in fixed order (tokens, spend,
-    ///     output size); null while within caps. Pure threshold compares —
-    ///     no lookup, no allocation.
+    ///     output size); <c>None</c> while within caps. Pure threshold
+    ///     compares — no lookup, no allocation.
     /// </summary>
-    /// <returns>The tripped limit kind, or null.</returns>
-    public RunLimitKind? CheckCap()
+    /// <returns>The tripped limit kind, or <c>None</c> while within caps.</returns>
+    public Maybe<RunLimitKind> CheckCap()
     {
         lock (_sync)
         {
@@ -158,16 +158,33 @@ public sealed class RunBudgetTracker
         }
     }
 
-    private RunLimitKind? CheckCapLocked()
+    /// <summary>
+    ///     The first exceeded ceiling, in the fixed order of the chain: the
+    ///     token cap, then the spend cap, then the output-size cap. The
+    ///     first cap that trips wins, so the priority is the order of the
+    ///     <c>Or</c> chain rather than the order of the statements.
+    /// </summary>
+    /// <remarks>
+    ///     The eager <c>Or</c> is deliberate: the three candidates are pure
+    ///     threshold compares, while the lazy overload would allocate a
+    ///     closure per call — and this runs once per streamed delta (#404).
+    /// </remarks>
+    private Maybe<RunLimitKind> CheckCapLocked()
     {
-        if (_caps.MaxTokens is { } maxTokens && TokenTotalLocked() > maxTokens)
-            return RunLimitKind.MaxTokens;
-        if (_caps.MaxCostUsd is { } maxCost && _hasReportedUsage && _tariffCostUsd > maxCost)
-            return RunLimitKind.MaxCost;
-        if (_caps.MaxOutputBytes is { } maxBytes && _outputBytes > maxBytes)
-            return RunLimitKind.MaxOutputBytes;
-        return null;
+        bool tokensExceeded = _caps.MaxTokens is { } maxTokens && TokenTotalLocked() > maxTokens;
+        bool costExceeded = _caps.MaxCostUsd is { } maxCost && _hasReportedUsage && _tariffCostUsd > maxCost;
+        bool outputExceeded = _caps.MaxOutputBytes is { } maxBytes && _outputBytes > maxBytes;
+
+        return Limit(tokensExceeded, RunLimitKind.MaxTokens)
+            .Or(Limit(costExceeded, RunLimitKind.MaxCost))
+            .Or(Limit(outputExceeded, RunLimitKind.MaxOutputBytes));
     }
+
+    /// <summary>
+    ///     The limit kind, or <c>None</c> when that cap is not exceeded.
+    /// </summary>
+    private static Maybe<RunLimitKind> Limit(bool exceeded, RunLimitKind kind) =>
+        exceeded ? Maybe<RunLimitKind>.From(kind) : Maybe<RunLimitKind>.None;
 
     /// <summary>
     ///     The token figure the cap binds: reported totals while any usage
@@ -180,7 +197,7 @@ public sealed class RunBudgetTracker
 
     private void NoteTripLocked()
     {
-        if (CheckCapLocked() is null)
+        if (CheckCapLocked().HasNoValue)
             return;
         if (!_tripped)
         {
