@@ -27,6 +27,7 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 - **Events**: `AgentEvent` base record with `Timestamp`; sealed subtypes for every agent/tool lifecycle event.
 - **Permissions**: `PermissionRuleset.Default/Empty`, `Merge`, `Evaluate`; `BashArgMatcher.IsDestructiveCommand/HasShellMetacharacters`.
 - **Serialization**: `JsonElementMemoryPackFormatter` for `JsonElement` and message types. (This entry previously named `MemoryPackFormatters`, which is the *file* `Models/MemoryPackFormatters.cs`, not a type in it — the #966 shape, where a document promises a name no declaration owns.)
+- **Generator markers**: `MoodFrameAttribute`, `TerminalEscapeAttribute`, `TuiRendererAttribute`, and `ObservedAttribute`/`ObservedScope`/`ObservedPolicyAttribute` — inert declarations the source generators in `Harbor.CodeGen` read. `ObservedAttribute` marks a seam (interface, class, or method) as instrumented; the contract is in [docs/OBSERVED_INSTRUMENTATION.md](../../docs/OBSERVED_INSTRUMENTATION.md). None of them has a runtime effect on its own.
 
 ## Dependencies
 
