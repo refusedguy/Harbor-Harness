@@ -1358,6 +1358,18 @@ jobs:
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
+          # #1884: the results directory is ABSOLUTE on purpose. Before the
+          # TUnit 1.75 upgrade (b6fcc333) the same relative path
+          # ("TestResults/<shard>") landed at the workspace root, so the
+          # upload below found the files and the TRX artifacts existed.
+          # After it, the runner resolves a relative --results-directory
+          # against the test app's OWN working directory, which is the
+          # assembly's own output folder, and the TRX landed in
+          # tests/<project>/bin/Release/net10.0/TestResults/<shard>/, where
+          # neither the artifact upload (TestResults/**, relative to the
+          # workspace) nor tools/test-measurements.py can see it. Both
+          # reported "no TRX" and the per-test measurements were unreachable.
+          # An absolute path is unambiguous in both layouts.
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
@@ -1370,7 +1382,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$GITHUB_WORKSPACE/$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -1414,6 +1426,26 @@ jobs:
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
+
+      # #1884: the CENSUS, next to the measurements above. The step above
+      # renders the tests that PRINTED something, so it sees ~88 of the ~8 340
+      # tests in a run: it is a measurement table, not a census. A baseline
+      # (how many tests does this suite have, what does this project cost)
+      # needs EVERY result, printed or not, and that is what this step
+      # renders: per project, the DISCOVERED count (not the passed count),
+      # the sum of the per-test durations, the wall the runner measured, and
+      # the parallelism factor that says whether the project is one serial
+      # chain. It is the table `docs/BENCHMARKS.md` §6 quotes, produced on
+      # every run instead of once by hand.
+      #
+      # Reporting only, never a gate: the script exits 0 on a missing or
+      # corrupt TRX set, and it prints its own one-line summary to the log.
+      - name: Report the test census (issue #1884)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-census.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --top 15
 
       - name: Publish Test Results
         if: always()
