@@ -54,8 +54,8 @@ name: meas-build-vcpu
 #      `build/_build/Targets/CompileTarget.cs` is a no-op for the same
 #      reason.
 #   2. The architecture gate has to be OUT of a compile-phase measurement,
-#      or SUBTRACTED from it: it is 29..38 % of the wall (80..139 s of a
-#      254..409 s build) and it is a single process, so it is serial in
+#      or SUBTRACTED from it: it is 29..39 % of the wall (79..154 s of a
+#      253..409 s build) and it is a single process, so it is serial in
 #      every arm. This harness keeps the gate ON (it measures the shape the
 #      NUKE Compile target runs) and subtracts it in the "ratio without the
 #      gate" column; the nightly job switches it off, which is the right
