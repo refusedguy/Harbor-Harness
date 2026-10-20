@@ -41,6 +41,9 @@ public class BashArgMatcherTests
             await Assert.That(BashArgMatcher.HasShellMetacharacters(command)).IsTrue();
     }
 
+    // Stays a method of its own: one of its vectors ("cat f | rm -rf ~")
+    // carries the '|' that separates the table's vectors, so it cannot join
+    // the table above.
     [Test]
     public async Task HasShellMetacharacters_UnquotedMetachars_AreStillFlagged()
     {
