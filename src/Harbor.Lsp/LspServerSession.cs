@@ -402,7 +402,15 @@ public sealed class LspServerSession : IAsyncDisposable
             ct,
             timeout).ConfigureAwait(false);
 
-        return outcome.IsSuccess ? Result.Success() : Result.Failure(outcome.Error);
+        // A failure is re-typed with the library member, never rebuilt by hand
+        // (ResultFailureConversionTests). The guard in front of ConvertFailure
+        // is load-bearing: it throws on a success.
+        if (outcome.IsFailure)
+        {
+            return outcome.ConvertFailure();
+        }
+
+        return Result.Success();
     }
 
     /// <summary>Diagnostics last published for the file.</summary>
