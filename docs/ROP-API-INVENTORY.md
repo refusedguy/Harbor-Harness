@@ -747,6 +747,28 @@ do. Production is not covered by that condition: `src`/`apps`/`contrib` keep CFE
 - It ignores `?.Value`.
 - It matches by property name on a `Result`-named type, not by the `IResult` interface.
 
+### 5.6.1 The blind spot now has a type-resolving analyser beside it (report-only, #1868)
+
+`tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzer.cs` (`HARCH003`) resolves the
+**type of the property being read** instead of the symbol of the receiver:
+
+- `Value`'s containing type is `Result<T>` whatever stands in front of it — an await, an
+  invocation, a field, a local. CFE0001 asks "is the RECEIVER a Result?", and an await is not a
+  symbol, so the question cannot be asked; this rule asks "is the PROPERTY a Result?", and the
+  answer survives the await. The blind spot is closed **by type, not by form**.
+- the rule then asks whether an `IsSuccess`/`IsFailure` check on the SAME value **dominates** the
+  read: branch containment (an `if`, a ternary), an early exit (`if (r.IsFailure) return;`), a
+  short circuit (`r.IsSuccess && …`) and a property pattern (`is { IsSuccess: true }`) all count,
+  and a reassignment between the check and the read invalidates the check.
+
+It is **report-only**: it runs in-process from the architecture suite, it is not a build-time
+gate, and the text rule
+(`tests/Harbor.Architecture.Tests/UnguardedResultReadRules.cs`) keeps being the gate until the
+differential in `Roslyn/UnguardedResultReadAnalyzerTests.cs` is green. Two limits are stated
+rather than hidden: `.Error` is not covered (it needs the inverted polarity and its own
+baseline), and the value identity is a storage NAME, so two same-named values share a key — in
+the safe direction (a missed report, never a false accusation).
+
 ### 5.7 Non-vacuity (the part that is easy to get wrong)
 
 A guard that cannot fire is worse than no guard — the same lesson as NetArchTest treating a

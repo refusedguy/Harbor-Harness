@@ -179,7 +179,13 @@ public sealed class UnguardedResultReadRules
     ///     The three bans as data: one row per blind-spot shape, the allow-list
     ///     as the baseline, nine planted controls, a discovery floor.
     /// </summary>
-    private static readonly ScanRule Rule = new()
+    /// <remarks>
+    ///     Internal rather than private because issue #1868's differential
+    ///     drives THIS rule object — not a copy of its patterns — so that the
+    ///     comparison against the analyzer is a differential and not a second
+    ///     implementation of the same regexes.
+    /// </remarks>
+    internal static readonly ScanRule Rule = new()
     {
         Id = "UnguardedResultRead",
         Trees = ShippedTrees,
