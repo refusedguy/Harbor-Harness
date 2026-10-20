@@ -20,8 +20,15 @@
 // subjects that bound the IDENTICAL registry fan-out through the IDENTICAL
 // AsyncFeed<T> kept the old name and their own copy of the number:
 //
-//   ProviderBrowserViewModel.cs:22          ModelFetchTimeout = 5s   (live surface)
-//   ProviderModelPickerViewModelBase.cs:39  ModelFetchTimeout = 5s   (unreferenced)
+//   ProviderBrowserViewModel.cs:22   ModelFetchTimeout = 5s   (live surface)
+//   ProviderModelPickerViewModelBase ModelFetchTimeout = 5s   (unreferenced)
+//
+// The second line was a base with no implementor at all: #1835 removed it (the
+// file is gone, so the citation above is a record of what the scan found, not a
+// pointer into the tree). It is kept here because the drift it describes is the
+// drift this rule exists to stop, and the shape it had — a second copy of the
+// number on a type nobody derives from — is still the shape a new copy would
+// take.
 //
 // That is precisely the drift #685 predicts: when the budget moves, whoever
 // remembers updates the picker and the browser keeps waiting its own five
@@ -197,7 +204,8 @@ public class ProviderCatalogueBudgetRules
             "src/" + ProjectDir + "/ViewModels/ProviderBrowserViewModel.cs",
             "src/" + ProjectDir + "/ViewModels/ProviderConfigViewModel.cs",
             "src/" + ProjectDir + "/ViewModels/ProviderModelPickerViewModel.cs",
-            "src/" + ProjectDir + "/ViewModels/ProviderModelPickerViewModelBase.cs",
+            // #1835 removed ProviderModelPickerViewModelBase.cs: the abstract base
+            // had no implementor, so it is no longer a file the scope can see.
         ],
         CustomParse = ParseCatalogueSurface,
     };
@@ -378,7 +386,7 @@ public class ProviderCatalogueBudgetRules
     {
         // Anti-rot. A discovered rule can decay into one that matches nothing,
         // and a rule that matches nothing is indistinguishable from a rule that
-        // passes. Pin both halves of the discovery: the four subjects that exist
+        // passes. Pin both halves of the discovery: the subjects that exist
         // today must still be found, and the rule must still have real spenders
         // to judge. If a catalogue surface is renamed or removed, this fails
         // loudly instead of the scan quietly going green.
@@ -387,7 +395,9 @@ public class ProviderCatalogueBudgetRules
             "ProviderBrowserViewModel.cs",
             "ProviderConfigViewModel.cs",
             "ProviderModelPickerViewModel.cs",
-            "ProviderModelPickerViewModelBase.cs"
+            // #1835 removed ProviderModelPickerViewModelBase.cs — the abstract
+            // base carried a second copy of the budget and had no implementor,
+            // so there is no fourth subject left to find.
         ];
 
         var surfaces = CatalogueSurfaces();
@@ -408,7 +418,7 @@ public class ProviderCatalogueBudgetRules
 
         await Assert.That(violations).IsEmpty()
             .Because(
-                "The subjects are discovered, so they can silently drift out of scope. Today four view-models in "
+                "The subjects are discovered, so they can silently drift out of scope. Today three view-models in "
                 + ProjectDir + " load the provider catalogue; if that set changes, this rule must be re-pointed "
                 + "deliberately rather than left governing nothing. Offenders: " + Offenders(violations));
     }

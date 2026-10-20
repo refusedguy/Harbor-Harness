@@ -14,8 +14,9 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///         <b>vm-dedup canon (audit 27-G):</b> canonical TEA-projection token VM for
 ///         Avalonia (<c>RecordUsage</c> over UiState; <c>Clear</c>/<c>Reset</c> shared
 ///         with the session-switch path). Not the same as the Desktop
-///         <c>TokenUsageViewModelBase</c> selector base or the shell-local WPF/Blazor
-///         chart VMs — do not merge without a logic refactor.
+///         token-usage selector base — removed in #1835, it had no implementor —
+///         or the shell-local WPF/Blazor chart VMs: do not merge without a logic
+///         refactor.
 ///     </para>
 ///     <para>
 ///         <b>Task R1 — Sparkline:</b> in addition to the existing

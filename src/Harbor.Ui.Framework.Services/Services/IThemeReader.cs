@@ -3,7 +3,7 @@ namespace Harbor.Ui.Framework.Services;
 /// <summary>
 ///     Read-only view of the active theme. Split out of
 ///     <see cref="IThemeService" /> (ISP, #469) so consumers that only project
-///     the current variant — e.g. <c>SettingsViewModelBase</c> — do not take a
+///     the current variant — e.g. a settings view-model — do not take a
 ///     dependency on the apply / watch roles.
 /// </summary>
 public interface IThemeReader

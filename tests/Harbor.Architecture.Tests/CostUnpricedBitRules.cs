@@ -62,9 +62,11 @@
 // two values the core already reported. Each is listed below with the reason it
 // cannot take the bit, and `EveryHome_StillMatchesExactlyOneLine` keeps an entry
 // from outliving its reason — a home that stops existing takes its mute button
-// with it. Three further homes are honest-by-omission rather than by shape, and
-// are named as such: a surface that shows NO cell when the bit is set is not
-// making a false claim, it is declining to make any.
+// with it. A surface that shows NO cell when the bit is set is honest by
+// omission rather than by shape, and is named as such: it is declining to make
+// any claim. #1835 removed the last of those (the dead
+// `TokenUsageViewModelBase`), so that set is empty today and every money
+// surface either consults the bit or is one of the shape homes above.
 //
 // NON-VACUITY
 // -----------
@@ -231,14 +233,16 @@ public sealed class CostUnpricedBitRules
             + "StatusViewModel's \"0.####\"), which is why it has no access to the "
             + "UiState bit at all.",
             HomeKind.RendersMoney),
-        new FileHome(
-            "src/Harbor.Desktop.Abstractions/ViewModels/TokenUsageViewModelBase.cs",
-            "An abstract base with no derived class in the product tree: `Rows` is declared "
-            + "and never populated, and `EstimatedCostUsd` has no reader anywhere. There is "
-            + "no money on screen here to misreport. Listed so that adding the first real "
-            + "consumer does not arrive already non-compliant.",
-            HomeKind.NoSurface,
-            "EstimatedCostUsd"),
+        // #1835 removed the last NoSurface home: the abstract base
+        // `TokenUsageViewModelBase` (an abstract class with no derived class in
+        // the product tree, whose `EstimatedCostUsd` had no reader anywhere) was
+        // deleted, because a published base with nothing behind it is not a
+        // surface — it is an unused promise. With it gone the set of
+        // honest-by-omission homes is EMPTY, which is the stronger state: every
+        // file that renders money now either consults the core's bit or is one
+        // of the four shape homes above, which name why they cannot. The RULE is
+        // unchanged; only the exemption list is shorter, and the liveness check
+        // below has nothing left to falsify.
     ];
 
     // MECHANISM (#1086, step 2, conveyor batch-13)
@@ -357,7 +361,8 @@ public sealed class CostUnpricedBitRules
                 // rows.Add($"total {n}  {StatusBarText.CostToUsd(cost)}");
                 """, null),
             // A bare decimal with no writer is not a money cell — the premise
-            // the NoSurface home below rests on.
+            // the (now empty) NoSurface home set rested on: a property nothing
+            // reads makes no claim about money.
             new ScanControl("NearMiss/BareDecimalNoWriter.cs", """
                 public decimal EstimatedCostUsd { get; }
                 """, null),
@@ -628,18 +633,24 @@ public sealed class CostUnpricedBitRules
         }
 
         // HomeKind.NoSurface — the exemption was "nothing on screen reads this".
-        // That is falsifiable, so it is asserted rather than trusted.
-        FileHome noSurface = Homes.Single(h => h.Kind == HomeKind.NoSurface);
-        await Assert.That(noSurface.UnreadProperty).IsNotNull()
-            .Because("a NoSurface home must NAME the property it claims nothing reads, or "
-                     + "the check below has nothing to falsify and the entry is unfalsifiable weight");
+        // That is falsifiable, so it is asserted rather than trusted. The set is
+        // EMPTY since #1835: the last one named the dead `TokenUsageViewModelBase`
+        // and was deleted with the file. An empty set grants nobody an exemption,
+        // so the rule is at full strength, and the loop below has nothing to
+        // falsify — which is why it is a loop and not a `Single`.
+        foreach (FileHome noSurface in Homes.Where(h => h.Kind == HomeKind.NoSurface))
+        {
+            await Assert.That(noSurface.UnreadProperty).IsNotNull()
+                .Because("a NoSurface home must NAME the property it claims nothing reads, or "
+                         + "the check below has nothing to falsify and the entry is unfalsifiable weight");
 
-        await Assert.That(ProductReadersOf(noSurface)).IsEmpty()
-            .Because("home " + noSurface.RelativePath + " was exempt because `" + noSurface.UnreadProperty
-                     + "` has no reader in the product tree. It now has one ("
-                     + string.Join(", ", ProductReadersOf(noSurface))
-                     + ") — give it the core's unpriced bit or re-argue the exemption, do not "
-                     + "inherit it silently");
+            await Assert.That(ProductReadersOf(noSurface)).IsEmpty()
+                .Because("home " + noSurface.RelativePath + " was exempt because `" + noSurface.UnreadProperty
+                         + "` has no reader in the product tree. It now has one ("
+                         + string.Join(", ", ProductReadersOf(noSurface))
+                         + ") — give it the core's unpriced bit or re-argue the exemption, do not "
+                         + "inherit it silently");
+        }
     }
 
     /// <summary>

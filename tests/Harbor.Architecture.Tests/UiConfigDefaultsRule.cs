@@ -96,11 +96,13 @@
 //   apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74
 // check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: written over `private string _theme = "system";`; repair deferred to the owner's symbol-rename decision] -->
 // check-doc-cites: record-drift apps/Harbor.App.Avalonia/ViewModels/ThemeSettingsViewModel.cs:74 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
-//   src/Harbor.Desktop.Abstractions/ViewModels/ThemeSettingsViewModelBase.cs:39
-// The third site, SettingsViewModel.cs:114, was fixed in the same commit that
+// The third site was the abstract base `ThemeSettingsViewModelBase` in this
+// project's ViewModels folder — the file is gone: #1835 removed the base
+// because nothing derived from it.
+// The next site, SettingsViewModel.cs:114, was fixed in the same commit that
 // added this file — but a guard that named `Theme` would be red on day one, and
 // a red-on-arrival guard does not land. Widening the list is the next wave's
-// call to make, with the two files above in the same commit.
+// call to make, with the file above in the same commit.
 //
 // KNOWN LIMITATION — stated, not hidden
 // ------------------------------------

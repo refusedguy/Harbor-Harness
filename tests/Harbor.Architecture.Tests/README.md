@@ -52,6 +52,12 @@ Two halves of the layering contract, both mechanically enforced:
    A contract that is legitimately waiting for a deferred product decision is
    excused by a named, reasoned, liveness-checked reservation table rather than
    by a comment. See ARCHITECTURE_LAYERS.md §5 and §5.9.
+7. **Dead-base rules** — a published base class nobody derives from.
+   `PublicAbstractBaseLivenessRules` (#1835) requires every `public abstract`
+   type in a published product assembly to have at least one implementor in the
+   product tree, or a named, reasoned, liveness-checked reservation. The
+   population is read from the csproj graph (the packable set and everything it
+   reaches), not from a hand-typed list. See ARCHITECTURE_LAYERS.md §5.
 
 ## Run
 
