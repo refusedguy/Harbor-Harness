@@ -147,10 +147,10 @@ public class OneWayConverterBaseTests
             .IsSameReferenceAs(BindingOperations.DoNothing);
 
         // Inverting is symmetric, so this one has a real write-back too.
-        await Assert.That(InverseBoolConverter.Instance.ConvertBack(true, typeof(bool), null, CultureInfo.InvariantCulture))
-            .IsEqualTo(false);
-        await Assert.That(InverseBoolConverter.Instance.ConvertBack(false, typeof(bool), null, CultureInfo.InvariantCulture))
-            .IsEqualTo(true);
+        await Assert.That((bool?)InverseBoolConverter.Instance.ConvertBack(true, typeof(bool), null, CultureInfo.InvariantCulture))
+            .IsFalse();
+        await Assert.That((bool?)InverseBoolConverter.Instance.ConvertBack(false, typeof(bool), null, CultureInfo.InvariantCulture))
+            .IsTrue();
     }
 
     [Test]
