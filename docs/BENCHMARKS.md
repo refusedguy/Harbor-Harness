@@ -1370,6 +1370,54 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Tui.PerfTests.RendererBenchmarkTests` relative tail-render gate | ratio | `t(2N) ≤ 3·t(N)` in the same run | **keep** — the runner's speed cancels |
 | `Harbor.LoadTests.MultiSessionLoadTests` | counts, time report-only | admissions double exactly when sessions double; both stopwatches printed | **keep** — the model of "gate the counts, report the time" |
 
+### Cell style on the diff path (#1524) — **accepted shape**, measured in CI
+
+`tests/Harbor.Benchmarks/CellStyleBenchmark.cs`, in the `benchmark` workflow step
+**Bench CellStyle shared view**; and
+`tests/Harbor.Tui.CellForge.Tests/CellStyleSharedViewTests.cs`, in the
+`test (ui)` shard (its report lines land in the TRX and in the job summary via
+`tools/test-measurements.py`).
+
+Issue #1524 named its own gate: apply a shared (flyweight) style representation
+ONLY if the measurement shows a win relative to "distinct styles << cells in a
+frame"; otherwise record the measurement and keep the accepted shape.
+
+**The gate number — the ratio the issue asked for.** The chat frame the test
+builds (200×50, user prompts + assistant markdown + tool calls, painted through
+the real panels) carries **4 218 painted cells over 17 distinct styles = 248.1
+cells per style**; the benchmark grid (200×50, 16 styles crossed with the row
+index) reads **10 000 cells over 51 distinct styles = 196.1 cells per style**.
+So the sharing ratio the issue predicted IS there, two orders of magnitude.
+
+**And it buys nothing, because there is no per-access allocation to share
+away.** `CellStyle` is a `readonly struct` (packed fg / bg / attrs) and
+`Cell.Style` copies three fields out of the cell's own 16-byte layout. The
+allocation column is the decisive one:
+
+| Row | Mean (Job-NTRUNJ) | Allocated |
+|---|---|---|
+| Style access per cell (builds a CellStyle) | 9.579 µs / 10 000 cells = **0.96 ns per cell** | **0 B** |
+| Style compare per cell (rebuilds both CellStyles) — the pre-#1524 shape | 11.259 µs = 1.13 ns per cell | **0 B** |
+| Style compare per cell (packed fields, no CellStyle) — the #1524 shape | 11.423 µs = 1.14 ns per cell | **0 B** |
+
+Run 39469499716 (workflow_dispatch on `perf/1524-cell-style-flyweight`),
+`--job Short`, ubuntu-latest. The two compare rows are **inside each other's
+noise** (11.259 µs ± 0.076 vs 11.423 µs ± 0.190; the ShortRun leg reads
+11.635 vs 11.550 — the other way round), so the packed compare is neither a win
+nor a loss: the JIT already compiles `Style == Style` into the same three
+integer compares. A classic flyweight (one heap object per distinct style,
+shared by the cells that use it) would **ADD** an allocation per distinct style
+and would grow the cell past the 16-byte budget the celldiff protocol pins —
+so the shared form of a style here is the **packed triple the cell already
+carries**, and `Cell.HasSameStyle` (the packed-field compare) is the form that
+materialises no `CellStyle` at all.
+
+The test-side numbers, from the `test (ui)` shard: **0 B** over 100 000 style
+reads on the 4 218-cell painted frame, and **0 B** over 200 full 200×50
+repaints that use 16 distinct styles. The immutability that makes this safe is
+pinned too: every `CellStyle` field is `readonly` and holds a value type, so
+there is no shared instance a caller could mutate under another holder.
+
 ### The shared helper (#1747) — `Harbor.TestKit.PerfGate`
 
 `tests/Harbor.TestKit/PerfGate.cs` is the ONE way to write a per-unit-of-work
