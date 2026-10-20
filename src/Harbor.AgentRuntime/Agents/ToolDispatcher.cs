@@ -285,7 +285,8 @@ public sealed class ToolDispatcher(
             tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(count);
 
             // #1766: the cap. One slot per running call; the group may never
-            // have more than the cap in flight.
+            // have more than the cap in flight. The slot is taken BEFORE the
+            // call is created, so a call that never got one never started.
             using var gate = new SemaphoreSlim(_maxParallelToolCalls, _maxParallelToolCalls);
 
             for (int k = 0; k < count; k++)
@@ -298,18 +299,53 @@ public sealed class ToolDispatcher(
                 // synchronous up to the permission gate, so the window is
                 // real (a permission-gate cancel from iteration k-1 lands
                 // inside this loop) rather than theoretical.
-                tasks[k] = ct.IsCancellationRequested
-                    ? Task.FromResult(NotStartedBecauseStopped(toolCalls[index]))
-                    : RunGatedAsync(
-                        index,
-                        gate,
-                        toolCalls,
-                        resolved,
-                        session,
-                        partial,
-                        agent,
-                        ct,
-                        toolExecutionTimeout);
+                if (ct.IsCancellationRequested)
+                {
+                    tasks[k] = Task.FromResult(NotStartedBecauseStopped(toolCalls[index]));
+                    continue;
+                }
+
+                // Take a slot. The common case — a call that finishes
+                // synchronously — takes the slot and gives it back right
+                // here, with no await and no continuation: the dispatch then
+                // costs what it cost before the cap existed. A call that is
+                // still running when the next one starts makes the loop wait
+                // for the slot, which is the rolling pool.
+                if (!gate.Wait(0))
+                {
+                    try
+                    {
+                        await gate.WaitAsync(ct).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // #401: the call never started, so it is a "not
+                        // started" entry — not an abandoned one, and it
+                        // publishes no start event.
+                        tasks[k] = Task.FromResult(NotStartedBecauseStopped(toolCalls[index]));
+                        continue;
+                    }
+                }
+
+                Task<ToolResultEntry> call = ExecuteSingleAsync(
+                    toolCalls[index],
+                    resolved[index],
+                    session,
+                    partial,
+                    agent,
+                    ct,
+                    toolExecutionTimeout);
+                tasks[k] = call;
+
+                if (call.IsCompleted)
+                {
+                    // It already finished: the slot is free again, right here.
+                    gate.Release();
+                }
+                else
+                {
+                    ReleaseSlotWhenDone(call, gate);
+                }
             }
 
             return await AwaitAllWithAbandonAsync(
@@ -326,70 +362,30 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Run one call under the group's concurrency cap (#1766). The call
-    ///     waits for a slot; it does not start until it has one, and the
-    ///     number of calls in flight never exceeds the cap.
+    ///     Give the pool slot back when a call that is still running finishes.
     /// </summary>
-    private async Task<ToolResultEntry> RunGatedAsync(
-        int index,
-        SemaphoreSlim gate,
-        IReadOnlyList<ToolCallPart> toolCalls,
-        Result<ITool>[] resolved,
-        ISessionContext session,
-        AssistantMessage partial,
-        AgentDefinition agent,
-        CancellationToken ct,
-        TimeSpan? toolExecutionTimeout)
+    /// <remarks>
+    ///     The continuation cannot throw: a disposed gate means the group is
+    ///     over and the slot died with it. The call's own outcome is read by
+    ///     the group's await, so nothing is left unobserved (§FP-003).
+    /// </remarks>
+    private static void ReleaseSlotWhenDone(Task call, SemaphoreSlim gate)
     {
-        // The wait for a slot is cancellable: a stop while a call is queued
-        // ends the wait — it does not leave the call hanging on the gate,
-        // and it does not swallow the token.
-        try
-        {
-            await gate.WaitAsync(ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // #401: the call never started, so it is a "not started" entry —
-            // not an abandoned one, and it publishes no start event.
-            return NotStartedBecauseStopped(toolCalls[index]);
-        }
-
-        try
-        {
-            // The token may have fired between the dispatch-loop check and
-            // the slot acquisition (#401): re-check before the tool runs.
-            if (ct.IsCancellationRequested)
+        _ = call.ContinueWith(
+            _ =>
             {
-                return NotStartedBecauseStopped(toolCalls[index]);
-            }
-
-            return await ExecuteSingleAsync(
-                toolCalls[index],
-                resolved[index],
-                session,
-                partial,
-                agent,
-                ct,
-                toolExecutionTimeout).ConfigureAwait(false);
-        }
-        finally
-        {
-            // The group can be over while this call is still running — the
-            // #401 abandon path gives a stuck call a bounded grace and then
-            // reports it Abandoned without waiting for it. The gate is
-            // disposed by then, and releasing a slot on a disposed semaphore
-            // throws, so the release is guarded: the slot died with the
-            // group.
-            try
-            {
-                gate.Release();
-            }
-            catch (ObjectDisposedException)
-            {
-                // The group already finished; nothing is waiting for this slot.
-            }
-        }
+                try
+                {
+                    gate.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The group already finished; nothing is waiting for this slot.
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     /// <summary>
