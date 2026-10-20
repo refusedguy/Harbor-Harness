@@ -1589,12 +1589,13 @@ Every number below is **MEASURED**, and none of it is a projection:
 **78 s**, `platform` **36 s**, `e2e` **37 s**. The PR wall is the maximum
 shard, not the sum, so `core` is the binding shard on this run.
 
-**One test failed in this run**: `Harbor.E2E.App.Avalonia`'s
+**One test failed in the baseline run**: `Harbor.E2E.App.Avalonia`'s
 `Chat_ShowToolCallCard` ("expected rendered 'read', but the visible tree never
-showed it"), which is why the `e2e` shard is red on it and the run's conclusion
-is `failure`. It does not change any count above (the test was discovered and
-it failed, which is what the Failed column says), and it is the reason this run
-is quoted as a measurement rather than as a green one.
+showed it"), which is why the `e2e` shard is red on it and that run's
+conclusion is `failure`. It does not change any count above (the test was
+discovered and it failed, which is what the Failed column says), and it is why
+the run is quoted as a measurement rather than as a green one. The same test
+passed on run 39438762137, so the flake is one flake and not a broken suite.
 
 **How to reproduce the table.** The counts and the per-assembly durations are in
 the run's job log (the "Test run summary" block per project). They are also in
@@ -1602,7 +1603,7 @@ the TRX files, and `tools/test-census.py` turns those into exactly this table,
 per project and per test:
 
 ```bash
-gh run download 39399653820 --name test-results-core --dir TestResults/core
+gh run download 39438762137 --name test-results-core --dir TestResults/core
 python3 tools/test-census.py TestResults/core          # the table above
 python3 tools/test-census.py TestResults/core --format csv > census.csv
 ```
@@ -1610,21 +1611,23 @@ python3 tools/test-census.py TestResults/core --format csv > census.csv
 The census reads every result the runner produced, including the ~99% of tests
 that printed nothing, so its `discovered` column is the number of tests the
 suite has, and its `wall` column is the runner's per-assembly duration read
-from the TRX `<Times>` window (95.39 s against the log's 95.47 s for the
-architecture suite on that run).
+from the TRX `<Times>` window. On run 39438762137 the census and the job log
+agree to the test: 8 342 discovered, 8 307 passed, 35 skipped, 0 failed, in the
+same 37 projects.
 `tools/test-measurements.py` cannot do this: it renders only the tests that
-printed a measurement, which on a full run is 76 rows out of 8 310.
+printed a measurement, which on a full run is 88 rows out of 8 342.
 
-> **Why the run id is not the one above.** Run 39399653820 is the last `dev`
-> push whose shards still produced TRX artifacts. The TUnit 1.75 upgrade
-> (`b6fcc333`) changed how the runner resolves a relative
-> `--results-directory`: the TRX files landed under the project's own output
-> directory (`tests/<project>/bin/Release/net10.0/TestResults/<shard>/`)
-> instead of the workspace root, so neither the artifact upload nor
-> `tools/test-measurements.py` could see them and every run after the upgrade
-> produced no `test-results-*` artifact at all. This PR pins the results
-> directory to an absolute path, which restores the artifacts, and it adds the
-> census to the job summary so the table above is produced on every run.
+> **The TRX artifacts came back in this PR.** They were gone from every run
+> between 2026-10-20 11:17 and this one. The TUnit 1.75 upgrade (`b6fcc333`)
+> changed how the runner resolves a relative `--results-directory`: the TRX
+> files landed under the project's own output directory
+> (`tests/<project>/bin/Release/net10.0/TestResults/<shard>/`) instead of the
+> workspace root, so neither the artifact upload (`TestResults/**`, relative
+> to the workspace) nor `tools/test-measurements.py` could see them, and every
+> run after the upgrade produced no `test-results-*` artifact at all. The
+> results directory is now absolute, the four artifacts are uploaded again
+> (588 KiB core, 824 KiB ui, 256 KiB platform, 115 KiB e2e on run 39438762137),
+> and the census runs in the job summary of every shard.
 
 > **Superseded: the 2026-07-18 local row.** The table this section replaces said
 > 45 tests / 2.19 s for `Harbor.Architecture.Tests` and "~493" for the suite.
@@ -1679,38 +1682,41 @@ architecture suite's wall is set by a handful of long tests (§ below). The
 discovered count is the stable number; the wall is a range, and a spike should
 be compared against the count first and the wall second.
 
-**What the architecture suite's wall is made of** (run 39399653820, the last
-`dev` run whose shards still produced TRX artifacts, read with
-`tools/test-census.py`): 977 tests, a sum of per-test durations of **1 108.01
-s** and a wall of **95.39 s**, a parallelism factor of **11.62**. So the suite
-is not one serial chain: it runs about a dozen lanes at once. The wall is set
+**What the architecture suite's wall is made of** (run 39438762137, read with
+`tools/test-census.py`): 1 032 tests, a sum of per-test durations of **1 888.72
+s** and a wall of **132.60 s**, a parallelism factor of **14.24**. So the suite
+is not one serial chain: it runs about fourteen lanes at once. The wall is set
 by the slowest single test, not by the total: the four
-`PanelKeyRouteReachabilityRule` tests take 79 s each, the pilot Roslyn analyzer
-test 78.9 s, and the `ProcessEnvIsolationRule` family 48-49 s each.
+`PanelKeyRouteReachabilityRule` tests take 112 s each, the pilot Roslyn analyzer
+test 108.0 s, and the `ProcessEnvIsolationRule` family 96-99 s each. The same
+numbers on the older tree of run 39399653820 (977 tests): 1 108.01 s of test
+time in a 95.39 s window, a parallelism factor of 11.62, and a floor set by
+79 s tests. The shape is the same on both; the tree grew by 5.5 %.
 
 **The closest thing to the spike's own question, already measured.**
 `PilotRoslynAnalyzerTests` runs a Roslyn analyzer over the live tree, which is
-what an ArchUnitNET-style spike would do. On run 39399653820 it printed:
+what an ArchUnitNET-style spike would do. On run 39438762137 it printed:
 
 ```
-[pilot] HARCH001+HARCH002 over 62 product compilations: 69867 ms
+[pilot] HARCH001+HARCH002 over 61 product compilations: 76885 ms
 ```
 
-62 product compilations, 69.9 s of analyzer work, on the Release build CI
-actually gates on. That is the current cost of the existing analyzer-based
-rule, and it is the number a spike should be compared against.
+61 product compilations, 76.9 s of analyzer work, on the Release build CI
+actually gates on (the older tree of run 39399653820 said 62 compilations and
+69.9 s). That is the current cost of the existing analyzer-based rule, and it
+is the number a spike should be compared against.
 
 **What a spike can compare against now.** Before this section, the only
 numbers in this file about the architecture suite were 45 tests and 2.19 s,
 measured on a local Debug, no-build run of a tree 23x smaller, in a
 configuration CI never runs. That is replaced by five Release measurements of
 the configuration the gate actually runs (1 032 discovered / 78.75 s on the
-current baseline run), the shape of that wall (1 108 s of test time inside a
-95.39 s window, a parallelism factor of 11.62, a floor set by four 79 s tests),
-and the cost of the closest existing thing to the spike (a Roslyn analyzer over
-62 product compilations, 69.87 s). A spike can price itself against those. The
-Debug half of the axis and the "dependencies discovered" half are still open,
-and §6.5 says so instead of leaving them implied.
+current baseline run), the shape of that wall (1 888.72 s of test time inside a
+132.60 s window, a parallelism factor of 14.24, a floor set by four 112 s
+tests), and the cost of the closest existing thing to the spike (a Roslyn
+analyzer over 61 product compilations, 76.89 s). A spike can price itself
+against those. The Debug half of the axis and the "dependencies discovered"
+half are still open, and §6.5 says so instead of leaving them implied.
 
 ### 6.2 Test execution
 
@@ -2152,11 +2158,12 @@ leaving the gap silent.
 
 | Axis | Release (what CI gates on) | Debug |
 |---|---:|---|
-| Architecture suite, tests discovered | **1 032** (run 39434075758) | not measured |
-| Architecture suite, wall | **78.75 s** (core shard, same run) | not measured |
-| Architecture suite, sum of per-test durations | **1 108.01 s** (run 39399653820, TRX) | not measured |
-| Analyzer population: product compilations the pilot Roslyn analyzer walked | **62** (run 39399653820) | not measured |
-| Analyzer cost over that population | **69.87 s** (run 39399653820) | not measured |
+| Architecture suite, tests discovered | **1 032** (runs 39434075758, 39438762137) | not measured |
+| Architecture suite, wall | **78.75 s** (core shard, run 39434075758) | not measured |
+| Architecture suite, sum of per-test durations | **1 888.72 s** (run 39438762137, TRX) | not measured |
+| Architecture suite, parallelism factor | **14.24** (run 39438762137, TRX) | not measured |
+| Analyzer population: product compilations the pilot Roslyn analyzer walked | **61** (run 39438762137) | not measured |
+| Analyzer cost over that population | **76.89 s** (run 39438762137) | not measured |
 
 Why the Debug half is empty: no CI job builds Debug (the pipeline is Release
 end to end), and the old local Debug row (45 tests / 2.19 s) is the number
