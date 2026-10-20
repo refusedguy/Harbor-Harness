@@ -110,7 +110,9 @@ public class RunBudgetTests
         // 1000/1e6*2 + 500/1e6*10 = 0.002 + 0.005. Exact decimal, not approximate.
         await Assert.That(budget.TariffCostUsd).IsEqualTo((decimal?)0.007m);
         await Assert.That(budget.CostSource).IsEqualTo(BudgetSource.TariffCost);
-        await Assert.That(tracker.CheckCap()).IsEqualTo(RunLimitKind.MaxCost);
+        Maybe<RunLimitKind> costHit = tracker.CheckCap();
+        await Assert.That(costHit.HasValue).IsTrue();
+        await Assert.That(costHit.Value).IsEqualTo(RunLimitKind.MaxCost);
     }
 
     [Test]
@@ -153,7 +155,9 @@ public class RunBudgetTests
         await Assert.That(budget.ReportedUsage!.InputTokens).IsEqualTo(4000);
         await Assert.That(budget.ReportedUsage!.InputTokens > 2500).IsTrue();
         await Assert.That(tracker.Overshoot).IsEqualTo(BudgetOvershootReason.InFlightRequests);
-        await Assert.That(tracker.CheckCap()).IsEqualTo(RunLimitKind.MaxTokens);
+        Maybe<RunLimitKind> tokenHit = tracker.CheckCap();
+        await Assert.That(tokenHit.HasValue).IsTrue();
+        await Assert.That(tokenHit.Value).IsEqualTo(RunLimitKind.MaxTokens);
     }
 
     [Test]

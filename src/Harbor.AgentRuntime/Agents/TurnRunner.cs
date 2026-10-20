@@ -346,8 +346,14 @@ internal sealed class TurnRunner(
             // #404: a capped text-only turn is a limit stop, not a finish
             // (the #403 shape on the budget axis). Cancel still wins: an
             // aborted stream ends as a cancel, never as a cap.
-            if (budget is not null && stopReason != StopReason.Aborted && budget.CheckCap() is { } earlyHit)
-                return new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit);
+            if (budget is not null && stopReason != StopReason.Aborted)
+            {
+                // Absence is a Maybe (#1557): "no cap tripped" is a state of
+                // the ledger, not a missing value the caller has to guess at.
+                Maybe<RunLimitKind> earlyHit = budget.CheckCap();
+                if (earlyHit.HasValue)
+                    return new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit.Value);
+            }
             return new TurnStepResult(truncationFallback, EndRun: true);
         }
 
@@ -394,10 +400,17 @@ internal sealed class TurnRunner(
         // persisted above: that is the modeled overshoot (LateUsage), not a
         // leak. A spend ceiling outranks a step ceiling — money is the more
         // specific bound — so this check comes first.
-        if (budget is not null && budget.CheckCap() is { } budgetHit)
+        if (budget is not null)
         {
-            TurnRunnerLog.BudgetCapHit(logger, budgetHit);
-            return new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit);
+            // Absence is a Maybe (#1557): the cap names the limit that
+            // tripped, and "none tripped" is a state, not a null to
+            // pattern-match away.
+            Maybe<RunLimitKind> budgetHit = budget.CheckCap();
+            if (budgetHit.HasValue)
+            {
+                TurnRunnerLog.BudgetCapHit(logger, budgetHit.Value);
+                return new TurnStepResult(truncationFallback, EndRun: true, Limit: budgetHit.Value);
+            }
         }
 
         // 11. Max steps — also honoured after a terminal stop reason.
@@ -582,7 +595,10 @@ internal sealed class TurnRunner(
                 // the response. Token/spend fold in after the stream, so only
                 // the output axis can newly trip here; the post-stream check
                 // reports the limit kind.
-                if (budget is not null && budget.CheckCap() == RunLimitKind.MaxOutputBytes)
+                // Absence is a Maybe (#1557) — a struct, so the "no tracker"
+                // case is a null Nullable and the "no cap" case is None.
+                Maybe<RunLimitKind> deltaHit = budget?.CheckCap() ?? Maybe<RunLimitKind>.None;
+                if (deltaHit.HasValue && deltaHit.Value == RunLimitKind.MaxOutputBytes)
                 {
                     // #1104: producer dies with the consumer — without this
                     // the fire-and-forget pump keeps pouring the whole
