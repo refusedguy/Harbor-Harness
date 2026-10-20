@@ -88,7 +88,7 @@ namespace Harbor.Architecture.Tests;
 public sealed class UnguardedResultReadAnalyzerTests
 {
     /// <summary>
-    ///     The planted OFFENDERS: five ways to read a <c>Result</c> that no
+    ///     The planted OFFENDERS: six ways to read a <c>Result</c> that no
     ///     check protects.
     /// </summary>
     /// <remarks>
@@ -169,7 +169,7 @@ public sealed class UnguardedResultReadAnalyzerTests
         """;
 
     /// <summary>
-    ///     The planted NEAR-MISSES: reads a human would call guarded, and
+    ///     The planted NEAR-MISSES: nine reads a human would call guarded, and
     ///     reads of types that are not <c>Result</c> at all.
     /// </summary>
     private const string NearMissesSource = """
