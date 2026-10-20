@@ -1510,13 +1510,42 @@ ratio moves when the scenarios get faster, and a ceiling does not.
 
 | Run | Project | Tests | Sum of durations | Wall | Parallelism factor |
 |---|---|---:|---:|---:|---:|
-| [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, 2026-10-20, before) | `Harbor.Tui.CellForge.PtyTests` | 81 | 103.58 s | 104.66 s | 0.99 |
-| ⏳ after | `Harbor.Tui.CellForge.PtyTests` | — | — | — | — |
+| [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, 2026-10-20, BEFORE) | `Harbor.Tui.CellForge.PtyTests` | 81 | 103.58 s | 104.66 s | 0.99 |
+| [39416057635](https://github.com/refusedguy/Harbor-Harness/actions/runs/39416057635) (PR #1939, AFTER run 1) | `Harbor.Tui.CellForge.PtyTests` | 81 | ≈64.7 s (est.) | **30.7 s** | ≈2.1 (est.) |
+| [39416057635](https://github.com/refusedguy/Harbor-Harness/actions/runs/39416057635) (PR #1939, AFTER run 2, the same job re-run) | `Harbor.Tui.CellForge.PtyTests` | 81 | ≈64.7 s (est.) | **38.0 s** | ≈1.7 (est.) |
+
+**The `ui` shard, measured the same way in all three runs** (the `test (ui)` job
+log's per-project timestamps, which are the numbers the workflow puts into its
+job summary table):
+
+| run | `ui` shard | of which the PTY project | the PTY share |
+|---|---:|---:|---:|
+| before | 129.0 s | 105.0 s | 81 % |
+| after, run 1 | 73.0 s | 31.0 s | 42 % |
+| after, run 2 | 67.0 s | 38.0 s | 57 % |
+
+The project is 3.4× (run 1) and 2.8× (run 2) faster, and the shard is 43 % and
+48 % cheaper. The two after runs differ by 7 s, which is the runner's load; the
+budget below is set against the slower one.
+
+**Method, and a gap in it.** The before row is read from the TRX artifact (the
+sum of the per-test durations divided by the TRX `<Times>` window). The after
+rows are read from the job log, because of a CI fact: **the current `ui` shard
+no longer produces TRX files** ("No files were found with the provided path:
+TestResults/**/*.trx", in both after runs), so the after run's per-test
+histogram is not downloadable. The before run's TRX is in the artifact of run
+39399653820. The after runs' per-test sum is therefore an ESTIMATE, derived
+from the three fixed waits (15.0 s + 16.0 s + 7.9 s off 103.58 s), and the
+factor follows from it; the wall is measured either way. The log timestamps
+also include the process start and the TRX write, so they are an over-estimate
+of the project's own time, which is the conservative direction for a
+before/after comparison.
 
 **Budget.** The project's wall must fit in **45 s** per CI run. Before #1789 it was
-104.66 s; the ceiling is a constant because the work per run does not change. The
+104.66 s. The ceiling is a constant because the work per run does not change. The
 ceiling is deliberately loose: it is there to catch a return to the serial chain
-(≈105 s), not to police a few seconds of runner noise.
+(≈105 s), not to police a few seconds of runner noise. Both after runs fit it,
+with 7 s and 15 s of headroom.
 
 **What #1789 removed, in order of what it was worth.** The suite's cost was not
 one thing, and the honest order is:
@@ -1619,9 +1648,11 @@ screen wait is a repaint-signal wait and the quiescence wait is a stability wind
 **What the parallelism factor cannot go below.** The longest single test is 21.41 s
 before the cadence fix and ≈5.4 s after it, so no amount of concurrency takes the
 project's wall under the longest test. The 2-permit limiter (`PtyScenarioLimit`) is
-the budget that trades the two off: 103.58 s of work before the fixed-wait fixes,
-≈65 s after them, over two lanes is ≈33 s of work per lane against a ≈5.4 s
-floor, so the wall lands where the work says it should, not at the sum.
+the budget that trades the two off: ≈65 s of work after the fixed-wait fixes,
+over two lanes is ≈32 s of work per lane against a ≈5.4 s floor, and the two
+measured walls (30.7 s and 38.0 s) sit exactly there. The limiter is what binds,
+not the floor: at 4 permits the same work is ≈16 s of work per lane, and that is
+the next step, with its own run's numbers before it is believed.
 
 **This work does NOT shorten the PR wall, and the numbers say so.** The PR wall is
 the MAXIMUM shard, not the sum. On the run this table is measured from: `core`
