@@ -258,6 +258,15 @@ jobs:
       # baseline row that no longer matches anything.
       - name: Test-project completeness gate fails on a project left out of CI
         run: python3 tools/check-test-projects.py --self-test
+      # Issue #1795. The skipped-test report is not a gate — it renders the
+      # skips of a run into the job summary — but it parses the TRX the
+      # runner wrote, and a parser that silently stopped finding the skips
+      # would publish an empty section and look like a clean run. Its
+      # self-test carries the two shapes that matter: a skip WITH a reason
+      # (the reason must survive, marker stripped) and a skip WITHOUT one
+      # (the report must say so instead of inventing a reason).
+      - name: Skipped-test report finds the skips and their reasons
+        run: python3 tools/test-skips.py --self-test
 
   links:
     name: internal links

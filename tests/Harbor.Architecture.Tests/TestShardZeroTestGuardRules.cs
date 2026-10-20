@@ -180,6 +180,19 @@ public sealed class TestShardZeroTestGuardRules
             .Because("the branch must assign `--minimum-expected-tests 1`. Without that assignment a "
                 + "`guard: true` row expands to an empty string and the host exits 0 on a zero-test "
                 + "run, which is the exact failure #977 reports. Found: " + FirstLine(step));
+
+        // #1795: the count-based guard is only half of the zero-test verdict.
+        // MTP's default policy is `allow-skipped`, under which a run in which
+        // EVERY test was skipped exits 0 — a suite that stopped running
+        // anything is indistinguishable from a green one. `strict` treats a
+        // skipped test as not run, so an all-skipped run fails (exit 8). The
+        // flag is passed on the run line, next to the guard, and it covers
+        // the shards whose `guard:` row is off as well — which is exactly the
+        // case the count-based half cannot see.
+        await Assert.That(step).Contains("--zero-tests-policy strict")
+            .Because("the run step must pass MTP's strict zero-tests policy. Without it a run in "
+                + "which every test was skipped is green under the default `allow-skipped` policy. "
+                + "Found: " + FirstLine(step));
     }
 
     /// <summary>

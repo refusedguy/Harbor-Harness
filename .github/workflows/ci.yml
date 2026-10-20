@@ -85,9 +85,9 @@ jobs:
       packages: ${{ steps.filter.outputs.packages }}
       deps: ${{ steps.filter.outputs.deps }}
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -110,6 +110,10 @@ jobs:
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
               - 'tools/test-measurements.py'
+              # The skipped-test report (issue #1795) — same #618 argument:
+              # an edit to the script alone must not skip the job that
+              # executes it.
+              - 'tools/test-skips.py'
               # The pack-validation gate's instrument (#429). Same #618
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
@@ -211,9 +215,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - name: Public-API snapshot gate fails on an unreviewed change
         run: python3 tools/check-public-api-abstractions.py --self-test
       - name: Check the frozen facade surface against its baseline
@@ -263,9 +267,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
@@ -325,9 +329,9 @@ jobs:
       # block: the value is the only thing that turns it off.
       HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -397,6 +401,42 @@ jobs:
       # build/_build.csproj, so NUKE build-code edits validate here too.
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         run: bash build/build.sh Compile --configuration Release
+
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+      - name: The zero-test guard can go red (issue #1795)
+        shell: bash
+        run: |
+          set -uo pipefail
+          dll="tests/Harbor.Abstractions.Tests/bin/Release/net10.0/Harbor.Abstractions.Tests.dll"
+          if [ ! -f "$dll" ]; then
+            echo "::error::missing $dll — the guard check would be vacuous"
+            exit 1
+          fi
+          set +e
+          dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
+            --treenode-filter "/*/*/NoSuchClassForTheGuardCheck/*" > /dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "$rc" -ne 8 ] && [ "$rc" -ne 9 ]; then
+            echo "::error::the zero-test guard is vacuous: a run that discovered no test exited $rc (expected 8 or 9)"
+            exit 1
+          fi
+          echo "the zero-test guard is not vacuous: an empty run exits $rc"
 
       # #1882. The issue's question, asked of the tree that was just built:
       # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
@@ -1000,9 +1040,9 @@ jobs:
               Harbor.LoadTests
               Harbor.E2E.Framework.Tests
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       # The shards run the binaries the build job already produced (the
       # "Download build outputs" step below), so nothing here restores into
@@ -1050,26 +1090,13 @@ jobs:
           set -uo pipefail
           guard=""
           if [ "${{ matrix.guard }}" = "true" ]; then
+            # The zero-test guard: a suite that discovered nothing must not
+            # read as green. `--minimum-expected-tests 1` is the count-based
+            # half (MTP exit 9 when fewer than one test ran).
             guard="--minimum-expected-tests 1"
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
-          # ABSOLUTE, and that is the point (#1791). A relative
-          # --results-directory used to be resolved against the runner's
-          # working directory, which is the workspace root, so the TRX landed
-          # in TestResults/<shard>/ where the step below looks for it. TUnit
-          # 1.75.0 (#1885) changed that: the relative path is now resolved
-          # against the test assembly's base directory, so every TRX landed in
-          # tests/<Project>/bin/Release/net10.0/TestResults/<shard>/ instead.
-          # Nothing noticed, because the two steps that consume the TRX both
-          # treat "no TRX" as "nothing to report": the measurement script
-          # exits 0, and the upload step has if-no-files-found: ignore. The
-          # per-test measurements — issue #618's whole mechanism — stopped
-          # being produced, and no job went red.
-          #
-          # An absolute path is what both versions agree on, so this is the
-          # fix that does not have to be re-made at the next bump.
-          trx_dir_abs="$GITHUB_WORKSPACE/$trx_dir"
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
@@ -1082,7 +1109,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir_abs" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -1125,6 +1152,19 @@ jobs:
         shell: bash
         run: |
           python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Issue #1795 — the SKIPPED tests, with their reasons, in the same
+      # summary panel. A skipped test asserts nothing, and the shard loop
+      # prints per-ASSEMBLY counts only, so a suite that quietly stopped
+      # running half its tests stayed green until somebody counted by hand
+      # (that is how the 20 skipped Avalonia golden tests were found).
+      # Reporting only, never a gate: the script exits 0 on a missing TRX.
+      - name: Report skipped tests (issue #1795)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Publish Test Results
@@ -1170,9 +1210,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1437,9 +1477,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1658,9 +1698,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -1700,9 +1740,9 @@ jobs:
     env:
       HARBOR_PERF_REPORT: ${{ github.workspace }}/renderer-perf-report.txt
     steps:
-      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
-      # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          submodules: recursive
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:

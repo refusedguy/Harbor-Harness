@@ -153,3 +153,8 @@ assets/demo/frames/
 # and check-md-links.py import md_gate, so every run drops a __pycache__ here.
 __pycache__/
 *.pyc
+
+# The golden lane writes the frame it just captured next to the baseline when
+# the two differ, so a reviewer can diff the two files (issue #1795). It is a
+# diagnostic, never a baseline — the goldens workflow does not commit it.
+*.golden.txt.actual.txt

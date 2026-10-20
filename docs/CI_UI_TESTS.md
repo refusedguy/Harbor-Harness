@@ -140,13 +140,26 @@ This builds the solution, runs architecture tests, and runs the full
 ## Accepting an intended golden change
 
 The frames lane (`ComponentGoldenFramesTests`, eight scenarios) and the
-legacy lane (`GoldenFrameTests`, four scenarios) compare settled headless
-frames against committed baselines. A mismatch fails with the test name,
-the expected hash, the actual hash, and the path of the written
-`.verified.png` next to the reference — eyeball that diff before accepting.
+legacy lane (`GoldenFrameTests`, four scenarios) render a component in the
+headless compositor and compare the CONTENT of the frame — the visual tree,
+the text, the resolved colours, the font sizes — against a committed
+baseline (`*.golden.txt`). A mismatch fails with the test name, the first
+differing line, and the path of the written `.actual.txt` next to the
+reference.
+
+**The baselines are checked on CI, on every run.** The lane used to compare
+SHA-256 hashes of PNG rasters, and every one of those comparisons was skipped
+on a shared runner: a raster is a function of the machine's Skia build and
+font stack, so a baseline captured on one host never matched another, and the
+most fragile part of the UI was checked nowhere (#1795). A content snapshot
+is a function of the code alone, so the same baseline holds on every host.
+
+A change of the frame therefore fails the build unless the baseline was
+regenerated in the SAME change — the same deliberate re-sign the public-API
+snapshot gate asks for.
 
 ```bash
-# Option A: regenerate locally (writes PNGs + sha256.json manifest together)
+# Option A: regenerate locally (writes the *.golden.txt baselines)
 HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.E2E.App.Avalonia -c Release -- \
   --treenode-filter "/*/*/*Golden*/*"
 
@@ -154,8 +167,33 @@ HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.E2E.App.Avalonia -c Re
 gh workflow run goldens.yml --ref <branch> -f suites="tests/Harbor.E2E.App.Avalonia"
 ```
 
-Review the `.verified.png` diff, then commit the baseline PNGs and the
-`ComponentTests/baselines/sha256.json` manifest in one commit. Pixel goldens
-are skipped on shared CI runners (`SkipGoldenOnCi`) because the Skia and font
-stack differs per host; enforce them on a pinned machine with
-`HARBOR_GOLDENS_STRICT=1`.
+Both options write the same files. Option B additionally re-runs the suites in
+verify mode before committing, so a baseline the code does not reproduce is
+not committed.
+
+Review the `.actual.txt` diff, then commit the regenerated `*.golden.txt`
+baselines in the same commit as the change that moved the frame. The
+geometry of a text-bearing frame is NOT part of the baseline: the size of a
+text control is a function of the host's font metrics (the app's mono slot
+is a system font stack), so a baseline that carried the geometry would be
+pinned to one machine's fonts. The layout is covered by the screenshot
+artifacts the suite writes (`~/.harbor/test-screenshots-*`) and by the
+structural assertions of the other UI suites.
+
+## Skipped tests
+
+A skipped test asserts nothing, so the number of them is published on every
+CI run: the `test` job renders the skipped tests of each shard, with the
+reason each one declared, into the job summary (`tools/test-skips.py`).
+
+```bash
+# the same view, from a local TRX set
+python3 tools/test-skips.py TestResults/e2e
+```
+
+The house rule this serves: a skipped test needs a reason, and the count
+must not grow silently. The Avalonia golden lane is the worked example — 20
+of its 133 tests were skipped on every CI run (12 golden frames skipped
+because a raster baseline never matches across machines, 7 `KnownFlake`
+tests, 1 order-dependent settings test); the golden skips are gone, and the
+rest are listed with their reasons on every run.
