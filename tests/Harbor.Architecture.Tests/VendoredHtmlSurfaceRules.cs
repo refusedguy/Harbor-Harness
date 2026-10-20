@@ -3,7 +3,7 @@
 // WHY THIS FILE EXISTS
 // --------------------
 // #726 filed a vendored pair of `CollapseWhitespace` helpers in
-// `external/ConsoleEx/SharpConsoleUI` (a git submodule on
+// `contrib/external/ConsoleEx/SharpConsoleUI` (a git submodule on
 // github.com/nickprotop/ConsoleEx) as ONE behaviour. #878 read both against the
 // pin and found they diverge from EACH OTHER:
 //
@@ -45,9 +45,18 @@
 // #717 already guards on the live side), and writing a rule over code no compiler
 // sees is the exact failure #915/#923/#924 recorded.
 //
-// `external/` is likewise not scanned — 4 files there name these types by
+// `contrib/external/` is likewise not scanned — 4 files there name these types by
 // definition, and the submodule's own sources are not ours to police. The scan
 // covers `src/` and `apps/`: OUR code, the only place a new call could appear.
+//
+// THE VENDORED RENDERER LEFT src/ (contrib/tui/Harbor.Tui.NickConsoleEx), so
+// the "most likely caller" this file used to point at is no longer inside the
+// scanned perimeter. That makes the guard's job NARROWER and its premise
+// STRONGER at the same time: Harbor no longer references SharpConsoleUI at all,
+// so the HTML surface is unreachable by construction, and what this rule now
+// holds is that nobody WIRES IT BACK — a `using SharpConsoleUI.Html;` in src/
+// or apps/ would be the first step of re-introducing the vendored dependency,
+// and it would be the step that makes ADR-012's deferred question real.
 //
 // NON-VACUITY
 // -----------
@@ -124,9 +133,12 @@ public class VendoredHtmlSurfaceRules
             new ScanControl("Bridge/Builder.cs", "private readonly HtmlBuilder _builder = new();", SubId),
             new ScanControl("Bridge/Control.cs", "private readonly HtmlControl _control = new();", SubId),
             // The post-decision shape is not "use a different name" — it is "do not
-            // reach the surface". So the quiet case is the CURRENT one: the
-            // NickConsoleEx renderer builds a MarkupControl and a window, and that
-            // must stay unflagged. A rule that fired here would forbid the fix.
+            // reach the surface". So the quiet case is the MARKUP one: a
+            // renderer that builds a MarkupControl and a window is not reaching
+            // the HTML surface, and a rule that fired here would forbid the fix.
+            // (The renderer that used to do this lives in contrib/ now, so this
+            // control is a planted shape rather than a quotation of live code —
+            // which is what a control is for.)
             new ScanControl("Current.cs", """
                 public sealed class NickConsoleExTuiRenderer : ITuiRenderer
                 {
@@ -151,7 +163,12 @@ public class VendoredHtmlSurfaceRules
         MinHits = 500,
         MustContain =
         [
-            "src/Harbor.Tui.NickConsoleEx/NickConsoleExTuiRenderer.cs",
+            // The walked perimeter must still contain a src/ TUI renderer: the
+            // rule is about OUR code reaching the surface, and the renderer
+            // family is where such a call would be written. The vendored
+            // renderer this used to name is in contrib/ now, which this rule
+            // deliberately does not scan.
+            "src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs",
         ],
     };
 
@@ -162,7 +179,9 @@ public class VendoredHtmlSurfaceRules
 
         await Assert.That(violations).IsEmpty()
             .Because(
-                "§ARCH (#878). SharpConsoleUI's HTML surface is unreachable from Harbor today, and that is "
+                "§ARCH (#878). SharpConsoleUI's HTML surface is unreachable from Harbor today — Harbor "
+                + "does not reference SharpConsoleUI at all any more, the vendored renderer having left "
+                + "src/ for contrib/ — and that is "
                 + "the premise ADR-012's recommendation rests on: two `CollapseWhitespace` helpers sit "
                 + "behind it and they disagree on 758 of 781 measured strings (ASCII six + trimmed edges "
                 + "versus char.IsWhiteSpace + kept edges). Rendering through them would make the same page "
@@ -189,14 +208,15 @@ public class VendoredHtmlSurfaceRules
                 + "A near-zero count means the paths are stale and the rule enforces nothing. "
                 + string.Join("; ", discovery));
 
-        // The one project where a call is most likely to appear: the wrapper that
-        // already talks to SharpConsoleUI. If the walk stopped covering it, the
-        // rule would still be green while the likeliest caller went unchecked.
-        await Assert.That(ScanRunner.ScopeFiles(Rule).Any(f => f.Contains("src/Harbor.Tui.NickConsoleEx/")))
+        // The project where a call is most likely to appear: the src/ renderer
+        // family. If the walk stopped covering it, the rule would still be green
+        // while the likeliest caller went unchecked.
+        await Assert.That(ScanRunner.ScopeFiles(Rule).Any(f => f.Contains("src/Harbor.Tui.CellForge/")))
             .IsTrue()
             .Because(
-                "Harbor.Tui.NickConsoleEx is the only project holding a reference to the submodule, so it "
-                + "is where a bridge would be written. A scan that missed it would be green and blind.");
+                "the src/ renderer family is where a bridge to the SharpConsoleUI HTML surface would be "
+                + "written, and the vendored renderer that used to be the likeliest caller now lives in "
+                + "contrib/, outside this rule's perimeter. A scan that missed src/ would be green and blind.");
     }
 
     [Test]

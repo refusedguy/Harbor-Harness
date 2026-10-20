@@ -53,10 +53,6 @@ public sealed record RendererPerformanceContract(
             new ThroughputContract(MinimumEventsPerSec: 10_000),
             new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(2)),
             new MemoryContract(MaxAllocatedMbPerThousandEvents: 1.0)),
-        new("nickconsoleex",
-            new ThroughputContract(MinimumEventsPerSec: 2_000),
-            new LatencyContract(P99Budget: TimeSpan.FromMilliseconds(10)),
-            new MemoryContract(MaxAllocatedMbPerThousandEvents: 4.0)),
     ];
 }
 

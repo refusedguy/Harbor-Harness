@@ -56,8 +56,6 @@ internal static class TuiModule
         }
 #if HARBOR_WITH_SPECTRE_TUI
         TuiModuleLog.TuiRenderer(ctx.Logger, tui);
-#elif HARBOR_WITH_NICK_CONSOLE_EX
-        TuiModuleLog.TuiRendererSpectreOff(ctx.Logger, tui);
 #else
         TuiModuleLog.TuiRendererCellForge(ctx.Logger, tui);
 #endif
@@ -159,9 +157,6 @@ internal static partial class TuiModuleLog
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "TUI renderer: {Tui}")]
     public static partial void TuiRenderer(ILogger logger, string tui);
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "TUI renderer: {Tui} (Spectre off, CellForge always enabled)")]
-    public static partial void TuiRendererSpectreOff(ILogger logger, string tui);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "TUI renderer: {Tui} (CellForge always enabled, Spectre off)")]
     public static partial void TuiRendererCellForge(ILogger logger, string tui);

@@ -89,20 +89,6 @@ internal sealed class CellForgeTuiRendererFactory : ITuiRendererFactory
             panelServices: Harbor.Ui.Framework.Panels.PanelServices.FromContainer(sp));
 }
 
-#if HARBOR_WITH_NICK_CONSOLE_EX
-/// <summary>Phase 3 additive backend over nickprotop/ConsoleEx (<c>HARBOR_TUI=nickconsoleex</c>).</summary>
-internal sealed class NickConsoleExTuiRendererFactory : ITuiRendererFactory
-{
-    public string BackendId => "nickconsoleex";
-
-    public IReadOnlyList<string> Aliases => [];
-
-    public ITuiRenderer Create(IServiceProvider sp) =>
-        new Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer(
-            sp.GetRequiredService<ILogger<Harbor.Tui.NickConsoleEx.NickConsoleExTuiRenderer>>());
-}
-#endif
-
 /// <summary>
 ///     Wraps a plugin-contributed <c>Func&lt;ITuiRenderer&gt;</c> (the shape
 ///     <c>IPluginLoadHost.RegisterTuiBackend</c> accepts) as an
@@ -255,9 +241,6 @@ public static class TuiBackendRegistry
             new PlainTuiRendererFactory(),
             new AnsiTuiRendererFactory(),
             new CellForgeTuiRendererFactory(),
-#if HARBOR_WITH_NICK_CONSOLE_EX
-            new NickConsoleExTuiRendererFactory(),
-#endif
 #if HARBOR_WITH_SPECTRE_TUI
             new SpectreTuiRendererFactory(),
             new FullscreenTuiRendererFactory(),

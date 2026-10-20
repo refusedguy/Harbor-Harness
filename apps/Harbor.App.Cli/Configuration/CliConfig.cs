@@ -41,11 +41,18 @@ public sealed record CliConfig : AppConfigBase
     /// <summary>
     ///     Default TUI renderer: <c>"auto"</c> (probe), <c>"ansi"</c>,
     ///     <c>"plain"</c>, <c>"cellforge"</c> (legacy alias
-    ///     <c>"consoleex"</c>), <c>"nickconsoleex"</c>, <c>"spectre"</c>,
-    ///     <c>"spectre-tui"</c>, <c>"fullscreen"</c>, <c>"terminal-gui"</c>,
+    ///     <c>"consoleex"</c>), <c>"spectre"</c>, <c>"spectre-tui"</c>,
+    ///     <c>"fullscreen"</c>, <c>"terminal-gui"</c>,
     ///     <c>"termina"</c>, <c>"razor"</c>. The <c>HARBOR_TUI</c> env var
     ///     overrides this at startup. Defaults to <c>"auto"</c> (which
     ///     resolves to <c>"spectre-tui"</c> in the CLI composition root).
+    ///     <para>
+    ///         The vendored <c>"nickconsoleex"</c> backend is not in this list
+    ///         any more: it left the product for <c>contrib/tui/</c>, so the id
+    ///         now resolves through the backend registry's single fallback
+    ///         rule (a warning naming the requested id) like any other
+    ///         unknown value.
+    ///     </para>
     /// </summary>
     public string DefaultTuiRenderer { get; init; } = "auto";
 

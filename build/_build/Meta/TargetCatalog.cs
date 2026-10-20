@@ -75,7 +75,7 @@ public static class TargetCatalog
                 new TargetParam("--with-spectre-tui", "bool", "true", "include Spectre TUI renderer"),
                 new TargetParam("--with-all-providers", "bool", "true", "all LLM providers instead of Ollama only"),
                 new TargetParam("--with-all-tools", "bool", "true", "all builtin tools instead of core six"),
-                new TargetParam("--with-renderer", "enum[All|CellForge|AnsiPlain|NickConsoleEx]", "all", "renderer backends to compose (nickconsoleex needs the ConsoleEx submodule)"),
+                new TargetParam("--with-renderer", "enum[All|CellForge|AnsiPlain]", "all", "renderer backends to compose"),
                 new TargetParam("--with-daemon", "bool", "true", "include the daemon IPC layer (false = single-process, no PublishIpc*)")
             ],
             [new TargetOutput("dir", "artifacts/publish/<app>/<variant>")],

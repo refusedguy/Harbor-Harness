@@ -28,7 +28,7 @@ namespace Harbor.Terminal.Abstractions.Renderers;
 ///     <para>
 ///         <b>What this does not unify.</b> Only the failure line. The started and
 ///         completed lines are genuinely per-renderer — AnsiPlain brackets them and
-///         prints a duration, NickConsoleEx uses markup, CellForge writes
+///         prints a duration, CellForge writes
 ///         <c>"history compacted"</c> — and folding those together would be a
 ///         visual-regression change to three surfaces, which is not this issue.
 ///     </para>

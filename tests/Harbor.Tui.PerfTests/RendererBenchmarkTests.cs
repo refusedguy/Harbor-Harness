@@ -37,7 +37,6 @@ public class RendererBenchmarkTests
     [Arguments("ansi")]
     [Arguments("plain")]
     [Arguments("cellforge")]
-    [Arguments("nickconsoleex")]
     public async Task Backend_MeetsAbsoluteContract(string backendId)
     {
         RendererPerformanceContract? contract = RendererPerformanceContract.Defaults
@@ -68,6 +67,21 @@ public class RendererBenchmarkTests
         {
             await Assert.That(runnable.Contains(contract.BackendId)).IsTrue()
                 .Because($"contract for '{contract.BackendId}' has no benchmark harness");
+        }
+
+        // The other direction: a backend the suite runs must declare a
+        // contract. Without this half the guard only caught a contract with
+        // no benchmark — a benchmark with no contract (a backend that is
+        // measured but whose ceilings nobody enforces) passed silently, and
+        // that is exactly the shape a removed backend leaves behind when
+        // only half of its two rows are deleted.
+        var contracted = RendererPerformanceContract.Defaults
+            .Select(static c => c.BackendId).ToHashSet(StringComparer.Ordinal);
+        foreach (string backendId in runnable)
+        {
+            await Assert.That(contracted.Contains(backendId)).IsTrue()
+                .Because($"backend '{backendId}' is benchmarked but declares no performance contract, "
+                       + "so its throughput/latency/allocation ceilings are not enforced by the gate");
         }
     }
 

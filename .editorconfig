@@ -616,14 +616,11 @@ dotnet_diagnostic.DI014.severity = suggestion
 # App.ShowOnboardingThenMain rather than captured by a constructor, so there is
 # no DI003 site to hide. It stays at the repo-wide `error` its sibling
 # composition root apps/Harbor.App.Cli is held to.
-
-# Renderer golden-frame tests (Phase 5): reserved for the NickConsoleEx
-# capture test, which drives SharpConsoleUI window-system internals.
-# TUnit0055 — "assertion not awaited" — fires on the fire-and-await shapes
-# the capture harness needs (a frame assertion raised from a callback the
-# test does not await), and there is no awaited form of that harness today.
-# The reason this row names the rule: the comment it replaces said "no
-# diagnostics fire in this file today", which is an argument for DELETING the
-# row, not for keeping it (#865).
-[tests/Harbor.Tui.RendererTests/NickConsoleExGoldenFrameTests.cs]
-dotnet_diagnostic.TUnit0055.severity = none
+#
+# The TUnit0055 demotion that used to sit here (the NickConsoleEx golden-frame
+# capture test, which drove SharpConsoleUI window-system internals) is GONE:
+# the vendored renderer moved to contrib/tui/Harbor.Tui.NickConsoleEx and its
+# capture test with it, so the path no longer exists. A demotion for a file
+# that is not in the tree is the #865 shape in the other direction — a
+# permission for nothing. The contributed renderer keeps its own .editorconfig
+# beside it, where the tree that owns the file can see it.

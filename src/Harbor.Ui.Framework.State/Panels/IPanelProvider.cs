@@ -22,7 +22,7 @@ namespace Harbor.Ui.Framework.Panels;
 ///         <c>IEnumerable&lt;string&gt;</c> — and flattens each into rows. <b>Anything
 ///         else falls through to <c>widget.ToString()</c>, so a returned widget object
 ///         paints its own type name.</b> There is no cast to a native widget type in any
-///         shipped renderer; <c>AnsiPlain</c> and <c>NickConsoleEx</c> have no panel
+///         shipped renderer; <c>AnsiPlain</c> has no panel
 ///         path at all. All 12 in-tree providers return
 ///         <c>PanelText.Clip(rows, ctx.Width, ctx.Height)</c>. The <c>object</c> return
 ///         leaves room for a native widget; the decoder has no case for one yet, which

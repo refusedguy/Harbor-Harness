@@ -11,10 +11,8 @@ using Harbor.TestKit;
 using Harbor.Tui.AnsiPlain;
 using Harbor.Tui.CellForge;
 using Harbor.Tui.CellForge.Rendering;
-using Harbor.Tui.NickConsoleEx;
 using Harbor.Ui.Framework.Rendering.PerformanceContracts;
 using Microsoft.Extensions.Logging.Abstractions;
-using SharpConsoleUI.Drivers;
 
 /// <summary>
 ///     Synthetic-load benchmark harness (renderer-unification sprint Phase
@@ -72,7 +70,7 @@ public static class RendererBenchmarkSuite
 
     /// <summary>
     ///     Runs the suite for the given backend id ("all", "ansi", "plain",
-    ///     "cellforge", "nickconsoleex").
+    ///     "cellforge").
     /// </summary>
     public static async Task<IReadOnlyList<RendererBenchmarkResult>> RunAsync(
         string renderer,
@@ -94,13 +92,6 @@ public static class RendererBenchmarkSuite
         {
             results.Add(await MeasureAsync("cellforge", () => new CellForgeTuiRenderer(
                 NullLogger<CellForgeTuiRenderer>.Instance, new NullTerminalBackend()), ct));
-        }
-
-        if (renderer is "all" or "nickconsoleex")
-        {
-            results.Add(await MeasureAsync("nickconsoleex", () => new NickConsoleExTuiRenderer(
-                NullLogger<NickConsoleExTuiRenderer>.Instance,
-                driverOverride: new HeadlessConsoleDriver(Cols, Rows)), ct));
         }
 
         return results;

@@ -390,9 +390,17 @@ public sealed class ScanUniverseRule
     ///         project can reach the shared test helpers without gaining a
     ///         product assembly it did not already have.
     ///     </para>
+    ///     <para>
+    ///         The vendored SharpConsoleUI renderer moving out of <c>src/</c> moved
+    ///         <c>contrib=14</c> to <c>contrib=15</c>: the renderer is now a <c>contrib/</c>
+    ///         project that declares three <c>src/</c> references and is not in the inventory,
+    ///         which is the definition of a blind project. The vendored third-party tree it
+    ///         points at does NOT count — it references no <c>src/</c> project, so it is not
+    ///         blind, it is merely invisible.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=14", "samples=5", "tests=36", "tools=1"];
+        ["apps=2", "contrib=15", "samples=5", "tests=36", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

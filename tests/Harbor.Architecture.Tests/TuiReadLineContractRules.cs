@@ -105,7 +105,6 @@ public sealed class TuiReadLineContractRules
         "src/Harbor.Tui.CellForge",
         "src/Harbor.Tui.CellForge.Engine",
         "src/Harbor.Tui.AnsiPlain",
-        "src/Harbor.Tui.NickConsoleEx",
         "src/Harbor.Tui.Notifications",
         "contrib/tui",
     ];

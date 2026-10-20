@@ -1,0 +1,34 @@
+<Project>
+
+  <!--
+    Boundary for vendored/third-party source trees (git submodules).
+    Deliberately does NOT import the repo-root Directory.Build.props/targets:
+    upstream projects keep their own package versions, warning policy and
+    TargetFrameworks. Central Package Management and TreatWarningsAsErrors
+    must not leak into external code.
+
+    WHY THIS FILE EXISTS AT THIS LEVEL
+    ---------------------------------
+    MSBuild imports the NEAREST Directory.Build.props walking up from the
+    project directory, and imports ONLY that one. The root
+    Directory.Build.props therefore never reaches a tree that has its own
+    copy of this file here. That is what makes the boundary work: the
+    vendored tree stops the walk at contrib/external/ and the root policy
+    (CPM, TreatWarningsAsErrors, the reflection ban, the architecture gate)
+    applies to Harbor's own code only.
+
+    RULE FOR ANY FUTURE VENDORED TREE
+    ---------------------------------
+    A third-party tree vendored into this repository MUST get the same three
+    files, one directory level above the vendored tree's root, so the walk
+    stops before it reaches the repository root:
+      <vendored-root>/../Directory.Build.props     (this file)
+      <vendored-root>/../Directory.Build.targets
+      <vendored-root>/../Directory.Packages.props
+    Without them the vendored source inherits the root's CPM pin (every
+    PackageReference must then carry an explicit version, and NuGet's
+    transitive pinning rejects the upstream edges) and the root's
+    TreatWarningsAsErrors (upstream warnings become Harbor build failures).
+  -->
+
+</Project>

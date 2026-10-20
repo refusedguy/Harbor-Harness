@@ -31,7 +31,7 @@ namespace Harbor.Ui.Framework.Panels;
 ///         <b>one</b> provider: CellForge is the only shipped renderer with a panel
 ///         path, and its decoder has no case for a native widget — anything that is
 ///         not a string collection is flattened by <c>ToString()</c> and the dock
-///         paints the type name. <c>AnsiPlain</c> and <c>NickConsoleEx</c> read no
+///         paints the type name. <c>AnsiPlain</c> reads no
 ///         panels at all, so a per-renderer assembly for either of them would be
 ///         collected and never read. See <see cref="IPanelProvider" /> for the
 ///         measured contract.

@@ -58,7 +58,7 @@ internal class Build : NukeBuild
     [Parameter("Include scripting (Jint JS engine) — not AOT-compatible")] private readonly bool WithScripting = true;
     [Parameter("Include Spectre.TUI interactive renderer — not AOT-compatible")]
     private readonly bool WithSpectreTui = true;
-    [Parameter("Renderer backends to compose (All, CellForge, AnsiPlain, NickConsoleEx)")]
+    [Parameter("Renderer backends to compose (All, CellForge, AnsiPlain)")]
     private readonly RendererSelection WithRenderer = RendererSelection.All;
     [Parameter("Include the daemon IPC layer (server + client transports)")]
     private readonly bool WithDaemon = true;

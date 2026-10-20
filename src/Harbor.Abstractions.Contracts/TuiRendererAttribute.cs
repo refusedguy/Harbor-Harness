@@ -13,7 +13,7 @@ public sealed class TuiRendererAttribute : Attribute
 {
     /// <summary>
     ///     Gets or sets the backend kind identifying the output strategy
-    ///     (e.g. "ansi", "plain", "cellforge", "nickconsoleex").
+    ///     (e.g. "ansi", "plain", "cellforge").
     /// </summary>
     public string Backend { get; set; } = string.Empty;
 

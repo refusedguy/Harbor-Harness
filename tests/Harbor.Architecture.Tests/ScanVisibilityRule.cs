@@ -287,15 +287,23 @@ public sealed class ScanVisibilityRule
     ///         delete from this array on purpose, which is the edit that deserves review.
     ///     </para>
     ///     <para>
-    ///         Two of eighteen top-level trees, 948 files behind them: <c>tests/</c> holds 784 and
-    ///         <c>contrib/</c> holds 164. The other sixteen are readable, which is what makes this
-    ///         a measurement rather than a constant — <c>analyzers</c> (2), <c>build</c> (30),
-    ///         <c>samples</c> (8), <c>tools</c> (10), <c>src</c> (811), <c>apps</c> (180) and the
-    ///         <c>external/</c> submodule (1330) all come back, and ten trees hold no <c>.cs</c> at
-    ///         all. Note that <c>external/</c> is returned in full: it is a submodule, and no
-    ///         clause of the filter mentions submodules, so the helper reads a 1330-file tree
-    ///         that no Harbor project references. That is a separate observation and this rule
-    ///         does not act on it.
+    ///         Two of seventeen top-level trees, 2279 files behind them: <c>tests/</c> holds 784
+    ///         and <c>contrib/</c> holds 1495 — 164 of its own, one from the vendored
+    ///         SharpConsoleUI renderer that moved out of <c>src/</c>, and the 1330-file
+    ///         third-party submodule that moved with it. The other fifteen are readable, which
+    ///         is what makes this a measurement rather than a constant — <c>analyzers</c> (2),
+    ///         <c>build</c> (30), <c>samples</c> (8), <c>tools</c> (10), <c>src</c> (810),
+    ///         <c>apps</c> (180) all come back, and ten trees hold no <c>.cs</c> at all.
+    ///     </para>
+    ///     <para>
+    ///         The vendored tree used to be a top-level <c>external/</c> tree that the helper
+    ///         read IN FULL — no clause of the filter mentioned submodules, so it read a
+    ///         1330-file tree that no Harbor project referenced. That observation was a
+    ///         separate matter and this rule did not act on it; the tree has since moved under
+    ///         <c>contrib/</c>, which the filter DOES reject, so those 1330 files are now
+    ///         invisible along with the rest of <c>contrib/</c>. The blind spot got LARGER,
+    ///         and that is the price of putting the vendored tree behind the boundary that
+    ///         keeps it out of the product.
     ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredInvisibleTrees = ["contrib", "tests"];

@@ -377,31 +377,20 @@ public static class DoctorChecks
     /// <summary>
     ///     Slice A (#1144): the <c>--with-renderer</c> selection is satisfiable
     ///     offline. An unknown value fails the MSBuild evaluation later; this
-    ///     check reports it before any target runs. <c>nickconsoleex</c> needs
-    ///     the vendored ConsoleEx submodule — without it both this check and
-    ///     the MSBuild guard fail with the same fix.
+    ///     check reports it before any target runs. No value needs anything on
+    ///     disk any more: the vendored SharpConsoleUI backend that used to
+    ///     require the ConsoleEx submodule left the product for
+    ///     <c>contrib/tui/</c>, so the selection is a pure vocabulary check.
     /// </summary>
     private static CheckResult CheckRendererDeps(DoctorContext ctx)
     {
         string renderer = (ctx.WithRenderer ?? "all").Trim().ToLowerInvariant();
-        string[] valid = ["all", "cellforge", "ansiplain", "nickconsoleex"];
+        string[] valid = ["all", "cellforge", "ansiplain"];
         if (!valid.Contains(renderer, StringComparer.Ordinal))
         {
             return new CheckResult(
                 "renderer.deps", CheckResult.Fail, $"unknown renderer '{ctx.WithRenderer}'",
-                "Use --with-renderer all|cellforge|ansiplain|nickconsoleex");
-        }
-        if (renderer == "nickconsoleex")
-        {
-            string probe = System.IO.Path.Combine(
-                ctx.RootDirectory, "external", "ConsoleEx", "SharpConsoleUI", "SharpConsoleUI.csproj");
-            if (!File.Exists(probe))
-            {
-                return new CheckResult(
-                    "renderer.deps", CheckResult.Fail,
-                    "renderer=nickconsoleex but external/ConsoleEx is not initialized",
-                    "Run: git submodule update --init external/ConsoleEx (or pick another --with-renderer)");
-            }
+                "Use --with-renderer all|cellforge|ansiplain");
         }
         return new CheckResult("renderer.deps", CheckResult.Ok, $"renderer={renderer}");
     }

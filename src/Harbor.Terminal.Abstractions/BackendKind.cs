@@ -14,7 +14,4 @@ public enum BackendKind : byte
 
     /// <summary>CellForge SGR automaton with diff-based frame emission.</summary>
     CellForge = 2,
-
-    /// <summary>NickConsoleEx / SharpConsoleUI markup output.</summary>
-    NickConsoleEx = 3,
 }

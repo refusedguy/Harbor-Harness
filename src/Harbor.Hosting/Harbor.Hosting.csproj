@@ -37,17 +37,6 @@
   <PropertyGroup>
     <DefineConstants Condition="'$(HarborWithPlugins)' == 'true'">$(DefineConstants);HARBOR_WITH_PLUGINS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithSpectreTui)' == 'true'">$(DefineConstants);HARBOR_WITH_SPECTRE_TUI</DefineConstants>
-    <!--
-      NickConsoleEx (renderer-unification Phase 3) auto-enables when the
-      vendored nickprotop/ConsoleEx submodule is initialized; fresh clones
-      without submodules build the rest of the graph unaffected.
-      Slice A (#1144): additionally gated on HarborWithRenderer — the backend
-      (and the vendored SharpConsoleUI it pulls) composes only for
-      HarborWithRenderer=all|nickconsoleex. Allowed values are validated
-      below; an unknown value fails the build instead of silently composing
-      an empty backend set.
-    -->
-    <DefineConstants Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj') AND ('$(HarborWithRenderer)' == 'all' OR '$(HarborWithRenderer)' == 'nickconsoleex')">$(DefineConstants);HARBOR_WITH_NICK_CONSOLE_EX</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllProviders)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_PROVIDERS</DefineConstants>
     <DefineConstants Condition="'$(HarborWithAllTools)' == 'true'">$(DefineConstants);HARBOR_WITH_ALL_TOOLS</DefineConstants>
     <!-- Slice A (#1144): read by #if in HarborModeRegistry / IpcModule. -->
@@ -176,33 +165,27 @@
   </ItemGroup>
 
   <!--
-    NickConsoleEx (renderer-unification Phase 3): ADDITIVE wrapper backend over
-    the vendored nickprotop/ConsoleEx submodule. external/Directory.Build.targets
-    retargets SharpConsoleUI's Spectre.Console dependency to the Harbor root pin
-    (0.54.0), so this reference is safe next to every other renderer backend.
-    Skipped when the submodule is not initialized (fresh clone).
-    Slice A (#1144): also skipped unless HarborWithRenderer=all|nickconsoleex,
-    so a CLI built for one renderer does not pull the SharpConsoleUI subtree.
-    CellForge/CellForge.Engine and AnsiPlain stay unconditional: the CLI's
-    agent-turn driver (ReplRunner, used by both `ask` and the REPL) is
-    CellForge-bound source, and the plain-pipe path plus the headless pairing
-    QR resolve through AnsiPlain — neither is a composable backend yet
-    (see docs/BUILD.md §Feature flags).
-  -->
-  <ItemGroup Condition="Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj') AND ('$(HarborWithRenderer)' == 'all' OR '$(HarborWithRenderer)' == 'nickconsoleex')">
-    <ProjectReference Include="..\Harbor.Tui.NickConsoleEx\Harbor.Tui.NickConsoleEx.csproj"/>
-  </ItemGroup>
-
-  <!--
     Slice A (#1144): HarborWithRenderer validation. MSBuild comparisons are
-    case-insensitive, so `nickconsoleex` and `NickConsoleEx` both pass; anything
-    outside the four canonical values fails before compilation — instead of
-    composing a backend set the registry cannot resolve. A bare Error element
-    is NOT allowed here (tasks live in targets); hence the BeforeBuild hook.
+    case-insensitive, so `cellforge` and `CellForge` both pass; anything
+    outside the three canonical values fails before compilation — instead of
+    silently composing a backend set the registry cannot resolve. A bare
+    Error element is NOT allowed here (tasks live in targets); hence the
+    BeforeBuild hook.
+
+    The `nickconsoleex` value is GONE: the vendored SharpConsoleUI backend
+    moved to contrib/tui/Harbor.Tui.NickConsoleEx and is no longer part of
+    the product (see Harbor.Tui.NickConsoleEx/README.md). A build script
+    that still asks for it therefore fails loudly here instead of quietly
+    producing a CLI without the backend it expected.
+
+    NOTE: the flag currently excludes nothing. The vendored backend was the
+    only backend the product could leave out, and it is gone; CellForge
+    (drives ask/REPL) and AnsiPlain (drives plain pipes) are still not
+    composable backends. The vocabulary is kept so the single-renderer CLI
+    has a place to land and so an unknown value still fails.
   -->
   <Target Name="ValidateHarborWithRenderer" BeforeTargets="BeforeBuild">
-    <Error Condition="'$(HarborWithRenderer)' != 'all' AND '$(HarborWithRenderer)' != 'cellforge' AND '$(HarborWithRenderer)' != 'ansiplain' AND '$(HarborWithRenderer)' != 'nickconsoleex'" Text="Invalid HarborWithRenderer='$(HarborWithRenderer)'. Expected all|cellforge|ansiplain|nickconsoleex (default all)." />
-    <Error Condition="'$(HarborWithRenderer)' == 'nickconsoleex' AND !Exists('..\..\external\ConsoleEx\SharpConsoleUI\SharpConsoleUI.csproj')" Text="HarborWithRenderer=nickconsoleex requires the vendored ConsoleEx submodule (external/ConsoleEx). Run: git submodule update --init external/ConsoleEx." />
+    <Error Condition="'$(HarborWithRenderer)' != 'all' AND '$(HarborWithRenderer)' != 'cellforge' AND '$(HarborWithRenderer)' != 'ansiplain'" Text="Invalid HarborWithRenderer='$(HarborWithRenderer)'. Expected all|cellforge|ansiplain (default all)." />
   </Target>
 
 </Project>

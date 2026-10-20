@@ -103,6 +103,13 @@ public static class ConfigNormalizer
     private static void ApplyPresentation(HarborConfig config, RawConfigDto raw)
     {
         // ── Presentation ──
+        // `tui` is a renderer id, copied through verbatim: which ids the
+        // product ships is the TUI backend registry's business (it resolves an
+        // unknown id through its single fallback rule and warns), so the
+        // config surface does not keep its own copy of the list. The vendored
+        // `nickconsoleex` backend left the product; that id is now just an
+        // unknown id.
+        //
         // CellForge knobs: canonical `ui.consoleEx` wins; the legacy root-level
         // `consoleEx` key is still honored so pre-CE-4-final configs keep working.
         config.Ui = new PresentationConfig(
