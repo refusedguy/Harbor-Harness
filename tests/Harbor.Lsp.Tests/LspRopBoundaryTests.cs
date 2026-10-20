@@ -38,24 +38,20 @@ public class LspNormalizeBoundaryTests
         await Assert.That(normalized.Value.HasNoValue).IsTrue();
     }
 
+    // #1770: the scalar-payload vectors used to be one copy-pasted method
+    // each. The assert never changed, only the payload and the expected
+    // reason did. Every row keeps its original test name as the case display
+    // name.
     [Test]
-    public async Task ScalarPayload_FailsWithNotObjectOrArray()
+    [Arguments("42", "not-object-or-array (got Number)", DisplayName = "ScalarPayload_FailsWithNotObjectOrArray")]
+    [Arguments("\"oops\"", "not-object-or-array (got String)", DisplayName = "StringPayload_FailsWithNotObjectOrArray")]
+    public async Task ScalarPayload_FailsWithNotObjectOrArray(string payload, string expectedError)
     {
         Result<Maybe<LspLocation>> normalized =
-            LspServerSession.TryNormalizeFirstLocation(Parse("42"), "/fallback.ts");
+            LspServerSession.TryNormalizeFirstLocation(Parse(payload), "/fallback.ts");
 
         await Assert.That(normalized.IsFailure).IsTrue();
-        await Assert.That(normalized.Error).IsEqualTo("not-object-or-array (got Number)");
-    }
-
-    [Test]
-    public async Task StringPayload_FailsWithNotObjectOrArray()
-    {
-        Result<Maybe<LspLocation>> normalized =
-            LspServerSession.TryNormalizeFirstLocation(Parse("\"oops\""), "/fallback.ts");
-
-        await Assert.That(normalized.IsFailure).IsTrue();
-        await Assert.That(normalized.Error).IsEqualTo("not-object-or-array (got String)");
+        await Assert.That(normalized.Error).IsEqualTo(expectedError);
     }
 
     [Test]

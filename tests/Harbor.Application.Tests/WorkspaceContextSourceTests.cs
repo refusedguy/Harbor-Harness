@@ -109,38 +109,27 @@ public class WorkspaceContextSourceTests : IDisposable
     ///     the helper trims the line before matching.
     /// </summary>
     [Test]
-    public async Task LoadSkills_FrontMatterFields_IndentedValue_Parsed()
+    // #1770: the skill-directory vectors used to be one copy-pasted method
+    // each. The assert never changed, only the (content, name, description)
+    // triple did. Every row keeps its original test name as the case display
+    // name.
+    [Arguments("---\n    name: deploy\n    description: Ships the branch to staging\n---\n# Deploy\n", "deploy", "Ships the branch to staging", DisplayName = "LoadSkills_FrontMatterFields_IndentedValue_Parsed")]
+    // #1580: the helper maps an empty field value to null, so the
+    // directory-name fallback applies for <c>name:</c> and the
+    // prose/markdown fallback applies for <c>description:</c>.
+    [Arguments("---\nname:\ndescription:\n---\n# Deploy\nRun it.\n", "deploy", "Deploy", DisplayName = "LoadSkills_FrontMatterEmptyValues_FallBack")]
+    [Arguments("# Deploy\nRun it.\n", "deploy", "Deploy", DisplayName = "LoadSkills_SkillDirectory_FallsBackToDirectoryName")]
+    public async Task LoadSkills_SkillDirectory_ReadsNameAndDescription(string content, string expectedName, string expectedDescription)
     {
         string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
         Directory.CreateDirectory(skillDir);
-        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
-            "---\n    name: deploy\n    description: Ships the branch to staging\n---\n# Deploy\n");
+        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"), content);
 
         var skills = WorkspaceContextSource.LoadSkills(_dir);
 
         await Assert.That(skills.Count).IsEqualTo(1);
-        await Assert.That(skills[0].Name).IsEqualTo("deploy");
-        await Assert.That(skills[0].Description).IsEqualTo("Ships the branch to staging");
-    }
-
-    /// <summary>
-    ///     #1580: the helper maps an empty field value to null, so the
-    ///     directory-name fallback applies for <c>name:</c> and the
-    ///     prose/markdown fallback applies for <c>description:</c>.
-    /// </summary>
-    [Test]
-    public async Task LoadSkills_FrontMatterEmptyValues_FallBack()
-    {
-        string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
-        Directory.CreateDirectory(skillDir);
-        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"),
-            "---\nname:\ndescription:\n---\n# Deploy\nRun it.\n");
-
-        var skills = WorkspaceContextSource.LoadSkills(_dir);
-
-        await Assert.That(skills.Count).IsEqualTo(1);
-        await Assert.That(skills[0].Name).IsEqualTo("deploy");
-        await Assert.That(skills[0].Description).IsEqualTo("Deploy");
+        await Assert.That(skills[0].Name).IsEqualTo(expectedName);
+        await Assert.That(skills[0].Description).IsEqualTo(expectedDescription);
     }
 
     [Test]
@@ -192,20 +181,6 @@ public class WorkspaceContextSourceTests : IDisposable
         await Assert.That(skills[0].Name).IsEqualTo("review");
         await Assert.That(skills[0].Description).IsEqualTo("Reviews pull requests");
         await Assert.That(skills[0].FilePath.Replace('\\', '/')).Contains(".harbor/skills/review/SKILL.md");
-    }
-
-    [Test]
-    public async Task LoadSkills_SkillDirectory_FallsBackToDirectoryName()
-    {
-        string skillDir = Path.Combine(_dir, ".harbor", "skills", "deploy");
-        Directory.CreateDirectory(skillDir);
-        await File.WriteAllTextAsync(Path.Combine(skillDir, "SKILL.md"), "# Deploy\nRun it.\n");
-
-        var skills = WorkspaceContextSource.LoadSkills(_dir);
-
-        await Assert.That(skills.Count).IsEqualTo(1);
-        await Assert.That(skills[0].Name).IsEqualTo("deploy");
-        await Assert.That(skills[0].Description).IsEqualTo("Deploy");
     }
 
     [Test]
