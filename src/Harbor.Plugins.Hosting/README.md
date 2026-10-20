@@ -19,7 +19,7 @@ Infrastructure — plugin pipeline layer. Depends on all four lower plugin layer
 
 - `PluginHost` — iterates source, compiles, instantiates, registers
 - `PluginHostBuilder` — fluent builder; the only way to construct `PluginHost`
-- `PluginHostOptions` — `ContinueOnError`, `PluginRoot`, `Dependencies`, etc.
+- `PluginHostOptions` — `ContinueOnError`, `PluginRoot`, `Dependencies`, `HarborVersion`, etc.
 - `PluginHostLocator` — probes for the out-of-process host binary next to the CLI
 - `PluginRouteAxisRegistry` — what the out-of-process route does with each
   extension axis, and why (issue #1723); the host's refusal messages are built
@@ -28,6 +28,10 @@ Infrastructure — plugin pipeline layer. Depends on all four lower plugin layer
 - `PluginAxisCarriage` — `Carried` / `Refused` / `ClosedSeam`
 - `PluginDependencyResolver` — the default `IPluginDependencyResolver`: a table of
   named capabilities, each with a readiness probe (#1733)
+
+`PluginHost` also holds the manifest gate (#1739): a plugin's manifest is read
+as data at discovery, and a manifest the host cannot read, or one that asks for
+a Harbor newer than the running one, is refused BEFORE the plugin is compiled.
 
 ## Usage
 

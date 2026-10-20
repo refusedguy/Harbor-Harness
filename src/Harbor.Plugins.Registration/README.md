@@ -25,6 +25,12 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
 - `SafePluginRegistrar` — try/catch decorator over any `IPluginRegistrar` (one bad plugin doesn't kill the pipeline)
 - `PanelRegistryPluginAdapter` — internal adapter for `ITuiPanelPlugin` -> `IPluginLoadHost.RegisterPanelProvider`
 
+The registrar also holds the manifest gate (#1739): a plugin that ships a
+manifest is checked against it before it is initialized. The name and the
+version the manifest declares must be the ones the plugin reports, and the
+extension axes it declares must be the axes the plugin implements — otherwise
+the plugin is refused with the reason.
+
 ## Usage
 
 ```csharp
