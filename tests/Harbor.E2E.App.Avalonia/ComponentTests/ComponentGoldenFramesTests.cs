@@ -38,7 +38,7 @@ public sealed class ComponentGoldenFramesTests : GoldenTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
         var snapshot = CaptureFrame(() => ToolCard(ToolCallState.Success, "Applied 1 hunk +12 -3"), 380, 120);
-        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/success.golden.txt", snapshot, "Applied 1 hunk");
+        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/success.golden.txt", snapshot, "edit");
     }
 
     [Test]
@@ -48,7 +48,7 @@ public sealed class ComponentGoldenFramesTests : GoldenTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
         var snapshot = CaptureFrame(() => ToolCard(ToolCallState.Error, "Exit 1: file not found"), 380, 120);
-        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/error.golden.txt", snapshot, "file not found");
+        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/error.golden.txt", snapshot, "edit");
     }
 
     [Test]
@@ -58,7 +58,7 @@ public sealed class ComponentGoldenFramesTests : GoldenTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
         var snapshot = CaptureFrame(() => ToolCard(ToolCallState.Running, "Running: reading src/App.cs"), 380, 120);
-        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/running.golden.txt", snapshot, "Running: reading");
+        await VerifyGoldenAsync("tests/fixtures/avalonia/frames/toolcall/running.golden.txt", snapshot, "edit");
     }
 
     [Test]

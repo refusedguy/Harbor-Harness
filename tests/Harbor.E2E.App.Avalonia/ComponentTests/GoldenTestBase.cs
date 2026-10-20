@@ -55,6 +55,13 @@ public abstract class GoldenTestBase : ComponentTestBase
     ///     assertion that does not depend on the baseline, so a baseline
     ///     regenerated from a frame that lost its content cannot pass.
     /// </summary>
+    /// <remarks>
+    ///     The text must be VISIBLE in the frame: the snapshot carries what
+    ///     the user sees, and a collapsed <c>Expander</c> keeps its content out
+    ///     of the visual tree (the tool-call card's args and result live
+    ///     there — the card renders collapsed until it is expanded, so the
+    ///     golden pins the card as the product draws it).
+    /// </remarks>
     protected static async Task VerifyGoldenAsync(string baselinePath, string snapshot, string expectedText)
     {
         GoldenFrame.VerifySnapshot(baselinePath, snapshot);

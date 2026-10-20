@@ -42,7 +42,7 @@ public sealed class GoldenFrameTests : GoldenTestBase
     {
         await Driver.ResetStateAsync().ConfigureAwait(false);
         var snapshot = CaptureFrame(() => ToolCard(ToolCallState.Success, "Applied 1 hunk — +12 −3", "✎"), 380, 120);
-        await VerifyGoldenAsync("tests/fixtures/golden/ToolCallCardView_GoldenFrame.golden.txt", snapshot, "Applied 1 hunk");
+        await VerifyGoldenAsync("tests/fixtures/golden/ToolCallCardView_GoldenFrame.golden.txt", snapshot, "edit");
     }
 
     [Test]

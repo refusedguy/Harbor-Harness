@@ -1090,17 +1090,10 @@ jobs:
           set -uo pipefail
           guard=""
           if [ "${{ matrix.guard }}" = "true" ]; then
-            # --zero-tests-policy strict (#1795): MTP's default policy is
-            # `allow-skipped`, under which a run in which EVERY test was
-            # skipped still exits 0 — a suite that stopped running anything
-            # would be indistinguishable from a green one. `strict` treats a
-            # skipped test as not run, so an all-skipped run is a failure.
-            # The flag is here for the runs that do NOT pass
-            # --minimum-expected-tests (a developer's `dotnet run`, a workflow
-            # that forgot the guard); with the minimum in force, MTP applies
-            # the count-based verdict instead (exit 9, MinimumExpectedTests
-            # PolicyViolation) — see the non-vacuity step below.
-            guard="--minimum-expected-tests 1 --zero-tests-policy strict"
+            # The zero-test guard: a suite that discovered nothing must not
+            # read as green. `--minimum-expected-tests 1` is the count-based
+            # half (MTP exit 9 when fewer than one test ran).
+            guard="--minimum-expected-tests 1"
           fi
           trx_dir="TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
@@ -1116,7 +1109,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
