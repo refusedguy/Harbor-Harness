@@ -2,7 +2,6 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 
 // The generated doubles are named with an ALIAS: this file's namespace sits
@@ -43,7 +42,10 @@ public class GeneratedDoubleTests
         await Assert.That(asInterface.Name.Value).IsEqualTo("generated_tool");
         await Assert.That(asInterface.DisplayName).IsEqualTo("Generated Tool");
 
-        ToolResult result = await asInterface.ExecuteAsync(JsonDocument.Parse("{}").RootElement, Context(), default);
+        ToolResult result = await asInterface.ExecuteAsync(
+            JsonDocument.Parse("{}").RootElement,
+            TestAgents.CreateToolContext(),
+            default);
         await Assert.That(result.Output).IsEqualTo("ok");
 
         // The recording surface: the call is in the log, with its arguments.
@@ -69,14 +71,4 @@ public class GeneratedDoubleTests
         await Assert.That(configured.IsSuccess).IsTrue();
         await Assert.That(configured.Value.Id).IsEqualTo(session.Id);
     }
-
-    private static ToolContext Context() => new(
-        "s1",
-        "m1",
-        "c1",
-        "code",
-        CancellationToken.None,
-        [],
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
 }

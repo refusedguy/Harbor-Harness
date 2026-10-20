@@ -36,46 +36,62 @@ namespace Harbor.Registries.Tests;
 public class ToolSafetyPolicyDerivationTests
 {
     /// <summary>
+    ///     The synthetic tools differ only in what they DECLARE, so they share
+    ///     one shape: the generated double carries the interface, this carries
+    ///     the declaration each tool makes.
+    /// </summary>
+    private abstract class SyntheticTool : FakeToolBase
+    {
+        protected SyntheticTool(
+            string name,
+            ToolSafetyProfile profile,
+            string displayName,
+            string description,
+            string schema,
+            ExecutionMode mode,
+            string output)
+        {
+            Name = ToolName.Create(name);
+            SafetyProfile = profile;
+            DisplayName = displayName;
+            Description = description;
+            ParameterSchema = JsonDocument.Parse(schema);
+            ExecutionMode = mode;
+            ExecuteAsyncValue = ToolResult.Success(output);
+        }
+    }
+
+    /// <summary>
     ///     A path-taking write tool invented for this test. It exists in no list
     ///     anywhere in the repository — that is the point.
     /// </summary>
-    private sealed class SyntheticPathWriteTool : FakeToolBase
+    private sealed class SyntheticPathWriteTool : SyntheticTool
     {
-        public SyntheticPathWriteTool()
+        private const string Schema = """
+            {
+              "type": "object",
+              "properties": {
+                "path":    { "type": "string", "description": "File to write" },
+                "content": { "type": "string", "description": "File content" }
+              },
+              "required": ["path", "content"]
+            }
+            """;
+
+        public SyntheticPathWriteTool() : base("synthetic_unsafe", ToolSafetyProfile.Path(), "Synthetic Path Write", "Writes a file. Invented to prove the guard is derived.", Schema, ExecutionMode.Sequential, "written")
         {
-            Name = ToolName.Create("synthetic_unsafe");
-            SafetyProfile = ToolSafetyProfile.Path();
-            DisplayName = "Synthetic Path Write";
-            Description = "Writes a file. Invented to prove the guard is derived.";
-            ParameterSchema = JsonDocument.Parse("""
-                {
-                  "type": "object",
-                  "properties": {
-                    "path":    { "type": "string", "description": "File to write" },
-                    "content": { "type": "string", "description": "File content" }
-                  },
-                  "required": ["path", "content"]
-                }
-                """);
-            ExecutionMode = ExecutionMode.Sequential;
-            ExecuteAsyncValue = ToolResult.Success("written");
         }
     }
 
     /// <summary>A tool that declares no path argument — the explicit opt-out.</summary>
-    private sealed class SyntheticOpaqueTool : FakeToolBase
+    private sealed class SyntheticOpaqueTool : SyntheticTool
     {
-        public SyntheticOpaqueTool()
+        private const string Schema = """
+            { "type": "object", "properties": { "name": { "type": "string" } } }
+            """;
+
+        public SyntheticOpaqueTool() : base("synthetic_opaque", ToolSafetyProfile.Opaque, "Synthetic Opaque", "Takes a name, not a path.", Schema, ExecutionMode.Parallel, "ok")
         {
-            Name = ToolName.Create("synthetic_opaque");
-            SafetyProfile = ToolSafetyProfile.Opaque;
-            DisplayName = "Synthetic Opaque";
-            Description = "Takes a name, not a path.";
-            ParameterSchema = JsonDocument.Parse("""
-                { "type": "object", "properties": { "name": { "type": "string" } } }
-                """);
-            ExecutionMode = ExecutionMode.Parallel;
-            ExecuteAsyncValue = ToolResult.Success("ok");
         }
     }
 
@@ -202,19 +218,14 @@ public class ToolSafetyPolicyDerivationTests
             .Because("a command is not a path; the traversal guard must not fire on it");
     }
 
-    private sealed class SyntheticShellTool : FakeToolBase
+    private sealed class SyntheticShellTool : SyntheticTool
     {
-        public SyntheticShellTool()
+        private const string Schema = """
+            { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
+            """;
+
+        public SyntheticShellTool() : base("synthetic_shell", ToolSafetyProfile.Command(), "Synthetic Shell", "Runs a command. Invented to prove Command routing.", Schema, ExecutionMode.Sequential, "ok")
         {
-            Name = ToolName.Create("synthetic_shell");
-            SafetyProfile = ToolSafetyProfile.Command();
-            DisplayName = "Synthetic Shell";
-            Description = "Runs a command. Invented to prove Command routing.";
-            ParameterSchema = JsonDocument.Parse("""
-                { "type": "object", "properties": { "command": { "type": "string" } }, "required": ["command"] }
-                """);
-            ExecutionMode = ExecutionMode.Sequential;
-            ExecuteAsyncValue = ToolResult.Success("ok");
         }
     }
 
