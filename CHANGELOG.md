@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### #1878 — TTL кэша каталога моделей читает `TimeProvider`
+
+**Кэш каталога моделей получил шов часов: протухание перестало быть состоянием, которое нужно ждать.**
+
+- `ProviderRegistry` (`src/Harbor.Registries/Providers/ProviderRegistry.cs`) принимает `TimeProvider?` — по умолчанию `TimeProvider.System`, то есть поведение не меняется — и читает TTL каталога через него. Четыре чтения `DateTimeOffset.UtcNow` заменены на `_time.GetUtcNow()`.
+- Ветка фан-аута (`GetAllModelsAsync`) считает `now` один раз на провайдера: проверка протухания и запись в кэш теперь согласованы, и гонка не может оставить две записи с разным `ExpiresAt`.
+- **Публичный API:** в `Harbor.Registries` у `ProviderRegistry` добавлен необязательный параметр конструктора `TimeProvider? timeProvider = null`. Сборка не заморожена гейтом — `tools/check-public-api.py` покрывает `Harbor.Abstractions.Contracts`, `tools/check-public-api-abstractions.py` — `Harbor.Abstractions` — поэтому пере-подпись базовой линии не требуется.
+- **Тест:** `tests/Harbor.Registries.Tests/ProviderRegistryCatalogTtlTests.cs` — ручной `TimeProvider` (BCL, без новой зависимости). Часы фейка стоят в 2001 году, поэтому тест ловит и частичный откат (запись через шов, сравнение по стенным часам). Тесты закрывают перекрёстные пути: запись фан-аута видна одиночному вызову и протухает для него, и наоборот; отдаётся именно перезапрошенный каталог, а не просто «провайдер спросили второй раз».
+
 ### #1844 — the dynamic-code ban is the compiler's rule, not a regex's
 
 **`src/Harbor.Plugins.*` may load code at run time; nothing else may. The compiler says so now.**
