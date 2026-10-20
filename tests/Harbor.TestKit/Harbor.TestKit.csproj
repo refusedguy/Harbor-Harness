@@ -10,10 +10,34 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      #1809: TWO references were dead weight and are gone.
+
+        * Harbor.Application — NOT a single type from it is used. Every type
+          TestKit touches was attributed to its declaring assembly: 22 types
+          from Harbor.Abstractions (IAgent, ITool, ILlmClient, ToolContext,
+          ToolDescriptor, SystemPromptContext, ...), 26 from
+          Harbor.Abstractions.Contracts (Session, AgentMessage, Usage, Pricing,
+          ToolName, PermissionRuleset, ProviderId, ...), 2 from
+          Harbor.Desktop.Abstractions (ChatViewModelBase, DiffViewModelBase),
+          2 from Harbor.Ui.Framework.Services, 3 from
+          Harbor.Ui.Framework.State, 1 from Harbor.Ui.Framework.ViewModels.
+          The only mention of Harbor.Application anywhere in the project was
+          a COMMENT (AllocationProbe.cs names Harbor.Application.Tests).
+        * Harbor.Diagnostics.Abstractions — 0 usages as well; it declares 8
+          types (ITracer/IMetrics/correlation) and TestKit names none of them.
+
+      Every remaining reference is load-bearing and is declared explicitly,
+      not leaned on transitively. Note that Harbor.Application is STILL in
+      TestKit's transitive closure — via Harbor.Desktop.Abstractions, which
+      needs Harbor.Application.Configuration.ProviderPresets for the onboarding
+      view-models (the documented #188 Presentation->Application exception).
+      Removing the direct edge therefore does NOT shrink the closure; do not
+      re-add it "for symmetry" — the honest fix for the remaining path is a
+      separate move of ProviderPresets, tracked outside #1809.
+    -->
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj"/>
     <!--
       #1549: the shared UI test doubles (TestDispatcherAdapter + the counting
       view-model stubs) live here. They need the Ui.Framework family
@@ -21,6 +45,10 @@
       view-model bases (ChatViewModelBase / DiffViewModelBase). Every one of
       these is already inside the closure of the test projects that consume
       this library, so the reference adds no new product assembly anywhere.
+      (#1809 measured it: a consumer that today does NOT sit on the Ui.Framework
+      family — e.g. Harbor.Storage.Tests — does gain these assemblies when it
+      starts referencing TestKit. The claim above holds for the consumers that
+      already reference them; the full delta table is in the #1809 PR body.)
     -->
     <ProjectReference Include="../../src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
