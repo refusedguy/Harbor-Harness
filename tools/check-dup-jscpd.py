@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Second duplication detector: jscpd 5.4.1 (MIT, self-contained Rust binary).
 
+Stdlib only — no pip, no network, no dotnet. The jscpd binary it downloads is
+a build-time tool: it never reaches the product and no `PackageReference` is
+added, so the dependency gate does not see it.
+
 The repository already has a duplication gate — `tools/check-test-dup.py`
 (#1778) — and this file does NOT replace it. It asks a different question
 with a different engine, and the two answers do not agree, which is the

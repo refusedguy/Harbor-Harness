@@ -124,6 +124,14 @@ on:
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
       - 'tools/check-public-api-resign.py'
+      # #1888. The gate policy's own checker, and the three tools whose
+      # self-test no workflow ran until the policy asked for one. A PR that
+      # edits any of them must run the checker, because the checker's
+      # verdict about the tree depends on what those files say.
+      - 'tools/check-gate-policy.py'
+      - 'tools/pack-validate.py'
+      - 'tools/test-skips.py'
+      - 'tools/normalize-mtimes.py'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -196,6 +204,12 @@ on:
       # #1845. Same trigger as above: the re-signing gate reads the commit
       # history, so a PR that edits the gate runs its self-test.
       - 'tools/check-public-api-resign.py'
+      # #1888. Same trigger as above: the policy checker, and the three tools
+      # whose self-test no workflow ran until the policy asked for one.
+      - 'tools/check-gate-policy.py'
+      - 'tools/pack-validate.py'
+      - 'tools/test-skips.py'
+      - 'tools/normalize-mtimes.py'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -326,6 +340,26 @@ jobs:
       # reflection call — the gate MUST fail on it.
       - name: Reflection-JSON gate fails on a planted reflection call
         run: python3 tools/check-test-json-reflection.py --self-test
+      # #1888. The policy checker's failure path. It plants one defect per
+      # rule in a synthetic tree and asserts that the rule fires, and that
+      # the same tree without the defect is clean. A rule that cannot fire
+      # is indistinguishable from a rule that found nothing, which is the
+      # shape every other gate in this job is tested against.
+      - name: Gate-policy checker fails on a planted divergence
+        run: python3 tools/check-gate-policy.py --self-test
+      # #1888. The three tools whose self-test no workflow ran. The policy
+      # says every gate and every reporter proves its own failure path in
+      # CI, and these three had a self-test that nothing called — a
+      # self-test nobody reads. The pack validator's self-test is offline
+      # (it builds its own fixture package), and the two reporters' and the
+      # helper's self-tests are offline too, so all three cost about a
+      # second.
+      - name: Pack validator still fails on a package without its metadata
+        run: python3 tools/pack-validate.py --selftest
+      - name: Skip reporter still finds a skipped test
+        run: python3 tools/test-skips.py TestResults --self-test
+      - name: Mtime normaliser still tells a changed file from an unchanged one
+        run: python3 tools/normalize-mtimes.py --self-test
 
   links:
     name: internal links
@@ -754,6 +788,39 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check XML-doc coverage of the frozen contract assembly
         run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
+
+  # #1888. Eleventh question, and the only one about the gates themselves:
+  # not "do the links resolve" and not "is the file shaped right" and not
+  # "does the count match" and not "is every dependency declared", but "does
+  # the table of gates in docs/CI_GATES.md still describe the gates this
+  # repository actually runs".
+  #
+  # A policy in prose decays: a gate is added, the table is not, and a year
+  # later the table describes a repository that does not exist. #933 measured
+  # that class on this repository (the builtin tool count was stated 16 times
+  # with six different values), and the cure that was buildable for a count
+  # is buildable for a table.
+  #
+  # The checker compares three sources — the table, the scripts in tools/ and
+  # the workflow files — and fails when they disagree. The rules it enforces
+  # are in docs/CI_GATES.md; the ones no file can answer (what a gate checks,
+  # that its message names the violator) are stated there as review rules.
+  #
+  # The floor is a ratchet, set AT the measured row count rather than below
+  # it: a table that lost rows because a gate was deleted would otherwise
+  # shrink quietly, and a policy that covers fewer gates than the repository
+  # runs is the #591 shape. The non-vacuity proof is the checker's own
+  # --self-test, run in the `selftest` job above.
+  gate-policy:
+    name: gate policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the gate table against the tools and the workflows
+        run: python3 tools/check-gate-policy.py --min-gates 27
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #

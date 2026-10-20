@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Per-test and per-project WALL census from the CI TRX artifacts.
 
+Stdlib only — no pip, no network, no dotnet. It reads the TRX artifacts a CI
+run already produced, so it adds no run, no build and no dependency.
+
 WHY THIS FILE EXISTS (issue #1884)
 
     The benchmark baselines in `docs/BENCHMARKS.md` had gone stale, and the
