@@ -130,7 +130,12 @@ public sealed class AgentLoop : IAgentLoop
         // keeps the shipped default (UpdateFlushPolicy.Default — the numbers
         // are stated in ONE place so the docs, the tests and the runtime
         // cannot drift). Forwarded to the turn runner below.
-        UpdateFlushPolicy? updateFlushPolicy = null)
+        UpdateFlushPolicy? updateFlushPolicy = null,
+        // #1735: the skill registry. Optional so every direct-construction
+        // caller keeps compiling unchanged; null keeps the workspace
+        // discovery and no invocation policy. Forwarded to the turn runner
+        // below, which is where the model-facing catalog is built.
+        ISkillRegistry? skillRegistry = null)
     {
         _providers = providers;
         _tools = tools;
@@ -188,7 +193,7 @@ public sealed class AgentLoop : IAgentLoop
             providers, tools, _promptBuilder, messageConverter, eventBus, logger,
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
             _compactionBehavior, _steering, _backgroundDrain, view,
-            updateFlushPolicy, _clock);
+            updateFlushPolicy, _clock, skillRegistry);
     }
 
     /// <summary>

@@ -155,7 +155,8 @@ internal static class ToolsCatalog
         Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
         Harbor.Abstractions.Agents.IBackgroundTaskRegistry? backgroundTasks = null,
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
-        ISessionStore? sessionStore = null)
+        ISessionStore? sessionStore = null,
+        ISkillRegistry? skillRegistry = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -185,7 +186,12 @@ internal static class ToolsCatalog
             new GrepTool(lf.CreateLogger<GrepTool>()),
             lf.CreateLogger<OutputLimitToolDecorator>()));
         tb.AddTool(lf => new LsTool(lf.CreateLogger<LsTool>()));
-        tb.AddTool(lf => new SkillTool(sessionStore, lf.CreateLogger<SkillTool>()));
+        // #1735: the registry is the same object the agent loop resolves, so
+        // the skill the model is told about and the skill the model is allowed
+        // to load are decided in ONE place. A null registry (a host that
+        // composes the tool catalog without one) keeps the tool's own
+        // discovery and no policy gate.
+        tb.AddTool(lf => new SkillTool(sessionStore, lf.CreateLogger<SkillTool>(), null, null, skillRegistry));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner, backgroundTasks));

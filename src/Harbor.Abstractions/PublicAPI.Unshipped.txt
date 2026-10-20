@@ -78,3 +78,15 @@ override Harbor.Abstractions.Sessions.SessionRemark.GetHashCode() -> int
 override Harbor.Abstractions.Sessions.SessionRemark.ToString() -> string!
 static Harbor.Abstractions.Sessions.SessionRemark.operator !=(Harbor.Abstractions.Sessions.SessionRemark? left, Harbor.Abstractions.Sessions.SessionRemark? right) -> bool
 static Harbor.Abstractions.Sessions.SessionRemark.operator ==(Harbor.Abstractions.Sessions.SessionRemark? left, Harbor.Abstractions.Sessions.SessionRemark? right) -> bool
+Harbor.Abstractions.Sessions.ISkillRegistry
+Harbor.Abstractions.Sessions.ISkillRegistry.GetSkills(string! workingDirectory, Harbor.Abstractions.Sessions.SkillCaller caller, string? mode = null, string? category = null) -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SkillDescriptor!>!
+Harbor.Abstractions.Sessions.ISkillRegistry.ResolveForCall(string! workingDirectory, string! name, Harbor.Abstractions.Sessions.SkillCaller caller, string? mode = null, string? category = null) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.SkillDescriptor!>
+Harbor.Abstractions.Sessions.ISkillProvider.Name.get -> string!
+Harbor.Abstractions.Sessions.ISkillProvider.Priority.get -> int
+Harbor.Abstractions.Sessions.SkillCaller
+Harbor.Abstractions.Sessions.SkillCaller.Model = 0 -> Harbor.Abstractions.Sessions.SkillCaller
+Harbor.Abstractions.Sessions.SkillCaller.User = 1 -> Harbor.Abstractions.Sessions.SkillCaller
+Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.get -> bool
+Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.init -> void
+Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.get -> bool
+Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.init -> void

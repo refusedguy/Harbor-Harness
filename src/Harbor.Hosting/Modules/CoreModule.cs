@@ -5,7 +5,6 @@ using Harbor.Application.Hooks;
 using Harbor.Application.Observability;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
-using Harbor.Application.Skills;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -52,7 +51,11 @@ internal static class CoreModule
         // interface; the static facade (TurnRunner's pre-DI path) forwards to
         // the same shared Instance, so both consumers read one cache.
         services.AddSingleton<IWorkspaceContextSource>(_ => WorkspaceContextSource.Instance);
-        services.AddSingleton<ISkillProvider, SkillProvider>();
+        // #1735: ISkillProvider and ISkillRegistry are registered by
+        // RegistryFacade.Compose, which builds them eagerly (the skill tool
+        // needs the registry while the tool registry is being built) and
+        // publishes ONE instance of each. Registering them here as well would
+        // have produced two providers and a doubled merge.
         services.AddSingleton<MessageConverter>();
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IToolRetryDecider, DefaultToolRetryDecider>();

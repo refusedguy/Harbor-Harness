@@ -75,13 +75,59 @@ public sealed record ContextFile(string Path, string Content);
 public sealed record SkillDescriptor(
     string Name,
     string Description,
-    string FilePath);
+    string FilePath)
+{
+    /// <summary>
+    ///     Whether the MODEL may invoke this skill. Defaults to true.
+    /// </summary>
+    /// <remarks>
+    ///     The flag is the skill's own, declared where the skill is declared
+    ///     (the file's front-matter) or by the provider that supplies it — not
+    ///     a decision the caller site makes. A slash-command-shaped workflow is
+    ///     useful to the human and noise to the model, and this is the flag
+    ///     that says so.
+    /// </remarks>
+    public bool ModelInvocable { get; init; } = true;
+
+    /// <summary>
+    ///     Whether the HUMAN may invoke this skill. Defaults to true.
+    /// </summary>
+    /// <remarks>
+    ///     The mirror of <see cref="ModelInvocable" />: a prompt fragment the
+    ///     model should follow on its own can be noise to the human, who asked
+    ///     a question rather than for a checklist.
+    /// </remarks>
+    public bool UserInvocable { get; init; } = true;
+}
 
 /// <summary>
 ///     Provides skill discovery and content loading for a working directory.
 /// </summary>
+/// <remarks>
+///     A provider is a SOURCE of skills, not a skill: the filesystem, a
+///     plugin's bundled catalog, a remote service. Several providers may be
+///     registered at once, and <see cref="ISkillRegistry" /> merges them.
+/// </remarks>
 public interface ISkillProvider
 {
+    /// <summary>
+    ///     The provider's name. Unique among the registered providers; it is
+    ///     what a duplicate-skill warning names.
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
+    ///     The provider's rank. When two providers offer the same skill name,
+    ///     the HIGHER rank wins; equal ranks are broken by the provider name
+    ///     (ordinal), so the outcome never depends on registration order.
+    /// </summary>
+    /// <remarks>
+    ///     The rank is a number the provider declares, not the order it
+    ///     happened to be registered in — which is what makes the rule
+    ///     predictable when a second source is added.
+    /// </remarks>
+    int Priority { get; }
+
     /// <summary>List all available skills for the given working directory.</summary>
     IReadOnlyList<SkillDescriptor> GetSkills(string workingDirectory);
 

@@ -814,6 +814,49 @@ Codex side is still an open feature request (#21027).
 
 ---
 
+### 28b. Decide who may call a skill (the invocation policy)
+
+A skill is a NAME, a DESCRIPTION and a policy — "when may this be called". The
+policy is declared where the skill is declared: the front-matter of the skill
+file. Two flags, and a skill that declares neither is callable by both.
+
+```markdown
+<!-- .harbor/skills/release/SKILL.md -->
+---
+name: release
+description: Cut a release and walk the checklist
+model-invocable: false
+---
+
+# Release checklist
+...
+```
+
+`model-invocable: false` keeps the skill from the model: it is not listed in the
+prompt's `<available_skills>` block, and the `skill` tool refuses to load it with
+the reason. `user-invocable: false` is the mirror — a prompt fragment the model
+should follow on its own, which would only be noise in a human's command list.
+
+The decision is made once, in the skill registry
+(`src/Harbor.SessionContext/Skills/SkillRegistry.cs`): it merges the catalogs of
+every registered `ISkillProvider`, deduplicates them by name under the providers'
+DECLARED `Priority`, and applies the policy. The model-facing catalog (the
+prompt) and the model-facing call (the tool) read that one registry, so they
+cannot disagree about which skills exist.
+
+A second source of skills — a plugin's bundled catalog, a remote service — is
+another `ISkillProvider` with a name and a rank. It joins the merge without a
+change to the workspace provider: the project-over-global rule stays inside the
+provider that owns the two roots, and the registry's rule is about providers
+competing with each other.
+
+The per-request layer is the invocation MATRIX
+(`src/Harbor.SessionContext/Skills/SkillPolicyMatrix.cs`): rows that say which
+skills a given (source, mode, category) admits. It is data, it narrows and never
+widens, and a request no row matches is not narrowed at all.
+
+---
+
 ## Permissions
 
 ### 29. Deny `bash` for `plan` agent
