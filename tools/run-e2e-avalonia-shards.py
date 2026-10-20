@@ -287,6 +287,9 @@ def run_shard(shard: dict, dll: str, results_dir: str, guard: list[str]) -> dict
         "dotnet", "exec", dll,
         "--treenode-filter", expression,
         *guard,
+        # The same zero-test policy the `test` job gives every other project:
+        # a shard that discovered nothing must fail, not pass.
+        "--zero-tests-policy", "strict",
         "--report-trx",
         "--results-directory", shard_dir,
         "--report-trx-filename", f"{shard_id}.trx",
