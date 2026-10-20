@@ -33,10 +33,11 @@ namespace Harbor.Terminal.Abstractions.Plugins;
 ///         <c>CellForgePanelRegistry</c> → the dock). It paints rows of text, not
 ///         cells; adding a cell-level widget is a <c>Panel</c> subclass spliced
 ///         into <c>ChatScreen.Build</c>, which is an in-tree change and not a
-///         plugin one (#555 freezes new axes).
+///         plugin one — this seam is closed by #564, not by the #555 freeze that
+///         was lifted on 2026-10-20.
 ///     </para>
 ///     <para>
-///         Kept in the type rather than deleted so the freeze still has a name,
+///         Kept in the type rather than deleted so the closure still has a name,
 ///         and so a future change that does wire a renderer to the collected
 ///         plugins has a contract to wire. The closure is guarded, not asserted:
 ///         <c>tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs</c>

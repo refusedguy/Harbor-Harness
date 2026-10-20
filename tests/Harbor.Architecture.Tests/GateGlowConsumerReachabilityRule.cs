@@ -56,7 +56,7 @@
 // project at all. The answer, measured: the consumer is in `apps/`, and the one test
 // project that references `apps/` is `Harbor.App.Cli.Tests` (via the
 // `InternalsVisibleTo` already declared in `Harbor.App.Cli.csproj`), so it is. No new
-// test project, no new axis (#555), and the method itself had to be opened from
+// test project, no new axis, and the method itself had to be opened from
 // `private` to `internal` — a one-word change to a class that already carries
 // test-visibility seams (`BuildStatusSnapshot`, `ShouldKeepHeartbeat`, `Utf8`).
 //

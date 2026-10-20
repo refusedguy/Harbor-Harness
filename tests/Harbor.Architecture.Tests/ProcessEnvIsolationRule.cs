@@ -75,7 +75,7 @@
 //     finishes, and #846 could not see it because a `[NotInParallel]` key orders
 //     writers against each other and says nothing about the state the last one
 //     leaves behind. See THE TEMPORAL AXIS below — this is a third half on the
-//     existing axis, not a new one (#555).
+//     existing axis, not a new one.
 //
 // THE TEMPORAL AXIS — what (1) and (2) cannot see, and why (3) is not a new axis
 // ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@
 // environment, the unit of contention is still the test project, and the writer
 // set is still the one (1) derives. What changes is that the axis gets its third
 // dimension — before/after, not only alongside — which is completion, not
-// extension. #555 freezes the extension points (the plugin and TUI seams);
+// extension. The extension points (the plugin and TUI seams) are untouched;
 // nothing here adds one.
 //
 // NON-VACUITY

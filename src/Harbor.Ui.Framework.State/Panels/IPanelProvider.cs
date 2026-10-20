@@ -26,8 +26,8 @@ namespace Harbor.Ui.Framework.Panels;
 ///         path at all. All 12 in-tree providers return
 ///         <c>PanelText.Clip(rows, ctx.Width, ctx.Height)</c>. The <c>object</c> return
 ///         leaves room for a native widget; the decoder has no case for one yet, which
-///         is #564's open question and an owner decision under the #555 feature freeze,
-///         not something a provider can rely on.
+///         is #564's open question and an owner decision, not something a provider
+///         can rely on.
 ///     </para>
 ///     <para>
 ///         <b>Purity:</b> <see cref="Build" /> MUST be side-effect free (read

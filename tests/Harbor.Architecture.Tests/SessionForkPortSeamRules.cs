@@ -75,7 +75,7 @@
 //      assemblies are excluded — a fake proves the port is injectable … and a
 //      rule that fails on the right kind of code is a rule that gets deleted."
 //
-//    So this is NOT a new axis and NOT a new kind of rule (#555). The two facts
+//    So this is NOT a new axis and NOT a new kind of rule. The two facts
 //    counted here — how many production types implement a Domain port, and
 //    whether the composition root binds it — are the same two facts #453 already
 //    counts for `ICommonConfigModelRefReader`. `SessionFactory`/`SessionForker`

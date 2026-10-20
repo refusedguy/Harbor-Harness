@@ -56,9 +56,11 @@
 | a plugin extension point | §5 Extension points | — |
 | a stateful projection of the event stream | §8 State + lifetime | — |
 
-**The freeze (#555) is why the guard column exists.** Per #555, guards land
+**The guard column exists because of #555's sequencing rule.** Guards land
 *before or with* the rewrite, and a refactor without a guard gets undone by the
-first new PR. If you touch a section, run its guard.
+first new PR. If you touch a section, run its guard. (The freeze the rule came
+from was lifted on 2026-10-20; the sequencing rule is not part of what was
+lifted — it is how a refactor lands.)
 
 ---
 
@@ -667,4 +669,5 @@ the transition and the lifecycle are the same code path rather than two.*
   [#578](https://github.com/refusedguy/Harbor-Harness/issues/578) (§7),
   [#579](https://github.com/refusedguy/Harbor-Harness/issues/579) (§6),
   [#555](https://github.com/refusedguy/Harbor-Harness/issues/555) (the freeze
-  that puts guards before rewrites).
+  that put guards before rewrites — lifted on 2026-10-20, sequencing rule and
+  all).

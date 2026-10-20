@@ -43,7 +43,7 @@
 //      invent a baseline.
 //   2. Relative to the median of the last N green runs. Rejected for the same
 //      missing state, plus it needs somewhere to KEEP the state — a new axis,
-//      and #555 freezes those.
+//      and an axis is a declaration plus wiring, not a free choice.
 //   3. Relative to the machine, against a baseline measured in the SAME run.
 //      This one. No cross-run state, so no new axis and no new artifact, and it
 //      is the answer the repository already reached twice for the same reason:

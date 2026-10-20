@@ -39,11 +39,12 @@ internal readonly record struct RequestHandlerEntry(
 ///         census in <see cref="HarborRequestTypes" />.
 ///     </para>
 ///     <para>
-///         <b>Not an extension axis (#555).</b> There is no discovery, no
-///         scanning for implementations, and no way for a host to add one. That
-///         is the point: a protocol surface that grows by editing one array
-///         fails loudly, and one that grows by whatever happens to be in the
-///         DI container does not fail at all.
+///         <b>Not an extension axis.</b> There is no discovery, no scanning for
+///         implementations, and no way for a host to add one — so nothing here
+///         is a plugin seam and nothing belongs in <c>PluginAxisRegistry</c>.
+///         That is the point: a protocol surface that grows by editing one
+///         array fails loudly, and one that grows by whatever happens to be in
+///         the DI container does not fail at all.
 ///     </para>
 /// </remarks>
 public sealed class RequestHandlerRegistry

@@ -18,7 +18,8 @@ namespace Harbor.Tui.CellForge.Widgets;
 /// <remarks>
 ///     No new extension point: the TemplateMethod only collapses the eight
 ///     byte-identical copies of the skeleton inside the existing
-///     <see cref="IOverlayLayer"/> seam (freeze #555). Per-seat <c>OnKey</c>
+///     <see cref="IOverlayLayer"/> seam — the seam itself is untouched, so
+///     nothing is declared in <c>PluginAxisRegistry</c>. Per-seat <c>OnKey</c>
 ///     declarations deliberately stay on the seats — the interface ships a
 ///     default (<c>=&gt; false</c>) and the key-plane census guard
 ///     (tests/Harbor.Architecture.Tests) derives each layer's fact row from the

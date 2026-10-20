@@ -11,6 +11,11 @@
 > `DOC-CITE-MISSING` on a tree where the file genuinely exists. A normative
 > banner would therefore assert a machine-checkability this document does not
 > have. The banner is dated for the honest reason, not to dodge the gate.
+>
+> **Обновление (2026-10-20):** фриз #555, под которым принималось это решение, снят
+> решением владельца. Решение ADR не меняется — `HtmlControl` по-прежнему не
+> подключается, — но основание другое: новая ось аддитивна и требует декларации в
+> `PluginAxisRegistry` и подключения, а не разрешения против фриза.
 
 - Статус: **измерение нормативно (§2-§4), решение НЕ принято (§6)**
 - Дата: 2026-10-01

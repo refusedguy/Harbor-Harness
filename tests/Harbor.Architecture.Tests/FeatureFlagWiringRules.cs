@@ -13,8 +13,7 @@
 //
 // This file does not decide it either, and asserts nothing about which recipe is
 // correct. Adding a workflow that publishes AOT is out of scope twice over: a
-// different issue owns it (#413), and a new CI gate is not what the feature
-// freeze (#555) wants arriving here.
+// different issue owns it (#413), and a new CI gate is not what this file is for.
 //
 // WHAT THIS FILE DOES INSTEAD
 // ---------------------------

@@ -55,8 +55,9 @@ public sealed record RequestContext(
 ///         <b>Not an extension axis.</b> Nothing scans for implementations and
 ///         no host can contribute one: the set is the array literal in
 ///         <see cref="RequestHandlerRegistry.CreateDefault" /> and the startup
-///         census rejects a union member that array forgot. The feature freeze
-///         (#555) is why that is deliberate.
+///         census rejects a union member that array forgot. There is no
+///         discovery, and that is deliberate: a protocol surface that grows by
+///         editing one array fails loudly.
 ///     </para>
 /// </remarks>
 public interface IRequestHandler<in TRequest>

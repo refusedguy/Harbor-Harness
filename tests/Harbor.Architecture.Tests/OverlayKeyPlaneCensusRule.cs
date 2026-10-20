@@ -49,8 +49,8 @@
 // that is dead is the key half: `RouteKey`, `HasModalBarrier`, `TopModal` and
 // `HitTest` have no product reader at all, and `PanelKeyRouteProbe.Ledger`
 // already carries `OverlayStack.RouteKey` as acknowledged debt under this
-// issue. Wiring or deleting it is a product decision bounded by the feature
-// freeze #555, and neither resolution is this file's to make.
+// issue. Wiring or deleting it is a product decision, and neither resolution is
+// this file's to make.
 //
 // So this file does the only thing that is neither: it pins the census, so
 // the decision cannot be taken against stale prose, and it pins the fact that
@@ -75,8 +75,8 @@
 //   reproduces the cascade: calling it at 1 moves the palette below the setup
 //   checklist; calling it at 3 moves the image viewer below the palette, which
 //   #387 makes deliberate ("a zoomed screenshot must never be typed into").
-//   Seating the palette as a layer is a NEW cellforge widget primitive, which
-//   #555 freezes by name.
+//   Seating the palette as a layer is a NEW cellforge widget primitive, which the
+//   widget axis closes by name (ADR-013).
 //
 // That is the price, and it is a product decision. The ratchet below fails the
 // day either resolution starts, so the decision is made once, explicitly.

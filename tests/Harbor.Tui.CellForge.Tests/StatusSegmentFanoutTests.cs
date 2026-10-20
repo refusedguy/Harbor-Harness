@@ -41,7 +41,7 @@ namespace Harbor.Tui.CellForge.Tests;
 ///     </para>
 ///     <para>
 ///         What the fix is <b>not</b>: a segment registry. A registry would add
-///         a place to register a cell in — a new axis (#555). This is the
+///         a place to register a cell in — a new axis. This is the
 ///         opposite move: the segment record itself becomes the one place a
 ///         cell's kind is written down, so the per-surface re-derivation has
 ///         nothing left to re-derive.

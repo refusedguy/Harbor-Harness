@@ -6,6 +6,11 @@
 > carries no `Status: normative` banner. The one fact it does fence is fenced in
 > `tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs`, red on the pre-fix
 > tree.
+>
+> **Update (2026-10-20):** the #555 freeze this record was decided under was lifted by
+> owner decision. The measurement and the deferral stand; a new axis is additive rather
+> than forbidden, so the question this ADR left open is now a question about whether
+> the extraction is worth doing, not about whether it is permitted.
 
 ## Status
 

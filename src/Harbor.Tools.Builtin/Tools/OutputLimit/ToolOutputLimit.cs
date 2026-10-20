@@ -20,9 +20,10 @@ namespace Harbor.Tools.Builtin;
 ///         policy edits this file, not N tools.
 ///     </para>
 ///     <para>
-///         Not new extension axes (#555): public types inside
+///         Not new extension axes: public types inside
 ///         <c>Harbor.Tools.Builtin</c>, applied at composition; nothing consumer
-///         facing is added and <c>Harbor.Abstractions</c> is untouched.
+///         facing is added and <c>Harbor.Abstractions</c> is untouched — no seam
+///         a plugin reaches, so <c>PluginAxisRegistry</c> does not name one.
 ///     </para>
 /// </remarks>
 public static class ToolOutputLimit

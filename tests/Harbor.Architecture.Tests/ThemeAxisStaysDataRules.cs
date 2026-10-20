@@ -1,5 +1,10 @@
-// ThemeAxisStaysDataRules.cs — the guard behind #622, which is the *exception*
+// ThemeAxisStaysDataRules.cs — the guard behind #622, which was the *exception*
 // clause to the #555 feature freeze.
+//
+// (The freeze itself was lifted on 2026-10-20. What this file grades did not
+// change with it: the theme axis is DATA, so adding a theme edits no code, and
+// the DATA/CODE distinction is the reason the carve-out existed in the first
+// place.)
 //
 // WHY THIS FILE EXISTS
 // --------------------
@@ -32,7 +37,7 @@
 //   `PermissionRuleset.Default` carries a row naming it. Those are the 8-10
 //   hand-kept name lists #557 counted. A tool is only reachable because C#
 //   mentions it by name, which is exactly why adding one is expensive and exactly
-//   why #555 freezes the set.
+//   why #555's premise holds for the code axis.
 //
 //   A THEME IS DATA. `ThemeJson.Parse` takes a string and merges whatever slots
 //   the document declares over a fallback. `ThemeStore` resolves
@@ -43,7 +48,7 @@
 //   So the axes differ in the only way that matters for a freeze: a new tool costs
 //   N hand-maintained lists, a new theme costs zero. #555's premise ("every new
 //   axis is one more list to keep in sync") is TRUE of tools and FALSE of themes.
-//   The freeze is therefore correct for the code axis and wrong for the data axis.
+//   The freeze was therefore correct for the code axis and wrong for the data axis.
 //
 // WHAT IS RULED
 // -------------
@@ -133,7 +138,7 @@ using System.Text.RegularExpressions;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
-///     #622: the theme axis is carved out of the #555 feature freeze, and this is
+///     #622: the theme axis was carved out of the #555 feature freeze, and this is
 ///     the carve-out's enforcement. The claim being defended is narrow and
 ///     structural: <b>a theme is data, so adding one edits no code</b>.
 /// </summary>
@@ -149,7 +154,7 @@ public sealed class ThemeAxisStaysDataRules
     // directory, a network catalogue, a plugin-provided palette, a second file
     // format. Each is a new mechanism with its own precedence rules, and #555
     // froze them. This list is where such a mechanism would be added, so it is
-    // where the freeze is anchored — the exception is a carve-out from a frozen
+    // where the seal is anchored — the exception is a carve-out from a frozen
     // set, and a carve-out with no recorded boundary is just a different freeze
     // nobody chose.
     //
@@ -261,7 +266,7 @@ public sealed class ThemeAxisStaysDataRules
 
         await Assert.That(violations).IsEmpty().Because(
             "A collection of theme NAMES in the discovery path is what turns the theme "
-            + "axis from data into code — and it is the whole reason #622 carves themes "
+            + "axis from data into code — and it is the whole reason #622 carved themes "
             + "out of the #555 freeze in the first place. With a name table, a user adding "
             + "a theme must edit C#, the cost profile becomes the tool axis's, and the "
             + "freeze's premise ('every new axis is one more hand-maintained list') becomes "

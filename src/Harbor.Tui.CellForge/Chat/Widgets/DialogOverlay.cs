@@ -786,9 +786,10 @@ public sealed partial class DialogOverlay
     //
     // The four per-kind key-switch nuclei from the old Handle methods live
     // here. The kind dispatcher inside HandleKey remains the single
-    // dispatch-by-kind point (no new extension axis; #555 holds): a new dialog
-    // kind is a new state class plus one dispatcher arm, and none of the
-    // existing states change. Prompt is deliberately NOT a state: it has no
+    // dispatch-by-kind point (no new extension axis — a new dialog kind is a
+    // new state class plus one dispatcher arm, not a seam a plugin reaches, so
+    // nothing is declared in PluginAxisRegistry): none of the existing states
+    // change. Prompt is deliberately NOT a state: it has no
     // kind switch of its own and its path is frozen legacy by its own
     // contract.
     //

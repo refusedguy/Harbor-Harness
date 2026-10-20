@@ -27,8 +27,9 @@
 // So "has a text buffer" is not a boolean any widget could declare. It is a
 // per-KEY decision, and the only place it can live is the site that routes the
 // key. THAT is why the four spellings are four sites and not one type — and it
-// is why an "IHaveTextBuffer" interface would be a new axis (frozen by #555)
-// that answers a question the tree already answers better by being explicit.
+// is why an "IHaveTextBuffer" interface would be a new axis — one to declare
+// in `PluginAxisRegistry` and wire — that answers a question the tree already
+// answers better by being explicit.
 //
 // What IS data, and does deserve one owner, is the MODIFIER CLASSIFICATION:
 // "Ctrl, Meta and Alt mean command; Shift is a case-shaper" is a fact about

@@ -27,7 +27,7 @@ verdict (#419).
 | Tool (`IToolPlugin`) | supported | supported | MCP `tools/list` + `tools/call` carry name, description, JSON schema and result — the full tool contract fits the wire. |
 | Provider (`IProviderPlugin`) | supported | unsupported (logged, discarded) | An `ILlmClient` factory cannot cross stdio: token streaming is per-turn and latency-sensitive, and auth material must not leave the core process. |
 | Agent (`IAgentPlugin`) | supported | unsupported (logged, discarded) | `AgentDefinition` carries a `PermissionRuleset` the core evaluates per call; rehydrating agents from a description string would silently drop the policy. |
-| TUI view (`ITuiPlugin`) | closed seam (#564 — collected, never rendered) | unsupported (logged, discarded) | Views must live in the renderer process; #555 freezes new TUI axes, so the split does not reopen this one. |
+| TUI view (`ITuiPlugin`) | closed seam (#564 — collected, never rendered) | unsupported (logged, discarded) | Views must live in the renderer process; the seam is closed by #564, so the split does not reopen this one. |
 | TUI panel (`ITuiPanelPlugin`) | supported | unsupported (logged, discarded) | The panel registry lives in the TUI renderer process; panels are UI-process state, not serializable registrations. |
 | Session store (`ISessionStorePlugin`, #581) | supported | unsupported (logged, discarded) | The store is resolved in-core at startup via `HARBOR_STORAGE`; a store behind a pipe would put every session read on IPC. |
 | TUI backend (`ITuiBackendPlugin`, #581/#584) | supported | unsupported (logged, discarded) | The renderer is constructed in the UI process; a backend factory cannot be expressed as an MCP tool. |

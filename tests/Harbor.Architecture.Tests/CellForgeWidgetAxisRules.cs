@@ -814,7 +814,8 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         Two-sided on purpose. If a future decision DOES open a widget axis —
-    ///         which is the owner's to make under #555, not this rule's — the
+    ///         which is the owner's to make (ADR-013 records that decision), not
+    ///         this rule's — the
     ///         honest response is to delete this assertion or record the allowance
     ///         the way <c>AllowedTreeBuilders</c> records its own, and the comment
     ///         says which. A guard that cannot be turned off is a guard that gets
@@ -967,9 +968,9 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         This is deliberately a probe inside the existing guard rather than a
-    ///         new axis, tool or CI job: #555 freezes the extension surface, and a
-    ///         rule that grades one already-declared seam's implementors opens
-    ///         nothing. The status stays owned by <see cref="ViewSeamStatus" />, so
+    ///         new axis, tool or CI job: a rule that grades one already-declared
+    ///         seam's implementors opens nothing, and the extension surface is not
+    ///         where a new CI job belongs. The status stays owned by <see cref="ViewSeamStatus" />, so
     ///         the deliberate edit that reopens the seam is the same one it already
     ///         is.
     ///     </para>

@@ -99,8 +99,8 @@
 //
 // Because both resolutions are the OWNER's — #857 asks whether
 // `IPanelProvider.OnKey` should be wired or deleted, #812 asks the same of the
-// `OverlayStack` host-routing API, and both are bounded by the feature freeze
-// #555 — the two known-dead routers sit in `PanelKeyRouteProbe.Ledger` with the
+// `OverlayStack` host-routing API, and both are product calls — the two
+// known-dead routers sit in `PanelKeyRouteProbe.Ledger` with the
 // issue that owns each, and the gate fails only on an UNDECLARED third. The
 // ledger ratchets both ways: an entry whose router stops being an orphan fails
 // until it is removed, so debt is retired by an explicit edit and never by
@@ -238,9 +238,8 @@ internal static class PanelKeyRouteProbe
     ///     <para>
     ///         This is NOT a fix and NOT a decision. #857 asks whether
     ///         <c>IPanelProvider.OnKey</c> should be wired or deleted, and #812 asks
-    ///         the same of the <c>OverlayStack</c> host-routing API; both are bounded
-    ///         by the feature freeze <c>#555</c> and both are product calls, so neither
-    ///         is the guard's to make. What the ledger does is stop the two known
+    ///         the same of the <c>OverlayStack</c> host-routing API; both are product
+    ///         calls, so neither is the guard's to make. What the ledger does is stop the two known
     ///         dead routers from being indistinguishable from a THIRD one.
     ///     </para>
     ///     <para>

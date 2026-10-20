@@ -48,7 +48,7 @@
 // could correctly say the panel `OnKey` has "no product host [that can] reach" it.
 //
 // Whether to open that door — wire `RouteKey`, or seat the palette as a layer —
-// is #812's decision and is frozen by #555. This file does not touch it. It only
+// is #812's decision. This file does not touch it. It only
 // stops the prose from asserting a route that does not exist, so the decision is
 // made against facts rather than against a confident sentence.
 //

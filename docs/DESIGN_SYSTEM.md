@@ -167,11 +167,11 @@ unconditionally; `ThemeWatcherApplyParityTests` drives the two watchers over one
 theme document and compares the ambient palette, so the parity is a measured
 property rather than a claim in this paragraph.
 
-## The theme axis is exempt from the feature freeze (#622)
+## The theme axis was carved out of the feature freeze (#622)
 
 The owner freeze [#555](https://github.com/refusedguy/Harbor-Harness/issues/555)
-froze "a new theme source" with every other extension axis. This axis is carved
-back out, and the reason is structural rather than preferential:
+froze "a new theme source" with every other extension axis, and #622 carved this
+axis back out. The reason is structural rather than preferential:
 
 - **A tool is code.** `ReadTool` is a class, and the product must be *told* it
   exists — `ToolsCatalog` constructs it, `ITool.SafetyProfile` declares what it
@@ -185,13 +185,15 @@ back out, and the reason is structural rather than preferential:
 
 So #555's premise — *every new axis is one more hand-maintained list to keep in
 sync* — is true of tools and false of themes. Adding a theme costs zero files
-edited; adding a tool costs a dozen. The freeze is right for the code axis and
+edited; adding a tool costs a dozen. The freeze was right for the code axis and
 wrong for the data axis.
 
-What stays frozen is the **mechanism**: a new *source* of themes (another
+What stays closed is the **mechanism**: a new *source* of themes (another
 directory, a network catalogue, a plugin-provided palette, a second file format)
 is a new axis and is not opened by this exception. Only adding a theme *to* the
-existing directory is.
+existing directory is. (The #555 freeze itself was lifted on 2026-10-20; a new
+theme SOURCE is not a plugin seam, so `PluginAxisRegistry` does not govern it —
+the carve-out's own boundary is what still holds here.)
 
 Enforced by `ThemeAxisStaysDataRules` in `tests/Harbor.Architecture.Tests/`,
 which fails if a table of theme names appears in the discovery path (that would

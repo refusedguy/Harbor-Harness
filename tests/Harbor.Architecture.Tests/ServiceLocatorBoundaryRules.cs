@@ -152,7 +152,7 @@
 // ENFORCED, at the strictest level, by the rules that can actually see lifetimes:
 // DI003 (captive dependency) and DI019 (scoped resolved from root) are `error`,
 // with DI002 / DI004 / DI001 at `warning` behind them. No new axis is needed for
-// it, and none is added — feature freeze #555.
+// it, and none is added.
 //
 // What this file adds is the one shape the analyzer layer genuinely does not own
 // and that a field sweep CAN own: a stored `IServiceScope`. Unlike a container, a

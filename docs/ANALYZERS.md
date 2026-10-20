@@ -312,8 +312,11 @@ that can see the lifetime graph rather than the field shape:
 - **DI019** (scoped service resolved from root provider) → `error`
 - DI002 / DI004 / DI001 → `warning`
 
-No new analyzer axis is needed for that, and none is added (feature freeze
-issue #555). The one container shape a reflection sweep *can* own is a stored
+No new analyzer axis is needed for that, and none is added. (The #555 freeze
+was lifted on 2026-10-20: opening an extension axis is additive rather than
+forbidden — but it has to be declared in `PluginAxisRegistry` and wired, and an
+analyzer axis is its own decision, taken in its own issue.) The one container
+shape a reflection sweep *can* own is a stored
 `IServiceScope` — unlike a container, a concrete scope has no innocent owner,
 because whoever holds it also owns its disposal. That is
 `ServiceLocatorBoundaryRules.SrcAssemblies_StoreNoServiceScope`, swept over the

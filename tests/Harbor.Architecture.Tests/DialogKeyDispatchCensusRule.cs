@@ -55,15 +55,16 @@
 // WHY THIS FILE IS NOT A FIX
 // --------------------------
 // The proposed remedy is seven per-kind widget classes. Those live in
-// `src/Harbor.Tui.CellForge/Chat/Widgets/`, which #555 freezes by name — the
-// frozen list reads "a new cellforge widget primitive
+// `src/Harbor.Tui.CellForge/Chat/Widgets/`, which the widget axis closes by
+// name — #555's frozen list read "a new cellforge widget primitive
 // (`src/Harbor.Tui.CellForge/Chat/Widgets/` — BorderPanel, flex, Tree, Table,
 // Sparkline, gauge, form controls, overlay layers, diff viewer, which-key are
 // the set)". #945 measured the same wall from the other side: seating a panel
 // as a layer is "a NEW cellforge widget primitive, which #555 freezes by name".
 //
 // So the refactor is not merely expensive here, it is out of bounds while the
-// freeze holds, and #555 explicitly allows what this file is: architecture
+// widget axis stays closed (ADR-013's decision), and the freeze that closed
+// it explicitly allowed what this file is: architecture
 // enforcement, "non-vacuous `Harbor.Architecture.Tests` rules", and docs that
 // reduce drift between hand-maintained lists and the code.
 //

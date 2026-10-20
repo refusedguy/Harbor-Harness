@@ -2,7 +2,9 @@
 
 Contract doc for composing ARBITRARY TUI interfaces on the CellForge engine
 (epic #1195). The composition layer lives inside the existing assemblies —
-no new extension axes (feature freeze #555) — and never touches the chat
+no new extension axes (the #555 freeze was lifted on 2026-10-20 — an axis is
+additive, not forbidden, but it has to be declared in `PluginAxisRegistry` and
+wired, and this document opens none) — and never touches the chat
 layer (`Chat/Rendering/LayoutTree.cs` stays the chat-owned collapse-priority
 solver; its binary split-ratio math is a read-only sample here).
 
@@ -124,7 +126,9 @@ before every `Paint` that follows a tree mutation or a resize.
 - No painting in `Arrange`. Arrangement assigns rects; pixels move in `Paint`.
 - No chat-layer edits. `LayoutTree`, `Panel`, `SplitNode`, `BorderPanel` are
   chat-owned; generic composition reuses only the engine solvers as samples.
-- No new assemblies, no new `ProjectReference`, no new plugin axes (#555).
+- No new assemblies, no new `ProjectReference`, no new plugin axes. (The #555
+  freeze was lifted on 2026-10-20: an axis is additive, but it has to be
+  declared in `PluginAxisRegistry` and wired — and this document opens none.)
   New nodes land in `Harbor.Tui.CellForge.Engine/Rendering`, BCL-only.
 - No allocations on the steady-state frame path: `for` index loops, reused
   rect scratch (`stackalloc` under 256 children), no LINQ, no closures.
