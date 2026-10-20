@@ -160,6 +160,8 @@ public class ThemeTokenResolvabilityTests
     public async Task Every_Theme_Key_A_View_Asks_For_Resolves_At_Runtime()
     {
         var asked = AskedMarkupResourceKeys();
+        await Assert.That(asked.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: with no markup key asked for it proves nothing");
 
         var unresolved = await AvaloniaSession.RunAsync(() =>
         {
@@ -174,16 +176,11 @@ public class ThemeTokenResolvabilityTests
             return missing;
         });
 
-        foreach (string violation in unresolved)
-            Console.WriteLine(violation);
-
-        await Assert
-            .That(unresolved)
-            .IsEmpty()
-            .Because(
-                "a key a view asks for and nothing declares paints nothing (DynamicResource) or fails the load "
-                + "(StaticResource) — see #971, the same silent-null shape as #948 reached through the name "
-                + "instead of through the lookup");
+        await GuardViolations.ReportAsync(
+            unresolved,
+            "a key a view asks for and nothing declares paints nothing (DynamicResource) or fails the load "
+            + "(StaticResource) — see #971, the same silent-null shape as #948 reached through the name "
+            + "instead of through the lookup");
     }
 
     // ---------------------------------------------------------------------
@@ -206,6 +203,8 @@ public class ThemeTokenResolvabilityTests
     public async Task Every_Theme_Key_App_Csharp_Names_Resolves_At_Runtime()
     {
         var asked = TokenShapedKeysInCSharp();
+        await Assert.That(asked.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: with no token named in app C# it proves nothing");
 
         var unresolved = await AvaloniaSession.RunAsync(() =>
         {
@@ -220,15 +219,10 @@ public class ThemeTokenResolvabilityTests
             return missing;
         });
 
-        foreach (string violation in unresolved)
-            Console.WriteLine(violation);
-
-        await Assert
-            .That(unresolved)
-            .IsEmpty()
-            .Because(
-                "a converter that names a token no dictionary declares silently falls through to whatever "
-                + "fallback it happens to carry — the #971 C#-side of the same class");
+        await GuardViolations.ReportAsync(
+            unresolved,
+            "a converter that names a token no dictionary declares silently falls through to whatever "
+            + "fallback it happens to carry — the #971 C#-side of the same class");
     }
 
     // ---------------------------------------------------------------------
@@ -357,16 +351,12 @@ public class ThemeTokenResolvabilityTests
             return missing;
         });
 
-        foreach (string violation in unresolved)
-            Console.WriteLine(violation);
-
         await Assert.That(keys.Count)
             .IsGreaterThanOrEqualTo(260)
             .Because("the six palettes declare 260 keys in total; fewer means the declaration parse stopped working");
-        await Assert
-            .That(unresolved)
-            .IsEmpty()
-            .Because("ThemeParityTests compares palettes to each other, which all six can agree on while none resolves");
+        await GuardViolations.ReportAsync(
+            unresolved,
+            "ThemeParityTests compares palettes to each other, which all six can agree on while none resolves");
     }
 
     // ---------------------------------------------------------------------
@@ -477,22 +467,17 @@ public class ThemeTokenResolvabilityTests
         foreach (string file in orphans)
             Console.WriteLine($"unmerged dictionary: {file} — {declared[file].Length} declared keys");
 
-        foreach (string violation in violations)
-            Console.WriteLine(violation);
-
         await Assert
             .That(orphans.Count)
             .IsGreaterThanOrEqualTo(4)
             .Because(
                 "Themes/Dark.axaml, Themes/Light.axaml, Themes/HarborDark.axaml and Themes/HarborLight.axaml are "
                 + "not merged by App.axaml; finding fewer means the merge-closure walk changed shape");
-        await Assert
-            .That(violations)
-            .IsEmpty()
-            .Because(
-                "a live consumer reaching into a dictionary the app never loads is exactly the defect both theme "
-                + "guards were blind to — they read declarations, and a declaration in an unloaded file is still "
-                + "a declaration");
+        await GuardViolations.ReportAsync(
+            violations,
+            "a live consumer reaching into a dictionary the app never loads is exactly the defect both theme "
+            + "guards were blind to — they read declarations, and a declaration in an unloaded file is still "
+            + "a declaration");
     }
 
     // =====================================================================

@@ -10,6 +10,14 @@ namespace Harbor.App.Avalonia.Tests;
 ///     all <c>.axaml</c> files in the Avalonia app. No running Application
 ///     is required — these are pure-XML-parity tests.
 /// </summary>
+/// <remarks>
+///     #1859: every guard here reports ALL of its violators in one run. The
+///     detection is unchanged; what changed is the reporting step: the
+///     violators used to be printed to stdout and then summarised by a single
+///     <c>Assert.That(violations.Count).IsEqualTo(0)</c>, which named none of
+///     them. Now each violator is its own assertion inside an
+///     <c>Assert.Multiple()</c> scope, so one CI run names every offender.
+/// </remarks>
 public class ResourceTypeTests
 {
     private const string XNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -23,6 +31,7 @@ public class ResourceTypeTests
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
+        var candidates = 0;
         foreach (var file in axamlFiles)
         {
             var doc = XDocument.Load(file);
@@ -34,6 +43,7 @@ public class ResourceTypeTests
 
                 if (key.Contains("Motion") || key.Contains("Ease") || key.Contains("Transition"))
                 {
+                    candidates++;
                     var sysNs = "clr-namespace:System;assembly=mscorlib";
                     if (elem.Name.NamespaceName != sysNs)
                     {
@@ -43,9 +53,10 @@ public class ResourceTypeTests
             }
         }
 
-        foreach (var v in violations)
-            Console.WriteLine(v);
-        await Assert.That(violations.Count).IsEqualTo(0);
+        await Assert.That(candidates).IsGreaterThan(0)
+            .Because("the rule has to be applied to something: with no Motion/Ease/Transition resource in the app it proves nothing");
+
+        await GuardViolations.ReportAsync(violations);
     }
 
     [Test]
@@ -57,6 +68,7 @@ public class ResourceTypeTests
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
+        var candidates = 0;
         foreach (var file in axamlFiles)
         {
             var doc = XDocument.Load(file);
@@ -68,6 +80,7 @@ public class ResourceTypeTests
 
                 if (key.Contains("Radius") && !key.Contains("RadiusFull") && !key.Contains("RadiusNone"))
                 {
+                    candidates++;
                     if (elem.Name.LocalName != "CornerRadius")
                     {
                         violations.Add($"{file}: {key} is {elem.Name.LocalName} (expected CornerRadius)");
@@ -76,9 +89,10 @@ public class ResourceTypeTests
             }
         }
 
-        foreach (var v in violations)
-            Console.WriteLine(v);
-        await Assert.That(violations.Count).IsEqualTo(0);
+        await Assert.That(candidates).IsGreaterThan(0)
+            .Because("the rule has to be applied to something: with no Radius resource in the app it proves nothing");
+
+        await GuardViolations.ReportAsync(violations);
     }
 
     [Test]
@@ -90,24 +104,34 @@ public class ResourceTypeTests
             SearchOption.AllDirectories);
 
         var violations = new List<string>();
+        var candidates = 0;
         foreach (var file in axamlFiles)
         {
             var doc = XDocument.Load(file);
+            // The Selector attribute is NOT in the xaml namespace: Avalonia writes
+            // it plain (`<Style Selector=":pointerover">`), so looking it up under
+            // XNamespace matched nothing at all and this guard examined zero
+            // elements. Found by the non-vacuity assertion #1859 added below.
             foreach (var style in doc.Descendants()
                 .Where(e => e.Name.LocalName == "Style"
-                         && e.Attribute(XName.Get("Selector", XNamespace)) is not null))
+                         && e.Attribute(XName.Get("Selector")) is not null))
             {
-                var selector = style.Attribute(XName.Get("Selector", XNamespace))?.Value ?? string.Empty;
-                if (selector.Contains(":pointerover") && selector.StartsWith('.'))
+                var selector = style.Attribute(XName.Get("Selector"))?.Value ?? string.Empty;
+                if (selector.Contains(":pointerover"))
                 {
-                    violations.Add($"{file}: {selector}");
+                    candidates++;
+                    if (selector.StartsWith('.'))
+                    {
+                        violations.Add($"{file}: {selector}");
+                    }
                 }
             }
         }
 
-        foreach (var v in violations)
-            Console.WriteLine(v);
-        await Assert.That(violations.Count).IsEqualTo(0);
+        await Assert.That(candidates).IsGreaterThan(0)
+            .Because("the rule has to be applied to something: with no :pointerover selector in the app it proves nothing");
+
+        await GuardViolations.ReportAsync(violations);
     }
 
     private static string FindRepoRoot()

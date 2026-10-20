@@ -98,6 +98,9 @@ public class HdsThemeCatalogParityTests
         string dark = ThemeVariant.Dark.Key.ToString() ?? "Dark";
         string light = ThemeVariant.Light.Key.ToString() ?? "Light";
 
+        await Assert.That(PaletteFiles.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: with no palette dictionary to read it proves nothing");
+
         List<string> offenders = [];
         foreach (var path in PaletteFiles)
         {
@@ -109,10 +112,7 @@ public class HdsThemeCatalogParityTests
             }
         }
 
-        foreach (string offender in offenders)
-            Console.WriteLine(offender);
-
-        await Assert.That(offenders).IsEmpty();
+        await GuardViolations.ReportAsync(offenders);
     }
 
     /// <summary>

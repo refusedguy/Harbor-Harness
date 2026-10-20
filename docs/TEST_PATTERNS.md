@@ -900,6 +900,28 @@ await Assert.That(async () => await fragile.Method())
     .Throws<InvalidOperationException>(ex => ex.Message.Contains("expected text"));
 ```
 
+### Reporting several failures at once
+
+`Assert.Multiple()` opens a scope that collects the failures instead of
+throwing on the first one, so a single run reports every offender:
+
+```csharp
+using var scope = Assert.Multiple();
+
+await Assert.That(first).IsEqualTo(1);
+await Assert.That(second).IsEqualTo(2);
+```
+
+The scope MUST be in a `using` — the TUnit analyzer `TUnitAssertions0004`
+(`DisposableUsingMultiple`) is an error otherwise. Inside the scope a failing
+assertion does not stop the method, so the code after it still runs: only
+expressions that are safe to evaluate belong in there.
+
+A guard that collects its violators into a list reports each violator as its
+own assertion inside the scope, with the violator's own text as the failure's
+reason. That way one CI run names every offender instead of only the first,
+and the "why" survives into the report.
+
 ### Data-driven tests
 
 TUnit supports inline data via `[Arguments]` and `[MethodDataSource]`:

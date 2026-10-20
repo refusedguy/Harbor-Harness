@@ -74,15 +74,16 @@ public class ThemeTokenDuplicationGuardTests
         var declared = ThemeColorValues();
         await Assert.That(declared.Count).IsGreaterThan(0);
 
-        List<string> violations = ColorLiteralsInAppCSharp()
+        var files = AppCSharpFiles();
+        await Assert.That(files.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: an empty app source set would make the rule vacuous");
+
+        List<string> violations = ColorLiteralsInAppCSharp(files)
             .Where(site => declared.Contains(site.Value.ToUpperInvariant()))
             .Select(Describe)
             .ToList();
 
-        foreach (string violation in violations)
-            Console.WriteLine(violation);
-
-        await Assert.That(violations).IsEmpty();
+        await GuardViolations.ReportAsync(violations);
     }
 
     /// <summary>
@@ -94,12 +95,13 @@ public class ThemeTokenDuplicationGuardTests
     [Test]
     public async Task Avalonia_App_CSharp_Contains_No_Color_Literal_At_All()
     {
-        List<string> violations = ColorLiteralsInAppCSharp().Select(Describe).ToList();
+        var files = AppCSharpFiles();
+        await Assert.That(files.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: an empty app source set would make the rule vacuous");
 
-        foreach (string violation in violations)
-            Console.WriteLine(violation);
+        List<string> violations = ColorLiteralsInAppCSharp(files).Select(Describe).ToList();
 
-        await Assert.That(violations).IsEmpty();
+        await GuardViolations.ReportAsync(violations);
     }
 
     private static string Describe(HexSite site) =>
@@ -128,15 +130,16 @@ public class ThemeTokenDuplicationGuardTests
         var declared = DeclaredIconPaths();
         await Assert.That(declared.Count).IsGreaterThan(0);
 
-        List<string> violations = IconPathLiteralsInAppCSharp()
+        var files = AppCSharpFiles();
+        await Assert.That(files.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: an empty app source set would make the rule vacuous");
+
+        List<string> violations = IconPathLiteralsInAppCSharp(files)
             .Where(site => declared.Any(d => site.Value.Contains(d.Data, StringComparison.Ordinal)))
             .Select(site => DescribeIcon(site, declared.First(d => site.Value.Contains(d.Data, StringComparison.Ordinal)).Key))
             .ToList();
 
-        foreach (string violation in violations)
-            Console.WriteLine(violation);
-
-        await Assert.That(violations).IsEmpty();
+        await GuardViolations.ReportAsync(violations);
     }
 
     /// <summary>
@@ -155,12 +158,13 @@ public class ThemeTokenDuplicationGuardTests
     [Test]
     public async Task Avalonia_App_CSharp_Contains_No_Icon_Path_Literal_At_All()
     {
-        List<string> violations = IconPathLiteralsInAppCSharp().Select(DescribeIcon).ToList();
+        var files = AppCSharpFiles();
+        await Assert.That(files.Count).IsGreaterThan(0)
+            .Because("the guard has to look at something: an empty app source set would make the rule vacuous");
 
-        foreach (string violation in violations)
-            Console.WriteLine(violation);
+        List<string> violations = IconPathLiteralsInAppCSharp(files).Select(DescribeIcon).ToList();
 
-        await Assert.That(violations).IsEmpty();
+        await GuardViolations.ReportAsync(violations);
     }
 
     private static string DescribeIcon(IconPathSite site) =>
@@ -209,16 +213,16 @@ public class ThemeTokenDuplicationGuardTests
             .OrderBy(p => p.Key, StringComparer.Ordinal)
             .ToArray();
 
-    private static IReadOnlyList<IconPathSite> IconPathLiteralsInAppCSharp() =>
-        AppCSharpFiles()
+    private static IReadOnlyList<IconPathSite> IconPathLiteralsInAppCSharp(IReadOnlyList<string> files) =>
+        files
             .SelectMany(file => File.ReadAllLines(file)
                 .Select((text, index) => (text, line: index + 1))
                 .SelectMany(entry => SvgPathLiteral.Matches(entry.text)
                     .Select(match => new IconPathSite(file, entry.line, match.Value))))
             .ToArray();
 
-    private static IReadOnlyList<HexSite> ColorLiteralsInAppCSharp() =>
-        AppCSharpFiles()
+    private static IReadOnlyList<HexSite> ColorLiteralsInAppCSharp(IReadOnlyList<string> files) =>
+        files
             .SelectMany(file => File.ReadAllLines(file)
                 .Select((text, index) => (text, line: index + 1))
                 .SelectMany(entry => HexColor.Matches(entry.text)
