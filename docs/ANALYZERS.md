@@ -33,6 +33,102 @@ Harbor runs three layers of static analysis + DI validation:
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 | **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
+The table above is the set of analyzers this repository runs. It is not the
+set of analyzers that were looked at. The candidates that were checked and not
+taken are in [§Checked and rejected candidates](#checked-and-rejected-candidates),
+so that the next person does not spend a day of NuGet registry reads and
+GitHub API calls rediscovering that a package was abandoned in 2019.
+
+### Checked and rejected candidates
+
+A row is a verdict only if it names a reason. "Rejected" on its own is a
+shrug, and a shrug cannot be re-checked when the package is republished.
+
+`Version checked` is the version the verdict was made against, and the verdict
+is a verdict **on that version**. A new release reopens it.
+
+**Checked on 2026-10-20** against `dev@a9f77508`. The version, the publish
+date and the licence come from the NuGet registry (`licenseExpression`, the
+nuspec's `licenseUrl`, or nothing at all where the package declares neither);
+the last push, the archived flag and the licence file come from the GitHub
+API.
+
+| Package | Version checked | Licence | Verdict | Reason |
+|---------|-----------------|---------|---------|--------|
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.302 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. |
+| `Roslynator.Analyzers` | 5.0.1 | Apache-2.0 | ADOPT, solution-wide | 284 RCS ids and no severity rows at all: the 4.15.0 to 5.0.1 gap introduced zero new ids and removed twenty obsolete implementations (#1851). |
+| `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, solution-wide | 24 S rules are demoted or switched off, each with a reason. The licence is not LGPL: it is the "SONAR Source-Available License v1.0", whose AI-use clause is open in #1858. |
+| `Meziantou.Analyzer` | 3.0.315 | MIT | ADOPT, solution-wide | 207 MA rows. The 3.0.123 to 3.0.315 gap added 31 ids, each baselined at the severity the package ships it with (#1851). |
+| `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, solution-wide | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
+| `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids and no severity rows: nine rules fire 216 times and every one of them is in `tests/`, where `TreatWarningsAsErrors` is off (#1905). The dynamic-code ban is not this package, it is RS0030 (#1844). |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.6.0 | MIT | ADOPT, solution-wide | RS0030 over `BannedSymbols.txt` and `BannedSymbols.DynamicCode.txt`. Since #1844 the compiler enforces the dynamic-code ban that a hand-written regex used to (#626). |
+| `DependencyInjection.Lifetime.Analyzers` | 2.18.24 | MIT | ADOPT, solution-wide | 29 DI rows, one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. |
+| `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. |
+| `DotNetProjectFile.Analyzers` | 1.19.1 | MIT | ADOPT, solution-wide | 193 Proj rows in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig). Three rules are errors, one is `none`, two stay `suggestion` because the lock-file question is the owner's (#1851, #1857). |
+| `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 are `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 5.6.0 | MIT | ADOPT, staged (PR #1944, issue #1845) | Replaces 1212 lines of python public-API gate with the compiler, on the two frozen projects only. The pull request is open, so this row records the decision, not the merge. |
+| `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | ADOPT with scope (issue #1848, open) | EX003 (a lost inner exception), EX021 (an exception type with no `(message, inner)` constructor) and EX011 (an empty catch) are the findings worth taking; the rest overlaps CA and Sonar. |
+| `NetArchTest.Rules` | 1.3.2 | MIT | IN the tree, the replacement is open | The layer gate runs on it, and its last release was 2021-05-23. The replacement is tracked in #1841 (ArchUnitNET) and #1864 (aweXpect.Reflection). |
+| `aweXpect.Reflection` | 3.1.0 | MIT | SPIKE, the live pilot (#1864, #1879) | The successor `Testably.Architecture.Rules` names, with no transitive Newtonsoft and no TUnit pin. It covers exactly one of our tasks: the shape of an interface and the dead surface. |
+| `ErrorProne.NET.CoreAnalyzers` | 0.9.0-beta.4 | MIT (a `licenseUrl`, no SPDX expression) | REJECT (#1849) | Measured on this tree: 2 product findings, both duplicating EX003. The unique rules give 0 (EPC32, EPC19, EPC16, EPC17, EPC26, EPC30, EPC23, EPC11), and EPC27 gives 4 false positives on the `async void` handlers `docs/ANTIPATTERNS.md` §13 blesses. |
+| `IDisposableAnalyzers` | 4.0.8 | MIT | REJECT the package, ADOPT the findings (#1854) | The package is dead (last push 2024-06-19), but IDISP014 (one `HttpClient` per call) is not covered by CA1001 or CA1063. The two sites it named were fixed by hand and a house rule now guards them (`HttpClientReuseRules.cs`). |
+| `SmartAnalyzers.MultithreadingAnalyzer` | 1.1.31 | MIT | REJECT | Last release 2019-09-17. `lock`, `Monitor` and `Interlocked` are covered by Sonar and AsyncFixer already. |
+| `SmartAnalyzers.ExceptionAnalyzer` | 1.0.10 | MIT | REJECT | Last release 2019-05-21, and it overlaps Meziantou, Sonar and CA. |
+| `DotNetAnalyzers.DocumentationAnalyzers` | 1.0.0-beta.59 | MIT | REJECT | Last push 2022-12-08 and still beta. `tools/check-xml-doc-coverage.py` covers the same ground and can state a suppression reason, which the analyzer cannot. |
+| `ClosedTypeHierarchyDiagnosticSuppressor` | 1.3.0 (a GitHub release; there is no nuget package) | MIT | REJECT | A suppressor of another diagnostic, not a check, and #1810 (the enum completeness gap) needs a check. A nuget search for the id returns 0 hits. |
+| `OneOfDiagnosticSuppressor` | no release, no nuget package | MIT | REJECT | The same reason, and there is nothing to install: a nuget search for the id returns 0 hits. |
+| `ClrHeapAllocationAnalyzer` | 3.0.0 | Apache-2.0 (a `licenseUrl` to the repository's LICENSE) | REJECT | The repository (Microsoft/RoslynClrHeapAllocationAnalyzer) is archived, last push 2022-05-26. The display-class finding it would have caught (#1529) needs a house analyzer, not this one. |
+| `NetFabric.Hyperlinq.Analyzer` | 2.3.0 | MIT | REJECT | No release for three years, and it analyses the Hyperlinq library, which this repository does not use. |
+| `SuccinctLinq.Analyzers` | 0.2.0 | MIT | REJECT | 0.x, one author, released days before the check. LINQ style is not this repository's problem. |
+| `StyleCopAnalyzers` | 1.3.133-beta | MIT | REJECT | The stable line is not there: it is beta, opinionated, and it would land as a wave of findings. If it is ever wanted it starts at `severity = none` for the whole family. |
+| `Agoda.Analyzers` | 1.1.203 | Apache-2.0 | REJECT | Opinionated, and the rules it shares with us are already covered by NetAnalyzers, Sonar and Roslynator. |
+| `Menees.Analyzers` | 4.0.2 | MIT | REJECT | A StyleCop port, so the same reasons. |
+| `Blowin.CleanCode` | 2.6.0 | none declared in the nuspec | REJECT | Opinionated, and the licence is not declared anywhere a licence check could read it. |
+| `csharp-refactor` | 0.1.22 | Unlicense | REJECT | 0.x, two stars, and "apply the fixes in bulk" is not a thing this repository wants. |
+| `SharpSource` | 1.33.4 | MIT | REJECT | Opinionated, and it overlaps Sonar on the same rules. |
+| `Gu.Analyzers` | 2.0.3 | MIT | REJECT | No release for two years. |
+| `SecurityCodeScan` | 3.5.4 | LGPL-3.0 | REJECT | Decided on activity and duplication, not on the licence: a build-time analyzer with `PrivateAssets=all` does not reach the product binary. Two years without a release, and it duplicates the Sonar S-rules. |
+| `Wintellect.Analyzers` | 1.0.6 | a `licenseUrl` to the repository's LICENSE, no SPDX expression | REJECT | Last release 2016-11-25. Ten years. |
+| `Selectorlyzer.Analyzers` | 0.0.5-beta | MIT (the nuspec's `licenseExpression` is empty) | REJECT as a substrate (#1846) | The package has three diagnostic ids in total (SEL0001 to SEL0003), so one rule cannot be switched off without its neighbours, and the matcher is syntactic (`SimpleBaseType` matched by name), so there is no semantic model to move the architecture rules onto. |
+| `TngTech.ArchUnitNET` | 0.13.4 | Apache-2.0 | REJECT at 0.13.4 (#1841, #1870, #1871) | There is no assembly-level primitive (upstream #130), an empty forbidden set makes a negative rule vacuously true, and 0.13.4 loses every async dependency in a Release build, which is the configuration the architecture gate runs in. |
+| `TngTech.ArchUnitNET.TUnit` | 0.13.4 | Apache-2.0 | REJECT with the core package | The adapter's whole TUnit surface is one exception type, so it was never the risk. Upstream stopped supporting it on 2025-09-24 (#1873). |
+| `Testably.Architecture.Rules` | 0.14.0 | MIT | REJECT (#1863) | The repository is archived and its README opens with `# DISCONTINUED!`. |
+| `Mockolate` | 3.6.0 | MIT | NOT-ADOPT (#1876) | AOT-clean, so the "reflection means not AOT" refusal does not apply, but its doubles are emitted into every test project (about 19 000 generated lines for our 27 interfaces, against our generator's 1 900, once) and it returns `default(Result<T>)`, where `Result.IsSuccess` is then true. |
+| `Testably.Abstractions` | 10.4.0 | MIT | NOT-ADOPT for production (#1876) | `TimeProvider` is already the product clock seam, and the file ports are already narrow `Result<T>` interfaces without exceptions. A second `IFileSystem` would throw that contract away. |
+| `aweXpect` | 3.4.0 | MIT | NOT-ADOPT as an assertion replacement (#1877) | TUnit's assertions are already in the tree; a second assertion vocabulary in 172 test files is an extra, not a saving. |
+| `aweXpect.Snapshots` | 0.6.0 | MIT | NOT-ADOPT (#1772) | The golden-frame work has its own plan, and the package does not cancel it. |
+| `aweXpect.Snapshots.PublicApi` | 0.6.0 | MIT | NOT-ADOPT, the third candidate (#1872) | `Microsoft.CodeAnalysis.PublicApiAnalyzers` covers the public-API freeze at the compiler level instead. |
+| `aweXpect.Migration` | 0.7.0 | MIT | NOT-ADOPT (#1877) | It migrates Moq and NSubstitute assertions, and this repository has none of either. |
+| `aweXpect.Logging` | 0.2.0 | MIT | WATCH (#1886) | It would pull `Microsoft.Extensions.Diagnostics.Testing` 10.11.0, which asks for `Microsoft.Extensions.Logging` 10.0.13 while this repository pins 10.0.10, and it does not cancel the shared `ILogger` double work. |
+| `aweXpect.Json` | 2.1.0 | MIT | NOT-ADOPT (#1886) | The JSON layer is closed by source generators, and the assertions it would replace mostly check our own types rather than arbitrary JSON. |
+| `jscpd` | 5.4.1 | MIT | REJECT (#1847) | `tools/check-test-dup.py` is the gate and it landed. jscpd compares token windows, which would change the detection semantics, and the baseline with them. |
+| `Philips.CodeAnalysis.DuplicateCodeAnalyzer` | 2.0.0 | MIT | REJECT as a gate (#1847) | It compares inside one compilation, so it cannot see the cross-project duplication that is half of the problem; it has no baseline concept, and its cost is paid on every build of every project. |
+| `PMD CPD` | 7.28.0 | LGPL-2.1 | REJECT (#1847) | It needs a JRE in CI, where this repository has neither node nor java, and it is weaker than jscpd on the "fail on new clones only" part. |
+| `Microsoft.CodeAnalysis.DuplicateCodeAnalyzer` | no such package | none | REJECT | The NuGet flat-container index for that id answers `BlobNotFound`. There is nothing to evaluate. |
+| `ReferenceTrimmer` | 3.5.13 | MIT | ADOPT as a one-off report, not as a gate (#1855) | The manual sweep of unused references already produced two wrong answers (#910, #957) and left 15 candidates unclassified. A permanent gate would be red on packages that are genuinely needed transitively, which is the "train people to ignore the rule" outcome the repository already forbids for RS0030 in tests. |
+| `DocumentFormat.OpenXml` | 3.5.1 | MIT | NOT A CANDIDATE | The OpenXML SDK, not an analyzer: it ships no diagnostic ids, so there is nothing to enable and nothing to baseline, and nothing in this repository reads or writes OOXML. |
+
+#### What changed since the 2026-10-20 audit
+
+The audit that produced the first version of this table recorded a snapshot.
+Seven of its rows have moved since, and the table above carries the current
+state:
+
+| Package | The audit said | It is now | Why |
+|---------|----------------|----------|-----|
+| `DotNetProjectFile.Analyzers` | REJECT for now, it covers `.csproj` hygiene rather than our invariants | ADOPT, three rules as errors | The package is in the tree at 1.19.1 with Proj0037, Proj0040 and Proj0041 as errors (#1851, #1857). |
+| `Microsoft.VisualStudio.Threading.Analyzers` | not rejected, resolved separately in #1852 | ADOPT with scope | #1852 merged. The package is in the tree with one rule on, and the gate that actually decides "is this an unobserved Task" is now `HARCH003`, a house analyzer, not the package. |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | a candidate with an open decision | ADOPT, staged | #1845 is decided and PR #1944 is open. The python public-API gate it replaces is still in the tree until that pull request merges. |
+| `IDisposableAnalyzers` | REJECT, it duplicates what CA1001 and CA1063 already say | REJECT the package, ADOPT the findings | IDISP014 is not covered by CA1001 or CA1063. The package is still dead; the two `HttpClient` sites it named were fixed by hand, a house rule now guards them (`HttpClientReuseRules.cs`), and both landed (#1854). |
+| `ErrorProne.NET.CoreAnalyzers` | REJECT, measured | REJECT, measured | The verdict stands, but the version the audit recorded (`0.1.5898.41180`) is not a version this package ever published. The measured version is `0.9.0-beta.4`, and it is the one the verdict applies to (#1849). |
+| `TheExceptionator.Analyzers` | not rejected, resolved separately in #1848 | ADOPT with scope, still open | #1848 has not merged, so the package is not in the tree. The scope is the three rules the table names. |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | already connected, not a candidate | ADOPT, and it now carries the dynamic-code ban | Since #1844 the second ban file, `BannedSymbols.DynamicCode.txt`, is enforced by RS0030 as well, so the package does more than the "What NOT to do" list. |
+
+Re-check this table when a package releases a new version, when Roslyn moves a
+major version, or once a year, whichever comes first. A verdict with a
+version in it is a verdict on that version.
+
 ### Reflection rules (ReflectionAnalyzers 0.3.1)
 
 46 diagnostics, `REFL001`–`REFL046`, all member-by-member correctness rules:
@@ -727,6 +823,10 @@ when registration is split across private helpers (as in Harbor's
 
 ## Adding a new analyzer
 
+The order of these steps is the point. A new analyzer is landed **with a
+baseline**, never with a finding, because `TreatWarningsAsErrors=true` turns
+every pre-existing finding into a red build on the day the package lands.
+
 1. Pin the version in `Directory.Packages.props`:
    ```xml
    <PackageVersion Include="NewAnalyzer" Version="x.y.z" />
@@ -734,12 +834,121 @@ when registration is split across private helpers (as in Harbor's
 2. Add the `PackageReference` (with `PrivateAssets="all"`) either to
    `Directory.Build.props` (solution-wide) or the relevant
    `apps/Directory.Build.props` / `tests/Directory.Build.props`.
-3. Configure severities in `.editorconfig`:
-   ```ini
-   dotnet_diagnostic.NEWRULE01.severity = error
-   ```
-4. Document the rule in this file (table + rationale).
-5. Run `dotnet build` and confirm 0 errors (or document why a warning is OK).
+3. Build with `-p:ReportAnalyzer=true` and write down **every** diagnostic id
+   the package ships, with the severity it ships it with. Do not enable
+   anything yet: the package's defaults are not this repository's defaults.
+   Four of the 29 `VSTHRD` rules ship as `error` by default, and three of the
+   `MA` rules ship as `warning` reading a `BannedSyntaxes.txt` this repository
+   does not have.
+4. Put every id into the severity table at the severity the package ships it
+   with, each with a written reason (see [below](#where-the-severity-table-lives)).
+   This is the baseline, and it is what keeps the build green while the
+   findings are still there.
+5. Fix or baseline each finding. A rule may not be raised to `error` on this
+   tree until its findings are gone, so every finding is either fixed in code
+   or carries a row that says why it is tolerated.
+6. Promote one rule at a time: fix the finding, raise that rule's severity,
+   and update this document's table for it in the same commit.
+7. Measure the `Compile` step before and after. It was 372.5 s on the
+   4-vCPU runner of #1801, and it is 69 % of the `build` job. A move that
+   grows it by more than 10 % does not stay.
+8. Run `dotnet build` and confirm 0 errors.
+
+### Where the severity table lives
+
+| File | What goes in it | Why it is there |
+|------|-----------------|-----------------|
+| `.editorconfig`, section `[*.{cs,csx}]` | every diagnostic reported on a C# source tree, tree-wide | Roslyn resolves the severity of a source-tree diagnostic from the editor config. |
+| `.editorconfig`, a path section such as `[apps/Harbor.App.Avalonia/**.cs]` | the same, but only for one directory | One such section exists today. `AnalyzerSeverityScopeRules` pins the set of paths and fails if a path-scoped section addresses a directory that is not in the checkout. |
+| [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig) | every diagnostic reported on an additional file, which today means the project-file rules | An additional-file diagnostic has no `SourceTree`, and Roslyn applies an editor-config severity only to a diagnostic that has one. A global analyzer config is the only per-rule mechanism that reaches them. |
+
+A severity written anywhere else reaches nothing. That is not a style rule:
+the two `.editorconfig` lines that used to configure `REL0001` and `REL0002`
+configured ids that do not exist in the package, so they configured nothing at
+all, and the rules they were meant to silence had always been running.
+
+### The row format
+
+```ini
+dotnet_diagnostic.<ID>.severity = <none|suggestion|warning|error>   # <the reason>
+```
+
+`none` is off. `suggestion` is visible in the IDE and is not promoted.
+`warning` is promoted to an error by `TreatWarningsAsErrors=true`. `error` is
+always an error.
+
+The reason is part of the row, not a comment above it. A comment above a row
+is invisible to every tool that reads the table, so the reason is lost the
+moment the next person reformats the file.
+
+### What a baseline row looks like
+
+Rules that are off are off **by family and by named reason**, not by a blanket
+switch. A family that has a real finding in this tree gets its own row with
+its own reason. The family block states the reason once, in prose, and the
+rows under it carry the rule's own short reason:
+
+```ini
+# --- Meziantou 3.0.315 (new rules, MA0213-MA0243) ---
+# The 3.0.123 -> 3.0.315 gap adds these 31 rules and changes no severity on the
+# 209 that already existed. Each new rule is baselined to the severity the
+# analyzer ships it with, so the version move cannot turn the zero-warning
+# build red on the day it lands.
+dotnet_diagnostic.MA0213.severity = none # Simplify negated boolean expression (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0220.severity = suggestion # The configured regular expression is not valid (ships warning; reads BannedSyntaxes.txt, which this repo does not have)
+```
+
+Three things are in that row: what the rule says, the severity the package
+ships it with, and why it is not adopted. The third is the one that turns the
+row into a decision rather than a transcription.
+
+The reason has to satisfy the shape the repository uses everywhere a row
+grants a permission. `tests/Harbor.Architecture.Tests/ExemptionReason.cs` is
+the one place that asks whether a tolerated row states why it is tolerated,
+and it asks three questions: the reason is not blank, it is not the tracking
+issue URL again (a URL says where the debt is tracked, not why it is
+tolerated, so it belongs in its own column), and it is at least 40 characters
+long. `later`, `TODO`, `see above` and `n/a` all pass a blank check and all
+say nothing.
+
+**What is machine-checked, and what is not.** The path-scoped rows are
+checked: `DiSeverityDemotionRules.PathScopedSection_NamesEveryRuleItSets`
+fails the build when the comment that governs a row does not name that row's
+id, and `AnalyzerSeverityScopeRules` fails when a path-scoped row addresses a
+path that is not in the checkout or is not named in this document. The
+tree-wide rows in `[*.{cs,csx}]` are not checked for a reason by any tool
+today. They carry one anyway, because the family convention above is what
+makes the table readable, and a table that only a machine can grade is a table
+nobody maintains.
+
+### How the baseline is lowered
+
+One rule at a time, and in the same commit as the fix:
+
+1. Fix the finding in the code.
+2. Raise that rule's severity in the severity table, or delete its
+   `severity = none` row if the rule is now good enough to run at the
+   severity the package ships it with.
+3. Update this document's table for that rule, if this document states one.
+4. Delete the "not adopted yet" wording from the row's reason, so the reason
+   describes what the row is now.
+
+A baseline row is not a permanent exemption. It is a debt with a reason
+attached, and the reason is what tells the next person whether the debt is
+still the one that was written down.
+
+This is the rule the two version moves established. The section *Version
+baseline, and what a version move may change* records it: a version bump lands
+with a baseline, not with a finding.
+
+### Who owns the table
+
+| What | Owner |
+|------|-------|
+| The severity table itself | `.editorconfig` for the source-tree rules, [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig) for the project-file rules. Both are the single source of truth, and both are the only places in this repository where a diagnostic severity is written down. |
+| The decision to adopt a rule | Whoever opens the pull request, and the owner when a family stays off for a product reason rather than a technical one. Proj0043 and Proj0044 stay at `suggestion` because the lock-file question is an owner decision, not a build rule. |
+| The enforcement | `tests/Harbor.Architecture.Tests/`: `AnalyzerSeverityScopeRules.cs` (a path-scoped row resolves to a real path, is named in this document, and the set of scoped paths is pinned), `DiSeverityDemotionRules.cs` (a path-scoped row names its own rule), and `ExemptionReason.cs` (the reason shape). |
+| The record | This document. Every analyzer family this repository runs has a section here, and every path-scoped demotion is named here. |
 
 ---
 
