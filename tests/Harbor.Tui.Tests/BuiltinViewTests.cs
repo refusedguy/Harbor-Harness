@@ -10,17 +10,6 @@ namespace Harbor.Tui.Tests;
 public class StatusBarViewTests
 {
     [Test]
-    public async Task Render_NoViewModel_WritesNothing()
-    {
-        var view = new StatusBarView();
-        var ctx = new CaptureRenderContext();
-
-        await view.RenderAsync(ctx);
-
-        await Assert.That(ctx.Output).IsEqualTo(string.Empty);
-    }
-
-    [Test]
     public async Task Render_WritesFormattedStatusLine()
     {
         var vm = new StatusBarViewModel
@@ -38,35 +27,10 @@ public class StatusBarViewTests
         await Assert.That(ctx.Output).Contains("anthropic");
         await Assert.That(ctx.Output).Contains("running");
     }
-
-    [Test]
-    public async Task Id_IsStatusBar()
-    {
-        var view = new StatusBarView();
-        await Assert.That(view.Id).IsEqualTo("status-bar");
-    }
-
-    [Test]
-    public async Task Placement_IsStatusBar()
-    {
-        var view = new StatusBarView();
-        await Assert.That(view.Placement).IsEqualTo(TuiViewPlacement.StatusBar);
-    }
 }
 
 public class ChatHistoryViewTests
 {
-    [Test]
-    public async Task Render_NoViewModel_WritesNothing()
-    {
-        var view = new ChatHistoryView();
-        var ctx = new CaptureRenderContext();
-
-        await view.RenderAsync(ctx);
-
-        await Assert.That(ctx.Output).IsEqualTo(string.Empty);
-    }
-
     [Test]
     public async Task Render_Entries_RendersAllEntries()
     {
@@ -131,35 +95,10 @@ public class ChatHistoryViewTests
         await Assert.That(ctx.Output).Contains("[result]");
         await Assert.That(ctx.Output).Contains("done");
     }
-
-    [Test]
-    public async Task Id_IsChatHistory()
-    {
-        var view = new ChatHistoryView();
-        await Assert.That(view.Id).IsEqualTo("chat-history");
-    }
-
-    [Test]
-    public async Task Placement_IsChatHistory()
-    {
-        var view = new ChatHistoryView();
-        await Assert.That(view.Placement).IsEqualTo(TuiViewPlacement.ChatHistory);
-    }
 }
 
 public class InputViewTests
 {
-    [Test]
-    public async Task Render_NoViewModel_WritesNothing()
-    {
-        var view = new InputView();
-        var ctx = new CaptureRenderContext();
-
-        await view.RenderAsync(ctx);
-
-        await Assert.That(ctx.Output).IsEqualTo(string.Empty);
-    }
-
     [Test]
     public async Task Render_EmptyText_ShowsPlaceholder()
     {
@@ -199,35 +138,10 @@ public class InputViewTests
         // The text "abc" should still be fully visible.
         await Assert.That(ctx.Output).Contains("abc");
     }
-
-    [Test]
-    public async Task Id_IsInput()
-    {
-        var view = new InputView();
-        await Assert.That(view.Id).IsEqualTo("input");
-    }
-
-    [Test]
-    public async Task Placement_IsInput()
-    {
-        var view = new InputView();
-        await Assert.That(view.Placement).IsEqualTo(TuiViewPlacement.Input);
-    }
 }
 
 public class DiffPreviewViewTests
 {
-    [Test]
-    public async Task Render_NoViewModel_WritesNothing()
-    {
-        var view = new DiffPreviewView();
-        var ctx = new CaptureRenderContext();
-
-        await view.RenderAsync(ctx);
-
-        await Assert.That(ctx.Output).IsEqualTo(string.Empty);
-    }
-
     [Test]
     public async Task Render_NoDiffs_WritesNothing()
     {
@@ -287,19 +201,61 @@ public class DiffPreviewViewTests
         await Assert.That(ctx.Output).DoesNotContain("next");
         await Assert.That(ctx.Output).DoesNotContain("previous");
     }
+}
+
+/// <summary>
+///     #1770: the four builtin views share one contract, so the three
+///     per-view copies of the same test became one table each. The factory is
+///     the only place that knows which concrete type answers to which id, and
+///     every row keeps the original fully-qualified test name as its display
+///     name.
+/// </summary>
+public class BuiltinViewContractTests
+{
+    private static ITuiView CreateBuiltinView(string viewId) => viewId switch
+    {
+        "status-bar" => new StatusBarView(),
+        "chat-history" => new ChatHistoryView(),
+        "input" => new InputView(),
+        "diff-preview" => new DiffPreviewView(),
+        _ => throw new ArgumentOutOfRangeException(nameof(viewId), viewId, "Unknown builtin view id."),
+    };
 
     [Test]
-    public async Task Id_IsDiffPreview()
+    [Arguments("status-bar", DisplayName = "StatusBarViewTests.Render_NoViewModel_WritesNothing")]
+    [Arguments("chat-history", DisplayName = "ChatHistoryViewTests.Render_NoViewModel_WritesNothing")]
+    [Arguments("input", DisplayName = "InputViewTests.Render_NoViewModel_WritesNothing")]
+    [Arguments("diff-preview", DisplayName = "DiffPreviewViewTests.Render_NoViewModel_WritesNothing")]
+    public async Task Render_NoViewModel_WritesNothing(string viewId)
     {
-        var view = new DiffPreviewView();
-        await Assert.That(view.Id).IsEqualTo("diff-preview");
+        var view = CreateBuiltinView(viewId);
+        var ctx = new CaptureRenderContext();
+
+        await view.RenderAsync(ctx);
+
+        await Assert.That(ctx.Output).IsEqualTo(string.Empty);
     }
 
     [Test]
-    public async Task Placement_IsOverlay()
+    [Arguments("status-bar", "status-bar", DisplayName = "StatusBarViewTests.Id_IsStatusBar")]
+    [Arguments("chat-history", "chat-history", DisplayName = "ChatHistoryViewTests.Id_IsChatHistory")]
+    [Arguments("input", "input", DisplayName = "InputViewTests.Id_IsInput")]
+    [Arguments("diff-preview", "diff-preview", DisplayName = "DiffPreviewViewTests.Id_IsDiffPreview")]
+    public async Task Id_MatchesTheRegisteredId(string viewId, string expectedId)
     {
-        var view = new DiffPreviewView();
-        await Assert.That(view.Placement).IsEqualTo(TuiViewPlacement.Overlay);
+        var view = CreateBuiltinView(viewId);
+        await Assert.That(view.Id).IsEqualTo(expectedId);
+    }
+
+    [Test]
+    [Arguments("status-bar", TuiViewPlacement.StatusBar, DisplayName = "StatusBarViewTests.Placement_IsStatusBar")]
+    [Arguments("chat-history", TuiViewPlacement.ChatHistory, DisplayName = "ChatHistoryViewTests.Placement_IsChatHistory")]
+    [Arguments("input", TuiViewPlacement.Input, DisplayName = "InputViewTests.Placement_IsInput")]
+    [Arguments("diff-preview", TuiViewPlacement.Overlay, DisplayName = "DiffPreviewViewTests.Placement_IsOverlay")]
+    public async Task Placement_MatchesTheLayoutSlot(string viewId, TuiViewPlacement expected)
+    {
+        var view = CreateBuiltinView(viewId);
+        await Assert.That(view.Placement).IsEqualTo(expected);
     }
 }
 

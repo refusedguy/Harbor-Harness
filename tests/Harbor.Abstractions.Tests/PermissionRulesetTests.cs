@@ -2,53 +2,21 @@ using Harbor.Abstractions.Permissions;
 namespace Harbor.Abstractions.Tests;
 public class PermissionRulesetTests
 {
+    // #1770: the default-ruleset vectors used to be one copy-pasted method
+    // each. The assert never changed — only the (tool, argPath, action) triple
+    // did. Every row keeps its original test name as the case display name.
     [Test]
-    public async Task Default_AllowsRead()
+    [Arguments("read", "any-file.txt", PermissionAction.Allow, DisplayName = "Default_AllowsRead")]
+    [Arguments("write", "/etc/passwd", PermissionAction.Ask, DisplayName = "Default_Asks_ForWrite_RootLevel")]
+    [Arguments("edit", ".env", PermissionAction.Deny, DisplayName = "Default_Denies_EnvFiles")]
+    [Arguments("bash", "rm -rf /", PermissionAction.Deny, DisplayName = "Default_Denies_RmRfRoot")]
+    [Arguments("bash", "sudo rm file", PermissionAction.Deny, DisplayName = "Default_Denies_Sudo")]
+    [Arguments("bash", "ls -la", PermissionAction.Allow, DisplayName = "Default_Allows_BashLs")]
+    [Arguments("write", "src/Program.cs", PermissionAction.Allow, DisplayName = "Default_Allows_SrcWrite")]
+    public async Task Default_Evaluate_MatchesTheExpectedAction(string tool, string argPath, PermissionAction expected)
     {
-        var action = PermissionRuleset.Default.Evaluate("read", "any-file.txt");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task Default_Asks_ForWrite_RootLevel()
-    {
-        var action = PermissionRuleset.Default.Evaluate("write", "/etc/passwd");
-        await Assert.That(action).IsEqualTo(PermissionAction.Ask);
-    }
-
-    [Test]
-    public async Task Default_Denies_EnvFiles()
-    {
-        var action = PermissionRuleset.Default.Evaluate("edit", ".env");
-        await Assert.That(action).IsEqualTo(PermissionAction.Deny);
-    }
-
-    [Test]
-    public async Task Default_Denies_RmRfRoot()
-    {
-        var action = PermissionRuleset.Default.Evaluate("bash", "rm -rf /");
-        await Assert.That(action).IsEqualTo(PermissionAction.Deny);
-    }
-
-    [Test]
-    public async Task Default_Denies_Sudo()
-    {
-        var action = PermissionRuleset.Default.Evaluate("bash", "sudo rm file");
-        await Assert.That(action).IsEqualTo(PermissionAction.Deny);
-    }
-
-    [Test]
-    public async Task Default_Allows_BashLs()
-    {
-        var action = PermissionRuleset.Default.Evaluate("bash", "ls -la");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
-    }
-
-    [Test]
-    public async Task Default_Allows_SrcWrite()
-    {
-        var action = PermissionRuleset.Default.Evaluate("write", "src/Program.cs");
-        await Assert.That(action).IsEqualTo(PermissionAction.Allow);
+        var action = PermissionRuleset.Default.Evaluate(tool, argPath);
+        await Assert.That(action).IsEqualTo(expected);
     }
 
     [Test]

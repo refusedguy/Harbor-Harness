@@ -12,14 +12,21 @@ public class MarkdownEditOpsTests
         return b;
     }
 
+    // #1770: the wrap vectors used to be one copy-pasted method each. The
+    // assert never changed — only the (text, caret, marker) triple did. Every
+    // row keeps its original test name as the case display name.
     [Test]
-    public async Task ToggleWrap_MidWord_WrapsAndCaretLandsAfterOpeningMarker()
+    [Arguments("hello world", 1, "**", "**hello** world", 2, DisplayName = "ToggleWrap_MidWord_WrapsAndCaretLandsAfterOpeningMarker")]
+    [Arguments("   ", 3, "**", "   ****", 5, DisplayName = "ToggleWrap_WhitespaceOnly_FallsBackToBarePair")]
+    [Arguments("a bb c", 1, "~~", "a ~~bb~~ c", 4, DisplayName = "ToggleWrap_OnGapBetweenWords_WrapsNextWord")]
+    [Arguments("done todo ", 10, "**", "done **todo** ", 7, DisplayName = "ToggleWrap_CaretPastLastWord_WrapsThatWordSkippingTrailingSpace")]
+    public async Task ToggleWrap_WrapsTheWordUnderTheCaret(string text, int caret, string marker, string expectedText, int expectedCaret)
     {
-        var b = NewAt("hello world", 1);
-        _ = MarkdownEditOps.ToggleWrap(b, "**");
+        var b = NewAt(text, caret);
+        _ = MarkdownEditOps.ToggleWrap(b, marker);
 
-        await Assert.That(b.SnapshotText()).IsEqualTo("**hello** world");
-        await Assert.That(b.Cursor).IsEqualTo(2);
+        await Assert.That(b.SnapshotText()).IsEqualTo(expectedText);
+        await Assert.That(b.Cursor).IsEqualTo(expectedCaret);
     }
 
     [Test]
@@ -43,36 +50,6 @@ public class MarkdownEditOpsTests
 
         await Assert.That(b.SnapshotText()).IsEqualTo("**");
         await Assert.That(b.Cursor).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task ToggleWrap_WhitespaceOnly_FallsBackToBarePair()
-    {
-        var b = NewAt("   ", 3);
-        _ = MarkdownEditOps.ToggleWrap(b, "**");
-
-        await Assert.That(b.SnapshotText()).IsEqualTo("   ****");
-        await Assert.That(b.Cursor).IsEqualTo(5);
-    }
-
-    [Test]
-    public async Task ToggleWrap_OnGapBetweenWords_WrapsNextWord()
-    {
-        var b = NewAt("a bb c", 1);
-        _ = MarkdownEditOps.ToggleWrap(b, "~~");
-
-        await Assert.That(b.SnapshotText()).IsEqualTo("a ~~bb~~ c");
-        await Assert.That(b.Cursor).IsEqualTo(4);
-    }
-
-    [Test]
-    public async Task ToggleWrap_CaretPastLastWord_WrapsThatWordSkippingTrailingSpace()
-    {
-        var b = NewAt("done todo ", 10);
-        _ = MarkdownEditOps.ToggleWrap(b, "**");
-
-        await Assert.That(b.SnapshotText()).IsEqualTo("done **todo** ");
-        await Assert.That(b.Cursor).IsEqualTo(7);
     }
 
     [Test]

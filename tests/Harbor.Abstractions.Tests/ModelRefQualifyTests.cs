@@ -21,63 +21,46 @@ namespace Harbor.Abstractions.Tests;
 /// </remarks>
 public class ModelRefQualifyTests
 {
+    // #1770: the qualified-model vectors used to be one copy-pasted method
+    // each. The assert never changed — only the (provider, model) pair did.
+    // Every row keeps its original test name as the case display name.
     [Test]
-    public async Task BareModelId_TakesTheGivenProvider()
+    [Arguments("kilocode", "gpt-4o", "kilocode/gpt-4o", DisplayName = "BareModelId_TakesTheGivenProvider")]
+    // IdentityConfig.FallbackModel, spelled out rather than referenced: this
+    // project cannot reference Harbor.Application. DefaultModelSingleSourceTests
+    // owns that constant; this test owns the RULE applied to it.
+    [Arguments("kilocode", "kilocode/tencent/hy3:free", "kilocode/tencent/hy3:free", DisplayName = "TheShippedDefaultModel_SurvivesTheRoundTrip")]
+    // The given provider is authoritative, so a mismatch is not silently
+    // re-pointed at another provider, the model id keeps every segment.
+    [Arguments("kilocode", "otherprov/some-model", "kilocode/otherprov/some-model", DisplayName = "PrefixForADifferentProvider_StaysPartOfTheModelId")]
+    // ProviderId normalizes to lower case, so a mixed-case prefix is the same
+    // provider and is redundant for the same reason.
+    [Arguments("kilocode", "KiloCode/tencent/hy3:free", "kilocode/tencent/hy3:free", DisplayName = "RedundantPrefix_IsMatchedCaseInsensitively")]
+    public async Task Qualify_ProducesTheExpectedQualifiedModel(string provider, string model, string expected)
     {
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "gpt-4o");
+        Result<ModelRef> result = ModelRef.Qualify(provider, model);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ToString()).IsEqualTo("kilocode/gpt-4o");
+        await Assert.That(result.Value.ToString()).IsEqualTo(expected);
     }
 
     [Test]
-    public async Task RedundantPrefixForTheSameProvider_IsDropped()
+    // What HARBOR_MODEL and the desktop settings screen write: the model half
+    // already carries the provider it belongs to.
+    [Arguments("kilocode", "kilocode/tencent/hy3:free", "kilocode", "tencent/hy3:free", DisplayName = "RedundantPrefixForTheSameProvider_IsDropped")]
+    // THE regression this method exists to prevent. "tencent/hy3:free" is
+    // kilocode's own DEFAULT model id (providers/kilocode.json), and a model
+    // id may contain slashes. Reading its first segment as a provider would
+    // turn a default install into a nonexistent "tencent" provider, so the
+    // prefix is dropped only when it names the given provider.
+    [Arguments("kilocode", "tencent/hy3:free", "kilocode", "tencent/hy3:free", DisplayName = "MultiSegmentBareModelId_IsNotReadAsAProvider")]
+    public async Task Qualify_SplitsProviderAndModelId(string provider, string model, string expectedProvider, string expectedModel)
     {
-        // What HARBOR_MODEL and the desktop settings screen write: the model half
-        // already carries the provider it belongs to.
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "kilocode/tencent/hy3:free");
+        Result<ModelRef> result = ModelRef.Qualify(provider, model);
 
         await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ProviderId.Value).IsEqualTo("kilocode");
-        await Assert.That(result.Value.ModelId).IsEqualTo("tencent/hy3:free");
-    }
-
-    [Test]
-    public async Task MultiSegmentBareModelId_IsNotReadAsAProvider()
-    {
-        // THE regression this method exists to prevent. "tencent/hy3:free" is
-        // kilocode's own DEFAULT model id (providers/kilocode.json), and a model
-        // id may contain slashes. Reading its first segment as a provider would
-        // turn a default install into a nonexistent "tencent" provider, so the
-        // prefix is dropped only when it names the given provider.
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "tencent/hy3:free");
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ProviderId.Value).IsEqualTo("kilocode");
-        await Assert.That(result.Value.ModelId).IsEqualTo("tencent/hy3:free");
-    }
-
-    [Test]
-    public async Task TheShippedDefaultModel_SurvivesTheRoundTrip()
-    {
-        // IdentityConfig.FallbackModel, spelled out rather than referenced: this
-        // project cannot reference Harbor.Application. DefaultModelSingleSourceTests
-        // owns that constant; this test owns the RULE applied to it.
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "kilocode/tencent/hy3:free");
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ToString()).IsEqualTo("kilocode/tencent/hy3:free");
-    }
-
-    [Test]
-    public async Task PrefixForADifferentProvider_StaysPartOfTheModelId()
-    {
-        // The given provider is authoritative, so a mismatch is not silently
-        // re-pointed at another provider — the model id keeps every segment.
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "otherprov/some-model");
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ToString()).IsEqualTo("kilocode/otherprov/some-model");
+        await Assert.That(result.Value.ProviderId.Value).IsEqualTo(expectedProvider);
+        await Assert.That(result.Value.ModelId).IsEqualTo(expectedModel);
     }
 
     [Test]
@@ -97,17 +80,6 @@ public class ModelRefQualifyTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.ModelId).IsEqualTo("tencent/hy3:free");
-    }
-
-    [Test]
-    public async Task RedundantPrefix_IsMatchedCaseInsensitively()
-    {
-        // ProviderId normalizes to lower case, so a mixed-case prefix is the same
-        // provider and is redundant for the same reason.
-        Result<ModelRef> result = ModelRef.Qualify("kilocode", "KiloCode/tencent/hy3:free");
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(result.Value.ToString()).IsEqualTo("kilocode/tencent/hy3:free");
     }
 
     [Test]

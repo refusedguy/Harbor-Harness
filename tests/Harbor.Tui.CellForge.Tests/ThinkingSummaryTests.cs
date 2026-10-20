@@ -7,37 +7,27 @@ namespace Harbor.Tui.CellForge.Tests;
 // ReasoningHeader port). Pure helpers — no rendering involved.
 public class ThinkingSummaryTests
 {
+    // #1770: the summarize vectors used to be one copy-pasted method each.
+    // One table per assert shape keeps the expectation literal in the assert.
     [Test]
-    public async Task BoldTitle_ExtractsTitleAndBody()
+    [Arguments("**Inspecting PR workflow**\n\nFirst step", "Inspecting PR workflow", "First step", DisplayName = "BoldTitle_ExtractsTitleAndBody")]
+    [Arguments("**Inspecting PR workflow**", "Inspecting PR workflow", "", DisplayName = "BoldTitle_StreamingWithoutBody_YieldsTitleOnly")]
+    public async Task Summarize_SplitsTitleAndBody(string text, string expectedTitle, string expectedBody)
     {
-        var summary = ThinkingSummary.Summarize("**Inspecting PR workflow**\n\nFirst step");
-        await Assert.That(summary.Title).IsEqualTo("Inspecting PR workflow");
-        await Assert.That(summary.Body).IsEqualTo("First step");
+        var summary = ThinkingSummary.Summarize(text);
+        await Assert.That(summary.Title).IsEqualTo(expectedTitle);
+        await Assert.That(summary.Body).IsEqualTo(expectedBody);
     }
 
     [Test]
-    public async Task BoldTitle_StreamingWithoutBody_YieldsTitleOnly()
-    {
-        var summary = ThinkingSummary.Summarize("**Inspecting PR workflow**");
-        await Assert.That(summary.Title).IsEqualTo("Inspecting PR workflow");
-        await Assert.That(summary.Body).IsEqualTo(string.Empty);
-    }
-
-    [Test]
-    public async Task BoldTitle_SingleNewline_DoesNotMatch_UsesFirstLine()
+    [Arguments("**Draft**\nbody on next line", "**Draft**", "body on next line", DisplayName = "BoldTitle_SingleNewline_DoesNotMatch_UsesFirstLine")]
+    [Arguments("weighing options here\nsecond line", "weighing options here", "second line", DisplayName = "PlainText_FallsBackToFirstLine")]
+    public async Task Summarize_TitleIsFirstLine_BodyKeepsTheRest(string text, string expectedTitle, string expectedBodyPart)
     {
         // Parity with the opencode regex (requires \n\n or end after **Title**).
-        var summary = ThinkingSummary.Summarize("**Draft**\nbody on next line");
-        await Assert.That(summary.Title).IsEqualTo("**Draft**");
-        await Assert.That(summary.Body.Contains("body on next line")).IsTrue();
-    }
-
-    [Test]
-    public async Task PlainText_FallsBackToFirstLine()
-    {
-        var summary = ThinkingSummary.Summarize("weighing options here\nsecond line");
-        await Assert.That(summary.Title).IsEqualTo("weighing options here");
-        await Assert.That(summary.Body.Contains("second line")).IsTrue();
+        var summary = ThinkingSummary.Summarize(text);
+        await Assert.That(summary.Title).IsEqualTo(expectedTitle);
+        await Assert.That(summary.Body.Contains(expectedBodyPart)).IsTrue();
     }
 
     [Test]
@@ -63,38 +53,25 @@ public class ThinkingSummaryTests
         await Assert.That(summary.Title!.Length).IsLessThanOrEqualTo(ThinkingSummary.MaxTitleChars);
     }
 
+    // #1770: the header vectors used to be one copy-pasted method each. The
+    // assert never changed — only the (text, duration, done) triple did. Every
+    // row keeps its original test name as the case display name.
     [Test]
-    public async Task Header_Done_WithTitleAndDuration()
+    [Arguments("weighing options", "2.5s", true, "+ Thought: weighing options · 2.5s", DisplayName = "Header_Done_WithTitleAndDuration")]
+    [Arguments("   ", "300ms", true, "+ Thought: 300ms", DisplayName = "Header_Done_WithoutTitle_ShowsDuration")]
+    [Arguments("weighing options", null, true, "+ Thought: weighing options", DisplayName = "Header_Done_WithoutDuration_OmitsSegment")]
+    [Arguments("first thought\nsecond", "9.9s", false, "+ Thinking: first thought", DisplayName = "Header_Streaming_ShowsNoDuration")]
+    public async Task Header_CollapsesToTheExpectedLine(string text, string? durationText, bool done, string expected)
     {
-        string header = ThinkingSummary.CollapsedHeader("weighing options", "2.5s", done: true);
-        await Assert.That(header).IsEqualTo("+ Thought: weighing options · 2.5s");
+        string header = ThinkingSummary.CollapsedHeader(text, durationText, done);
+        await Assert.That(header).IsEqualTo(expected);
     }
 
     [Test]
-    public async Task Header_Done_WithoutTitle_ShowsDuration()
+    [Arguments(true, "+ Thought", DisplayName = "Header_Empty_IsBareLabel_Done")]
+    [Arguments(false, "+ Thinking", DisplayName = "Header_Empty_IsBareLabel_Streaming")]
+    public async Task Header_Empty_IsBareLabel(bool done, string expected)
     {
-        string header = ThinkingSummary.CollapsedHeader("   ", "300ms", done: true);
-        await Assert.That(header).IsEqualTo("+ Thought: 300ms");
-    }
-
-    [Test]
-    public async Task Header_Done_WithoutDuration_OmitsSegment()
-    {
-        string header = ThinkingSummary.CollapsedHeader("weighing options", durationText: null, done: true);
-        await Assert.That(header).IsEqualTo("+ Thought: weighing options");
-    }
-
-    [Test]
-    public async Task Header_Streaming_ShowsNoDuration()
-    {
-        string header = ThinkingSummary.CollapsedHeader("first thought\nsecond", "9.9s", done: false);
-        await Assert.That(header).IsEqualTo("+ Thinking: first thought");
-    }
-
-    [Test]
-    public async Task Header_Empty_IsBareLabel()
-    {
-        await Assert.That(ThinkingSummary.CollapsedHeader(null, null, done: true)).IsEqualTo("+ Thought");
-        await Assert.That(ThinkingSummary.CollapsedHeader(null, null, done: false)).IsEqualTo("+ Thinking");
+        await Assert.That(ThinkingSummary.CollapsedHeader(null, null, done)).IsEqualTo(expected);
     }
 }

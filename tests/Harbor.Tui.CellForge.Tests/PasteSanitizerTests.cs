@@ -39,53 +39,25 @@ public class PasteSanitizerTests
         await Assert.That(result.Modified).IsTrue();
     }
 
+    // #1770: the escape-stripping vectors used to be one copy-pasted method
+    // each. The assert never changed — only the payload and the escape count
+    // did. Every row keeps its original test name as the case display name.
     [Test]
-    public async Task BracketedPasteMarkers_InPayload_Stripped()
+    // A paste that itself contains 200~/201~ markers (nested bracketed paste
+    // injection) — CSI sequences strip whole, '~' stays with text.
+    [Arguments("ls\u001B[200~rm -rf /\u001B[201~", "lsrm -rf /", 2, DisplayName = "BracketedPasteMarkers_InPayload_Stripped")]
+    [Arguments("x\u001B]52;c;aGk=\u0007y\u001B]2;title\u001B\\z", "xyz", 2, DisplayName = "OscStrings_BelAndStTerminated_Stripped")]
+    // Paste containing an OSC 52 clipboard-set: the terminal never sees it.
+    [Arguments("echo hi\u001B]52;c;ZXZpbA==\u0007", "echo hi", 1, DisplayName = "ClipboardOverwriteInjection_Neutralized")]
+    // DCS consumes its own ST terminator; ESC 7 and ESC ( B are Fe/nF forms.
+    [Arguments("a\u001BPq#0;2;0;0;0-~\u001B\\b\u001B7c\u001B(Bd", "abcd", 3, DisplayName = "DcsAndLoneEscapes_Stripped")]
+    [Arguments("hi\u001B", "hi", 1, DisplayName = "TrailingLoneEsc_Dropped")]
+    public async Task EscapeSequences_AreStrippedAndCounted(string payload, string expectedText, int expectedEscapes)
     {
-        // A paste that itself contains 200~/201~ markers (nested bracketed
-        // paste injection) — CSI sequences strip whole, '~' stays with text.
-        var result = PasteSanitizer.Sanitize("ls\u001B[200~rm -rf /\u001B[201~");
+        var result = PasteSanitizer.Sanitize(payload);
 
-        await Assert.That(result.Text).IsEqualTo("lsrm -rf /");
-        await Assert.That(result.EscapeSequences).IsEqualTo(2);
-    }
-
-    [Test]
-    public async Task OscStrings_BelAndStTerminated_Stripped()
-    {
-        var result = PasteSanitizer.Sanitize("x\u001B]52;c;aGk=\u0007y\u001B]2;title\u001B\\z");
-
-        await Assert.That(result.Text).IsEqualTo("xyz");
-        await Assert.That(result.EscapeSequences).IsEqualTo(2);
-    }
-
-    [Test]
-    public async Task ClipboardOverwriteInjection_Neutralized()
-    {
-        // Paste containing an OSC 52 clipboard-set: the terminal never sees it.
-        var result = PasteSanitizer.Sanitize("echo hi\u001B]52;c;ZXZpbA==\u0007");
-
-        await Assert.That(result.Text).IsEqualTo("echo hi");
-        await Assert.That(result.EscapeSequences).IsEqualTo(1);
-    }
-
-    [Test]
-    public async Task DcsAndLoneEscapes_Stripped()
-    {
-        // DCS consumes its own ST terminator; ESC 7 and ESC ( B are Fe/nF forms.
-        var result = PasteSanitizer.Sanitize("a\u001BPq#0;2;0;0;0-~\u001B\\b\u001B7c\u001B(Bd");
-
-        await Assert.That(result.Text).IsEqualTo("abcd");
-        await Assert.That(result.EscapeSequences).IsEqualTo(3);
-    }
-
-    [Test]
-    public async Task TrailingLoneEsc_Dropped()
-    {
-        var result = PasteSanitizer.Sanitize("hi\u001B");
-
-        await Assert.That(result.Text).IsEqualTo("hi");
-        await Assert.That(result.EscapeSequences).IsEqualTo(1);
+        await Assert.That(result.Text).IsEqualTo(expectedText);
+        await Assert.That(result.EscapeSequences).IsEqualTo(expectedEscapes);
     }
 
     [Test]
