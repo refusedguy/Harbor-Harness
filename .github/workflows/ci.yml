@@ -1590,7 +1590,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$GITHUB_WORKSPACE/$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
