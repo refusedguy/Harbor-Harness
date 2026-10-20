@@ -77,6 +77,70 @@ public static class SamplePluginSource
                                      """;
 
     /// <summary>
+    ///     A CS-source plugin with a chosen plugin name and a chosen set of DECLARED
+    ///     DEPENDENCIES (#1733).
+    /// </summary>
+    /// <remarks>
+    ///     It is a tool plugin, so a test can see whether it contributed anything by
+    ///     looking at the tools the host registered: a plugin that is still waiting for a
+    ///     dependency registers none.
+    /// </remarks>
+    /// <param name="suffix">Unique suffix, so two runs never collide in the shared AppDomain.</param>
+    /// <param name="pluginName">The plugin's own name — the name another plugin can depend on.</param>
+    /// <param name="dependencies">The dependency names the plugin declares.</param>
+    public static string WithDependencies(string suffix, string pluginName, params string[] dependencies)
+    {
+        string declared = string.Join(", ", Array.ConvertAll(dependencies, static d => $"\"{d}\""));
+
+        return $$"""
+                using System;
+                using System.Collections.Generic;
+                using System.Text.Json;
+                using System.Threading;
+                using System.Threading.Tasks;
+                using CSharpFunctionalExtensions;
+                using Harbor.Abstractions.Models;
+                using Harbor.Abstractions.Models.Identifiers;
+                using Harbor.Abstractions.Permissions;
+                using Harbor.Abstractions.Plugins;
+                using Harbor.Abstractions.Tools;
+
+                public sealed class DepPlugin{{suffix}} : IToolPlugin
+                {
+                    public string Name => "{{pluginName}}";
+                    public Version Version => new(1, 0, 0);
+                    public Version RequiredHarborVersion => new(0, 4, 0);
+                    public string Description => "Test plugin {{suffix}}";
+                    public IReadOnlyList<string> Dependencies => new string[] { {{declared}} };
+
+                    public void Initialize(PluginContext context) { }
+
+                    public void RegisterTools(IToolRegistryBuilder builder) => builder.AddTool<DepTool{{suffix}}>();
+
+                    public Task ShutdownAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+                }
+
+                public sealed class DepTool{{suffix}} : ITool
+                {
+                    public ToolName Name => ToolName.Create("dep_{{suffix.ToLowerInvariant()}}");
+                    public string DisplayName => "Dep {{suffix}}";
+                    public string Description => "Returns a greeting";
+                    public JsonDocument ParameterSchema => JsonDocument.Parse("{\"type\":\"object\"}");
+                    public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
+                    public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
+
+                    public string? PromptSnippet => null;
+                    public IReadOnlyList<string> PromptGuidelines => Array.Empty<string>();
+
+                    public Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext context, CancellationToken cancellationToken)
+                    {
+                        return Task.FromResult(ToolResult.Success("Hello from {{suffix}}!"));
+                    }
+                }
+                """;
+    }
+
+    /// <summary>
     ///     A CS source file declaring a class that implements IPlugin but has NO
     ///     parameterless constructor — the instantiator should skip it.
     /// </summary>

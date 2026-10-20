@@ -19,13 +19,15 @@ Infrastructure — plugin pipeline layer. Depends on all four lower plugin layer
 
 - `PluginHost` — iterates source, compiles, instantiates, registers
 - `PluginHostBuilder` — fluent builder; the only way to construct `PluginHost`
-- `PluginHostOptions` — `ContinueOnError`, `PluginRoot`, etc.
+- `PluginHostOptions` — `ContinueOnError`, `PluginRoot`, `Dependencies`, etc.
 - `PluginHostLocator` — probes for the out-of-process host binary next to the CLI
 - `PluginRouteAxisRegistry` — what the out-of-process route does with each
   extension axis, and why (issue #1723); the host's refusal messages are built
   from it, and `tests/Harbor.Architecture.Tests/ExtensionAxisRouteCarriageRule.cs`
   grades it against the host's code
 - `PluginAxisCarriage` — `Carried` / `Refused` / `ClosedSeam`
+- `PluginDependencyResolver` — the default `IPluginDependencyResolver`: a table of
+  named capabilities, each with a readiness probe (#1733)
 
 ## Usage
 
