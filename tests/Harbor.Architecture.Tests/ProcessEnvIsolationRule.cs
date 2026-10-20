@@ -1126,13 +1126,13 @@ public class ProcessEnvIsolationRule
     // ── discovery ───────────────────────────────────────────────────────────
 
     /// <summary>The `[NotInParallel]` form declared on a type: the bare one, or a key list.</summary>
-    private sealed record Parallelism(bool IsGlobal, string[] Keys)
+    internal sealed record Parallelism(bool IsGlobal, string[] Keys)
     {
         internal static readonly Parallelism None = new(false, []);
     }
 
     /// <summary>One top-level type declaration and everything the rules need to judge it.</summary>
-    private sealed record TypeSite(
+    internal sealed record TypeSite(
         string Project,
         string File,
         string Class,
@@ -1315,7 +1315,7 @@ public class ProcessEnvIsolationRule
         return false;
     }
 
-    private static IReadOnlyList<TypeSite> DiscoverWriters() =>
+    internal static IReadOnlyList<TypeSite> DiscoverWriters() =>
         [.. DiscoverTypesInProjects(EnumerateTestProjects())
             .Where(t => t.WriteLine > 0 && t.DeclaresTests)];
 

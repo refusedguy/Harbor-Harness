@@ -660,7 +660,7 @@ public class ApprovalGateWaiterRaceRules
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>One racy assertion, with the line the assertion sits on.</summary>
-    private sealed record WaiterRace(int Line, string Method, string Waiter, string Disposition);
+    internal sealed record WaiterRace(int Line, string Method, string Waiter, string Disposition);
 
     /// <summary>
     ///     Every <c>*.cs</c> under <c>tests/</c>, minus build output and sibling
@@ -672,7 +672,7 @@ public class ApprovalGateWaiterRaceRules
     ///     <c>/tests/</c>, so it would discard every file in the tree it was asked to
     ///     walk and the rule would pass vacuously.
     /// </remarks>
-    private static IReadOnlyList<string> EnumerateTestSources()
+    internal static IReadOnlyList<string> EnumerateTestSources()
     {
         if (RepoPaths.RepoRoot is not { } root)
         {
@@ -749,7 +749,7 @@ public class ApprovalGateWaiterRaceRules
     ///     Every terminal-disposition assertion that a parked waiter can still race,
     ///     in the order it appears in the file.
     /// </summary>
-    private static IReadOnlyList<WaiterRace> FindRaces(string source)
+    internal static IReadOnlyList<WaiterRace> FindRaces(string source)
     {
         var races = new List<WaiterRace>();
 
