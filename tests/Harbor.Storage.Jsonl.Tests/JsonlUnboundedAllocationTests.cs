@@ -911,7 +911,8 @@ public class JsonlUnboundedAllocationTests
     public async Task UpdateMessage_DropsTheStaleEntryAndLeavesTheRestReadable()
     {
         // The rewrite's correctness contract, unchanged by streaming: the old
-        // entry goes, the fresh one lands at the end, everything else survives.
+        // entry goes, the fresh one lands WHERE THE OLD ONE STOOD (#1798 — the
+        // record keeps its position in the file), everything else survives.
         var (store, sessionId) = await SeedAsync(3);
         try
         {

@@ -1,4 +1,4 @@
-// SessionRewritePlans.cs — the three JSONL rewrite shapes, as strategies (#460).
+// SessionRewritePlans.cs — the JSONL rewrite shapes, as strategies (#460).
 //
 // All three used to be spelled the same way: File.ReadAllLines(sessionFile)
 // into a List<string>, filter/index the list, then write a temp file and
@@ -163,22 +163,50 @@ internal sealed class HeaderRewritePlan : SessionRewritePlan
 }
 
 /// <summary>
-///     Drop every record that is a <c>"message"</c> entry carrying the given
-///     id, leaving the rest alone. Header records and unparseable records are
-///     never matched, so the file stays readable.
+///     Replace the record that is a <c>"message"</c> entry carrying the given
+///     id, IN PLACE: the fresh record takes the position the stale one held,
+///     and every other record keeps its own (#1798). Header records and
+///     unparseable records are never matched, so the file stays readable.
 /// </summary>
-internal sealed class DropMessagePlan : SessionRewritePlan
+/// <remarks>
+///     <para>
+///         The position is the point. File order IS insertion order for this
+///         store, and a rewind anchors on a record's position in the file
+///         (<see cref="DeleteAfterAnchorPlan" />) — so a rewrite that drops
+///         the stale record and appends the fresh one at the END moves the
+///         message to the tail of the history without a trace, and a rewind
+///         anchored on it then removes nothing. Replacing in place keeps
+///         "file order = insertion order" true across an edit.
+///     </para>
+///     <para>
+///         A second record with the same id — a file written before the
+///         duplicate-drop, or an append that raced the edit — is stale and
+///         goes, so the file keeps exactly one record per id. The net file is
+///         the same as the drop-and-append rewrite produced, minus the move.
+///     </para>
+/// </remarks>
+internal sealed class ReplaceMessagePlan : SessionRewritePlan
 {
     private readonly string _messageId;
     private readonly byte[] _idNeedle;
+    private readonly byte[] _replacement;
+    private bool _replaced;
 
-    internal DropMessagePlan(string messageId)
+    internal ReplaceMessagePlan(string messageId, byte[] replacement)
     {
         _messageId = messageId;
         _idNeedle = Encoding.UTF8.GetBytes($"\"id\":\"{messageId}\"");
+        _replacement = replacement;
     }
 
-    internal override void Reset() => ClearFound();
+    /// <summary>The fresh record, written where the stale one stood.</summary>
+    internal override byte[] Replacement => _replacement;
+
+    internal override void Reset()
+    {
+        ClearFound();
+        _replaced = false;
+    }
 
     internal override LineAction Decide(ReadOnlySpan<byte> record)
     {
@@ -187,8 +215,16 @@ internal sealed class DropMessagePlan : SessionRewritePlan
             return LineAction.Keep;
         }
 
+        if (_replaced)
+        {
+            // A second record for the same id: the fresh one is already in
+            // place, so this one is the stale leftover.
+            return LineAction.Drop;
+        }
+
+        _replaced = true;
         MarkFound();
-        return LineAction.Drop;
+        return LineAction.Replace;
     }
 }
 

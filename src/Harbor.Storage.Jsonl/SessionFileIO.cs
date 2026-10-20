@@ -50,15 +50,20 @@ internal static class SessionFileIO
     /// <para>
     ///     Returns false when nothing changed; the original file and its
     ///     directory are then untouched and no temp is left behind.
-    ///     <paramref name="trailer" /> is written after the last record, if
-    ///     given.
+    /// </para>
+    /// <para>
+    ///     <b>#1798:</b> there is no "append a record at the end" mode here any
+    ///     more. It was the tail-append that moved an updated message to the
+    ///     end of the history: file order IS insertion order here, and the
+    ///     rewind anchors on a record's position in the file. A record that
+    ///     changes its content changes IN PLACE — the plan says so with
+    ///     <see cref="LineAction.Replace" />.
     /// </para>
     /// </remarks>
     internal static bool RewriteRecordsAtomic(
         string targetPath,
-        SessionRewritePlan plan,
-        byte[]? trailer = null) =>
-        RewriteRecords(targetPath, plan, trailer).Found;
+        SessionRewritePlan plan) =>
+        RewriteRecords(targetPath, plan).Found;
 
     /// <summary>
     ///     <see cref="RewriteRecordsAtomic" /> returning the plan that carried
@@ -66,7 +71,7 @@ internal static class SessionFileIO
     ///     messages a rewind removed) reads it off the same object the decision
     ///     was made on rather than re-deriving it.
     /// </summary>
-    internal static T RewriteRecords<T>(string targetPath, T plan, byte[]? trailer = null)
+    internal static T RewriteRecords<T>(string targetPath, T plan)
         where T : SessionRewritePlan
     {
         if (!MayRewrite(targetPath, plan))
@@ -89,7 +94,7 @@ internal static class SessionFileIO
             using (var sink = new FileStream(
                        tempPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 64 * 1024))
             {
-                StreamRecords(source, sink, plan, trailer);
+                StreamRecords(source, sink, plan);
             }
 
             File.Move(tempPath, targetPath, overwrite: true);
@@ -193,8 +198,7 @@ internal static class SessionFileIO
     private static void StreamRecords(
         Stream source,
         Stream sink,
-        SessionRewritePlan plan,
-        byte[]? trailer)
+        SessionRewritePlan plan)
     {
         using var reader = new ChunkedLineReader(source);
 
@@ -232,11 +236,6 @@ internal static class SessionFileIO
         else if (reader.TryGetTrailingRecord(out var trailing))
         {
             ApplyVerdict(sink, plan, trailing);
-        }
-
-        if (trailer is not null)
-        {
-            WriteRecord(sink, trailer);
         }
     }
 
