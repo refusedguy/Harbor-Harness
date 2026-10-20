@@ -97,6 +97,7 @@ namespace Harbor.TestKit;
 [JsonSerializable(typeof(ToolCommandArgs), TypeInfoPropertyName = "ToolCommandArgs")]
 [JsonSerializable(typeof(ToolPatternPathArgs), TypeInfoPropertyName = "ToolPatternPathArgs")]
 [JsonSerializable(typeof(ToolInputArgs), TypeInfoPropertyName = "ToolInputArgs")]
+[JsonSerializable(typeof(AppConfigDocument), TypeInfoPropertyName = "AppConfigDocument")]
 public sealed partial class TestJsonContext : JsonSerializerContext
 {
 }

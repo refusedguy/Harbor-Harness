@@ -103,120 +103,173 @@ SOURCE_GEN_MARKERS = (
 OPTIONS_RE = re.compile(r"\bJsonSerializerOptions\b|\b[A-Za-z0-9_]*Options\b")
 
 
-def strip_comments_and_strings(src: str) -> str:
-    """Blank out comments and string literals, preserving every other char.
+def _hole_span(src: str, start: int, dollars: int) -> int:
+    """Return the index just past an interpolation hole that starts at `start`.
 
-    A `JsonSerializer.Serialize` inside a doc comment is a sentence, not a
-    call; one inside a string literal is data. Both are blanked so the scan
-    sees only real code. The length is not preserved — only the code that is
-    left is scanned.
+    The hole's content is CODE: it may hold braces, and it may hold nested
+    string literals. The hole closes with `dollars` braces at brace depth 0.
     """
-    out = []
-    i = 0
     n = len(src)
-    in_line = False
-    in_block = False
-    in_string = False
-    in_char = False
-    in_raw = False
-    in_verbatim = False
+    depth = 0
+    i = start
     while i < n:
         c = src[i]
-        nxt = src[i + 1] if i + 1 < n else ""
-        if in_line:
-            if c == "\n":
-                in_line = False
-                out.append("\n")
-            else:
-                out.append(" ")
+        if c == '"' or c == "'":
+            i = _skip_literal(src, i)
+            continue
+        if c == "{":
+            depth += 1
             i += 1
             continue
-        if in_block:
-            if c == "*" and nxt == "/":
-                in_block = False
-                out.append("  ")
-                i += 2
+        if c == "}":
+            if depth == 0:
+                if dollars == 1:
+                    return i + 1
+                run = 0
+                j = i
+                while j < n and src[j] == "}" and run < dollars:
+                    run += 1
+                    j += 1
+                if run == dollars:
+                    return j
+                i = j
                 continue
-            out.append("\n" if c == "\n" else " ")
+            depth -= 1
             i += 1
             continue
-        if in_raw:
-            if src.startswith('"""', i):
-                in_raw = False
-                out.append('"""')
-                i += 3
+        i += 1
+    return n
+
+
+def _dollars_before(src: str, index: int) -> int:
+    """How many `$` signs precede the literal that starts at `index`?"""
+    dollars = 0
+    back = index - 1
+    while back >= 0 and src[back] == "$":
+        dollars += 1
+        back -= 1
+    return dollars
+
+
+def _skip_literal(src: str, i: int) -> int:
+    """Return the index just past the string or char literal that starts at `i`.
+
+    Handles the four shapes C# has: a regular literal, a verbatim literal, a
+    raw literal, and a char literal. An interpolated literal is skipped HOLE
+    BY HOLE, because the hole's content is code and may hold a nested string.
+    """
+    n = len(src)
+    if src[i] == "'":
+        j = i + 1
+        while j < n:
+            if src[j] == "\\":
+                j += 2
                 continue
-            out.append("\n" if c == "\n" else " ")
-            i += 1
-            continue
-        if in_verbatim:
-            if c == '"':
-                in_verbatim = False
-                out.append('"')
-                i += 1
+            if src[j] == "'":
+                return j + 1
+            j += 1
+        return n
+    dollars = _dollars_before(src, i)
+    if src.startswith('"""', i):
+        j = i + 3
+        while j < n:
+            if src.startswith('"""', j):
+                return j + 3
+            if dollars >= 2 and src.startswith("{{", j):
+                j = _hole_span(src, j + 2, dollars)
                 continue
-            out.append("\n" if c == "\n" else " ")
-            i += 1
-            continue
-        if in_string:
-            if c == "\\":
-                out.append("  ")
-                i += 2
+            if dollars == 1 and src[j] == "{" and src[j + 1 : j + 2] != "{":
+                j = _hole_span(src, j + 1, 1)
                 continue
-            if c == '"':
-                in_string = False
-                out.append('"')
-                i += 1
+            j += 1
+        return n
+    j = i + 1
+    while j < n:
+        c = src[j]
+        if c == "\\":
+            j += 2
+            continue
+        if dollars >= 1 and c == "{":
+            if dollars == 1 and src[j + 1 : j + 2] == "{":
+                j += 2
                 continue
-            out.append("\n" if c == "\n" else " ")
-            i += 1
-            continue
-        if in_char:
-            if c == "\\":
-                out.append("  ")
-                i += 2
-                continue
-            if c == "'":
-                in_char = False
-                out.append("'")
-                i += 1
-                continue
-            out.append(" ")
-            i += 1
-            continue
-        if c == "/" and nxt == "/":
-            in_line = True
-            out.append("  ")
-            i += 2
-            continue
-        if c == "/" and nxt == "*":
-            in_block = True
-            out.append("  ")
-            i += 2
-            continue
-        if src.startswith('@"', i):
-            in_verbatim = True
-            out.append('  ')
-            i += 2
-            continue
-        if src.startswith('"""', i):
-            in_raw = True
-            out.append('"""')
-            i += 3
+            j = _hole_span(src, j + 1, dollars)
             continue
         if c == '"':
-            in_string = True
-            out.append('"')
-            i += 1
+            return j + 1
+        j += 1
+    return n
+
+
+def _is_code(src: str, index: int) -> bool:
+    """Is the character at `index` code rather than comment or string text?
+
+    Walks the source from the start, skipping comments and literals. The
+    content of an interpolation hole is CODE, so the walk treats a hole as
+    code rather than as text.
+    """
+    i = 0
+    n = len(src)
+    while i < n:
+        if i == index:
+            return True
+        c = src[i]
+        if c == "/" and src[i + 1 : i + 2] == "/":
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            if j > index:
+                return False
+            i = j + 1
             continue
-        if c == "'":
-            in_char = True
-            out.append("'")
-            i += 1
+        if c == "/" and src[i + 1 : i + 2] == "*":
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            if j > index:
+                return False
+            i = j
             continue
-        out.append(c)
+        if c == '"' or c == "'":
+            end = _skip_literal(src, i)
+            if c == '"' and _inside_hole(src, i, end, index):
+                return True
+            if end > index:
+                return False
+            i = end
+            continue
         i += 1
-    return "".join(out)
+    return False
+
+
+def _inside_hole(src: str, start: int, end: int, index: int) -> bool:
+    """Is `index` inside an interpolation hole of the literal at `start`?"""
+    dollars = _dollars_before(src, start)
+    if dollars == 0:
+        return False
+    i = start
+    while i < end:
+        if src.startswith('"""', start):
+            if dollars >= 2 and src.startswith("{{", i):
+                span = _hole_span(src, i + 2, dollars)
+                if i + 2 <= index < span - dollars:
+                    return True
+                i = span
+                continue
+            if dollars == 1 and src[i] == "{" and src[i + 1 : i + 2] != "{":
+                span = _hole_span(src, i + 1, 1)
+                if i + 1 <= index < span - 1:
+                    return True
+                i = span
+                continue
+            i += 1
+            continue
+        if src[i] == "{":
+            span = _hole_span(src, i + 1, dollars)
+            if i + 1 <= index < span - dollars:
+                return True
+            i = span
+            continue
+        i += 1
+    return False
 
 
 def extract_call(src: str, open_paren_index: int) -> tuple[str, int]:
@@ -237,12 +290,9 @@ def extract_call(src: str, open_paren_index: int) -> tuple[str, int]:
             depth -= 1
             if depth == 0:
                 return src[start:i], i + 1
-        elif c == '"':
-            i += 1
-            while i < n and src[i] != '"':
-                if src[i] == "\\":
-                    i += 1
-                i += 1
+        elif c == '"' or c == "'":
+            i = _skip_literal(src, i)
+            continue
         i += 1
     return src[start:], n
 
@@ -268,14 +318,15 @@ def scan(root: str) -> list[dict]:
     for path in iter_source_files(root):
         with open(path, encoding="utf-8") as handle:
             raw = handle.read()
-        code = strip_comments_and_strings(raw)
-        for match in CALL_RE.finditer(code):
-            args, _ = extract_call(code, match.end() - 1)
+        for match in CALL_RE.finditer(raw):
+            if not _is_code(raw, match.start()):
+                continue
+            args, _ = extract_call(raw, match.end() - 1)
             source_generated = any(marker.search(args) for marker in SOURCE_GEN_MARKERS)
             findings.append(
                 {
                     "path": os.path.relpath(path, REPO_ROOT).replace(os.sep, "/"),
-                    "line": line_of(code, match.start()),
+                    "line": line_of(raw, match.start()),
                     "method": match.group(1),
                     "args": " ".join(args.split()),
                     "source_generated": source_generated,
@@ -383,6 +434,21 @@ def self_test() -> int:
                 "}\n"
             )
         with open(
+            os.path.join(tests, "Harbor.Sample.Tests", "Hole.cs"), "w", encoding="utf-8"
+        ) as handle:
+            # The call lives INSIDE the interpolation hole of a raw
+            # interpolated string. A scan that blanks the literal whole
+            # would miss it — which is exactly the bug this fixture exists
+            # for: the mock's own hot path builds its JSON this way.
+            handle.write(
+                "namespace Harbor.Sample.Tests;\n"
+                "public class Hole\n"
+                "{\n"
+                "    public string Reflect(string path) =>\n"
+                '        $"""{{\"path\":{{JsonSerializer.Serialize(path)}}}}""";\n'
+                "}\n"
+            )
+        with open(
             os.path.join(tests, "Harbor.Sample.Tests", "Good.cs"), "w", encoding="utf-8"
         ) as handle:
             handle.write(
@@ -412,17 +478,18 @@ def self_test() -> int:
         try:
             findings = scan(os.path.join(tmp, "tests"))
             violations = [f for f in findings if not f["source_generated"]]
-            if len(findings) != 2:
-                print("self-test FAILED: expected 2 calls, saw %d" % len(findings))
+            if len(findings) != 3:
+                print("self-test FAILED: expected 3 calls, saw %d" % len(findings))
                 return 1
-            if len(violations) != 1:
+            if len(violations) != 2:
                 print(
-                    "self-test FAILED: expected exactly 1 reflection call, saw %d"
+                    "self-test FAILED: expected exactly 2 reflection calls, saw %d"
                     % len(violations)
                 )
                 return 1
-            if not violations[0]["path"].endswith("Sample.cs"):
-                print("self-test FAILED: the wrong call was flagged")
+            names = sorted(v["path"].rsplit("/", 1)[-1] for v in violations)
+            if names != ["Hole.cs", "Sample.cs"]:
+                print("self-test FAILED: the wrong calls were flagged: %s" % names)
                 return 1
         finally:
             REPO_ROOT, EXCEPTIONS_FILE = saved_root, saved_exceptions
