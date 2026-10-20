@@ -76,7 +76,7 @@ public sealed partial class WriteTool : ITool
         {
             Result<string> expectedVersion = FileVersion.NormalizeExpected(rawExpected);
             if (expectedVersion.IsFailure)
-                return Result.Failure(expectedVersion.Error);
+                return expectedVersion.ConvertFailure();
         }
 
         return Result.Success();

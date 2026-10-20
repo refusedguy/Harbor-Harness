@@ -232,7 +232,7 @@ internal static class FileVersion
 
         Result<string> normalized = NormalizeExpected(expectedRaw);
         if (normalized.IsFailure)
-            return Result.Failure(normalized.Error);
+            return normalized.ConvertFailure();
 
         string expectedHex = normalized.Value;
         if (currentDigest is null)
