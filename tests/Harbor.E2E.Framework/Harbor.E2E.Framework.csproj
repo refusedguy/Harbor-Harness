@@ -13,8 +13,6 @@
                              (SpectreTui, Termina, Terminal.Gui, RazorConsole).
                              Uses `script -qfc` on Linux/macOS and ConPTY on
                              Windows (Windows impl is stubbed, see notes).
-      * HeadlessAvaloniaDriver - Avalonia.Headless driver for the desktop app
-                             (skips on Linux, see notes in HeadlessAvaloniaDriver.cs).
       * MockLlmServer      - in-process OpenAI-compatible HTTP server. Returns
                              canned SSE-streamed chat completions. Thread-safe.
       * E2eTestBase        - TUnit base class. Per-class MockLlmServer + temp HOME.
@@ -23,6 +21,22 @@
     write 3-5 [Category("E2E")] tests each. All E2E tests are filterable via
     `dotnet test -filter "Category=E2E"` so they can run separately from the
     fast unit test suite in CI.
+
+    THIS PROJECT CARRIES NO [Test] METHODS, AND THAT IS A RULE, NOT A COINCIDENCE.
+
+    TUnit discovers the test classes of a REFERENCED test project inside every
+    project that references it, so a [Test] method declared here runs once per
+    referencing project. StateTestRunnerTests.cs used to live here and therefore
+    ran SIX times per CI run (Harbor.E2E.App.Avalonia, Harbor.E2E.Cli,
+    Harbor.LoadTests, Harbor.Tui.E2E.Tests, Harbor.Tui.CellForge.PtyTests and
+    Harbor.Ipc.Tests) — 156 executions of 26 tests. The tests now live in
+    tests/Harbor.E2E.Framework.Tests, a project nothing references, so they run
+    exactly once.
+
+    tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs enforces both
+    halves of that: a test project must not reference another test project
+    unless it uses its types, and a test project that another test project
+    references must not declare test methods at all.
   -->
 
   <PropertyGroup>

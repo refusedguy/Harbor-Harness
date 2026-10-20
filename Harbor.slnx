@@ -173,6 +173,12 @@
     <Folder Name="/tests/E2E/">
         <Project Path="tests/Harbor.Tui.E2E.Tests/Harbor.Tui.E2E.Tests.csproj"/>
         <Project Path="tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj"/>
+        <!-- The framework's own tests. A separate project on purpose: TUnit runs
+             the test classes of a referenced test project inside every project
+             that references it, so a [Test] method in the framework ran six
+             times per CI run. Nothing references this project, so its tests run
+             exactly once. -->
+        <Project Path="tests/Harbor.E2E.Framework.Tests/Harbor.E2E.Framework.Tests.csproj"/>
         <Project Path="tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj"/>
         <Project Path="tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj"/>
         <Project Path="tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj"/>
