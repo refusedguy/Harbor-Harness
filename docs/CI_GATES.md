@@ -20,16 +20,16 @@ table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 37 files, 28 376 lines |
+| python tools in `tools/` | 37 files, 29 282 lines |
 | of them, the `check-*.py` family | 19 files, 20 306 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
 | gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 27 |
+| tools with a self-test | 28 |
 | tools with a ratchet | 14 |
-| tools with a floor | 16 |
+| tools with a floor | 17 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -264,7 +264,7 @@ The modes are:
 | `tools/check-test-projects.py` | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
 | `tools/check-tunit-analyzer-gate.py` | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
 | `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
-| `tools/ci-shard-slices.py` | the build-output slices match the test shards | ci.yml | build | gate | — | — | — |
+| `tools/ci-shard-slices.py` | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
 | `tools/codemod-test-events.py` | rewrites the hand-built test events in `tests/` into the shared `TestEvents` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
@@ -286,11 +286,15 @@ Two things the table says that are easy to miss:
   measure time" rule applies to gates alone: a measurement that fails a build
   on a slow runner is a gate that gets switched off, and a measurement that
   only reports belongs where this one is.
-- `tools/ci-shard-slices.py` and `tools/demo_repro.py` have no self-test.
-  They are gates, and they are the two gaps in the "every gate has a
-  self-test" rule. Both compare two things that CI itself produced (the
-  shard list against the slice list, two recordings of the same tape), so a
-  planted control for them is a fixture of that shape rather than a flag.
+- `tools/demo_repro.py` has no self-test. It is a gate, and it is the one
+  gap left in the "every gate has a self-test" rule. It compares two
+  recordings of the same tape (the demo played twice), so a planted
+  control for it is a fixture of that shape rather than a flag.
+- `tools/ci-shard-slices.py` USED to have no self-test, for the same
+  reason: it compared two things CI itself produced (the shard list
+  against the slice list, two recordings of the same tape). Since the
+  lists came from one source (issue #1800), the fixture is a desync
+  planted in the tree rather than a flag, and the gate has one.
 
 ## The checker
 

@@ -252,12 +252,12 @@ jobs:
         # and Harbor.Application.Tests — which the ubuntu `core` shard runs on
         # every PR anyway. What stays is the part that can only be wrong on
         # another operating system:
+        #   Harbor.Core.Tests          — the agent core's host-dependent paths
         #   Harbor.Storage.Tests       — SQLite on NTFS
         #   Harbor.Storage.Jsonl.Tests — file semantics of the JSONL store
         #   Harbor.Tui.Tests           — terminal rendering
         #   Harbor.Tui.CellForge.Tests — the fullscreen cell renderer
         #   Harbor.Ipc.Tests           — named pipes on Windows
-        #   Harbor.Core.Tests          — the agent core's host-dependent paths
         include:
           - projects: >-
               Harbor.Core.Tests
