@@ -293,16 +293,16 @@ public class JsonlSessionPorterSnapshotTests
 
         public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
 
-        public override async Task WriteLineAsync(string? value)
+        public override Task WriteLineAsync(string? value)
         {
-            await _builder.AppendLineAsync(value).ConfigureAwait(false);
+            _builder.AppendLine(value);
             if (_fired)
             {
-                return;
+                return Task.CompletedTask;
             }
 
             _fired = true;
-            await _onFirstWrite().ConfigureAwait(false);
+            return _onFirstWrite();
         }
 
         public override string ToString() => _builder.ToString();
