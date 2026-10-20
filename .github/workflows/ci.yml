@@ -1603,7 +1603,7 @@ jobs:
             # half (MTP exit 9 when fewer than one test ran).
             guard="--minimum-expected-tests 1"
           fi
-          trx_dir="TestResults/${{ matrix.shard }}"
+          trx_dir="$GITHUB_WORKSPACE/TestResults/${{ matrix.shard }}"
           mkdir -p "$trx_dir"
           # #1884: the results directory is ABSOLUTE on purpose. Before the
           # TUnit 1.75 upgrade (b6fcc333) the same relative path
@@ -1629,6 +1629,23 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
+            elif [ "$p" = "Harbor.E2E.App.Avalonia" ]; then
+              # The headless Avalonia suite runs as ONE PROCESS PER SHARD, not
+              # as one process for the whole project. The Avalonia Application,
+              # the $HOME the driver sets and the pinned Harbor home are all
+              # process-wide, so two classes cannot drive one window in one
+              # process; a second PROCESS can. The shard list is
+              # tests/Harbor.E2E.App.Avalonia/e2e-shards.json, and the runner
+              # fails loudly when a shard's filter drops a class (a filter that
+              # silently drops tests is worse than the serialisation this
+              # removes).
+              if python3 tools/run-e2e-avalonia-shards.py \
+                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                status="pass"
+              else
+                status="FAIL"
+                rc=1
+              fi
             elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$GITHUB_WORKSPACE/$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
