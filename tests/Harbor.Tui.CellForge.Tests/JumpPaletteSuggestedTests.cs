@@ -1,8 +1,5 @@
 using System.Collections.Immutable;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Tui.CellForge.Panels;
-using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
@@ -63,13 +60,6 @@ public class JumpPaletteSuggestedTests
                 Sessions = ImmutableArray.Create(sessions)
             }
         };
-
-    private static SessionInfo Info(string id, string title) => new(
-        SessionId.Create(id),
-        title,
-        DateTimeOffset.UtcNow,
-        DateTimeOffset.UtcNow,
-        "active");
 
     private static string Joined(object? widget) => widget switch
     {
@@ -212,7 +202,7 @@ public class JumpPaletteSuggestedTests
     [Test]
     public async Task Panel_Seed_Marks_Working_And_Dirty_Sessions_Suggested()
     {
-        var state = StateWithSessions(Info("s1", "Idle One"), Info("s2", "Busy Two"), Info("s3", "Dirty Three"));
+        var state = StateWithSessions(WidgetFixtures.Info("s1", "Idle One"), WidgetFixtures.Info("s2", "Busy Two"), WidgetFixtures.Info("s3", "Dirty Three"));
         var gateway = new FakeGateway(new Dictionary<string, (string?, string?, string?, bool)>
         {
             ["s1"] = ("/repo/a", "idle", "main", false),
@@ -231,7 +221,7 @@ public class JumpPaletteSuggestedTests
     [Test]
     public async Task Panel_Seed_AllIdle_Renders_No_Suggested_Block()
     {
-        var state = StateWithSessions(Info("s1", "Idle One"));
+        var state = StateWithSessions(WidgetFixtures.Info("s1", "Idle One"));
         var gateway = new FakeGateway(new Dictionary<string, (string?, string?, string?, bool)>
         {
             ["s1"] = ("/repo/a", "idle", "main", false),

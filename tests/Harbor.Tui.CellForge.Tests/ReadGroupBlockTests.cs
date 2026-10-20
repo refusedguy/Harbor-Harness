@@ -1,12 +1,12 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using TUnit.Core;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -17,9 +17,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class ReadGroupBlockTests
 {
-    private static JsonElement Args(string json) =>
-        JsonDocument.Parse(json).RootElement.Clone();
-
     private static (FakeEventBus Bus, ChatTimelinePanel Panel, ChatScreenBridge Bridge) Setup(
         string model = "m")
     {
@@ -32,7 +29,7 @@ public class ReadGroupBlockTests
 
     private static async Task ExecAsync(FakeEventBus bus, ChatScreenBridge bridge, string id, string tool, string args, long tickMs)
     {
-        await bus.PublishAsync(new ToolExecutionStartEvent(id, tool, Args(args)));
+        await bus.PublishAsync(new ToolExecutionStartEvent(id, tool, TestArgs.FromJson(args)));
         bridge.Tick(tickMs);
         await bus.PublishAsync(new ToolExecutionEndEvent(id, ToolResult.Success("ok-" + id), IsError: false));
     }
@@ -115,9 +112,9 @@ public class ReadGroupBlockTests
         var (bus, panel, bridge) = Setup();
         using (bridge)
         {
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", Args("{\"path\":\"a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"a.cs\"}")));
             bridge.Tick(100);
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc2", "read", Args("{\"path\":\"b.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc2", "read", TestArgs.FromJson("{\"path\":\"b.cs\"}")));
             bridge.Tick(110);
 
             await Assert.That(panel.Timeline.Count).IsEqualTo(1);

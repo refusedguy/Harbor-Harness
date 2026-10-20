@@ -21,20 +21,6 @@ public class DialogApprovalTests
     private static readonly ConsoleKeyInfo EnterKey = new('\r', ConsoleKey.Enter, false, false, false);
     private static readonly ConsoleKeyInfo EscKey = new('\x1b', ConsoleKey.Escape, false, false, false);
 
-    // DialogOverlay approval editing only inspects Key for navigation —
-    // any other Key value types KeyChar verbatim into the reason field.
-    private static ConsoleKeyInfo CharKey(char c) => new(c, ConsoleKey.A, false, false, false);
-
-    private static ConsoleKeyInfo SpecialKey(ConsoleKey key) => new('\0', key, false, false, false);
-
-    private static void Type(DialogOverlay dialog, string text)
-    {
-        foreach (char c in text)
-        {
-            _ = dialog.HandleKey(CharKey(c));
-        }
-    }
-
     private static string PaintArt(DialogOverlay dialog, int cols = 64, int rows = 22)
     {
         var viewport = new Rect(0, 0, cols, rows);
@@ -93,17 +79,17 @@ public class DialogApprovalTests
         dialog.ShowApproval("bash", "rm -rf /", selectedIndex: 0);
         await Assert.That(dialog.SelectedApproval).IsEqualTo(ApprovalChoice.Approve);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
         await Assert.That(dialog.SelectedApproval).IsEqualTo(ApprovalChoice.AlwaysAllow);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
         await Assert.That(dialog.SelectedApproval).IsEqualTo(ApprovalChoice.Deny);
 
         // Wrap-around (radio semantics): one more step returns to allow-once.
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.RightArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.RightArrow));
         await Assert.That(dialog.SelectedApproval).IsEqualTo(ApprovalChoice.Approve);
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.UpArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.UpArrow));
         await Assert.That(dialog.SelectedApproval).IsEqualTo(ApprovalChoice.Deny);
     }
 
@@ -114,13 +100,13 @@ public class DialogApprovalTests
         dialog.ShowApproval("bash", "rm -rf /");
 
         // Arrows stay on the choice row; printable keys feed the reason field.
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.DownArrow));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.DownArrow));
         await Assert.That(dialog.SelectedIndex).IsEqualTo(1);
 
-        Type(dialog, "no");
+        Keys.Type(dialog, "no");
         await Assert.That(dialog.RejectReason).IsEqualTo("no");
 
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.Backspace));
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.Backspace));
         await Assert.That(dialog.RejectReason).IsEqualTo("n");
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();
@@ -154,7 +140,7 @@ public class DialogApprovalTests
     {
         var dialog = new DialogOverlay();
         dialog.ShowApproval("edit", "patch main.cs", "-gone\n+added-line", "main.cs");
-        Type(dialog, "why");
+        Keys.Type(dialog, "why");
 
         string art = PaintArt(dialog);
 
@@ -223,8 +209,8 @@ public class DialogApprovalTests
 
         var dialog = new DialogOverlay();
         dialog.ShowApproval(gate.ToolName, "run rm?", "- rm -rf /\n+ echo safe", "run.sh");
-        _ = dialog.HandleKey(SpecialKey(ConsoleKey.End)); // Deny
-        Type(dialog, "destructive");
+        _ = dialog.HandleKey(Keys.SpecialKey(ConsoleKey.End)); // Deny
+        Keys.Type(dialog, "destructive");
 
         await Assert.That(dialog.HandleKey(EnterKey)).IsFalse();
         await Assert.That(router.CommitModalDecision(dialog.SelectedApproval, dialog.RejectReason)).IsTrue();

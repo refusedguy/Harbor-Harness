@@ -22,24 +22,12 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class PostFxTests
 {
-    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
-        c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
-
-    private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
-    {
-        var (r, g, b) = Channels(accent);
-        const double burn = 0.65; // GlowEffect.HotBurn
-        return EngineCells.PackedColor.Rgb(
-            (byte)(r + ((255 - r) * burn)),
-            (byte)(g + ((255 - g) * burn)),
-            (byte)(b + ((255 - b) * burn)));
-    }
 
     private static UIR.PackedColor ToUi(EngineCells.PackedColor c) => UIR.PackedColor.FromRaw(c.Value);
 
     private static string HotSgr(EngineCells.PackedColor accent)
     {
-        var (r, g, b) = Channels(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value));
+        var (r, g, b) = TestColors.Channels(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(TestColors.HotTone(accent)), GlowEffect.PeakStrength).Value));
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
@@ -87,7 +75,7 @@ public class PostFxTests
         var dimCell = EngineCells.Cell.From(new Rune('-'), new EngineCells.CellStyle(attrs: EngineCells.StyleAttr.Dim));
 
         var glowed = effect.Transform(5, 1, in accentCell);
-        await Assert.That(glowed.Style.Fg.Value).IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
+        await Assert.That(glowed.Style.Fg.Value).IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(TestColors.HotTone(accent)), GlowEffect.PeakStrength).Value);
         await Assert.That(glowed.Rune).IsEqualTo(accentCell.Rune); // rune untouched
         await Assert.That((int)glowed.Style.Attrs).IsEqualTo((int)EngineCells.StyleAttr.Bold); // attrs untouched
 
@@ -176,7 +164,7 @@ public class PostFxTests
         // FRONT mirrors the TERMINAL: the emitted cell is stored transformed —
         // that is what makes disarm convergence a one-frame plain repaint.
         await Assert.That(engine.Front.Get(4, 1).Style.Fg.Value)
-            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
+            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(TestColors.HotTone(accent)), GlowEffect.PeakStrength).Value);
 
         // Disarm: the plain cell now differs from the mirrored glow and is
         // repainted once — no glow sticks to the terminal.
@@ -374,6 +362,6 @@ public class PostFxTests
 
         await Assert.That(backend.Text.Contains(HotSgr(accent))).IsTrue();
         await Assert.That(session.Front.Get(2, 1).Style.Fg.Value)
-            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), GlowEffect.PeakStrength).Value);
+            .IsEqualTo(PanelFx.Lerp(ToUi(accent), ToUi(TestColors.HotTone(accent)), GlowEffect.PeakStrength).Value);
     }
 }

@@ -312,23 +312,9 @@ public class ToolCallBlockMapperTests
         // purpose: Harbor.Extensions is not on this assembly's matrix row, so
         // Presentation renders without the Application-layer pool. Scoped to
         // this file: TableBlock, OnboardingFlow, ... keep their own slices.
-        string path = FindRepoFile(Path.Combine("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ToolCallBlock.cs"));
+        string path = RepoPaths.FindFile(Path.Combine("src", "Harbor.Tui.CellForge", "Chat", "Widgets", "ToolCallBlock.cs"));
         string source = await File.ReadAllTextAsync(path);
         await Assert.That(source.Contains("new StringBuilder")).IsFalse();
-    }
-
-    /// <summary>Locate a repo-relative source file by walking up from the test assembly directory.</summary>
-    private static string FindRepoFile(string relativePath)
-    {
-        string? dir = AppContext.BaseDirectory;
-        while (dir is not null)
-        {
-            string candidate = Path.Combine(dir, relativePath);
-            if (File.Exists(candidate))
-                return candidate;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        throw new FileNotFoundException($"Repo file not found: {relativePath}");
     }
 
     [Test]

@@ -1,4 +1,3 @@
-using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Projection;
@@ -51,19 +50,6 @@ public class SkillFreshnessStatusPillTests
         return sb.ToString();
     }
 
-    private static int Find(StatusSeg[] workspace, int count, string text)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (workspace[i].Text == text)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
     private static SkillFreshnessSummary Stale(params SkillFreshnessEntry[] entries) =>
         SkillFreshnessAggregate.Of(entries)!;
 
@@ -86,7 +72,7 @@ public class SkillFreshnessStatusPillTests
         int n = StatusProjectorPanel.BuildSegments(MockState(), ws, skills: summary);
 
         await Assert.That(n).IsEqualTo(5);
-        int index = Find(ws, n, "skills ●2 changed");
+        int index = WidgetFixtures.Find(ws, n, "skills ●2 changed");
         await Assert.That(index).IsEqualTo(3);
         await Assert.That(ws[index].Accent).IsEqualTo(StatusAccent.Accent);
     }
@@ -115,9 +101,9 @@ public class SkillFreshnessStatusPillTests
         int n = StatusProjectorPanel.BuildSegments(
             state, ws, "retry 1/3 in 4s", skills: Stale(new SkillFreshnessEntry("a", "aa", "bb")));
 
-        int retry = Find(ws, n, "retry 1/3 in 4s");
-        int skills = Find(ws, n, "skills ●1 changed");
-        int scroll = Find(ws, n, "scroll 50%");
+        int retry = WidgetFixtures.Find(ws, n, "retry 1/3 in 4s");
+        int skills = WidgetFixtures.Find(ws, n, "skills ●1 changed");
+        int scroll = WidgetFixtures.Find(ws, n, "scroll 50%");
         await Assert.That(retry).IsGreaterThanOrEqualTo(0);
         await Assert.That(skills).IsEqualTo(retry + 1);
         await Assert.That(scroll).IsGreaterThan(skills);
@@ -129,7 +115,7 @@ public class SkillFreshnessStatusPillTests
         var ws = new StatusSeg[StatusProjectorPanel.MaxSegments];
         int n = StatusProjectorPanel.BuildSegments(
             MockState("running"), ws, skills: Stale(new SkillFreshnessEntry("a", null, "bb")));
-        int index = Find(ws, n, "skills ✗1 missing");
+        int index = WidgetFixtures.Find(ws, n, "skills ✗1 missing");
 
         await Assert.That(index).IsGreaterThanOrEqualTo(0);
         await Assert.That(ws[index].FixedPriority).IsTrue();

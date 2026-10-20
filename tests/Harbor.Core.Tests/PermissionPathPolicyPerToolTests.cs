@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Harbor.Abstractions.Agents;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
 using Harbor.TestKit;
@@ -17,22 +16,6 @@ namespace Harbor.Core.Tests;
 /// </summary>
 public class PermissionPathPolicyPerToolTests
 {
-    private static AgentDefinition AgentWithRuleset(params PermissionRule[] rules) => new(
-        AgentName.Create("code"),
-        "Code",
-        "Default coding agent.",
-        "test-model",
-        "test",
-        new PermissionRuleset(rules));
-
-    private static JsonElement Args(params (string key, string value)[] pairs)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach ((string k, string v) in pairs)
-            dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
-    }
-
     private static PermissionService CreateService(
         AgentDefinition agent,
         Func<PermissionRequest, CancellationToken, Task<PermissionResponse>>? asker = null)
@@ -54,12 +37,12 @@ public class PermissionPathPolicyPerToolTests
     [Test]
     public async Task PathTool_AnchoredAllow_AllowsInsidePath(string tool)
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule(tool, "safe/*", PermissionAction.Allow),
             new PermissionRule(tool, "*", PermissionAction.Deny));
         var svc = CreateService(agent);
 
-        var result = await svc.CheckAsync("code", tool, Args(("path", "safe/file.txt")));
+        var result = await svc.CheckAsync("code", tool, TestArgs.FromPairs(("path", "safe/file.txt")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
@@ -77,12 +60,12 @@ public class PermissionPathPolicyPerToolTests
     [Test]
     public async Task PathTool_UnmatchedPath_FallsThroughToDeny(string tool)
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule(tool, "safe/*", PermissionAction.Allow),
             new PermissionRule(tool, "*", PermissionAction.Deny));
         var svc = CreateService(agent);
 
-        var result = await svc.CheckAsync("code", tool, Args(("path", "other/file.txt")));
+        var result = await svc.CheckAsync("code", tool, TestArgs.FromPairs(("path", "other/file.txt")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
@@ -100,12 +83,12 @@ public class PermissionPathPolicyPerToolTests
     [Test]
     public async Task PathTool_TraversalOutsideWorkspace_DeniesWithoutAsker(string tool)
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule(tool, "safe/*", PermissionAction.Allow),
             new PermissionRule(tool, "*", PermissionAction.Deny));
         var svc = CreateService(agent);
 
-        var result = await svc.CheckAsync("code", tool, Args(("path", "safe/../../etc/passwd")));
+        var result = await svc.CheckAsync("code", tool, TestArgs.FromPairs(("path", "safe/../../etc/passwd")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Deny);
@@ -123,7 +106,7 @@ public class PermissionPathPolicyPerToolTests
     [Test]
     public async Task PathTool_AskRule_DelegatesToAsker(string tool)
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule(tool, "*", PermissionAction.Ask));
 
         PermissionRequest? captured = null;
@@ -134,7 +117,7 @@ public class PermissionPathPolicyPerToolTests
         }
 
         var svc = CreateService(agent, Asker);
-        var result = await svc.CheckAsync("code", tool, Args(("path", "safe/file.txt")));
+        var result = await svc.CheckAsync("code", tool, TestArgs.FromPairs(("path", "safe/file.txt")));
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
@@ -155,11 +138,11 @@ public class PermissionPathPolicyPerToolTests
     [Test]
     public async Task PathTool_MissingPathArg_MatchesWildcard(string tool)
     {
-        var agent = AgentWithRuleset(
+        var agent = AgentFixtures.AgentWithRuleset(
             new PermissionRule(tool, "*", PermissionAction.Allow));
         var svc = CreateService(agent);
 
-        var result = await svc.CheckAsync("code", tool, Args());
+        var result = await svc.CheckAsync("code", tool, TestArgs.FromPairs());
 
         await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);

@@ -15,19 +15,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class CommandPaletteViewportTests
 {
-    private static CommandPaletteView OpenMany(int count)
-    {
-        var items = new CommandItem[count];
-        for (int i = 0; i < items.Length; i++)
-        {
-            items[i] = new CommandItem("cmd" + i, "Command " + i.ToString("00"));
-        }
-
-        var palette = new CommandPaletteView();
-        palette.Show(items);
-        return palette;
-    }
-
     private static KeyEvent Key(KeyCode code) => KeyEvent.Simple(code, KeyModifiers.None);
 
     private static void Down(CommandPaletteView palette, int times)
@@ -41,7 +28,7 @@ public class CommandPaletteViewportTests
     [Test]
     public async Task Scroll_MoveDown_KeepsSelectedVisible_AndPaintsScrollbar()
     {
-        var palette = OpenMany(20);
+        var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8); // 4 list rows
         var buffer = new ScreenBuffer(30, 8);
         palette.Paint(buffer, rect);
@@ -59,7 +46,7 @@ public class CommandPaletteViewportTests
     [Test]
     public async Task Scrollbar_Hidden_WhenContentFits()
     {
-        var palette = OpenMany(3);
+        var palette = PaletteFixtures.OpenMany(3);
         var buffer = new ScreenBuffer(30, 8);
         palette.Paint(buffer, new Rect(0, 0, 30, 8));
         string art = GridDump.Art(buffer);
@@ -71,7 +58,7 @@ public class CommandPaletteViewportTests
     [Test]
     public async Task Refilter_ResetsScrollToTop()
     {
-        var palette = OpenMany(20);
+        var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8);
         var buffer = new ScreenBuffer(30, 8);
         palette.Paint(buffer, rect);
@@ -90,7 +77,7 @@ public class CommandPaletteViewportTests
     [Test]
     public async Task PageDown_MovesByPage_AndKeepsSelectionVisible()
     {
-        var palette = OpenMany(20);
+        var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8); // 4 list rows
         var buffer = new ScreenBuffer(30, 8);
         palette.Paint(buffer, rect);

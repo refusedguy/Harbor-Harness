@@ -55,34 +55,6 @@ public class CompactionServiceTests
             NullLogger<CompactionService>.Instance);
     }
 
-    private static UserMessage User(string content) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        content,
-        "code",
-        "test-model");
-
-    private static AssistantMessage Assistant(string text) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model");
-
-    private static AssistantMessage Summary(string text, string? firstKeptId) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model",
-        IsSummary: true,
-        SummaryFirstKeptId: firstKeptId);
-
     private static ToolResultMessage ToolResult(string toolName, string output) => new(
         Guid.NewGuid().ToString("N"),
         "session-1",
@@ -93,7 +65,7 @@ public class CompactionServiceTests
     public async Task ShouldCompact_ReturnsFalse_WhenUnderReserve()
     {
         var svc = CreateService();
-        var messages = new AgentMessage[] { User("hi") };
+        var messages = new AgentMessage[] { MessageFixtures.User("hi") };
 
         bool result = svc.ShouldCompact(messages, HugeModel);
 
@@ -108,7 +80,7 @@ public class CompactionServiceTests
         // does not exceed the reserve, and the service no longer trips on the
         // negative threshold its own scan used to produce.
         var svc = CreateService();
-        var messages = new AgentMessage[] { User("anything at all") };
+        var messages = new AgentMessage[] { MessageFixtures.User("anything at all") };
 
         bool result = svc.ShouldCompact(messages, SmallModel);
 
@@ -138,8 +110,8 @@ public class CompactionServiceTests
         var svc = CreateService();
         var big = new List<AgentMessage>();
         for (int i = 0; i < 20; i++)
-            big.Add(User(new string('x', 4000)));
-        var small = new AgentMessage[] { User("hi") };
+            big.Add(MessageFixtures.User(new string('x', 4000)));
+        var small = new AgentMessage[] { MessageFixtures.User("hi") };
         var tracker = new TokenTracker();
 
         int bigEstimate = tracker.EstimateTokens(big);
@@ -169,7 +141,7 @@ public class CompactionServiceTests
         // 20 × ~1100 tokens = ~22000: over 30000−16384, under 30000−100.
         var big = new List<AgentMessage>();
         for (int i = 0; i < 20; i++)
-            big.Add(User(new string('x', 4000)));
+            big.Add(MessageFixtures.User(new string('x', 4000)));
         var window = new ModelInfo(
             "test-model",
             "test",
@@ -203,12 +175,12 @@ public class CompactionServiceTests
 
         var messages = new List<AgentMessage>
         {
-            User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), // 0
-            Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), // 1
-            User("cccccccccccccccccccccccccccccccccccccccc"), // 2
-            Assistant("dddddddddddddddddddddddddddddddddddd"), // 3
-            User("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"), // 4
-            Assistant("ffffffffffffffffffffffffffffffffffff") // 5
+            MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), // 0
+            MessageFixtures.Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), // 1
+            MessageFixtures.User("cccccccccccccccccccccccccccccccccccccccc"), // 2
+            MessageFixtures.Assistant("dddddddddddddddddddddddddddddddddddd"), // 3
+            MessageFixtures.User("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"), // 4
+            MessageFixtures.Assistant("ffffffffffffffffffffffffffffffffffff") // 5
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -243,13 +215,13 @@ public class CompactionServiceTests
 
         var messages = new List<AgentMessage>
         {
-            User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            MessageFixtures.Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
             // Tool call + result pair — must not be split.
             AssistantWithToolCall("call-1", "read"),
             ToolResult("read", "cccccccccccccccccccccccccccccccccccc"),
-            User("dddddddddddddddddddddddddddddddddddd"),
-            Assistant("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+            MessageFixtures.User("dddddddddddddddddddddddddddddddddddd"),
+            MessageFixtures.Assistant("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -271,7 +243,7 @@ public class CompactionServiceTests
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 12; i++)
-            messages.Add(User($"msg-{i}-xxxxxxxxxxxxxxxx"));
+            messages.Add(MessageFixtures.User($"msg-{i}-xxxxxxxxxxxxxxxx"));
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
 
@@ -289,10 +261,10 @@ public class CompactionServiceTests
 
         var messages = new List<AgentMessage>
         {
-            User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-            Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-            User("cccccccccccccccccccccccccccccccccccccccc"),
-            Assistant("dddddddddddddddddddddddddddddddddddd")
+            MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            MessageFixtures.Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+            MessageFixtures.User("cccccccccccccccccccccccccccccccccccccccc"),
+            MessageFixtures.Assistant("dddddddddddddddddddddddddddddddddddd")
         };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
@@ -319,7 +291,7 @@ public class CompactionServiceTests
 
         var messages = new List<AgentMessage>();
         for (int i = 0; i < 10; i++)
-            messages.Add(User($"captest-{i:D2}-" + new string('x', 400)));
+            messages.Add(MessageFixtures.User($"captest-{i:D2}-" + new string('x', 400)));
 
         int headEstimate = new TokenTracker().EstimateTokens(messages);
         // Budget lands mid-head: the full head does not fit, one message does.
@@ -356,7 +328,7 @@ public class CompactionServiceTests
         svc.KeepRecentTokens = 1;
         svc.TailTurns = 0;
 
-        var messages = new List<AgentMessage> { User("fit-aa"), User("fit-bb") };
+        var messages = new List<AgentMessage> { MessageFixtures.User("fit-aa"), MessageFixtures.User("fit-bb") };
 
         var result = await svc.CompactAsync("session-1", messages, HugeModel);
 
@@ -370,7 +342,7 @@ public class CompactionServiceTests
     [Test]
     public async Task Materialize_NoSummary_ReturnsInputUnchanged()
     {
-        var messages = new AgentMessage[] { User("hi"), Assistant("ho") };
+        var messages = new AgentMessage[] { MessageFixtures.User("hi"), MessageFixtures.Assistant("ho") };
 
         var view = CompactionPolicy.MaterializeCompactedView(messages);
 
@@ -382,10 +354,10 @@ public class CompactionServiceTests
     {
         // Mirrors the post-append layout: [head…, tail…, summary] — the tail
         // sits BEFORE the appended summary, and the view reorders it behind.
-        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        var u2 = Assistant("cccccccccccccccccccccccccccccccccccc");
-        var summary = Summary("folded head", u1.Id);
+        var u0 = MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = MessageFixtures.User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var u2 = MessageFixtures.Assistant("cccccccccccccccccccccccccccccccccccc");
+        var summary = MessageFixtures.Summary("folded head", u1.Id);
         var raw = new AgentMessage[] { u0, u1, u2, summary };
 
         var view = CompactionPolicy.MaterializeCompactedView(raw);
@@ -399,10 +371,10 @@ public class CompactionServiceTests
     [Test]
     public async Task Materialize_NullAnchor_KeepsOnlySummaryAndLaterMessages()
     {
-        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        var summary = Summary("folded everything", null);
-        var after = Assistant("appended after compaction");
+        var u0 = MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = MessageFixtures.User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = MessageFixtures.Summary("folded everything", null);
+        var after = MessageFixtures.Assistant("appended after compaction");
         var raw = new AgentMessage[] { u0, u1, summary, after };
 
         var view = CompactionPolicy.MaterializeCompactedView(raw);
@@ -415,9 +387,9 @@ public class CompactionServiceTests
     [Test]
     public async Task Materialize_UnresolvedAnchor_ReturnsFullHistory()
     {
-        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        var summary = Summary("dangling anchor", "does-not-exist");
+        var u0 = MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = MessageFixtures.User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = MessageFixtures.Summary("dangling anchor", "does-not-exist");
         var raw = new AgentMessage[] { u0, u1, summary };
 
         var view = CompactionPolicy.MaterializeCompactedView(raw);
@@ -429,10 +401,10 @@ public class CompactionServiceTests
     [Test]
     public async Task Materialize_MessagesAppendedAfterSummary_ArePreservedInOrder()
     {
-        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        var summary = Summary("folded", u1.Id);
-        var a2 = Assistant("turn answer");
+        var u0 = MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = MessageFixtures.User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var summary = MessageFixtures.Summary("folded", u1.Id);
+        var a2 = MessageFixtures.Assistant("turn answer");
         var tr3 = ToolResult("read", "file contents here");
         var raw = new AgentMessage[] { u0, u1, summary, a2, tr3 };
 
@@ -453,10 +425,10 @@ public class CompactionServiceTests
         await Assert.That(created.IsSuccess).IsTrue();
         string sessionId = created.Value.Id;
 
-        var u0 = User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        var u1 = User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        var u2 = Assistant("cccccccccccccccccccccccccccccccccccc");
-        var summary = Summary("folded head", u1.Id);
+        var u0 = MessageFixtures.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var u1 = MessageFixtures.User("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        var u2 = MessageFixtures.Assistant("cccccccccccccccccccccccccccccccccccc");
+        var summary = MessageFixtures.Summary("folded head", u1.Id);
         // Raw layout is append-only: pruned head first, then kept tail,
         // then the summary the loop appends on top.
         var raw = new List<AgentMessage> { u0, u1, u2, summary };

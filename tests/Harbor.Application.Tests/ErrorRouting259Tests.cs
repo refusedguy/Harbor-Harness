@@ -1,9 +1,5 @@
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Application.Agents;
-using Harbor.Application.Permissions;
-using Harbor.Application.Resilience;
-using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,24 +17,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class ErrorRouting259Tests
 {
-    private static AgentLoop LoopWithClock(ScriptedLlmClient client, FakeEventBus bus, TimeProvider clock)
-    {
-        var agent = TestAgents.AllowAll();
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            new FakeToolRegistry(),
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(clock),
-            bus,
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
-    }
-
     [Test]
     public async Task RateLimitStorm_PublishesSingleAgentError_InsteadOfOnePerAttempt()
     {
@@ -46,7 +24,7 @@ public class ErrorRouting259Tests
             new TextDeltaEvent("t", "partial-"),
             new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
+        var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-storm", "code", "test", "test-model"));
 
@@ -63,7 +41,7 @@ public class ErrorRouting259Tests
         var client = new ScriptedLlmClient([
             new ErrorEvent("bad key", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
+        var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-fatal", "code", "test", "test-model"));
 
@@ -81,7 +59,7 @@ public class ErrorRouting259Tests
             [new ErrorEvent("slow down", Kind: ProviderErrorKind.RateLimit, StatusCode: 429)],
             [new TextDeltaEvent("t", "recovered"), new StepFinishEvent(0, "stop", new Usage(1, 1))]);
         var bus = new FakeEventBus();
-        var loop = LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
+        var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-259-recovery", "code", "test", "test-model"));
 

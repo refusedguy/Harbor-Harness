@@ -12,14 +12,6 @@ namespace Harbor.Tui.CellForge.Tests;
 
 public class ChatScreenBridgeTests
 {
-    private static AssistantMessage AssistantMsg(string sessionId, params string[] texts) => new(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow,
-        [.. texts.Select(t => new TextPart(t))], StopReason.Stop, new Usage(0, 0), "test-model");
-
-    private static UserMessage UserMsg(string sessionId, string content) => new(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow,
-        content, "code", "test-model");
-
     [Test]
     public async Task FullTurn_Flows_IntoBlocks()
     {
@@ -29,7 +21,7 @@ public class ChatScreenBridgeTests
         using var bridge = new ChatScreenBridge(bus, panel, status);
 
         // History replay on AgentStart.
-        await bus.PublishAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there"), AssistantMsg("s1", "hello!")]));
+        await bus.PublishAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there"), WidgetFixtures.AssistantMsg("s1", "hello!")]));
         await bus.PublishAsync(new MessageStartEvent(AssistantMessage.Empty("s1", "m")));
 
         long t0 = 100;
@@ -37,7 +29,7 @@ public class ChatScreenBridgeTests
         await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("id", "Answer **line**\n"), AssistantMessage.Empty("s1", "m")));
         await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", System.Text.Json.JsonDocument.Parse("{\"path\":\"a.cs\"}").RootElement.Clone()));
         await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
-        await bus.PublishAsync(new MessageEndEvent(AssistantMsg("s1", "Answer line")));
+        await bus.PublishAsync(new MessageEndEvent(WidgetFixtures.AssistantMsg("s1", "Answer line")));
         await bus.PublishAsync(new AgentEndEvent([]));
 
         var tl = panel.Timeline;
@@ -342,8 +334,8 @@ public class ChatScreenBridgeTests
 
         // The run republishes the full snapshot INCLUDING the echoed message.
         await bus.PublishAsync(new AgentStartEvent("s1", [
-            UserMsg("s1", "hi"),
-            AssistantMsg("s1", "hello!"),
+            WidgetFixtures.UserMsg("s1", "hi"),
+            WidgetFixtures.AssistantMsg("s1", "hello!"),
         ]));
 
         var tl = panel.Timeline;
@@ -360,7 +352,7 @@ public class ChatScreenBridgeTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         using var bridge = new ChatScreenBridge(bus, panel, new StatusViewModel());
 
-        var history = new AgentMessage[] { UserMsg("s1", "q1"), AssistantMsg("s1", "a1") };
+        var history = new AgentMessage[] { WidgetFixtures.UserMsg("s1", "q1"), WidgetFixtures.AssistantMsg("s1", "a1") };
         await bus.PublishAsync(new AgentStartEvent("s1", history));
         await bus.PublishAsync(new AgentStartEvent("s1", history));
         await bus.PublishAsync(new AgentStartEvent("s1", history));
@@ -760,10 +752,10 @@ public class ChatScreenBridgeTests
         var status = new StatusViewModel { Model = "m" };
         using var bridge = new ChatScreenBridge(bus, panel, status, autoSubscribe: false);
 
-        await bus.PublishAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await bus.PublishAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there")]));
         await Assert.That(panel.Timeline.Count).IsEqualTo(0);
 
-        await bridge.AcceptAsync(new AgentStartEvent("s1", [UserMsg("s1", "hi there")]));
+        await bridge.AcceptAsync(new AgentStartEvent("s1", [WidgetFixtures.UserMsg("s1", "hi there")]));
         await Assert.That(panel.Timeline.Count).IsEqualTo(1);
         await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
         await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);

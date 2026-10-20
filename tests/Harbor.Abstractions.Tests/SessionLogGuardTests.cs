@@ -40,9 +40,9 @@ public class SessionLogGuardTests
     {
         IReadOnlyList<SessionLogEntry> before =
         [
-            Message(0, "m1", "the agent said this"),
-            Message(1, "m2", "and this"),
-            Message(2, "m3", "and this too"),
+            LogEntryFixtures.Message(0, "m1", "the agent said this"),
+            LogEntryFixtures.Message(1, "m2", "and this"),
+            LogEntryFixtures.Message(2, "m3", "and this too"),
         ];
 
         // The compression: the tail is gone from the log, not merely hidden.
@@ -68,8 +68,8 @@ public class SessionLogGuardTests
     {
         IReadOnlyList<SessionLogEntry> before =
         [
-            Message(0, "m1", "the agent said this"),
-            Message(1, "m2", "and this"),
+            LogEntryFixtures.Message(0, "m1", "the agent said this"),
+            LogEntryFixtures.Message(1, "m2", "and this"),
         ];
 
         // Compaction: a summary is APPENDED and the folded messages leave the
@@ -78,7 +78,7 @@ public class SessionLogGuardTests
         [
             before[0],
             before[1],
-            Message(2, "summary-1", "a summary of the two messages above"),
+            LogEntryFixtures.Message(2, "summary-1", "a summary of the two messages above"),
         ];
 
         await Assert.That(SessionLogGuard.IsLossless(before, after)).IsTrue()
@@ -99,8 +99,8 @@ public class SessionLogGuardTests
     {
         IReadOnlyList<SessionLogEntry> before =
         [
-            Message(0, "m1", "the agent said this"),
-            Message(1, "m2", "and this"),
+            LogEntryFixtures.Message(0, "m1", "the agent said this"),
+            LogEntryFixtures.Message(1, "m2", "and this"),
         ];
 
         IReadOnlyList<SessionLogEntry> after =
@@ -125,8 +125,8 @@ public class SessionLogGuardTests
     {
         IReadOnlyList<SessionLogEntry> before =
         [
-            Message(0, "m1", "the same text"),
-            Message(1, "m2", "the same text"),
+            LogEntryFixtures.Message(0, "m1", "the same text"),
+            LogEntryFixtures.Message(1, "m2", "the same text"),
         ];
 
         IReadOnlyList<SessionLogEntry> after = [before[0]];
@@ -146,8 +146,8 @@ public class SessionLogGuardTests
     [Test]
     public async Task Guard_TellsAnEditedVersionFromTheOriginal()
     {
-        UserMessage original = (UserMessage)Message(0, "m1", "the original text").Message!;
-        UserMessage edited = (UserMessage)Message(1, "m1", "the edited text").Message!;
+        UserMessage original = (UserMessage)LogEntryFixtures.Message(0, "m1", "the original text").Message!;
+        UserMessage edited = (UserMessage)LogEntryFixtures.Message(1, "m1", "the edited text").Message!;
 
         await Assert.That(SessionLogGuard.Fingerprint(original))
             .IsNotEqualTo(SessionLogGuard.Fingerprint(edited))
@@ -196,20 +196,6 @@ public class SessionLogGuardTests
         await Assert.That(surface.Current.Count).IsEqualTo(1);
         await Assert.That(surface.Shadowed.Count).IsEqualTo(2);
     }
-
-    private static SessionLogEntry Message(int position, string id, string content) => new()
-    {
-        Kind = SessionLogEntryKind.Message,
-        Id = id,
-        Position = position,
-        Message = new UserMessage(
-            id,
-            "s1",
-            DateTimeOffset.UnixEpoch,
-            content,
-            "code",
-            "test-model"),
-    };
 
     private static SessionLogEntry Rewind(int position, string id, string anchorId) => new()
     {

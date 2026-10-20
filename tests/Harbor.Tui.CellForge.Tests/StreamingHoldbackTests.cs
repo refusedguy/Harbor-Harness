@@ -11,23 +11,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public class StreamingHoldbackTests
 {
-    private static List<string> Flatten(IReadOnlyList<MdLine> lines)
-    {
-        var flat = new List<string>(lines.Count);
-        foreach (var l in lines)
-        {
-            var sb = new System.Text.StringBuilder();
-            foreach (var s in l.Spans)
-            {
-                sb.Append('[').Append(s.Style).Append(':').Append(s.Text).Append(']');
-            }
-
-            flat.Add(sb.ToString());
-        }
-
-        return flat;
-    }
-
     private static StreamingMarkdownRenderer OneShot(string source, int width)
     {
         var r = new StreamingMarkdownRenderer();
@@ -59,8 +42,8 @@ public class StreamingHoldbackTests
         _ = r.RenderTail(40);
         r.Complete();
         _ = r.RenderTail(40);
-        await Assert.That(Flatten(r.GetLines()))
-            .IsEquivalentTo(Flatten(OneShot("```csharp\nline one\nline two\nline three\n```\nafter\n", 40).GetLines()));
+        await Assert.That(MarkdownFixtures.Flatten(r.GetLines()))
+            .IsEquivalentTo(MarkdownFixtures.Flatten(OneShot("```csharp\nline one\nline two\nline three\n```\nafter\n", 40).GetLines()));
     }
 
     [Test]
@@ -78,8 +61,8 @@ public class StreamingHoldbackTests
         _ = r.RenderTail(40);
         r.Complete();
         _ = r.RenderTail(40);
-        await Assert.That(Flatten(r.GetLines()))
-            .IsEquivalentTo(Flatten(OneShot("| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\ntail\n", 40).GetLines()));
+        await Assert.That(MarkdownFixtures.Flatten(r.GetLines()))
+            .IsEquivalentTo(MarkdownFixtures.Flatten(OneShot("| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\ntail\n", 40).GetLines()));
     }
 
     [Test]
@@ -96,8 +79,8 @@ public class StreamingHoldbackTests
         _ = r.RenderTail(40);
         r.Complete();
         _ = r.RenderTail(40);
-        await Assert.That(Flatten(r.GetLines()))
-            .IsEquivalentTo(Flatten(OneShot("$$\nE = mc^2\n$$\ndone\n", 40).GetLines()));
+        await Assert.That(MarkdownFixtures.Flatten(r.GetLines()))
+            .IsEquivalentTo(MarkdownFixtures.Flatten(OneShot("$$\nE = mc^2\n$$\ndone\n", 40).GetLines()));
     }
 
     [Test]

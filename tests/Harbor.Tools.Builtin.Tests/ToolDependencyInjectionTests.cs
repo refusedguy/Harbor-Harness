@@ -11,7 +11,6 @@ using TUnit.Assertions.Extensions;
 using Result = CSharpFunctionalExtensions.Result;
 using FakeSessionStoreBase = Harbor.TestKit.Generated.FakeSessionStore; // #1769: generated double
 
-
 namespace Harbor.Tools.Builtin.Tests;
 
 /// <summary>
@@ -29,8 +28,6 @@ public class ToolDependencyInjectionTests
     private static ToolContext Ctx() =>
         TestToolContext.Create(sessionId: "s1", messageId: "m1", callId: "c1");
 
-    private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
-
     private string WriteFile(string name, string content)
     {
         string path = Path.Combine(_root, name);
@@ -47,7 +44,7 @@ public class ToolDependencyInjectionTests
         var tool = new ReadTool(NullLogger<ReadTool>.Instance);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
+            TestArgs.FromJson($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("class Plain");
@@ -60,7 +57,7 @@ public class ToolDependencyInjectionTests
         var tool = new EditTool(NullLogger<EditTool>.Instance);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Old","newString":"New"}"""), Ctx());
+            TestArgs.FromJson($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Old","newString":"New"}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).DoesNotContain("LSP:");
@@ -74,7 +71,7 @@ public class ToolDependencyInjectionTests
         var tool = new ReadTool(NullLogger<ReadTool>.Instance, lsp);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
+            TestArgs.FromJson($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}}}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(lsp.Opened).Contains(path);
@@ -89,7 +86,7 @@ public class ToolDependencyInjectionTests
         var tool = new EditTool(NullLogger<EditTool>.Instance, lsp);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Noted","newString":"Noted2"}"""), Ctx());
+            TestArgs.FromJson($$"""{"path":{{JsonSerializer.Serialize(path, TestJsonContext.Default.String)}},"oldString":"Noted","newString":"Noted2"}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("LSP: 1 diagnostic(s)");
@@ -116,7 +113,7 @@ public class ToolDependencyInjectionTests
             _ => """{"server":"fs","name":"p"}""",
         };
 
-        ToolResult result = await tool.ExecuteAsync(Args(json), Ctx());
+        ToolResult result = await tool.ExecuteAsync(TestArgs.FromJson(json), Ctx());
 
         await Assert.That(result.IsError).IsTrue();
         // Points at the composition root, not at a container the caller never had.
@@ -131,7 +128,7 @@ public class ToolDependencyInjectionTests
         var tool = new LspTool(NullLogger<LspTool>.Instance);
 
         ToolResult result = await tool.ExecuteAsync(
-            Args("""{"action":"diagnostics","path":"/tmp/a.cs"}"""), Ctx());
+            TestArgs.FromJson("""{"action":"diagnostics","path":"/tmp/a.cs"}"""), Ctx());
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("injected into the 'lsp' tool");
@@ -147,7 +144,7 @@ public class ToolDependencyInjectionTests
         // back to the process CWD. An unknown skill is a tool error, not a crash.
         var tool = new SkillTool(NullLogger<SkillTool>.Instance);
 
-        ToolResult result = await tool.ExecuteAsync(Args("""{"name":"no-such-skill"}"""), Ctx());
+        ToolResult result = await tool.ExecuteAsync(TestArgs.FromJson("""{"name":"no-such-skill"}"""), Ctx());
 
         await Assert.That(result.IsError).IsTrue();
     }
@@ -165,7 +162,7 @@ public class ToolDependencyInjectionTests
         Directory.CreateDirectory(skillDir);
         File.WriteAllText(Path.Combine(skillDir, "SKILL.md"), "# From the session directory");
 
-        ToolResult result = await tool.ExecuteAsync(Args("""{"name":"review"}"""), Ctx());
+        ToolResult result = await tool.ExecuteAsync(TestArgs.FromJson("""{"name":"review"}"""), Ctx());
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("From the session directory");

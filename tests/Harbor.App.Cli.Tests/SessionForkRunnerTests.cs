@@ -8,24 +8,6 @@ public class SessionForkRunnerTests
 {
     private readonly MemorySessionStore _store = new();
 
-    private static async Task<Harbor.Abstractions.Models.Session> SeedAsync(
-        MemorySessionStore store, string title, params AgentMessage[] messages)
-    {
-        var created = (await store.CreateAsync("/tmp", "code", "test", "test-model")).Value;
-        if (!string.IsNullOrEmpty(title))
-        {
-            created = created with { Title = title };
-            await store.UpdateAsync(created);
-        }
-
-        foreach (var message in messages)
-        {
-            await store.AppendMessageAsync(created.Id, message with { SessionId = created.Id });
-        }
-
-        return created;
-    }
-
     private static UserMessage User(string content) => new(
         Guid.NewGuid().ToString("N"), "s", DateTimeOffset.UtcNow, content, "code", "test-model");
 
@@ -41,7 +23,7 @@ public class SessionForkRunnerTests
     [Test]
     public async Task Fork_CopiesPrefixInclusive_KeepsSourceIntact()
     {
-        var source = await SeedAsync(_store, "lineage root", User("q1"), Assistant("a1"), User("q2"), Assistant("a2"));
+        var source = await SessionFixtures.SeedAsync(_store, "lineage root", User("q1"), Assistant("a1"), User("q2"), Assistant("a2"));
         var history = (await _store.GetMessagesAsync(source.Id)).Value;
         string cutPoint = history[1].Id.ToString(); // inclusive cut after a1
 
@@ -70,7 +52,7 @@ public class SessionForkRunnerTests
     [Test]
     public async Task Fork_LastMessage_CopiesEverything()
     {
-        var source = await SeedAsync(_store, "", User("only question"), Assistant("only answer"));
+        var source = await SessionFixtures.SeedAsync(_store, "", User("only question"), Assistant("only answer"));
         var last = (await _store.GetMessagesAsync(source.Id)).Value[^1].Id.ToString();
 
         var forked = await new SessionForkRunner(_store).ForkAsync(source.Id, last);
@@ -83,7 +65,7 @@ public class SessionForkRunnerTests
     [Test]
     public async Task Fork_UnknownMessageId_FailsWithoutCreatingFork()
     {
-        var source = await SeedAsync(_store, "", User("q"));
+        var source = await SessionFixtures.SeedAsync(_store, "", User("q"));
         int sessionsBefore = (await _store.ListAsync()).Value.Count;
 
         var forked = await new SessionForkRunner(_store).ForkAsync(source.Id, "no-such-message-id");

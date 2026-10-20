@@ -8,13 +8,11 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class GenericWidgetsTests
 {
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     private static string PaintField(GenericTextField field, int width = 20)
     {
         var buffer = new ScreenBuffer(width, 1);
         field.Paint(buffer, new Rect(0, 0, width, 1));
-        return Art(buffer);
+        return ScreenFixtures.Art(buffer);
     }
 
     [Test]
@@ -123,7 +121,7 @@ public class GenericWidgetsTests
         list.MoveTo(1);
         var buffer = new ScreenBuffer(20, 4);
         list.Paint(buffer, new Rect(0, 0, 20, 4));
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("apple")).IsTrue();
         await Assert.That(art.Contains("›") || art.Contains(">")).IsTrue();
     }
@@ -137,7 +135,7 @@ public class GenericWidgetsTests
         await Assert.That(list.Offset).IsGreaterThan(0);
         var buffer = new ScreenBuffer(20, 2);
         list.Paint(buffer, new Rect(0, 0, 20, 2));
-        await Assert.That(Art(buffer).Contains("four")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("four")).IsTrue();
     }
 
     [Test]
@@ -145,7 +143,7 @@ public class GenericWidgetsTests
     {
         var buffer = new ScreenBuffer(10, 1);
         GenericProgressBar.Paint(buffer, new Rect(0, 0, 10, 1), new GenericProgressState(0.5, ShowLabel: false));
-        await Assert.That(Art(buffer)).IsEqualTo(
+        await Assert.That(ScreenFixtures.Art(buffer)).IsEqualTo(
             new string(GenericProgressBar.Filled, 5) + new string(GenericProgressBar.Track, 5));
     }
 
@@ -170,7 +168,7 @@ public class GenericWidgetsTests
         await Assert.That(spinner.Frame).IsEqualTo(0);
         var buffer = new ScreenBuffer(4, 1);
         spinner.Paint(buffer, new Rect(0, 0, 4, 1));
-        await Assert.That(Art(buffer).Trim()).IsNotEqualTo(string.Empty);
+        await Assert.That(ScreenFixtures.Art(buffer).Trim()).IsNotEqualTo(string.Empty);
     }
 
     [Test]
@@ -181,7 +179,7 @@ public class GenericWidgetsTests
         table.AddRow(["alpha", "yes"]);
         var buffer = new ScreenBuffer(30, 8);
         table.Paint(buffer, new Rect(0, 0, 30, 8));
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("name")).IsTrue();
         await Assert.That(art.Contains("alpha")).IsTrue();
         await Assert.That(art.Contains("┌")).IsTrue();
@@ -196,7 +194,7 @@ public class GenericWidgetsTests
         table.AddRow(["0123456789abcdef"]);
         var buffer = new ScreenBuffer(12, 8);
         table.Paint(buffer, new Rect(0, 0, 12, 8));
-        await Assert.That(Art(buffer).Contains("…")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("…")).IsTrue();
     }
 
     [Test]
@@ -235,7 +233,7 @@ public class GenericWidgetsTests
 
         var buffer = new ScreenBuffer(30, 4);
         form.Paint(buffer, new Rect(0, 0, 30, 4));
-        await Assert.That(Art(buffer).Contains("Required.")).IsTrue();
+        await Assert.That(ScreenFixtures.Art(buffer).Contains("Required.")).IsTrue();
     }
 
     [Test]
@@ -252,7 +250,7 @@ public class GenericWidgetsTests
     public async Task Demo_Build_ContainsEveryWidget()
     {
         var buffer = GenericWidgetsDemo.Build(60, 24);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("Generic widgets")).IsTrue();
         await Assert.That(art.Contains("hello cells")).IsTrue();
         await Assert.That(art.Contains("beta")).IsTrue();

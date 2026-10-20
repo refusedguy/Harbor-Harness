@@ -105,20 +105,6 @@ public class ToolDispatcherRetryTests
         new(new FakeToolRegistry(tool), permissions, bus,
             NullLogger<ToolDispatcher>.Instance, null, decider, abandonGrace, clock);
 
-    private static async Task WaitForAsync(Func<bool> condition, string what)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (!condition() && sw.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            await Task.Delay(5).ConfigureAwait(false);
-        }
-
-        if (!condition())
-        {
-            throw new TimeoutException($"Timed out waiting for: {what}");
-        }
-    }
-
     [Test]
     public async Task TransientFailsOnce_ThenSucceeds()
     {
@@ -199,7 +185,7 @@ public class ToolDispatcherRetryTests
 
         var run = dispatcher.ExecuteAsync(
             [Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
-        await WaitForAsync(
+        await AsyncWaits.WaitForAsync(
             () => bus.Events.OfType<ToolExecutionUpdateEvent>().Any(e => e.RetryAttempt.HasValue),
             "backoff entered");
         cts.Cancel(); // provably inside the fixed 500ms backoff

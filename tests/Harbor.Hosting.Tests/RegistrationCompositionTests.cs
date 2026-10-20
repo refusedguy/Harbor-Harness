@@ -31,12 +31,6 @@ public class RegistrationCompositionTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
     private static IReadOnlyList<string> ToolNames(IServiceProvider sp) =>
         sp.GetRequiredService<IToolRegistry>()
             .GetAllTools()
@@ -48,7 +42,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_Full14_RegistersExactlyTheTwentyBuiltinTools()
     {
-        using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
         // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree)
@@ -82,7 +76,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_Standard10_RegistersDesktopSubset_WithoutFullOnlyTools()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
@@ -107,7 +101,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_Standard10_McpRegistryStillResolves_AsEmptyRegistry()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
@@ -160,7 +154,7 @@ public class RegistrationCompositionTests
     {
         await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
-            using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
         });
     }
@@ -170,7 +164,7 @@ public class RegistrationCompositionTests
     {
         await EnvScope.WithAsync("HARBOR_STORAGE", null, async () =>
         {
-            using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<JsonlSessionStore>();
         });
     }
@@ -180,7 +174,7 @@ public class RegistrationCompositionTests
     {
         await EnvScope.WithAsync("HARBOR_STORAGE", "memory", async () =>
         {
-            using var sp = Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "jsonl" });
             await Assert.That(sp.GetRequiredService<ISessionStore>()).IsTypeOf<MemorySessionStore>();
         });
     }
@@ -190,7 +184,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_TuiRenderer_ResolvesPlainUnderMinimalFeatureSet()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
@@ -209,7 +203,7 @@ public class RegistrationCompositionTests
     {
         await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
         {
-            using var sp = Compose(new HarborComposeOptions
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions
             {
                 HarborDir = TempHarborDir(),
                 DefaultStorageBackend = "memory",
@@ -256,7 +250,7 @@ public class RegistrationCompositionTests
     {
         await EnvScope.WithAsync("HARBOR_TUI", null, async () =>
         {
-            using var sp = Compose(new HarborComposeOptions
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions
             {
                 HarborDir = TempHarborDir(),
                 DefaultStorageBackend = "memory",
@@ -366,7 +360,7 @@ public class RegistrationCompositionTests
     [Test]
     public async Task AddHarbor_RegistersSharedUiStore_ForRendererPipelineSnapshotRestore()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",

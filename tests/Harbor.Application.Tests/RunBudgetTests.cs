@@ -5,10 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
-using Harbor.Abstractions.Tools;
 using Harbor.Application.Agents;
-using Harbor.Application.Permissions;
-using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
@@ -75,23 +72,6 @@ public class RunBudgetTests
             new StepFinishEvent(0, "tool_use", usage)
         }
     ]);
-
-    private static AgentLoop Loop(ILlmClient client, ITool tool, FakeEventBus bus, AgentDefinition agent)
-    {
-        var agents = new FakeAgentRegistry(agent);
-        return new AgentLoop(
-            new FakeProviderRegistry(client),
-            new FakeToolRegistry(tool),
-            agents,
-            new StubSystemPromptBuilder(),
-            new FakeCompactionService(),
-            new FakeTokenTracker(),
-            new RetryPolicy(),
-            bus,
-            new PermissionService(agents, NullLogger<PermissionService>.Instance),
-            new MessageConverter(),
-            NullLogger<AgentLoop>.Instance);
-    }
 
     [Test]
     public async Task BudgetSource_HasFourMembersAndNoFallback()
@@ -198,7 +178,7 @@ public class RunBudgetTests
         var client = ToolCallingClient(new Usage(1000, 200));
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxTokens: 1500));
-        var loop = Loop(client, counter, bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -230,7 +210,7 @@ public class RunBudgetTests
         var client = new ScriptedLlmClient([script]);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxOutputBytes: CapBytes));
-        var loop = Loop(client, new CountingTool(), bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, new CountingTool(), bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -267,7 +247,7 @@ public class RunBudgetTests
         ]);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxTokens: 1_000_000, MaxCostUsd: 1000m, MaxOutputBytes: 1_000_000));
-        var loop = Loop(client, counter, bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, counter, bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -320,7 +300,7 @@ public class RunBudgetTests
         var client = new TokenCapturingLlmClient(script);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxOutputBytes: CapBytes));
-        var loop = Loop(client, new CountingTool(), bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, new CountingTool(), bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 
@@ -342,7 +322,7 @@ public class RunBudgetTests
         ]);
         var bus = new FakeEventBus();
         var agent = BudgetAgent(new RunBudgetCaps(MaxTokens: 1_000_000, MaxCostUsd: 1000m, MaxOutputBytes: 1_000_000));
-        var loop = Loop(client, new CountingTool(), bus, agent);
+        var loop = AgentLoopFixtures.Loop(client, new CountingTool(), bus, agent);
 
         var result = await loop.RunAsync(NewSession(), agent);
 

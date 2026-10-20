@@ -25,8 +25,6 @@ public class FilePickerNavStateTests
         return picker;
     }
 
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     // List rows start at rect.Y + 2; the entry text paints at rect.X + 1.
     // Selected rows carry Bold (Accent+Bold), plain rows do not (query row
     // at y=1 is Bold too, so only list rows are graded).
@@ -84,7 +82,7 @@ public class FilePickerNavStateTests
         // Height 6 → 2 list rows; selection drags the viewport down.
         var buffer = new ScreenBuffer(60, 6);
         picker.Paint(buffer, new Rect(0, 0, 60, 6), picker.State);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("src/e.cs")).IsTrue();
         await Assert.That(art.Contains("src/a.cs")).IsFalse();
     }

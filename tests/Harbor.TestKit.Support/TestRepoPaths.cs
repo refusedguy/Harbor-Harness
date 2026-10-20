@@ -76,6 +76,33 @@ public static class RepoPaths
     /// <param name="parts">Path segments, relative to the repository root.</param>
     public static string Combine(params string[] parts) => Path.Combine(Root, Path.Combine(parts));
 
+    /// <summary>
+    ///     Finds a file inside the repository by its repository-relative path.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The search walks up from the test host's directory until the file
+    ///         turns up, which is what a test that reads a source file out of the
+    ///         checkout needs: the depth of the host's <c>bin/</c> directory is
+    ///         not known in advance.
+    ///     </para>
+    /// </remarks>
+    /// <param name="relativePath">The path of the file, relative to the checkout.</param>
+    /// <exception cref="FileNotFoundException">The file is not above the test host.</exception>
+    public static string FindFile(string relativePath)
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir, relativePath);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+
+        throw new FileNotFoundException($"Repo file not found: {relativePath}");
+    }
+
     private static string FindRepoRoot()
     {
         DirectoryInfo? dir = new(AppContext.BaseDirectory);

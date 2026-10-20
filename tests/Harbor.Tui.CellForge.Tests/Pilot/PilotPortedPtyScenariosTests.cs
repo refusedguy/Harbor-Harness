@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Tui.CellForge.Tests.Pilot;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -28,9 +29,6 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </summary>
 public sealed class PilotPortedPtyScenariosTests
 {
-    private static JsonElement Args(string json) =>
-        JsonDocument.Parse(json).RootElement.Clone();
-
     /// <summary>
     /// Port of <c>SubmitScenarioTests.Submit_UserBlock_MockResponseStreams_AndCommits</c>:
     /// "привет" + Enter → answer streams in chunks → block commits and stays
@@ -87,7 +85,7 @@ public sealed class PilotPortedPtyScenariosTests
         await pilot.PublishAsync(new MessageStartEvent(streaming));
         await pilot.PublishAsync(new MessageUpdateEvent(new ToolCallStartEvent("tc1", "read"), streaming));
         await pilot.PublishAsync(ToolExecutionStartEvent.Create(
-            "tc1", "read", Args("{\"path\":\"pty-tool-probe-423.txt\"}")));
+            "tc1", "read", TestArgs.FromJson("{\"path\":\"pty-tool-probe-423.txt\"}")));
         await pilot.PublishAsync(new ToolExecutionEndEvent(
             "tc1",
             ToolResult.Success("pty-probe-line-alpha-423\npty-probe-line-beta-423\n"),
@@ -128,7 +126,7 @@ public sealed class PilotPortedPtyScenariosTests
         await pilot.PublishAsync(ToolExecutionStartEvent.Create(
             "tc1",
             "edit",
-            Args("{\"path\":\"pty-edit-probe-1057.txt\",\"oldString\":\"oldmarker-line-1057\",\"newString\":\"newmarker-line-1057\"}")));
+            TestArgs.FromJson("{\"path\":\"pty-edit-probe-1057.txt\",\"oldString\":\"oldmarker-line-1057\",\"newString\":\"newmarker-line-1057\"}")));
         await pilot.PublishAsync(new ToolExecutionEndEvent(
             "tc1",
             ToolResult.Success("Edited pty-edit-probe-1057.txt\nDiff (context):\n- oldmarker-line-1057\n+ newmarker-line-1057"),

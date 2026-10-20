@@ -110,19 +110,6 @@ public class ToolDispatcherCommitTests
         TimeSpan? abandonGrace, TimeProvider? clock) =>
         new(new FakeToolRegistry(tool), permissions, new FakeEventBus(),
             NullLogger<ToolDispatcher>.Instance, coordinator, null, abandonGrace, clock);
-    private static async Task WaitForAsync(Func<bool> condition, string what)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (!condition() && sw.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            await Task.Delay(5).ConfigureAwait(false);
-        }
-
-        if (!condition())
-        {
-            throw new TimeoutException($"Timed out waiting for: {what}");
-        }
-    }
 
     [Test]
     public async Task CancelBeforeCommit_ToolNeverStarts()
@@ -136,7 +123,7 @@ public class ToolDispatcherCommitTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(runner.AbortToken);
 
         var run = dispatcher.ExecuteAsync([Call()], NewSession(), AssistantMessage.Empty("s", "m"), CodeAgent(), cts.Token);
-        await WaitForAsync(() => permissions.Checks == 1, "permission check entered");
+        await AsyncWaits.WaitForAsync(() => permissions.Checks == 1, "permission check entered");
 
         // Cancel wins after approval started but before commit.
         coordinator.RequestCancel(runner);
@@ -232,7 +219,7 @@ public class ToolDispatcherCommitTests
 
         var run1 = dispatcher.ExecuteAsync([tc], session, partial, agent, CancellationToken.None);
         var run2 = dispatcher.ExecuteAsync([tc], session, partial, agent, CancellationToken.None);
-        await WaitForAsync(() => permissions.Checks == 2, "both checks entered");
+        await AsyncWaits.WaitForAsync(() => permissions.Checks == 2, "both checks entered");
         gate.TrySetResult(true);
 
         var m1 = await run1.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);

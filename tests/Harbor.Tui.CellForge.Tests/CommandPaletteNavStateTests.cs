@@ -25,21 +25,6 @@ public class CommandPaletteNavStateTests
         return palette;
     }
 
-    private static CommandPaletteView OpenMany(int count)
-    {
-        var items = new CommandItem[count];
-        for (int i = 0; i < items.Length; i++)
-        {
-            items[i] = new CommandItem("cmd" + i, "Command " + i.ToString("00"));
-        }
-
-        var palette = new CommandPaletteView();
-        palette.Show(items);
-        return palette;
-    }
-
-    private static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
-
     // List rows start at rect.Y + 2; the entry text paints at rect.X + 1.
     // Selected rows carry Bold (Accent+Bold), plain rows do not (query row
     // at y=1 is Bold too, so only list rows are graded; the seed commands
@@ -92,13 +77,13 @@ public class CommandPaletteNavStateTests
     [Test]
     public async Task Palette_ExternalState_ScrollsToSelection()
     {
-        var palette = OpenMany(20);
+        var palette = PaletteFixtures.OpenMany(20);
         palette.State.SelectLast();
 
         // Height 6 → 2 list rows; selection drags the viewport down.
         var buffer = new ScreenBuffer(60, 6);
         palette.Paint(buffer, new Rect(0, 0, 60, 6), palette.State);
-        string art = Art(buffer);
+        string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("Command 19")).IsTrue();
         await Assert.That(art.Contains("Command 00")).IsFalse();
     }

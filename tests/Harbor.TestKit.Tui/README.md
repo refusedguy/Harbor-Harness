@@ -32,6 +32,7 @@ the core may not reach `Harbor.Ui.Framework*`, `Harbor.Desktop.*`,
 | `UiTestDoubles.cs` | `TestDispatcherAdapter`, `CountingStoreSubscriberStub`, `CountingChatViewModelStub`, `DiffViewModelTestStub` (#1549) — they extend UI base types, so they are kept in one file. |
 | `NullRenderContext.cs` | A render context that renders nothing (#1772) — it implements `ITuiRenderContext`, which lives in `Harbor.Terminal.Abstractions`. |
 | `TestPanelProvider.cs` | A panel provider that builds a declared widget (#1772) — it implements `IPanelProvider`, which lives in `Harbor.Ui.Framework.State`. |
+| `TestColors.cs` | The packed-colour helpers the glow suites share (`Channels`, `HotTone`) — not a double, but it reaches `Harbor.Tui.CellForge.Engine` for the colour type, and the core kit may not (#1889). |
 
 ## The namespace is `Harbor.TestKit`
 
@@ -42,12 +43,12 @@ part follows it.
 
 ## Rules
 
-1. **Only a double that needs the UI stack belongs here.** A double that
+1. **Only a type that needs the UI stack belongs here.** A double that
    needs only `Harbor.Abstractions` belongs in the core
    [`Harbor.TestKit`](../Harbor.TestKit/README.md), which every consumer
    already references.
 2. **A consumer takes this reference only when it uses one of these
-   doubles.** The reference is the whole point of the split: the projects that
+   types.** The reference is the whole point of the split: the projects that
    never use a UI double must not compile the UI stack.
 3. **The composition is pinned.**
    `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs` asserts that

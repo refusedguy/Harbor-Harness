@@ -144,9 +144,9 @@
    этого документа стоит `allow-unwired`.
 6. **Ни одна существующая тестовая пин-строка не стоит на `k`.** Все они на
    `K`: `StatusBarFactsParityTests.cs:179-180,199`,
-   `StatusProjectionTests.cs:102`, `StatusProjectorPanelTests.cs:88`,
-   `StatusSegmentOrderTests.cs:135,162`, `PanelWiringTests.cs:190,201,316`,
-   `CellForgeBuiltinPanelsTests.cs:383`, `StatusMappersTests.cs:219`. На `k`
+   `StatusProjectionTests.cs:102`, `StatusProjectorPanelTests.cs:74`,
+   `StatusSegmentOrderTests.cs:135,162`, `PanelWiringTests.cs:179,190,305`,
+   `CellForgeBuiltinPanelsTests.cs:372`, `StatusMappersTests.cs:219`. На `k`
    стоит только `SideBarViewTests.cs:51,106-111` (и это тест сайдбара, то есть
    писателя №5). Это важно для цены: чтение тестов уже сказало «`K`», и
    смена нотации на `k` — это изменение **тестовых ожиданий**, а не

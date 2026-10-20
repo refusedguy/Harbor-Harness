@@ -34,14 +34,7 @@ public class PanelServicesCompositionTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
-
-    private static ServiceProvider ComposeDefault() => Compose(new HarborComposeOptions
+    private static ServiceProvider ComposeDefault() => CompositionFixtures.Compose(new HarborComposeOptions
     {
         HarborDir = TempHarborDir(),
         DefaultStorageBackend = "memory",
@@ -166,7 +159,7 @@ public class PanelServicesCompositionTests
     [Test]
     public async Task AddHarbor_RegistersReadAndEdit_EvenWithoutAnLspService()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",

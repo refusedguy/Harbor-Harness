@@ -27,13 +27,6 @@ public class TableBlockNavStateTests
         return block;
     }
 
-    private static ScreenBuffer PaintToBuffer(TableBlock block, int width = 40)
-    {
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
-        return buffer;
-    }
-
     private static ScreenBuffer PaintWith(TableBlock block, GenericNavState state, int width = 40)
     {
         var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
@@ -97,7 +90,7 @@ public class TableBlockNavStateTests
     public async Task Block_LegacyPaint_NoSelectionByDefault()
     {
         var block = ParseSample();
-        var buffer = PaintToBuffer(block);
+        var buffer = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(IsReversed(buffer, 2, 3)).IsFalse();
         await Assert.That(IsReversed(buffer, 2, 4)).IsFalse();
     }
@@ -108,7 +101,7 @@ public class TableBlockNavStateTests
         // RowState defaults to the first row, but the legacy path only reads
         // the widget-local selection — display-only hosts stay byte-identical.
         var block = ParseSample();
-        var buffer = PaintToBuffer(block);
+        var buffer = ScreenFixtures.PaintToBuffer(block);
         await Assert.That(IsReversed(buffer, 2, 3)).IsFalse();
         await Assert.That(IsReversed(buffer, 2, 4)).IsFalse();
     }

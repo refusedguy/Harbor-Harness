@@ -1,5 +1,4 @@
 using Harbor.Abstractions.Events;
-using Harbor.Abstractions.Models;
 using Harbor.DesignSystem;
 using Harbor.Tui.CellForge.Mascot;
 using Harbor.Tui.CellForge.Rendering;
@@ -77,44 +76,25 @@ public class MascotReactionTests
         return (screen, buffer);
     }
 
-    /// <summary>Paints all panels <paramref name="frames" /> times, returning only the LAST frame's art.</summary>
-    private static string PaintLastFrame(ChatScreen screen, ScreenBuffer buffer, int frames)
-    {
-        for (int i = 0; i < frames - 1; i++)
-        {
-            foreach (var panel in screen.Tree.Panels)
-            {
-                panel.Paint(buffer);
-            }
-        }
-
-        foreach (var panel in screen.Tree.Panels)
-        {
-            panel.Paint(buffer);
-        }
-
-        return GridDump.Art(buffer);
-    }
-
     [Test]
     public async Task ErrorBlink_PlaysThreeFrames_ThenMoodResumes()
     {
         var (screen, buffer) = BuildFooterScreen();
         var status = screen.Status.Vm;
 
-        _ = PaintLastFrame(screen, buffer, 1); // settle, tick 1
+        _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1); // settle, tick 1
 
         status.SignalMascot(MascotReaction.ErrorBlink);
-        string f0 = PaintLastFrame(screen, buffer, 1); // notify tick — frame 0
+        string f0 = ScreenFixtures.PaintLastFrame(screen, buffer, 1); // notify tick — frame 0
         await Assert.That(f0).Contains(AmbientMascot.ErrorBlinkFrames[0]);
 
-        string f1 = PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
+        string f1 = ScreenFixtures.PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
         await Assert.That(f1).Contains(AmbientMascot.ErrorBlinkFrames[1]);
 
-        string f2 = PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
+        string f2 = ScreenFixtures.PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
         await Assert.That(f2).Contains(AmbientMascot.ErrorBlinkFrames[2]);
 
-        string after = PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks); // expiry tick (11)
+        string after = ScreenFixtures.PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks); // expiry tick (11)
         await Assert.That(after).DoesNotContain(AmbientMascot.ErrorBlinkFrames[0]);
         await Assert.That(after).DoesNotContain(AmbientMascot.ErrorBlinkFrames[2]);
         await Assert.That(after).Contains(AmbientMascot.IdleFrames[11 % AmbientMascot.IdleFrames.Length]);
@@ -134,9 +114,9 @@ public class MascotReactionTests
         ChatPalette.PinFrame();
         try
         {
-            _ = PaintLastFrame(screen, buffer, 1);
+            _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
             status.SignalMascot(MascotReaction.ErrorBlink);
-            _ = PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
+            _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1); // notify paint — settled tint
 
             // The '(' of the blink face sits at the trailing edge of the status row.
             int x = screen.Status.Rect.Right - AmbientMascot.Width(AmbientMascot.ErrorBlinkFrames[0]);
@@ -155,16 +135,16 @@ public class MascotReactionTests
         var (screen, buffer) = BuildFooterScreen();
         var status = screen.Status.Vm;
 
-        _ = PaintLastFrame(screen, buffer, 1);
+        _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         status.SignalMascot(MascotReaction.SuccessBounce);
 
-        string f0 = PaintLastFrame(screen, buffer, 1);
+        string f0 = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         await Assert.That(f0).Contains(AmbientMascot.SuccessBounceFrames[0]);
 
-        string f1 = PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
+        string f1 = ScreenFixtures.PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
         await Assert.That(f1).Contains(AmbientMascot.SuccessBounceFrames[1]);
 
-        string after = PaintLastFrame(screen, buffer, 2 * MascotDirector.ReactionFrameTicks);
+        string after = ScreenFixtures.PaintLastFrame(screen, buffer, 2 * MascotDirector.ReactionFrameTicks);
         await Assert.That(after).DoesNotContain(AmbientMascot.SuccessBounceFrames[1]);
     }
 
@@ -174,16 +154,16 @@ public class MascotReactionTests
         var (screen, buffer) = BuildFooterScreen();
         var status = screen.Status.Vm;
 
-        _ = PaintLastFrame(screen, buffer, 1);
+        _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         status.SignalMascot(MascotReaction.ApprovalWiggle);
 
-        string f0 = PaintLastFrame(screen, buffer, 1);
+        string f0 = ScreenFixtures.PaintLastFrame(screen, buffer, 1);
         await Assert.That(f0).Contains(AmbientMascot.ApprovalWiggleFrames[0]);
 
-        string f1 = PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
+        string f1 = ScreenFixtures.PaintLastFrame(screen, buffer, MascotDirector.ReactionFrameTicks);
         await Assert.That(f1).Contains(AmbientMascot.ApprovalWiggleFrames[1]);
 
-        string after = PaintLastFrame(screen, buffer, 2 * MascotDirector.ReactionFrameTicks);
+        string after = ScreenFixtures.PaintLastFrame(screen, buffer, 2 * MascotDirector.ReactionFrameTicks);
         await Assert.That(after).DoesNotContain(AmbientMascot.ApprovalWiggleFrames[0]);
     }
 
@@ -224,7 +204,7 @@ public class MascotReactionTests
         var status = screen.Status.Vm;
 
         status.SignalMascot(MascotReaction.ErrorBlink);
-        _ = PaintLastFrame(screen, buffer, 1); // panel consumed it
+        _ = ScreenFixtures.PaintLastFrame(screen, buffer, 1); // panel consumed it
 
         await Assert.That(status.ConsumeMascotSignal()).IsEqualTo(MascotReaction.None);
     }

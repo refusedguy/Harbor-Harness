@@ -17,17 +17,6 @@ public class CellForgeSkillFreshnessPanelTests
     private static PanelContext Ctx(UiState state, int width = 80, int height = 24, PanelServices? services = null) =>
         new(state, width, height, services);
 
-    private static IReadOnlyList<string> Rows(object? widget) => widget switch
-    {
-        null => Array.Empty<string>(),
-        string s => s.Split('\n'),
-        IReadOnlyList<string> rows => rows,
-        IEnumerable<string> lines => lines.ToArray(),
-        _ => new[] { widget.ToString() ?? string.Empty },
-    };
-
-    private static string Joined(object? widget) => string.Join("\n", Rows(widget));
-
     private static CellForgeSkillFreshnessPanel WithModel(out SkillFreshnessModel model)
     {
         model = new SkillFreshnessModel();
@@ -58,7 +47,7 @@ public class CellForgeSkillFreshnessPanelTests
     [Test]
     public async Task Build_Empty_RendersPlaceholder()
     {
-        string text = Joined(new CellForgeSkillFreshnessPanel().Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(new CellForgeSkillFreshnessPanel().Build(Ctx(new UiState())));
         await Assert.That(text).Contains("Skills (0)");
         await Assert.That(text).Contains("No skills installed.");
     }
@@ -67,7 +56,7 @@ public class CellForgeSkillFreshnessPanelTests
     public async Task Build_WithEntries_RendersPillRows()
     {
         var panel = WithModel(out _);
-        string text = Joined(panel.Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(panel.Build(Ctx(new UiState())));
         await Assert.That(text).Contains("✓ current  code-review");
         await Assert.That(text).Contains("● changed  drifted");
         await Assert.That(text).Contains("1 need attention");
@@ -78,7 +67,7 @@ public class CellForgeSkillFreshnessPanelTests
     {
         var panel = WithModel(out var model);
         model.SetSkills([new SkillFreshnessEntry("only", "aa", "aa")]);
-        string text = Joined(panel.Build(Ctx(new UiState())));
+        string text = WidgetFixtures.Joined(panel.Build(Ctx(new UiState())));
         await Assert.That(text).Contains("Skills (1)");
         await Assert.That(text).Contains("All skills up to date.");
         await Assert.That(text).DoesNotContain("drifted");
@@ -88,7 +77,7 @@ public class CellForgeSkillFreshnessPanelTests
     public async Task Clipping_TinyViewport_NeverThrows()
     {
         var panel = WithModel(out _);
-        var rows = Rows(panel.Build(Ctx(new UiState(), width: 10, height: 3, services: null)));
+        var rows = WidgetFixtures.Rows(panel.Build(Ctx(new UiState(), width: 10, height: 3, services: null)));
         await Assert.That(rows.Count <= 3).IsTrue();
         foreach (string line in rows)
         {

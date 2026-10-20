@@ -1,12 +1,12 @@
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
 using TUnit.Core;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -18,17 +18,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class TaskCardTests
 {
-    private static JsonElement Args(string json) =>
-        JsonDocument.Parse(json).RootElement.Clone();
-
-    private static AssistantMessage AssistantMsg(string sessionId, params string[] texts) => new(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow,
-        [.. texts.Select(t => new TextPart(t))], StopReason.Stop, new Usage(0, 0), "test-model");
-
-    private static UserMessage UserMsg(string sessionId, string content) => new(
-        Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow,
-        content, "code", "test-model");
-
     private static (FakeEventBus Bus, ChatTimelinePanel Panel, StatusViewModel Status, ChatScreenBridge Bridge) Setup(
         string model = "m")
     {
@@ -41,9 +30,9 @@ public class TaskCardTests
 
     private static async Task StartParentTaskAsync(FakeEventBus bus, ChatScreenBridge bridge, string taskId = "task1")
     {
-        await bus.PublishAsync(new AgentStartEvent("s-parent", [UserMsg("s-parent", "do recon")]));
+        await bus.PublishAsync(new AgentStartEvent("s-parent", [WidgetFixtures.UserMsg("s-parent", "do recon")]));
         await bus.PublishAsync(new ToolExecutionStartEvent(
-            taskId, "task", Args("{\"agent\":\"explore\",\"prompt\":\"find parsers\"}")));
+            taskId, "task", TestArgs.FromJson("{\"agent\":\"explore\",\"prompt\":\"find parsers\"}")));
         bridge.Tick(1000);
     }
 
@@ -56,7 +45,7 @@ public class TaskCardTests
             await StartParentTaskAsync(bus, bridge);
 
             // Live suffix tracks the running child tool…
-            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "read", Args("{\"path\":\"a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "read", TestArgs.FromJson("{\"path\":\"a.cs\"}")));
             bridge.Tick(1010);
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
             await Assert.That(card.Info.ToolName).IsEqualTo("task");
@@ -80,10 +69,10 @@ public class TaskCardTests
         {
             await StartParentTaskAsync(bus, bridge);
 
-            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "read", Args("{\"path\":\"a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "read", TestArgs.FromJson("{\"path\":\"a.cs\"}")));
             bridge.Tick(1010);
             await bus.PublishAsync(new ToolExecutionEndEvent("c1", ToolResult.Success("body"), IsError: false));
-            await bus.PublishAsync(new ToolExecutionStartEvent("c2", "grep", Args("{\"pattern\":\"parse\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("c2", "grep", TestArgs.FromJson("{\"pattern\":\"parse\"}")));
             bridge.Tick(1120);
             await bus.PublishAsync(new ToolExecutionEndEvent("c2", ToolResult.Success("hit"), IsError: false));
             bridge.Tick(1500);
@@ -124,13 +113,13 @@ public class TaskCardTests
             await StartParentTaskAsync(bus, bridge);
 
             // Child session announcement: transcript header only, no replay.
-            await bus.PublishAsync(new AgentStartEvent("s-child", [UserMsg("s-child", "secret")], Kind: SessionKind.Subagent));
+            await bus.PublishAsync(new AgentStartEvent("s-child", [WidgetFixtures.UserMsg("s-child", "secret")], Kind: SessionKind.Subagent));
             await Assert.That(panel.Timeline.Count).IsEqualTo(2);
 
             // Child prose: suppressed from the feed…
-            await bus.PublishAsync(new MessageStartEvent(AssistantMsg("s-child", string.Empty)));
-            await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("d1", "secret child text"), AssistantMsg("s-child", "x")));
-            await bus.PublishAsync(new MessageEndEvent(AssistantMsg("s-child", "secret child text")));
+            await bus.PublishAsync(new MessageStartEvent(WidgetFixtures.AssistantMsg("s-child", string.Empty)));
+            await bus.PublishAsync(new MessageUpdateEvent(new TextDeltaEvent("d1", "secret child text"), WidgetFixtures.AssistantMsg("s-child", "x")));
+            await bus.PublishAsync(new MessageEndEvent(WidgetFixtures.AssistantMsg("s-child", "secret child text")));
             await Assert.That(panel.Timeline.Count).IsEqualTo(2);
             await Assert.That(panel.Timeline.BlockAt(0).Kind).IsEqualTo("user");
             await Assert.That(panel.Timeline.BlockAt(1).Kind).IsEqualTo("tool-call");
@@ -152,7 +141,7 @@ public class TaskCardTests
         {
             await StartParentTaskAsync(bus, bridge);
 
-            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "bash", Args("{\"cmd\":\"make\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("c1", "bash", TestArgs.FromJson("{\"cmd\":\"make\"}")));
             await bus.PublishAsync(new ToolExecutionUpdateEvent("c1", "retrying", RetryAttempt: 1, RetryMaxAttempts: 3, RetryBackoffSeconds: 1.0));
 
             var card = (ToolCallBlock)panel.Timeline.BlockAt(panel.Timeline.Count - 1);
@@ -177,7 +166,7 @@ public class TaskCardTests
             await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
 
             // Child run ends mid-task: parent footer stays Running, no mascot bounce.
-            await bus.PublishAsync(new AgentEndEvent([AssistantMsg("s-child", "done")]));
+            await bus.PublishAsync(new AgentEndEvent([WidgetFixtures.AssistantMsg("s-child", "done")]));
             await Assert.That(status.Mode).IsEqualTo(StatusBarMode.Running);
             await Assert.That(panel.Timeline.Count).IsEqualTo(2);
         }
@@ -190,7 +179,7 @@ public class TaskCardTests
         var (bus, panel, _, bridge) = Setup();
         using (bridge)
         {
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", Args("{\"path\":\"src/a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"src/a.cs\"}")));
             bridge.Tick(120);
             await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
 

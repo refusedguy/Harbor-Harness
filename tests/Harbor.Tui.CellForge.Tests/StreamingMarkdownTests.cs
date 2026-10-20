@@ -57,23 +57,6 @@ public class StreamingMarkdownTests
     /// </summary>
     private static string Lf(string s) => s.Replace("\r\n", "\n", StringComparison.Ordinal);
 
-    private static List<string> Flatten(IReadOnlyList<MdLine> lines)
-    {
-        var flat = new List<string>(lines.Count);
-        foreach (var l in lines)
-        {
-            var sb = new System.Text.StringBuilder();
-            foreach (var s in l.Spans)
-            {
-                sb.Append('[').Append(s.Style).Append(':').Append(s.Text).Append(']');
-            }
-
-            flat.Add(sb.ToString());
-        }
-
-        return flat;
-    }
-
     [Test]
     [Arguments(40)]
     [Arguments(20)]
@@ -100,8 +83,8 @@ public class StreamingMarkdownTests
             streaming.Complete();
             _ = streaming.RenderTail(width);
 
-            var got = Flatten(streaming.GetLines());
-            var want = Flatten(expected.GetLines());
+            var got = MarkdownFixtures.Flatten(streaming.GetLines());
+            var want = MarkdownFixtures.Flatten(expected.GetLines());
 
             await Assert.That(got).IsEquivalentTo(want).Because($"doc#{doc} diverged at width {width}");
         }
@@ -136,7 +119,7 @@ public class StreamingMarkdownTests
                 once.Complete();
                 _ = once.RenderTail(30);
 
-                await Assert.That(Flatten(streamed.GetLines())).IsEquivalentTo(Flatten(once.GetLines()));
+                await Assert.That(MarkdownFixtures.Flatten(streamed.GetLines())).IsEquivalentTo(MarkdownFixtures.Flatten(once.GetLines()));
             }
         }
     }
@@ -175,7 +158,7 @@ public class StreamingMarkdownTests
         fresh.Push("a fairly long paragraph that will wrap differently at different terminal widths\n\nsecond block\n");
         fresh.Complete();
         _ = fresh.RenderTail(16);
-        await Assert.That(Flatten(r.GetLines())).IsEquivalentTo(Flatten(fresh.GetLines()));
+        await Assert.That(MarkdownFixtures.Flatten(r.GetLines())).IsEquivalentTo(MarkdownFixtures.Flatten(fresh.GetLines()));
     }
 
     [Test]
@@ -222,7 +205,7 @@ public class StreamingMarkdownTests
         direct.Push("no trailing newline here");
         direct.Complete();
         _ = direct.RenderTail(30);
-        await Assert.That(Flatten(r.GetLines())).IsEquivalentTo(Flatten(direct.GetLines()));
+        await Assert.That(MarkdownFixtures.Flatten(r.GetLines())).IsEquivalentTo(MarkdownFixtures.Flatten(direct.GetLines()));
     }
 
     private static IEnumerable<string> Chunks(string s)

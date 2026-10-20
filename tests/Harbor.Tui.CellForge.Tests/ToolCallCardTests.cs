@@ -2,13 +2,13 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Terminal.Abstractions.ViewModels;
 using Harbor.Tui.CellForge.Input;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Streaming;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
 using TUnit.Core;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -19,9 +19,6 @@ namespace Harbor.Tui.CellForge.Tests;
 [NotInParallel("pty")]
 public class ToolCallCardTests
 {
-    private static JsonElement Args(string json) =>
-        JsonDocument.Parse(json).RootElement.Clone();
-
     private static (FakeEventBus Bus, ChatTimelinePanel Panel, ChatScreenBridge Bridge) Setup(
         string model = "m")
     {
@@ -38,7 +35,7 @@ public class ToolCallCardTests
         var (bus, panel, bridge) = Setup();
         using (bridge)
         {
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", Args("{\"path\":\"src/a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"src/a.cs\"}")));
             bridge.Tick(120);
             await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
 
@@ -58,7 +55,7 @@ public class ToolCallCardTests
         var (bus, panel, bridge) = Setup();
         using (bridge)
         {
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc9", "bash", Args("{}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc9", "bash", TestArgs.FromJson("{}")));
             bridge.Tick(50);
             await bus.PublishAsync(new ToolExecutionEndEvent("tc9", ToolResult.Error("exit code 1"), IsError: true));
 
@@ -87,7 +84,7 @@ public class ToolCallCardTests
         var tracker = new ToolCardTracker(panel);
 
         tracker.EnsureCard("tc1", "bash", argsSummary: null);
-        tracker.EnsureCard("tc1", "bash", Args("{\"cmd\":\"make\"}"), restampStarted: true);
+        tracker.EnsureCard("tc1", "bash", TestArgs.FromJson("{\"cmd\":\"make\"}"), restampStarted: true);
 
         var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
         await Assert.That(card.Info.ArgsSummary).IsEqualTo(string.Empty);
@@ -104,7 +101,7 @@ public class ToolCallCardTests
         var panel = new ChatTimelinePanel("chat", 20, 4);
         var tracker = new ToolCardTracker(panel);
 
-        tracker.EnsureCard("tc1", "bash", Args("{\"cmd\":\"make\"}"));
+        tracker.EnsureCard("tc1", "bash", TestArgs.FromJson("{\"cmd\":\"make\"}"));
 
         var card = (ToolCallBlock)panel.Timeline.BlockAt(0);
         await Assert.That(card.Info.ArgsSummary).IsEqualTo("{\"cmd\":\"make\"}");
@@ -205,7 +202,7 @@ public class ToolCallCardTests
         var (bus, panel, bridge) = Setup();
         using (bridge)
         {
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", Args("{\"path\":\"a.cs\"}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{\"path\":\"a.cs\"}")));
             await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("file body"), IsError: false));
 
             var tl = panel.Timeline;
@@ -234,9 +231,9 @@ public class ToolCallCardTests
         {
             await Assert.That(bridge.TryRouteToolCardKey(KeyEvent.Simple(KeyCode.Enter))).IsFalse();
 
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", Args("{}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc1", "read", TestArgs.FromJson("{}")));
             await bus.PublishAsync(new ToolExecutionEndEvent("tc1", ToolResult.Success("one"), IsError: false));
-            await bus.PublishAsync(new ToolExecutionStartEvent("tc2", "bash", Args("{}")));
+            await bus.PublishAsync(new ToolExecutionStartEvent("tc2", "bash", TestArgs.FromJson("{}")));
             await bus.PublishAsync(new ToolExecutionEndEvent("tc2", ToolResult.Success("two"), IsError: false));
 
             var first = (ToolCallBlock)panel.Timeline.BlockAt(0);

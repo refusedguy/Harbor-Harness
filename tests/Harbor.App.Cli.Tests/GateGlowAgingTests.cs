@@ -61,7 +61,6 @@
 
 using System.Text;
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.App.Cli.Repl;
 using Harbor.Application.Configuration;
@@ -95,23 +94,11 @@ public sealed class GateGlowAgingTests
 
     // ── Colour helpers, the PostFxTests idiom ─────────────────────────────
 
-    private static (byte R, byte G, byte B) Channels(EngineCells.PackedColor c) =>
-        c.IsRgb ? c.RgbChannels : ((byte)0, (byte)0, (byte)0);
-
     /// <summary>The fixed burn <c>GlowEffect</c> applies toward white to derive its hot tone.</summary>
-    private static EngineCells.PackedColor HotTone(EngineCells.PackedColor accent)
-    {
-        var (r, g, b) = Channels(accent);
-        const double burn = 0.65; // GlowEffect.HotBurn
-        return EngineCells.PackedColor.Rgb(
-            (byte)(r + ((255 - r) * burn)),
-            (byte)(g + ((255 - g) * burn)),
-            (byte)(b + ((255 - b) * burn)));
-    }
 
     private static string Sgr(EngineCells.PackedColor c)
     {
-        var (r, g, b) = Channels(c);
+        var (r, g, b) = TestColors.Channels(c);
         return $"\x1B[38;2;{r};{g};{b}m";
     }
 
@@ -131,7 +118,7 @@ public sealed class GateGlowAgingTests
     private static UIR.PackedColor ToUi(EngineCells.PackedColor c) => UIR.PackedColor.FromRaw(c.Value);
 
     private static string HotSgr(EngineCells.PackedColor accent, double intensity) =>
-        Sgr(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(HotTone(accent)), intensity * GlowEffect.PeakStrength).Value));
+        Sgr(EngineCells.PackedColor.FromRaw(PanelFx.Lerp(ToUi(accent), ToUi(TestColors.HotTone(accent)), intensity * GlowEffect.PeakStrength).Value));
 
     // ── The producer half, observed through the real consumer ────────────
 

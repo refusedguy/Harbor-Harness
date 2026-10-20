@@ -10,6 +10,7 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Plugins.Runtime.Tests.Security;
 
@@ -31,9 +32,6 @@ public sealed class SandboxedPluginToolTests
         Messages: Array.Empty<AgentMessage>(),
         ReportProgress: (_, _) => Task.CompletedTask,
         Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
-
-    private static JsonElement Args(string json) =>
-        JsonDocument.Parse(json).RootElement.Clone();
 
     private static SandboxedPluginTool Wrap(
         ITool inner,
@@ -64,14 +62,14 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("""{"path":"notes.txt"}"""), ToolResult.Success("ok"));
+        var inner = new FakeTool(TestArgs.FromJson("""{"path":"notes.txt"}"""), ToolResult.Success("ok"));
         var tool = Wrap(
             inner,
             bus,
             audit,
             capabilities: new HashSet<PluginCapability> { PluginCapability.ReadFiles });
 
-        var result = await tool.ExecuteAsync(Args("""{"path":"notes.txt"}"""), Ctx);
+        var result = await tool.ExecuteAsync(TestArgs.FromJson("""{"path":"notes.txt"}"""), Ctx);
 
         await Assert.That(result.IsError).IsFalse();
         await Assert.That(bus.Events).IsEmpty();
@@ -88,7 +86,7 @@ public sealed class SandboxedPluginToolTests
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
         var inner = new FakeTool(
-            Args("{}"),
+            TestArgs.FromJson("{}"),
             ToolResult.Success("never"),
             delay: TimeSpan.FromSeconds(5));
         var tool = Wrap(
@@ -98,7 +96,7 @@ public sealed class SandboxedPluginToolTests
             timeout: TimeSpan.FromMilliseconds(100),
             capabilities: new HashSet<PluginCapability> { PluginCapability.ReadFiles });
 
-        var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+        var result = await tool.ExecuteAsync(TestArgs.FromJson("{}"), Ctx);
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:timeout]");
@@ -113,7 +111,7 @@ public sealed class SandboxedPluginToolTests
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
         var inner = new FakeTool(
-            Args("{}"),
+            TestArgs.FromJson("{}"),
             ToolResult.Success("never"),
             delay: TimeSpan.FromSeconds(5),
             ignoresToken: true);
@@ -123,7 +121,7 @@ public sealed class SandboxedPluginToolTests
             audit,
             timeout: TimeSpan.FromMilliseconds(100));
 
-        var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+        var result = await tool.ExecuteAsync(TestArgs.FromJson("{}"), Ctx);
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:timeout]");
@@ -135,10 +133,10 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Success(new string('x', 1024)));
+        var inner = new FakeTool(TestArgs.FromJson("{}"), ToolResult.Success(new string('x', 1024)));
         var tool = Wrap(inner, bus, audit, memoryBudget: 16);
 
-        var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+        var result = await tool.ExecuteAsync(TestArgs.FromJson("{}"), Ctx);
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("[sandbox:memory]");
@@ -160,7 +158,7 @@ public sealed class SandboxedPluginToolTests
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
         var inner = new FakeTool(
-            Args("{}"),
+            TestArgs.FromJson("{}"),
             ToolResult.Success("ok"),
             delay: TimeSpan.FromMilliseconds(200));
         var tool = Wrap(inner, bus, audit);
@@ -177,7 +175,7 @@ public sealed class SandboxedPluginToolTests
 
         try
         {
-            var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+            var result = await tool.ExecuteAsync(TestArgs.FromJson("{}"), Ctx);
 
             await Assert.That(result.IsError).IsFalse();
             await Assert.That(bus.Of<PluginBlockedEvent>()).IsEmpty();
@@ -200,7 +198,7 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Success("x"), delay: TimeSpan.FromSeconds(5));
+        var inner = new FakeTool(TestArgs.FromJson("{}"), ToolResult.Success("x"), delay: TimeSpan.FromSeconds(5));
         var tool = Wrap(
             inner,
             bus,
@@ -213,7 +211,7 @@ public sealed class SandboxedPluginToolTests
         var cancelledCtx = Ctx with { Abort = cancelledCts.Token };
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => tool.ExecuteAsync(Args("{}"), cancelledCtx, cancelledCts.Token));
+            () => tool.ExecuteAsync(TestArgs.FromJson("{}"), cancelledCtx, cancelledCts.Token));
 
         await Assert.That(bus.Events).IsEmpty();
         await Assert.That(audit.Entries).IsEmpty();
@@ -224,14 +222,14 @@ public sealed class SandboxedPluginToolTests
     {
         var bus = new RecordingEventBus();
         var audit = new RecordingAuditLog();
-        var inner = new FakeTool(Args("{}"), ToolResult.Error("boom"));
+        var inner = new FakeTool(TestArgs.FromJson("{}"), ToolResult.Error("boom"));
         var tool = Wrap(
             inner,
             bus,
             audit,
             capabilities: new HashSet<PluginCapability> { PluginCapability.ReadFiles });
 
-        var result = await tool.ExecuteAsync(Args("{}"), Ctx);
+        var result = await tool.ExecuteAsync(TestArgs.FromJson("{}"), Ctx);
 
         await Assert.That(result.IsError).IsTrue();
         await Assert.That(bus.Of<PluginBlockedEvent>()).IsEmpty();

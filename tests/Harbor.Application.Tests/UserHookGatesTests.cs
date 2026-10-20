@@ -24,14 +24,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class UserHookGatesTests
 {
-    private static UserMessage UserMsg(string sessionId, int i) => new(
-        Guid.NewGuid().ToString("N"),
-        sessionId,
-        DateTimeOffset.UtcNow,
-        $"question-{i}",
-        "user",
-        "test-model");
-
     private sealed class FakeHookRunner : IHookRunner
     {
         public int PromptCalls;
@@ -102,7 +94,7 @@ public class UserHookGatesTests
         };
         var loop = CreateLoop(client, bus, hooks);
         var session = Session.Create("/tmp/harbor-hook-gates-tests", "code", "test", "test-model");
-        var context = new TestSessionContext(session, [UserMsg(session.Id, 0)]);
+        var context = new TestSessionContext(session, [AgentFixtures.UserMsg(session.Id, 0)]);
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
@@ -142,7 +134,7 @@ public class UserHookGatesTests
         var hooks = new FakeHookRunner();
         var loop = CreateLoop(client, bus, hooks);
         var session = Session.Create("/tmp/harbor-hook-gates-tests", "code", "test", "test-model");
-        var context = new TestSessionContext(session, [UserMsg(session.Id, 0)]);
+        var context = new TestSessionContext(session, [AgentFixtures.UserMsg(session.Id, 0)]);
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
@@ -164,7 +156,7 @@ public class UserHookGatesTests
         };
         var loop = CreateLoop(client, bus, hooks);
         var session = Session.Create("/tmp/harbor-hook-gates-tests", "code", "test", "test-model");
-        var context = new TestSessionContext(session, [UserMsg(session.Id, 0)]);
+        var context = new TestSessionContext(session, [AgentFixtures.UserMsg(session.Id, 0)]);
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 

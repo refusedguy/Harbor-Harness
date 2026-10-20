@@ -14,16 +14,6 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </summary>
 public class TaskToolTests
 {
-    private static AgentDefinition SubAgent(string name) => new(
-        AgentName.Create(name),
-        name,
-        name,
-        "test-model",
-        "test",
-        PermissionRuleset.Empty,
-        20,
-        IsSubAgent: true);
-
     private static AgentDefinition NonSubAgent(string name) => new(
         AgentName.Create(name),
         name,
@@ -34,14 +24,6 @@ public class TaskToolTests
 
     private static ToolContext CreateContext() =>
         TestToolContext.Create(sessionId: "session-1", messageId: "message-1", callId: "call-1");
-
-    private static JsonElement Args(params (string key, string value)[] pairs)
-    {
-        var dict = new Dictionary<string, object?>();
-        foreach ((string k, string v) in pairs)
-            dict[k] = v;
-        return JsonDocument.Parse(JsonSerializer.Serialize(dict, TestJsonContext.Default.DictionaryStringObject)).RootElement.Clone();
-    }
 
     [Test]
     public async Task Name_IsTask()
@@ -70,10 +52,10 @@ public class TaskToolTests
     public async Task ExecuteAsync_UnknownAgent_ReturnsErrorListingAvailable()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
-        var args = Args(("agent", "nonexistent"), ("prompt", "hi"));
+        var args = TestArgs.FromPairs(("agent", "nonexistent"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -88,7 +70,7 @@ public class TaskToolTests
         agents.Register(NonSubAgent("code"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
-        var args = Args(("agent", "code"), ("prompt", "do work"));
+        var args = TestArgs.FromPairs(("agent", "code"), ("prompt", "do work"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -100,10 +82,10 @@ public class TaskToolTests
     public async Task ExecuteAsync_ValidSubAgent_NoRunnerWired_FailsHonest()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
-        var args = Args(("agent", "explore"), ("prompt", "find all TODO comments in src/"));
+        var args = TestArgs.FromPairs(("agent", "explore"), ("prompt", "find all TODO comments in src/"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         // G4: with no runner wired the tool must fail explicitly — never fabricate
@@ -117,7 +99,7 @@ public class TaskToolTests
     public async Task ExecuteAsync_ValidSubAgent_RunnerExecutesAndReturnsFinalOutput()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult(
             SessionId: "sub-1",
             AgentName: "explore",
@@ -125,7 +107,7 @@ public class TaskToolTests
             NewMessages: 2)));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var args = Args(("agent", "explore"), ("prompt", "find all TODOs"));
+        var args = TestArgs.FromPairs(("agent", "explore"), ("prompt", "find all TODOs"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsFalse();
@@ -142,11 +124,11 @@ public class TaskToolTests
     public async Task ExecuteAsync_RunnerFailure_PropagatesAsToolError()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Failure<SubAgentRunResult>("model exploded"));
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var args = Args(("agent", "explore"), ("prompt", "hi"));
+        var args = TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -157,11 +139,11 @@ public class TaskToolTests
     public async Task ExecuteAsync_NestingGuardActive_RefusesBeforeRunnerCall()
     {
         var agents = new AgentRegistry();
-        agents.Register(SubAgent("explore"));
+        agents.Register(AgentFixtures.SubAgent("explore"));
         var runner = new FakeRunner(Result.Success(new SubAgentRunResult("sub-1", "explore", "never", 0)), canSpawn: false);
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance, runner);
 
-        var args = Args(("agent", "explore"), ("prompt", "hi"));
+        var args = TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -177,7 +159,7 @@ public class TaskToolTests
 
         // AgentName.Create lowercases and accepts any non-empty string, so use a
         // clearly invalid one — empty string triggers the failure path.
-        var args = Args(("agent", ""), ("prompt", "hi"));
+        var args = TestArgs.FromPairs(("agent", ""), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();
@@ -190,7 +172,7 @@ public class TaskToolTests
         var agents = new AgentRegistry();
         var tool = new TaskTool(agents, NullLogger<TaskTool>.Instance);
 
-        var args = Args(("agent", "explore"), ("prompt", "hi"));
+        var args = TestArgs.FromPairs(("agent", "explore"), ("prompt", "hi"));
         var result = await tool.ExecuteAsync(args, CreateContext());
 
         await Assert.That(result.IsError).IsTrue();

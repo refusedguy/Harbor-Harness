@@ -18,17 +18,10 @@ public class McpTransportCompositionTests
     private static string TempHarborDir() =>
         Path.Combine(Path.GetTempPath(), "harbor-hosting-tests", Guid.NewGuid().ToString("N"));
 
-    private static ServiceProvider Compose(HarborComposeOptions options)
-    {
-        var services = new ServiceCollection();
-        services.AddHarbor(options);
-        return services.BuildServiceProvider();
-    }
-
     [Test]
     public async Task AddHarbor_PublishesTheTransportSeam()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
@@ -45,7 +38,7 @@ public class McpTransportCompositionTests
     [Test]
     public async Task AddHarbor_ExtraTransport_WidensTheAcceptedSetWithoutTouchingTheRegistry()
     {
-        using var sp = Compose(new HarborComposeOptions
+        using var sp = CompositionFixtures.Compose(new HarborComposeOptions
         {
             HarborDir = TempHarborDir(),
             DefaultStorageBackend = "memory",
@@ -74,7 +67,7 @@ public class McpTransportCompositionTests
         // existing mcp.json — that must never boot.
         await Assert.ThrowsAsync<ArgumentException>(async () =>
         {
-            using var sp = Compose(new HarborComposeOptions
+            using var sp = CompositionFixtures.Compose(new HarborComposeOptions
             {
                 HarborDir = TempHarborDir(),
                 DefaultStorageBackend = "memory",

@@ -3,7 +3,6 @@ using System.Text;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Models.Identifiers;
 using Harbor.TestKit;
 using Harbor.Tui.CellForge.Panels;
 using Harbor.Tui.CellForge.Rendering;
@@ -156,13 +155,6 @@ public class CellForgeJumpPalettePanelTests
                 Sessions = ImmutableArray.Create(sessions)
             }
         };
-
-    private static SessionInfo Info(string id, string title) => new(
-        SessionId.Create(id),
-        title,
-        DateTimeOffset.UtcNow,
-        DateTimeOffset.UtcNow,
-        "active");
 
     private static UiStore VisibleJumpStore() => JumpStore(TuiPanelState.Visible);
 
@@ -517,7 +509,7 @@ public class CellForgeJumpPalettePanelTests
         };
         var manager = new FakeSessionManager();
         manager.AddContext(session);
-        var state = StateWithSessions(Info("s1", "Jump Palette"));
+        var state = StateWithSessions(WidgetFixtures.Info("s1", "Jump Palette"));
         var git = new TestGitQuery(worktrees: [new GitWorktreeInfo("/repo/.worktrees/jump-palette", "feat/jump-palette", false)]);
         var services = new PanelServices { Sessions = manager, Git = git };
         var panel = new CellForgeJumpPalettePanel { WorktreeDirectory = "/repo" };
@@ -552,7 +544,7 @@ public class CellForgeJumpPalettePanelTests
             };
         var manager = new FakeSessionManager();
         manager.AddContext(session);
-        var state = StateWithSessions(Info("s1", "Main"));
+        var state = StateWithSessions(WidgetFixtures.Info("s1", "Main"));
         var panel = new CellForgeJumpPalettePanel();
 
         string text = Joined(panel.Build(Ctx(state, new PanelServices { Sessions = manager })));
@@ -577,7 +569,7 @@ public class CellForgeJumpPalettePanelTests
             };
         var manager = new FakeSessionManager();
         manager.AddContext(session);
-        var state = StateWithSessions(Info("s1", "Main"));
+        var state = StateWithSessions(WidgetFixtures.Info("s1", "Main"));
         var services = new PanelServices { Sessions = manager, Git = new ThrowingGitQuery() };
         var panel = new CellForgeJumpPalettePanel();
 

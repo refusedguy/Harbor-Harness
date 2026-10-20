@@ -15,14 +15,6 @@ namespace Harbor.Application.Tests;
 /// </summary>
 public class MessageSnapshotTests
 {
-    private static UserMessage UserMsg(string sessionId, int i) => new(
-        Guid.NewGuid().ToString("N"),
-        sessionId,
-        DateTimeOffset.UtcNow,
-        $"question-{i}",
-        "user",
-        "test-model");
-
     [Test]
     public async Task RunAsync_AgentStartEvent_CarriesPreRunSnapshotNotLiveList()
     {
@@ -31,7 +23,7 @@ public class MessageSnapshotTests
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), bus);
         var session = Session.Create("/tmp/harbor-message-snapshot-tests", "code", "test", "test-model");
-        var context = new TestSessionContext(session, [UserMsg(session.Id, 0), UserMsg(session.Id, 1)]);
+        var context = new TestSessionContext(session, [AgentFixtures.UserMsg(session.Id, 0), AgentFixtures.UserMsg(session.Id, 1)]);
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
@@ -60,7 +52,7 @@ public class MessageSnapshotTests
         var bus = new FakeEventBus();
         var loop = TestLoops.Create(client, new FakeToolRegistry(), new FakeTokenTracker(), new FakeCompactionService(), bus);
         var session = Session.Create("/tmp/harbor-message-snapshot-tests", "code", "test", "test-model");
-        var context = new TestSessionContext(session, [UserMsg(session.Id, 0), UserMsg(session.Id, 1)]);
+        var context = new TestSessionContext(session, [AgentFixtures.UserMsg(session.Id, 0), AgentFixtures.UserMsg(session.Id, 1)]);
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 

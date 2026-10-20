@@ -42,7 +42,7 @@ private static AgentDefinition CodeAgent() => new(
 // tests/Harbor.Application.Tests/AgentLoopCacheStrategyTests.cs:13
 private static AgentDefinition AllowAllAgent() => new(...same pattern...);
 
-// tests/Harbor.Core.Tests/PermissionServiceTests.cs:12
+// tests/Harbor.Core.Tests/PermissionServiceTests.cs:11
 private static AgentDefinition AgentWithRuleset(params PermissionRule[] rules) => new(
     AgentName.Create("code"), "Code", "Default coding agent.", "test-model", "test",
     new PermissionRuleset(rules));
@@ -214,7 +214,7 @@ private sealed class FailingAppendStore(Session session) : ISessionStore { ... }
 // tests/Harbor.Application.Tests/PermissionBypassTests.cs:13
 private static JsonElement Args(object payload) => ...;
 
-// tests/Harbor.Core.Tests/PermissionServiceTests.cs:14
+// tests/Harbor.Core.Tests/PermissionServiceTests.cs:13
 private static JsonElement Args(params (string key, string value)[] pairs) => ...;
 
 // tests/Harbor.Application.Tests/BashDenyEndToEndTests.cs:37
@@ -276,7 +276,7 @@ Session.Create("/tmp/harbor-subtest", "code", "test", "test-model")
 ### 2.19 Specialized LLM clients defined locally
 
 ```csharp
-// tests/Harbor.Core.Tests/CompactionServiceTests.cs:157
+// tests/Harbor.Core.Tests/CompactionServiceTests.cs:129
 private sealed class SummaryLlmClient : ILlmClient { ... }
 
 // tests/Harbor.Core.Tests/CompactionErrorPathTests.cs:86
