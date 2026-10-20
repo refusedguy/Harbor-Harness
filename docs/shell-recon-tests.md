@@ -23,7 +23,7 @@
 | `Harbor.Storage.Jsonl.Tests` | JSONL session-store tests |
 | `Harbor.Storage.Tests` | Storage-abstraction tests |
 | `Harbor.Tools.Builtin.Tests` | 14 builtin tool tests (read/write/edit/bash/glob/grep/ls/task/webfetch/patch/notebook/ripgrep/tree/mcp) |
-| `Harbor.Tui.E2E.Tests` | E2E framework helpers (StateTestRunner, StateTestBase) |
+| `Harbor.Tui.E2E.Tests` | TUI E2E suite (renderer divergence, demo recorder) |
 | `Harbor.Tui.Tests` | **Primary TUI unit-test project**: UiReducer, UiStore, InputModel, PanelRegistry, SpectreTui renderer, ChatViewProjector, DefaultUiProjector, TEA bridges, diagnostics panel, F12 keymap |
 | `Harbor.App.Avalonia.Tests` | Avalonia desktop app: DI, view inflation, killer features, locator convention |
 | `Harbor.App.Blazor.Tests` | Blazor app DI tests |
@@ -34,6 +34,7 @@
 | `Harbor.E2E.App.Blazor` | Blazor E2E |
 | `Harbor.E2E.Cli` | CLI E2E (mock LLM server round-trip) |
 | `Harbor.E2E.Framework` | E2E test framework (StateTestRunner, mock LLM server, PTY driver) |
+| `Harbor.E2E.Framework.Tests` | Unit tests for the E2E framework's own state helpers |
 | `Harbor.E2E.Tui.RazorConsole` | RazorConsole E2E |
 | `Harbor.E2E.Tui.SpectreTui` | **SpectreTUI PTY E2E**: streaming, tool-call, error, compaction, panels, scroll, input history, autocomplete |
 | `Harbor.E2E.Tui.Termina` | Termina E2E |
@@ -89,7 +90,11 @@
 **Files:**
 - `tests/Harbor.Tui.Tests/PanelRegistryTests.cs` — `TeaComplianceTests`
 - `tests/Harbor.E2E.Framework/StateTestRunner.cs` — factory helpers
-- `tests/Harbor.E2E.Framework/StateTestBase.cs` — base class
+- `tests/Harbor.E2E.Framework.Tests/StateTestRunnerTests.cs` — the tests for
+  those factory helpers (they live in their own project because TUnit runs the
+  test classes of a referenced test project inside every project that
+  references it — a test method in the shared framework would run once per
+  consumer)
 
 ### Covered scenarios
 | Scenario | Assertion |

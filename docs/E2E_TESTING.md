@@ -36,13 +36,27 @@ tests/Harbor.E2E.Framework/
 ├── IE2eDriver.cs                   # Common contract: Start/Send/Read/Wait/Stop
 ├── CliDriver.cs                    # Process.Start-based; for one-shot CLI + Blazor
 ├── TuiDriver.cs                    # PTY-wrapped; for interactive TUI renderers
-├── HeadlessAvaloniaDriver.cs       # Avalonia.Headless; for desktop app
 ├── MockLlmServer.cs                # HttpListener; OpenAI-compatible SSE mock
 ├── E2eTestBase.cs                  # TUnit base; per-test MockLlmServer + temp HOME
 ├── HarborAppLocator.cs             # Walk up to repo root; locate dotnet host
 ├── AnsiStripper.cs                 # Regex-based ANSI escape remover for TUI screens
 └── GlobalUsings.cs                 # Framework-wide using directives
 ```
+
+The framework carries **no `[Test]` methods**, and that is a rule rather than a
+coincidence. TUnit discovers the test classes of a referenced test project
+inside every project that references it, so a `[Test]` method declared here
+would run once per referencing project. The framework's own tests live in
+`tests/Harbor.E2E.Framework.Tests/`, a project nothing references, so they run
+exactly once. `tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs`
+enforces both halves of that rule.
+
+The Avalonia desktop driver is **not** here: it lives with the app it drives,
+in `tests/Harbor.E2E.App.Avalonia/HeadlessAvaloniaDriver.cs`, because it needs
+`Avalonia.Headless` and drives the app in-process on a dedicated UI thread.
+(The framework used to carry a second, speculative `HeadlessAvaloniaDriver`
+that drove the app through stdin/stdout — a protocol the Avalonia desktop app
+does not speak. It had no callers and was deleted.)
 
 ### 2.1 `IE2eDriver` — the common contract
 
