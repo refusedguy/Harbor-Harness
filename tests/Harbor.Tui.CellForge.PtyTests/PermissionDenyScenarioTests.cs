@@ -10,9 +10,9 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>ToolDispatcher.CheckPermissionAsync</c>) streams to the timeline as
 ///     the tool result, the probe stays byte-identical on disk, and the run
 ///     settles at idle after the mock is switched to a plain text response
-///     (the mock re-serves the canned call per request and the home-config
-///     <c>maxSteps</c> budget does not end the run — see #1118 — so without
-///     the switch the deny loop never settles). The denial streams as an
+///     (the mock re-serves the canned call per request, and the home-config
+///     <c>maxSteps</c> budget ends the run now — #1118 — so the budget is
+///     set to the two turns this scenario needs). The denial streams as an
 ///     error-state card (glyph <c>✖</c>) next to the <c>✗ denied</c>
 ///     approval trail (the symmetric counterpart of the <c>✓ approved</c>
 ///     trail asserted by #1122). The denial BODY ("Permission denied") is
@@ -40,7 +40,7 @@ public sealed class PermissionDenyScenarioTests : CellForgePtyScenarioBase
               "model": "mock/test-model",
               "agent": "code",
               "onboarded": true,
-              "maxSteps": 1
+              "maxSteps": 2
             }
             """);
         Server.SetToolCallResponse("test-model", "read", new { path = probe });

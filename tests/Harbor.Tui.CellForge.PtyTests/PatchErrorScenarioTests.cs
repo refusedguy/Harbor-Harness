@@ -16,8 +16,9 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     own <c>[y]/[n]/[a]</c> keys — <c>a</c> (always allow) is remembered for
 ///     the run — then switches the mock to a plain text response so follow-up
 ///     turns settle instead of re-executing the canned call (the mock
-///     re-serves per request and the home-config <c>maxSteps</c> budget does
-///     not end the run — see #1118). The failed call completes the card in
+///     re-serves per request, and the home-config <c>maxSteps</c> budget ends
+///     the run now — #1118 — so the budget is set to the two turns this
+///     scenario needs). The failed call completes the card in
 ///     the error state (glyph <c>✖</c>, symmetric to the <c>✔</c> success
 ///     header asserted by #1122), the run goes idle, and the probe stays
 ///     byte-identical on disk. The error BODY ("Hunk at line … did not match
@@ -49,7 +50,7 @@ public sealed class PatchErrorScenarioTests : CellForgePtyScenarioBase
               "model": "mock/test-model",
               "agent": "code",
               "onboarded": true,
-              "maxSteps": 1
+              "maxSteps": 2
             }
             """);
         Server.SetToolCallResponse("test-model", "patch", new
