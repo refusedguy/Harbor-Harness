@@ -177,6 +177,58 @@ public static class SessionLogGuard
         /// <returns>The digest material for the message.</returns>
         protected override string VisitUnknown(AgentMessage message)
             => message.ToString() ?? string.Empty;
+
+        /// <summary>
+        ///     The digest material of an assistant message's parts, in order.
+        /// </summary>
+        /// <param name="parts">The message's parts.</param>
+        /// <returns>The digest material.</returns>
+        private static string DescribeParts(IReadOnlyList<ContentPart> parts)
+        {
+            var visitor = new PartDigestVisitor();
+            var builder = new StringBuilder();
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append('\n');
+                }
+
+                builder.Append(visitor.Accept(parts[i]));
+            }
+
+            return builder.ToString();
+        }
+
+        /// <summary>
+        ///     The digest material of a tool-result message's results, in order.
+        /// </summary>
+        /// <param name="results">The message's results.</param>
+        /// <returns>The digest material.</returns>
+        private static string DescribeResults(IReadOnlyList<ToolResultEntry> results)
+        {
+            var builder = new StringBuilder();
+
+            for (int i = 0; i < results.Count; i++)
+            {
+                if (i > 0)
+                {
+                    builder.Append('\n');
+                }
+
+                ToolResultEntry entry = results[i];
+                builder.Append(entry.ToolCallId)
+                    .Append('|')
+                    .Append(entry.ToolName)
+                    .Append('|')
+                    .Append(entry.IsError ? '1' : '0')
+                    .Append('|')
+                    .Append(entry.Output);
+            }
+
+            return builder.ToString();
+        }
     }
 
     /// <summary>
@@ -212,57 +264,5 @@ public static class SessionLogGuard
         /// <param name="part">The unrecognised part.</param>
         /// <returns>The digest material for the part.</returns>
         protected override string VisitUnknown(ContentPart part) => part.ToString() ?? string.Empty;
-    }
-
-    /// <summary>
-    ///     The digest material of an assistant message's parts, in order.
-    /// </summary>
-    /// <param name="parts">The message's parts.</param>
-    /// <returns>The digest material.</returns>
-    private static string DescribeParts(IReadOnlyList<ContentPart> parts)
-    {
-        var visitor = new PartDigestVisitor();
-        var builder = new StringBuilder();
-
-        for (int i = 0; i < parts.Count; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append('\n');
-            }
-
-            builder.Append(visitor.Accept(parts[i]));
-        }
-
-        return builder.ToString();
-    }
-
-    /// <summary>
-    ///     The digest material of a tool-result message's results, in order.
-    /// </summary>
-    /// <param name="results">The message's results.</param>
-    /// <returns>The digest material.</returns>
-    private static string DescribeResults(IReadOnlyList<ToolResultEntry> results)
-    {
-        var builder = new StringBuilder();
-
-        for (int i = 0; i < results.Count; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append('\n');
-            }
-
-            ToolResultEntry entry = results[i];
-            builder.Append(entry.ToolCallId)
-                .Append('|')
-                .Append(entry.ToolName)
-                .Append('|')
-                .Append(entry.IsError ? '1' : '0')
-                .Append('|')
-                .Append(entry.Output);
-        }
-
-        return builder.ToString();
     }
 }
