@@ -41,9 +41,10 @@ WHY THIS FILE EXISTS (issue #1823)
 
     Six of the referencing projects use the framework's types. One does
     not: `Harbor.Ipc.Tests` references `Harbor.E2E.Framework` and names
-    none of its types, so the reference buys nothing and costs the IPC
-    test project 14 assemblies in its closure (22 -> 8) and 26 duplicated
-    test executions in the `platform` shard.
+    none of its types, so the reference buys nothing. It costs the IPC
+    test project 14 assemblies in its closure (22 -> 8: the framework
+    itself plus 13 product assemblies) and 26 duplicated test executions
+    in the `platform` shard.
 
 WHAT THE GATE ANSWERS
 

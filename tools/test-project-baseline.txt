@@ -85,8 +85,16 @@
 #
 # Harbor.Terminal.Abstractions.Tests has the same shape with a different
 # target: it references Harbor.TestKit and names none of its types, which
-# drags 3 product assemblies into its closure. TestKit carries no tests,
+# drags 4 product assemblies into its closure. TestKit carries no tests,
 # so nothing is duplicated there; the cost is the closure alone.
+#
+# The last four rows came from the TestKit split (#1834), which landed
+# between the gate's own pull request and its merge. The split carved
+# Harbor.TestKit into Harbor.TestKit, Harbor.TestKit.Support and
+# Harbor.TestKit.Tui and added Harbor.TestKit.Tests, and it left two
+# references behind that name none of the types they point at. The gate
+# found them the moment they appeared, which is the ratchet doing its job:
+# a new hole is red until somebody says why it may stay.
 #
 # Harbor.E2E.App.Avalonia already defines the two-process split that would
 # fix the duplication: E2eShards.Shard0 and E2eShards.Shard1 are
@@ -100,5 +108,9 @@ PROJECT-EMPTY | Harbor.TestKit | Shared fixture library for the test tree: other
 CLAIM-CONDITIONAL | Harbor.Tui.PerfTests | The perf-gate job runs it only when the PR touches the UI paths, because the suite measures renderer throughput against a committed baseline rather than asserting correctness. | @refusedguy
 TEST-DUPLICATED | Harbor.E2E.Framework | Six listed projects reference it, so TUnit discovers its 26 tests in each of them and they run six times per CI run instead of once. Issue 1812 owns the fix. | @refusedguy
 TEST-REFERENCE-UNUSED | Harbor.Ipc.Tests -> Harbor.E2E.Framework | It names none of the framework's types, so the reference buys nothing while dragging 13 product assemblies into the IPC closure and duplicating 26 tests. | @refusedguy
-TEST-REFERENCE-UNUSED | Harbor.Terminal.Abstractions.Tests -> Harbor.TestKit | It names none of TestKit's types, so the reference buys nothing while dragging 3 product assemblies into the project's closure. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.Terminal.Abstractions.Tests -> Harbor.TestKit | It names none of TestKit's types, so the reference buys nothing while dragging 4 product assemblies into the project's closure. | @refusedguy
 SHARD-UNWIRED | Harbor.E2E.App.Avalonia | E2eShards defines the two-process split that would place the framework's tests in one shard, but CI runs the project once without a filter, so the partition is dead code. | @refusedguy
+PROJECT-EMPTY | Harbor.TestKit.Support | Fixture library split out of Harbor.TestKit by the 1834 TestKit split: it carries scopes and doubles, not tests of its own, so no CI list can run it. | @refusedguy
+PROJECT-EMPTY | Harbor.TestKit.Tui | Fixture library split out of Harbor.TestKit by the 1834 TestKit split: it carries the terminal test doubles, not tests of its own, so no CI list can run it. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.TestKit -> Harbor.TestKit.Support | The 1834 TestKit split left the reference behind: Harbor.TestKit names none of the Support project's types, so the reference buys nothing and costs nothing to drop. | @refusedguy
+TEST-REFERENCE-UNUSED | Harbor.TestKit.Tests -> Harbor.TestKit | The 1834 TestKit split left the reference behind: the test project exercises Support and Tui directly and names none of Harbor.TestKit's types, while the reference drags 16 product assemblies in. | @refusedguy
