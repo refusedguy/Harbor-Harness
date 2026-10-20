@@ -2132,24 +2132,26 @@ the state removes the waiting AND the serialisation it feeds: a failing scenario
 holds its permit for the seconds it needs to fail, not for the whole bound.
 
 **Measured on the `ui` shard (arm64), the same tree with and without the change.** The
-"before" row is this branch with the new tests and NO fix; the "after" row is the
-same branch with the fix. Both carry the same 64 tests.
+"before" row is this branch with the new tests and NO fix; the "after" rows are the
+same branch with the fix. All three carry the same 64 tests.
 
-| Run | Tree | PTY project | The wait after the child's exit | The scenario's duration |
-|---|---|---|---|---|
-| [39469637522](https://github.com/refusedguy/Harbor-Harness/actions/runs/39469637522) (this branch, BEFORE the fix) | the new tests, no fix | 64 tests, 63 passed, **1 failed**; project **38.92 s** (census: sum 76.53 s, wall 38.86 s, factor 1.97) | the full bound: `screen condition not met within 00:00:10 (waited 10.0s)` | **10.64 s** |
-| [39474702848](https://github.com/refusedguy/Harbor-Harness/actions/runs/39474702848) (this branch, AFTER the fix) | the new tests + the fix | 64 tests, **64 passed**; project **37.36 s** | the state: `the child process exited and its output is drained: no further repaint can arrive` | under 3 s (the scenario's own assertion) |
-| [39467269890](https://github.com/refusedguy/Harbor-Harness/actions/runs/39467269890) (dev, the baseline) | dev, without the new tests | 61 tests, 61 passed; project **33.83 s** (census: sum 65.88 s, wall 33.77 s, factor 1.95) | no such scenario on that tree | not applicable |
+| Run | Tree | PTY project | The `ui` shard | The wait after the child's exit | The scenario's duration |
+|---|---|---|---|---|---|
+| [39469637522](https://github.com/refusedguy/Harbor-Harness/actions/runs/39469637522) (this branch, BEFORE the fix) | the new tests, no fix | 64 tests, 63 passed, **1 failed**; project **38.92 s** (census: sum 76.53 s, wall 38.86 s, factor 1.97) | 81 s | the full bound: `screen condition not met within 00:00:10 (waited 10.0s)` | **10.64 s** |
+| [39480291027](https://github.com/refusedguy/Harbor-Harness/actions/runs/39480291027) (this branch, AFTER the fix) | the new tests + the fix | 64 tests, **64 passed**; project **33.82 s** | 73 s | the state: `the child process exited and its output is drained: no further repaint can arrive` | under 3 s (the scenario's own assertion) |
+| [39474702848](https://github.com/refusedguy/Harbor-Harness/actions/runs/39474702848) (this branch, AFTER the fix, the earlier base) | the new tests + the fix | 64 tests, **64 passed**; project **37.36 s** | 73 s | the state, as above | under 3 s |
+| [39467269890](https://github.com/refusedguy/Harbor-Harness/actions/runs/39467269890) (dev, the baseline) | dev, without the new tests | 61 tests, 61 passed; project **33.83 s** (census: sum 65.88 s, wall 33.77 s, factor 1.95) | 73 s | no such scenario on that tree | not applicable |
 
 **Read the wait, not the project wall.** The project's wall moved by 1.6 s between the
-two branch rows, and the runner's own spread on the same project is larger than that
-(33.13 s and 33.83 s on two `dev` runs of the SAME tree), so the wall difference is
-NOT the measurement. The measurement is the wait: **10.0 s of pure waiting** in the
-before row (the full bound, and the only way that wait could end), and a wait that
-ends on the state in the after row. The pump publishes the terminal state within one
-pump idle cap (100 ms) of the child's death, and the scenario asserts that the wait
-ended in under 3 s. One scenario waiting out the timeout is 10 s of a lane; thirteen
-of them is 65 s of a two-lane budget, which is the shape #1970 measured.
+two branch rows of the FIRST pair (37.36 s against 38.92 s), and the runner's own
+spread on the same project is larger than that (33.13 s, 33.83 s and 33.82 s on
+three runs), so the wall difference is NOT the measurement. The measurement is the
+wait: **10.0 s of pure waiting** in the before row (the full bound, and the only way
+that wait could end), and a wait that ends on the state in the after rows. The pump
+publishes the terminal state within one pump idle cap (100 ms) of the child's death,
+and the scenario asserts that the wait ended in under 3 s. One scenario waiting out
+the timeout is 10 s of a lane; thirteen of them is 65 s of a two-lane budget, which
+is the shape #1970 measured.
 
 **The number of scenarios that wait out the timeout: 1 → 0.** Before the change, the
 scenario that waits for a repaint after the child's exit IS a scenario that waits out
@@ -2159,13 +2161,13 @@ quiet: the `A_Live_Child_That_Does_Not_Paint_The_Condition_Still_Waits_Out_The_B
 scenario pins that (1.62 s for a 1 s bound, and the exact `TimeoutException`, not the
 child-exited one).
 
-> **A CI fact that hides the per-test numbers of the "after" row.** That row has no
-> census: the TRX did not land in the upload path, because `ci.yml` on `dev` passes
-> `--results-directory "$GITHUB_WORKSPACE/$trx_dir"` with an already-absolute
-> `trx_dir`. The path comes out doubled, so neither the artifact upload nor
-> `tools/test-census.py` finds the file. That is a `dev` regression and not this
-> branch's: the "before" row, one `dev` commit earlier, has its census. The fix is
-> one token, `--results-directory "$trx_dir"`.
+> **A CI fact that hides the per-test numbers of the "after" rows.** Those rows have
+> no census: the TRX did not land in the upload path, because `ci.yml` on `dev`
+> passes `--results-directory "$GITHUB_WORKSPACE/$trx_dir"` with an
+> already-absolute `trx_dir`. The path comes out doubled, so neither the artifact
+> upload nor `tools/test-census.py` finds the file. That is a `dev` regression and
+> not this branch's: the "before" row, one `dev` commit earlier, has its census. The
+> fix is one token, `--results-directory "$trx_dir"`.
 
 ### 6.4 CI test-suite wall: `Harbor.E2E.App.Avalonia` (CI runs 39417846300 and 39421557542, dev and this PR, 2026-10-20)
 
