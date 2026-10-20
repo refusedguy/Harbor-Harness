@@ -126,16 +126,8 @@ public sealed class ToastTests : ComponentTestBase
 
         var path = await CaptureAsync("toast-multiple-stacked").ConfigureAwait(false);
 
-        // Tear the toast down deterministically instead of waiting out the
-        // product's 4s auto-dismiss timer. The timer is still exercised — and
-        // asserted — by Toast_AutoDismiss_After4Seconds below; what this
-        // test needs is "the next test starts with no toast on screen", and
-        // dropping the collection is what actually delivers that. The wait
-        // that stood here was four seconds of a fully serialised project
-        // (#1790) spent on a timer whose firing this test never asserted.
-        UI(() => Vm.Toasts.Clear());
-        await Driver.ShowMainWindowAsync().ConfigureAwait(false);
-        await Driver.WaitForTextAbsentAsync("First toast body", TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        // Wait for auto-dismiss so the next test starts clean.
+        await Driver.WaitForTextAbsentAsync("First toast body", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -185,12 +177,7 @@ public sealed class ToastTests : ComponentTestBase
 
         var path = await CaptureAsync("toast-long-message").ConfigureAwait(false);
 
-        // Tear the toast down deterministically — same reason as
-        // Toast_Multiple_StackedVertically: the auto-dismiss timer has its
-        // own asserting test, and this one only needs the screen clean for
-        // the next test in a class that runs one test at a time.
-        UI(() => Vm.Toasts.Clear());
-        await Driver.ShowMainWindowAsync().ConfigureAwait(false);
-        await Driver.WaitForTextAbsentAsync("deliberately long toast", TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+        // Wait for auto-dismiss.
+        await Driver.WaitForTextAbsentAsync("deliberately long toast", TimeSpan.FromSeconds(7)).ConfigureAwait(false);
     }
 }
