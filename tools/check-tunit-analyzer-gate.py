@@ -62,12 +62,19 @@ WAIVED_METHOD = "Waived_Offender_MustNotBeReported"
 
 # A compiler diagnostic line, e.g.
 #   /repo/tests/TUnitAnalyzerCanary/PlantedOffender.cs(31,9): error TUnitAssertions0005: Assert.That(...) should not be used with a constant value [/repo/...csproj]
+#
+# The file group is NOT anchored to the start of the line: a build log can
+# carry a prefix (the runner's `##[error]` marker, a step name with
+# parentheses in it), and the diagnostic is what matters, not what is in
+# front of it. The file is normalised to its last path segment below.
 DIAGNOSTIC_RE = re.compile(
-    r"^(?P<file>[^\r\n(]+)\((?P<line>\d+),(?P<col>\d+)\):\s+"
+    r"(?P<file>[^\r\n(]*?)\((?P<line>\d+),(?P<col>\d+)\):\s+"
     r"(?P<severity>error|warning)\s+"
     r"(?P<id>TUnit[A-Za-z]*\d+):\s*(?P<message>.*?)\s*$",
     re.M,
 )
+
+CANARY_SOURCE_NAME = os.path.basename(CANARY_SOURCE)
 
 
 def read(path: str) -> str:
@@ -102,10 +109,23 @@ def analyse(log: str, planted_line: int, waived_line: int) -> list[str]:
     """The problems with one build log. An empty list means the control held."""
     problems: list[str] = []
 
-    diagnostics = [
-        m for m in DIAGNOSTIC_RE.finditer(log)
-        if m.group("id") == "TUnitAssertions0005"
-    ]
+    # MSBuild prints the SAME diagnostic twice: once as it happens (prefixed
+    # with the runner's `##[error]` marker) and once in the error summary.
+    # They are one diagnostic, so they are counted once — the dedup key is the
+    # file, the position and the id, which is what makes the two the same
+    # finding.
+    seen = set()
+    diagnostics = []
+    for match in DIAGNOSTIC_RE.finditer(log):
+        if match.group("id") != "TUnitAssertions0005":
+            continue
+        file = match.group("file").rsplit("##[error]", 1)[-1].strip()
+        name = os.path.basename(file.replace("\\", "/"))
+        key = (name, match.group("line"), match.group("col"), match.group("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        diagnostics.append((name, match))
 
     if not diagnostics:
         problems.append(
@@ -116,9 +136,15 @@ def analyse(log: str, planted_line: int, waived_line: int) -> list[str]:
         )
         return problems
 
-    for match in diagnostics:
+    for name, match in diagnostics:
         line = int(match.group("line"))
-        if line == waived_line:
+        if name != CANARY_SOURCE_NAME:
+            problems.append(
+                f"a TUnitAssertions0005 was reported in {name}, which is not "
+                f"the canary's source ({CANARY_SOURCE_NAME}). The gate is "
+                f"measuring something else."
+            )
+        elif line == waived_line:
             problems.append(
                 f"the waived site (line {waived_line}) was reported: the "
                 f"suppression did not cover its own site and nothing else."
@@ -167,9 +193,21 @@ def selftest() -> int:
         f"Assert.That(...) should not be used with a constant value "
         f"[/repo/{CANARY_PROJECT}]\n"
     )
+    # What MSBuild actually prints: the same diagnostic twice — once as it
+    # happens (with the runner's `##[error]` marker in front) and once in the
+    # error summary. One finding, printed twice.
+    printed_twice = (
+        f"##[error]  /repo/{CANARY_SOURCE}({planted},9): error TUnitAssertions0005: x\n"
+        f"##[error]  /repo/{CANARY_SOURCE}({planted},9): error TUnitAssertions0005: x\n"
+    )
     cases = [
         ("the clean log must pass", good, True),
         ("a log with no diagnostic must be rejected", "", False),
+        (
+            "a log that prints the diagnostic twice must still pass",
+            printed_twice,
+            True,
+        ),
         (
             "a log with the waived site reported must be rejected",
             good + f"/repo/{CANARY_SOURCE}({waived},9): error TUnitAssertions0005: x\n",
@@ -178,6 +216,11 @@ def selftest() -> int:
         (
             "a log with the diagnostic on another line must be rejected",
             f"/repo/{CANARY_SOURCE}({waived + 40},9): error TUnitAssertions0005: x\n",
+            False,
+        ),
+        (
+            "a log with the diagnostic in another file must be rejected",
+            f"/repo/tests/SomethingElse/Other.cs({planted},9): error TUnitAssertions0005: x\n",
             False,
         ),
         (
