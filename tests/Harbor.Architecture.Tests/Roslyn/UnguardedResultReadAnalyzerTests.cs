@@ -155,6 +155,15 @@ public sealed class UnguardedResultReadAnalyzerTests
                     reloaded = await _store.LoadAsync();
                     return reloaded.Value;
                 }
+
+                // OFFENDER 6 — a `||` condition that can be true BECAUSE the
+                // result failed: the ternary's true arm is then reachable with
+                // a FAILED result, so the read there is not protected.
+                public async Task<string> UnguardedTernaryOverOrAsync()
+                {
+                    var guarded = await _store.LoadAsync();
+                    return guarded.IsFailure || guarded.Value.Length > 0 ? guarded.Value : "failed";
+                }
             }
         }
         """;
@@ -220,11 +229,17 @@ public sealed class UnguardedResultReadAnalyzerTests
 
                 // NEAR-MISS 5 — the `||` short-circuit guard: the right operand
                 // runs only when the left one is false, i.e. only when the
-                // result is a SUCCESS.
+                // result is a SUCCESS. This is the shape the live tree uses
+                // (McpOAuthHandler: `if (refreshed.IsFailure || refreshed.Value.HasValue)`).
                 public async Task<string> GuardedByShortCircuitOrAsync()
                 {
                     var loaded = await _store.LoadAsync();
-                    return loaded.IsFailure || loaded.Value.Length > 0 ? loaded.Value : "failed";
+                    if (loaded.IsFailure || loaded.Value.Length > 0)
+                    {
+                        return "present";
+                    }
+
+                    return "failed";
                 }
 
                 // NEAR-MISS 6 — the property-pattern guard.
@@ -313,6 +328,7 @@ public sealed class UnguardedResultReadAnalyzerTests
         {
             "_store.LoadAsync().GetAwaiter().GetResult()",
             "await _store.LoadAsync()",
+            "guarded",
             "loaded",
             "other",
             "reloaded",
@@ -323,8 +339,9 @@ public sealed class UnguardedResultReadAnalyzerTests
                 "the rule bans a Result read that no IsSuccess/IsFailure check dominates, and the "
                 + "planted source contains one of each: the await spelling CFE0001 cannot see, the "
                 + "synchronous spelling of the same hole, a local nobody checked, a DIFFERENT "
-                + "instance than the one that was checked, and a value that was reassigned after "
-                + "the check. A receiver missing from the left side is a shape the analyzer cannot "
+                + "instance than the one that was checked, a value that was reassigned after "
+                + "the check, and a ternary whose condition can be true because the result failed. "
+                + "A receiver missing from the left side is a shape the analyzer cannot "
                 + "see; one missing from the right side is a false positive. Reported: "
                 + string.Join(" | ", receivers));
     }
