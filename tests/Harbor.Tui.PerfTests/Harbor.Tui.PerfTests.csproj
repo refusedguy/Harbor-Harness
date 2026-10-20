@@ -14,6 +14,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      #1889: the shared cost gate (TestScalingGate, #1652) lives in
+      Harbor.TestKit, and this project used to keep a DOCUMENTED SAME-API
+      INTERNAL COPY of that file because TestKit dragged Harbor.Application
+      into the slice this project measures. The composite TestKit no longer
+      does — its closure is Harbor.Abstractions + Harbor.Abstractions.Contracts
+      + itself. So the copy is gone and the shared file is used.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.AnsiPlain\Harbor.Tui.AnsiPlain.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Tui.CellForge.Engine\Harbor.Tui.CellForge.Engine.csproj"/>
     <!-- #1772: the shared terminal-backend doubles. The sibling references

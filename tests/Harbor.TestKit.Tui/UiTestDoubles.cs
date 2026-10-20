@@ -1,3 +1,26 @@
+// UiTestDoubles.cs — the shared UI test doubles (#1549), moved here by #1889.
+//
+// WHY THE MOVE
+// ------------
+// This file was ONE of eleven files in `Harbor.TestKit`, and the only one
+// that needed the UI stack. The four `<ProjectReference>`s it cost were
+// therefore paid by every test project that referenced TestKit for an
+// unrelated reason — 11 of the 14 consumers never touched a double, and each
+// of them dragged eleven UI/Desktop assemblies into its build.
+//
+// The doubles are worth keeping (#1549 replaced five hand-rolled private
+// duplicates with these). What was not worth keeping was the arrangement:
+// the files that need the UI stack now live in the project that is allowed
+// to need it, and `Harbor.TestKit` itself is core-only — a closure of four
+// projects, of which only two are product assemblies, instead of nineteen.
+// `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs` pins that
+// split.
+//
+// THE NAMESPACE DID NOT MOVE. The TestKit family is ONE namespace
+// (`Harbor.TestKit`) spread over several assemblies (#1772/#1773), so a
+// consumer needs `using Harbor.TestKit;` and nothing else, whichever
+// assembly the type happens to live in.
+
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;

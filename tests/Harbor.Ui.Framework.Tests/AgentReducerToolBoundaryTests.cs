@@ -14,7 +14,7 @@
 //
 //   2. SCALING (lower class) — the #410/#1373 RELATIVE gate over N
 //      tool-start/end pairs: t(2N) <= 3*t(N) and alloc(2N) <= 3*alloc(N),
-//      medians of rounds, GC-fenced, on the shared #1652 TestScalingGate copy.
+//      medians of rounds, GC-fenced, on the shared #1652 TestScalingGate.
 //      No absolute budget lives here — absolute columns print for info only —
 //      because the repo's receipts (#460, commit c5eb5e28) show an absolute
 //      number measuring the runner, not the code. The double-encode this slice
@@ -27,6 +27,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 

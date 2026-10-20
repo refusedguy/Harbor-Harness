@@ -1,6 +1,11 @@
-// tests/Harbor.TestKit/PerfGate.cs. This project cannot reference
-// Harbor.TestKit (TestKit drags Harbor.Application, Harbor.Storage.Tests must not pull it to measure its slice), so
-// the same signature API ships locally as INTERNAL: PerfGateLeg,
+// tests/Harbor.TestKit/PerfGate.cs — DOCUMENTED COPY (#1747).
+// This project measures its own storage slice and keeps the perf gate local,
+// so the helper the slice rides stays internal to this assembly and the
+// measurement's process stays free of the shared kit's assemblies.
+// #1889 split Harbor.TestKit into a core and a UI part, so the core no longer
+// drags Harbor.Application; the copy is kept because the LOCALITY is what
+// this project wants, not because the shared file is out of reach.
+// The same signature API ships locally as INTERNAL: PerfGateLeg,
 // PerfGateOptions, PerfGateResult, PerfGate. Keep the copies in sync with
 // the TestKit master — a drift in the decision function or the probe would
 // make one assembly's green mean something different.

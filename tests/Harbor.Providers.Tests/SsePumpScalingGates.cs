@@ -3,6 +3,7 @@ extern alias CompatWire;
 using System.Diagnostics;
 using System.Text;
 using TUnit.Assertions;
+using Harbor.TestKit;
 using CompatSseLineKind = CompatWire::Harbor.Providers.Internal.SseLineKind;
 using CompatSsePump = CompatWire::Harbor.Providers.Internal.SsePump;
 

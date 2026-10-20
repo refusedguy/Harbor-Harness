@@ -862,6 +862,10 @@ public sealed class CommonConfigContractRules
         return name.EndsWith("Tests", StringComparison.Ordinal)
                || name.EndsWith(".TestKit", StringComparison.Ordinal)
                || string.Equals(name, "Harbor.TestKit", StringComparison.Ordinal)
+               // #1889: the composite TestKit grew a part. It is a test
+               // assembly like the core, and the sweep must not treat it as
+               // production code.
+               || string.Equals(name, "Harbor.TestKit.Tui", StringComparison.Ordinal)
                || name.EndsWith(".Benchmarks", StringComparison.Ordinal)
                || name.StartsWith("testhost", StringComparison.Ordinal)
                || name.StartsWith("Microsoft.Testing", StringComparison.Ordinal);

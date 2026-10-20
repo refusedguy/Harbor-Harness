@@ -6,24 +6,81 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <!--
-      #1772: the terminal-backend doubles.
+      #1772 + #1889: the ONE UI-scoped part of the TestKit family.
 
-      They live in a sibling rather than in `Harbor.TestKit` for the same
-      reason the other sibling exists (#1549's closure rule): the seam they
-      substitute is `ISyncTerminalBackend`, which lives in
-      `Harbor.Tui.CellForge.Engine`. `Harbor.TestKit` may not reference that
-      assembly — eleven of its consumers do not have it in their closure, and
-      adding the edge would push a product assembly into all of them.
+      It lives in a sibling rather than in `Harbor.TestKit` for #1549's closure
+      rule: `Harbor.TestKit` is referenced by fourteen test projects, and every
+      product assembly it reaches is paid for by all of them. The doubles that
+      need the UI stack therefore live here, and the core keeps only the two
+      contract assemblies.
 
-      `Harbor.Tui.CellForge.Engine` is a leaf (no project references of its
-      own), so this project adds exactly ONE assembly to a consumer's closure
-      — and every consumer of these doubles already has it.
+      WHAT IS IN HERE
+      ================
+        * `FakeTerminalBackend.cs` (#1772) — the terminal-backend double. It
+          substitutes `ISyncTerminalBackend`, which lives in
+          `Harbor.Tui.CellForge.Engine`; that assembly is a leaf (no project
+          references of its own), so it adds exactly ONE assembly to a
+          consumer's closure — and every consumer of these doubles already has
+          it.
+        * `UiTestDoubles.cs` (#1549) — the dispatcher double and the counting
+          view-model stubs. They need the Ui.Framework family
+          (`IDispatcherAdapter` / `UiState` / `StoreSubscriberViewModel`) and
+          the desktop view-model bases (`ChatViewModelBase` /
+          `DiffViewModelBase`).
+        * `NullRenderContext.cs` (#1772) — a render context that renders
+          nothing. It implements `ITuiRenderContext`, which lives in
+          `Harbor.Terminal.Abstractions`.
+        * `TestPanelProvider.cs` (#1772) — a panel provider that builds a
+          declared widget. It implements `IPanelProvider`, which lives in
+          `Harbor.Ui.Framework.State`.
+
+      EVERY CONSUMER OF THESE DOUBLES ALREADY HAS THE UI STACK IN ITS OWN
+      CLOSURE — that is the property that makes this part safe to reference,
+      and it is the same property the core had lost. The core's closure is
+      pinned by `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs`.
+
+      #1835 owns moving `ChatViewModelBase` / `DiffViewModelBase` out of
+      `Harbor.Desktop.Abstractions` into `Harbor.Ui.Framework.ViewModels`; when
+      that lands, the `Harbor.Desktop.Abstractions` edge below goes away with
+      it, and this part stops reaching `Harbor.Application` transitively.
     -->
     <RootNamespace>Harbor.TestKit</RootNamespace>
+    <!--
+      #1889: this part stays a "test project" by flag, like the rest of the
+      family (`Harbor.TestKit`, `Harbor.TestKit.Support`). It carries no
+      `[Test]` method of its own, so the #1823 completeness gate
+      (`tools/check-test-projects.py`) reports it as `PROJECT-EMPTY` — a row
+      the gate's baseline owns. That row already exists for this project on
+      dev (#1947 is refreshing the baseline), and this change adds no NEW
+      project, so it adds no new finding. Declaring `IsTestProject=false`
+      here would have REMOVED the finding and left the baseline row stale —
+      a ratchet that fails when a hole closes is a ratchet that rewards
+      silencing the gate rather than fixing it.
+    -->
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- #1772: the terminal-backend double's seam. A leaf assembly. -->
     <ProjectReference Include="../../src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj" />
+    <!--
+      #1889: the four references the UI doubles cost the core kit.
+      `Harbor.Ui.Framework.Services` holds `IDispatcherAdapter`,
+      `Harbor.Ui.Framework.State` holds `UiState`/`UiStore`/`IPanelProvider`,
+      `Harbor.Ui.Framework.ViewModels` holds `StoreSubscriberViewModel`, and
+      `Harbor.Desktop.Abstractions` holds `ChatViewModelBase` /
+      `DiffViewModelBase`.
+    -->
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj" />
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj" />
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj" />
+    <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj" />
+    <!-- #1772: `NullRenderContext` implements `ITuiRenderContext`. -->
+    <ProjectReference Include="../../src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ILogger/ILoggerFactory, for the doubles' optional-logger constructors. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
   </ItemGroup>
 
 </Project>

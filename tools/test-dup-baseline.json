@@ -9,25 +9,25 @@
     "normalisation": "comments dropped; string literals -> S; char literals -> C; numeric literals -> N; identifiers -> I; whitespace collapsed"
   },
   "census": {
-    "files": 994,
-    "lines": 205954,
-    "methods": 10690,
-    "test_methods": 6858
+    "files": 1003,
+    "lines": 206333,
+    "methods": 10658,
+    "test_methods": 6787
   },
   "metrics": {
-    "groups": 212,
-    "intra_file_groups": 106,
-    "cross_file_groups": 106,
-    "exact_groups": 123,
-    "duplicate_lines": 3626,
-    "group_lines": 5990,
+    "groups": 208,
+    "intra_file_groups": 105,
+    "cross_file_groups": 103,
+    "exact_groups": 120,
+    "duplicate_lines": 3057,
+    "group_lines": 5284,
     "shape_coincidences": 0,
-    "files": 994,
-    "lines": 205954,
-    "methods": 10690,
-    "test_methods": 6858
+    "files": 1003,
+    "lines": 206333,
+    "methods": 10658,
+    "test_methods": 6787
   },
-  "blocking_duplicate_lines": 3367,
+  "blocking_duplicate_lines": 2798,
   "groups": {
     "00c25fe277a33905527cc4696dd798419f502485": {
       "members": [
@@ -176,21 +176,6 @@
       "files": 2,
       "exact": 2,
       "shape": "4c835a22a3bfde48438b056fa08b78d1456b8e38"
-    },
-    "0d9fbffc31cd9ecf463c58fb589a6faabe0aa631": {
-      "members": [
-        "tests/Harbor.Abstractions.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
-        "tests/Harbor.Domain.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
-        "tests/Harbor.Providers.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
-        "tests/Harbor.TestKit/TestScalingGate.cs::AssertWithinLimitsAsync#0",
-        "tests/Harbor.Tui.PerfTests/TestScalingGate.cs::AssertWithinLimitsAsync#0",
-        "tests/Harbor.Ui.Framework.Tests/TestScalingGate.cs::AssertWithinLimitsAsync#0"
-      ],
-      "count": 6,
-      "lines": 31,
-      "files": 6,
-      "exact": 6,
-      "shape": "711dfaedf58d9ffb106b9a44cb8d0030494ec36d"
     },
     "0db764a36a42be09dca211fbf72d15d44c94d5d8": {
       "members": [
@@ -828,19 +813,6 @@
       "files": 1,
       "exact": 2,
       "shape": "dd242a972e893f5386db5e7943101c894f1fc774"
-    },
-    "40ec29378aaadf0453282341ee03d6f23ed902da": {
-      "members": [
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Error_RedAccent#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Info_BlueAccentAndMessage#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Success_GreenAccent#0",
-        "tests/Harbor.E2E.App.Avalonia/ComponentTests/ToastTests.cs::Toast_Warning_PeachAccent#0"
-      ],
-      "count": 4,
-      "lines": 6,
-      "files": 1,
-      "exact": 0,
-      "shape": "dfb9ac17871dba32708de4db2b7b1de79cdae06b"
     },
     "41ca6a8e4873c9f7e27a7e8c9b63594a675abde8": {
       "members": [
@@ -1945,7 +1917,7 @@
       "lines": 6,
       "files": 1,
       "exact": 0,
-      "shape": "d9920bde167f346799f72940d107f162a9559690"
+      "shape": "1b98ecde3c1f2f1c1aae420e145b5c3f68af0f5d"
     },
     "cdd2af7f09aff2d6de952e3cafbf8183a4e0294e": {
       "members": [
@@ -2315,17 +2287,6 @@
       "exact": 2,
       "shape": "6745b16e9f6a7b3cf8736fcd883d24e78cab8944"
     },
-    "f37f532488e8f6b8ccd08d854f12dc7e21ad1d55": {
-      "members": [
-        "tests/Harbor.E2E.Framework/HeadlessAvaloniaDriver.cs::StartXvfbAsync#0",
-        "tests/Harbor.E2E.Framework/TuiDriver.cs::StartXvfbAsync#0"
-      ],
-      "count": 2,
-      "lines": 26,
-      "files": 2,
-      "exact": 2,
-      "shape": "d1d67c9eeb7f588fa08b2149e78002014af26dd7"
-    },
     "f3a4b5bd9069d46cb9a06ec4b92e248a53d8f74e": {
       "members": [
         "tests/Harbor.Tui.E2E.Tests/Shrink/DdminShrinkerTests.cs::FindRepoRoot#0",
@@ -2347,21 +2308,6 @@
       "files": 2,
       "exact": 2,
       "shape": "f2351461da8f55df98e81b4239e48695007c4432"
-    },
-    "f576005d532c109a48257edb6434aae7d46790e4": {
-      "members": [
-        "tests/Harbor.Abstractions.Tests/TestScalingGate.cs::MeasureAsync#0",
-        "tests/Harbor.Domain.Tests/TestScalingGate.cs::MeasureAsync#0",
-        "tests/Harbor.Providers.Tests/TestScalingGate.cs::MeasureAsync#0",
-        "tests/Harbor.TestKit/TestScalingGate.cs::MeasureAsync#0",
-        "tests/Harbor.Tui.PerfTests/TestScalingGate.cs::MeasureAsync#0",
-        "tests/Harbor.Ui.Framework.Tests/TestScalingGate.cs::MeasureAsync#0"
-      ],
-      "count": 6,
-      "lines": 74,
-      "files": 6,
-      "exact": 6,
-      "shape": "f590cf4d3a188296c394fb09fbd7bfbc13346fe7"
     },
     "f6e891c1d0cd1a3ca3f4a4ce939959452b7b49a8": {
       "members": [

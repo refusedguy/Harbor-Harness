@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Harbor.Abstractions.Permissions;
+using Harbor.TestKit;
 
 namespace Harbor.Abstractions.Tests;
 
@@ -13,9 +14,10 @@ namespace Harbor.Abstractions.Tests;
 // GATE: relative, same shape as #410 / #1373. Cost(2N)/cost(N) <= 3 for time
 // over N-rule Evaluate miss-walks (linear is 2.00, O(N^2) is 4.00). No
 // absolute millisecond budget: those measure the runner, not the code.
-// Measured through the DOCUMENTED MINI-COPY of Harbor.TestKit's
-// TestScalingGate (#1652; Abstractions.Tests must not reference TestKit — it
-// drags Harbor.Application): GC-fenced legs scaled toward ~100 ms of real
+// Measured through the SHARED Harbor.TestKit's TestScalingGate (#1652;
+// since #1889 this project references the shared file instead of keeping a
+// local copy — the TestKit core no longer drags Harbor.Application into the
+// slice this project measures): GC-fenced legs scaled toward ~100 ms of real
 // work, medians over five rounds, x1.05 noise band on the time branch;
 // #1642's ratio-3.63-out-of-a-20-ms-best-of leg is the shape that dies here.
 //

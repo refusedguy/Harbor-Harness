@@ -120,7 +120,8 @@ docs/specs/                           — 20 design specification documents (top
 docs/                                 — 74 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 44 test/bench projects, one directory each
-                                        incl. shared Harbor.TestKit and Harbor.Benchmarks
+                                        incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
+                                        part) and Harbor.Benchmarks
                                         (`tests/` holds 46 directories: the 44 projects plus
                                         `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
                                         plain `ls -d tests/*/ | wc -l` reads 46, two more than the
