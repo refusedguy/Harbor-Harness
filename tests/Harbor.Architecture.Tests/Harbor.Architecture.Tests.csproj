@@ -12,7 +12,7 @@
       triggers on a probe helper.
     -->
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);CS1591;S3011;S2365;CA1851;RS2008;RS1035;RS1036</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;S3011;S2365;CA1851;RS2008;RS1035;RS1036;RS1041</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -41,6 +41,14 @@
       in src/ or apps/ depends on it, so the NativeAOT rule (#626) is not
       engaged. That rule governs shipped code, and this is a test-only
       dependency.
+
+      RS1041 ("this compiler extension should not be implemented in an assembly
+      with target framework .NET 10.0") is suppressed here on purpose: the
+      analyzers under Roslyn/ are NOT shipped as compiler extensions. They are
+      ordinary classes that this test project runs IN-PROCESS against a
+      compilation it builds (Compilation.WithAnalyzers). RS1041 is about
+      assemblies the COMPILER loads, and this assembly is loaded by the test
+      host, so the hazard it describes does not apply.
     -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
     <!--

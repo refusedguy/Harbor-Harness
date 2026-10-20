@@ -160,8 +160,9 @@ public sealed class NoDynamicCodeAnalyzer : DiagnosticAnalyzer
 
     /// <summary>
     ///     An invocation of a banned factory: <c>Assembly.Load</c>,
-    ///     <c>Assembly.LoadFrom</c>, <c>Assembly.LoadFile</c> or
-    ///     <c>AppDomain.DefineDynamicAssembly</c>.
+    ///     <c>Assembly.LoadFrom</c>, <c>Assembly.LoadFile</c>,
+    ///     <c>AppDomain.DefineDynamicAssembly</c>, or any member of a type in
+    ///     the emit namespace (<c>AssemblyBuilder.DefineDynamicAssembly</c>).
     /// </summary>
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
     {
@@ -181,13 +182,36 @@ public sealed class NoDynamicCodeAnalyzer : DiagnosticAnalyzer
         string ownerName = owner.ToDisplayString();
         bool banned =
             (ownerName == AssemblyTypeName && Array.IndexOf(BannedAssemblyMethods, method.Name) >= 0)
-            || (ownerName == AppDomainTypeName && method.Name == "DefineDynamicAssembly");
+            || (ownerName == AppDomainTypeName && method.Name == "DefineDynamicAssembly")
+            || IsInEmitNamespace(owner);
 
         if (banned)
         {
             context.ReportDiagnostic(
                 Diagnostic.Create(Rule, invocation.GetLocation(), ownerName + "." + method.Name));
         }
+    }
+
+    /// <summary>
+    ///     Whether a type lives in the emit namespace and is not a value type.
+    /// </summary>
+    /// <remarks>
+    ///     The .NET Core way to manufacture an assembly at run time is
+    ///     <c>System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly</c>,
+    ///     NOT <c>AppDomain.DefineDynamicAssembly</c>: the latter does not
+    ///     exist in .NET Core, .NET 9 or .NET 10, so a text rule that bans the
+    ///     token <c>AppDomain.DefineDynamicAssembly</c> bans something that
+    ///     cannot appear in compiling code at all. The analyzer sees that by
+    ///     resolving the symbol, which is the whole argument for resolving it.
+    /// </remarks>
+    private static bool IsInEmitNamespace(INamedTypeSymbol type)
+    {
+        if (type.IsValueType)
+        {
+            return false;
+        }
+
+        return type.ContainingNamespace?.ToDisplayString() == ReflectionEmitNamespaceName;
     }
 
     /// <summary>An object creation of a banned type: <c>new TypeBuilder(…)</c>.</summary>
@@ -339,7 +363,7 @@ public sealed class NoDynamicCodeAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        return type.ContainingNamespace?.ToDisplayString() == ReflectionEmitNamespaceName;
+        return IsInEmitNamespace(type);
     }
 }
 

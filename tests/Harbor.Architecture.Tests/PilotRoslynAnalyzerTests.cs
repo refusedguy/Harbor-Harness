@@ -16,6 +16,16 @@
 //      measured 738 s of the repository's 1 128 s of test time inside this
 //      project, because every rule reads the tree with its own `Lazy`.)
 //
+// ONE THING THE PILOT FOUND THAT A TEXT RULE CANNOT
+// -------------------------------------------------
+// The text rule bans the token `AppDomain.DefineDynamicAssembly`. That API
+// DOES NOT EXIST in .NET Core, .NET 9 or .NET 10 — the .NET way to manufacture
+// an assembly at run time is `System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly`.
+// So one of the text rule's nine branches bans something that cannot appear in
+// compiling code at all: it can only ever match a comment or a string literal.
+// The analyzer sees this by resolving the symbol, and the pilot's control uses
+// the API that actually exists.
+//
 // THE PLANTED CONTROLS ARE THE POINT
 // ---------------------------------
 // A guard that matches nothing is indistinguishable from a guard that is
@@ -79,7 +89,7 @@ public sealed class PilotRoslynAnalyzerTests
                 public DynamicMethod Emit() => new DynamicMethod("go", typeof(void), Type.EmptyTypes);
 
                 public Assembly Define() =>
-                    AppDomain.CurrentDomain.DefineDynamicAssembly(new AssemblyName("x"), AssemblyBuilderAccess.Run);
+                    AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("x"), AssemblyBuilderAccess.Run);
 
                 public AssemblyLoadContext? Context { get; set; }
 
@@ -179,10 +189,10 @@ public sealed class PilotRoslynAnalyzerTests
 
         var expected = new List<string>
         {
-            "System.AppDomain.DefineDynamicAssembly",
             "System.Reflection.Assembly.Load",
             "System.Reflection.Assembly.LoadFile",
             "System.Reflection.Assembly.LoadFrom",
+            "System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly",
             "System.Reflection.Emit.DynamicMethod",
             "System.Reflection.Emit.TypeBuilder",
             "System.Runtime.Loader.AssemblyLoadContext",
