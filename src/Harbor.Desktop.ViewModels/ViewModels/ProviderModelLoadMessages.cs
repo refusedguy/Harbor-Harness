@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Wording of the provider/model failure surface, shared by the picker and

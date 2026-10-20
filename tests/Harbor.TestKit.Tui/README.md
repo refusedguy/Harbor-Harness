@@ -59,7 +59,8 @@ part follows it.
 
 This project references `Harbor.Ui.Framework.Services`,
 `Harbor.Ui.Framework.State`, `Harbor.Ui.Framework.ViewModels`,
-`Harbor.Desktop.Abstractions`, `Harbor.Terminal.Abstractions` and
+`Harbor.Desktop.ViewModels` (#1899 moved the desktop view-models out of
+`Harbor.Desktop.Abstractions`), `Harbor.Terminal.Abstractions` and
 `Harbor.Tui.CellForge.Engine`. The third one is where
 `ChatViewModelBase` and `DiffViewModelBase` still live; #1835 owns moving
 them into `Harbor.Ui.Framework.ViewModels`, and the edge goes with them.

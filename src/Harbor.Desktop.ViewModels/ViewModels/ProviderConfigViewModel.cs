@@ -5,7 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Ui.Framework.Services;
 using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 /// <summary>
 ///     Per-provider configuration row view-model. One instance per
 ///     registered provider — holds the editable API key, the live auth

@@ -1,6 +1,6 @@
 using Harbor.App.Avalonia.Services;
 using Harbor.Abstractions.Tools;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Commands;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.State;

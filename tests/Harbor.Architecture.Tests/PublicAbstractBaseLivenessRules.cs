@@ -603,14 +603,15 @@ public sealed class PublicAbstractBaseLivenessRules
     private static readonly ReservedAbstractBase[] ReservedBases =
     [
         new(
-            "Harbor.Desktop.Abstractions.ViewModels.DiffViewModelBase",
+            "Harbor.Desktop.ViewModels.DiffViewModelBase",
             "The desktop diff view-model base. No shipped app derives from it: the "
             + "Avalonia shell renders diffs through the concrete DiffViewModel, and the "
             + "WPF/MAUI/Blazor apps are not built by CI. Its only implementor in the tree "
             + "is the Harbor.TestKit stub, and the base stays published because moving it "
             + "down to Harbor.Ui.Framework.ViewModels — which would take "
-            + "Harbor.Desktop.Abstractions, and with it Harbor.Application, out of the "
-            + "TestKit closure — is a separate move.",
+            + "Harbor.Desktop.ViewModels, and with it Harbor.Application, out of the "
+            + "TestKit closure — is a separate move (#1875). #1899 moved the base here "
+            + "with the rest of the view-models; it did not move it down.",
             "https://github.com/refusedguy/Harbor-Harness/issues/1875"),
         new(
             "Harbor.Tui.CellForge.Input.FocusableBase",
@@ -796,11 +797,11 @@ public sealed class PublicAbstractBaseLivenessRules
 
         var known = report.Candidates.Select(c => c.FullName).ToHashSet(StringComparer.Ordinal);
 
-        await Assert.That(known.Contains("Harbor.Desktop.Abstractions.ViewModels.ChatViewModelBase")).IsTrue().Because(
+        await Assert.That(known.Contains("Harbor.Desktop.ViewModels.ChatViewModelBase")).IsTrue().Because(
             "the base the shipped desktop app derives from must be in the population — if it "
             + "is not, the scan is not reading what it claims to read");
 
-        await Assert.That(report.Implementors.ContainsKey("Harbor.Desktop.Abstractions.ViewModels.ChatViewModelBase")).IsTrue().Because(
+        await Assert.That(report.Implementors.ContainsKey("Harbor.Desktop.ViewModels.ChatViewModelBase")).IsTrue().Because(
             "its only product implementor is apps/Harbor.App.Avalonia/ViewModels/ChatViewModel.cs, "
             + "which is why this rule is a source scan and not a reflection over the loaded "
             + "assemblies: the composition roots are not referenced by this test project");

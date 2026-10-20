@@ -271,7 +271,7 @@ public sealed class ConfigHalfPairWriteRules
     [Test]
     public async Task TheOnboardingWriter_IsOnTheDerivedPerimeter()
     {
-        const string writer = "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs";
+        const string writer = "src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs";
 
         await Assert.That(Perimeter().Contains(writer, StringComparer.Ordinal)).IsTrue()
             .Because(

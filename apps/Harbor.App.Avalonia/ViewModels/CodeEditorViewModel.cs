@@ -10,7 +10,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.Abstractions.Filesystem;
 using Harbor.Abstractions.Lsp;
 using Harbor.Abstractions.Tools;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels;
@@ -481,7 +481,7 @@ public sealed partial class CodeEditorViewModel : ObservableObject
 }
 
 /// <summary>One editor tab — file path, name, extension, content, dirty flag. Inherits shared model; adds AvaloniaEdit-specific SyntaxName.</summary>
-public sealed partial class EditorTabViewModel : Harbor.Desktop.Abstractions.ViewModels.EditorTabViewModel
+public sealed partial class EditorTabViewModel : Harbor.Desktop.ViewModels.EditorTabViewModel
 {
     public EditorTabViewModel(string filePath, string fileName, string extension, string content)
         : base(filePath, fileName, extension, content)

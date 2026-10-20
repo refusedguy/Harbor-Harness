@@ -122,6 +122,22 @@
 
 ### #1845 — public-API-гейт переезжает из 1212 строк python в компилятор
 
+### #1899 — `Harbor.Desktop.Abstractions` разделён: лист и честное имя для хаба
+
+**Сборка обещала слой контрактов, а была хабом: 9 ссылок и замыкание на 18 сборок под именем, которое читатель использует как карту. Разделение проведено по измеренному шву — зависимости, а не вкус.**
+
+**Переизмерено на `origin/dev` = `283a9dbe`** (цифры самого issue уже устарели: не 39 файлов и 55 типов, а **30 файлов и 46 типов**). Шов, по которому делится сборка, — зависимость, а не тема: **12 типов** (контракты конфига, порты `IAppConfigStore<T>` / `ICommonConfigStore`, DTO `AppConfigBase` / `CommonConfig` / `CompositeConfig<T>`, кросс-VM-сообщения, модели и енамы) связывают **два** типа Harbor, оба в `Harbor.Abstractions.Contracts`; **34 конкретные VM** связывают `Harbor.Application` (доказанное исключение `#188` — каталог `ProviderPresets`) и пять модулей `Harbor.Ui.Framework.*`. Две из девяти ссылок не связывали ни одного типа (`Harbor.Terminal.Abstractions` и пустой мета-проект `Harbor.Ui.Framework`) — обе уже были записаны в `EnforcerIntegrityTests` как vestigial с пометкой «Remove the reference».
+
+**Что сделано.** `Harbor.Desktop.Abstractions` остаётся и теперь действительно лист: **одна** ссылка (`Harbor.Abstractions.Contracts`), замыкание **2 сборки** вместо **18**, ребро `#188` ушло вместе с VM, которые его читают. Конкретные VM переехали в новую `Harbor.Desktop.ViewModels` (`PackageId Harbor.Desktop.ViewModels`), их namespace стал `Harbor.Desktop.ViewModels`. Потребителю, которому нужен только `ICommonConfigStore` или `ThemeKind`, больше не тащатся `Harbor.Application` и всё семейство `Ui.Framework`.
+
+**Что это чинит сверх заявленного.** `DesktopAbstractionsLeafTakesNoIoRules` уже называл эту сборку «config leaf» и рассуждал о её пустом allowed-наборе. После разделения посылка гварда — описание дерева, а не пожелание.
+
+**Две стоимости из оценки issue исправлены измерением.** Во-первых, **переподписывать public-API baseline нечего**: `PublicAPI.Baseline.txt` есть только у `Harbor.Abstractions` и `Harbor.Abstractions.Contracts`. Во-вторых, **внешних потребителей нет**: nuget.org отвечает 404 на все Harbor-пакеты (`harbor.desktop.abstractions`, `harbor.abstractions`, `harbor.abstractions.contracts`), а release-воркфлоу публикует только CLI. Ломающее изменение реально по существу и пусто по факту.
+
+**Что остаётся за владельцем** (зафиксировано в [ADR-020](docs/adr/ADR-020-desktop-abstractions-split.md)): идентичность и версионирование двух пакуемых сборок; удаление двух неиспользуемых публичных типов, найденных при измерении (`ThemeKind` — ноль ссылок во всём дереве; `ToastKind` из `Harbor.Desktop.Abstractions.Models` — ноль ссылок и дубль типа из `Harbor.Ui.Framework.Services`); имя листа (`Harbor.Desktop.Abstractions` или `Harbor.Desktop.Contracts`). Разделение **не** трогает замороженную `Harbor.Abstractions.Contracts` и **не** переносит три абстрактные базы в `Harbor.Ui.Framework.ViewModels` — это отдельная работа `#1875`, которая и вытащила бы `Harbor.Application` из замыкания `Harbor.TestKit`.
+
+**BREAKING (для будущих потребителей пакета):** 34 типа сменили assembly-qualified имя и namespace (`Harbor.Desktop.Abstractions.ViewModels.*` → `Harbor.Desktop.ViewModels.*`); новая пакуемая сборка `Harbor.Desktop.ViewModels`. Типы 12-типовой половины (контракты, модели, енамы) сохранили и сборку, и namespace.
+### Proj0037/Proj0040 — корень `Directory.Build.props` импортируется относительным путём
 **Замороженная публичная поверхность двух сборок теперь охраняется анализатором компилятора, а не построчным сканером исходников. Удалено 1212 строк python, гейт перестаёт быть отдельным CI-джобом и начинает падать на обычной сборке.**
 
 **Что было.** Два скрипта — `tools/check-public-api.py` (607 строк, `Harbor.Abstractions.Contracts`) и `tools/check-public-api-abstractions.py` (605 строк, `Harbor.Abstractions`) — сканировали исходники построчно и сравнивали результат с закоммиченным baseline'ом `Qualified.Type :: normalized declaration`. Каждый из них был ещё и отдельным CI-джобом (`docs.yml` → «public-api snapshot», `ci.yml` → «public-api snapshot (Abstractions)»).

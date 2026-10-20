@@ -1,45 +1,44 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Harbor.Desktop.Abstractions — UI-framework-agnostic contracts shared by
+    Harbor.Desktop.Abstractions — the config schema, models and enums shared by
     every Harbor desktop app (Avalonia, WPF, MAUI, Blazor).
 
+    #1899: this assembly USED to hold the whole desktop UI layer — 46 public
+    types, 9 project references, a 18-assembly dependency closure — under a
+    name that promised a contract layer. It was a hub wearing a leaf's name.
+    The split put the concrete view-models in `Harbor.Desktop.ViewModels`,
+    and what is left here is the part the name always described: the config
+    SCHEMA and its PORTS, the cross-view-model messages, and the shared
+    models/enums. See docs/adr/ADR-020-desktop-abstractions-split.md.
+
     Dependency rule (enforced by Harbor.Architecture.Tests):
-      ✅ Harbor.Abstractions, Harbor.Terminal.Abstractions
-      ✅ Harbor.PolicyConfig — documented exception (#188, part of #96):
-         ProviderPresets catalog used by ProviderModelPickerViewModel /
-         OnboardingViewModel (Presentation → Application tech debt;
-         future fix: move preset catalog to Domain Harbor.Abstractions).
-         The target was Harbor.Application until #1625 moved the configuration
-         family out; the debt is the same one, one assembly over.
-      ❌ Harbor.Application / Harbor.Registries (except the ProviderPresets
-         catalog above — see docs/ARCHITECTURE_LAYERS.md §2 exception)
-      ✅ CommunityToolkit.Mvvm (source-gen MVVM)
-      ✅ Microsoft.Extensions.Logging.Abstractions
+      ✅ Harbor.Abstractions.Contracts — ONE reference, and it is the innermost
+         assembly in the repository: CommonConfig reads AgentName.Fallback
+         (#716) and SessionDotState reads SessionStatus, both of which live
+         there. The leaf's dependency closure is therefore TWO assemblies: this
+         one and the contract leaf.
+      ❌ NO Harbor.Abstractions / Harbor.Application / Harbor.Registries /
+         Harbor.PolicyConfig — the #188 Presentation → Application edge (the
+         ProviderPresets catalog, which #1625 moved out of Harbor.Application
+         into Harbor.PolicyConfig) moved to Harbor.Desktop.ViewModels with the
+         view-models that read it.
+      ❌ NO Harbor.Ui.Framework.* / Harbor.Terminal.Abstractions — the
+         view-model bases moved out with the view-models.
       ❌ NO Avalonia / WPF / MAUI / Blazor / WindowsBase / System.Drawing
       ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.* (Infrastructure)
 
-    Platform VMs in apps/Harbor.App.* derive from the abstract VMs here and add
-    platform-specific bindings (AvaloniaDispatcher, WPF Dispatcher, Blazor JSInterop).
-
-    #1835 CORRECTED THAT PROMISE, because it was not kept. Ten of the abstract
-    VMs published here had ZERO implementors anywhere in the tree — they were
-    public surface in a packable package with nothing deriving from them — and
-    they are gone. What remains is three bases, and the promise holds for two of
-    them: apps/Harbor.App.Avalonia derives ChatViewModel and CommandPaletteViewModel
-    from here. The WPF / MAUI / Blazor apps live under contrib/ and are not built
-    by CI, so they are not a reason for anything here to be public.
-    DiffViewModelBase is the third: it has no shipped subclass (Harbor.TestKit
-    builds a stub on it), and
-    tests/Harbor.Architecture.Tests/PublicAbstractBaseLivenessRules.cs is what
-    stops a fourth base from being published the same way.
+    The config STORES are persistence and live in `Harbor.Hosting`
+    (Harbor.Desktop.AbstractionsLeafTakesNoIoRules.cs guards that): the PORTS
+    (IAppConfigStore<T>, ICommonConfigStore) and the DTOs (AppConfigBase,
+    CommonConfig, CompositeConfig<T>) are here.
   -->
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>true</IsPackable>
     <PackageId>Harbor.Desktop.Abstractions</PackageId>
-    <Description>Harbor desktop abstractions — shared interfaces, base view-models, design-system primitives for Avalonia/WPF/MAUI/Blazor apps.</Description>
+    <Description>Harbor desktop abstractions — the shared configuration schema, config-store ports, cross-view-model messages and models/enums for Avalonia/WPF/MAUI/Blazor apps.</Description>
     <PackageTags>harbor;desktop;abstractions;mvvm;cross-platform</PackageTags>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
 
@@ -50,29 +49,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
-    <!-- #1625: the ProviderPresets catalog left Harbor.Application for
-         Harbor.PolicyConfig, so the #188 exception's target moved with it.
-         The reference is REPLACED, not added: nothing else in this package
-         reached into Harbor.Application, and a declared-but-unbound edge is a
-         dead edge the architecture gate reports. -->
-    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
-    <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>
-    <ProjectReference Include="..\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
-    <!-- #679: the desktop DiffViewModel and DiffViewModelBase read the diff
-         algorithm and the diff-format parsers from the core
-         (Harbor.Ui.Framework.Rendering.Widgets) instead of each re-deriving a
-         diff by index and re-sniffing the format by string literal.
-         Presentation to Presentation, which conforms. -->
-    <ProjectReference Include="..\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
+    <!-- #1899: the ONE Harbor reference this leaf has. SessionStatus and
+         AgentName both live in Harbor.Abstractions.Contracts, so the leaf
+         points at the contract assembly directly rather than through the
+         Harbor.Abstractions facade — which it does not use a single type of.
+         The result is a two-assembly dependency closure. -->
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm"/>
+    <!-- CommonConfig's XML doc names Microsoft.Extensions.Logging.LogLevel, so
+         the reference has to stay or the cref does not resolve. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <!--
       CSharpFunctionalExtensions provides Result<T> used directly in the public

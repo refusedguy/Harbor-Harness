@@ -8,7 +8,7 @@ using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Browse providers + models with metadata. Read-only view; configuring a new

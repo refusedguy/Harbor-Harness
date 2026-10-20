@@ -1,5 +1,5 @@
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.Messaging;
@@ -7,7 +7,7 @@ using Harbor.Abstractions.Providers;
 
 namespace Harbor.App.Avalonia.ViewModels;
 
-public sealed partial class ProviderModelPickerViewModel : Harbor.Desktop.Abstractions.ViewModels.ProviderModelPickerViewModel
+public sealed partial class ProviderModelPickerViewModel : Harbor.Desktop.ViewModels.ProviderModelPickerViewModel
 {
     public ProviderModelPickerViewModel(
         IProviderRegistry providers,

@@ -5,7 +5,7 @@ using Harbor.App.Avalonia.ViewModels.Board;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Harbor.Ui.Framework.Navigation;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 
 namespace Harbor.App.Avalonia.Navigation;
 
@@ -35,7 +35,7 @@ public sealed class AvaloniaContentHost : IContentHost
     public CodeEditorViewModel CodeEditor { get; }
     public Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel Diff { get; }
     public TokenUsageViewModel TokenUsage { get; }
-    public Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel ProviderBrowser { get; }
+    public Harbor.Desktop.ViewModels.ProviderBrowserViewModel ProviderBrowser { get; }
     public Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel ProviderModelPicker { get; }
     public SettingsViewModel Settings { get; }
     public Harbor.App.Avalonia.ViewModels.FocusSessionViewModel FocusSession { get; }
@@ -60,7 +60,7 @@ public sealed class AvaloniaContentHost : IContentHost
         CodeEditorViewModel codeEditor,
         Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel diff,
         TokenUsageViewModel tokenUsage,
-        Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel providerBrowser,
+        Harbor.Desktop.ViewModels.ProviderBrowserViewModel providerBrowser,
         Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel providerModelPicker,
         SettingsViewModel settings,
         Harbor.App.Avalonia.ViewModels.FocusSessionViewModel focusSession,

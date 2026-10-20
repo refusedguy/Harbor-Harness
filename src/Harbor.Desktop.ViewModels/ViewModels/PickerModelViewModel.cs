@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 /// <summary>
 ///     One model row in the provider/model picker. Clicking the row raises
 ///     <c>ProviderModelPickerViewModel.SelectModelCommand</c>. Pure record —

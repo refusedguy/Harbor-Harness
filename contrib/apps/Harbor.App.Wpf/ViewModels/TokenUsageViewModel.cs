@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Token usage charts. Plots cumulative input/output tokens over the
@@ -83,13 +83,13 @@ public sealed partial class TokenUsageViewModel : ObservableObject
 
 /// <summary>
 ///     One bar in the token usage chart. Platform extension of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.TokenBarViewModel" /> record —
+///     <see cref="Harbor.Desktop.ViewModels.TokenBarViewModel" /> record —
 ///     adds the WPF <see cref="Brush" />es for each bar (the canonical color keys
 ///     live on the shared record as <c>InputBrushKey</c> / <c>OutputBrushKey</c>).
 ///     <see cref="Label" />, <see cref="InputHeight" /> and <see cref="OutputHeight" />
 ///     are inherited from the shared record.
 /// </summary>
-public sealed partial class TokenBarViewModel : Harbor.Desktop.Abstractions.ViewModels.TokenBarViewModel
+public sealed partial class TokenBarViewModel : Harbor.Desktop.ViewModels.TokenBarViewModel
 {
     /// <summary>Input-bar fill brush.</summary>
     public Brush InputBrush { get; set; } = Brushes.CornflowerBlue;

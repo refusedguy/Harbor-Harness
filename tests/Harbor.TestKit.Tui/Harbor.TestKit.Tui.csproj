@@ -40,9 +40,9 @@
       pinned by `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs`.
 
       #1835 owns moving `ChatViewModelBase` / `DiffViewModelBase` out of
-      `Harbor.Desktop.Abstractions` into `Harbor.Ui.Framework.ViewModels`; when
-      that lands, the `Harbor.Desktop.Abstractions` edge below goes away with
-      it, and this part stops reaching `Harbor.Application` transitively.
+      `Harbor.Desktop.ViewModels` into `Harbor.Ui.Framework.ViewModels`; when
+      that lands, the `Harbor.Desktop.ViewModels` edge below goes away with it,
+      and this part stops reaching `Harbor.Application` transitively.
     -->
     <RootNamespace>Harbor.TestKit</RootNamespace>
     <!--
@@ -67,13 +67,14 @@
       `Harbor.Ui.Framework.Services` holds `IDispatcherAdapter`,
       `Harbor.Ui.Framework.State` holds `UiState`/`UiStore`/`IPanelProvider`,
       `Harbor.Ui.Framework.ViewModels` holds `StoreSubscriberViewModel`, and
-      `Harbor.Desktop.Abstractions` holds `ChatViewModelBase` /
-      `DiffViewModelBase`.
+      `Harbor.Desktop.ViewModels` holds `ChatViewModelBase` /
+      `DiffViewModelBase` (#1899 moved them out of Harbor.Desktop.Abstractions).
     -->
     <ProjectReference Include="../../src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj" />
     <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj" />
     <ProjectReference Include="../../src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj" />
-    <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj" />
+    <!-- #1899: the desktop view-model bases moved out of Harbor.Desktop.Abstractions. -->
+    <ProjectReference Include="../../src/Harbor.Desktop.ViewModels/Harbor.Desktop.ViewModels.csproj" />
     <!-- #1772: `NullRenderContext` implements `ITuiRenderContext`. -->
     <ProjectReference Include="../../src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     One provider row on step 2 of the onboarding wizard. Pure view-model —

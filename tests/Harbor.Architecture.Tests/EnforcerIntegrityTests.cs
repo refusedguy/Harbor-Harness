@@ -148,10 +148,6 @@ public sealed class EnforcerIntegrityTests
             "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Hosting", "Harbor.Tui.CellForge.Engine",
             "#450/#546: pre-existing vestigial edge — DI wires the CellForge renderer, not the engine assembly directly. Remove the reference; see issue #546."),
-        new("Harbor.Desktop.Abstractions", "Harbor.Terminal.Abstractions",
-            "#450/#543: pre-existing vestigial edge — no TUI vocabulary is bound from this assembly. Remove the reference; see issue #543."),
-        new("Harbor.Desktop.Abstractions", "Harbor.Ui.Framework",
-            "#450/#542: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly; Harbor.Ui.Framework itself is empty. See issue #542."),
         new("Harbor.Desktop.Shared", "Harbor.Ui.Framework",
             "#450/#544: pre-existing vestigial edge — the leaf Ui.Framework.* modules are referenced directly; Harbor.Ui.Framework itself is empty. See issue #544."),
     ];

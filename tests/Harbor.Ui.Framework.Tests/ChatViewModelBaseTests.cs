@@ -1,4 +1,4 @@
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.TestKit;

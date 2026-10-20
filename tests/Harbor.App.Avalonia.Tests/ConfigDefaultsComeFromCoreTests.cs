@@ -41,7 +41,7 @@ using Harbor.App.Avalonia.Configuration;
 using Harbor.App.Avalonia.Tests.Support;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 

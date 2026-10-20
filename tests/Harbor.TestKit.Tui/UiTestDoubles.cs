@@ -21,7 +21,7 @@
 // consumer needs `using Harbor.TestKit;` and nothing else, whichever
 // assembly the type happens to live in.
 
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Ui.Framework.ViewModels;

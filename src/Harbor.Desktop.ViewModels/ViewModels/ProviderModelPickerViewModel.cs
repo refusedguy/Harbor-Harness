@@ -14,7 +14,7 @@ using Harbor.Desktop.Abstractions.Configuration;
 using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.Messaging;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     View-model behind the <c>ProviderModelPicker</c> control. Lists every

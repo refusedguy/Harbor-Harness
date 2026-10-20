@@ -4,7 +4,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Avalonia.Tests;

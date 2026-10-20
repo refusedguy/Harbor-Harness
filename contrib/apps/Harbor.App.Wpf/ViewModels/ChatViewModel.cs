@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Streaming chat view model. Maintains the message list and the active
@@ -110,12 +110,12 @@ public sealed partial class ChatViewModel : ObservableObject
 
 /// <summary>
 ///     View model for a single chat message (user / assistant / tool). Platform
-///     extension of the shared <see cref="Harbor.Desktop.Abstractions.ViewModels.ChatMessageViewModel" />
+///     extension of the shared <see cref="Harbor.Desktop.ViewModels.ChatMessageViewModel" />
 ///     record — adds the WPF <see cref="Brush" /> for the role label (the
 ///     canonical color key lives on the shared record as
 ///     <c>RoleBrushKey</c>).
 /// </summary>
-public sealed partial class ChatMessageViewModel : Harbor.Desktop.Abstractions.ViewModels.ChatMessageViewModel
+public sealed partial class ChatMessageViewModel : Harbor.Desktop.ViewModels.ChatMessageViewModel
 {
     /// <summary>Construct a <see cref="ChatMessageViewModel" />.</summary>
     public ChatMessageViewModel(string role, string content, DateTimeOffset timestamp)

@@ -13,6 +13,7 @@
     <Project Path="src/Harbor.Application/Harbor.Application.csproj" />
     <Project Path="src/Harbor.CodeGen/Harbor.CodeGen.csproj" />
     <Project Path="src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj" />
+    <Project Path="src/Harbor.Desktop.ViewModels/Harbor.Desktop.ViewModels.csproj" />
     <Project Path="src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj" />
     <Project Path="src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj" />
     <Project Path="src/Harbor.Extensions/Harbor.Extensions.csproj" />

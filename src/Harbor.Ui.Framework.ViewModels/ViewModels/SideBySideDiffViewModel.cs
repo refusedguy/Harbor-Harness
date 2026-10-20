@@ -24,7 +24,7 @@ namespace Harbor.Ui.Framework.ViewModels;
 ///     <para>
 ///         <b>Why the name says "SideBySide" (#570).</b> This type was
 ///         <c>DiffViewModel</c>, and so was
-///         <c>Harbor.Desktop.Abstractions.ViewModels.DiffViewModel</c>. Two live
+///         <c>Harbor.Desktop.ViewModels.DiffViewModel</c>. Two live
 ///         types behind one name is what let #570's bug hide: the author of a fix
 ///         could not tell from the name which one they were editing, one copy
 ///         kept the old behaviour, and the end-to-end test stayed green because
