@@ -11,6 +11,8 @@
       - IPluginRegistrar         (registration contract)
       - IPluginLoadHost          (host-side sink called by the registrar)
       - PluginAxisRegistry       (the single registry of plugin extension axes)
+      - IPluginDependencyResolver (is a declared dependency ready right now — #1733)
+      - PendingPlugin            (a plugin that is loaded but not activated — #1733)
       - PluginScript             (immutable wrapper around a single .cs source file)
       - CompiledPluginAssembly   (loaded assembly + source hash)
       - LoadedPlugin             (live IPlugin instance + metadata)
