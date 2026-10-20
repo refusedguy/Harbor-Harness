@@ -18,8 +18,12 @@
         the fixture hands the child its HOME explicitly instead of swapping
         the process environment.
       * Concurrency is bounded by [ParallelLimiter<PtyScenarioLimit>] on
-        CellForgePtyScenarioBase. One semaphore per LIMIT TYPE, so four
-        permits for the whole assembly: one spawned child per runner core.
+        CellForgePtyScenarioBase. One semaphore per LIMIT TYPE, so two
+        permits for the whole assembly: a scenario is a spawned child
+        process, and two at a time is what a four-core runner carries.
+      * One key survives: "quit-gesture", held by CtrlCScenarioTests and
+        CtrlCGestureScenarioTests, because the product's 2 000 ms quit window
+        is measured on the app's own clock.
       * Every wait is bounded; per-test budget ~30 s.
       * Linux-only by design (CI platform); off-Linux runs are Skipped, the
         Windows ConPTY port is an explicit follow-up.

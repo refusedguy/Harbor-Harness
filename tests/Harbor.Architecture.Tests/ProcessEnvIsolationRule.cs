@@ -45,11 +45,19 @@
 //     of being silently unprotected.
 //
 //     Classes with no `[Test]` are out of scope, and deliberately so: the
-//     attribute means nothing on a fixture, and the classes that USE such a
-//     fixture already carry it. `Harbor.E2E.App.Avalonia` is the worked example
+//     attribute means nothing on a fixture, so the burden falls on the
+//     classes that USE such a fixture, and those must carry a parallelism form
+//     of their own. `Harbor.E2E.App.Avalonia` is the worked example
 //     — `HeadlessAvaloniaDriver` writes `HOME` and `MockServerFixture` writes
 //     `HOME`/`USERPROFILE`, neither has a test, and every consumer is already
 //     tagged `e2e-framework` (`AvaloniaUiTests.cs:54` plus eight more).
+//     `Harbor.Tui.CellForge.PtyTests` stopped being a consumer in #1789: the
+//     PTY scenarios use their own fixture, which starts a mock server and
+//     makes a temp home WITHOUT touching the process environment (the child
+//     gets its `HOME` explicitly, through `ChildEnv`), so they carry no
+//     `[NotInParallel]` form and need none. The rule's derived writer set is
+//     unchanged either way: the fixture has no `[Test]`, and the classes that
+//     use it never call `Environment.SetEnvironmentVariable` themselves.
 //
 //     Writers that already declare a key are left alone. The four
 //     `Harbor.Hosting.Tests` classes that pin `HARBOR_MODE` / `HARBOR_STORAGE`

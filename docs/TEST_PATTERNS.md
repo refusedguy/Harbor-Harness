@@ -872,8 +872,9 @@ the test process reads no home-scoped state. So the fix was not a new key: it
 was to stop writing process state ([`PtyScenarioFixture`](../tests/Harbor.Tui.CellForge.PtyTests/PtyScenarioFixture.cs))
 and to let the limiter that was already in the tree do its job
 (`[ParallelLimiter<PtyScenarioLimit>]`, where TUnit keys the semaphore by the
-LIMIT TYPE, so it is one four-permit gate for the whole assembly, and four is
-the runner's core count: one spawned child per core).
+LIMIT TYPE, so it is one gate for the whole assembly, and the budget is a
+constant: two scenarios at a time, because a scenario is a spawned child
+process and the runner has four cores).
 
 Two rules fall out of that, and both are enforced by
 [`PtyScenarioIsolationTests`](../tests/Harbor.Tui.CellForge.PtyTests/PtyScenarioIsolationTests.cs):

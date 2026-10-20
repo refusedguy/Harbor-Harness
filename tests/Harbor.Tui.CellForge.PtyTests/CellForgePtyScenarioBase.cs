@@ -40,10 +40,11 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     What bounds the concurrency instead is the
 ///     <c>[ParallelLimiter&lt;PtyScenarioLimit&gt;]</c> below: the semaphore is
 ///     keyed by the LIMIT TYPE, so
-///     <see cref="PtyScenarioLimit" /> is one four-permit gate for the whole
-///     assembly. Four is the runner's core count, and one scenario per core is
-///     the honest budget. Each scenario spawns a .NET child, so the resource
-///     being bounded is CPU, not the terminal.
+///     <see cref="PtyScenarioLimit" /> is one two-permit gate for the whole
+///     assembly. Each scenario spawns a .NET child, so the resource being
+///     bounded is CPU, not the terminal, and two children at a time is what a
+///     four-core runner carries without squeezing the scenarios that measure
+///     the app's own clock.
 /// </summary>
 [ParallelLimiter<PtyScenarioLimit>]
 public abstract class CellForgePtyScenarioBase
@@ -594,20 +595,36 @@ public abstract class CellForgePtyScenarioBase
     {
         string projectPath = HarborAppLocator.ResolveProjectPath(CliProjectRelativePath);
         string projectDir = Path.GetDirectoryName(projectPath)!;
+        string release = Path.Combine(projectDir, "bin", "Release", "net10.0", "Harbor.App.Cli.dll");
         string debug = Path.Combine(projectDir, "bin", "Debug", "net10.0", "Harbor.App.Cli.dll");
+
+        // Release first, and Debug only when it is the only thing there or
+        // when it is asked for by name. The old order preferred Debug, so a
+        // developer with a stale Debug build ran the scenarios against a
+        // binary that no longer matched the source and read the failures as
+        // product bugs (#1789). CI has only Release, so this changes nothing
+        // there; locally it makes the binary the test runs explicit.
+        if (File.Exists(release) &&
+            !string.Equals(
+                Environment.GetEnvironmentVariable("HARBOR_TEST_CLI_CONFIG"),
+                "Debug",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return release;
+        }
+
         if (File.Exists(debug))
         {
             return debug;
         }
 
-        string release = Path.Combine(projectDir, "bin", "Release", "net10.0", "Harbor.App.Cli.dll");
         if (File.Exists(release))
         {
             return release;
         }
 
         throw new FileNotFoundException(
-            "Harbor.App.Cli.dll not built — run dotnet build before PTY scenarios.", debug);
+            "Harbor.App.Cli.dll not built — run dotnet build before PTY scenarios.", release);
     }
 
     /// <summary>

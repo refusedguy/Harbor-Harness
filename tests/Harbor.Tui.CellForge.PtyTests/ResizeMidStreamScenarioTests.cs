@@ -16,8 +16,11 @@ public sealed class ResizeMidStreamScenarioTests : CellForgePtyScenarioBase
     [Timeout(45_000)]
     public async Task Resize_MidStream_CompletesWithinNewBounds()
     {
-        // ~900 chars at the mock's 4-chars/50ms cadence ≈ 10 s of streaming —
-        // enough headroom to resize in the middle of the run.
+        // ~800 chars at the mock's 4-chars/10ms cadence ≈ 2 s of streaming:
+        // enough headroom to resize in the middle of the run, and a fifth of
+        // the ~10 s the default 50 ms cadence cost. The mock's cadence IS this
+        // scenario's clock (#1789).
+        Server.SetChunkDelay(TimeSpan.FromMilliseconds(10));
         Server.SetResponse("test-model", "RESIZE-" + new string('m', 780) + "-DONE");
         await StartAppAsync(100, 30).ConfigureAwait(false);
         _ = await WaitForScreenAsync(

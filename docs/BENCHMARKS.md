@@ -1514,10 +1514,29 @@ ratio moves when the scenarios get faster, and a ceiling does not.
 | ⏳ after | `Harbor.Tui.CellForge.PtyTests` | — | — | — | — |
 
 **Budget.** The project's wall must fit in **45 s** per CI run. Before #1789 it was
-104.66 s. The ceiling is a constant because the work per run does not change: the
-scenarios are the same 81 tests, and the lever is how many of them run at once. The
+104.66 s; the ceiling is a constant because the work per run does not change. The
 ceiling is deliberately loose: it is there to catch a return to the serial chain
 (≈105 s), not to police a few seconds of runner noise.
+
+**What #1789 removed, in order of what it was worth.** The suite's cost was not
+one thing, and the honest order is:
+
+| what | s | note |
+|---|---:|---|
+| the serial chain itself (one `"pty"` key on 40 classes) | 99.3 % busy | the chain never idled: concurrency level 1 for 103.29 s of the 104.03 s span. There was no idle to reclaim; the key WAS the cost |
+| a dead raw-byte wait (`MouseScenarioTests`) | 15.0 | `Session.WaitForOutputAsync(t => t.Contains("WHEEL-OK"), 15 s)` on a cursor-positioned stream: the literal never appears contiguously, so the wait always burned its full timeout and asserted nothing. The TRX of four runs carries "WARN: WHEEL-OK not in raw" every time, with the mock's request count at 5, i.e. the turn had happened and the needle still missed |
+| the mock's default 50 ms chunk cadence, in two scenarios | 23.9 | `Server.SetChunkDelay` already existed and one scenario already used it: 1 600 chars is 20.0 s at 50 ms and 4.0 s at 10 ms; 792 chars is 9.9 s and 2.0 s |
+| the child boot | 21.6 | 48 spawns of `dotnet exec Harbor.App.Cli.dll` at ≈0.45 s. The PTY device itself is free (spawn = 1–26 ms) |
+
+The first three rows are what #1789 changed; the last is what is left, and it is
+the floor of the suite: even with every wait free, 48 child boots are ~21.6 s of
+work.
+
+**The app's own clock is the one thing that must not be squeezed.** The quit
+gesture's 2 000 ms window is measured by the APP, and the test's 2 300 ms sleep
+clears it by 300 ms. That is the margin, and it is why the two Ctrl+C classes
+keep a narrow `"quit-gesture"` key (held by those two and by nothing else)
+instead of running in parallel with each other.
 
 **It was the only suite in its lane that CHOSE to be serial.** The same `ui` shard
 run, every project, wall from the TRX `<Times>` window:
@@ -1597,11 +1616,23 @@ answers: ~10 s of that is the provider's own cadence, not the harness's. The rem
 screen wait is a repaint-signal wait and the quiescence wait is a stability window
 (#1792, #1814).
 
-**What the parallelism factor cannot go below.** The longest single test is 21.41 s,
-so no amount of concurrency takes the project's wall under that. The 4-permit limiter
-(`PtyScenarioLimit`) is the budget that trades the two off: 103.58 s of work over four
-lanes is 25.9 s of work per lane, which is just above the 21.41 s floor, so the wall
-lands at ≈26–30 s with the outliers intact.
+**What the parallelism factor cannot go below.** The longest single test is 21.41 s
+before the cadence fix and ≈5.4 s after it, so no amount of concurrency takes the
+project's wall under the longest test. The 2-permit limiter (`PtyScenarioLimit`) is
+the budget that trades the two off: 103.58 s of work before the fixed-wait fixes,
+≈65 s after them, over two lanes is ≈33 s of work per lane against a ≈5.4 s
+floor, so the wall lands where the work says it should, not at the sum.
+
+**This work does NOT shorten the PR wall, and the numbers say so.** The PR wall is
+the MAXIMUM shard, not the sum. On the run this table is measured from: `core`
+159.43 s, `ui` 126.31 s (of which the PTY project is 104.66 s), `e2e` 60.0 s,
+`platform` 31.4 s. The `ui` shard is already ≈33 s BELOW `core`, and it only
+becomes the binding shard if the PTY project exceeds ≈113 s. Deleting the whole
+project would not move the critical path. What the work buys is the `ui` shard's
+own wall, the runner occupancy, the flake blast radius (one serial chain of 81
+tests means one flake costs the whole project), and the removal of a serial-chain
+liability. The shard rebalancing that is happening in parallel is what moves the
+critical path, and this change lowers the floor it is working against.
 
 **What the three groups of tests are, priced.** The 81 tests split into three
 kinds, classified from the tree and priced with the same TRX:
