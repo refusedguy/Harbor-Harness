@@ -310,7 +310,7 @@ public sealed class SourceCommentStripperTests
         // real code blanked across 5 files — 442 of them in `PermissionRuleset.cs`,
         // the file the contributor guide tells you to edit to add a permission rule.
         // Three of the rules that walk all of `src/` (`LogLevelMnemonicRule`,
-        // `ExtensionAxisFreezeRule`, `FileLogSinkOwnershipRule`) have been grading
+        // `ExtensionAxisRegistrationRule`, `FileLogSinkOwnershipRule`) have been grading
         // it that way.
         string[] source =
         [

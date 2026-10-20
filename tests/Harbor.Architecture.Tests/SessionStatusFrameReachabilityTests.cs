@@ -87,8 +87,8 @@ public class SessionStatusFrameReachabilityTests
     ///     and the second commit renames it. The two ways to make it pass are
     ///     deliberately both available — the test project takes an <c>apps/</c>
     ///     reference, or the test stops claiming the frame — and this gate does not
-    ///     adjudicate which, because #555 and the issue's own perimeter discussion
-    ///     make that the owner's call.
+    ///     adjudicate which, because the issue's own perimeter discussion makes
+    ///     that the owner's call.
     /// </remarks>
     [Test]
     public async Task NoTest_DrivesTheSeamDirectly_WhileItsProjectCannotReachTheFrame()

@@ -88,7 +88,7 @@
 // no such section today (`Harbor.Application`, `Harbor.Registries`, `Harbor.Ipc.*`,
 // `Harbor.Tui.*`, `Harbor.Desktop.*`, `Harbor.Lsp`, `Harbor.Terminal.Pty`,
 // `Harbor.DesignSystem`). Requiring one would be a documentation project wearing
-// a guard's clothes, and #555 freezes new axes. The floors in
+// a guard's clothes, and it is not this rule's to open a new axis. The floors in
 // `Declarations_AreFound` close the softer hole instead: a section deleted to
 // dodge a finding shrinks a count a reviewer can see.
 //

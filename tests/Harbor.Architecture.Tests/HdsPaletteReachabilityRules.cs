@@ -42,8 +42,8 @@
 //     the registration, so a new theme costs zero code edits. Nothing about the six
 //     HDS palettes participates in that claim, and no user extension depends on it.
 //   * The six HDS palettes are a hand-written `IReadOnlyList<string>`, which is the
-//     CODE axis by #622's own definition — a new one is a C# edit, and #555 still
-//     freezes that. `HdsThemeCatalogParityTests` holds the list to the folder, which
+//     CODE axis by #622's own definition — a new one is a C# edit, and that is what
+//     makes it a code axis. `HdsThemeCatalogParityTests` holds the list to the folder, which
 //     is the strongest form available for a compiled Avalonia app whose `avares://`
 //     cannot be enumerated.
 //
@@ -83,7 +83,7 @@
 //     duplicating it here would be a second source of truth about design tokens —
 //     the exact thing AGENTS.md rule 9 forbids.
 //   * Adding a palette. This file does not change the cost of adding one, and the
-//     #555 freeze on that is untouched: a new palette is still a C# edit to
+//     code axis is untouched: a new palette is still a C# edit to
 //     `PaletteNames` plus a new .axaml, which is what makes it a code axis.
 //
 // RED ON FIRST RUN — the point of the commit order

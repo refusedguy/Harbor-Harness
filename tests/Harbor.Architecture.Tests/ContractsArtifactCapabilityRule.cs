@@ -81,7 +81,7 @@ public sealed class ContractsArtifactCapabilityRule
     /// <summary>
     ///     The file that holds the single permitted read. Named so the permission
     ///     has a subject: a permission without one is a blanket excuse, which is
-    ///     the shape <c>ExtensionAxisFreezeRule.EveryDeclaredAxis_IsStillReal</c>
+    ///     the shape <c>ExtensionAxisRegistrationRule.EveryAxis_IsRegisteredInTheSingleRegistry</c>
     ///     exists to stop elsewhere in this project.
     /// </summary>
     private const string PermittedReadFile = "src/Harbor.Abstractions.Contracts/Models/RunVerification.cs";

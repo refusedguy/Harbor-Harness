@@ -15,7 +15,8 @@ namespace Harbor.Plugin.TodoWrite;
 ///     TodoWrite plugin — adds a `todo` tool for task management plus a
 ///     <c>todo-list</c> TUI panel. Showcase slice-1 (#1434): persistent
 ///     cross-session todos with search, on the existing axes only
-///     (tools + <c>ITuiPanelPlugin</c>, no new axes per #555).
+///     (tools + <c>ITuiPanelPlugin</c> — no new axis, so nothing new to
+///     declare in <c>PluginAxisRegistry</c>).
 /// </summary>
 public sealed class TodoWritePlugin : IToolPlugin, ITuiPanelPlugin
 {

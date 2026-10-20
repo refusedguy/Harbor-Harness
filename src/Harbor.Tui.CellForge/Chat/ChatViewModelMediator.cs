@@ -17,7 +17,8 @@ namespace Harbor.Tui.CellForge;
 ///     bodies. The colleagues still know nothing of each other; the
 ///     coordination is centralized exactly as before, but under an explicit
 ///     role: the renderer depends on this seam instead of naming every VM.
-///     In-tree only — not a plugin axis (#555).
+///     In-tree only — not a plugin axis: no plugin can reach it, so
+///     <c>PluginAxisRegistry</c> does not name it.
 /// </summary>
 public interface IChatViewModelMediator
 {

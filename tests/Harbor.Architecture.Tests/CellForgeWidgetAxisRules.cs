@@ -34,7 +34,7 @@
 //
 // THE VIEW SEAM: A DOOR, A MARKER, A DISPATCH, AND NO CONSUMER
 // -----------------------------------------------------------
-// `ITuiPlugin` passes #620's `ExtensionAxisFreezeRule`, and passing it is
+// `ITuiPlugin` passes #620's `ExtensionAxisRegistrationRule`, and passing it is
 // precisely why the problem survived. That rule grades a marker and a DOOR, and
 // this seam has both: `ITuiPlugin` is dispatched in `PluginRegistrar.Register`
 // and `host.RegisterTuiPlugin(tuiPlugin)` really is invoked. What is missing is
@@ -166,20 +166,20 @@
 //   a line that names it — it does not need nine tokens.
 // * Rules 1-3 read source text, not a reference graph. A `TuiPlugins` reader
 //   reached by reflection, or a `RegisterTui` call compiled from a delegate,
-//   would not be seen. The same boundary `ExtensionAxisFreezeRule` records for
+//   would not be seen. The same boundary `ExtensionAxisRegistrationRule` records for
 //   "nothing calls it", and for the same reason: these are members on a host
 //   object no plugin is ever handed, so a property hand-off cannot fake a read.
 // * A collected-plugins read is matched as `.TuiPlugins` — a read through a
 //   receiver, not the declaration, so re-writing a property cannot make a dead
 //   seam look wired. That asymmetry is the whole point, and it is the same one
-//   `ExtensionAxisFreezeRule.OpenedDoor` uses. Since #916 the member is deleted,
+//   `ExtensionAxisProbe.OpenedDoor` uses. Since #916 the member is deleted,
 //   so this probe is vacuous until someone reintroduces the collection *and* a
 //   reader of it; it is kept because the reintroduction is the event rule 3 is
 //   two-sided for.
 // * #916 added the guard this file did not have: rules 1-3 are two-sided on the
 //   CONSUMER, so a declaration was invisible to all of them and the first
 //   `class Foo : ITuiPlugin` in `src/`+`apps/` would have left all seven rules
-//   here and all six in `ExtensionAxisFreezeRule` green.
+//   here and every rule in `ExtensionAxisRegistrationRule` green.
 //   `ViewSeam_HasNoFirstImplementorInProductSource` closes that, matching the
 //   marker in a BASE LIST rather than on a receiver — the one shape that is a
 //   declaration and not a use.
@@ -474,7 +474,7 @@ internal static partial class CellForgeSeamProbe
     ///         A suffix is a proxy and the proxy is stated rather than hidden:
     ///         a foreign widget named <c>Chrome</c> is not seen, and one named
     ///         <c>FooPanel</c> in a non-<c>Harbor.Tui</c> namespace is not seen.
-    ///         The same boundary <c>ExtensionAxisFreezeRule</c> records for "nothing
+    ///         The same boundary <c>ExtensionAxisRegistrationRule</c> records for "nothing
     ///         calls it". The claim this rule supports is the narrow one: the widget
     ///         set is closed BY DEFAULT, and an accidental opening through the
     ///         renderer's own vocabulary is loud rather than silent.
@@ -783,7 +783,7 @@ public sealed class CellForgeWidgetAxisRules
             .Because(
                 "AllowedTreeBuilders is the recorded excuse for a construction site, and an excuse with "
                 + "nothing behind it is how a freeze quietly becomes a suggestion — the same rule "
-                + "ExtensionAxisFreezeRule applies to its own sealed axis list. If the layout tree moved "
+                + "ExtensionAxisRegistrationRule applies to the axes the product registry declares. If the layout tree moved "
                 + "or the factory was split, update the entry in the same commit that moved it. Stale: "
                 + (stale.Length == 0 ? "(none)" : string.Join(", ", stale)));
     }
@@ -806,7 +806,7 @@ public sealed class CellForgeWidgetAxisRules
     ///         This rule looks for the shape such a door takes when it is written
     ///         in another assembly: a type whose NAME claims to be a widget. It is a
     ///         name probe, deliberately, and the limits are the same ones
-    ///         <c>ExtensionAxisFreezeRule</c> records for "nothing calls it" —
+    ///         <c>ExtensionAxisRegistrationRule</c> records for "nothing calls it" —
     ///         a door reached by reflection, or by a name this suffix list does not
     ///         anticipate, is not seen. The honest claim is narrower and still
     ///         worth having: <b>the widget set is closed by default</b>, and this
@@ -814,7 +814,8 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         Two-sided on purpose. If a future decision DOES open a widget axis —
-    ///         which is the owner's to make under #555, not this rule's — the
+    ///         which is the owner's to make (ADR-013 records that decision), not
+    ///         this rule's — the
     ///         honest response is to delete this assertion or record the allowance
     ///         the way <c>AllowedTreeBuilders</c> records its own, and the comment
     ///         says which. A guard that cannot be turned off is a guard that gets
@@ -950,12 +951,12 @@ public sealed class CellForgeWidgetAxisRules
     ///         <b>The gap #916 found, and it is a hole in the CLOSURE rather than in
     ///         the documentation.</b> Rule 3 counts <c>readers + calls</c>, and both
     ///         probes are anchored on a receiver, so neither can see a declaration.
-    ///         <c>ExtensionAxisFreezeRule</c> grades the axis as
-    ///         <c>SealedAxis("ITuiPlugin", "RegisterTuiPlugin")</c>, which it already
+    ///         <c>ExtensionAxisRegistrationRule</c> grades the axis as the registered
+    ///         <c>ITuiPlugin</c>→<c>RegisterTuiPlugin</c> pair, which it already
     ///         passes — that pass is why the problem survived. So the first
     ///         <c>class Foo : ITuiPlugin</c> written anywhere under <c>src/</c> or
-    ///         <c>apps/</c> would leave all seven rules in this file green and all six
-    ///         in <c>ExtensionAxisFreezeRule</c> green.
+    ///         <c>apps/</c> would leave all seven rules in this file green and every
+    ///         rule in <c>ExtensionAxisRegistrationRule</c> green.
     ///     </para>
     ///     <para>
     ///         What that costs is the failure mode this whole file exists to
@@ -967,9 +968,9 @@ public sealed class CellForgeWidgetAxisRules
     ///     </para>
     ///     <para>
     ///         This is deliberately a probe inside the existing guard rather than a
-    ///         new axis, tool or CI job: #555 freezes the extension surface, and a
-    ///         rule that grades one already-declared seam's implementors opens
-    ///         nothing. The status stays owned by <see cref="ViewSeamStatus" />, so
+    ///         new axis, tool or CI job: a rule that grades one already-declared
+    ///         seam's implementors opens nothing, and the extension surface is not
+    ///         where a new CI job belongs. The status stays owned by <see cref="ViewSeamStatus" />, so
     ///         the deliberate edit that reopens the seam is the same one it already
     ///         is.
     ///     </para>
@@ -988,9 +989,9 @@ public sealed class CellForgeWidgetAxisRules
                 + "first implementor — and that accident is invisible to every other rule here. Rule 3 is "
                 + "two-sided on the CONSUMER, so it counts a reader of the collected list and a call of "
                 + "RegisterTui, and a declaration is neither; the marker and the door are both already "
-                + "present, which is what makes this seam pass ExtensionAxisFreezeRule today. So the first "
+                + "present, which is what makes this seam pass ExtensionAxisRegistrationRule today. So the first "
                 + "`class Foo : ITuiPlugin` in product source would pass all seven rules in this file and "
-                + "all six in ExtensionAxisFreezeRule, and the type it produces is the exact failure #564 "
+                + "every rule in ExtensionAxisRegistrationRule, and the type it produces is the exact failure #564 "
                 + "is about: it loads, logs success, and paints nothing, and the documents tell plugin "
                 + "authors not to write it while nothing can tell whether they did. Implement ITuiPanelPlugin "
                 + "instead — that axis is live end to end. If a first implementor is genuinely wanted, flip "
@@ -1036,7 +1037,7 @@ public sealed class CellForgeWidgetAxisRules
             .Because(
                 "the other half of the discrimination: the marker appears in product source in four "
                 + "shapes that are NOT implementors — the interface's own declaration, a parameter, a "
-                + "collection element, and the dispatch branch that satisfies ExtensionAxisFreezeRule. A "
+                + "collection element, and the dispatch branch that satisfies ExtensionAxisRegistrationRule. A "
                 + "probe that swept any of those in would be red on the tree it was written for, and the "
                 + "fix for that red would be to delete the rule.");
     }
@@ -1082,7 +1083,7 @@ public sealed class CellForgeWidgetAxisRules
                 + "a read of the collected plugins, or a call of ITuiPlugin.RegisterTui on a receiver, is what "
                 + "makes the seam real: PluginRegistrar dispatches the marker and invokes "
                 + "host.RegisterTuiPlugin(...), which is the whole reason this seam PASSES "
-                + "ExtensionAxisFreezeRule — a marker and a door are present and connected, and the "
+                + "ExtensionAxisRegistrationRule — a marker and a door are present and connected, and the "
                 + "renderer that would consume them is not. Declared '" + ViewSeamStatus + "', found "
                 + consumed + " consumer(s)"
                 + (consumed == 0 ? " (the seam is collected and never rendered)." : ".")

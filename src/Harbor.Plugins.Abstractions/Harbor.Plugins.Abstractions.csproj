@@ -10,6 +10,7 @@
       - IPluginInstantiator      (instantiation contract)
       - IPluginRegistrar         (registration contract)
       - IPluginLoadHost          (host-side sink called by the registrar)
+      - PluginAxisRegistry       (the single registry of plugin extension axes)
       - PluginScript             (immutable wrapper around a single .cs source file)
       - CompiledPluginAssembly   (loaded assembly + source hash)
       - LoadedPlugin             (live IPlugin instance + metadata)

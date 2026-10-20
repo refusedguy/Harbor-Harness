@@ -94,7 +94,7 @@
 // * It does not count tests. The per-project totals live in the job summary and
 //   the TRX artifacts; a floor of 1 is what the guard asserts, because 1 is what
 //   distinguishes "ran" from "discovered nothing".
-// * `contrib/` is untouched (#555).
+// * `contrib/` is untouched.
 
 namespace Harbor.Architecture.Tests;
 

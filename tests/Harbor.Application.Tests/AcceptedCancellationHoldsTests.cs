@@ -26,9 +26,9 @@ namespace Harbor.Application.Tests;
 ///         irreversible state. It is a <b>flag</b> — a
 ///         <see cref="CancellationToken" /> — and the defect was therefore not
 ///         "no flag" but "a path that lets work start anyway". This file pins
-///         that path closed. No new stop-state enum is introduced: the freeze
-///         (#555) holds, and the guarantee is expressible against the token that
-///         already exists.
+///         that path closed. No new stop-state enum is introduced: the guarantee
+///         is expressible against the token that already exists, and a stop
+///         state is not a seam a plugin reaches.
 ///     </para>
 ///     <para>
 ///         <b>Non-vacuity.</b> The tests below are built so the guard MUST fire

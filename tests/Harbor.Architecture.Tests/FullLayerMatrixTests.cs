@@ -238,7 +238,7 @@ public class FullLayerMatrixTests
         // reason it is a NAMED site and not a project-granular excuse — the
         // ITuiBackendPlugin axis is defined by its door, and that door's payload
         // is a Func<ITuiRenderer>. It is the renderer equivalent of ITuiPlugin,
-        // not a widening: #620's ExtensionAxisFreezeRule is what found the axis
+        // not a widening: #620's ExtensionAxisRegistrationRule is what found the axis
         // half-open, and this file is the plugin-author half of it.
         ["Harbor.Plugins.Abstractions"] =
         [

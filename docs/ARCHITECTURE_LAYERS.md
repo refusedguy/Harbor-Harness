@@ -143,7 +143,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 > `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` and
 > `Harbor.Ui.Framework.Abstractions`; Presentation holds
 > `Harbor.Terminal.Abstractions` and `Harbor.Desktop.Abstractions`. Which name a project
-> *should* have is a layering decision (#555), not a docs one.
+> *should* have is a layering decision, not a docs one. (The #555 freeze that
+> used to hold that decision was lifted on 2026-10-20; the matrix in §2 is what
+> decides it now.)
 >
 > The `Harbor.Desktop.Abstractions → Harbor.Ui.Framework.*` edges this box used to carry
 > as an EXCEPTION are ordinary Presentation-to-Presentation edges the matrix permits; the

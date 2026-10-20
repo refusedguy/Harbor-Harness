@@ -19,9 +19,22 @@ namespace Harbor.Plugins.Host;
 /// <summary>
 ///     Minimal <see cref="IPluginLoadHost" /> implementation that captures the <see cref="ITool" />
 ///     instances contributed by CS-source plugins and exposes them to the MCP stdio server.
-///     Provider / agent / TUI registrations are accepted (so plugin <c>Initialize</c> never
-///     throws) but are not surfaced over MCP — only tools are.
 /// </summary>
+/// <remarks>
+///     <para>
+///         This route exposes TOOLS ONLY. Every other door therefore REFUSES the
+///         contribution and says why, instead of accepting it silently: a door that
+///         answered <c>Result.Success()</c> while registering nothing would tell a
+///         plugin its provider / agent / panel / session store / TUI backend was
+///         registered when it was not — the "accepted" and the "dropped" were
+///         indistinguishable to the caller (#1758).
+///     </para>
+///     <para>
+///         The refusal is ANSWERED, never thrown, so a plugin's <c>Initialize</c>
+///         still does not fail over an axis this route does not carry — the
+///         registration is reported as refused and the plugin load continues.
+///     </para>
+/// </remarks>
 internal sealed class McpPluginLoadHost : IPluginLoadHost
 {
     private readonly ConcurrentDictionary<string, ITool> _tools = new(StringComparer.Ordinal);
@@ -48,41 +61,49 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
 
     public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory)
     {
-        McpPluginLoadHostLog.ProviderIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), providerId);
-        return Result.Success();
+        McpPluginLoadHostLog.ProviderRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), providerId);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; provider '{providerId}' was not registered.");
     }
 
     public Result RegisterAgent(AgentDefinition agent)
     {
-        McpPluginLoadHostLog.AgentIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), agent.Name);
-        return Result.Success();
+        McpPluginLoadHostLog.AgentRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), agent.Name);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; agent '{agent.Name}' was not registered.");
     }
 
     public Result RegisterTuiPlugin(ITuiPlugin plugin)
     {
-        McpPluginLoadHostLog.TuiIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), plugin.Name);
-        return Result.Success();
+        McpPluginLoadHostLog.TuiRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), plugin.Name);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; TUI plugin '{plugin.Name}' was not registered.");
     }
 
     public Result RegisterPanelProvider(IPanelProvider panel)
     {
-        McpPluginLoadHostLog.PanelIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), panel.Id);
-        return Result.Success();
+        McpPluginLoadHostLog.PanelRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), panel.Id);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; panel '{panel.Id}' was not registered.");
     }
 
     // #581: the MCP stdio server exposes tools only. These two doors exist so the
     // interface stays uniformly implementable — an MCP-hosted plugin calling them
-    // gets a loud "not exposed" log instead of a compile error against a sealed seam.
+    // gets a loud "not exposed" log and an explicit refusal instead of a compile
+    // error against a sealed seam, and instead of a Success that registered
+    // nothing (#1758).
     public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
     {
-        McpPluginLoadHostLog.SessionStoreIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
-        return Result.Success();
+        McpPluginLoadHostLog.SessionStoreRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; session store '{backendId}' was not registered.");
     }
 
     public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
     {
-        McpPluginLoadHostLog.TuiBackendIgnored(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
-        return Result.Success();
+        McpPluginLoadHostLog.TuiBackendRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
+        return Result.Failure(
+            $"The out-of-process plugin host exposes tools only; TUI backend '{backendId}' was not registered.");
     }
 }
 
@@ -92,21 +113,21 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
 /// </summary>
 internal static partial class McpPluginLoadHostLog
 {
-    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin provider '{Id}' is not exposed over MCP; ignoring.")]
-    public static partial void ProviderIgnored(ILogger logger, string id);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin provider '{Id}' is not exposed over MCP; refusing the registration.")]
+    public static partial void ProviderRefused(ILogger logger, string id);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Plugin agent '{Name}' is not exposed over MCP; ignoring.")]
-    public static partial void AgentIgnored(ILogger logger, string name);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "Plugin agent '{Name}' is not exposed over MCP; refusing the registration.")]
+    public static partial void AgentRefused(ILogger logger, string name);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Plugin TUI '{Name}' is not exposed over MCP; ignoring.")]
-    public static partial void TuiIgnored(ILogger logger, string name);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Plugin TUI '{Name}' is not exposed over MCP; refusing the registration.")]
+    public static partial void TuiRefused(ILogger logger, string name);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Plugin panel '{Id}' is not exposed over MCP; ignoring.")]
-    public static partial void PanelIgnored(ILogger logger, string id);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information, Message = "Plugin panel '{Id}' is not exposed over MCP; refusing the registration.")]
+    public static partial void PanelRefused(ILogger logger, string id);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Plugin session store '{Id}' is not exposed over MCP; ignoring.")]
-    public static partial void SessionStoreIgnored(ILogger logger, string id);
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Plugin session store '{Id}' is not exposed over MCP; refusing the registration.")]
+    public static partial void SessionStoreRefused(ILogger logger, string id);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Plugin TUI backend '{Id}' is not exposed over MCP; ignoring.")]
-    public static partial void TuiBackendIgnored(ILogger logger, string id);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information, Message = "Plugin TUI backend '{Id}' is not exposed over MCP; refusing the registration.")]
+    public static partial void TuiBackendRefused(ILogger logger, string id);
 }

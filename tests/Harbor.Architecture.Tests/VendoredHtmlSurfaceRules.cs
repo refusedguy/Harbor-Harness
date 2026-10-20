@@ -169,8 +169,9 @@ public class VendoredHtmlSurfaceRules
                 + "look different depending on which path a string took. Reaching the surface is a separate "
                 + "decision from fixing it, and it is NOT this rule's to make: decide the fork/replace "
                 + "question in docs/adr/ADR-012-vendored-html-collapse-whitespace-pair.md first, then widen "
-                + "or delete this guard deliberately. If HtmlControl is genuinely needed, ADR §6 variant C and "
-                + "the #555 feature freeze both apply. "
+                + "or delete this guard deliberately. If HtmlControl is genuinely needed, ADR §6 variant C "
+                + "applies — the #555 freeze it was decided under was lifted on 2026-10-20, so the ADR's "
+                + "own reasoning is what still decides it. "
                 + string.Join("\n", violations));
     }
 

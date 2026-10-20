@@ -358,11 +358,12 @@ process**; only the tool capability crosses the wire (capability parity table:
       plugin.Initialize(context), then dispatches Register*() based on which
       sub-interface(s) the type implements:
           IToolPlugin     → RegisterTools (served over MCP tools/list + tools/call)
-          IProviderPlugin → accepted, logged as not exposed over MCP, discarded
-          IAgentPlugin    → accepted, logged as not exposed over MCP, discarded
-          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (accepted and
-                            discarded; closed seam, #564)
-          ITuiPanelPlugin → accepted, logged as not exposed over MCP, discarded
+          IProviderPlugin → refused with a reason (this route exposes tools
+                            only), logged and discarded
+          IAgentPlugin    → refused with a reason, logged and discarded
+          ITuiPlugin      → host.RegisterTuiPlugin(plugin)  (refused with a
+                            reason; closed seam, #564)
+          ITuiPanelPlugin → refused with a reason, logged and discarded
       The SafePluginRegistrar decorator wraps each call in try/catch so one bad plugin
       doesn't abort the rest.
 4. The CLI calls plugin tools via MCP; compilation errors surface as `isError`

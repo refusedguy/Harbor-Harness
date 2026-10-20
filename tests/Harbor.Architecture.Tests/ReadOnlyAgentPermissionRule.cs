@@ -86,8 +86,9 @@
 // The same holds for `write` and `edit`, which is why this is a property of
 // `Merge` and not of `patch`. Fixing it needs an operation that is not
 // subtraction-by-key (a deny must be able to outrank a more specific allow), and
-// feature freeze #555 forbids inventing one here. So it is CHARACTERISED below,
-// not fixed: the test pins today's behaviour and names the hazard, so the next
+// inventing one is a change to the rule model's surface — not this file's to
+// make. So it is CHARACTERISED below, not fixed: the test pins today's
+// behaviour and names the hazard, so the next
 // person to reach for `Default.Merge(deny)` finds the reason in a red-capable
 // assertion instead of re-deriving it.
 //
@@ -243,8 +244,9 @@ public sealed class ReadOnlyAgentPermissionRule
     ///     </para>
     ///     <para>
     ///         The fix needs an operation that lets a deny outrank a more specific
-    ///         allow. That is a new operation over rules, which feature freeze #555
-    ///         rules out here, so it is recorded in #798 instead of written.
+    ///         allow. That is a new operation over rules — a change to the rule
+    ///         model's surface, and not this file's to make — so it is recorded in
+    ///         #798 instead of written.
     ///     </para>
     /// </remarks>
     [Test]

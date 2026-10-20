@@ -348,7 +348,8 @@ consistency in code that no user path executes.
 
 Issue #564 asked whether the CellForge widget set is closed at compile time and
 whether a plugin can add one. Measured on `dev` = `7aff0c87`, the widget axis is an
-INTERNAL CONTRACT and the freeze is correct (#555), the view seam
+INTERNAL CONTRACT and the freeze is correct (#555 — lifted on 2026-10-20; the widget
+axis is closed by that owner decision, not by the freeze), the view seam
 (`ITuiPlugin`/`ITuiView`) is CLOSED and has been since #780/#966, and the panel
 seam (`ITuiPanelPlugin`/`IPanelProvider`) is LIVE — with a real door and four
 product readers — but was documented as returning a renderer-native widget that
@@ -358,9 +359,9 @@ So the residual finding was neither an open axis nor a closed one. It was three
 plugin-facing documents teaching an API that does not compile or does not render,
 which is the same defect #916 measured in prose and one document further out.
 
-Decided: the widget axis stays closed (an owner decision under #555, not this
-issue's), the panel axis stays text-only, and the documents now say so — fenced
-by two new rules in `tools/check-doc-cites.py` that are red on the pre-fix tree.
+Decided: the widget axis stays closed (an owner decision, not this issue's), the
+panel axis stays text-only, and the documents now say so — fenced by two new rules
+in `tools/check-doc-cites.py` that are red on the pre-fix tree.
 
 - Full text, the three axes with their implementation and reader counts, the
   measured cost, and the four known limits:
@@ -380,7 +381,9 @@ The interface exists: `IPanelSessionGateway` is the extracted lower-layer sessio
 added by #470 with a doc-comment stating the rule the issue re-derives, and
 `CellForgeTuiRenderer` binds it that way. The three named interfaces have **0**
 occurrences each in `src/`, `apps/` and `tests/` — writing them is an introduction,
-which is a new axis under #555, not an extraction.
+which is a new axis (the #555 freeze that forbade it was lifted on 2026-10-20; an axis
+is additive, but it has to be declared in `PluginAxisRegistry` and wired), not an
+extraction.
 
 The move is blocked twice by the same authority: `docs/ARCHITECTURE_LAYERS.md` §2 says
 the Application layer "must not know about UI vocabulary", and

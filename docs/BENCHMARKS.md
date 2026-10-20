@@ -1294,7 +1294,10 @@ rather than "already partially done":
    (CatchUp).
 
 So there is no queue of render invalidations to put a priority lane on, and adding one
-would be a new axis under the #555 freeze for no measured gain. An approval, a
+would be a new axis for no measured gain. The #555 freeze that forbade it was
+lifted on 2026-10-20, so an axis is additive rather than forbidden — but a
+priority lane nobody measured is not worth declaring in `PluginAxisRegistry`,
+let alone wiring. An approval, a
 cancellation or a permission request is in `_events`; `_events` is drained in the same
 loop iteration that paints the burst, and `ChatScreenBridge.Tick` drains the gate queue
 before the paced reveal — the ordering inside `Tick` is the lane, and it is now pinned

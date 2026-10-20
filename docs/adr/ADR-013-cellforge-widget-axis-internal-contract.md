@@ -6,6 +6,15 @@
 > as it stands, which is why it carries no `Status: normative` banner. The parts
 > that must stay true ARE fenced, by two rules in `tools/check-doc-cites.py` and
 > seven in `tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs`.
+>
+> **Update (2026-10-20):** the #555 freeze this record was decided under was lifted by
+> owner decision. The DECISION stands — the widget axis is an internal contract and the
+> view seam stays closed (#564) — but its ground is now that owner decision rather
+> than a freeze. #620's guard was replaced by
+> `tests/Harbor.Architecture.Tests/ExtensionAxisRegistrationRule.cs`, which grades the
+> axes the product registry
+> (`src/Harbor.Plugins.Abstractions/PluginAxisRegistry.cs`) declares and their wiring,
+> instead of a closed set.
 
 ## Status
 

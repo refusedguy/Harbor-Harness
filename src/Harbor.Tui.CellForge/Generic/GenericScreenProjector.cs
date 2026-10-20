@@ -8,8 +8,9 @@ namespace Harbor.Tui.CellForge.Generic;
 /// <see cref="IProjector{UiState}"/> for <see cref="GenericScreen"/>.
 /// The generic half owns no chat slices — no transcript, no costs, no agents —
 /// so the only mirror is store focus into the screen marker (the screen owns
-/// the marker, the store owns the truth). In-tree only, NOT a plugin axis
-/// (#555), like its chat sibling <see cref="ChatScreenProjector"/>.
+/// the marker, the store owns the truth). In-tree only, NOT a plugin axis — the
+/// renderer owns the registry and no plugin can reach it — like its chat
+/// sibling <see cref="ChatScreenProjector"/>.
 /// </summary>
 public sealed class GenericScreenProjector : IProjector<UiState>
 {

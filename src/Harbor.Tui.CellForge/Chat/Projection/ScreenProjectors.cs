@@ -12,9 +12,10 @@ namespace Harbor.Tui.CellForge;
 /// <summary>
 /// Per-screen projector (epic #1195, issue #1202): folds one <see cref="UiState"/>
 /// snapshot into the widgets of the screen named by <see cref="ScreenId"/>.
-/// In-tree only — this is NOT a plugin axis (#555): the renderer owns the
+/// In-tree only — this is NOT a plugin axis: the renderer owns the
 /// registry, implementations live beside the screens they serve, and nothing
-/// outside this assembly registers one.
+/// outside this assembly registers one — so no plugin can reach it and
+/// <c>PluginAxisRegistry</c> does not name it.
 /// <para/>
 /// Inversion lesson (ratatui): ratatui has NO projection — render reads the app
 /// state directly — so chat slices must not leak into the common path. The

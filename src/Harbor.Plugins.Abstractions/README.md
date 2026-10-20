@@ -22,6 +22,7 @@ Application — the plugin CONTRACT layer, and the matrix places it in **Applica
 - `IPluginInstantiator` — instantiation contract (`CompiledPluginAssembly` -> `LoadedPlugin`)
 - `IPluginRegistrar` — registration contract (`LoadedPlugin` -> wires into host registries)
 - `IPluginLoadHost` — host-side sink (called by the registrar with new plugins)
+- `PluginAxisRegistry` — the single registry of plugin extension axes (marker + host door per axis)
 - `PluginScript` — immutable wrapper around a single `.cs` source file (path + content + hash)
 - `CompiledPluginAssembly` — loaded assembly + source hash
 - `LoadedPlugin` — live `IPlugin` instance + metadata

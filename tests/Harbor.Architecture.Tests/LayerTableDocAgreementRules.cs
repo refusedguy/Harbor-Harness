@@ -146,7 +146,7 @@
 //     absent from the root README even after this PR's corrections. The direction
 //     that matters is the one `LayerDocAgreementRule` calls R1: a name that IS in a
 //     row must be in the RIGHT row. A coverage requirement would turn this into a
-//     documentation project, and #555 freezes new axes.
+//     documentation project, and it is not this rule's to open a new axis.
 //   * `Harbor.Plugins.Host`. `OutOfScopeAssemblies` gives it no layer ("OutputType=Exe
 //     out-of-process MCP stdio server — a composition root"), so any fix that assigned
 //     it one would be asserting an answer the gate does not give. It is unjudged here.

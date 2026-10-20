@@ -117,7 +117,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 // #620: these two doors have been on IPluginLoadHost since #581/#584
                 // with the registries, the composition plumbing and the module wiring
                 // already built around them — but nothing dispatched them and a plugin
-                // is never handed the host, so they were unreachable. ExtensionAxisFreezeRule
+                // is never handed the host, so they were unreachable. ExtensionAxisRegistrationRule
                 // found both axes half-open; these branches are the other half of the fix.
                 if (plugin.Instance is ISessionStorePlugin storePlugin)
                 {

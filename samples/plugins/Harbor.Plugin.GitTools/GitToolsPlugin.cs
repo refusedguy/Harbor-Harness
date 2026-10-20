@@ -16,7 +16,8 @@ namespace Harbor.Plugin.GitTools;
 ///     GitTools plugin — adds a `git` tool for common git operations plus a
 ///     `git_status` tool for structured branch/PR facts and a `git-status`
 ///     TUI panel. Showcase slice-2 (#1434): branch/PR status panel over the
-///     existing axes only (tools + <c>ITuiPanelPlugin</c>, no new axes per #555).
+///     existing axes only (tools + <c>ITuiPanelPlugin</c> — no new axis, so
+///     nothing new to declare in <c>PluginAxisRegistry</c>).
 /// </summary>
 public sealed class GitToolsPlugin : IToolPlugin, ITuiPanelPlugin
 {

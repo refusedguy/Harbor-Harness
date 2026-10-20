@@ -58,7 +58,7 @@ public sealed class CellForgeGraphRules
             // Grading it reports the test project as a layering leak of itself.
             // Dormant until KeyGateFamilyRules (#833) drove ComposerController as
             // a real object, which made the engine load for the first time.
-            // Same shape as ExtensionAxisFreezeRule, which already skips test
+            // Same shape as ExtensionAxisRegistrationRule, which already skips test
             // and benchmark assemblies by name.
             if (string.Equals(name, "Harbor.Architecture.Tests", StringComparison.Ordinal))
             {

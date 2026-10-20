@@ -8,6 +8,13 @@ reachable.
 
 Numbers below were re-derived against `dev@e3ec4b96`. Nothing is copied from the issue text.
 
+> **Update (2026-10-20):** the #555 freeze this analysis was bounded by was lifted by
+> owner decision. The measurements below stand as they were measured, and §5's "out of
+> bounds while #555 holds" is now a dated statement: the per-kind widget split is no
+> longer blocked by a freeze. What still decides it is the product question §5 names —
+> whether to wire onboarding to `DialogOverlay` or delete the dialog primitives and their
+> 4 000 lines of tests — and the widget-axis decision ADR-013 records.
+
 ---
 
 ## 1. The "State pattern replaced by `_kind` enum" premise is false — nothing was replaced

@@ -54,7 +54,8 @@
 // Serilog, the Avalonia app never touches the hand-rolled provider. So there is
 // no run in which one log line could be produced twice, and unifying them would
 // be a rewrite of two working log formats — a behaviour change, not a
-// deduplication. Under the #555 feature freeze it is not this PR's job, and
+// deduplication. Unifying them is a behaviour change to two working log
+// formats and a decision of its own (#558), so it is not this PR's job, and
 // asserting it here would encode a rewrite as an invariant. #558's own
 // "Done looks like" line `rg 'HarborLogManager|FileLoggerProvider|
 // RollingLogCleaner' apps/Harbor.App.Avalonia` returning nothing IS this rule.

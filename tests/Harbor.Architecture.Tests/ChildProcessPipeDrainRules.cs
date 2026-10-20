@@ -80,7 +80,7 @@
 // port was only ever a file filter, and it was the filter — not the rule — that
 // was wrong.
 //
-// WHY NOT A PORT INSTEAD (#555)
+// WHY NOT A PORT INSTEAD
 // -----------------------------
 // The alternative is a new `IChildProcessRunner` that drains both pipes, which
 // would make the rule port-scoped honestly. It is not taken, for a reason that is

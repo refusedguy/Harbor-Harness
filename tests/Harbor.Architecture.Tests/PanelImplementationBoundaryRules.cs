@@ -40,10 +40,11 @@
 //
 // Three independent facts in the tree, none of them an opinion:
 //
-//   1. `ITuiPanelPlugin` is one of the seven axes #555 froze, and
-//      `ExtensionAxisFreezeRule.SealedAxes` (:450) pairs it with the door
-//      `RegisterPanelProvider`. `EverySealedAxis_IsDispatchedAndOpened` FAILS THE
-//      BUILD if either half stops being real. So a third-party plugin contributing
+//   1. `ITuiPanelPlugin` is one of the REGISTERED axes — `PluginAxisRegistry`
+//      (src/Harbor.Plugins.Abstractions/PluginAxisRegistry.cs) pairs it with the
+//      door `RegisterPanelProvider` — and
+//      `ExtensionAxisRegistrationRule.EveryAxis_IsWhole` FAILS THE BUILD if
+//      either half stops being real. So a third-party plugin contributing
 //      a panel is a shipped, sanctioned capability — not a theoretical one.
 //   2. The plugin CONSTRUCTS the panel. `ITuiPanelPlugin.RegisterPanels(
 //      IPanelRegistry)` hands the host a FINISHED `IPanelProvider` instance;

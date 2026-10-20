@@ -449,7 +449,8 @@ in the renderer that owns it.
 7. For a panel a **plugin** contributes, use `ITuiPanelPlugin` +
    `IPanelRegistry` instead; that axis is live. A CellForge *cell-level* widget
    (a `Panel` subclass) is neither: the layout tree is built by
-   `ChatScreen.Build`, so widget work stays in-tree (#555 freezes new axes).
+   `ChatScreen.Build`, so widget work stays in-tree (the plugin seam is
+   `ITuiPanelPlugin`; a cell-level widget is not a plugin axis — see ADR-013).
 
 ### Add a CS-source plugin (preferred)
 

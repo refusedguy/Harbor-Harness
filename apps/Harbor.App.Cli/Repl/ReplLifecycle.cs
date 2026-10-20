@@ -607,8 +607,10 @@ internal sealed class ReplLifecycle(CellForgeReplRunner host)
     /// <summary>
     ///     #622 — arm the themes directory (<c>~/.harbor/themes</c>, override with
     ///     <c>HARBOR_THEMES_DIR</c>) so a theme is added by dropping a file into
-    ///     it. This is the whole point of the carve-out from the #555 freeze: the
-    ///     theme axis is DATA, so adding one must edit no code.
+    ///     it. This is the whole point of #622's carve-out from the #555 freeze: the
+    ///     theme axis is DATA, so adding one must edit no code. (The freeze itself
+    ///     was lifted on 2026-10-20; what #622 carved out is a new theme SOURCE,
+    ///     which is still a new axis and a decision of its own.)
     /// </summary>
     /// <remarks>
     ///     <para>

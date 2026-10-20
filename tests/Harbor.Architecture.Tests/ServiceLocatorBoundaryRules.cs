@@ -152,7 +152,7 @@
 // ENFORCED, at the strictest level, by the rules that can actually see lifetimes:
 // DI003 (captive dependency) and DI019 (scoped resolved from root) are `error`,
 // with DI002 / DI004 / DI001 at `warning` behind them. No new axis is needed for
-// it, and none is added — feature freeze #555.
+// it, and none is added.
 //
 // What this file adds is the one shape the analyzer layer genuinely does not own
 // and that a field sweep CAN own: a stored `IServiceScope`. Unlike a container, a
@@ -635,7 +635,7 @@ public class ServiceLocatorBoundaryRules
     ///     Types of an assembly, tolerating the ones that will not enumerate. The
     ///     <c>src/</c> sweep reaches ~60 assemblies, one of which failing to load
     ///     must not crash the rule — the same tolerance
-    ///     <c>ExtensionAxisFreezeRule.ProductTypes</c> and <c>SeamLeakProbe</c>
+    ///     <c>ExtensionAxisProbe.ProductTypes</c> and <c>SeamLeakProbe</c>
     ///     apply. Discovery is not a silent pass: <c>Sweeps_CoverRealTypes</c>
     ///     requires the type count to be real.
     /// </summary>

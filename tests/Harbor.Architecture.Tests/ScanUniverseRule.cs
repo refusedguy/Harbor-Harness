@@ -56,9 +56,9 @@
 //     (`DeclaredButUnboundProjectReferences`). #949 reached the same conclusion
 //     and stopped there for the same reason. Reported, not done.
 //   * The five distinct exclusion predicates in the six perimeter-bearing files
-//     are not unified. That is a new shared axis for a feature-frozen tree
-//     (#555), it changes six files' shape, and this measurement is what tells
-//     the owner whether it is worth the price.
+//     are not unified. That is a new shared axis, it changes six files' shape,
+//     and this measurement is what tells the owner whether it is worth the
+//     price.
 //   * `Harbor.Samples.slnx` (11 of 40 rows name deleted projects) and
 //     `contrib/Contrib.slnx` (26 of 26) are NOT load-bearing for any tool: no
 //     rule reads a `.slnx` row as a project list. `RepoPaths` uses `Harbor.slnx`

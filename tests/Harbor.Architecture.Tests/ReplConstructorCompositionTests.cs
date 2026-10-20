@@ -138,8 +138,8 @@
 // "Is this parameter retained by its constructor" and "how many times is this
 // type constructed" are both textual facts about code that never ships as an
 // inspectable API — `SlashCommandDispatcher` is `internal sealed`, so a test
-// double is not reachable without an axis the feature freeze (#555) does not
-// permit. Reading the text is also the only way to see the dead wiring, which
+// double is not reachable without an axis — one to declare in
+// `PluginAxisRegistry` and wire — which this file does not open. Reading the text is also the only way to see the dead wiring, which
 // by definition no test executes.
 //
 // NON-VACUITY

@@ -55,12 +55,12 @@
 // is then free to inline a status, and nothing goes red. The claim moves from a
 // test NAME (cheap to lie in) to a RULE (has to be re-derived to survive).
 //
-// WHY THIS IS NOT A NEW AXIS UNDER #555
-// -------------------------------------
-// #555 freezes new EXTENSION SEAMS — new interfaces a plugin or a widget can
-// implement. This is a gate over code that already exists, in the project that
-// already holds the other 20+ source gates. Two of the three perimeters it needs
-// are reachable without adding anything:
+// WHY THIS IS NOT A NEW AXIS
+// --------------------------
+// A new EXTENSION SEAM is a new interface a plugin or a widget can implement —
+// one to declare in `PluginAxisRegistry` and wire. This is a gate over code that
+// already exists, in the project that already holds the other 20+ source gates.
+// Two of the three perimeters it needs are reachable without adding anything:
 //
 //   * `tests/Harbor.Architecture.Tests` already text-scans `apps/` — the shared
 //     `SourceScan.ProductTrees` is literally `["src", "apps"]`, and 20+ rules use

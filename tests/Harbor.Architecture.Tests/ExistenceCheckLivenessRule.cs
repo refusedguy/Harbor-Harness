@@ -59,8 +59,9 @@
 //
 // So this file MEASURES and PINS. It does not decide what should happen to a
 // conditional reference to a project that lives outside the enforced tree —
-// that is a judgement about the contrib boundary, and the freeze in #555 plus
-// the open question in #950 both say it is not this file's to make.
+// that is a judgement about the contrib boundary, and the #555 freeze that
+// pointed at it plus the open question in #950 both say it is not this file's to
+// make.
 //
 // WHY NOT FIX `FindProjectDir` INSTEAD
 // ------------------------------------
