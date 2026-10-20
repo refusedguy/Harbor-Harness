@@ -648,13 +648,23 @@ finally
 ### Test message factories
 
 Use `Harbor.TestKit.TestMessages` to build realistic `AgentMessage` instances
-without hand-rolling constructors:
+without hand-rolling constructors (#1816 — the tree builds every message
+through this factory, and `tools/codemod-test-events.py` moved the call sites
+over):
 
 ```csharp
 var userMsg    = TestMessages.User("Hello", sessionId: "session-1");
 var assistant  = TestMessages.Assistant("Hi there!", sessionId: "session-1");
-var toolResult = TestMessages.ToolResult("read", "file contents", callId: "call-1", sessionId: "session-1");
+var toolResult = TestMessages.ToolResult(
+    [new ToolResultEntry("call-1", "read", "file contents", false)],
+    sessionId: "session-1");
 ```
+
+The payload comes first; every other argument is named, because a message
+record's adjacent parameters are often the same type (`agent` and `model` are
+both `string`) and a positional call can swap them and still compile. An
+assistant message that carries a tool call, a thinking part or a file uses
+`TestMessages.AssistantParts(parts, ...)` instead.
 
 ### Memory store alternative
 
@@ -1186,7 +1196,7 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 | `CountingTool` | `ITool` that counts executions and records raw args — use as a canary for timeout/permission tests. |
 | `ScriptedLlmClient(params LlmEvent[][] scripts)` | `ILlmClient` replaying scripted events; exposes `Requests` list and `GetModelsAsync`. |
 | `ThrowingLlmClient` | `ILlmClient` whose `StreamAsync` always throws. |
-| `TestMessages.*` | Message builders: `User(content, sid)`, `Assistant(text, sid)`, `ToolResult(tool, out, callId, sid)`. |
+| `TestMessages.*` | Message builders: `User(content, …)`, `Assistant(text, …)`, `AssistantParts(parts, …)`, `ToolResult(entries, …)`. The payload comes first, the rest is named. |
 | `TestSessionContext(Session, seedMessages?)` | `ISessionContext` with `SteeringQueue` + `EnqueueSteering`. |
 
 ### Example: using TestKit in an agent-loop test

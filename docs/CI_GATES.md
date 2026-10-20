@@ -221,13 +221,13 @@ other six are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
 the measurement helper `aggregate-build-vcpu.py`, which a human runs after a
 measurement run, `measure-project-graph.py`, which a human runs to read the
 project graph, and `codemod-test-events.py`, which rewrites the hand-built
-test events. All 37 are listed, because a tool that is not listed is a tool
-nobody reviews. The table records, for each one, the question it answers, where
-it runs, whether it blocks a build, whether it has a self-test, the ratchet it
-holds, and the floors CI passes it. The table is checked by
-`tools/check-gate-policy.py`, which fails when it stops describing the tree:
-it names a tool the table does not list, and it names a table row the tree
-does not have.
+test events and test messages. All 37 are listed, because a tool that is not
+listed is a tool nobody reviews. The table records, for each one, the question
+it answers, where it runs, whether it blocks a build, whether it has a
+self-test, the ratchet it holds, and the floors CI passes it. The table is
+checked by `tools/check-gate-policy.py`, which fails when it stops describing
+the tree: it names a tool the table does not list, and it names a table row
+the tree does not have.
 
 The modes are:
 
@@ -265,7 +265,7 @@ The modes are:
 | `tools/check-tunit-analyzer-gate.py` | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
 | `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
 | `tools/ci-shard-slices.py` | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
-| `tools/codemod-test-events.py` | rewrites the hand-built test events in `tests/` into the shared `TestEvents` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/codemod-test-events.py` | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
