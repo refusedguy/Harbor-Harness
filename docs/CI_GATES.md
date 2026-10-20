@@ -15,15 +15,17 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on `dev` at `be4f8d25`, the tree the table was written against:
+Measured on `dev` at `d56aef9f`, the tree the table was last reconciled
+against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 26 595 lines |
+| python tools in `tools/` | 35 files, 26 617 lines |
 | of them, the `check-*.py` family | 18 files, 19 162 lines |
-| workflows that run a python tool | 7: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml`, `release.yml` |
-| gates that block a build | 22 |
+| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `evaluation-cost.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
+| gates that block a build | 21 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
+| controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 5 reporters, 6 helpers, 1 library |
 | tools with a self-test | 26 |
 | tools with a ratchet | 13 |
@@ -173,11 +175,16 @@ findings that are not defects.
    defect, and the self-test asserts both that the gate fails on it and what
    the gate says about it. A self-test that only asserts "exit code 1" is
    half a self-test: the message is the part a reader needs.
-2. **A ratchet, and a floor that only goes down.** The floor is the
-   non-vacuity proof in numeric form: a scan that quietly narrowed must go
-   red instead of reporting a clean tree. A floor is lowered in the same diff
-   as the change that legitimately lowered the number, where a reviewer sees
-   it. A floor that can be raised is a target, not a ratchet.
+2. **A ratchet, and a floor that is not loosened.** Two different numbers,
+   two different rules. A **baseline** (an exceptions file) is a ratchet: its
+   rows may only shrink, because every row is a violation the tree is allowed
+   to keep, and a new one is a new finding. A **floor** (`--min-*`) is the
+   non-vacuity proof in numeric form: a scan that quietly narrowed must go red
+   instead of reporting a clean tree. A floor is set AT the measured count,
+   it is lowered in the same diff as the change that legitimately lowered the
+   number, where a reviewer sees it, and it is RAISED when the measured count
+   grows - a higher floor is stricter, and stricter is not a hole. What a
+   floor may never do is be loosened to hide a regression.
 3. **A deterministic exit.** The same tree gives the same exit code. No
    clock, no network, no randomness, no dependence on the machine.
 4. **A message that names the violator.** "3 problems" costs the reader the
@@ -213,15 +220,16 @@ graph, and `codemod-test-events.py`, which rewrites the hand-built test
 events. All 35 are listed, because a tool that is not listed is a tool nobody
 reviews — with the question it answers, where it runs, whether it blocks a
 build, whether it has a self-test, the ratchet it holds, and the floors CI
-passes it. The table is
-
-checked by `tools/check-gate-policy.py`, which fails when it stops describing
-the tree.
+passes it. The table is checked by `tools/check-gate-policy.py`, which fails
+when it stops describing the tree.
 
 The modes are:
 
 - **gate** - it fails a build.
 - **advisory** - it reports and lets the build pass (`--warn-only`).
+- **control** - it proves that a COMPILE-time gate is armed, so it runs the
+  compiler. There are two of those: this one for the TUnit analyzer
+  promotion, and `tools/public-api-nonvacuity.sh` for the public-API freeze.
 - **reporter** - it prints and never fails.
 - **helper** - a tool the pipeline uses, not a check of its own.
 - **library** - imported by other tools, run by no workflow.
@@ -235,7 +243,7 @@ The modes are:
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 27` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 35` |
 | `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
@@ -246,7 +254,7 @@ The modes are:
 | `tools/check-test-json-reflection.py` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
 | `tools/check-test-packages.py` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 50 --min-packages 1400 --min-output-dirs 40` |
 | `tools/check-test-projects.py` | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
-| `tools/check-tunit-analyzer-gate.py` | TUnit's own analyzers are armed: a planted offender fails the build and a planted waiver does not | ci.yml | build | gate | `--selftest` | — | — |
+| `tools/check-tunit-analyzer-gate.py` | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
 | `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
 | `tools/ci-shard-slices.py` | the build-output slices match the test shards | ci.yml | build | gate | — | — | — |
 | `tools/codemod-test-events.py` | rewrites the hand-built test events in `tests/` into the shared `TestEvents` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
@@ -311,7 +319,7 @@ Run it:
 
 ```bash
 ./tools/check-gate-policy.py --self-test
-./tools/check-gate-policy.py --min-gates 27
+./tools/check-gate-policy.py --min-gates 35
 ```
 
 Its own `--self-test` plants one defect per rule in a synthetic tree and
