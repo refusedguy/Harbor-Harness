@@ -1,6 +1,12 @@
 using System.Threading.Channels;
 using Harbor.Abstractions.Models;
 namespace Harbor.Abstractions.Sessions;
+// The default bodies of the #1784 members are written as ONE-LINE blocks on
+// purpose. The public-API snapshot scanner (tools/check-public-api-abstractions.py)
+// reads an interface body line by line, and a default body split across lines is
+// read as an extra member — the frozen baseline then grows a row that says
+// nothing. One line per member keeps the baseline a record of the contract
+// rather than of the formatting.
 /// <summary>
 ///     Storage abstraction for sessions (Repository pattern, GOF).
 ///     Implementations: JSONL (default), SQLite (opt), Postgres (future plugin).
@@ -29,6 +35,32 @@ namespace Harbor.Abstractions.Sessions;
 ///         </list>
 ///         Unreadable message rows/lines are skipped with a warning, never a
 ///         whole-history failure.
+///     </para>
+///     <para>
+///         <b>The log and the surface (#1784).</b> A store keeps a LOG — every
+///         record ever written, in write order — and exposes a SURFACE: the
+///         folded view of that log, which is what
+///         <see cref="GetMessagesAsync" /> returns. The two differ because a
+///         rewind takes messages OUT of the surface without deleting them from
+///         the log, and because an edited message leaves its previous version
+///         in the log as a shadowed record.
+///     </para>
+///     <para>
+///         <b>What the invariant covers.</b> The "the agent's text never
+///         disappears" invariant is about the REWIND path and the IN-PLACE
+///         EDIT path — the two that physically destroyed text until #1784. It
+///         is NOT about compaction: compaction appends a summary message and
+///         hides the folded messages from the MODEL CONTEXT only, so the
+///         records are in the log before and after it.
+///     </para>
+///     <para>
+///         <b>What is guaranteed where.</b> The invariant is guaranteed by the
+///         backends that implement <see cref="GetSessionLogAsync" /> and
+///         <see cref="RewindMessagesAfterAsync" />. For a store that has not
+///         been migrated, the members below fail loudly rather than deleting
+///         anything, and the legacy destructive behaviour stays reachable only
+///         through the explicitly deprecated
+///         <see cref="DeleteMessagesAfterAsync" />.
 ///     </para>
 /// </remarks>
 public interface ISessionStore
@@ -87,6 +119,35 @@ public interface ISessionStore
     public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default);
 
     /// <summary>
+    ///     Get the session's whole LOG: every record ever written, in write
+    ///     order — the current messages, the versions they replaced, and the
+    ///     events that moved messages out of the surface.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the read side of the append-only model (#1784). The log
+    ///         is the truth; <see cref="GetMessagesAsync" /> returns the
+    ///         SURFACE, the fold of that log. A caller that needs to know what
+    ///         the agent said BEFORE a rewind, or what a message said before it
+    ///         was edited, reads the log.
+    ///     </para>
+    ///     <para>
+    ///         <b>Default implementation:</b> a failure. A store that has not
+    ///         been migrated to the append-only log has no log to return, and
+    ///         reporting an empty log as if it were the whole truth would be a
+    ///         lie that reads like a fact.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     The log records in write order, or failure if the session does not
+    ///     exist or the store does not expose a log.
+    /// </returns>
+    public Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(string sessionId, CancellationToken ct = default)
+    { return Task.FromResult(Result.Failure<IReadOnlyList<SessionLogEntry>>($"Session store '{GetType().Name}' does not expose a session log (#1784).")); }
+
+    /// <summary>
     ///     Delete a session and all of its messages.
     /// </summary>
     /// <param name="sessionId">The session id.</param>
@@ -133,15 +194,102 @@ public interface ISessionStore
     public Task<Result> UpdateStatsAsync(string sessionId, SessionMetadata metadata, CancellationToken ct = default);
 
     /// <summary>
+    ///     Rewind the session to <paramref name="messageId" />: every message
+    ///     after the anchor LEAVES THE SURFACE, and the records stay in the log.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the append-only replacement for the old destructive
+    ///         <see cref="DeleteMessagesAfterAsync" /> (#1784). The anchor
+    ///         itself is KEPT — this is "rewind to here" semantics for session
+    ///         revert/branch-from-history — and the tail is not deleted: the
+    ///         records stay in the log as shadowed records, and the rewind is
+    ///         recorded IN the log as an event.
+    ///     </para>
+    ///     <para>
+    ///         The returned count is how many messages left the surface. It is
+    ///         the same number the destructive verb used to report, and it does
+    ///         NOT mean that many records were destroyed.
+    ///     </para>
+    ///     <para>
+    ///         <b>Default implementation:</b> a failure. A store that has not
+    ///         been migrated must NOT fall back to deleting messages — that
+    ///         fallback is exactly the data loss this contract removes, and a
+    ///         loud failure is the only honest answer for a store that cannot
+    ///         keep the records.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Id of the message to keep as the new tail.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     The number of messages that left the surface, or failure if the
+    ///     session/message does not exist or the store does not support
+    ///     append-only rewind.
+    /// </returns>
+    public Task<Result<int>> RewindMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    { return Task.FromResult(Result.Failure<int>($"Session store '{GetType().Name}' does not support append-only rewind (#1784).")); }
+
+    /// <summary>
     ///     Delete every message after (insertion-order) the given message. The
     ///     target message itself is KEPT — this is "rewind to here" semantics
     ///     for session revert/branch-from-history.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>Soft-deprecated (#1784) — use
+    ///         <see cref="RewindMessagesAfterAsync" />.</b> This member is kept
+    ///         as a FORWARDER, not removed: physical deletion has no place in
+    ///         the append-only model, and a rewind now leaves the surface
+    ///         without deleting anything from the log.
+    ///     </para>
+    ///     <para>
+    ///         The deprecation is documentation-only — there is deliberately no
+    ///         <c>[Obsolete]</c> attribute, because this repository compiles
+    ///         with warnings-as-errors and the attribute would break every
+    ///         out-of-tree implementor of this interface.
+    ///     </para>
+    ///     <para>
+    ///         A store that still OVERRIDES this member keeps its legacy
+    ///         destructive behaviour until it is migrated; the default
+    ///         implementation forwards to
+    ///         <see cref="RewindMessagesAfterAsync" />, so a migrated store
+    ///         answers this call correctly without overriding it.
+    ///     </para>
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
     /// <param name="messageId">Id of the message to keep as the new tail.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The number of deleted messages, or failure if session/message not found.</returns>
-    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default);
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    { return RewindMessagesAfterAsync(sessionId, messageId, ct); }
+
+    /// <summary>
+    ///     Physically remove the messages after <paramref name="messageId" />
+    ///     from the log — the ONE operation that destroys records.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Prune is NEVER automatic (#1784, owner decision). An implicit
+    ///         prune would silently destroy exactly what the append-only log
+    ///         exists to keep, so the only path that removes records is an
+    ///         explicit command that says how much it is about to destroy.
+    ///     </para>
+    ///     <para>
+    ///         <b>Default implementation:</b> a failure. A store that has not
+    ///         been migrated has no prune plan, and defaulting to "nothing was
+    ///         pruned" would report success for work never done.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Id of the message to keep as the new tail.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     The number of records removed, or failure if the session/message
+    ///     does not exist or the store does not support prune.
+    /// </returns>
+    public Task<Result<int>> PurgeMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    { return Task.FromResult(Result.Failure<int>($"Session store '{GetType().Name}' does not support explicit prune (#1784).")); }
 }
 
 /// <summary>

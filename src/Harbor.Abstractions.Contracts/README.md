@@ -16,6 +16,7 @@ The **pure contract/data layer** of Harbor — value objects, domain events, mes
 | `Models/Identifiers/` | `SessionId`, `MessageId`, `ToolCallId`, `ProviderId`, `ModelRef`, `ToolName`, `AgentName` — `ValueObject`-based identifiers with validation |
 | `Models/Visitors/` | `AgentMessageVisitor<TResult>`, `ContentPartVisitor<TResult>` — the single GoF traversal over the two message sum types (#461) |
 | `Events/` | `AgentEvent` discriminated union (`AgentStartEvent`, `TurnStartEvent`, `MessageStartEvent`, `ToolExecutionStartEvent`, etc.), `LlmStreamErrorException`, `ProviderErrorKind`, `ProviderErrors` |
+| `Sessions/` | `SessionLogEntry` (one record of an append-only session log), `SessionLogEntryKind` / `SessionLogEntryState`, `SessionSurface` + `SessionLogFold` (the shared fold: current / shadowed / log-only), `SessionLogGuard` (the "the agent's text never disappears" guard) — #1784 |
 | `Permissions/` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `BashArgMatcher`, `ToolCategory` |
 
 ## Public API summary
