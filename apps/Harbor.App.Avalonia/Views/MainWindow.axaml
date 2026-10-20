@@ -15,11 +15,6 @@
         WindowStartupLocation="CenterScreen"
         FontFamily="{DynamicResource FontUi}">
 
-    <Window.Resources>
-        <views:BrushKeyConverter x:Key="BrushKeyConv" />
-        <views:EqualityConverter x:Key="EqualityConv" />
-    </Window.Resources>
-
     <!--
         ROOT LAYOUT — Grid with explicit rows/columns:
           Row 0: TitleBar (Auto, 44px, spans all cols)
@@ -50,25 +45,25 @@
                         Spacing="2" Margin="6,4" x:Name="TabStrip">
                 <RadioButton Classes="TabButton" Content="Chat" GroupName="MainView"
                              AutomationProperties.Name="Chat tab"
-                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=chat}" />
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=chat}" />
                 <RadioButton Classes="TabButton" Content="Code" GroupName="MainView"
                              AutomationProperties.Name="Code tab"
-                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=code}" />
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=code}" />
                 <RadioButton Classes="TabButton" Content="Sessions" GroupName="MainView"
                              AutomationProperties.Name="Sessions tab"
-                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={StaticResource EqualityConv}, ConverterParameter=board}" />
+                             IsChecked="{Binding ActiveView, Mode=TwoWay, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=board}" />
             </StackPanel>
 
             <!-- Content -->
             <Grid Grid.Row="1">
                 <views:ChatView
-                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=chat, FallbackValue=True}"
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=chat, FallbackValue=True}"
                     DataContext="{Binding Chat}" />
                 <views:CodeEditorView
-                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=code, FallbackValue=False}"
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=code, FallbackValue=False}"
                     DataContext="{Binding CodeEditor}" />
                 <board:BoardView
-                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={StaticResource EqualityConv}, ConverterParameter=board, FallbackValue=False}"
+                    IsVisible="{Binding $parent[Window].DataContext.ActiveView, Converter={x:Static views:EqualityConverter.Instance}, ConverterParameter=board, FallbackValue=False}"
                     DataContext="{Binding Board}" />
             </Grid>
         </Grid>

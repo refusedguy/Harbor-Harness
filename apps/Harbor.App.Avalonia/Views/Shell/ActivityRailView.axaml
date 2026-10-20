@@ -10,8 +10,12 @@
              VerticalAlignment="Stretch">
 
     <UserControl.Resources>
+        <!--
+            #1539: only the stateful converter is declared here. The glyph
+            converter is stateless, so it comes from the shared singleton
+            (x:Static) instead of a per-view instance.
+        -->
         <shell:BoolToWidthConverter x:Key="BoolToWidth" ExpandedWidth="240" CollapsedWidth="56"/>
-        <shell:FileTypeToGeometryConverter x:Key="FileTypeToGeometry"/>
     </UserControl.Resources>
 
     <Border Background="{DynamicResource BgRailBrush}"
@@ -69,7 +73,7 @@
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <PathIcon Width="16" Height="16">
                                         <PathIcon.Data>
-                                            <Binding Path="." Converter="{StaticResource FileTypeToGeometry}"/>
+                                            <Binding Path="." Converter="{x:Static shell:FileTypeToGeometryConverter.Instance}"/>
                                         </PathIcon.Data>
                                     </PathIcon>
                                     <TextBlock Text="{Binding Name}"

@@ -23,10 +23,6 @@
                            Timestamp="{Binding TimestampText}"/>
     -->
 
-    <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey" />
-    </UserControl.Resources>
-
     <Grid Margin="0,6" ColumnDefinitions="100,*">
         <!-- Role pill (JetBrains Mono, accent color) -->
         <Border Grid.Column="0"
@@ -35,13 +31,13 @@
                 Padding="8,3"
                 VerticalAlignment="Top"
                 HorizontalAlignment="Left"
-                BorderBrush="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                BorderBrush="{Binding BrushKey, Converter={x:Static vw:BrushKeyConverter.Instance}, RelativeSource={RelativeSource AncestorType=UserControl}}"
                 BorderThickness="2,0,0,0">
             <TextBlock Text="{Binding RoleLabel, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontFamily="{DynamicResource FontMono}"
                        FontSize="11"
                        FontWeight="SemiBold"
-                       Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                       Foreground="{Binding BrushKey, Converter={x:Static vw:BrushKeyConverter.Instance}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
         </Border>
 
         <!-- Message body — plain TextBlock. (MarkdownRenderer integration
@@ -60,7 +56,7 @@
                            FontFamily="{DynamicResource FontUi}"
                            FontSize="14"
                            LineHeight="20"
-                           Foreground="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                           Foreground="{Binding BrushKey, Converter={x:Static vw:BrushKeyConverter.Instance}, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                 <!-- Optional timestamp (right-aligned, muted). Hidden when
                      the bound value is null/empty (StringNullOrEmptyToBoolConverter
                      + InverseBoolConverter for IsVisible). -->

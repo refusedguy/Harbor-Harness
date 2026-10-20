@@ -152,6 +152,16 @@ public partial class ActivityRailView : UserControl
     }
 }
 
+/// <summary>
+///     Turns the rail's expanded flag into the rail's width.
+/// </summary>
+/// <remarks>
+///     Not a <see cref="OneWayConverterBase{T}" />: the two widths are instance
+///     state, set from the XAML that declares the converter
+///     (<c>ExpandedWidth</c> / <c>CollapsedWidth</c>). A shared singleton
+///     would carry one rail's widths into every other rail, so this converter
+///     is declared as a resource and instantiated per view.
+/// </remarks>
 public sealed class BoolToWidthConverter : IValueConverter
 {
     public double ExpandedWidth { get; set; } = 240;
@@ -194,7 +204,7 @@ public sealed class BoolToWidthConverter : IValueConverter
 ///     (<c>docs/ui/HDS.md</c>; <c>ThemeTokenDuplicationGuardTests</c> enforces it).
 /// </para>
 /// </remarks>
-public sealed class FileTypeToGeometryConverter : IValueConverter
+public sealed class FileTypeToGeometryConverter : OneWayConverterBase<FileTypeToGeometryConverter>
 {
     /// <summary>Category a classified (source-ish) file row gets.</summary>
     public const string CodeResourceKey = "IcFileCode";
@@ -235,7 +245,7 @@ public sealed class FileTypeToGeometryConverter : IValueConverter
     }
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not FileTreeNode node) return null;
         if (global::Avalonia.Application.Current is null) return null;
@@ -248,9 +258,6 @@ public sealed class FileTypeToGeometryConverter : IValueConverter
             ? resource
             : null;
     }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>

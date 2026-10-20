@@ -11,13 +11,10 @@ namespace Harbor.App.Avalonia.Views;
 ///     Resolves a resource-key string (e.g. "ChatUserBrush") to the registered
 ///     <see cref="IBrush" />. Used by the chat template + status bar.
 /// </summary>
-public sealed class BrushKeyConverter : IValueConverter
+public sealed class BrushKeyConverter : OneWayConverterBase<BrushKeyConverter>
 {
-    /// <summary>Singleton instance for use as a static resource.</summary>
-    public static readonly BrushKeyConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not string key) return null;
 
@@ -30,16 +27,18 @@ public sealed class BrushKeyConverter : IValueConverter
         // not already found. Both branches now live in ThemeBrushResolver.
         return ThemeBrushResolver.Resolve(key);
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
 ///     Returns true when the bound value equals the converter parameter. Used to
 ///     toggle visibility of the chat/code views based on <c>ActiveView</c>.
 /// </summary>
+/// <remarks>
+///     Not a <see cref="OneWayConverterBase{T}" />: this converter is
+///     two-way. When the bound control (e.g. RadioButton.IsChecked) becomes
+///     true, the parameter is pushed back to the source, so a radio-button
+///     group can drive the bound view.
+/// </remarks>
 public sealed class EqualityConverter : IValueConverter
 {
     /// <summary>Singleton instance.</summary>
@@ -68,38 +67,24 @@ public sealed class EqualityConverter : IValueConverter
 ///     value does NOT equal the parameter. Used for "Back" button visibility
 ///     (visible when CurrentStep != 1).
 /// </summary>
-public sealed class InequalityConverter : IValueConverter
+public sealed class InequalityConverter : OneWayConverterBase<InequalityConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly InequalityConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => !Equals(value?.ToString(), parameter?.ToString());
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => !Equals(value?.ToString(), parameter?.ToString());
 }
 
 /// <summary>
 ///     Returns "Finish" when the bound numeric step equals <c>TotalSteps</c>
 ///     (5), otherwise "Next". Used for the onboarding wizard's nav button.
 /// </summary>
-public sealed class FinishLabelConverter : IValueConverter
+public sealed class FinishLabelConverter : OneWayConverterBase<FinishLabelConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly FinishLabelConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         const int totalSteps = 5;
         return value is int step && step >= totalSteps ? "Finish" : "Next";
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -113,29 +98,34 @@ public sealed class FinishLabelConverter : IValueConverter
 ///     Returns a brush (resolved from app resources) directly, so the
 ///     Ellipse can bind <c>Fill</c> without needing a second converter.
 /// </summary>
-public sealed class StepToStepperBrushConverter : IValueConverter
+public sealed class StepToStepperBrushConverter : OneWayConverterBase<StepToStepperBrushConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly StepToStepperBrushConverter Instance = new();
-
-    /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is not int currentStep) return null;
-        if (!int.TryParse(parameter?.ToString(), out int dotStep)) return null;
-
-        string key = currentStep switch
+    /// <summary>
+    ///     The resource key that paints the stepper dot at
+    ///     <paramref name="dotStep" /> when the wizard is at
+    ///     <paramref name="currentStep" />.
+    /// </summary>
+    /// <remarks>
+    ///     Static so the mapping can be asserted with no Avalonia
+    ///     <c>Application</c> standing up: the key is the part worth
+    ///     asserting, and the resource plumbing around it is not.
+    /// </remarks>
+    public static string BrushKeyFor(int currentStep, int dotStep) =>
+        currentStep switch
         {
             _ when currentStep > dotStep => "StepperDoneBrush",
             _ when currentStep == dotStep => "StepperActiveBrush",
             _ => "StepperPendingBrush"
         };
-        return ThemeBrushResolver.Resolve(key);
-    }
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not int currentStep) return null;
+        if (!int.TryParse(parameter?.ToString(), out int dotStep)) return null;
+
+        return ThemeBrushResolver.Resolve(BrushKeyFor(currentStep, dotStep));
+    }
 }
 
 /// <summary>
@@ -144,20 +134,14 @@ public sealed class StepToStepperBrushConverter : IValueConverter
 ///     an <see cref="IBrush" /> via <see cref="BrushKeyConverter" /> so the
 ///     status-bar accent can be bound directly to a status string.
 /// </summary>
-public sealed class StatusTextToBrushConverter : IValueConverter
+public sealed class StatusTextToBrushConverter : OneWayConverterBase<StatusTextToBrushConverter>
 {
-    public static readonly StatusTextToBrushConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         string key = StatusMappers.StatusToBrushKey(value?.ToString());
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -166,21 +150,15 @@ public sealed class StatusTextToBrushConverter : IValueConverter
 ///     <see cref="ToolCallState" /> enum value, returns the matching
 ///     <see cref="IBrush" /> from app resources.
 /// </summary>
-public sealed class ToolCallStateToBrushConverter : IValueConverter
+public sealed class ToolCallStateToBrushConverter : OneWayConverterBase<ToolCallStateToBrushConverter>
 {
-    public static readonly ToolCallStateToBrushConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not ToolCallState state) return null;
         string key = StatusMappers.ToolCallStateToBrushKey(state);
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -188,43 +166,31 @@ public sealed class ToolCallStateToBrushConverter : IValueConverter
 ///     <see cref="IValueConverter" />. Bound to a <c>SessionStatus</c> enum
 ///     value, returns the short display label.
 /// </summary>
-public sealed class SessionStatusToTextConverter : IValueConverter
+public sealed class SessionStatusToTextConverter : OneWayConverterBase<SessionStatusToTextConverter>
 {
-    public static readonly SessionStatusToTextConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not SessionStatus status) return null;
         return StatusMappers.SessionStatusToText(status);
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
-///     Wraps <see cref="StatusMappers.SessionStatusToBrushKey" /> as an
-///     Avalonia <see cref="IValueConverter" />. Bound to a
-///     <c>SessionStatus</c> enum value, returns the matching
-///     <see cref="IBrush" /> for the session list row's status dot.
+///     Wraps <see cref="StatusMappers.SessionStatusToBrushKey" /> as an Avalonia
+///     <see cref="IValueConverter" />. Bound to a <c>SessionStatus</c> enum
+///     value, returns the matching <see cref="IBrush" /> for the session list
+///     row's status dot.
 /// </summary>
-public sealed class SessionStatusToBrushConverter : IValueConverter
+public sealed class SessionStatusToBrushConverter : OneWayConverterBase<SessionStatusToBrushConverter>
 {
-    public static readonly SessionStatusToBrushConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not SessionStatus status) return null;
         string key = StatusMappers.SessionStatusToBrushKey(status);
         return BrushKeyConverter.Instance.Convert(key, targetType, parameter, culture);
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -232,12 +198,10 @@ public sealed class SessionStatusToBrushConverter : IValueConverter
 ///     <see cref="IValueConverter" />. Bound to a UTC <c>DateTime</c>,
 ///     returns "5m ago" / "2h ago" / "Mar 5".
 /// </summary>
-public sealed class TimeAgoConverter : IValueConverter
+public sealed class TimeAgoConverter : OneWayConverterBase<TimeAgoConverter>
 {
-    public static readonly TimeAgoConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
         {
@@ -246,10 +210,6 @@ public sealed class TimeAgoConverter : IValueConverter
             _ => string.Empty
         };
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -257,12 +217,10 @@ public sealed class TimeAgoConverter : IValueConverter
 ///     <see cref="IValueConverter" />. Bound to a long token count,
 ///     returns "1.2K" / "12K" / "1.4M".
 /// </summary>
-public sealed class TokensToCompactConverter : IValueConverter
+public sealed class TokensToCompactConverter : OneWayConverterBase<TokensToCompactConverter>
 {
-    public static readonly TokensToCompactConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
         {
@@ -271,10 +229,6 @@ public sealed class TokensToCompactConverter : IValueConverter
             _ => "0"
         };
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
@@ -282,12 +236,10 @@ public sealed class TokensToCompactConverter : IValueConverter
 ///     <see cref="IValueConverter" />. Bound to a decimal cost,
 ///     returns "$0.0123".
 /// </summary>
-public sealed class CostToUsdConverter : IValueConverter
+public sealed class CostToUsdConverter : OneWayConverterBase<CostToUsdConverter>
 {
-    public static readonly CostToUsdConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         return value switch
         {
@@ -296,18 +248,19 @@ public sealed class CostToUsdConverter : IValueConverter
             _ => "$0.0000"
         };
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
 ///     Inverts a boolean. Used for <c>IsVisible</c> bindings where the
 ///     source flag is "is hidden" but the view needs "is visible".
 /// </summary>
+/// <remarks>
+///     Not a <see cref="OneWayConverterBase{T}" />: inverting is symmetric, so
+///     this converter has a real <c>ConvertBack</c> — it inverts again.
+/// </remarks>
 public sealed class InverseBoolConverter : IValueConverter
 {
+    /// <summary>Singleton instance.</summary>
     public static readonly InverseBoolConverter Instance = new();
 
     /// <inheritdoc />
@@ -322,14 +275,8 @@ public sealed class InverseBoolConverter : IValueConverter
 ///     Used for placeholder visibility ("no messages yet" only shown when
 ///     transcript is empty).
 /// </summary>
-public sealed class StringNullOrEmptyToBoolConverter : IValueConverter
+public sealed class StringNullOrEmptyToBoolConverter : OneWayConverterBase<StringNullOrEmptyToBoolConverter>
 {
-    public static readonly StringNullOrEmptyToBoolConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => string.IsNullOrEmpty(value?.ToString());
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => string.IsNullOrEmpty(value?.ToString());
 }

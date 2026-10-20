@@ -22,10 +22,6 @@
         the key to the actual IBrush at bind time.
     -->
 
-    <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey" />
-    </UserControl.Resources>
-
     <Border Classes="ToolCallCard"
             Background="{DynamicResource BgSubtleBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
@@ -50,7 +46,7 @@
                            VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" />
                 <Border Grid.Column="2"
-                        Background="{Binding StatusBrushKey, Converter={StaticResource BrushKey}}"
+                        Background="{Binding StatusBrushKey, Converter={x:Static vw:BrushKeyConverter.Instance}}"
                         CornerRadius="3"
                         Padding="6,1"
                         VerticalAlignment="Center">
