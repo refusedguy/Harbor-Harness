@@ -2515,9 +2515,9 @@ spends most of its time waiting for a CPU that is busy anyway.
 **The graph is not the limiter either.** Measured, not modelled: at least four
 projects were in flight for 97.0..99.2 % of the build (peak 76..83 in
 flight, average 25..33). The graph agrees
-(`tools/measure-project-graph.py`): 109 projects, 453 edges, depth 15, widest
-level 20 projects, and 10 of its 16 levels are wide enough for four
-compilers.
+(`tools/measure-project-graph.py`, on this branch's tree): 109 projects, 465
+edges, depth 15, widest level 20 projects, and 11 of its 16 levels are wide
+enough for four compilers.
 
 **What the verdict is for #1929.** The issue's decision table cannot be used
 as written: the ratio it asks for reads 1.0, which the table maps to "the
