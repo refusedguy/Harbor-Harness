@@ -1,0 +1,173 @@
+{
+  "_comment": [
+    "THE single source of truth for WHERE each analyzer package runs (issue #1801).",
+    "",
+    "Every analyzer package in this repository is a Roslyn (or MSBuild) analyzer",
+    "that runs inside the compiler of EVERY project that references it. The cost",
+    "of that is not the number of findings: it is the number of ANALYZER CLASSES",
+    "the package registers times the number of COMPILATIONS the package is",
+    "referenced by. A rule set to `severity = none` is silenced; the analyzer",
+    "that implements it still runs. So the only lever that removes the cost is",
+    "the SCOPE, and a scope that is not written down drifts back to",
+    "solution-wide within a few months.",
+    "",
+    "This file is that writing-down. The gate (tools/check-analyzer-scope.py)",
+    "fails when the tree says anything else, so the table and the tree cannot",
+    "drift apart. To widen or narrow a family: edit this file AND the props",
+    "files, and let the gate tell you whether the two agree.",
+    "",
+    "HOW A SCOPE IS DECLARED IN THE TREE",
+    "",
+    "  * Every analyzer PackageReference carries the condition",
+    "    Condition=\"'$(<property>)' != 'off'\".",
+    "  * The property is set to 'on' or 'off' by the scope file of the tree the",
+    "    project lives in (src/, apps/, tests/), BEFORE that file imports the",
+    "    repository-root Directory.Build.props.",
+    "  * The repository-root file holds the DEFAULT, which is the scope of the",
+    "    projects that import it and no other: samples/, tools/ and contrib/.",
+    "  * A command-line -p:<property>=off wins over both, which is what the",
+    "    measurement harness uses to turn exactly one family off.",
+    "",
+    "HOW TO READ A ROW",
+    "",
+    "  id            the NuGet package id",
+    "  property      the MSBuild property that switches it off",
+    "  declared_in   the file(s) that carry the PackageReference element",
+    "  scopes        the trees the package actually runs in",
+    "  mode          'scope' = the scope properties decide;",
+    "                'job'   = the package has its own switch and its own scope",
+    "                (ReferenceTrimmer runs in one CI job, not in the build)",
+    "  reason        WHY the scope is what it is. A row without a reason is a",
+    "                transcription, not a decision."
+  ],
+  "version": 1,
+  "not_analyzers": [
+    {
+      "id": "Excubo.Analyzers.Annotations",
+      "reason": "It ships the [Exposes]/[Injects] ATTRIBUTES, not an analyzer. It is a compile-time dependency of the composition roots under apps/ and it declares nothing the compiler has to check. It is listed here so that the gate's shape heuristic does not read it as an analyzer that arrived without a scope decision."
+    }
+  ],
+  "trees": {
+    "root": "the projects that import the repository-root Directory.Build.props and no other: samples/, tools/ and contrib/",
+    "src": "every project under src/",
+    "apps": "every project under apps/",
+    "tests": "every project under tests/"
+  },
+  "families": [
+    {
+      "id": "Roslynator.Analyzers",
+      "property": "HarborAnalyzerRoslynator",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "284 RCS ids and no severity row for any of them, so every rule runs at the severity the package ships it with. It fires in product code, so it stays everywhere it can gate."
+    },
+    {
+      "id": "SonarAnalyzer.CSharp",
+      "property": "HarborAnalyzerSonar",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "447 rule ids, of which 40 fire. Every one of the 476 findings is under tests/ (#2030), and src/ + apps/ are clean."
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.NetAnalyzers",
+      "property": "HarborAnalyzerNetAnalyzers",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "The base layer every other package is judged against: 329 CA ids. It is the SDK's own analyzer set, so removing it from a tree removes the CA rules from that tree rather than merely their findings."
+    },
+    {
+      "id": "AsyncFixer",
+      "property": "HarborAnalyzerAsyncFixer",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "Five rules, all at 'suggestion'. They never reach the build log, so the package is a build cost with no build output; it is kept because the rules are still worth reading in the IDE."
+    },
+    {
+      "id": "ReflectionAnalyzers",
+      "property": "HarborAnalyzerReflection",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "46 rules, none of them about dynamic code (#1905). The nine rules that fire produce 41 findings, all under tests/, none of them a defect."
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.BannedApiAnalyzers",
+      "property": "HarborAnalyzerBannedApi",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "RS0030 over BannedSymbols.txt and BannedSymbols.DynamicCode.txt. The dynamic-code ban (#1844) and the 'What NOT to do' list are held by this package, so it runs wherever the ban file is wired."
+    },
+    {
+      "id": "Meziantou.Analyzer",
+      "property": "HarborAnalyzerMeziantou",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "207 MA rows, each one configured with a reason. The package is the performance layer of the tree and it fires in product code."
+    },
+    {
+      "id": "DependencyInjection.Lifetime.Analyzers",
+      "property": "HarborAnalyzerDiLifetime",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "37 DI ids; DI003, DI013, DI015, DI017 and DI019 are errors and they gate the composition roots and the modules that register services."
+    },
+    {
+      "id": "CSharpFunctionalExtensions.Analyzers",
+      "property": "HarborAnalyzerCfe",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "CFE0001 is the mechanical guard for the ROP-001 crash class (a .Value on a failed Result<T>). It fires only where CSharpFunctionalExtensions is resolvable, and the guard has to be in the trees where Result<T> is used."
+    },
+    {
+      "id": "DotNetProjectFile.Analyzers",
+      "property": "HarborAnalyzerProjectFile",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": ["root", "src", "apps", "tests"],
+      "mode": "scope",
+      "reason": "Not a Roslyn analyzer: it reads the MSBuild project files. Proj0037, Proj0040 and Proj0041 are errors and they are about the project files themselves, so they have to run wherever a project file is compiled."
+    },
+    {
+      "id": "Microsoft.VisualStudio.Threading.Analyzers",
+      "property": "HarborAnalyzerVsThreading",
+      "declared_in": ["src/Directory.Build.props", "apps/Directory.Build.props"],
+      "scopes": ["src", "apps"],
+      "mode": "scope",
+      "reason": "29 rules, exactly one of them on (VSTHRD110, at 'suggestion'). The gate that decides 'is this an unobserved Task?' is HARCH003, a house analyzer, not this package (#1852). The test tree has its own async culture, so the package is not there."
+    },
+    {
+      "id": "Excubo.Analyzers.DependencyInjectionValidation",
+      "property": "HarborAnalyzerExcubo",
+      "declared_in": ["apps/Directory.Build.props", "contrib/apps/Directory.Build.props"],
+      "scopes": ["apps"],
+      "mode": "scope",
+      "reason": "It validates the [Exposes] attribute declarations, and only the composition roots under apps/ declare them. Its five rules are all at 'suggestion' because its flow analysis only follows the immediate method body; the real coverage is the DI registration tests."
+    },
+    {
+      "id": "Microsoft.CodeAnalysis.PublicApiAnalyzers",
+      "property": "HarborAnalyzerPublicApi",
+      "declared_in": [
+        "src/Harbor.Abstractions/Harbor.Abstractions.csproj",
+        "src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"
+      ],
+      "scopes": ["src"],
+      "mode": "scope",
+      "reason": "The public-API freeze of #428, and it is a freeze of exactly two assemblies. The gate is compile-time: RS0016 and RS0017 are errors in the two frozen projects and exist in no other project."
+    },
+    {
+      "id": "ReferenceTrimmer",
+      "property": "HarborReferenceTrimmer",
+      "declared_in": ["Directory.Build.props"],
+      "scopes": [],
+      "mode": "job",
+      "reason": "The unused-reference detector. It is OFF by default and ON in exactly one place: the 'reference-trimmer' job, which sets the HarborReferenceTrimmer property. It runs there with TreatWarningsAsErrors off, because its findings are warnings and this repository promotes warnings to errors."
+    }
+  ]
+}

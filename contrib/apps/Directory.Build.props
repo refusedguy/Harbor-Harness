@@ -35,7 +35,7 @@
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerExcubo)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

@@ -39,7 +39,7 @@
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerExcubo)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): an analyzer package has no runtime assembly. -->
       <PrivateAssets>all</PrivateAssets>
@@ -64,7 +64,7 @@
       HARCH003 in tests/Harbor.Architecture.Tests/Roslyn/ — a type-resolving
       analyzer rather than a spelling match (#1852).
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerVsThreading)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): an analyzer package ships no runtime assembly. -->
       <PrivateAssets>all</PrivateAssets>
