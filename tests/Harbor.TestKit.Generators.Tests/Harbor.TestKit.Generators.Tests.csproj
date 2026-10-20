@@ -7,13 +7,22 @@
     <!--
       The guard for issue #1769. It drives the generator IN-PROCESS (Roslyn
       driver) over a synthetic compilation, and it exercises the doubles the
-      generator emitted into Harbor.TestKit.
+      generator emitted.
+
+      #1875: those doubles are emitted into `Harbor.TestKit.Generated` now —
+      that is where the generator runs — so this project takes that part as
+      well as the core kit.
     -->
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"/>
     <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!-- #1875: the generator now runs over the sibling
+         `Harbor.TestKit.Generated`, which is where the opt-in marker and the
+         emitted doubles live. The guard names `GenerateFakesAttribute` and
+         the generated `Fake*` types, so it takes that part as well. -->
+    <ProjectReference Include="..\Harbor.TestKit.Generated\Harbor.TestKit.Generated.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

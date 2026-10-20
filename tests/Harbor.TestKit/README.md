@@ -15,13 +15,15 @@ project that needs a double for something Harbor owns; never shipped.
 | `Builders/` | Builders, not doubles — message factories and the like. |
 | `TestToolContext.cs` | The one place a `ToolContext` is built (#1775). |
 | `TestAgents.cs`, `TestMessages.cs`, `TestTempDirs.cs`, `TestScalingGate.cs`, `AllocationProbe.cs` | Named entry points other suites share. |
-| `GenerateFakesAttribute.cs`, `Generated/FakeCall.cs` | The opt-in list and the call-record type for the source-generated doubles (#1769). The generator itself lives in `tests/Harbor.TestKit.Generators` and runs over this project as an ANALYZER — build-time only, nothing of it reaches a consumer. |
 
-The UI-framework doubles (#1549) are NOT here, and neither is the null render
-context or the panel provider (#1772): they moved to
+The source-generated doubles are NOT here (#1875): the opt-in marker, the
+call-record type and the twelve emitted `Fake*` classes moved to
+[`Harbor.TestKit.Generated`](../Harbor.TestKit.Generated/), which is the part
+the generator runs over. The UI-framework doubles (#1549) are NOT here, and
+neither is the null render context or the panel provider (#1772): they moved to
 [`Harbor.TestKit.Tui`](../Harbor.TestKit.Tui/) in #1889, because they are the
 files that need the UI/Desktop stack. This core reaches no UI assembly at
-all, which is the whole point of the split: fourteen test projects reference
+all, which is the whole point of the split: nineteen test projects reference
 it, and every product assembly it reached was paid for by all of them.
 
 ## Naming
@@ -55,6 +57,11 @@ it, and every product assembly it reached was paid for by all of them.
    and every one of its consumers inherits that. A double that
    needs the UI/Desktop stack goes into a part (`Harbor.TestKit.Tui`), and only
    the consumers that actually use it take the reference.
+6. **A double the GENERATOR emits belongs in the generated part, not here.**
+   `Harbor.TestKit.Generated` (#1875) carries the opt-in marker and the twelve
+   emitted classes. The core does not reference that part: a reference would
+   make the core's closure five, and every consumer of the core would carry
+   the doubles whether it used them or not.
 
 ## Dependency closure
 
@@ -67,15 +74,11 @@ therefore **four** assemblies, and every consumer inherits exactly that. Only
 TWO of the four are product assemblies, and both are contract assemblies every
 consumer already has.
 
-The one other `<ProjectReference>` here is the source generator
-(`Harbor.TestKit.Generators`, #1769), declared as `OutputItemType=Analyzer`
-with `ReferenceOutputAssembly=false`. It is build-time only: the generator
-assembly never lands in this project's output, so it is not part of the
-closure, and the repository's own reference reader
-(`RepoPaths.ReadProjectReferences`) reports it separately for exactly that
-reason. That reader recognises the CHILD-ELEMENT form of `OutputItemType`
-that every other analyzer reference in the tree uses, which is why this
-project writes it that way.
+The core carries NO build-time-only reference any more (#1875). The source
+generator (`Harbor.TestKit.Generators`, #1769) used to be declared here as
+`OutputItemType=Analyzer` with `ReferenceOutputAssembly=false`; it now runs
+over [`Harbor.TestKit.Generated`](../Harbor.TestKit.Generated/) instead, and
+this project declares neither it nor that part.
 
 Before #1889 the kit also referenced the `Harbor.Ui.Framework.*` family and
 `Harbor.Desktop.Abstractions`, because `UiTestDoubles.cs` needed them. That
@@ -95,3 +98,6 @@ does not use the doubles does not compile them.
 The split is pinned by `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs`:
 the core may not reach `Harbor.Ui.Framework*`, `Harbor.Desktop.*`,
 `Harbor.Terminal.Abstractions` or `Harbor.Application`, and the parts may.
+The same file pins the generated part (#1875): its closure is exactly itself
+plus the two contract assemblies, it reaches none of the forbidden projects,
+and the core does not reference it.

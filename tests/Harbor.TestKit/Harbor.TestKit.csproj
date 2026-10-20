@@ -77,30 +77,30 @@
     <ProjectReference Include="../Harbor.TestKit.Support/Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
-  <ItemGroup>
-    <!--
-      #1769: the test-double generator runs over THIS project as an analyzer
-      and emits the Harbor.TestKit.Generated.Fake* classes — a concrete class per
-      opted-in interface, never a proxy. It is build-time only: the generator
-      assembly is not referenced (ReferenceOutputAssembly=false) and nothing of
-      it reaches a consumer.
+  <!--
+    #1875: the source-generated test doubles LEFT this project. The
+    generator (`tests/Harbor.TestKit.Generators`) now runs over the sibling
+    `Harbor.TestKit.Generated`, and so does the opt-in marker
+    (`GenerateFakesAttribute.cs`) and the call-record type
+    (`Generated/FakeCall.cs`). This project therefore no longer declares the
+    generator as an analyzer at all — the whole ItemGroup is gone, not just
+    the reference.
 
-      #1889: `OutputItemType` is written in the CHILD-ELEMENT form every other
-      analyzer reference in this repository uses (src/Harbor.Tui.CellForge,
-      src/Harbor.Terminal.Abstractions, tests/Harbor.Terminal.Abstractions.Tests,
-      ...). The attribute form is legal MSBuild, but the repository's own
-      reference reader — `RepoPaths.ReadProjectReferences`, which the layering
-      rules and the #1889 composition guard both walk — recognises only the
-      child element. An attribute-form analyzer edge is therefore invisible to
-      it, and the build-time-only generator would land in the core kit's
-      DECLARED closure as if it were a runtime dependency. The build is
-      identical either way; only what the tooling sees changes.
-    -->
-    <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"
-                      ReferenceOutputAssembly="false">
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-  </ItemGroup>
+    The two halves of that move:
+
+      * the CORE gets smaller. The 12 generated classes and their 48 methods
+        are no longer compiled into the assembly that 19 test projects
+        reference, so the core's own surface — and its binary — shrink.
+      * the DOUBLES get their own closure of three: themselves and the two
+        contract assemblies. A test project that needs a double and nothing
+        else takes that part, not this one.
+
+    The namespace did not change: the generator hard-codes
+    `Harbor.TestKit.Generated` and the marker is matched by its metadata name
+    `Harbor.TestKit.GenerateFakesAttribute`, so every consumer's `using` line
+    is unchanged and no consumer re-runs the generator. The doubles reach a
+    consumer as an ordinary assembly reference.
+  -->
 
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>

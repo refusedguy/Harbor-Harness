@@ -6,9 +6,9 @@ test assembly opts into. Issue #1769.
 ## Layer
 
 **Build-time tooling.** A Roslyn component consumed as an ANALYZER by
-`tests/Harbor.TestKit`. It ships no runtime code: the generator assembly is not
-referenced by anything (`ReferenceOutputAssembly="false"`), and the doubles it
-emits are ordinary C# classes.
+`tests/Harbor.TestKit.Generated`. It ships no runtime code: the generator
+assembly is not referenced by anything (`ReferenceOutputAssembly="false"`), and
+the doubles it emits are ordinary C# classes.
 
 ## What it is NOT
 
@@ -28,10 +28,11 @@ emits are ordinary C# classes.
 | `FakeDiagnostics.cs` | The `HARBORFAKE00x` diagnostics — every one of them an **error**. |
 
 The opt-in marker lives in the CONSUMED assembly
-(`tests/Harbor.TestKit/GenerateFakesAttribute.cs`) and is matched by **metadata
-name** — the same convention `src/Harbor.CodeGen/ToolGlueGenerator.cs` uses for
-`ToolInfoAttribute` — so this component needs no project reference to
-`Harbor.TestKit`:
+(`tests/Harbor.TestKit.Generated/GenerateFakesAttribute.cs` — it moved there
+from the core kit in #1875, together with the doubles it produces) and is
+matched by **metadata name** — the same convention
+`src/Harbor.CodeGen/ToolGlueGenerator.cs` uses for `ToolInfoAttribute` — so
+this component needs no project reference to `Harbor.TestKit.Generated`:
 
 ```csharp
 [assembly: GenerateFakes(typeof(ITool), typeof(ISessionStore), /* … */)]
@@ -99,8 +100,8 @@ wrong.
   implements the interface); the negative control asks for an interface with a
   static abstract member and asserts the diagnostic and that nothing is emitted.
 - `GeneratedDoubleTests` exercises the doubles the generator actually emitted
-  into `Harbor.TestKit`. If the generator did not run, that file does not
-  compile — the guard cannot pass against a generator that produced nothing.
+  into `Harbor.TestKit.Generated`. If the generator did not run, that file does
+  not compile — the guard cannot pass against a generator that produced nothing.
 
 ## Build
 
@@ -113,8 +114,8 @@ dotnet build tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj
 - A generic interface is refused (`HARBORFAKE002`).
 - A static abstract member, a by-ref return and a pointer parameter are
   refused (`HARBORFAKE002`).
-- The generated doubles live in `Harbor.TestKit`, so every interface they
-  implement must be visible to `Harbor.TestKit` — an interface that lives deeper
-  (say `IConfigStore` in `Harbor.Application`) does not belong in the opt-in
-  list: a double for it would drag that assembly's closure into every consumer
-  of `Harbor.TestKit` (#1809).
+- The generated doubles live in `Harbor.TestKit.Generated`, so every interface
+  they implement must be visible to that project — an interface that lives
+  deeper (say `IConfigStore` in `Harbor.Application`) does not belong in the
+  opt-in list: a double for it would drag that assembly's closure into every
+  consumer of the generated part (#1809).

@@ -75,6 +75,19 @@
 // must not reference UI" would be green on a tree where the split had never
 // happened, because the whole point of the split is that the UI parts of the
 // kit still reach the UI stack.
+//
+// #1875: the SOURCE-GENERATED doubles moved into a part of their own.
+//
+//   Harbor.TestKit.Generated   the opt-in marker, the call-record type and the
+//                              twelve emitted `Fake*` classes. The generator
+//                              runs over THIS project, so the doubles are
+//                              compiled here and reach a consumer as an
+//                              ordinary assembly reference.
+//
+// The part is judged by the same shape as the core: its closure is exactly
+// itself plus the two contract assemblies, and it reaches no UI, Desktop,
+// Terminal-Abstractions or Application project. The core does NOT reference it
+// — the core's closure stays FOUR, which is what the #1889 rule above pins.
 
 namespace Harbor.Architecture.Tests;
 
@@ -98,6 +111,20 @@ public sealed class TestKitCompositionRules
     ///     the kit that does.
     /// </summary>
     internal const string UiPart = "Harbor.TestKit.Tui";
+
+    /// <summary>
+    ///     The generated part (#1875): the opt-in marker, the call-record type
+    ///     and the twelve source-generated doubles. The generator runs over this
+    ///     project, and nothing else does.
+    /// </summary>
+    internal const string GeneratedPart = "Harbor.TestKit.Generated";
+
+    /// <summary>
+    ///     The Roslyn component that emits the doubles. It is build-time only:
+    ///     it reaches a project as an ANALYZER, and the repository's reference
+    ///     reader reports an analyzer edge separately from a runtime one.
+    /// </summary>
+    internal const string GeneratorPart = "Harbor.TestKit.Generators";
 
     /// <summary>
     ///     The projects the core is judged against. The list is EXACT names,
@@ -325,6 +352,104 @@ public sealed class TestKitCompositionRules
             .Because(
                 "The rule judges the core by its exact project name, so a part is never judged by "
                 + "the core's rule. Judged: " + string.Join(", ", JudgedProjects));
+    }
+
+    // ---- #1875: the generated part ------------------------------------------
+
+    /// <summary>
+    ///     The generated part's closure is exactly itself plus the two contract
+    ///     assemblies (#1875).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The twelve opted-in interfaces all live in
+    ///         <c>Harbor.Abstractions</c> or
+    ///         <c>Harbor.Abstractions.Contracts</c>. A part whose closure were
+    ///         wider would mean a double had started depending on something
+    ///         deeper, and every consumer of the part would pay for it — the
+    ///         same mistake #1809 removed from the core.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task The_Generated_Part_Reaches_Only_The_Two_Contract_Assemblies()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph = LiveProjectGraph();
+
+        await Assert.That(graph.ContainsKey(GeneratedPart)).IsTrue()
+            .Because(
+                $"{GeneratedPart} must exist — it is where the source-generated doubles live "
+                + "since #1875.");
+
+        List<string> closure = [.. ClosureOf(GeneratedPart, graph)];
+
+        await Assert.That(closure).IsEquivalentTo(new[]
+        {
+            GeneratedPart, "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
+        }).Because(
+            "The generated part is supposed to be exactly three projects wide — itself and the "
+            + "two contract assemblies every opted-in interface lives in. A different set means "
+            + "the split changed shape (or the walk stopped reading the csprojs). Found: "
+            + string.Join(", ", closure));
+    }
+
+    /// <summary>
+    ///     The generated part reaches no UI, Desktop, Terminal-Abstractions or
+    ///     Application project (#1875).
+    /// </summary>
+    [Test]
+    public async Task The_Generated_Part_Reaches_No_Ui_Desktop_Or_Application_Project()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph = LiveProjectGraph();
+
+        IReadOnlyList<string> forbidden = ForbiddenPathsFrom(GeneratedPart, graph);
+
+        await Assert.That(forbidden).IsEmpty()
+            .Because(
+                "Every one of the twelve opted-in interfaces lives in the two contract "
+                + "assemblies, so a double can only ever need those. A forbidden project in the "
+                + "generated part's closure is a double that started depending on the UI stack. "
+                + "Offending paths: " + (forbidden.Count == 0 ? "(none)" : string.Join("; ", forbidden)));
+    }
+
+    /// <summary>
+    ///     The core does not reference the generated part, and it does not
+    ///     reference the generator at runtime either (#1875).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The core's closure is pinned at four projects by
+    ///         <see cref="The_Core_Closure_Contains_The_Expected_Projects" />.
+    ///         A reference from the core to the generated part would make it
+    ///         five, and every consumer of the core would carry the doubles
+    ///         whether it uses them or not — the opposite of what the split is
+    ///         for. The two halves of the kit are therefore siblings, not
+    ///         parent and child.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task The_Core_Does_Not_Reference_The_Generated_Part()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph = LiveProjectGraph();
+
+        IReadOnlyList<string> coreReferences =
+            graph.TryGetValue(CorePart, out IReadOnlyList<string>? declared) && declared is not null
+                ? declared
+                : Array.Empty<string>();
+
+        await Assert.That(coreReferences.Contains(GeneratedPart)).IsFalse()
+            .Because(
+                "The core kit is pinned at four projects wide and the generated part would be a "
+                + "fifth. The core would also carry the doubles into every one of its consumers, "
+                + "whether they use them or not — the opposite of what the split is for. Core "
+                + "references: " + string.Join(", ", coreReferences));
+
+        await Assert.That(coreReferences.Contains(GeneratorPart)).IsFalse()
+            .Because(
+                "The generator is build-time only: it reaches a project as an ANALYZER, and the "
+                + "repository's reference reader reports an analyzer edge separately from a "
+                + "runtime one. A runtime edge from the core to the generator would put a Roslyn "
+                + "component in the core's closure. Core references: "
+                + string.Join(", ", coreReferences));
     }
 
     // ---- the machinery ------------------------------------------------------

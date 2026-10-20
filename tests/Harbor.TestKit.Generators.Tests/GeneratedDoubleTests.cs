@@ -14,7 +14,7 @@ namespace Harbor.TestKit.Generators.Tests;
 
 /// <summary>
 ///     The half of the guard that runs against the doubles the generator
-///     ACTUALLY emitted into <c>Harbor.TestKit</c> (issue #1769).
+///     ACTUALLY emitted (issue #1769).
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -23,6 +23,11 @@ namespace Harbor.TestKit.Generators.Tests;
 ///         project would fail at the BUILD, not at a green assertion. That is
 ///         the point: the guard cannot pass against a generator that produced
 ///         nothing.
+///     </para>
+///     <para>
+///         #1875: the doubles are emitted into <c>Harbor.TestKit.Generated</c>
+///         now — that is the project the generator runs over — and the
+///         namespace they live in did not change.
 ///     </para>
 /// </remarks>
 public class GeneratedDoubleTests

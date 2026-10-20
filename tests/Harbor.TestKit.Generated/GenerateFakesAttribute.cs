@@ -43,7 +43,8 @@ namespace Harbor.TestKit;
 ///     </para>
 ///     <para>
 ///         Add an interface only when a test project actually needs a double for
-///         it: every entry is a public type in this assembly.
+///         it: every entry is a public type of one of the two contract
+///         assemblies this part references.
 ///     </para>
 ///     <para>
 ///         Every interface listed here lives in <c>Harbor.Abstractions</c> or
@@ -53,6 +54,16 @@ namespace Harbor.TestKit;
 ///         this list: a double for it would drag that assembly's whole closure
 ///         into every consumer of this one (#1809). Such a double belongs to
 ///         the test project that already has the closure.
+///     </para>
+///     <para>
+///         #1875: this file moved here from the core kit
+///         (<c>tests/Harbor.TestKit/GenerateFakesAttribute.cs</c>) together with
+///         the generator that reads it and the doubles it produces. The
+///         METADATA NAME is what the generator matches on, and it did not
+///         change — so no consumer's source changed either, and the marker
+///         exists in exactly one assembly. Two assemblies declaring a type of
+///         the same full name is CS0433 at every consumer that references
+///         both.
 ///     </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
