@@ -241,9 +241,11 @@ The modes are:
 
 | Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|
+| `tools/aggregate-analyzer-cost.py` | the analyzer cost table: the marginal wall cost of every analyzer family (the `all-on` arm against the `no-<family>` arm) and the compiler's own per-analyzer seconds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
 | `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
 | `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-abstractions-contract.py` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
+| `tools/check-analyzer-scope.py` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
 | `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
@@ -269,7 +271,7 @@ The modes are:
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
-| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, nightly.yml | measure, measurement | reporter | — | — | — |
+| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-analyzer-cost.yml, meas-build-vcpu.yml, nightly.yml | measure, measurement | reporter | — | — | — |
 | `tools/measure-project-graph.py` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, nightly.yml | build, measurement | reporter | `--self-test` | — | — |
 | `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |

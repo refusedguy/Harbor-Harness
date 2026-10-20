@@ -385,11 +385,11 @@
 
     THE THREE SCOPE FILES. A project under src/, apps/ or tests/ imports
     the NEAREST Directory.Build.props, and each of those three files states
-    the scope of every family BEFORE it imports this one. A property
-    assigned in a props file wins over the default below, and a global
-    property (the command line) wins over both — which is what lets the
-    measurement harness turn exactly one family off for a whole build with
-    `-p:HarborAnalyzerSonar=off`, and nothing else.
+    the scope of every family it wants to change BEFORE it imports this
+    one. A property assigned in a props file wins over the default below,
+    and a global property (the command line) wins over both — which is what
+    lets the measurement harness turn exactly one family off for a whole
+    build with `-p:HarborAnalyzerSonar=off`, and nothing else.
 
     THE DEFAULT BELOW IS THE ROOT SCOPE: the projects that import this file
     and no other — samples/, tools/ and contrib/. A family whose default is
@@ -400,28 +400,31 @@
     of that was measured rather than guessed (issue #1801; the numbers are
     in docs/ANALYZERS.md): a family that produces no finding in a tree
     still runs its analyzers over every compilation in that tree, once per
-    analyzer class in the package. Roslyn reports the elapsed time per
-    analyzer assembly, so the cost of a package is the number of analyzer
-    classes it registers times the number of compilations it is referenced
-    by — and that is a cost the severity table cannot switch off.
-    `severity = none` silences a rule; it does not stop the analyzer from
-    running.
+    analyzer class in the package.
 
-    So the scope is the only lever that removes the cost, and it has to be
-    written down or it drifts back: a package declared in this file is
-    declared for EVERY tree. The gate is what keeps that from happening
-    again.
+    AND THE SEVERITY TABLE CANNOT SWITCH THAT COST OFF. That is the
+    measurement that decides the shape of this file: the compiler's own
+    analyzer report (`-p:ReportAnalyzer=true`) attributes 45.5 s of the
+    build to `VSTHRD010MainThreadUsageAnalyzer` — a rule this repository
+    sets to `severity = none`. Roslyn runs the analyzer and drops the
+    diagnostic afterwards; the work is already paid. So `severity = none`
+    is a way of not hearing a rule, not a way of not running it, and the
+    SCOPE is the only lever that removes the cost.
+
+    So the scope is written down or it drifts back: a package declared in
+    this file is declared for EVERY tree. The gate is what keeps that from
+    happening again.
   -->
   <PropertyGroup>
     <HarborAnalyzerRoslynator Condition="'$(HarborAnalyzerRoslynator)' == ''">on</HarborAnalyzerRoslynator>
-    <HarborAnalyzerSonar Condition="'$(HarborAnalyzerSonar)' == ''">on</HarborAnalyzerSonar>
+    <HarborAnalyzerSonar Condition="'$(HarborAnalyzerSonar)' == ''">off</HarborAnalyzerSonar>
     <HarborAnalyzerNetAnalyzers Condition="'$(HarborAnalyzerNetAnalyzers)' == ''">on</HarborAnalyzerNetAnalyzers>
-    <HarborAnalyzerAsyncFixer Condition="'$(HarborAnalyzerAsyncFixer)' == ''">on</HarborAnalyzerAsyncFixer>
+    <HarborAnalyzerAsyncFixer Condition="'$(HarborAnalyzerAsyncFixer)' == ''">off</HarborAnalyzerAsyncFixer>
     <HarborAnalyzerReflection Condition="'$(HarborAnalyzerReflection)' == ''">on</HarborAnalyzerReflection>
-    <HarborAnalyzerBannedApi Condition="'$(HarborAnalyzerBannedApi)' == ''">on</HarborAnalyzerBannedApi>
+    <HarborAnalyzerBannedApi Condition="'$(HarborAnalyzerBannedApi)' == ''">off</HarborAnalyzerBannedApi>
     <HarborAnalyzerMeziantou Condition="'$(HarborAnalyzerMeziantou)' == ''">on</HarborAnalyzerMeziantou>
-    <HarborAnalyzerDiLifetime Condition="'$(HarborAnalyzerDiLifetime)' == ''">on</HarborAnalyzerDiLifetime>
-    <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">on</HarborAnalyzerCfe>
+    <HarborAnalyzerDiLifetime Condition="'$(HarborAnalyzerDiLifetime)' == ''">off</HarborAnalyzerDiLifetime>
+    <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">off</HarborAnalyzerCfe>
     <HarborAnalyzerProjectFile Condition="'$(HarborAnalyzerProjectFile)' == ''">on</HarborAnalyzerProjectFile>
     <HarborAnalyzerVsThreading Condition="'$(HarborAnalyzerVsThreading)' == ''">on</HarborAnalyzerVsThreading>
     <HarborAnalyzerExcubo Condition="'$(HarborAnalyzerExcubo)' == ''">on</HarborAnalyzerExcubo>

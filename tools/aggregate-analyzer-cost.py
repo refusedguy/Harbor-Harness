@@ -6,9 +6,12 @@ for every arm of `.github/workflows/meas-analyzer-cost.yml` and answers two
 questions:
 
   1. What does each analyzer family cost the build? — the wall-time
-     difference between the `all-on` arm and the `no-<family>` arm. The
-     difference is the MARGINAL cost of that family: everything else is the
-     same tree, the same runner and the same command.
+     difference between the arm's OWN baseline and the arm. The two builds
+     run back to back in the same job, on the same runner, so the machine's
+     speed cancels out of the difference. (The unpaired design — one arm per
+     job, compared against a baseline from another job — measured a 16 %
+     spread on two builds of the SAME tree and reported removing an
+     analyzer as making the build 90 s slower; see the workflow's header.)
 
   2. How much of the compiler's time does each family take? — the compiler's
      own report (`-p:ReportAnalyzer=true`), which prints the elapsed time per
@@ -62,6 +65,10 @@ _REPORT_ROW = re.compile(
     r"^\s*(?P<seconds>[<>]?\d+(?:\.\d+)?)\s+(?P<pct>\d+|<1)\s{2,}(?P<name>\S.*?)\s*$"
 )
 
+# The log `measure-build-cpu.py` writes prefixes every line with the elapsed
+# seconds since the command started.
+_LOG_PREFIX = re.compile(r"^\s*\d+\.\d+\s\|\s?")
+
 _TOTAL = re.compile(
     r"^Total analyzer execution time:\s*(?P<seconds>\d+(?:\.\d+)?)\s*seconds"
 )
@@ -78,15 +85,19 @@ def family_of(assembly):
 
 
 def read_arms(meas_dir):
-    """Every arm's measurement, keyed by label."""
+    """Every arm's two halves, keyed by label."""
     arms = {}
     for path in sorted(glob.glob(os.path.join(meas_dir, "*.json"))):
-        label = os.path.basename(path)[: -len(".json")]
+        name = os.path.basename(path)[: -len(".json")]
+        label, _, half = name.rpartition("-")
+        if half not in ("base", "arm") or not label:
+            continue
         try:
             with open(path, encoding="utf-8") as handle:
-                arms[label] = json.load(handle)
+                data = json.load(handle)
         except (OSError, ValueError):
             continue
+        arms.setdefault(label, {})[half] = data
     return arms
 
 
@@ -115,7 +126,7 @@ def parse_analyzer_report(log_path):
         return totals
     with open(log_path, encoding="utf-8", errors="replace") as handle:
         for raw in handle:
-            line = raw.rstrip("\n")
+            line = _LOG_PREFIX.sub("", raw.rstrip("\n"))
             if _TOTAL.match(line.strip()):
                 continue
             match = _REPORT_ROW.match(line)
@@ -133,11 +144,6 @@ def parse_analyzer_report(log_path):
     return totals
 
 
-def median_wall(arms, labels):
-    values = [wall_of(arms[label]) for label in labels if label in arms]
-    return statistics.median(values) if values else None
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("meas_dir", help="the directory the arms wrote into")
@@ -151,103 +157,97 @@ def main():
         print("no arms found", file=sys.stderr)
         return 1
 
-    all_on_labels = sorted(label for label in arms if label.startswith("all-on"))
-    narrowed_labels = sorted(label for label in arms if label.startswith("narrowed"))
-    no_labels = sorted(label for label in arms if label.startswith("no-"))
-
-    baseline = median_wall(arms, all_on_labels)
-    narrowed = median_wall(arms, narrowed_labels)
-
-    report_totals = {}
-    for label in arms:
-        if label.startswith("report"):
-            report_totals = parse_analyzer_report(
-                os.path.join(args.meas_dir, f"{label}.log")
-            )
-            break
-
+    noise = []
+    rows = []
+    narrowed = None
     per_family_report = {}
-    for assembly, seconds in report_totals.items():
-        family = family_of(assembly)
-        entry = per_family_report.setdefault(
-            family, {"seconds": 0.0, "assemblies": []}
-        )
-        entry["seconds"] += seconds
-        entry["assemblies"].append(assembly)
+
+    for label in sorted(arms):
+        halves = arms[label]
+        if "base" not in halves or "arm" not in halves:
+            print(f"{label}: incomplete arm, skipped")
+            continue
+        base_wall = wall_of(halves["base"])
+        arm_wall = wall_of(halves["arm"])
+        delta = base_wall - arm_wall
+        row = {
+            "label": label,
+            "baseline_wall_seconds": base_wall,
+            "arm_wall_seconds": arm_wall,
+            "wall_delta_seconds": delta,
+            "arm_csc_ms": csc_ms_of(halves["arm"]),
+            "arm_avg_busy_cores": cores_of(halves["arm"]),
+        }
+        if label.startswith("null-"):
+            noise.append(delta)
+        elif label == "narrowed":
+            narrowed = row
+        elif label.endswith("-report"):
+            rows.append(row)
+        else:
+            rows.append(row)
+
+        if label.endswith("-report"):
+            totals = parse_analyzer_report(
+                os.path.join(args.meas_dir, f"{label}-arm.log")
+            )
+            for assembly, seconds in totals.items():
+                family = family_of(assembly)
+                entry = per_family_report.setdefault(
+                    family, {"seconds": 0.0, "assemblies": []}
+                )
+                entry["seconds"] += seconds
+                entry["assemblies"].append(assembly)
     for entry in per_family_report.values():
         entry["assemblies"].sort()
 
-    rows = []
-    for label in no_labels:
-        arm = arms[label]
-        family_label = label[len("no-") :]
-        wall = wall_of(arm)
-        delta = (baseline - wall) if baseline is not None else None
-        rows.append(
-            {
-                "family_label": family_label,
-                "wall_seconds": wall,
-                "csc_ms": csc_ms_of(arm),
-                "avg_busy_cores": cores_of(arm),
-                "baseline_wall_seconds": baseline,
-                "wall_delta_seconds": delta,
-            }
-        )
     rows.sort(key=lambda row: -(row["wall_delta_seconds"] or 0.0))
 
-    result = {
-        "baseline_wall_seconds": baseline,
-        "baseline_arms": all_on_labels,
-        "narrowed_wall_seconds": narrowed,
-        "narrowed_arms": narrowed_labels,
-        "marginal_cost": rows,
-        "analyzer_seconds_per_family": per_family_report,
-        "arms": {
-            label: {
-                "wall_seconds": wall_of(arm),
-                "csc_ms": csc_ms_of(arm),
-                "avg_busy_cores": cores_of(arm),
-                "exit_code": arm.get("exit_code"),
-            }
-            for label, arm in sorted(arms.items())
-        },
-    }
+    noise_floor = max((abs(value) for value in noise), default=0.0)
+    noise_median = statistics.median(noise) if noise else 0.0
 
     lines = []
     lines.append("# The cost of each analyzer family")
     lines.append("")
-    if baseline is not None:
-        lines.append(
-            f"Baseline (`all-on`, the median of {len(all_on_labels)} runs): "
-            f"**{baseline:.1f} s** of wall time."
-        )
-    else:
-        lines.append("Baseline: no `all-on` arm in this run.")
-    if narrowed is not None and baseline is not None:
-        lines.append("")
-        lines.append(
-            f"Narrowed tree (the branch's own declaration, the median of "
-            f"{len(narrowed_labels)} runs): **{narrowed:.1f} s**, "
-            f"**{baseline - narrowed:.1f} s** against the baseline "
-            f"({(baseline - narrowed) / baseline * 100:.1f} %)."
-        )
+    lines.append(
+        "Every arm builds the same tree twice in one job — the baseline "
+        "(every analyzer family ON, in every tree) and then its own arm — so "
+        "the runner's speed cancels out of the difference."
+    )
     lines.append("")
+    if noise:
+        lines.append(
+            f"The noise floor, measured by the control arms (the baseline "
+            f"against itself): median {noise_median:+.1f} s, largest "
+            f"{noise_floor:.1f} s. A difference below that is not a "
+            f"difference."
+        )
+        lines.append("")
+    if narrowed:
+        lines.append(
+            f"**The narrowed tree: {narrowed['arm_wall_seconds']:.1f} s against "
+            f"a baseline of {narrowed['baseline_wall_seconds']:.1f} s in the "
+            f"same job — {narrowed['wall_delta_seconds']:+.1f} s "
+            f"({narrowed['wall_delta_seconds'] / narrowed['baseline_wall_seconds'] * 100:+.1f} %).**"
+        )
+        lines.append("")
     lines.append("## The marginal cost of each family")
     lines.append("")
     lines.append(
-        "The difference between the `all-on` arm and the `no-<family>` arm. "
-        "Everything else in the two arms is the same tree, the same runner "
-        "and the same command."
+        "The difference between the arm's own baseline and the arm, in the "
+        "same job, on the same runner. Everything else in the two builds is "
+        "the same tree and the same command."
     )
     lines.append("")
-    lines.append("| family | wall (s) | against the baseline (s) | Csc (ms) | avg busy cores |")
-    lines.append("|---|---|---|---|---|")
+    lines.append(
+        "| family | baseline (s) | arm (s) | difference (s) | arm Csc (ms) | avg busy cores |"
+    )
+    lines.append("|---|---|---|---|---|---|")
     for row in rows:
-        delta = row["wall_delta_seconds"]
-        delta_text = f"{delta:+.1f}" if delta is not None else "n/a"
         lines.append(
-            f"| `{row['family_label']}` | {row['wall_seconds']:.1f} | {delta_text} | "
-            f"{row['csc_ms']} | {row['avg_busy_cores']} |"
+            f"| `{row['label']}` | {row['baseline_wall_seconds']:.1f} | "
+            f"{row['arm_wall_seconds']:.1f} | {row['wall_delta_seconds']:+.1f} | "
+            f"{row['arm_csc_ms']} | {row['arm_avg_busy_cores']} |"
         )
     lines.append("")
     lines.append("## The compiler's own report")
@@ -272,6 +272,26 @@ def main():
     else:
         lines.append("_The compiler printed no analyzer report in this run._")
     lines.append("")
+
+    result = {
+        "noise_floor_seconds": noise_floor,
+        "noise_median_seconds": noise_median,
+        "narrowed": narrowed,
+        "marginal_cost": rows,
+        "analyzer_seconds_per_family": per_family_report,
+        "arms": {
+            label: {
+                "baseline_wall_seconds": wall_of(halves["base"]),
+                "arm_wall_seconds": wall_of(halves["arm"]),
+                "wall_delta_seconds": wall_of(halves["base"]) - wall_of(halves["arm"]),
+                "arm_csc_ms": csc_ms_of(halves["arm"]),
+                "arm_avg_busy_cores": cores_of(halves["arm"]),
+                "exit_code": halves["arm"].get("exit_code"),
+            }
+            for label, halves in sorted(arms.items())
+            if "base" in halves and "arm" in halves
+        },
+    }
 
     markdown = "\n".join(lines)
     print(markdown)

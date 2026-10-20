@@ -1,6 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
   <!--
+    THE ANALYZER SCOPE OF THIS TREE (issue #1801). BEFORE the import: the
+    root file evaluates every analyzer PackageReference's Condition while it
+    is read, so a property set after the import would come too late.
+
+    Only Sonar is turned ON here, and the reason is the measurement, not a
+    preference: SonarAnalyzer.CSharp produced 324 findings on this tree and
+    EVERY ONE of them is under tests/. The product tree produces none of
+    them. So this is where the family runs, and the product tree is left
+    without it — which is a change to the build contract and is written
+    down as one, in docs/ANALYZERS.md §Analyzer scope and in the scope
+    table (one row).
+
+    The families the root switches OFF stay off here, because in this tree
+    they produce nothing at all: RS0030 and CFE0001 are NoWarn'd by the
+    root props under any project whose path contains 'tests', and the DI
+    lifetime rules have their input in the composition roots, not in a test
+    project.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerSonar>on</HarborAnalyzerSonar>
+  </PropertyGroup>
+
+  <!--
     The solution-wide Directory.Build.props is imported by RELATIVE path, not by
     the GetPathOfFileAbove function. MSBuild evaluates both to the same file
     (this directory's parent), but the project-file analyzer (#1857) can only
