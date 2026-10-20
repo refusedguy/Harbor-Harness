@@ -62,37 +62,58 @@ public sealed class EventStringShreddingGates
     private const int PatchLines = 1000;
 
     // ── Budgets: bytes per unit of work (machine-independent, HARD) ─────────
+    //
+    // Pinned from the CI measurement of the PRE-SLICE tree (run 39390539021,
+    // PR #1910 — the gate landed before the fix, so that run measured the
+    // shredding shape):
+    //
+    //   tool start   104.0 B/unit      (the args JSON + the summary)
+    //   card frame   131 144.0 B/unit  (two copies of a 64 KiB body)
+    //   patch split  175 248.0 B/unit  (two normalizations + the array + the
+    //                                     per-line tab copies)
+    //
+    // Each budget sits BELOW the pre-slice cost (so the old shape fails the
+    // gate) and ABOVE what the slice leaves behind (so the new shape passes
+    // with headroom).
 
     /// <summary>
     ///     Byte budget for ONE tool-start event on a card the LLM already
     ///     opened. The shaped args are discarded for such a card, so the
     ///     honest budget is a handful of bytes — the dictionary probe.
     /// </summary>
-    private const long MaxBytesPerToolStart = 4096;
+    private const long MaxBytesPerToolStart = 8;
 
     /// <summary>
     ///     Byte budget for ONE painted frame carrying a 64 KiB tool card.
     ///     The frame paints spans; nothing of the body is copied.
     /// </summary>
-    private const long MaxBytesPerFrame = 1024 * 1024;
+    private const long MaxBytesPerFrame = 4 * 1024;
 
     /// <summary>
     ///     Byte budget for ONE split of a 1000-line patch. The split
     ///     materializes the lines themselves (that is the API's result), and
     ///     nothing else.
     /// </summary>
-    private const long MaxBytesPerPatchSplit = 1024 * 1024;
+    private const long MaxBytesPerPatchSplit = 128 * 1024;
 
     // ── Time budgets: probe units per unit of work (machine-scaled, SOFT) ───
 
     /// <summary>Time budget for ONE tool-start event, in probe units.</summary>
-    private const double MaxProbeUnitsPerToolStart = 4.0;
+    private const double MaxProbeUnitsPerToolStart = 1.0;
 
     /// <summary>Time budget for ONE painted frame, in probe units.</summary>
-    private const double MaxProbeUnitsPerFrame = 2_000.0;
+    private const double MaxProbeUnitsPerFrame = 700.0;
 
     /// <summary>Time budget for ONE patch split, in probe units.</summary>
-    private const double MaxProbeUnitsPerPatchSplit = 20_000.0;
+    private const double MaxProbeUnitsPerPatchSplit = 1_400.0;
+
+    /// <summary>
+    ///     The floor below which a measured leg is not evidence. The units of
+    ///     work here are small — a frame, a split — so the shared 5 ms default
+    ///     would stand the time branch down on every run; 1 ms is the shortest
+    ///     leg that still decides something on a hosted runner.
+    /// </summary>
+    private const double MinLegMs = 1.0;
 
     // ── Gate 1: the per-tool-call args shaping ──────────────────────────────
 
@@ -104,27 +125,9 @@ public sealed class EventStringShreddingGates
 
     [Test]
     [Timeout(300_000)]
-    public async Task ToolStart_On_An_Open_Card_CostsWithinBudget()
-    {
-        PerfGateResult result = await PerfGate.MeasureAsync(
-            work: units => Task.FromResult(DriveToolStartCost(units)),
-            units: ToolStartsPerWindow,
-            options: new PerfGateOptions
-            {
-                Label = "tool-start-event-cost",
-                MaxBytesPerUnit = MaxBytesPerToolStart,
-                MaxProbeUnitsPerUnit = MaxProbeUnitsPerToolStart,
-                RequirePositiveBytes = false,
-
-                // The unit of work here is a dictionary probe — a couple of
-                // tens of nanoseconds — so the default 5 ms floor would
-                // stand the time branch down on every run. 1 ms is the
-                // shortest leg this workload can produce honestly.
-                MinMeasurableLegMs = 1.0,
-            });
-
-        await result.AssertWithinBudgetsAsync("tool-start event on an open card");
-    }
+    public async Task ToolStart_On_An_Open_Card_CostsWithinBudget() =>
+        await RunGate("tool-start event on an open card", ToolStartsPerWindow,
+            Gate("tool-start-event-cost", MaxBytesPerToolStart, MaxProbeUnitsPerToolStart), DriveToolStartCost);
 
     /// <summary>
     ///     Drives one window: open every card first (the LLM's ToolCallStart
@@ -177,21 +180,9 @@ public sealed class EventStringShreddingGates
 
     [Test]
     [Timeout(300_000)]
-    public async Task ToolCardFrame_CostsWithinBudget()
-    {
-        PerfGateResult result = await PerfGate.MeasureAsync(
-            work: units => Task.FromResult(DriveFrameCost(units)),
-            units: FramesPerWindow,
-            options: new PerfGateOptions
-            {
-                Label = "tool-card-frame-cost",
-                MaxBytesPerUnit = MaxBytesPerFrame,
-                MaxProbeUnitsPerUnit = MaxProbeUnitsPerFrame,
-                RequirePositiveBytes = false,
-            });
-
-        await result.AssertWithinBudgetsAsync("painted frame carrying a 64 KiB tool card");
-    }
+    public async Task ToolCardFrame_CostsWithinBudget() =>
+        await RunGate("painted frame carrying a 64 KiB tool card", FramesPerWindow,
+            Gate("tool-card-frame-cost", MaxBytesPerFrame, MaxProbeUnitsPerFrame), DriveFrameCost);
 
     /// <summary>
     ///     Drives one window: a timeline carrying ONE completed tool card
@@ -263,21 +254,9 @@ public sealed class EventStringShreddingGates
 
     [Test]
     [Timeout(300_000)]
-    public async Task PatchSplit_CostsWithinBudget()
-    {
-        PerfGateResult result = await PerfGate.MeasureAsync(
-            work: units => Task.FromResult(DrivePatchSplitCost(units)),
-            units: PatchSplitsPerWindow,
-            options: new PerfGateOptions
-            {
-                Label = "patch-split-cost",
-                MaxBytesPerUnit = MaxBytesPerPatchSplit,
-                MaxProbeUnitsPerUnit = MaxProbeUnitsPerPatchSplit,
-                RequirePositiveBytes = false,
-            });
-
-        await result.AssertWithinBudgetsAsync("split of a 1000-line CRLF patch");
-    }
+    public async Task PatchSplit_CostsWithinBudget() =>
+        await RunGate("split of a 1000-line CRLF patch", PatchSplitsPerWindow,
+            Gate("patch-split-cost", MaxBytesPerPatchSplit, MaxProbeUnitsPerPatchSplit), DrivePatchSplitCost);
 
     /// <summary>
     ///     Drives one window: split the same patch body over and over. The
@@ -337,5 +316,45 @@ public sealed class EventStringShreddingGates
         }
 
         return sb.ToString();
+    }
+
+    // ── The shared gate shape ────────────────────────────────────────────────
+
+    /// <summary>
+    ///     The budget shape every gate here shares: a constant per unit of
+    ///     work, the allocation branch asserted hard and the time branch
+    ///     asserted only when the measurement is reproducible.
+    /// </summary>
+    private static PerfGateOptions Gate(string label, long maxBytesPerUnit, double maxProbeUnitsPerUnit) =>
+        new()
+        {
+            Label = label,
+            MaxBytesPerUnit = maxBytesPerUnit,
+            MaxProbeUnitsPerUnit = maxProbeUnitsPerUnit,
+
+            // A workload that legitimately allocates nothing per unit opts
+            // out of the positive-bytes floor: zero is the answer there, not
+            // a missing measurement (#741/#591).
+            RequirePositiveBytes = false,
+            MinMeasurableLegMs = MinLegMs,
+        };
+
+    /// <summary>
+    ///     Measure → report → assert. The report is printed before the
+    ///     assertions run, so a red gate still leaves the numbers that
+    ///     produced it in the log.
+    /// </summary>
+    private static async Task RunGate(
+        string topic,
+        int units,
+        PerfGateOptions options,
+        Func<int, PerfGateLeg> work)
+    {
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: u => Task.FromResult(work(u)),
+            units: units,
+            options: options);
+
+        await result.AssertWithinBudgetsAsync(topic);
     }
 }
