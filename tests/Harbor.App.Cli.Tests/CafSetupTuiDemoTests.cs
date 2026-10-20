@@ -20,76 +20,54 @@ namespace Harbor.App.Cli.Tests;
 ///     <c>CafSessionRunTests</c> and <c>CafProvidersAuthConfigTests</c>);
 ///     without the constraint a concurrent swap steals our output and the
 ///     capture reads back empty.
+///     <para>
+///         The parity and <c>--help</c> assertions themselves live in
+///         <see cref="CafVerbTestBase" /> — this class keeps only the verb
+///         and the tail.
+///     </para>
 /// </remarks>
 [NotInParallel]
-public class CafSetupTuiDemoTests
+public class CafSetupTuiDemoTests : CafVerbTestBase
 {
     [Test]
     public async Task Tui_UnknownSub_MatchesManualByteForByte()
     {
         string[] tail = ["bogus-sub-xyz"];
-        var direct = await CaptureAsync(() => HelpVerbs.RunTuiCommand(tail));
-        var viaCaf = await RunCafAsync("tui", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("tui", tail, () => HelpVerbs.RunTuiCommand(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Demo_UnknownPositional_MatchesManualByteForByte()
     {
         string[] tail = ["bogus-sub-xyz"];
-        var direct = await CaptureAsync(() => HelpVerbs.RunDemoCommand(tail));
-        var viaCaf = await RunCafAsync("demo", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("demo", tail, () => HelpVerbs.RunDemoCommand(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Demo_BadScene_MatchesManualByteForByte()
     {
         string[] tail = ["--scene", "bogus"];
-        var direct = await CaptureAsync(() => HelpVerbs.RunDemoCommand(tail));
-        var viaCaf = await RunCafAsync("demo", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("demo", tail, () => HelpVerbs.RunDemoCommand(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Demo_ShortSceneAlias_MatchesManualByteForByte()
     {
         string[] tail = ["-s", "bogus"];
-        var direct = await CaptureAsync(() => HelpVerbs.RunDemoCommand(tail));
-        var viaCaf = await RunCafAsync("demo", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("demo", tail, () => HelpVerbs.RunDemoCommand(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Demo_BadTui_MatchesManualByteForByte()
     {
         string[] tail = ["--tui", "bogus"];
-        var direct = await CaptureAsync(() => HelpVerbs.RunDemoCommand(tail));
-        var viaCaf = await RunCafAsync("demo", tail);
-        await Assert.That(viaCaf.Exit).IsEqualTo(2);
-        await Assert.That(viaCaf.Exit).IsEqualTo(direct.Exit);
-        await Assert.That(viaCaf.Out).IsEqualTo(direct.Out);
-        await Assert.That(viaCaf.Err).IsEqualTo(direct.Err);
+        await AssertMatchesManualByteForByte("demo", tail, () => HelpVerbs.RunDemoCommand(tail), expectedExit: 2);
     }
 
     [Test]
     public async Task Setup_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("setup", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
+        await AssertHelpExitsZeroWithUsage("setup");
     }
 
     [Test]
@@ -108,34 +86,6 @@ public class CafSetupTuiDemoTests
     [Test]
     public async Task Demo_Help_ExitsZeroWithUsage()
     {
-        var (exit, output, _) = await RunCafAsync("demo", ["--help"]);
-        await Assert.That(exit).IsEqualTo(0);
-        await Assert.That(output).Contains("Usage");
-    }
-
-    private static async Task<(int Exit, string Out, string Err)> CaptureAsync(Func<Task<int>> run)
-    {
-        var originalOut = Console.Out;
-        var originalErr = Console.Error;
-        try
-        {
-            var swOut = new StringWriter();
-            var swErr = new StringWriter();
-            Console.SetOut(swOut);
-            Console.SetError(swErr);
-            int exit = await run().ConfigureAwait(false);
-            return (exit, swOut.ToString(), swErr.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalErr);
-        }
-    }
-
-    private static Task<(int Exit, string Out, string Err)> RunCafAsync(string verb, string[] rest)
-    {
-        Environment.ExitCode = 0;
-        return CaptureAsync(() => CafPilotVerbs.RunAsync(verb, rest));
+        await AssertHelpExitsZeroWithUsage("demo");
     }
 }

@@ -17,8 +17,10 @@ namespace Harbor.ChangeTracking.Tests;
 /// </summary>
 [SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
-public class ChangeSetFreezerTests
+public class ChangeSetFreezerTests : ChangeTrackingTestBase
 {
+    /// <inheritdoc />
+    protected override (string Email, string Name) GitAuthor => ("s3@test", "s3");
     [Test]
     public async Task Freeze_ModifyAddDelete_ProduceRightStatusesWithCounts()
     {
@@ -497,12 +499,12 @@ public class ChangeSetFreezerTests
     }
 
     /// <summary>Fresh repo with a text file, a deletable file, a movable file and a binary file.</summary>
-    private static string InitRepo()
+    protected override string InitRepo(bool branch = false)
     {
-        string dir = NewTempDir();
+        string dir = NewTempDir("harbor-fz");
         Git(dir, "init");
-        Git(dir, "config user.email s3@test");
-        Git(dir, "config user.name s3");
+        Git(dir, $"config user.email {GitAuthor.Email}");
+        Git(dir, $"config user.name {GitAuthor.Name}");
         Git(dir, "config commit.gpgsign false");
         File.WriteAllText(Path.Combine(dir, "a.txt"), "one\n");
         File.WriteAllText(Path.Combine(dir, "del.txt"), "del\n");
@@ -510,10 +512,14 @@ public class ChangeSetFreezerTests
         File.WriteAllBytes(Path.Combine(dir, "bin.dat"), [0x00, 0x01, 0x02, 0xFF, 0xFE]);
         Git(dir, "add -A");
         Git(dir, "commit -m init");
-        Git(dir, "checkout -b s3-test");
+        Git(dir, $"checkout -b {GitAuthor.Name}-test");
         return dir;
     }
 
+    // The HARBOR_HOME swap stays HERE, in the test class, on purpose: see
+    // ChangeTrackingTestBase — ProcessEnvIsolationRule derives its writer set
+    // and its clean-writer floor from the classes that write the process
+    // environment, and this class is one of them.
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         string? savedHarborHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
@@ -531,31 +537,6 @@ public class ChangeSetFreezerTests
         }
     }
 
-    private static string NewTempDir()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), $"harbor-fz-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
-
-    private static void DeleteDir(string dir)
-    {
-        try
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
-        {
-            // Test cleanup is best-effort.
-            _ = ex;
-        }
-    }
-
-    private static void Git(string dir, string arguments)
-    {
-        string output = GitOut(dir, arguments);
-        _ = output;
-    }
 
     /// <summary>Linux-only helper: make a hook file executable (the hooks test returns early off Linux).</summary>
     private static void ChmodPlusX(string path)
@@ -573,39 +554,5 @@ public class ChangeSetFreezerTests
             throw new TimeoutException($"chmod +x {path} timed out.");
         if (proc.ExitCode != 0)
             throw new InvalidOperationException($"chmod +x {path} failed ({proc.ExitCode}).");
-    }
-
-    private static string GitOut(string dir, string arguments)
-    {
-        var psi = new ProcessStartInfo("git", arguments)
-        {
-            WorkingDirectory = dir,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        psi.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
-        using var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException($"git {arguments}: process failed to start.");
-        if (!proc.WaitForExit(30_000))
-        {
-            try
-            {
-                proc.Kill(entireProcessTree: true);
-            }
-            catch (Exception ex)
-            {
-                _ = ex;
-            }
-            throw new TimeoutException($"git {arguments} timed out in '{dir}'.");
-        }
-
-        string stdout = proc.StandardOutput.ReadToEnd();
-        string stderr = proc.StandardError.ReadToEnd();
-        if (proc.ExitCode != 0)
-            throw new InvalidOperationException($"git {arguments} failed ({proc.ExitCode}): {stderr}");
-        return stdout;
     }
 }

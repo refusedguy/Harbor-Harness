@@ -6,10 +6,8 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
-using Harbor.Storage.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using Harbor.Registries.Providers;
 
 namespace Harbor.Core.Tests;
 
@@ -20,46 +18,22 @@ namespace Harbor.Core.Tests;
 ///     truncation fallback). F19 — a silent summarizer must not persist an EMPTY
 ///     summary anchor that silently discards the entire compressed history.
 /// </summary>
-public class CompactionErrorPathTests
+public class CompactionErrorPathTests : CompactionTestBase
 {
-    private static readonly ModelInfo HugeModel = new(
-        "test-model", "test", "Test Model", 1_000_000, 1_024, false, false, true, Pricing.Unknown, "openai");
-
-    private static CompactionService CreateService(ILlmClient client)
-    {
-        var providers = new ProviderRegistry();
-        providers.Register(ProviderId.Create("test"), () => client);
-        return new CompactionService(
-            new TokenTracker(),
-            providers,
-            NullLogger<CompactionService>.Instance);
-    }
-
     private static List<AgentMessage> FourLongMessages() =>
     [
-        new UserMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "code", "test-model"),
-        new AssistantMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            new[] { new TextPart("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") }, StopReason.Stop, new Usage(0, 0), "test-model"),
-        new UserMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            "cccccccccccccccccccccccccccccccccccccccc", "code", "test-model"),
-        new AssistantMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            new[] { new TextPart("dddddddddddddddddddddddddddddddddddd") }, StopReason.Stop, new Usage(0, 0), "test-model")
+        User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+        User("cccccccccccccccccccccccccccccccccccccccc"),
+        Assistant("dddddddddddddddddddddddddddddddddddd")
     ];
-
-    private static CompactionService Configured(CompactionService svc)
-    {
-        svc.KeepRecentTokens = 60;
-        svc.TailTurns = 0;
-        return svc;
-    }
 
     [Test]
     public async Task CompactAsync_SilentStreamNoDeltas_ReturnsFailureInsteadOfEmptyAnchor()
     {
-        var svc = Configured(CreateService(new SilentLlmClient()));
+        var svc = CreateService(new SilentLlmClient(), keepRecentTokens: 60);
 
-        var result = await svc.CompactAsync("session-1", FourLongMessages(), HugeModel);
+        var result = await svc.CompactAsync("session-1", FourLongMessages(), TestModel());
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("empty summary");
@@ -68,11 +42,11 @@ public class CompactionErrorPathTests
     [Test]
     public async Task CompactAsync_CancelledDuringSummarization_FailsAsCancelledNotAsFailure()
     {
-        var svc = Configured(CreateService(new HangingLlmClient()));
+        var svc = CreateService(new HangingLlmClient(), keepRecentTokens: 60);
         using var cts = new CancellationTokenSource();
 
         Task<CSharpFunctionalExtensions.Result<CompactionResult>> pending =
-            svc.CompactAsync("session-1", FourLongMessages(), HugeModel, cts.Token);
+            svc.CompactAsync("session-1", FourLongMessages(), TestModel(), cts.Token);
         cts.Cancel();
 
         CSharpFunctionalExtensions.Result<CompactionResult> result = await pending;
@@ -98,7 +72,7 @@ public class CompactionErrorPathTests
         }
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { HugeModel }));
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel() }));
     }
 
     /// <summary>Hangs until cancelled — mirrors a real in-flight summarisation.</summary>
@@ -115,6 +89,6 @@ public class CompactionErrorPathTests
         }
 
         public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { HugeModel }));
+            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(new[] { TestModel() }));
     }
 }

@@ -22,39 +22,19 @@ namespace Harbor.Core.Tests;
 ///     back to the primary model on ANY resolution failure. HarborConfig
 ///     round-trips the key through RawConfigDto.
 /// </summary>
-public class SecondaryCompactionModelTests
+public class SecondaryCompactionModelTests : CompactionTestBase
 {
-    private static readonly ModelInfo PrimaryModel = new(
-        "test-model",
-        "test",
-        "Primary Test Model",
-        1_000_000,
-        1_024,
-        false,
-        false,
-        true,
-        Pricing.Unknown,
-        "openai");
+    private static ModelInfo PrimaryModel => TestModel(displayName: "Primary Test Model");
 
-    private static readonly ModelInfo CheapModel = new(
-        "cheap-model",
-        "cheap",
-        "Cheap Test Model",
-        100_000,
-        1_024,
-        false,
-        false,
-        true,
-        Pricing.Unknown,
-        "openai");
+    private static ModelInfo CheapModel => TestModel(id: "cheap-model", provider: "cheap", displayName: "Cheap Test Model");
 
     [Test]
     public async Task CompactAsync_NoSecondary_PrimaryClientSummarizes()
     {
         var primary = new CapturingLlmClient("summary", [PrimaryModel]);
-        var svc = CreateService(primary, secondaryModel: null);
+        var svc = CreateService(primary);
 
-        var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
+        var result = await svc.CompactAsync("session-1", SixMessageHistory(), HugeWindow(PrimaryModel));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(primary.Requests.Count).IsEqualTo(1);
@@ -68,20 +48,9 @@ public class SecondaryCompactionModelTests
     {
         var primary = new CapturingLlmClient("primary summary", [PrimaryModel]);
         var cheap = new CapturingLlmClient("cheap summary", [CheapModel]);
-        var providers = new ProviderRegistry();
-        providers.Register(ProviderId.Create("test"), () => primary);
-        providers.Register(ProviderId.Create("cheap"), () => cheap);
-        var svc = new CompactionService(
-            new TokenTracker(),
-            providers,
-            NullLogger<CompactionService>.Instance,
-            secondaryModel: "cheap/cheap-model")
-        {
-            KeepRecentTokens = 500,
-            TailTurns = 0
-        };
+        var svc = CreateService(primary, "cheap/cheap-model", extraProvider: ("cheap", cheap));
 
-        var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
+        var result = await svc.CompactAsync("session-1", SixMessageHistory(), HugeWindow(PrimaryModel));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(cheap.Requests.Count).IsEqualTo(1);
@@ -96,19 +65,9 @@ public class SecondaryCompactionModelTests
     {
         var primary = new CapturingLlmClient("primary summary", [PrimaryModel]);
         // "cheap" provider is NOT registered → resolution must fail cleanly.
-        var providers = new ProviderRegistry();
-        providers.Register(ProviderId.Create("test"), () => primary);
-        var svc = new CompactionService(
-            new TokenTracker(),
-            providers,
-            NullLogger<CompactionService>.Instance,
-            secondaryModel: "cheap/cheap-model")
-        {
-            KeepRecentTokens = 500,
-            TailTurns = 0
-        };
+        var svc = CreateService(primary, "cheap/cheap-model");
 
-        var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
+        var result = await svc.CompactAsync("session-1", SixMessageHistory(), HugeWindow(PrimaryModel));
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(primary.Requests.Count).IsEqualTo(1);
@@ -124,11 +83,7 @@ public class SecondaryCompactionModelTests
         // Warning log (same observability as the resolution path).
         var log = new CapturingLogger();
 
-        _ = new CompactionService(
-            new TokenTracker(),
-            new ProviderRegistry(),
-            log,
-            secondaryModel: "no-slash-here");
+        _ = CreateService(logger: log, secondaryModel: "no-slash-here");
 
         await Assert.That(log.Messages.Any(
             m => m.Contains("no-slash-here") && m.Contains("Invalid model reference"))).IsTrue();
@@ -138,19 +93,9 @@ public class SecondaryCompactionModelTests
     public async Task CompactAsync_SecondaryInvalid_FallsBackToPrimaryClient()
     {
         var primary = new CapturingLlmClient("primary summary", [PrimaryModel]);
-        var providers = new ProviderRegistry();
-        providers.Register(ProviderId.Create("test"), () => primary);
-        var svc = new CompactionService(
-            new TokenTracker(),
-            providers,
-            NullLogger<CompactionService>.Instance,
-            secondaryModel: "no-slash-here")
-        {
-            KeepRecentTokens = 500,
-            TailTurns = 0
-        };
+        var svc = CreateService(primary, "no-slash-here");
 
-        var result = await svc.CompactAsync("session-1", History(), HugeWindow(PrimaryModel));
+        var result = await svc.CompactAsync("session-1", SixMessageHistory(), HugeWindow(PrimaryModel));
 
         // Same degradation as before (#1582), but the config error is logged at
         // construction; here just pin the behaviour on a single primary client.
@@ -167,11 +112,7 @@ public class SecondaryCompactionModelTests
         // and must not pre-fire ModelRef.TryParse's empty-reference error.
         var log = new CapturingLogger();
 
-        _ = new CompactionService(
-            new TokenTracker(),
-            new ProviderRegistry(),
-            log,
-            secondaryModel: " ");
+        _ = CreateService(logger: log, secondaryModel: " ");
 
         await Assert.That(log.Messages.Count).IsEqualTo(0);
     }
@@ -196,95 +137,5 @@ public class SecondaryCompactionModelTests
 
         await Assert.That(normalized.IsSuccess).IsTrue();
         await Assert.That(normalized.Value.SecondaryModel).IsEqualTo("cheap/cheap-model");
-    }
-
-    private static CompactionService CreateService(
-        CapturingLlmClient primary,
-        string? secondaryModel)
-    {
-        var providers = new ProviderRegistry();
-        providers.Register(ProviderId.Create("test"), () => primary);
-        return new CompactionService(
-            new TokenTracker(),
-            providers,
-            NullLogger<CompactionService>.Instance,
-            secondaryModel)
-        {
-            KeepRecentTokens = 500,
-            TailTurns = 0
-        };
-    }
-
-    /// <summary>Six-message history large enough for a deterministic head cut.</summary>
-    private static List<AgentMessage> History() =>
-    [
-        User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
-        User("cccccccccccccccccccccccccccccccccccccccc"),
-        Assistant("dddddddddddddddddddddddddddddddddddd"),
-        User("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
-        Assistant("ffffffffffffffffffffffffffffffffffff")
-    ];
-
-    /// <summary>The passed model with a huge window so ShouldCompact-style budgeting never interferes.</summary>
-    private static ModelInfo HugeWindow(ModelInfo source) => source with { ContextWindow = 1_000_000 };
-
-    private static UserMessage User(string content) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        content,
-        "code",
-        "test-model");
-
-    private static AssistantMessage Assistant(string text) => new(
-        Guid.NewGuid().ToString("N"),
-        "session-1",
-        DateTimeOffset.UtcNow,
-        new[] { new TextPart(text) },
-        StopReason.Stop,
-        new Usage(0, 0),
-        "test-model");
-
-    /// <summary>
-    ///     Log capture for the #1582 observability tests: records the formatted
-    ///     message of every entry, warnings included.
-    /// </summary>
-    private sealed class CapturingLogger : ILogger<CompactionService>
-    {
-        public List<string> Messages { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(
-            LogLevel logLevel,
-            EventId eventId,
-            TState state,
-            Exception? exception,
-            Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
-    }
-
-    /// <summary>Capturing client bound to a fixed provider id and catalog.</summary>
-    private sealed class CapturingLlmClient(string summary, ModelInfo[] catalog) : ILlmClient
-    {
-        public List<LlmRequest> Requests { get; } = [];
-
-        public ProviderId ProviderId { get; init; } = ProviderId.Create("test");
-
-        public async IAsyncEnumerable<LlmEvent> StreamAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            Requests.Add(request);
-            yield return new TextDeltaEvent("0", summary);
-            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-            yield return new StepFinishEvent(0, "stop", new Usage(0, summary.Length / 4));
-        }
-
-        public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>(catalog));
     }
 }

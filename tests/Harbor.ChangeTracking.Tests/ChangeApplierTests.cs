@@ -16,8 +16,11 @@ namespace Harbor.ChangeTracking.Tests;
 /// </summary>
 [SkipWhenGitMissing]
 [NotInParallel("harbor-home")]
-public class ChangeApplierTests
+public class ChangeApplierTests : ChangeTrackingTestBase
 {
+    /// <inheritdoc />
+    protected override (string Email, string Name) GitAuthor => ("s6@test", "s6");
+
     [Test]
     public async Task Applied_CleanBase_AppliesPatchAndMarksAccepted()
     {
@@ -406,20 +409,10 @@ public class ChangeApplierTests
     private static string AcceptLog(string home, string runId) =>
         Path.Combine(home, "runs", runId, ChangeApplier.AcceptLogFileName);
 
-    /// <summary>Fresh repo with one committed file.</summary>
-    private static string InitRepo()
-    {
-        string dir = NewTempDir();
-        Git(dir, "init");
-        Git(dir, "config user.email s6@test");
-        Git(dir, "config user.name s6");
-        Git(dir, "config commit.gpgsign false");
-        File.WriteAllText(Path.Combine(dir, "a.txt"), "one\n");
-        Git(dir, "add a.txt");
-        Git(dir, "commit -m init");
-        return dir;
-    }
-
+    // The HARBOR_HOME swap stays HERE, in the test class, on purpose: see
+    // ChangeTrackingTestBase — ProcessEnvIsolationRule derives its writer set
+    // and its clean-writer floor from the classes that write the process
+    // environment, and this class is one of them.
     private static async Task WithIsolatedHome(Func<string, Task> body)
     {
         string? savedHarborHome = Environment.GetEnvironmentVariable("HARBOR_HOME");
@@ -435,65 +428,5 @@ public class ChangeApplierTests
             Environment.SetEnvironmentVariable("HARBOR_HOME", savedHarborHome);
             DeleteDir(home);
         }
-    }
-
-    private static string NewTempDir()
-    {
-        string dir = Path.Combine(Path.GetTempPath(), $"harbor-ws-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(dir);
-        return dir;
-    }
-
-    private static void DeleteDir(string dir)
-    {
-        try
-        {
-            Directory.Delete(dir, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException)
-        {
-            // Test cleanup is best-effort.
-            _ = ex;
-        }
-    }
-
-    private static void Git(string dir, string arguments)
-    {
-        string output = GitOut(dir, arguments);
-        _ = output;
-    }
-
-    private static string GitOut(string dir, string arguments)
-    {
-        var psi = new ProcessStartInfo("git", arguments)
-        {
-            WorkingDirectory = dir,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-        };
-        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
-        psi.Environment["GIT_CONFIG_NOSYSTEM"] = "1";
-        using var proc = Process.Start(psi)
-            ?? throw new InvalidOperationException($"git {arguments}: process failed to start.");
-        if (!proc.WaitForExit(30_000))
-        {
-            try
-            {
-                proc.Kill(entireProcessTree: true);
-            }
-            catch (Exception ex)
-            {
-                _ = ex;
-            }
-            throw new TimeoutException($"git {arguments} timed out in '{dir}'.");
-        }
-
-        string stdout = proc.StandardOutput.ReadToEnd();
-        string stderr = proc.StandardError.ReadToEnd();
-        if (proc.ExitCode != 0)
-            throw new InvalidOperationException($"git {arguments} failed ({proc.ExitCode}): {stderr}");
-        return stdout;
     }
 }
