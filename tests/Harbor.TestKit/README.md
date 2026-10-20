@@ -15,7 +15,14 @@ project that needs a double for something Harbor owns; never shipped.
 | `Builders/` | Builders, not doubles — message factories and the like. |
 | `TestToolContext.cs` | The one place a `ToolContext` is built (#1775). |
 | `TestAgents.cs`, `TestMessages.cs`, `TestTempDirs.cs`, `TestScalingGate.cs`, `AllocationProbe.cs` | Named entry points other suites share. |
-| `UiTestDoubles.cs` | The UI-framework doubles (#1549) — kept in one file because they extend UI base types, not Harbor interfaces. |
+| `GenerateFakesAttribute.cs`, `Generated/FakeCall.cs` | The opt-in list and the call-record type for the source-generated doubles (#1769). The generator itself lives in `tests/Harbor.TestKit.Generators` and runs over this project as an ANALYZER — build-time only, nothing of it reaches a consumer. |
+
+The UI-framework doubles (#1549) are NOT here, and neither is the null render
+context or the panel provider (#1772): they moved to
+[`Harbor.TestKit.Tui`](../Harbor.TestKit.Tui/) in #1889, because they are the
+files that need the UI/Desktop stack. This core reaches no UI assembly at
+all, which is the whole point of the split: fourteen test projects reference
+it, and every product assembly it reached was paid for by all of them.
 
 ## Naming
 
@@ -28,10 +35,10 @@ project that needs a double for something Harbor owns; never shipped.
 
 ## Rules
 
-1. **A double lives in `Harbor.TestKit/`, not in the test project that needed
+1. **A double lives in the shared kit, not in the test project that needed
    it.** If two projects need the same double, the second one references the
    first instead of copying it. A `Fake*` type that exists in a test project
-   while an equivalent exists here is a bug.
+   while an equivalent exists in the kit is a bug.
 2. **One file = one interface.** `Fakes/ISessionStore.cs` holds
    `FakeSessionStore` and nothing else. The name of the file is the interface
    the double stands in for.
@@ -41,14 +48,50 @@ project that needs a double for something Harbor owns; never shipped.
    `TestAsserts` family for exactly this reason.
 4. **A double must not change the behaviour it stands in for.** A fake that
    answers differently from the production implementation is a test that lies.
+5. **A double that needs a heavy dependency belongs in a PART, not here.**
+   `Harbor.TestKit` is the core: it references `Harbor.Abstractions` and
+   `Harbor.Abstractions.Contracts` and nothing else, so its closure is four
+   assemblies — itself, its own support part, and the two contract assemblies —
+   and every one of its consumers inherits that. A double that
+   needs the UI/Desktop stack goes into a part (`Harbor.TestKit.Tui`), and only
+   the consumers that actually use it take the reference.
 
 ## Dependency closure
 
-`Harbor.TestKit` references the `Harbor.Ui.Framework.*` family and
-`Harbor.Desktop.Abstractions` because `UiTestDoubles.cs` needs them. That is
-safe only while every consumer already has them in its own closure: the
-closure of `Harbor.TestKit` must stay a **subset** of the closure of every
-project that references it. Adding `Harbor.TestKit` to a project that does not
-already reference the UI-framework family would push new product assemblies
-into that project — don't. Either the double does not need them, or the
-consumer already has them.
+The core `Harbor.TestKit` references `Harbor.Abstractions`,
+`Harbor.Abstractions.Contracts` and its own support part
+`Harbor.TestKit.Support` (#1772/#1773 — the core references the sibling so a
+consumer of the core reaches the shared helpers transitively, in the same
+`Harbor.TestKit` namespace). Its transitive `<ProjectReference>` closure is
+therefore **four** assemblies, and every consumer inherits exactly that. Only
+TWO of the four are product assemblies, and both are contract assemblies every
+consumer already has.
+
+The one other `<ProjectReference>` here is the source generator
+(`Harbor.TestKit.Generators`, #1769), declared as `OutputItemType=Analyzer`
+with `ReferenceOutputAssembly=false`. It is build-time only: the generator
+assembly never lands in this project's output, so it is not part of the
+closure, and the repository's own reference reader
+(`RepoPaths.ReadProjectReferences`) reports it separately for exactly that
+reason. That reader recognises the CHILD-ELEMENT form of `OutputItemType`
+that every other analyzer reference in the tree uses, which is why this
+project writes it that way.
+
+Before #1889 the kit also referenced the `Harbor.Ui.Framework.*` family and
+`Harbor.Desktop.Abstractions`, because `UiTestDoubles.cs` needed them. That
+made the closure **nineteen** assemblies, eleven of them UI/Desktop, and
+every one of the kit's fourteen consumers paid for them whether it used a
+double or not — `Harbor.Core.Tests` alone carried thirteen assemblies it had
+no use for. The doubles moved to [`Harbor.TestKit.Tui`](../Harbor.TestKit.Tui/)
+and the core became what it says above.
+
+The rule this replaced was "the closure of `Harbor.TestKit` must stay a
+subset of the closure of every project that references it", which was a
+restatement of the problem: the kit could not grow a double that needed
+anything new, because every consumer would grow with it. The composite kit
+removes the reason for the constraint — a part is opt-in, and a consumer that
+does not use the doubles does not compile them.
+
+The split is pinned by `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs`:
+the core may not reach `Harbor.Ui.Framework*`, `Harbor.Desktop.*`,
+`Harbor.Terminal.Abstractions` or `Harbor.Application`, and the parts may.

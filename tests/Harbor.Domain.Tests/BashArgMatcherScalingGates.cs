@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Harbor.Abstractions.Permissions;
+using Harbor.TestKit;
 
 namespace Harbor.Domain.Tests;
 
@@ -15,9 +16,11 @@ namespace Harbor.Domain.Tests;
 // GATE: cost(2N)/cost(N) <= 3 for both time and allocations, where N is the
 // argv token count. Linear is 2.00, O(N^2) is 4.00 — same bound shape as the
 // #410 store-path gate. No absolute millisecond or byte budget: those measure
-// the runner, not the code. Measured through the DOCUMENTED MINI-COPY of
-// Harbor.TestKit's TestScalingGate (#1652; this project must not reference
-// TestKit — it drags Harbor.Application): GC-fenced legs scaled toward
+// the runner, not the code. Measured through the SHARED Harbor.TestKit's
+// TestScalingGate (#1652; since #1889 this project references the shared file
+// instead of keeping a local copy — the TestKit core no longer drags
+// Harbor.Application into the slice this project measures): GC-fenced legs
+// scaled toward
 // ~100 ms of real work, medians over five rounds, x1.05 noise band on the
 // time branch only, the allocation branch strict.
 //

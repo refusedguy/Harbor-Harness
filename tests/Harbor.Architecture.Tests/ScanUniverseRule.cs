@@ -405,6 +405,14 @@ public sealed class ScanUniverseRule
     ///         points at does NOT count — it references no <c>src/</c> project, so it is not
     ///         blind, it is merely invisible.
     ///     </para>
+    ///     <para>
+    ///         #1889 does NOT move this count, and that is the point: the split
+    ///         gave the UI doubles a home WITHOUT adding a project.
+    ///         <c>Harbor.TestKit.Tui</c> already existed (#1772) and was already
+    ///         blind — it declares a <c>src/</c> reference — so moving files INTO
+    ///         it moved no row. The count is re-measured from the tree on every
+    ///         change, and the split left it at 36.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
         ["apps=2", "contrib=15", "samples=5", "tests=37", "tools=1"];

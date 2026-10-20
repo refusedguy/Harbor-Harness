@@ -15,6 +15,12 @@
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!--
+      #1889: the shared UI DOUBLES (TestDispatcherAdapter) live in the
+      UI-scoped TestKit part now, so a consumer that uses one says so
+      explicitly. The core TestKit above is UI-free.
+    -->
+    <ProjectReference Include="..\..\tests\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

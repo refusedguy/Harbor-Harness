@@ -18,8 +18,19 @@
       arrives here through Harbor.Desktop.Abstractions, and the Ui.Framework
       family is referenced directly — so the reference adds no new product
       assembly to the slice the perf gates below measure.
+
+      #1889: the core TestKit still ships the shared cost gates (TestScalingGate)
+      this assembly's perf gates ride, so that reference stays.
     -->
     <ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!--
+      #1889: the shared UI DOUBLES moved out of the core TestKit into the
+      UI-scoped `Harbor.TestKit.Tui` part, so that the eleven test projects
+      that use TestKit for an unrelated reason stop compiling the UI stack.
+      This project is one of the three that actually uses a double, so it
+      takes the reference the core no longer implies.
+    -->
+    <ProjectReference Include="../Harbor.TestKit.Tui/Harbor.TestKit.Tui.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

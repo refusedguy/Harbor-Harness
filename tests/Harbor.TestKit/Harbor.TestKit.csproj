@@ -36,24 +36,34 @@
       re-add it "for symmetry" — the honest fix for the remaining path is a
       separate move of ProviderPresets, tracked outside #1809.
     -->
+    <!--
+      #1889: the four UI references are GONE, and with them the closure
+      shrinks from 19 assemblies to 4.
+
+      The files that needed them — `UiTestDoubles.cs` (the dispatcher double
+      and the counting view-model stubs), `NullRenderContext.cs` and
+      `TestPanelProvider.cs` — now live in the sibling project
+      `Harbor.TestKit.Tui`, which is the ONE place allowed to pull the
+      UI/Desktop stack in on behalf of a test. What stayed here is the core:
+      agent fakes, scripted clients, assertions, message builders, perf gates
+      — none of which touch a view model.
+
+      The paragraph above is kept as a record, not as a description of this
+      file: the "Harbor.Application is STILL in TestKit's transitive closure"
+      sentence was true until #1889 and is now false, because the edge that
+      carried it (Harbor.Desktop.Abstractions) left with the doubles. The
+      ProviderPresets move it mentions is still worth doing — it is what keeps
+      `Harbor.Desktop.Abstractions` heavy for every project that needs a
+      desktop view-model base — but it is no longer what makes TestKit heavy.
+
+      The closure is FOUR, not three, and the fourth is the kit's OWN support
+      part: `Harbor.TestKit.Support` (see the #1772/#1773 note below). It is
+      not a product assembly — it references `Harbor.Abstractions` only — so
+      the core still adds no product assembly to any consumer beyond
+      `Harbor.Abstractions` and `Harbor.Abstractions.Contracts`.
+    -->
     <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
     <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
-    <!--
-      #1549: the shared UI test doubles (TestDispatcherAdapter + the counting
-      view-model stubs) live here. They need the Ui.Framework family
-      (IDispatcherAdapter / UiState / StoreSubscriberViewModel) and the desktop
-      view-model bases (ChatViewModelBase / DiffViewModelBase). Every one of
-      these is already inside the closure of the test projects that consume
-      this library, so the reference adds no new product assembly anywhere.
-      (#1809 measured it: a consumer that today does NOT sit on the Ui.Framework
-      family — e.g. Harbor.Storage.Tests — does gain these assemblies when it
-      starts referencing TestKit. The claim above holds for the consumers that
-      already reference them; the full delta table is in the #1809 PR body.)
-    -->
-    <ProjectReference Include="../../src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj"/>
-    <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
     <!--
       #1772/#1773: the helpers that need no product assembly beyond the
       contracts (the three scopes, the logging doubles, the Abstractions-level
@@ -74,15 +84,26 @@
       opted-in interface, never a proxy. It is build-time only: the generator
       assembly is not referenced (ReferenceOutputAssembly=false) and nothing of
       it reaches a consumer.
+
+      #1889: `OutputItemType` is written in the CHILD-ELEMENT form every other
+      analyzer reference in this repository uses (src/Harbor.Tui.CellForge,
+      src/Harbor.Terminal.Abstractions, tests/Harbor.Terminal.Abstractions.Tests,
+      ...). The attribute form is legal MSBuild, but the repository's own
+      reference reader — `RepoPaths.ReadProjectReferences`, which the layering
+      rules and the #1889 composition guard both walk — recognises only the
+      child element. An attribute-form analyzer edge is therefore invisible to
+      it, and the build-time-only generator would land in the core kit's
+      DECLARED closure as if it were a runtime dependency. The build is
+      identical either way; only what the tooling sees changes.
     -->
     <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="false" />
+                      ReferenceOutputAssembly="false">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="TUnit"/>
     <PackageReference Include="TUnit.Assertions"/>
   </ItemGroup>

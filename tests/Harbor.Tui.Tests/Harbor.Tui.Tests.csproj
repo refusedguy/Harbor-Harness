@@ -14,7 +14,13 @@
     <!-- #1772/#1773: the shared test doubles and the three scopes. This
          project already has every product assembly the library needs, so the
          reference adds none. -->
-    <ProjectReference Include="..\Harbor.TestKit\Harbor.TestKit.csproj"/>
+    <!--
+      #1889: `NullRenderContext` (the render context that renders nothing)
+      moved out of the core TestKit into the UI-scoped `Harbor.TestKit.Tui`
+      part, and it is the ONLY kit type this project used — so the core
+      reference goes with it rather than becoming an unused edge.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

@@ -20,9 +20,11 @@ namespace Harbor.Providers.Tests;
 ///         the single-size build, measured in the same run
 ///         (<c>t(2N) &lt;= 3*t(N)</c>). A quadratic regression lands at 4x
 ///         and cannot hide under it; runner speed cancels in the ratio.
-///         Measured through the DOCUMENTED MINI-COPY of Harbor.TestKit's
-///         <see cref="TestScalingGate" /> (#1652; Providers.Tests must not
-///         reference TestKit — it drags Harbor.Application): GC-fenced legs
+///         Measured through the SHARED Harbor.TestKit's
+///         <see cref="TestScalingGate" /> (#1652; since #1889 this project
+///         references the shared file instead of keeping a local copy — the
+///         TestKit core no longer drags Harbor.Application into the slice
+///         this project measures): GC-fenced legs
 ///         scaled toward ~100 ms of real work, medians over five rounds, and
 ///         a x1.05 noise band on the time branch only — the #1643
 ///         3.27-vs-3.0 flake came out of a 7.9 ms best-of-5 leg.

@@ -3,6 +3,7 @@ namespace Harbor.Tui.PerfTests;
 using System.Diagnostics;
 using Harbor.Ui.Framework.Rendering.Markdown;
 using Harbor.Ui.Framework.Rendering.PerformanceContracts;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -157,9 +158,11 @@ public class RendererBenchmarkTests
         // so its linear is 1.00); iter-doubling is the linearity check
         // (twice the renders, so its linear is 2.00).
         //
-        // #1652 measure: the DOCUMENTED MINI-COPY of Harbor.TestKit's
-        // TestScalingGate (Tui.PerfTests must not reference TestKit — it
-        // drags Harbor.Application) runs the legs GC-fenced, scaled to
+        // #1652 measure: the SHARED Harbor.TestKit's TestScalingGate (since
+        // #1889 this project references the shared file instead of keeping a
+        // local copy — the TestKit core no longer drags Harbor.Application
+        // into the slice this project measures) runs the legs GC-fenced,
+        // scaled to
         // ~100 ms of real work (the millisecond-leg best-of shape is where
         // the noise lives), and reports MEDIANS over five rounds. The old
         // hand-rolled loop shared one doc-100 leg between the two ratio

@@ -160,6 +160,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.Projection;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -208,10 +209,12 @@ public sealed class StorePathScalingGates
     ///         the quadratic shape the gate exists to catch.
     ///     </para>
     ///     <para>
-    ///         The measure lives in the DOCUMENTED MINI-COPY of Harbor.TestKit's
-    ///         <see cref="TestScalingGate" /> (#1652; Ui.Framework.Tests must not
-    ///         reference TestKit — it drags Harbor.Application): GC-fenced legs
-    ///         scaled toward ~100 ms of real work, medians over five rounds,
+    ///         The measure lives in the SHARED Harbor.TestKit
+    ///         <see cref="TestScalingGate" /> (#1652; since #1889 this project
+    ///         references the shared file instead of keeping a local copy —
+    ///         the TestKit core no longer drags Harbor.Application into the
+    ///         slice this project measures): GC-fenced legs scaled toward
+    ///         ~100 ms of real work, medians over five rounds,
     ///         x1.05 noise band on the time branch only. The hand-rolled
     ///         best-of-5 loop stayed at a ~10 ms leg, which was exactly small
     ///         enough for a neighbour or a collection to decide the ratio.

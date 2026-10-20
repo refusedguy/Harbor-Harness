@@ -48,13 +48,20 @@ namespace Harbor.TestKit;
 // lasts long enough for its DURATION and ALLOCATION to be measured against
 // real work instead of against the measurement's own overhead.
 //
-// WHO MAY REFERENCE THIS — Harbor.Application.Tests, Harbor.Registries.Tests
-// and Harbor.Tui.CellForge.Tests already reference Harbor.TestKit. The other
-// cost-gate projects must NOT (TestKit drags Harbor.Application; a test
-// project must not pull that to measure a renderer/provider/domain slice).
-// Those projects keep a DOCUMENTED SAME-API INTERNAL COPY of this file
-// (grep "TestScalingGate.cs — #1652" under tests/); keep copies in sync with
-// this one.
+// WHO MAY REFERENCE THIS — ANY cost-gate project may reference
+// Harbor.TestKit since #1889. The copies of this file used to exist because
+// the shared TestKit dragged Harbor.Application, and a test project must not
+// pull that into a renderer/provider/domain slice it is trying to measure.
+// #1889 split the kit into a core and a UI part, and the CORE's closure is
+// now Harbor.Abstractions + Harbor.Abstractions.Contracts + itself — the
+// heavy assembly is gone — so the five DOCUMENTED SAME-API INTERNAL COPIES
+// of this file (Harbor.Abstractions.Tests, Harbor.Domain.Tests,
+// Harbor.Providers.Tests, Harbor.Tui.PerfTests, Harbor.Ui.Framework.Tests)
+// were deleted and those projects now consume this file directly.
+//
+// A copy is still allowed, but only with a WRITTEN REASON: a copy must name
+// the file it was copied from and say why it is a copy. That is enforced by
+// tests/Harbor.Architecture.Tests/TestKitSharedCopyReasonRules.cs.
 
 /// <summary>
 ///     One measured leg of a scaling gate: the wall time of the window and
