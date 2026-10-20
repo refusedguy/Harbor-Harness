@@ -32,15 +32,15 @@
 //   2. For an unmappable reference the task sets
 //      `GlobalPropertiesToRemove = "Configuration;Platform"` on the item, and
 //      the MSBuild call that builds the reference honours it
-//      (Microsoft.Common.CurrentVersion.targets:1850:
+//      Microsoft.Common.CurrentVersion.targets (line 1850):
 //      `RemoveProperties="%(...GlobalPropertiesToRemove);TargetFramework;..."`).
 //   3. The child then starts with NO Configuration, and
-//      Microsoft.Common.CurrentVersion.targets:149 answers with
+//      Microsoft.Common.CurrentVersion.targets (line 149) answers with
 //      `<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>`.
 //
 // The switch for step 2 is `ShouldUnsetParentConfigurationAndPlatform`, which
 // defaults to true for a solution build
-// (Microsoft.Common.CurrentVersion.targets:1584). The fix for #1921 sets it to
+// Microsoft.Common.CurrentVersion.targets (line 1584). The fix for #1921 sets it to
 // false in the root `Directory.Build.props`, so an unmappable reference
 // inherits the configuration of the project that references it.
 //
@@ -58,7 +58,7 @@
 // inheriting it: the root `Directory.Build.props` gives every
 // `<ProjectReference>` a `SetConfiguration` of `Configuration=$(Configuration)`,
 // which is the metadata
-// Microsoft.Common.CurrentVersion.targets:2150 passes to the MSBuild call that
+// Microsoft.Common.CurrentVersion.targets (line 2150) passes to the MSBuild call that
 // builds a referenced project. The child's configuration becomes an explicit
 // global property, so whichever path asks for the child, the child is built in
 // the configuration of the build that asks.
@@ -763,8 +763,8 @@ public sealed class ReleaseBuildConfigurationRule
                 + "MSBuild cannot map such a reference onto the solution's configuration table, so it "
                 + "removes Configuration and Platform from the child's global properties "
                 + "(dotnet/msbuild AssignProjectConfiguration.cs; "
-                + "Microsoft.Common.CurrentVersion.targets:1850) and the child then falls back to "
-                + "Microsoft.Common.CurrentVersion.targets:149 — " + ReleaseConfigurationProbe.DefaultConfiguration
+                + "Microsoft.Common.CurrentVersion.targets (line 1850)) and the child then falls back to "
+                + "Microsoft.Common.CurrentVersion.targets (line 149) — " + ReleaseConfigurationProbe.DefaultConfiguration
                 + ". The child is therefore built in Debug inside a Release build, and its Debug output "
                 + "is what the dependents' Release bin directories receive. The fix is the parent's "
                 + "effective ShouldUnsetParentConfigurationAndPlatform = false (the child INHERITS the "

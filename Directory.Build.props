@@ -44,10 +44,10 @@
         2. For an unresolvable reference the task sets
            `GlobalPropertiesToRemove = "Configuration;Platform"` on the item, and
            the MSBuild call that builds the reference honours it
-           (Microsoft.Common.CurrentVersion.targets:1850,
+           Microsoft.Common.CurrentVersion.targets (line 1850),
            `RemoveProperties="%(...GlobalPropertiesToRemove);..."`).
         3. The child therefore starts with NO Configuration at all, and
-           Microsoft.Common.CurrentVersion.targets:149 answers that with
+           Microsoft.Common.CurrentVersion.targets (line 149) answers that with
            `<Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>`.
 
       Measured on CI run 39389070999: three of the 112 projects that Release
@@ -61,7 +61,7 @@
 
       `ShouldUnsetParentConfigurationAndPlatform` is MSBuild's own switch for
       this. It defaults to true for a solution build
-      (Microsoft.Common.CurrentVersion.targets:1584) and that default is what
+      Microsoft.Common.CurrentVersion.targets (line 1584) and that default is what
       unsets the configuration. Set to false, a reference the solution cannot map
       inherits the CONFIGURATION of the project that references it, so the whole
       graph is built in the configuration the caller asked for.
@@ -85,7 +85,7 @@
       only one MSBuild uses to decide how a referenced project is built: a
       reference can also be built through a path that does not carry the
       parent's Configuration, and then the child falls back to
-      Microsoft.Common.CurrentVersion.targets:149 — Debug.
+      Microsoft.Common.CurrentVersion.targets (line 149) — Debug.
 
       Measured on CI run 39407510139 (the run that carried the switch above):
       src/Harbor.CodeGen was built TWICE — once in Release (the solution's own
@@ -96,7 +96,7 @@
       a Release build, which is the defect #1921 is about.
 
       `SetConfiguration` is the metadata MSBuild's own
-      Microsoft.Common.CurrentVersion.targets:2150 passes to the MSBuild call
+      Microsoft.Common.CurrentVersion.targets (line 2150) passes to the MSBuild call
       that builds a referenced project, so setting it here makes the child's
       configuration an EXPLICIT global property instead of an inherited one:
       the child is built in the configuration of the build that asks for it,
