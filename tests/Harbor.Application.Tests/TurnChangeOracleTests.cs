@@ -278,16 +278,20 @@ public class TurnChangeOracleTests
 
             await bus.PublishAsync(ToolExecutionStartEvent.Create(id, call.ToolName, argsDoc.RootElement));
 
-            if (call.Content is not null && call.Path is not null)
+            // The locals carry the narrowing across the await: a property
+            // access would have to be re-read after it.
+            string? content = call.Content;
+            string? declaredPath = call.Path;
+            if (content is not null && declaredPath is not null)
             {
-                string full = Path.Combine(root, call.Path);
+                string full = Path.Combine(root, declaredPath);
                 string? parent = Path.GetDirectoryName(full);
                 if (parent is not null)
                 {
                     Directory.CreateDirectory(parent);
                 }
 
-                await File.WriteAllTextAsync(full, call.Content);
+                await File.WriteAllTextAsync(full, content);
             }
 
             await bus.PublishAsync(new ToolExecutionEndEvent(id, ToolResult.Success("ok"), false));

@@ -224,7 +224,7 @@ public sealed class TurnChangeOracle : IDisposable
 
         // Fingerprinted OUTSIDE the lock: this reads the file, and the lock
         // is held by every other writer of this state.
-        Fingerprint before = Fingerprint(target);
+        Fingerprint before = ReadFingerprint(target);
 
         lock (_sync)
         {
@@ -255,7 +255,7 @@ public sealed class TurnChangeOracle : IDisposable
             target = call.Target;
         }
 
-        Fingerprint after = Fingerprint(target);
+        Fingerprint after = ReadFingerprint(target);
 
         lock (_sync)
         {
@@ -401,7 +401,7 @@ public sealed class TurnChangeOracle : IDisposable
     /// <summary>
     ///     Read what the filesystem says about one path right now.
     /// </summary>
-    private Fingerprint Fingerprint(string path)
+    private Fingerprint ReadFingerprint(string path)
     {
         try
         {
