@@ -1227,7 +1227,7 @@ jobs:
               echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
-            elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
+            elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
             else
               status="FAIL"
@@ -1375,7 +1375,7 @@ jobs:
             if [ ! -f "$dll" ]; then
               echo "Missing $dll — did build artifact download fail?"
               printf '%s\tmissing\n' "$p" >> Coverage/status.tsv
-            elif dotnet exec "$dll" --minimum-expected-tests 1 \
+            elif dotnet exec "$dll" --minimum-expected-tests 1 --zero-tests-policy strict \
                 --coverage \
                 --coverage-output "$GITHUB_WORKSPACE/Coverage/$p.cobertura.xml" \
                 --coverage-output-format cobertura; then

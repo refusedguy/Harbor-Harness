@@ -1,0 +1,28 @@
+# harbor-frame-snapshot v1
+frame 380x120
+Window bg=#FF1E1E2E
+  Panel
+    Border bg=#FF000000
+    Border bg=#FF1E1E2E
+    Panel bg=ImmutableSolidColorBrush
+    VisualLayerManager
+      ContentPresenter
+        ToolCallCardView
+          ContentPresenter
+            Border bg=#FF313244
+              Grid
+                Grid
+                  TextBlock text="E" fg=#FFCDD6F4 font="Inter" size=13
+                  TextBlock text="edit" fg=#FFCDD6F4 font="JetBrains Mono" size=12
+                  Border
+                    TextBlock text="err" fg=#FF181825 font="JetBrains Mono" size=10
+                  TextBlock text="340ms" fg=#FF8B90A6 font="Inter" size=10
+                Expander bg=ImmutableSolidColorBrush
+                  DockPanel
+                    ToggleButton bg=ImmutableSolidColorBrush content="details"
+                      Border bg=ImmutableSolidColorBrush
+                        Grid
+                          ContentPresenter
+                            TextBlock text="details" fg=#FFCDD6F4 font="Inter" size=14
+                          Border bg=#00FFFFFF
+                            Path
