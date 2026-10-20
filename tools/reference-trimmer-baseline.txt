@@ -1,4 +1,4 @@
-# reference-trimmer-baseline — the unused references the tree produces, as
+# reference-trimmer-baseline - the unused references the tree produces, as
 # measured by ReferenceTrimmer 3.5.13, and the reason each one is still there.
 #
 # OWNER: issue #1853. Read by tools/check-reference-trimmer.py on every PR.
@@ -13,7 +13,7 @@
 # So the file can only shrink, and the gate gets stricter as the tree is
 # fixed. A closed finding cannot stay blessed.
 #
-# ── FORMAT ────────────────────────────────────────────────────────────────
+# - FORMAT ---------------------------------------------------------------
 #
 #   <rule> | <subject> | <reason> | <owner>
 #
@@ -29,19 +29,118 @@
 #            allowed here.
 #   owner    A '@handle' somebody can be asked about.
 #
-# ── WHAT IS NOT HERE, AND WHY ─────────────────────────────────────────────
+# - WHAT IS NOT HERE, AND WHY ---------------------------------------------
 #
 # The four projects whose <PackageReference> set tools/check-abstractions-
-# contract.py already answers for — src/Harbor.Abstractions,
+# contract.py already answers for - src/Harbor.Abstractions,
 # src/Harbor.Abstractions.Contracts, src/Harbor.Extensions and
-# src/Harbor.Application — are not listed here. Their findings are dropped
+# src/Harbor.Application - are not listed here. Their findings are dropped
 # before the comparison, because two gates answering the same question for
-# the same projects means two baselines to keep in step.
+# the same projects means two baselines to keep in step. Measured on the
+# first run, those four produced no finding at all.
 #
-# Microsoft.NET.Test.Sdk is a separate matter: it is a candidate in its own
-# right, and the decision to remove it belongs to issue #1893, not to this
-# one. Rows for it are not written until that issue has landed.
+# Microsoft.NET.Test.Sdk is a separate matter, and the answer is measured
+# rather than assumed: ReferenceTrimmer SKIPS every package that ships a
+# build/ folder, and Microsoft.NET.Test.Sdk ships one, so RT0003 never named
+# it. The 16 projects that carry it are therefore outside this gate's
+# reach, and the decision to remove it belongs to issue #1893.
 #
-# ── THE ROWS ──────────────────────────────────────────────────────────────
+# - THE TWO ROWS THAT WERE CLOSED ----------------------------------------
 #
-# (empty — the first measured run writes them)
+# The first measured run produced 60 findings. Two of them were dead
+# references with no reading required, and this PR closed them:
+#
+#   src/Harbor.Logging          Microsoft.Extensions.Logging.Abstractions
+#                                The only source file binds Serilog.ILogger
+#                                and nothing else. The assembly stays in the
+#                                closure through Serilog.Extensions.Hosting
+#                                10.0.0, which depends on it directly, and
+#                                the transitive pin resolves it to the same
+#                                10.0.13 - so no resolved version changes.
+#
+#   src/Harbor.CodeGen          ../Harbor.Abstractions.Contracts
+#                                Every generator names the attributes it
+#                                emits as STRINGS and looks them up in the
+#                                CONSUMER's compilation; no type of the
+#                                contracts assembly is bound here. Every
+#                                consumer carries Harbor.Abstractions, which
+#                                references the contracts, so the attribute
+#                                types stay resolvable everywhere.
+#
+# - THE ROWS --------------------------------------------------------------
+#
+# The rows below are the measured state of the tree, grouped by the shape of
+# the reference they are about. The shapes are not interchangeable: the tool
+# reports one thing - "the compiler binds no type in this assembly" - and
+# that one thing means five different things depending on WHY the reference
+# is there.
+#
+### FAMILY 1 - THE META-PACKAGE'S OWN CONTENT (6 rows)
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj :: ../Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so this reference IS its content: the six sub-projects are what the published package declares, and the compiler binds none of them because the package compiles no code. | @refusedguy
+
+### FAMILY 2 - A CONSUMER OF THE META-PACKAGE (8 rows)
+RT0002 | apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj :: ../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj :: ../Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj :: ../Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj :: ../Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj :: ../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj :: ../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+RT0002 | tests/Harbor.Ui.Framework.Tests/Harbor.Ui.Framework.Tests.csproj :: ../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | Harbor.Ui.Framework is a meta-package with no sources of its own, so the compiler binds nothing in it; the reference exists to carry its six sub-projects into this project's closure, and that is the whole content of the package. | @refusedguy
+
+### FAMILY 3 - A SOURCE-GENERATOR EDGE (6 rows)
+RT0002 | src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj :: ../Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+RT0002 | src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj :: ../Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+RT0002 | src/Harbor.Tui.AnsiPlain/Harbor.Tui.AnsiPlain.csproj :: ../Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+RT0002 | src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj :: ../Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+RT0002 | tests/Harbor.Terminal.Abstractions.Tests/Harbor.Terminal.Abstractions.Tests.csproj :: ../../src/Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+RT0002 | tests/Harbor.Tui.CellForge.Tests/Harbor.Tui.CellForge.Tests.csproj :: ../../src/Harbor.CodeGen/Harbor.CodeGen.csproj | This edge exists to RUN the source generator in this project's compilation, not to bind a type: the generator's own types are never named here, so the analyzer assembly is compile-time unused by construction. | @refusedguy
+
+### FAMILY 4 - THE ARCHITECTURE SUITE READS THE ASSEMBLY BY REFLECTION (13 rows)
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Ipc.InProcess/Harbor.Ipc.InProcess.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Logging/Harbor.Logging.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Lsp/Harbor.Lsp.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Telemetry.Otlp/Harbor.Telemetry.Otlp.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Terminal.Pty/Harbor.Terminal.Pty.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Tui.CellForge.Prompts/Harbor.Tui.CellForge.Prompts.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+RT0002 | tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj :: ../../src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj | The architecture suite loads this assembly to police the layer rules, by name and through reflection; the compiler never binds a type from it, which is exactly why the tool cannot see that the reference is load-bearing. | @refusedguy
+
+### FAMILY 5 - AN EDGE THAT CARRIES A TRANSITIVE, OR A REDUNDANT EDGE (24 rows)
+RT0002 | apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj :: ../../src/Harbor.Providers.Ollama/Harbor.Providers.Ollama.csproj | This direct edge is redundant: Harbor.Providers.Ollama is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj :: ../../src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj | This direct edge is redundant: Harbor.Storage.Jsonl is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj :: ../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj | This direct edge is redundant: Harbor.Storage.Memory is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Ipc.InProcess/Harbor.Ipc.InProcess.csproj | This direct edge is redundant: Harbor.Ipc.InProcess is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Ipc.Server/Harbor.Ipc.Server.csproj | This direct edge is redundant: Harbor.Ipc.Server is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj | This direct edge is redundant: Harbor.Plugins.Compilation is already reachable from this project through Harbor.Plugins.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj | This direct edge is redundant: Harbor.Plugins.Instantiation is already reachable from this project through Harbor.Plugins.Registration, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj | This direct edge is redundant: Harbor.Plugins.Registration is already reachable from this project through Harbor.Plugins.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Providers.Anthropic/Harbor.Providers.Anthropic.csproj | This direct edge is redundant: Harbor.Providers.Anthropic is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Providers.Ollama/Harbor.Providers.Ollama.csproj | This direct edge is redundant: Harbor.Providers.Ollama is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Providers.OpenAI/Harbor.Providers.OpenAI.csproj | This direct edge is redundant: Harbor.Providers.OpenAI is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj | This direct edge is redundant: Harbor.Storage.Jsonl is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj | This direct edge is redundant: Harbor.Storage.Memory is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: ../../src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj | This direct edge is redundant: Harbor.Storage.Sqlite is already reachable from this project through Harbor.Hosting, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj :: ../Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj | This edge binds no type of its own, but it is what carries Harbor.Terminal.Abstractions into this project's compile and output closure; no other reference of this project reaches it, so removing it would take the terminal abstractions out of the desktop shell's closure. | @refusedguy
+RT0002 | src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj :: ../Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj | This direct edge is redundant: Harbor.Plugins.Instantiation is already reachable from this project through Harbor.Plugins.Registration, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj :: ../Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj | This edge binds no type of its own, but it is what carries the plugin storage assembly into this project's closure; no other reference of this project reaches it, so removing it would take the storage assembly out of the plugin host's closure. | @refusedguy
+RT0002 | src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj :: ../Harbor.Abstractions/Harbor.Abstractions.csproj | The only type this project binds from the family is AgentEvent, and AgentEvent lives in Harbor.Abstractions.Contracts, which this reference is what brings into the closure; the facade assembly itself binds nothing. | @refusedguy
+RT0002 | src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj :: ../Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj | This direct edge is redundant: Harbor.Desktop.Animations is already reachable from this project through Harbor.Ui.Framework.Rendering, and no type of it is named here, so the edge buys nothing the other path does not already buy. | @refusedguy
+RT0002 | src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj :: ../Harbor.Abstractions/Harbor.Abstractions.csproj | The types this project binds from the family live in Harbor.Abstractions.Contracts, which this reference is what brings into the closure; the facade assembly itself binds nothing. | @refusedguy
+RT0002 | tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj :: ../../apps/Harbor.App.Cli/Harbor.App.Cli.csproj | The E2E driver launches the built CLI, so the reference is what puts the CLI's output where the driver runs it; no type of it is named at compile time and the tool cannot see a file on disk. | @refusedguy
+RT0002 | tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj :: ../../src/Harbor.Application/Harbor.Application.csproj | The framework's own sources name no type of the application assembly; the reference is what keeps it in the E2E driver's closure, which is the assembly the driver exercises at run time. | @refusedguy
+RT0002 | tests/Harbor.TestKit.Tests/Harbor.TestKit.Tests.csproj :: ../Harbor.TestKit/Harbor.TestKit.csproj | The #1834 TestKit split left the reference behind: the project exercises Support and Tui directly and names none of Harbor.TestKit's types. tools/check-test-projects.py already carries this one as a TEST-REFERENCE-UNUSED row, and PR #1946 is the change that closes it. | @refusedguy
+RT0002 | tests/Harbor.TestKit/Harbor.TestKit.csproj :: ../Harbor.TestKit.Support/Harbor.TestKit.Support.csproj | The csproj says why it is there: referencing the sibling is how a consumer of this project reaches the Support types transitively, in the same namespace, without adding a product assembly to anybody. | @refusedguy
+
+### FAMILY 6 - A PACKAGE REFERENCE THAT BINDS NOTHING (1 rows)
+RT0003 | apps/Harbor.App.Cli/Harbor.App.Cli.csproj :: Excubo.Analyzers.Annotations | The CLI declares no [Exposes] attribute, so the annotation assembly binds nothing here; the package is declared for the whole apps/ tree by apps/Directory.Build.props, where Harbor.App.Avalonia does use it, so this is a gap in the CLI's [Exposes] coverage rather than a dead reference. | @refusedguy

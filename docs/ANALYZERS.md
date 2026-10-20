@@ -15,6 +15,12 @@ Harbor runs three layers of static analysis + DI validation:
    `dotnet-arch` tool and its stale `dotnetarch.json` were removed in ROP-D; see
    §3).
 
+A fourth tool, **ReferenceTrimmer**, is not an analyzer in the sense above:
+it runs in its own CI job, it reports on the project files rather than on the
+source, and it is gated by a baseline rather than by a severity table. It is
+catalogued in [§4](#4-reference-trimmer-the-unused-reference-gate) and
+measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
+
 ---
 
 ## 1. Roslyn analyzers
@@ -807,6 +813,42 @@ real csproj link items in both directions. It runs
 in the `test` job's `core` shard and again inside the Release build itself
 (`HarborArchitectureGate`) — no extra tool install, single source of truth. See
 docs/ARCHITECTURE_LAYERS.md §5 for the rule catalogue.
+
+---
+
+## 4. ReferenceTrimmer — the unused-reference gate
+
+**ReferenceTrimmer 3.5.13** (MIT) is a build-time analyzer that asks Roslyn
+which assemblies the compiled code actually uses, and reports the declared
+references that none of them reach:
+
+| Rule | Meaning |
+|------|---------|
+| `RT0000` | documentation generation is off, so the answer is less accurate |
+| `RT0001` | a bare `<Reference>` the compiler never uses |
+| `RT0002` | a `<ProjectReference>` the compiler never uses |
+| `RT0003` | a `<PackageReference>` the compiler never uses |
+
+It is **off by default and on in exactly one place**: the `reference-trimmer`
+job in `.github/workflows/ci.yml` sets the `HarborReferenceTrimmer` property,
+which is what makes `Directory.Build.props` add the `<PackageReference>`. The
+ordinary build is untouched.
+
+It is a separate job rather than a build step for three reasons: the analysis
+costs a semantic pass over every compilation; its findings are warnings, and
+this repository sets `TreatWarningsAsErrors=true`, so the package would break
+the build the day it was added; and the tool sees source only, so it cannot
+see reflection, DI registration by convention or a plugin loaded by name.
+
+The gate is [`tools/check-reference-trimmer.py`](../tools/check-reference-trimmer.py)
+and its ratchet is
+[`tools/reference-trimmer-baseline.txt`](../tools/reference-trimmer-baseline.txt):
+a finding the baseline does not carry is red, and a row the tree no longer
+produces is red too, so the baseline can only shrink.
+
+The measured run, the 60 findings it produced, the six families of false
+positive and the two dead references it closed are in
+[docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 
 ---
 
