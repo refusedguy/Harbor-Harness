@@ -156,6 +156,15 @@ jobs:
               # the tree it ships in, and land unvalidated — issue #618's
               # defect with the same payload again (#1565 batch-4 hit this).
               - 'tools/Harbor.Evals/**'
+            # #1853. The unused-reference gate (#1853) and its baseline. The
+            # same #618 argument as the lines above: the ordinary way to
+            # answer a red unused-reference job is to edit the BASELINE, and
+            # if the baseline were not in this filter then the edit that
+            # silences the gate would also be the edit that stops the gate
+            # from running — unvalidated. Editing the tool has the same
+            # problem.
+              - 'tools/check-reference-trimmer.py'
+              - 'tools/reference-trimmer-baseline.txt'
             # #1882. The package set of the test and sample projects can only
             # change through one of these: a project's own .csproj, the props
             # that inject a PackageReference into every project, the version
@@ -306,6 +315,108 @@ jobs:
         run: python3 tools/check-test-packages.py --self-test
       - name: Check the resolved package set of every test and sample project
         run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
+
+  # #1853. Unused-reference detection over the whole solution.
+  #
+  # ReferenceTrimmer 3.5.13 (MIT) is a build-time analyzer: it asks Roslyn
+  # which assemblies the compiled code actually uses and reports the declared
+  # references that none of them reach (RT0001 bare reference, RT0002 project
+  # reference, RT0003 package reference).
+  #
+  # It is a separate job and not a build step, for three reasons.
+  #
+  #   COST. GetUsedAssemblyReferences is a real semantic analysis of every
+  #   compilation. Running it on every PR would tax every PR for a signal
+  #   that changes only when a dependency changes.
+  #
+  #   BLAST RADIUS. The findings are warnings, and this repository sets
+  #   TreatWarningsAsErrors=true, so the package would break the build the
+  #   day it was added. The job turns warnings-as-errors off FOR ITSELF and
+  #   compares the findings with a baseline instead. The property is a global
+  #   property, so it overrides the props files that set it.
+  #
+  #   SCOPE. The tool sees SOURCE. It cannot see reflection, DI registration
+  #   by convention, or a plugin loaded by name. This repository forbids
+  #   dynamic code outside src/Harbor.Plugins.* (#626), so the blind spot is
+  #   small — but a candidate still needs a human read before anything is
+  #   removed, and the baseline is where that read is recorded.
+  #
+  # Two properties make the run measure the whole tree rather than a part of
+  # it:
+  #
+  #   GenerateDocumentationFile=true — tests/Directory.Build.props turns the
+  #   doc file off, and the tool says itself (RT0000) that without one its
+  #   "used references" answer is less accurate. A weaker instrument that is
+  #   allowed to under-report is not a measurement, so the job turns the doc
+  #   file on everywhere; the gate treats an RT0000 as a failure.
+  #
+  #   HarborArchGate=false — the architecture suite that runs inside the
+  #   Release build is the `core` test shard's job on the PR path, and running
+  #   it here as well would compile the same assembly twice for one answer.
+  #
+  # The raw log is uploaded as an artifact so that a reader can check the
+  # tool's answer without re-running it.
+  reference-trimmer:
+    name: unused references (ReferenceTrimmer)
+    needs: changes
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
+      - uses: actions/checkout@v7
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+      # The restore has to run with the property too: the package has to be in
+      # the assets file before the compiler can load the analyzer, and a
+      # restore without the property would write an assets file the build
+      # then does not agree with.
+      - name: Restore the solution with the ReferenceTrimmer analyzer
+        run: dotnet restore Harbor.slnx -p:HarborReferenceTrimmer=true
+      - name: Build the solution and collect the analyzer's findings
+        run: |
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:HarborReferenceTrimmer=true \
+            -p:TreatWarningsAsErrors=false \
+            -p:GenerateDocumentationFile=true \
+            -p:HarborArchGate=false \
+            -p:MaxCpuCount=0 \
+            -flp:"logfile=rt-warnings.log;warningsonly" \
+            -flp2:"logfile=rt-errors.log;errorsonly"
+      # The coverage list is the answer to "how many projects did the analyzer
+      # actually run in". The analyzer writes its declared-reference table
+      # into each project's intermediate directory, so the table's own file
+      # names are the evidence — and the gate checks the count against a
+      # floor, because a scan that silently narrowed must go red, not quiet.
+      - name: Coverage — the projects the analyzer actually ran in
+        run: |
+          find . -name '_ReferenceTrimmer_DeclaredReferences.tsv' \
+                   -not -path './.git/*' -not -path './external/*' \
+            | sed 's|/obj/.*||' | sed 's|^\./||' | sort -u > rt-coverage.txt
+          echo "the analyzer ran in $(wc -l < rt-coverage.txt) project(s)"
+      - name: Upload the findings artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reference-trimmer-findings
+          path: |
+            rt-warnings.log
+            rt-coverage.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: The gate is red when the tool is not allowed to answer
+        if: always()
+        run: python3 tools/check-reference-trimmer.py --self-test
+      - name: Gate — no unused reference outside the baseline
+        if: always()
+        run: python3 tools/check-reference-trimmer.py --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
 
   build:
     needs: changes
