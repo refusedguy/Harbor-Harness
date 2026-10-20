@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Gate the build-output slices against the test shards (issue #1803's CI lane).
+
+Stdlib only — no pip, no network, no dotnet build. Wired into the `build`
+job of .github/workflows/ci.yml, and it guards ONE thing:
+
+    every project the `test` job runs must be carried by the build-output
+    artifact that job downloads.
+
+WHY THIS FILE EXISTS
+
+  The build job used to upload ONE artifact with the whole solution's
+  binaries in it, and every consumer downloaded the whole thing. That is
+  448 MiB handed to six jobs to run one shard each. The build job now
+  uploads one artifact per consumer, and each shard's artifact carries
+  only that shard's projects' output directories.
+
+  That turns one list into two. The shard's project list lives in the
+  `test` job's matrix; the slice's project list lives in the build job's
+  upload step. They are the same list, written twice, 200 lines apart in
+  one file, and NOTHING connected them: the first version of the split
+  shipped with a shard list and a slice list that had drifted by one
+  project, and the shard failed with
+
+      Missing tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/
+      Harbor.TestKit.Generators.Tests.dll — did build artifact download fail?
+
+  which points at the download, not at the list that caused it. A checker
+  that stops checking is still green on every PR, so this one is the
+  guard: it fails the build when the two lists disagree, and it fails
+  LOUDLY (rather than silently passing) when it cannot read the file it
+  is supposed to read.
+
+WHAT IT CHECKS
+
+  1. Every project in a shard's `projects:` list appears in that shard's
+     slice (the upload step named `solution-binaries-<shard>`).
+  2. The combined artifact `solution-binaries` — the one the `coverage`
+     job downloads — carries every project the coverage job runs.
+  3. The slices that run the CLI carry the CLI's own output directory
+     (`apps/Harbor.App.Cli/bin/Release/net10.0/`). Two test helpers
+     start the CLI from THERE, not from the test project's copy of the
+     assembly: tests/Harbor.E2E.Framework/CliDriver.cs (the e2e shard)
+     and tests/Harbor.Tui.CellForge.PtyTests/CellForgePtyScenarioBase.cs
+     (the ui shard).
+
+HOW IT READS THE FILE
+
+  A regex over the workflow text, not a YAML parser: PyYAML is not on the
+  runner image, and the shapes it looks for are fixed by this file's own
+  formatting (`- shard: <name>` … `projects: >-` … one project per line,
+  and `name: solution-binaries…` … `path: |` … one glob per line).
+
+  If it cannot find what it expects, it says so and exits non-zero. A
+  checker that quietly checks nothing is the failure mode this file
+  exists to prevent.
+"""
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+WORKFLOW = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci.yml"
+
+# The slices that start the CLI, and therefore need the CLI's output
+# directory. Keep in sync with the two helpers named in the docstring.
+CLI_CONSUMING_SLICES = ("solution-binaries-ui", "solution-binaries-e2e")
+CLI_OUTPUT_DIR = "apps/Harbor.App.Cli/bin/Release/net10.0"
+
+
+def read_shard_lists(text: str) -> dict[str, list[str]]:
+    """shard name -> the projects the `test` job's matrix runs for it."""
+    shards: dict[str, list[str]] = {}
+    for match in re.finditer(r"- shard: (\S+)\n(.*?)(?=\n\s+- shard: |\n\s+steps:)", text, re.S):
+        shard, block = match.group(1), match.group(2)
+        lines = block.splitlines()
+        start = next((i for i, ln in enumerate(lines) if ln.strip().startswith("projects:")), None)
+        if start is None:
+            continue
+        projects: list[str] = []
+        for line in lines[start + 1:]:
+            if line.strip() and line.startswith(" " * 10):
+                projects.append(line.strip())
+            elif projects:
+                break
+        if projects:
+            shards[shard] = projects
+    return shards
+
+
+def read_slices(text: str) -> dict[str, dict[str, set[str]]]:
+    """artifact name -> {output directory: the kinds of file its globs carry}."""
+    slices: dict[str, dict[str, set[str]]] = {}
+    pattern = re.compile(
+        r"name: (solution-binaries(?:-[a-z0-9-]+)?)\n\s+path: \|\n((?:\s{12,}.*\n)+)")
+    for match in pattern.finditer(text):
+        artifact, body = match.group(1), match.group(2)
+        carried: dict[str, set[str]] = {}
+        for line in body.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("!"):
+                continue
+            glob = re.match(r"((?:tests|apps|src)/.+?/bin/Release/net10\.0)/(.*)$", line)
+            if not glob:
+                continue
+            base, tail = glob.group(1), glob.group(2)
+            if tail == "*.*":
+                kind = "files"
+            elif tail == "runtimes/linux-x64/native/*":
+                kind = "native"
+            elif tail == "*/Harbor.*.resources.dll":
+                kind = "satellite"
+            else:
+                kind = tail
+            carried.setdefault(base, set()).add(kind)
+        slices[artifact] = carried
+    return slices
+
+
+# The three kinds of file a project's slice must carry: the project's own
+# assemblies and JSON, the linux-x64 native assets, and Harbor's own
+# satellite assembly.
+REQUIRED_KINDS = {"files", "native", "satellite"}
+
+
+def read_coverage_projects(text: str) -> list[str]:
+    """The projects the `coverage` job runs (its own hard-coded loop)."""
+    match = re.search(r"for p in \\\n(.*?); do", text, re.S)
+    if not match:
+        return []
+    return [line.strip().rstrip("\\").strip()
+            for line in match.group(1).splitlines()
+            if line.strip().startswith("Harbor.")]
+
+
+def main() -> int:
+    if not WORKFLOW.is_file():
+        print(f"::error::workflow not found: {WORKFLOW}")
+        return 1
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    shards = read_shard_lists(text)
+    slices = read_slices(text)
+    coverage = read_coverage_projects(text)
+
+    if not shards:
+        print("::error::no shard lists found in the `test` job's matrix — "
+              "this checker cannot see what it guards")
+        return 1
+    if not slices:
+        print("::error::no build-output slices found in the `build` job — "
+              "this checker cannot see what it guards")
+        return 1
+
+    problems: list[str] = []
+
+    for shard, projects in sorted(shards.items()):
+        artifact = f"solution-binaries-{shard}"
+        carried = slices.get(artifact)
+        if carried is None:
+            problems.append(f"the `{shard}` shard has no `{artifact}` upload step")
+            continue
+        for project in projects:
+            base = f"tests/{project}/bin/Release/net10.0"
+            if base not in carried:
+                problems.append(
+                    f"`{project}` is in the `{shard}` shard's project list but not in the "
+                    f"`{artifact}` slice — the shard would fail with 'Missing …dll'")
+            else:
+                missing_kinds = REQUIRED_KINDS - carried[base]
+                if missing_kinds:
+                    problems.append(
+                        f"the `{artifact}` slice does not carry {sorted(missing_kinds)} for "
+                        f"`{project}` — the shard would fail with 'Missing …dll'")
+
+    combined = slices.get("solution-binaries")
+    if combined is None:
+        problems.append("the combined `solution-binaries` upload step is missing")
+    else:
+        for project in coverage:
+            base = f"tests/{project}/bin/Release/net10.0"
+            if base not in combined:
+                problems.append(
+                    f"`{project}` is run by the `coverage` job but is not in the combined "
+                    f"`solution-binaries` slice — coverage would report it as missing")
+
+    for artifact in CLI_CONSUMING_SLICES:
+        carried = slices.get(artifact)
+        if carried is None:
+            problems.append(f"the `{artifact}` upload step is missing")
+        elif CLI_OUTPUT_DIR not in carried:
+            problems.append(
+                f"the `{artifact}` slice does not carry `{CLI_OUTPUT_DIR}` — the CLI is "
+                f"started from there by the e2e and PTY helpers")
+        else:
+            missing_kinds = REQUIRED_KINDS - carried[CLI_OUTPUT_DIR]
+            if missing_kinds:
+                problems.append(
+                    f"the `{artifact}` slice does not carry {sorted(missing_kinds)} for "
+                    f"`{CLI_OUTPUT_DIR}` — the CLI would not start")
+
+    if problems:
+        print("::error::the build-output slices and the test shards disagree:")
+        for problem in problems:
+            print(f"  - {problem}")
+        return 1
+
+    print(f"ok: {len(shards)} shards, {len(slices)} slices, "
+          f"{len(coverage)} coverage projects — every one of them carried")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
