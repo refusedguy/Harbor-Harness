@@ -110,13 +110,13 @@ public sealed class SqliteAppendCostGate
     ///     Allocation budget for ONE appended message, in bytes. Machine-
     ///     independent, so it is compared as measured, with no band.
     /// </summary>
-    private const long MaxBytesPerMessage = 32 * 1024;
+    private const long MaxBytesPerMessage = 16 * 1024;
 
     /// <summary>
     ///     Time budget for ONE appended message, in probe units (see
     ///     `PerfGate`). Machine-scaled and soft.
     /// </summary>
-    private const double MaxProbeUnitsPerMessage = 8_000.0;
+    private const double MaxProbeUnitsPerMessage = 1_500.0;
 
     private static string NewTempDbPath() =>
         Path.Combine(Path.GetTempPath(), $"harbor-sqlite-{Guid.NewGuid():N}.db");

@@ -62,6 +62,15 @@ namespace Harbor.Storage.Jsonl.Tests;
 // is in the ci.yml `test-os` matrix (windows-latest, macos-latest), so without
 // the gate a Linux number is asserted on two other runtimes. Same shape as
 // AgentLoopAllocationTests and the other alloc tripwires.
+//
+// The REWRITE gate does NOT use the process-wide seam, and the reason is the
+// measurement itself (#1747): the streaming copy is SYNCHRONOUS, so the
+// per-thread counter measures it exactly — and a per-thread counter cannot be
+// polluted by whatever else the process does, which is exactly what the
+// process-wide counter over the store's awaiting UpdateAsync was. The same
+// tree measured 69 KiB on one CI run and 375 MB on the next, in a 215 ms
+// window; the rewrite is O(1) in memory by construction, so that swing is the
+// WINDOW's noise, not the code's cost.
 [NotInParallel]
 public class JsonlUnboundedAllocationTests
 {
@@ -706,15 +715,17 @@ public class JsonlUnboundedAllocationTests
         var (store, sessionId) = await SeedAsync(1);
         try
         {
+            string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
+
             // Baseline FIRST, on the same session while it is still small: the
-            // fixed cost of a rename (temp file, two FileStreams, the block) with
-            // none of the bulk involved.
-            long smallBaseline = await MeasureHeaderRewriteAsync(store, sessionId, "baseline");
+            // fixed cost of a rewrite (temp file, two FileStreams, the block)
+            // with none of the bulk involved.
+            long smallBaseline = MeasureHeaderRewrite(path);
 
             const int payloadBytes = 24 * 1024 * 1024;
             await AppendFatMessageAsync(store, sessionId, "fat", payloadBytes);
 
-            long allocated = await MeasureHeaderRewriteAsync(store, sessionId, "renamed by #460");
+            long allocated = MeasureHeaderRewrite(path);
 
             Console.WriteLine(
                 $"jsonl-460: header rewrite = {smallBaseline / 1024} KiB on a small session, " +
@@ -756,6 +767,17 @@ public class JsonlUnboundedAllocationTests
                     + " KiB baseline. A rewrite that copies the file (the pre-#460 shape) costs 1024 KiB "
                     + "per MiB and fails this by an order of magnitude.");
 
+            // And the STORE's own header edit still works on the file the
+            // streaming rewrite left behind — the store path (the semaphore, the
+            // fresh header, the rewrite) is exercised here, unmeasured: the
+            // MEMORY claim is the streaming copy's, and it is measured above
+            // through the synchronous seam.
+            var session = await store.GetAsync(sessionId);
+            await Assert.That(session.IsSuccess).IsTrue();
+            var renamed = session.Value with { Title = "renamed by #460" };
+            var renamedResult = await store.UpdateAsync(renamed);
+            await Assert.That(renamedResult.IsSuccess).IsTrue();
+
             // And every record survived the rewrite — the count first, because a
             // byte-piping bug shows up as a missing record, not as a wrong one.
             var reread = await store.GetMessagesAsync(sessionId);
@@ -771,38 +793,79 @@ public class JsonlUnboundedAllocationTests
     }
 
     /// <summary>
-    ///     What one header rename costs before any of the session's bulk is
+    ///     What one header rewrite costs before any of the session's bulk is
     ///     involved: the fixed overhead of the temp file, the two FileStreams
     ///     and the block. The big-session measurement is compared against this,
     ///     so the assertion is about the file's contribution and nothing else.
     /// </summary>
-    private static async Task<long> MeasureHeaderRewriteAsync(
-        JsonlSessionStore store, string sessionId, string title)
+    /// <remarks>
+    ///     <para>
+    ///         THE PROBE IS THE PER-THREAD COUNTER OVER A SYNCHRONOUS WINDOW,
+    ///         and that is the whole point of this rewrite of the measurement
+    ///         (#1747).
+    ///     </para>
+    ///     <para>
+    ///         The streaming copy — <c>SessionFileIO.RewriteRecordsAtomic</c>,
+    ///         which never awaits — is the thing whose MEMORY this gate claims:
+    ///         the header plan replaces the first record and copies the rest
+    ///         through byte for byte, so no record of the session is ever
+    ///         assembled. The store's <c>UpdateAsync</c> wraps that copy in a
+    ///         semaphore and a header serialization, both trivially small, and
+    ///         the test above still runs it (unmeasured) to prove the file
+    ///         stays valid and every record survives.
+    ///     </para>
+    ///     <para>
+    ///         Measuring it through the store used to mean a PROCESS-WIDE
+    ///         counter over an <c>await</c>ing call — and that window is not a
+    ///         measurement of the rewrite at all. The same tree measured
+    ///         <b>69 KiB</b> on one CI run and <b>375 MB</b> on the next, in a
+    ///         window that took 215 ms: the rewrite is O(1) in memory by
+    ///         construction, so a number that swings by three orders of
+    ///         magnitude is the WINDOW's noise (whatever else the process
+    ///         allocated while it was open), not the code's cost. A per-thread
+    ///         counter over a synchronous window cannot be polluted that way,
+    ///         and it is EXACT: the copy's allocations all happen on the
+    ///         calling thread.
+    ///     </para>
+    /// </remarks>
+    private static long MeasureHeaderRewrite(string path)
     {
-        var session = await store.GetAsync(sessionId);
-        if (!session.IsSuccess)
-        {
-            throw new InvalidOperationException($"session lookup failed: {session.Error}");
-        }
-
-        var renamed = session.Value with { Title = title };
+        // The replacement record is the file's own current header: what the
+        // rewrite does with the REST of the file is the claim, and the header's
+        // CONTENT is not.
+        byte[] header = ReadFirstRecord(path);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        // Process-wide delta via the shared seam (#741), valid because the class
-        // is [NotInParallel] and UpdateAsync is async — see the read window for
-        // why neither cheaper counter can measure an async operation here.
-        var (updated, allocated) = await AllocationProbe.MeasureProcessAsync(
-            () => store.UpdateAsync(renamed));
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        bool wrote = SessionFileIO.RewriteRecordsAtomic(path, new HeaderRewritePlan(header));
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        if (!updated.IsSuccess)
+        if (!wrote)
         {
-            throw new InvalidOperationException($"header rewrite failed: {updated.Error}");
+            throw new InvalidOperationException("header rewrite found no record to replace");
         }
 
         return allocated;
+    }
+
+    /// <summary>
+    ///     The file's first record, without its LF. A helper because the
+    ///     rewrite's replacement record must not carry the terminator: the
+    ///     writer adds it.
+    /// </summary>
+    private static byte[] ReadFirstRecord(string path)
+    {
+        using var reader = new StreamReader(path);
+        string? first = reader.ReadLine();
+        if (first is null)
+        {
+            throw new InvalidOperationException($"session file has no first record: {path}");
+        }
+
+        return Encoding.UTF8.GetBytes(first);
     }
 
     [Test]

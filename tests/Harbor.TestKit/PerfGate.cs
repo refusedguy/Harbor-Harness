@@ -135,6 +135,17 @@ public sealed record PerfGateOptions
     ///     whatever the leg's length.
     /// </summary>
     public double MinMeasurableLegMs { get; init; } = 5.0;
+
+    /// <summary>
+    ///     Whether the allocation branch must have measured a POSITIVE number
+    ///     of bytes per unit. True by default: a byte count of zero satisfies
+    ///     every ceiling, so a mis-wired probe would make the gate pass on any
+    ///     tree (the #591 shape). Set it to <c>false</c> for a workload that
+    ///     legitimately allocates nothing per unit — an allocation-free fast
+    ///     path — where zero is the correct answer and not a missing
+    ///     measurement.
+    /// </summary>
+    public bool RequirePositiveBytes { get; init; } = true;
 }
 
 /// <summary>
@@ -171,6 +182,13 @@ public sealed record PerfGateResult
     public required long MaxBytesPerUnit { get; init; }
     public required double MaxProbeUnitsPerUnit { get; init; }
 
+    /// <summary>
+    ///     Whether the allocation branch must have measured a POSITIVE number
+    ///     of bytes per unit (see
+    ///     <see cref="PerfGateOptions.RequirePositiveBytes" />).
+    /// </summary>
+    public required bool RequirePositiveBytes { get; init; }
+
     /// <summary>Whether the allocation branch is within its budget.</summary>
     public required bool BytesWithinBudget { get; init; }
 
@@ -202,8 +220,15 @@ public sealed record PerfGateResult
                 ? (TimeWithinBudget ? ", time PASS" : ", time FAIL")
                 : ", time REPORTED ONLY";
 
+            string bytesBudget = MaxBytesPerUnit == long.MaxValue
+                ? "no byte budget"
+                : $"≤ {MaxBytesPerUnit} B/unit";
+            string timeBudget = double.IsInfinity(MaxProbeUnitsPerUnit)
+                ? "no time budget"
+                : $"≤ {MaxProbeUnitsPerUnit:F1} probe units/unit";
+
             return $"[perf-gate] {Label}: measured {Units} unit(s) over {Rounds} round(s) — "
-                + $"{time}, {bytes} | budget: ≤ {MaxBytesPerUnit} B/unit, ≤ {MaxProbeUnitsPerUnit:F1} probe units/unit "
+                + $"{time}, {bytes} | budget: {bytesBudget}, {timeBudget} "
                 + $"| probe {ProbeMsPerUnit:F6} ms/unit, spread {RelativeSpread:F2}x, "
                 + $"{(Trusted ? "trusted" : "NOT trusted")} | verdict: {verdict}";
         }
@@ -231,10 +256,23 @@ public sealed record PerfGateResult
 
         if (MaxBytesPerUnit != long.MaxValue)
         {
-            await Assert.That(BytesPerUnit).IsGreaterThan(0.0)
-                .Because(
-                    $"the allocation baseline must be a real measurement ({topic}, {Label}): "
-                    + $"{BytesPerUnit:F1} B per unit. A zero denominator makes the byte budget meaningless.");
+            if (RequirePositiveBytes)
+            {
+                await Assert.That(BytesPerUnit).IsGreaterThan(0.0)
+                    .Because(
+                        $"the allocation baseline must be a real measurement ({topic}, {Label}): "
+                        + $"{BytesPerUnit:F1} B per unit. A zero denominator makes the byte budget meaningless.");
+            }
+            else
+            {
+                // A workload that legitimately allocates nothing per unit: zero
+                // is the answer, not a missing measurement. The floor is still
+                // there — a negative byte count describes nothing (#741).
+                await Assert.That(BytesPerUnit).IsGreaterThanOrEqualTo(0.0)
+                    .Because(
+                        $"a negative allocation measurement describes nothing ({topic}, {Label}): "
+                        + $"{BytesPerUnit:F1} B per unit.");
+            }
 
             await Assert.That(BytesPerUnit).IsLessThanOrEqualTo((double)MaxBytesPerUnit)
                 .Because(
@@ -374,6 +412,7 @@ public static class PerfGate
             Trusted = trusted,
             MaxBytesPerUnit = opts.MaxBytesPerUnit,
             MaxProbeUnitsPerUnit = opts.MaxProbeUnitsPerUnit,
+            RequirePositiveBytes = opts.RequirePositiveBytes,
             BytesWithinBudget = bytesWithin,
             TimeWithinBudget = timeWithin,
             TimeAsserted = timeBudgeted && trusted,

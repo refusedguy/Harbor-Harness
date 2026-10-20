@@ -1026,13 +1026,14 @@ by whole multiples, and its base is not a fixed amount of work.
 
 | Test | Claim | Gate | Measured |
 |---|---|---|---|
-| `AppendOnly_CostPerChange_StaysWithinBudget` | allocation per append+`Project` pair at 1024 transcript lines — the size where a per-change cost that grows with the transcript shows up | ≤ 192 KiB per pair (machine-independent, HARD) | ⏳ first run pending (#1747) |
-| `AppendOnly_CostPerChange_StaysWithinBudget` | time per append+`Project` pair, in **probe units** — the cost of one pair divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 4000 probe units per pair (machine-scaled, SOFT — stands down when the measurement is not trusted) | ⏳ first run pending (#1747) |
+| `AppendOnly_CostPerChange_StaysWithinBudget` | allocation per append+`Project` pair at 1024 transcript lines — the size where a per-change cost that grows with the transcript shows up | ≤ 128 KiB per pair (machine-independent, HARD) | **98 547 B** per pair (run 39372950798, PR #1807) — the same number the pre-#1747 ratio gate measured (12 318.3 KiB over 128 pairs) |
+| `AppendOnly_CostPerChange_StaysWithinBudget` | time per append+`Project` pair, in **probe units** — the cost of one pair divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 1200 probe units per pair (machine-scaled, SOFT — stands down when the measurement is not trusted) | **297** probe units per pair — 0.118 ms/unit against a probe that costs 0.000398 ms/unit (run 39372950798) |
 
-The reference point for the byte budget is the pre-#1747 measurement on the
-same tree: 12 318.3 KiB over 128 pairs at 1024 lines ≈ 96 KiB per pair, so the
-budget leaves ~2× headroom, and a per-append full-map rebuild (the regression
-this gate exists for) lands several times above it.
+The byte budget is **pinned from the CI measurement** — 98 547 B per pair at
+1024 transcript lines, which is the same number the pre-#1747 ratio gate
+measured (12 318.3 KiB over 128 pairs) — so the budget leaves ~1.33× headroom,
+and a per-append full-map rebuild (the regression this gate exists for) lands
+several times above it.
 
 > The `[perf-gate] project-history-cost: measured 128 unit(s) …` report line
 > prints into the `test (ui)` job log on every run — cite THAT run's values
@@ -1057,8 +1058,8 @@ and on the noise": **it reddened on a loaded runner at "ratio 3.102 vs limit
 
 | Test | Claim | Gate | Measured |
 |---|---|---|---|
-| `Append_CostPerMessage_IsWithinBudget` | allocation per appended message, over a FIXED 512 appended messages into a session that already holds 512 rows — so a cost that grows with the session's size lands in the measurement | ≤ 32 KiB per message (machine-independent, HARD) | ⏳ first run pending (#1747) |
-| `Append_CostPerMessage_IsWithinBudget` | time per appended message, in **probe units** — the cost of one append divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 8000 probe units per message (machine-scaled, SOFT) | ⏳ first run pending (#1747) |
+| `Append_CostPerMessage_IsWithinBudget` | allocation per appended message, over a FIXED 512 appended messages into a session that already holds 512 rows — so a cost that grows with the session's size lands in the measurement | ≤ 16 KiB per message (machine-independent, HARD) | **7 816 B** per message (run 39372950798, PR #1807) |
+| `Append_CostPerMessage_IsWithinBudget` | time per appended message, in **probe units** — the cost of one append divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ≤ 1500 probe units per message (machine-scaled, SOFT) | **444** probe units per message — 0.169 ms/unit against a probe that costs 0.000380 ms/unit (run 39372950798) |
 
 The byte budget's reference point is `docs/BENCHMARKS.md`'s own row — "Sqlite
 WAL Append ×10 | 2.2–2.6 ms | 155 KB", i.e. ~15.5 KB per append — with 2×
@@ -1101,7 +1102,7 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Update_HeaderEditOnABigSession_…` | differential | `(big − baseline) ≥ 0` **and** `< 2 MiB` | **replace the methodology** — done in #1747. The `≥ 0` floor was a FALSE premise: both operands come from one monotonic counter, so their difference can legitimately be negative (a saving), and the observed value was exactly that (−15 384 B). A broken measurement is a negative SINGLE window, and that shape is refused inside `AllocationProbe`. The ceiling is now a constant per MiB of bulk rewritten |
 | `Harbor.Storage.Jsonl.Tests.JsonlUnboundedAllocationTests.Read_ThousandRecordSession_…` | absolute + blanket `[Retry(3)]` | `allocated < graph + fileBytes` — a ceiling ~1.5% under the measured number | **replace the methodology** — done in #1747. The measurement is now a minimum over three reads (the process-wide counter's noise only ever inflates a reading), the budget is a constant per record, and the blanket retry is gone |
 | `Harbor.Storage.Jsonl.Tests.JsonlAllocationBudgetTests` | absolute bytes | ≤ 8 KB/line, ≤ 512 KB/read | **keep** — a byte budget is already machine-independent and already per unit of work |
-| `Harbor.Registries.Tests.AllocationBudgetTests` | absolute bytes | 0 B on the fast paths, ≤ 1–2 KB/publish on the fan-out | **keep** — same |
+| `Harbor.Registries.Tests.EventBusAllocationTests` / `ToolRegistryAllocationTests` (file `AllocationBudgetTests.cs`) | absolute bytes | 0 B on the fast paths, ≤ 1–2 KB/publish on the fan-out | **keep** — same |
 | `Harbor.Tui.CellForge.Tests.AllocationBudgetTests` | absolute bytes | 0 B per event | **keep** — same |
 | `Harbor.Tui.CellForge.Tests.PerfBudgetTests` | absolute bytes, time reported | 0 B per frame; frame time printed, never gated (#996) | **keep** — the model of the discipline |
 | `Harbor.Ui.Framework.Tests.StoreDispatchAllocTests` | differential bytes | per-dispatch cost of the store, measured against a bare store | **keep** — machine-independent and per unit of work |
@@ -1130,7 +1131,7 @@ much does ONE UNIT OF WORK cost, and is that within a reviewed constant?".
 | **Measure** | The workload runs `Rounds` times behind a GC fence; the MEDIAN of each series is the measurement, and the relative spread across rounds is kept |
 | **Report** | The report line is printed on every run, PASS OR FAIL, and says `measured` explicitly. `tools/test-measurements.py` lifts it into the job summary (the #618 mechanism), so a gate that measures and reports without failing is still evidence |
 | **Assert softly** | The allocation branch asserts hard. The time branch asserts ONLY when the measurement is TRUSTED — the spread across rounds is within `MaxTrustedSpread` and the leg was long enough to measure. A runner that cannot reproduce its own baseline is not evidence about the code, so the time branch reports and stands down instead of failing the build (the `StatusBarFitPerfTests` #487 precedent) |
-| **Non-vacuity** | A leg that measured nothing is a failure, not a pass: a zero millisecond reading and a zero byte reading are both refused before any budget is read (#591) |
+| **Non-vacuity** | A leg that measured nothing is a failure, not a pass: a zero millisecond reading is refused before any budget is read, and a zero byte reading is refused too — a byte count of zero satisfies every ceiling, so a mis-wired probe would make the gate pass on any tree (#591). A workload that legitimately allocates nothing per unit opts out with `RequirePositiveBytes = false` |
 
 ### JsonlMessagePayload serialization gate (#1531) — **RELATIVE**, CI merge gate ⏳ first run pending
 

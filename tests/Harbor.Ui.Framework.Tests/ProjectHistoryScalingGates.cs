@@ -101,17 +101,20 @@ public sealed class ProjectHistoryScalingGates
     /// <summary>
     ///     Allocation budget for ONE append+project pair, in bytes.
     ///     Machine-independent, so it is compared as measured, with no band.
-    ///     The measured value on the current tree is ~96 KiB per pair at 1024
-    ///     transcript lines (docs/BENCHMARKS.md, run 39123327931); the budget
-    ///     leaves ~2x headroom for the runtime's own bookkeeping.
+    ///     The measured value on the current tree is 98 547 B per pair at 1024
+    ///     transcript lines — the same number the pre-#1747 ratio gate measured
+    ///     (12 318.3 KiB over 128 pairs, run 39123327931) and the same number
+    ///     the #1747 gate measured (run 39372950798) — so the budget leaves
+    ///     ~1.33x headroom.
     /// </summary>
-    private const long MaxBytesPerPair = 192 * 1024;
+    private const long MaxBytesPerPair = 128 * 1024;
 
     /// <summary>
     ///     Time budget for ONE append+project pair, in probe units (see
-    ///     `PerfGate`). Machine-scaled and soft.
+    ///     `PerfGate`). Machine-scaled and soft. Pinned from the same CI run:
+    ///     297 probe units per pair against a 1200 budget.
     /// </summary>
-    private const double MaxProbeUnitsPerPair = 4_000.0;
+    private const double MaxProbeUnitsPerPair = 1_200.0;
 
     [Test]
     [Timeout(300_000)]
