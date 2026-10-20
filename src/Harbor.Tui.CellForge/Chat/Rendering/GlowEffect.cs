@@ -62,9 +62,13 @@ public sealed class GlowEffect : IPostEffect
 
     public EngineCells.Cell Transform(int x, int y, in EngineCells.Cell cell)
     {
+        // #1524: the cell's style is read ONCE into a local. The getter copies
+        // three packed fields (no allocation, nothing shared to mutate), but
+        // reading it three times rebuilt the same value three times.
+        var style = cell.Style;
         if (_intensity <= 0.0
-            || !cell.Style.Fg.IsRgb
-            || cell.Style.Fg != _accent
+            || !style.Fg.IsRgb
+            || style.Fg != _accent
             || !_region.Contains(x, y))
         {
             return cell;
@@ -72,7 +76,6 @@ public sealed class GlowEffect : IPostEffect
 
         // The lerp is renderer-side (PanelFx); both colors round-trip through
         // the packed uint exactly, so the blend is bit-identical either way.
-        var style = cell.Style;
         var glow = PanelFx.Lerp(
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(style.Fg.Value),
             Harbor.Ui.Framework.Rendering.PackedColor.FromRaw(_hot.Value),

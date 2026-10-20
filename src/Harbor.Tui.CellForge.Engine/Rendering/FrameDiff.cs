@@ -312,8 +312,10 @@ public ref struct FrameDiffEnumerator
             // (the terminal still shows the old style there), then repaint the
             // lead. Trailing-before-lead: clearing after can erase the glyph
             // on some terminals (ratatui #2652).
+            // #1524: the style comparison reads the cells' packed fields
+            // instead of rebuilding a CellStyle on each side.
             if (width == Cell.Wide && n.Rune == frontCell.Rune
-                && target.Style != frontCell.Style && prevVisible)
+                && !target.HasSameStyle(in frontCell) && prevVisible)
             {
                 ArmTrailing(_x + 1, Math.Min(_x + width, _rowRight), force: true, deferredX: _x);
                 continue;

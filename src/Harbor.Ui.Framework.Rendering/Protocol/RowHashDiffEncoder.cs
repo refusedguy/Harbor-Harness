@@ -85,7 +85,7 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
             for (int x = 0; x < cols;)
             {
                 var nopt = next.GetDiffOption(x, y);
-                var n = next.Get(x, y);
+                Cell n = next.Get(x, y);
                 int width = n.Width;
 
                 if (nopt == CellDiffOption.Skip)
@@ -120,9 +120,11 @@ public sealed class RowHashDiffEncoder : ICellDiffEncoder
                     continue;
                 }
 
-                var f = prev.Get(x, y);
+                Cell f = prev.Get(x, y);
+                // #1524: the style comparison reads the cells' packed fields
+                // instead of rebuilding a CellStyle on each side.
                 if (width == Cell.Wide && n.Rune == f.Rune
-                    && n.Style != f.Style && f.StyleVisibleOnBlank)
+                    && !n.HasSameStyle(in f) && f.StyleVisibleOnBlank)
                 {
                     // Style-only change on an unchanged wide glyph whose
                     // previous style was visible on blanks: trailing columns
