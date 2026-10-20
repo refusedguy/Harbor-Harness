@@ -71,6 +71,14 @@ internal static class SourceScan
     ///     Every <c>*.cs</c> file under the named repository-relative trees,
     ///     sorted for a stable failure message.
     /// </summary>
+    /// <remarks>
+    ///     The directory walk is the shared snapshot's (#1791) — one walk per
+    ///     directory for the whole assembly — and this filter is applied on top
+    ///     of it, so the SET and the ORDER are exactly what they were before
+    ///     the snapshot existed. The filter stays here because the filter is
+    ///     what decides a rule's SCOPE, and the snapshot only knows the part
+    ///     every rule agrees on.
+    /// </remarks>
     /// <param name="trees">Repository-relative directories to walk.</param>
     internal static IReadOnlyList<string> EnumerateCsFiles(params string[] trees)
     {
@@ -88,8 +96,8 @@ internal static class SourceScan
                 continue;
             }
 
-            found.AddRange(Directory
-                .EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+            found.AddRange(SharedSourceTreeSnapshot.Shared
+                .EnumerateCsFiles(dir)
                 .Where(p => !IsBuildOutput(p)));
         }
 

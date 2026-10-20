@@ -1798,6 +1798,108 @@ is still asserted, against the production constant `MainViewModel.ToastAutoDismi
 The shipped behaviour is unchanged: with `TimeProvider.System` the delay takes the same
 `TimerQueueTimer` path `Task.Delay(TimeSpan)` took, so a toast still leaves four seconds
 after it was pushed.
+### 6.5 Architecture-suite tree scan (#1791) — **CONSTANT BUDGET**, CI merge gate
+
+`tests/Harbor.Architecture.Tests`, in the `test (core)` merge-gate shard.
+
+The architecture suite is the slowest artefact in the test set, and the cost
+was never the rules' verdicts — it was the layer under them. The wall is not
+throughput-bound: a handful of classes each block on their own whole-tree
+work, and the rest of the suite queues behind them.
+
+**Two numbers, and they are not the same number.** The *sum of durations* is
+what a rule's tests add up to, and it counts a test's WAITING for a shared
+lazy once per waiter — so a class whose four tests share one scan shows four
+times the scan in that column. The *span* is the class's wall footprint
+(last end − first start), and the span is what a critical path is made of.
+Both are in the tables below, and the measurement file
+(`tests/Harbor.Architecture.Tests/SourceTreeScanMeasurement.cs`) prints the
+phases of the three heaviest rules, measured ALONE, so the work can be told
+apart from the queueing.
+
+**Before** — run 39413205038 (`test/1791-before`, the tree without the
+change), 2026-10-20:
+
+| class | span | sum of durations | what it actually does |
+|---|---:|---:|---|
+| `PanelKeyRouteReachabilityRule` | 72.9 s | 502.8 s | a text scan of the product trees, and then — for every hand-off it looks up — a re-split of every file it walks past |
+| `ProcessEnvIsolationRule` | 67.9 s | 632.2 s | a text scan of the whole test tree, re-derived once per test — nine times over |
+| `PilotRoslynAnalyzerTests` | 66.2 s | 169.6 s | **52 Roslyn COMPILATIONS** (1 236 files parsed) — not a text scan |
+| `TokenCellSingleHomeRules` | 28.8 s | 28.9 s | a text scan of the product trees against three regexes — one test, so the class's parallelism is 1.00 by construction |
+| `ApprovalGateWaiterRaceRules` | 19.1 s | 38.5 s | a text scan of the whole test tree, twice |
+
+**After** — two runs of the same tree plus the change, 2026-10-20: 39418488276
+and 39421786081.
+
+| class | span (before) | span (after) | durations (before) | durations (after) |
+|---|---:|---:|---:|---:|
+| `PanelKeyRouteReachabilityRule` | 72.9 s | 58.6 / 58.9 s | 502.8 s | 235.2 / 237.4 s |
+| `ProcessEnvIsolationRule` | 67.9 s | **1.9 / 1.4 s** | 632.2 s | **11.4 / 7.7 s** |
+| `PilotRoslynAnalyzerTests` | 66.2 s | 51.4 / 55.4 s | 169.6 s | 94.2 / 110.4 s |
+| `TokenCellSingleHomeRules` | 28.8 s | 42.2 / 39.5 s | 28.9 s | 42.2 / 39.7 s |
+| `ApprovalGateWaiterRaceRules` | 19.1 s | 12.6 / 15.1 s | 38.5 s | 25.2 / 30.4 s |
+| `SharedSourceTreeSnapshotTests` (new) | — | 41.1 / 44.1 s | — | 41.5 / 44.1 s |
+
+| project | before (1 run) | after (2 runs) |
+|---|---:|---:|
+| tests | 987 | 993 (+6: the snapshot's own guard) |
+| sum of durations | 1 693.1 s | **712.1 / 769.4 s** (−55 to −58 %) |
+| project wall | 114.5 s | **70.0 / 72.0 s** (−37 to −39 %) |
+| parallelism | 14.8× | 10.2× / 10.7× |
+
+The two "after" runs differ by 8 % of the summed duration and 3 % of the
+wall, so the wall figure is a range and not a single number. The class that
+moves by an order of magnitude — the process-environment rule, 67.9 s →
+1.4–1.9 s — moves by more than the spread between the runs, and it moves for
+a reason a reader can check: the rule re-derived the same answer nine times
+and now derives it once.
+
+Two caveats, stated rather than buried. The "before" wall includes the
+measurement's own serial run at the end of the assembly (27.9 s); the
+"after" includes the guard's 41–44 s, which ran CONCURRENTLY with the
+classes (inside the wall), so it did not extend it — the guard's own work is
+the two comment-strips it does per file, about 2.5 s for the whole project,
+and its REPORTED duration is contention rather than work, because it ran
+alongside six other CPU-bound classes. And the classes that move UP
+(`TokenCellSingleHomeRules` 28.8 → 39.5–42.2 s) move for the same reason
+the ones that move down move: neither rule's work changed, and both are
+scheduled against a queue whose order shifted when nine test-tree parses
+stopped competing for the CPU. The total is what the suite pays.
+
+Two things follow from the phases, measured alone on the "before" tree, and
+they are the whole shape of the fix:
+
+* **The reads are not the cost.** Reading 1 236 product files takes **46 ms**,
+  and comment-stripping the whole test tree takes **3 556 ms**. The cost is the
+  ANALYSIS — the panel/overlay scan is **17 453 ms**, the process-environment
+  discovery **3 338 ms**, the approval-gate scan **3 468 ms**. A shared
+  snapshot of the file BYTES would not touch that; a shared snapshot of the
+  file's LINE VIEW, and a memo over it, do.
+* **The repetition is the cost.** The process-environment rule re-derived the
+  same answer nine times and the approval-gate rule twice; both are pure
+  functions of a tree that does not change while the suite runs.
+
+`MatchesPatternScalingGates.Cost_GrowsLinearly_InRuleCount` (34.0 s) is in
+`Harbor.Abstractions.Tests` and is not a tree scan at all: it is a relative
+cost gate that measures `PermissionRuleset.Evaluate` over 256 and 512 rules,
+and its duration is the gate's own measurement budget.
+
+**The budget is a COUNT, not a duration.** A duration measures the runner; a
+count measures the code. The shared snapshot
+(`tests/Harbor.Architecture.Tests/SharedSourceTreeSnapshot.cs`) is held to:
+
+| Claim | Gate | Where |
+|---|---|---|
+| one snapshot per process | exactly 1 instance for the whole assembly, asserted as a test AND from an `[After(HookType.Assembly)]` hook — a test can only see a second snapshot that already existed when it ran | `SharedSourceTreeSnapshotTests.Exactly_One_Snapshot_Exists_For_The_Whole_Process` |
+| one read per file | `reads == distinct files read`, for the whole assembly | `..._Reads_Each_File_Once_And_Derives_Each_Line_View_Once` |
+| at most two line views per file | `line views ≤ 2 × files` | the same test |
+| the bytes the rules used to read | the snapshot's raw text, its `'\n'` line view and its `ReadAllLines` line view, each compared against a fresh read computed the way each rule computed it before | `..._Hands_Out_The_Bytes_The_Rules_Used_To_Read` |
+| the file set the rules used to walk | the snapshot's walk, compared against a fresh walk with the same filter | the same test |
+| the snapshot still describes the tree | every captured file's size and mtime, and every captured directory's file list, re-checked against the disk | `..._Still_Describes_The_Tree_On_Disk` |
+| the checker can fail | a changed file, a deleted file and a grown directory are planted and the checker has to report them; an unchanged tree has to report nothing | `..._Reports_A_Planted_Defect` |
+
+> The `coverage` job re-runs the architecture suite a second time (report-only,
+> no gate), so the suite's cost per PR is currently paid twice.
 
 ## 7. Comparison with previous (inflated) numbers
 
