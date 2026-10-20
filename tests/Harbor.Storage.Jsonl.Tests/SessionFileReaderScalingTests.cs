@@ -89,9 +89,15 @@ public class SessionFileReaderScalingTests
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     Pinned from the same run: 124.699 ms over 13 reads = 9.59 ms per
     ///     read against a probe that costs 0.000380 ms/unit, i.e. ~25 200 probe
-    ///     units per read. The budget leaves ~2.4x headroom.
+    ///     units per read.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerRead = 60_000.0;
+    private const double MaxProbeUnitsPerRead = 300_000.0;
 
     /// <summary>Full file reads where the leg-scaling probe starts; one read is a few ms over this size.</summary>
     private const int InitialReads = 8;
@@ -127,7 +133,7 @@ public class SessionFileReaderScalingTests
             // leg carried. It is now:
             //
             //     bytes per full read   <= 1 600 000   (machine-independent, HARD)
-            //     probe units per read   <= 60 000      (machine-scaled time, SOFT)
+            //     probe units per read   <= 300 000     (machine-scaled time, SOFT)
             //
             // measured over a FIXED amount of work (8 full reads of the
             // 4 000-message file) on the SAME runner in the SAME run. The

@@ -64,7 +64,7 @@
 // the retained working set, and the lower the ratio read):
 //
 //     bytes per scripted delta <= 1 700     — machine-independent, HARD.
-//     probe units per delta    <= 2.6      — machine-scaled time, SOFT.
+//     probe units per delta    <= 13       — machine-scaled time, SOFT.
 //
 // The amount of work is FIXED (100 000 deltas per leg, in drives of 1 000), so
 // the budget is a per-delta number and the runner's load cannot move it. The
@@ -241,11 +241,19 @@ public sealed class StorePathScalingGates
     ///     <para>
     ///         Pinned from the same run: 18.189 ms over 55 000 deltas =
     ///         0.331 us per delta against a probe that costs 0.000380 ms/unit,
-    ///         i.e. ~0.87 probe units per delta. The budget leaves ~3x
-    ///         headroom.
+    ///         i.e. ~0.87 probe units per delta.
+    ///     </para>
+    ///     <para>
+    ///         The budget is wide on purpose: the probe's OWN measured cost
+    ///         moved 5.3x between two CI runs of the SAME tree (0.000380
+    ///         ms/unit in run 39423151864, 0.000072 ms/unit in run
+    ///         39436405496), so the probe-unit currency is only as stable as
+    ///         the yardstick behind it. The BYTE budget is the branch that
+    ///         can fail on any runner - it is exact - and the time budget is
+    ///         the gross-regression detector.
     ///     </para>
     /// </summary>
-    private const double MaxProbeUnitsPerDelta = 2.6;
+    private const double MaxProbeUnitsPerDelta = 13.0;
 
     // =====================================================================
     // 1. The measurement.
@@ -343,7 +351,7 @@ public sealed class StorePathScalingGates
         // The gate is now:
         //
         //     bytes per scripted delta  <= 1 700      (machine-independent, HARD)
-        //     probe units per delta     <= 2.6        (machine-scaled time, SOFT)
+        //     probe units per delta     <= 13         (machine-scaled time, SOFT)
         //
         // measured over a FIXED amount of work (100 000 deltas, in drives of
         // 1 000), so the amount of work a leg does no longer depends on the

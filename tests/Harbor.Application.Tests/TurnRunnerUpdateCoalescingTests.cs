@@ -81,9 +81,23 @@ public class TurnRunnerUpdateCoalescingTests
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     Pinned from the same run: 90.172 ms over 2 048 000 deltas = 0.044 us
     ///     per delta against a probe that costs 0.000380 ms/unit, i.e. ~0.116
-    ///     probe units per delta. The budget leaves ~5x headroom.
+    ///     probe units per delta.
+    ///     <para>
+    ///         This one is the receipt for the note below: the probe-unit
+    ///         currency for this allocation-bound workload moved 11x between
+    ///         two CI runs of the SAME tree - 0.116 probe units per delta in
+    ///         run 39423151864 and 1.27 in run 39436405496, whose probe cost
+    ///         0.000072 ms/unit against the other run's 0.000380 ms/unit -
+    ///         while the BYTE branch read 72 B per delta in BOTH.
+    ///     </para>
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerDelta = 0.6;
+    private const double MaxProbeUnitsPerDelta = 6.0;
 
     /// <summary>
     ///     The policy the behaviour tests pin: a delta cap and no time bound,
@@ -285,7 +299,7 @@ public class TurnRunnerUpdateCoalescingTests
     ///     TestScalingGate (#1652). It is now:
     ///     <code>
     ///     bytes per published delta  &lt;= 92    (machine-independent, HARD)
-    ///     probe units per delta      &lt;= 0.6   (machine-scaled time, SOFT)
+    ///     probe units per delta      &lt;= 6.0   (machine-scaled time, SOFT)
     ///     </code>
     ///     measured over a FIXED amount of work (1 000 000 deltas, in turns of
     ///     2 000) on the SAME runner in the SAME run. The allocation branch is

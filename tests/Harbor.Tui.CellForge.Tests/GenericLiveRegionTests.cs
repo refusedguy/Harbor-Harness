@@ -32,10 +32,15 @@ public class GenericLiveRegionTests
     ///     Pinned from the CI measurement of the ratio gate this replaced (run
     ///     39423151864): 17.099 ms over 287 paints of a 200-line region, and
     ///     1.99x that for the 400-line one, i.e. ~312 probe units per frame
-    ///     against a probe that costs 0.000380 ms/unit. The budget leaves
-    ///     ~2.9x headroom.
+    ///     against a probe that costs 0.000380 ms/unit.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerPaint = 900.0;
+    private const double MaxProbeUnitsPerPaint = 4_500.0;
 
     private static string Art(GenericLiveRegion region, int width = 20)
     {
@@ -227,7 +232,7 @@ public class GenericLiveRegionTests
     ///     real CI run at 3.54 against the 3.15 limit. It is now:
     ///     <code>
     ///     bytes per painted frame  &lt;= 0      (machine-independent, HARD)
-    ///     probe units per frame    &lt;= 900    (machine-scaled time, SOFT)
+    ///     probe units per frame    &lt;= 4 500  (machine-scaled time, SOFT)
     ///     </code>
     ///     measured over a FIXED amount of work (400 paints of a 400-line
     ///     region) on the SAME runner in the SAME run. The allocation branch is

@@ -219,9 +219,14 @@ public class AgentReducerToolBoundaryScalingGates
     ///     <see cref="PerfGate" />). Machine-scaled and SOFT. Pinned from the
     ///     same run: 63.327 ms over 17 404 pairs = 3.64 us per pair against a
     ///     probe that costs 0.000380 ms/unit, i.e. ~9.6 probe units per pair.
-    ///     The budget leaves ~4.2x headroom.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerPair = 40.0;
+    private const double MaxProbeUnitsPerPair = 200.0;
 
     private const string ToolName = "read";
 
@@ -265,7 +270,7 @@ public class AgentReducerToolBoundaryScalingGates
         // behaviour it was written for. It is now:
         //
         //     bytes per tool pair      <= 16 000   (machine-independent, HARD)
-        //     probe units per tool pair <= 40       (machine-scaled time, SOFT)
+        //     probe units per tool pair <= 200      (machine-scaled time, SOFT)
         //
         // measured over a FIXED amount of work (4 000 pairs) on the SAME runner
         // in the SAME run. The allocation branch is machine-independent and is

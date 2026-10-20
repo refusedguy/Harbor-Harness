@@ -57,7 +57,7 @@ namespace Harbor.Application.Tests;
 ///         The gate is now:
 ///         <code>
 ///         bytes per tool call   &lt;= 4 000    (machine-independent, HARD)
-///         probe units per call   &lt;= 12       (machine-scaled time, SOFT)
+///         probe units per call   &lt;= 60       (machine-scaled time, SOFT)
 ///         </code>
 ///         measured over a FIXED amount of work (50 000 tool calls, in batches
 ///         of 100) on the SAME runner in the SAME run, with the harness's
@@ -115,9 +115,14 @@ public class ToolDispatcherToolContextScalingTests
     ///     and no CPU yardstick scales a descheduled thread. Pinned from the
     ///     same run: 47.139 ms over 56 900 calls = 0.828 us per call against a
     ///     probe that costs 0.000380 ms/unit, i.e. ~2.2 probe units per call.
-    ///     The budget leaves ~5.5x headroom.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerToolCall = 12.0;
+    private const double MaxProbeUnitsPerToolCall = 60.0;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{}""");
 

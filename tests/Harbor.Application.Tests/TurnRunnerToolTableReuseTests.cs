@@ -78,9 +78,15 @@ public class TurnRunnerToolTableReuseTests
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     Pinned from the same run: 115.124 ms over 1 480 turns = 77.8 us per
     ///     turn against a probe that costs 0.000380 ms/unit, i.e. ~205 probe
-    ///     units per turn. The budget leaves ~2.9x headroom.
+    ///     units per turn.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerTurn = 600.0;
+    private const double MaxProbeUnitsPerTurn = 2_400.0;
 
     private static readonly JsonDocument SchemaDoc = JsonDocument.Parse("""{"type":"object"}""");
 
@@ -344,7 +350,7 @@ public class TurnRunnerToolTableReuseTests
     ///     (#1652). It is now:
     ///     <code>
     ///     bytes per turn        &lt;= 30 000   (machine-independent, HARD)
-    ///     probe units per turn  &lt;= 600      (machine-scaled time, SOFT)
+    ///     probe units per turn  &lt;= 2 400    (machine-scaled time, SOFT)
     ///     </code>
     ///     measured over a FIXED amount of work (1 000 text-only turns against
     ///     a 200-tool registry) on the SAME runner in the SAME run. The

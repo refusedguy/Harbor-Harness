@@ -17,7 +17,7 @@ namespace Harbor.Storage.Jsonl.Tests;
 ///         (#1652). It is now:
 ///         <code>
 ///         bytes per serialized message &lt;= 220   (machine-independent, HARD)
-///         probe units per message        &lt;= 0.6  (machine-scaled time, SOFT)
+///         probe units per message        &lt;= 6.0  (machine-scaled time, SOFT)
 ///         </code>
 ///         measured over a FIXED amount of work (1 000 000 messages, in
 ///         batches of 16) on the SAME runner in the SAME run. The allocation
@@ -54,9 +54,15 @@ public class JsonlMessagePayloadScalingTests
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     Pinned from the same run: 14.973 ms over 342 192 messages = 0.044 us
     ///     per message against a probe that costs 0.000380 ms/unit, i.e. ~0.115
-    ///     probe units per message. The budget leaves ~5x headroom.
+    ///     probe units per message.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerMessage = 0.6;
+    private const double MaxProbeUnitsPerMessage = 6.0;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{"path":"a.txt"}""");
     private static readonly DateTime CreatedAt = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);

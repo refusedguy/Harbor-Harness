@@ -102,10 +102,15 @@ public class CachingSystemPromptBuilderKeyScalingTests
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     Pinned from the same run at the measured context size: 195.252 ms
     ///     over 3 002 turns = 65.0 us per turn against a probe that costs
-    ///     0.000380 ms/unit, i.e. ~171 probe units per turn. The budget leaves
-    ///     ~3.5x headroom.
+    ///     0.000380 ms/unit, i.e. ~171 probe units per turn.
+    ///     The budget is wide on purpose: the probe's OWN measured cost moved
+    ///     5.3x between two CI runs of the SAME tree (0.000380 ms/unit in run
+    ///     39423151864, 0.000072 ms/unit in run 39436405496), so the
+    ///     probe-unit currency is only as stable as the yardstick behind it.
+    ///     The BYTE budget is the branch that can fail on any runner - it is
+    ///     exact - and the time budget is the gross-regression detector.
     /// </summary>
-    private const double MaxProbeUnitsPerTurn = 600.0;
+    private const double MaxProbeUnitsPerTurn = 2_400.0;
 
     /// <summary>One fixed real working directory for both legs (the key holds the path).</summary>
     private static readonly string WorkDir = TestTempDirs.NewDirectory("harbor-prompt-key-scaling");
@@ -122,7 +127,7 @@ public class CachingSystemPromptBuilderKeyScalingTests
     ///     shared TestScalingGate (#1652). It is now:
     ///     <code>
     ///     bytes per turn        &lt;= 1 536   (machine-independent, HARD)
-    ///     probe units per turn  &lt;= 600     (machine-scaled time, SOFT)
+    ///     probe units per turn  &lt;= 2 400   (machine-scaled time, SOFT)
     ///     </code>
     ///     measured over a FIXED amount of work (1 000 turns at the LARGER
     ///     context) on the SAME runner in the SAME run. The allocation branch
