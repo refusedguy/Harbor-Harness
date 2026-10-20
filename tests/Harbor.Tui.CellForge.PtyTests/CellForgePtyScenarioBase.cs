@@ -13,11 +13,39 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>HARBOR_TUI=consoleex</c> app inside a <see cref="PtySession" />, and
 ///     an ANSI screen emulation fed incrementally from the raw master stream.
 ///
-///     All scenario classes share the "pty" NotInParallel constraint key:
-///     process spawn + real PTYs are serialized by design.
+///     WHY THERE IS NO <c>[NotInParallel]</c> KEY HERE (#1789)
+///
+///     The scenarios used to share one <c>"pty"</c> constraint key, which
+///     serialized the whole project: 40 classes on one key, so the wall time
+///     was the SUM of the durations and the parallelism factor was 1.00. The
+///     key was a claim about a shared resource, and there is no such resource:
+///     every scenario spawns its OWN pseudo-terminal (its own
+///     <c>posix_openpt</c>), its OWN child process, its OWN mock server (a
+///     random port) and its OWN temp <c>$HOME</c> — a GUID directory, not a
+///     shared path. Nothing in this project is process-wide, so nothing needs
+///     a mutex, and the repo's own rule says so
+///     (<c>docs/TEST_PATTERNS.md</c> §Parallelism: "use a key when the set of
+///     competitors is knowable and enumerable"; here the set is EMPTY).
+///
+///     The one thing that WAS process-wide was the fixture's
+///     <c>Environment.SetEnvironmentVariable("HOME", …)</c>, and the scenarios
+///     never needed it: the child receives its <c>HOME</c> explicitly through
+///     <see cref="ChildEnv" />. <see cref="PtyScenarioFixture" /> is the
+///     env-write-free fixture that replaced it, so the isolation the scenarios
+///     rely on is per-test state handed to a child process rather than state
+///     the test process mutates. A process-wide write would need the BARE
+///     <c>[NotInParallel]</c> form — "completely alone" — which is strictly
+///     worse than the key it replaced.
+///
+///     What bounds the concurrency instead is the
+///     <c>[ParallelLimiter&lt;PtyScenarioLimit&gt;]</c> below: the semaphore is
+///     keyed by the LIMIT TYPE, so
+///     <see cref="PtyScenarioLimit" /> is one four-permit gate for the whole
+///     assembly. Four is the runner's core count, and one scenario per core is
+///     the honest budget — each scenario spawns a .NET child, so the resource
+///     being bounded is CPU, not the terminal.
 /// </summary>
-[NotInParallel("pty")]
-[ParallelLimiter<MockServerLimit>]
+[ParallelLimiter<PtyScenarioLimit>]
 public abstract class CellForgePtyScenarioBase
 {
     private const string CliProjectRelativePath = "apps/Harbor.App.Cli/Harbor.App.Cli.csproj";
@@ -51,8 +79,14 @@ public abstract class CellForgePtyScenarioBase
     /// <summary><see cref="Environment.TickCount64" /> of the last repaint.</summary>
     private long _lastRepaintTick;
 
-    [ClassDataSource<MockServerFixture>(Shared = SharedType.None)]
-    public required MockServerFixture Fixture { get; init; }
+    /// <summary>
+    ///     The per-test mock server + temp <c>$HOME</c>. <see cref="PtyScenarioFixture" />
+    ///     and not <c>MockServerFixture</c>: the latter also swaps the PROCESS
+    ///     <c>HOME</c>/<c>USERPROFILE</c>, which is the one thing that would
+    ///     force these scenarios to be serialized against each other (#1789).
+    /// </summary>
+    [ClassDataSource<PtyScenarioFixture>(Shared = SharedType.None)]
+    public required PtyScenarioFixture Fixture { get; init; }
 
     protected MockLlmServer Server => Fixture.Server;
 
@@ -124,7 +158,7 @@ public abstract class CellForgePtyScenarioBase
 
         string dll = ResolveCliDllPath();
         var spec = new PtyStartSpec(
-            FileName: HarborAppLocator.ResolveDotnetHost(),
+            FileName: ResolveDotnetHost(),
             Args: ["exec", dll],
             Cols: cols,
             Rows: rows,
@@ -574,5 +608,34 @@ public abstract class CellForgePtyScenarioBase
 
         throw new FileNotFoundException(
             "Harbor.App.Cli.dll not built — run dotnet build before PTY scenarios.", debug);
+    }
+
+    /// <summary>
+    ///     The muxer that spawns the child.
+    ///     <para />
+    ///     The test host IS a <c>dotnet</c> process (CI runs
+    ///     <c>dotnet exec &lt;testdll&gt;</c>), so its own executable is the one
+    ///     muxer that is guaranteed to be able to run the child — and it is the
+    ///     same one the runner already uses. This matters because the fallback
+    ///     (<see cref="HarborAppLocator.ResolveDotnetHost" />) resolves
+    ///     <c>$HOME/.dotnet/dotnet</c>, and the scenarios no longer control the
+    ///     process <c>HOME</c> (#1789): a developer with an older SDK installed
+    ///     under <c>~/.dotnet</c> would have had the child spawned by it, and an
+    ///     older muxer cannot run a <c>net10.0</c> app.
+    /// </summary>
+    private static string ResolveDotnetHost()
+    {
+        string? processPath = Environment.ProcessPath;
+        if (processPath is not null
+            && string.Equals(
+                Path.GetFileNameWithoutExtension(processPath),
+                "dotnet",
+                StringComparison.OrdinalIgnoreCase)
+            && File.Exists(processPath))
+        {
+            return processPath;
+        }
+
+        return HarborAppLocator.ResolveDotnetHost();
     }
 }

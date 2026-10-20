@@ -11,7 +11,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     result lands mid-loop — aborting exactly like a streaming turn (see
 ///     <see cref="CtrlCScenarioTests" />). Marker asserts only (celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class AbortMidToolScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

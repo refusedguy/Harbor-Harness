@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     bar keeps rendering. This pins survival, not live rebind (no config
 ///     watcher exists today — live-reload semantics is a separate issue).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ConfigToggleScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

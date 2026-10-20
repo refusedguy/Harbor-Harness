@@ -22,7 +22,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     stays on the settled timeline next to the approval trail, and the
 ///     probe is patched on disk.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class PatchDiffScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

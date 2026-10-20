@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     resolved by a left SGR press/route through the REPL bridge (routes
 ///     presses into <c>TryRouteApprovalClick</c> BEFORE wheel handling).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class MouseScenarioTests : CellForgePtyScenarioBase
 {
     private const string WheelUpSeq = "\x1b[<64;10;5M";  // SGR wheel up @ col10,row5

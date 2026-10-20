@@ -10,7 +10,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     newline); (b) неизвестный CSI-u (999u) и мусорные последовательности
 ///     глотаются парсером без влияния на композер и без падения.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class KittyEdgeScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

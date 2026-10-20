@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     (4 символа / 50 мс) делает промежуточные кадры недетерминированными —
 ///     вместо этого маркерные ассерты финального состояния (celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class SubmitScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

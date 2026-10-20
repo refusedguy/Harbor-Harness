@@ -10,7 +10,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     восстанавливает руны, текст виден на сетке и доезжает до LLM
 ///     побайтно-точно (JSON-escape на проводе).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class Utf8ScenarioTests : CellForgePtyScenarioBase
 {
     private const string MixedText = "привет 你好 🚀";

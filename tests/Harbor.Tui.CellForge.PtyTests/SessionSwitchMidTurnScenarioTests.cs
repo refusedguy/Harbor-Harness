@@ -18,7 +18,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     <c>esc close</c>) before asserting timeline markers. Marker asserts
 ///     only (streaming cadence is nondeterministic — celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class SessionSwitchMidTurnScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

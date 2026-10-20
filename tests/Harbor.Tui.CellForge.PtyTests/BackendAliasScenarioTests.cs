@@ -11,7 +11,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     auto-title are off in the harness), so equality here is the shared
 ///     golden the acceptance criteria ask for.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class BackendAliasScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

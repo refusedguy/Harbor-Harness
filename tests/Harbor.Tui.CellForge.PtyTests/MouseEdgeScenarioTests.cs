@@ -10,7 +10,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     scrollback'а wheel-up возвращает вниз wheel-down — «живой» низ ленты
 ///     снова на экране.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class MouseEdgeScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

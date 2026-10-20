@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     начала/конца строки, Ctrl+Y вставляет последний kill; (c) Enter на
 ///     пустом композере — no-op без запроса к LLM и без порчи состояния.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ComposerEditingScenarioTests : CellForgePtyScenarioBase
 {
     private static int CountLines(string[] lines, string needle) =>

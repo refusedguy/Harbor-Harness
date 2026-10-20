@@ -8,7 +8,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     подсказку, второе в пределах окна — выход с кодом 0 и
 ///     leave-alt-screen последовательностью.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class CtrlCScenarioTests : CellForgePtyScenarioBase
 {
     private static readonly string[] SpinnerFrames =

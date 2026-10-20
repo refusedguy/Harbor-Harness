@@ -10,7 +10,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     универсальным жестом Enter, ни одна строка не выходит за новую ширину,
 ///     статус возвращается в idle (ход не потерян и не «завис»).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ResizeMidStreamScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

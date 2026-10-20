@@ -8,7 +8,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     статус отрисованы; settled idle-кадр сверяется побайтово-нормализованным
 ///     golden'ом (эмулированная сетка, TrimEnd строк).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class LaunchScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

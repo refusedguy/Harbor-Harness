@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     (b) жест выхода живёт в окне 2000 мс: второе нажатие ПОСЛЕ окна даёт
 ///     подсказку снова, второе ВНУТРИ окна — штатный выход.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class CtrlCGestureScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

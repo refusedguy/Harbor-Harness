@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     300×8 и 20×50 подряд: winsize ядра расходится с ожиданиями рендера,
 ///     приложение обязано пережить оба края и остаться работоспособным.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ResizeGeometryScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

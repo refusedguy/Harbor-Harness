@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     words are asserted). Marker asserts only (streaming cadence is
 ///     nondeterministic — celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class MarkdownRenderScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

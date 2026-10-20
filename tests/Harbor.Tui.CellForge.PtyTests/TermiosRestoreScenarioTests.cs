@@ -11,7 +11,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     снятый до spawn). Это ровно класс бага CE-4: 49-байтный struct Termios
 ///     позволял ядру писать мимо — и это не ловил ни один из 366 тестов.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class TermiosRestoreScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

@@ -1494,6 +1494,135 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --treenode-filter "*/*/*Allocation*"
 ```
 
+### 6.3 PTY scenario wall time and parallelism factor (#1789) ✅ measured in CI
+
+`tests/Harbor.Tui.CellForge.PtyTests` — the most expensive single test project in the
+repository by wall time, and 75 % of the `ui` shard's cost. It was ONE serial chain:
+40 classes carried a single `[NotInParallel("pty")]` constraint key, so the project's wall
+was the SUM of its test durations and its parallelism factor was 0.99.
+
+**Method.** The numbers are read from the TRX artifact of a CI run, not from a local
+run: `tests/Harbor.Tui.CellForge.PtyTests.trx` from the `test (ui)` shard. The wall is
+the TRX `<Times>` window (creation → finish) — the same window the runner reports as
+the assembly's duration — and the parallelism factor is `sum of per-test durations ÷
+wall`. The budget is a CONSTANT (a wall-time ceiling for the project), not a ratio: a
+ratio moves when the scenarios get faster, and a ceiling does not.
+
+| Run | Project | Tests | Sum of durations | Wall | Parallelism factor |
+|---|---|---:|---:|---:|---:|
+| [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, 2026-10-20, before) | `Harbor.Tui.CellForge.PtyTests` | 81 | 103.58 s | 104.66 s | 0.99 |
+| ⏳ after | `Harbor.Tui.CellForge.PtyTests` | — | — | — | — |
+
+**Budget.** The project's wall must fit in **45 s** per CI run. Before #1789 it was
+104.66 s; the ceiling is a constant because the work per run does not change — the
+scenarios are the same 81 tests, and the lever is how many of them run at once. The
+ceiling is deliberately loose: it is there to catch a return to the serial chain
+(≈105 s), not to police a few seconds of runner noise.
+
+**It was the only suite in its lane that CHOSE to be serial.** The same `ui` shard
+run, every project, wall from the TRX `<Times>` window:
+
+| project | tests | sum of durations | wall | parallelism factor |
+|---|---:|---:|---:|---:|
+| `Harbor.Tui.CellForge.Tests` | 2 409 | 37.86 s | 8.56 s | 4.42 |
+| `Harbor.Ui.Framework.Tests` | 627 | 12.78 s | 6.74 s | 1.90 |
+| `Harbor.Tui.RendererTests` | 40 | 1.31 s | 0.72 s | 1.81 |
+| `Harbor.Tui.Tests` | 244 | 1.18 s | 0.83 s | 1.42 |
+| `Harbor.App.Avalonia.Tests` | 355 | 3.29 s | 2.77 s | 1.19 |
+| `Harbor.Terminal.Abstractions.Tests` | 76 | 0.71 s | 1.07 s | 0.66 |
+| `Harbor.DesignSystem.Tests` | 53 | 0.34 s | 0.95 s | 0.36 |
+| **`Harbor.Tui.CellForge.PtyTests`** | **81** | **103.58 s** | **104.66 s** | **0.99** |
+
+The PTY project is not slow because PTY tests are slow: it is slow because one
+constraint key admitted one test at a time. 2 409 renderer tests run in 8.56 s in the
+same lane, in the same process, on the same runner.
+
+**Where the time is (before).** The 81 tests are 52 PTY scenarios in 39 classes plus
+29 in-process tests that ride along in the same executable (26 `StateTestRunnerTests`
+from `Harbor.E2E.Framework`, 3 `PtyScrollbackTests`) — 0.31 s of the 103.58 s in
+total. The scenario time is NOT evenly spread:
+
+| class | tests | class total (s) |
+|---|---:|---:|
+| `SessionSwitchMidTurnScenarioTests` | 1 | 21.41 |
+| `MouseScenarioTests` | 2 | 17.87 |
+| `ResizeMidStreamScenarioTests` | 1 | 11.07 |
+| `CtrlCGestureScenarioTests` | 2 | 3.71 |
+| `ComposerEditingScenarioTests` | 3 | 2.85 |
+| `SubmitScenarioTests` | 2 | 2.55 |
+| `TerminalModesScenarioTests` | 2 | 2.24 |
+| `MarkdownRenderScenarioTests` | 1 | 2.20 |
+| `MouseEdgeScenarioTests` | 2 | 2.19 |
+| `BackendAliasScenarioTests` | 1 | 2.08 |
+| `ResizeGeometryScenarioTests` | 2 | 1.91 |
+| `KittyEdgeScenarioTests` | 2 | 1.80 |
+| `PasteEdgeScenarioTests` | 2 | 1.76 |
+| `WriteResultScenarioTests` | 1 | 1.40 |
+| `TreeErrorScenarioTests` | 1 | 1.40 |
+| `ToolErrorScenarioTests` | 1 | 1.38 |
+| `PatchDiffScenarioTests` | 1 | 1.38 |
+| `ReadErrorScenarioTests` | 1 | 1.38 |
+| `GlobErrorScenarioTests` | 1 | 1.37 |
+| `PatchErrorScenarioTests` | 1 | 1.37 |
+| `GrepErrorScenarioTests` | 1 | 1.35 |
+| `LsErrorScenarioTests` | 1 | 1.35 |
+| `AbortMidToolScenarioTests` | 1 | 1.35 |
+| `WriteErrorScenarioTests` | 1 | 1.33 |
+| `EditDiffScenarioTests` | 1 | 1.32 |
+| `EditErrorScenarioTests` | 1 | 1.31 |
+| `PermissionDenyScenarioTests` | 1 | 1.31 |
+| `ToolCallStreamingScenarioTests` | 1 | 1.21 |
+| `ConfigToggleScenarioTests` | 1 | 1.09 |
+| `ExtremeResizeScenarioTests` | 1 | 1.09 |
+| `TermiosRestoreScenarioTests` | 1 | 1.00 |
+| `PtyHarnessSanityTests` | 4 | 0.92 |
+| `Utf8ScenarioTests` | 1 | 0.89 |
+| `KittyKeysScenarioTests` | 1 | 0.86 |
+| `CtrlCScenarioTests` | 1 | 0.85 |
+| `PasteInjectionScenarioTests` | 1 | 0.73 |
+| `ResizeScenarioTests` | 1 | 0.66 |
+| `CrashRecoveryScenarioTests` | 1 | 0.65 |
+| `LaunchScenarioTests` | 1 | 0.65 |
+| `StateTestRunnerTests` (in-process, from `Harbor.E2E.Framework`) | 26 | 0.29 |
+| `PtyScrollbackTests` (in-process) | 3 | 0.02 |
+
+**The three outliers are the floor, and this change does not touch them.** 48.5 s of
+the 103.58 s sits in three tests — `NewSession_WhileRunning_Rejected_ThenFreshSessionWorks`
+(21.41 s), `SgrWheelUp_ScrollsTimelineBack_RevealingTopContent` (16.12 s) and
+`Resize_MidStream_CompletesWithinNewBounds` (11.07 s). They are slow because the mock
+provider streams 4 characters per 50 ms and the scenarios ask for 800-character
+answers: ~10 s of that is the provider's own cadence, not the harness's. The remaining
+78 tests total ~53 s, one to two seconds each, and are dominated by the child's boot
+(`dotnet exec Harbor.App.Cli.dll`). There are no fixed sleeps left to remove — the
+screen wait is a repaint-signal wait and the quiescence wait is a stability window
+(#1792, #1814).
+
+**What the parallelism factor cannot go below.** The longest single test is 21.41 s,
+so no amount of concurrency takes the project's wall under that. The 4-permit limiter
+(`PtyScenarioLimit`) is the budget that trades the two off: 103.58 s of work over four
+lanes is 25.9 s of work per lane, which is just above the 21.41 s floor — so the wall
+lands at ≈26–30 s with the outliers intact.
+
+**A process split of this project, measured (LPT over the class costs above).** A
+constraint key is process-local, so splitting the project into CI jobs by
+`--treenode-filter` leaves the classes INSIDE each job serial — the table below is the
+cost of splitting INSTEAD of parallelising in-process:
+
+| processes | shard costs (s) | max shard |
+|---:|---|---:|
+| 1 (today) | 104.66 | 104.66 |
+| 2 | 51.88 / 51.70 | 51.88 |
+| 3 | 34.43 / 34.48 / 34.68 | 34.68 |
+| 4 | 25.84 / 25.90 / 26.17 / 25.67 | 26.17 |
+
+The in-process parallelism this issue delivers lands in the same place as the 4-process
+split (≈26–30 s) and beats the 2- and 3-process splits (51.9 s, 34.7 s) — because
+those numbers assume the classes inside a process stay serial, which is exactly what
+removing the key removes. On a four-core runner a process split ON TOP of the in-process
+parallelism buys no wall time (the CPU, not the process boundary, is the binding
+resource) and costs one runner job per extra shard. The split becomes the right lever
+when the runner has more cores; until then the in-process budget is.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that

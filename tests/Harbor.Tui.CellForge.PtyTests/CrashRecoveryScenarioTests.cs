@@ -11,7 +11,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     пока master открыт. Восстановление — ответственность НОВОЙ сессии:
 ///     свежий PtySession (cat) на новом PTY работает штатно.
 /// </summary>
-[NotInParallel("pty")]
 public sealed class CrashRecoveryScenarioTests : CellForgePtyScenarioBase
 {
     [Test]

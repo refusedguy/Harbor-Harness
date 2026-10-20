@@ -9,7 +9,6 @@ namespace Harbor.Tui.CellForge.PtyTests;
 ///     to a wide-short frame, squeeze to a narrow-tall frame, prove a turn
 ///     still lands, then restore. Survival + marker asserts (celldiff §8).
 /// </summary>
-[NotInParallel("pty")]
 public sealed class ExtremeResizeScenarioTests : CellForgePtyScenarioBase
 {
     [Test]
