@@ -51,6 +51,7 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
     private readonly ConcurrentDictionary<string, ITool> _tools = new(StringComparer.Ordinal);
     private readonly IServiceCollection _services = new ServiceCollection();
     private readonly IConfiguration _configuration = new ConfigurationBuilder().Build();
+    private int _sessionEstablished;
 
     public McpPluginLoadHost(ILoggerFactory loggerFactory, IEventBus eventBus)
     {
@@ -64,6 +65,22 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
     public IEventBus EventBus { get; }
 
     public IReadOnlyDictionary<string, ITool> Tools => _tools;
+
+    /// <summary>
+    ///     Whether the MCP client has completed the handshake with this host (#1733).
+    /// </summary>
+    /// <remarks>
+    ///     The out-of-process host publishes this as the <c>mcp-session</c> capability: a
+    ///     plugin that needs the session to be up waits for it instead of failing at load
+    ///     time. It is the one capability this process can honestly offer, because the
+    ///     handshake is the one thing that is genuinely not true when the plugins load.
+    /// </remarks>
+    public bool IsSessionEstablished => Volatile.Read(ref _sessionEstablished) == 1;
+
+    /// <summary>
+    ///     Record that the MCP client completed the handshake.
+    /// </summary>
+    public void MarkSessionEstablished() => Volatile.Write(ref _sessionEstablished, 1);
 
     public Result RegisterTool(ITool tool)
         => _tools.TryAdd(tool.Name.Value, tool)

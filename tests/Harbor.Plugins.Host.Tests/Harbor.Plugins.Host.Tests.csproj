@@ -10,9 +10,10 @@
     <!-- #1723: the route's per-axis verdict (PluginRouteAxisRegistry) is read
          directly by the carriage suite, and the crossing suite drives the
          registrar so the carried axis is exercised end to end. -->
-    <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Plugins.Registration\Harbor.Plugins.Registration.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\..\src\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>

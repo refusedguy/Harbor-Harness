@@ -46,15 +46,31 @@ public static class Program
             new PluginRegistrar(parsed.PluginRoot, loggerFactory.CreateLogger<PluginRegistrar>(), loggerFactory),
             loggerFactory.CreateLogger<SafePluginRegistrar>());
 
+        var loadHost = new McpPluginLoadHost(loggerFactory, new NullEventBus());
+
+        // #1733: the host publishes ONE capability — "mcp-session", the MCP session with
+        // the CLI. It is not true when the plugins load (the client has not connected
+        // yet), so a plugin that declares it waits, visibly, and comes up the moment the
+        // handshake lands.
+        var dependencies = new PluginDependencyResolver(
+            new Dictionary<string, Func<bool>>(StringComparer.Ordinal)
+            {
+                ["mcp-session"] = () => loadHost.IsSessionEstablished
+            },
+            loggerFactory.CreateLogger<PluginDependencyResolver>());
+
         var host = new PluginHostBuilder()
             .WithSource(source)
             .WithCompiler(compiler)
             .WithInstantiator(instantiator)
             .WithRegistrar(registrar)
-            .WithOptions(o => o.PluginRoot = parsed.PluginRoot)
+            .WithOptions(o =>
+            {
+                o.PluginRoot = parsed.PluginRoot;
+                o.Dependencies = dependencies;
+            })
             .Build(loggerFactory.CreateLogger<PluginHost>());
 
-        var loadHost = new McpPluginLoadHost(loggerFactory, new NullEventBus());
         var loadResult = await host.LoadAllAsync(loadHost).ConfigureAwait(false);
 
         if (loadResult.IsFailure)
@@ -68,7 +84,10 @@ public static class Program
             cts.Cancel();
         };
 
-        var server = new McpStdioServer(loadHost, loggerFactory.CreateLogger<McpStdioServer>());
+        var server = new McpStdioServer(
+            loadHost,
+            loggerFactory.CreateLogger<McpStdioServer>(),
+            () => host.ActivatePending(loadHost));
         try
         {
             await server.RunAsync(cts.Token).ConfigureAwait(false);
