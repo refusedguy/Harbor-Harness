@@ -959,13 +959,14 @@ second fold is what gives `ProjectHistory`'s common-prefix scan something to
 reuse — drop that scan and line 0 comes back as a new instance and the counter
 fires.
 
-### MatchesPattern scaling gate (#1528) — **RELATIVE**, CI merge gate
+### MatchesPattern scaling gate (#1528) — **PER-UNIT BUDGET**, CI merge gate
 
-**Leg length fixed in #1948** — the leg scaler now starts at ONE unit instead of at a
-burst of 200 `Evaluate` calls, so the legs land at ~100 ms instead of 876–1 838 ms and
-the gate stops paying 26.5 s of its 27.9 s to prove a ratio that never moved. The FORM
-is still a ratio: converting it needs `Harbor.TestKit.PerfGate`, which this assembly
-cannot reach until #1889's TestKit split gives it the TestKit reference.
+**Converted in #1948** — the cost gate here is now a BUDGET PER UNIT OF WORK: **0 B
+per `Evaluate` call** (the exact zero, and the strongest shape a byte claim can take)
+and 3 000 probe units per call (soft), over a FIXED 2 400 calls. The leg scaler's
+8–17x-over-target legs (876–1 838 ms) are gone with the ratio they served: the gate
+stopped paying 26.5 s of its 27.9 s to prove a number that never moved, and the
+assembly's wall went from 18.542 s to 3.495 s.
 
 `Harbor.Abstractions.Tests.MatchesPatternScalingGates`, in the `test (core)` merge-gate shard.
 
@@ -1253,6 +1254,8 @@ Two of the gates were not merely noisy but **measuring the harness**:
 | `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | time per painted frame, in probe units | ratio, above | **≤ 4 500 probe units per frame** (SOFT) | **~312 probe units** per frame |
 | `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | allocation per tool-start/end pair, over a FIXED 4 000 pairs | ratio ≤ 3.0 — **the same measurement on both sides** | **≤ 16 000 B per pair** (HARD) | **11 959 B** per pair (208 151 840 B over 17 404 pairs) |
 | `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | time per tool-start/end pair, in probe units | ratio, above | **≤ 200 probe units per pair** (SOFT) | **~9.6 probe units** per pair — 3.64 µs/pair |
+| `MatchesPatternScalingGates.Cost_PerCall_StaysWithinBudget` | allocation per `Evaluate` miss-walk, over a FIXED 2 400 calls against the 512-rule ruleset | ratio ≤ 3.0 / 3.15 | **≤ 0 B per call** (HARD — the exact zero) | **0 B** per call (876 361 ms / 0 B over 40 000 calls) |
+| `MatchesPatternScalingGates.Cost_PerCall_StaysWithinBudget` | time per `Evaluate` miss-walk, in probe units | ratio, above | **≤ 3 000 probe units per call** (SOFT) | **~110 probe units** per call at 512 rules — 43.8 µs/call against a probe that costs 0.000380 ms/unit |
 | `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | allocation per scripted delta, over a FIXED 100 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 1 700 B per delta** (HARD) | **1 300 B** per delta (71 508 360 B over 55 drives of 1 000 deltas) |
 | `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | time per scripted delta, in probe units | ratio, above | **≤ 13 probe units per delta** (SOFT) | **~0.87 probe units** per delta — 0.331 µs/delta |
 
@@ -1336,7 +1339,7 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Core.Tests.CompactionPolicyMaterializeScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **keep** — same |
 | `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
 | `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **convert to a constant** — done in #1948; the pre-#1533 companion stays on the ratio helper because it never gated anything |
-| `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **keep** — the exact-zero form is the strongest shape a byte claim can take. Its LEG LENGTH was fixed in #1948 (the scaler now starts at ONE unit, not at a burst of 200 calls): the legs were 876–1 838 ms against a 100 ms target, and 26.5 s of the gate's 27.9 s went to proving a ratio that never moved. The FORM stays a ratio until #1889 gives this assembly the TestKit reference |
+| `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **convert to a constant** — done in #1948, once #1889 gave this assembly the TestKit reference: **0 B per Evaluate call** (the exact zero, which is the strongest shape a byte claim can take) and 3 000 probe units per call. Its LEG LENGTH was fixed in the same change (the legs were 876–1 838 ms against a 100 ms target, and 26.5 s of the gate's 27.9 s went to proving a ratio that never moved) |
 | `Harbor.Domain.Tests.BashArgMatcherScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
 | `Harbor.Providers.Tests.OpenAiCompatibleRequestBuildScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
 | `Harbor.Providers.Tests.SsePumpScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
