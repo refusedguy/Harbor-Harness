@@ -159,7 +159,7 @@ public sealed class SessionListTests : ComponentTestBase
 
         var hasMatch = await Driver.WaitForTextAsync("Investigate IPC deadlock", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasMatch).IsTrue();
+        await Assert.That(hasMatch).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasOther = Driver.GetRenderedText().Contains("Refactor agent loop", StringComparison.Ordinal);
         await Assert.That(hasOther).IsFalse();
@@ -200,7 +200,7 @@ public sealed class SessionListTests : ComponentTestBase
 
         var hasNew = await Driver.WaitForTextAsync("New session", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasNew).IsTrue();
+        await Assert.That(hasNew).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("sessions-new-created").ConfigureAwait(false);
     }
@@ -245,14 +245,14 @@ public sealed class SessionListTests : ComponentTestBase
             },
             TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
-        await Assert.That(hasKeep).IsTrue();
+        await Assert.That(hasKeep).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         // The "Opened: Delete me" toast lingers ~4s — poll deterministically until gone.
         bool toastGone = await Driver.WaitForConditionAsync(
             () => !Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal),
             TimeSpan.FromSeconds(6),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
-        await Assert.That(toastGone).IsTrue();
+        await Assert.That(toastGone).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("sessions-deleted").ConfigureAwait(false);
 
@@ -287,7 +287,7 @@ public sealed class SessionListTests : ComponentTestBase
             },
             TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
-        await Assert.That(hasFeature).IsTrue();
+        await Assert.That(hasFeature).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var path = await CaptureAsync("sessions-git-info").ConfigureAwait(false);
 

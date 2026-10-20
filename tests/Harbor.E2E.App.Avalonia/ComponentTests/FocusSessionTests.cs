@@ -40,15 +40,15 @@ public sealed class FocusSessionTests : ComponentTestBase
 
         var opened = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsFocusSessionOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasTitle = await Driver.WaitForRenderedTextAsync("Focus Mode", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasTitle).IsTrue();
+        await Assert.That(hasTitle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasHint = await Driver.WaitForRenderedTextAsync("Esc to exit", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasHint).IsTrue();
+        await Assert.That(hasHint).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var sessionTitle = UI(() => Vm.FocusSession.Title);
         await Assert.That(sessionTitle).IsNotEqualTo(string.Empty);
@@ -75,7 +75,7 @@ public sealed class FocusSessionTests : ComponentTestBase
         UI(() => Vm.ToggleFocusSessionCommand.Execute(null));
         var opened = await Driver.WaitForRenderedTextAsync("Focus Mode", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var exit = Driver.FindButtonByText("Exit Focus Mode");
         await Assert.That(exit).IsNotNull();
@@ -83,12 +83,12 @@ public sealed class FocusSessionTests : ComponentTestBase
 
         var closed = await Driver.WaitForConditionAsync(
             () => UI(() => !Vm.IsFocusSessionOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(closed).IsTrue();
+        await Assert.That(closed).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var chromeGone = await Driver.WaitForConditionAsync(
             () => !UI(() => Driver.GetRenderedText().Contains("Focus Mode", StringComparison.Ordinal)),
             TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(chromeGone).IsTrue();
+        await Assert.That(chromeGone).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         await CaptureAsync("focus-exit-button").ConfigureAwait(false);
     }

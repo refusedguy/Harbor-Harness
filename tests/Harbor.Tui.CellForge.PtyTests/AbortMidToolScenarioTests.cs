@@ -29,24 +29,15 @@ public sealed class AbortMidToolScenarioTests : CellForgePtyScenarioBase
 
         SubmitLine("read the probe in a loop");
 
-        // Free the loop at the approval prompt, tolerating re-prompts.
-        var approvalDeadline = TimeSpan.FromSeconds(30);
-        var approvalSw = System.Diagnostics.Stopwatch.StartNew();
-        while (approvalSw.Elapsed < approvalDeadline)
-        {
-            string[] snap = NormalizedLines();
-            if (snap.Any(x => x.Contains("pty-abort-content-423", StringComparison.Ordinal)))
-            {
-                break;
-            }
-
-            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
-            {
-                Session.SendKey("a");
-            }
-
-            await Task.Delay(300).ConfigureAwait(false);
-        }
+        // Free the loop at the approval prompt, tolerating re-prompts. The
+        // gate and the tool output are OBSERVED states — the wait wakes on
+        // the repaint signal, so the 'a' goes out as soon as the gate is
+        // painted instead of up to a poll interval later.
+        bool approved = await AnswerApprovalGateAsync(
+            "permission required",
+            "pty-abort-content-423",
+            TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+        await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
         // First executed result proves the free-running loop — abort NOW, deep inside it.
         _ = await WaitForScreenAsync(

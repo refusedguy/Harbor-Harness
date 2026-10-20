@@ -36,11 +36,11 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
 
         var hasTitle = await Driver.WaitForRenderedTextAsync("Diff viewer", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasTitle).IsTrue();
+        await Assert.That(hasTitle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasCompute = await Driver.WaitForRenderedTextAsync("Compute", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasCompute).IsTrue();
+        await Assert.That(hasCompute).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.IsDiffOpen = false);
         var closed = UI(() => Vm.IsDiffOpen);
@@ -63,7 +63,7 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
         UI(() => Vm.IsDiffOpen = true);
         var opened = await Driver.WaitForRenderedTextAsync("Diff viewer", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() =>
         {
@@ -80,7 +80,7 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
 
         var hasNewText = await Driver.WaitForRenderedTextAsync("line2 changed", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasNewText).IsTrue();
+        await Assert.That(hasNewText).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.IsDiffOpen = false);
 
@@ -101,15 +101,15 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
 
         var hasTitle = await Driver.WaitForRenderedTextAsync("Token usage per turn", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasTitle).IsTrue();
+        await Assert.That(hasTitle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasInput = await Driver.WaitForRenderedTextAsync("Total input", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasInput).IsTrue();
+        await Assert.That(hasInput).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasCost = await Driver.WaitForRenderedTextAsync("Cumulative cost", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasCost).IsTrue();
+        await Assert.That(hasCost).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.IsTokenUsageOpen = false);
         var closed = UI(() => Vm.IsTokenUsageOpen);
@@ -131,7 +131,7 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
         UI(() => Vm.IsTokenUsageOpen = true);
         var opened = await Driver.WaitForRenderedTextAsync("Token usage per turn", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(opened).IsTrue();
+        await Assert.That(opened).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.TokenUsage.ClearCommand.Execute(null));
         var bars = UI(() => Vm.TokenUsage.Bars.Count);
@@ -160,15 +160,15 @@ public sealed class OverlaySurfacesTests : ComponentTestBase
 
         var hasTitle = await Driver.WaitForRenderedTextAsync("Provider browser", TimeSpan.FromSeconds(3))
             .ConfigureAwait(false);
-        await Assert.That(hasTitle).IsTrue();
+        await Assert.That(hasTitle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasProviders = await Driver.WaitForRenderedTextAsync("Providers", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasProviders).IsTrue();
+        await Assert.That(hasProviders).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         var hasModels = await Driver.WaitForRenderedTextAsync("Models", TimeSpan.FromSeconds(2))
             .ConfigureAwait(false);
-        await Assert.That(hasModels).IsTrue();
+        await Assert.That(hasModels).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         UI(() => Vm.IsProviderBrowserOpen = false);
         var closed = UI(() => Vm.IsProviderBrowserOpen);

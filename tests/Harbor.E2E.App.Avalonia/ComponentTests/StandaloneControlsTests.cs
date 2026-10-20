@@ -98,11 +98,11 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         {
             var hasHelper = await Driver.WaitForTextInWindowAsync(
                 window, "Enter send", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasHelper).IsTrue();
+            await Assert.That(hasHelper).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var hasSend = await Driver.WaitForTextInWindowAsync(
                 window, "Send", TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            await Assert.That(hasSend).IsTrue();
+            await Assert.That(hasSend).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -136,12 +136,12 @@ public sealed class StandaloneControlsTests : ComponentTestBase
             var hasStop = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("Stop", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasStop).IsTrue();
+            await Assert.That(hasStop).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var sendHidden = await Driver.WaitForConditionAsync(
                 () => UI(() => !RenderedTextOf(window).Contains("Send", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(sendHidden).IsTrue();
+            await Assert.That(sendHidden).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() =>
             {
@@ -152,7 +152,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
             var sendBack = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("Send", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(sendBack).IsTrue();
+            await Assert.That(sendBack).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -194,7 +194,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         {
             var hasName = await Driver.WaitForTextInWindowAsync(
                 window, "read", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasName).IsTrue();
+            await Assert.That(hasName).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var pill = UI(() => cardVm.StatusPill);
             await Assert.That(pill).IsEqualTo("running");
@@ -208,12 +208,12 @@ public sealed class StandaloneControlsTests : ComponentTestBase
             var argsShown = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains(argsText, StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(argsShown).IsTrue();
+            await Assert.That(argsShown).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var resultShown = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains(resultText, StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(resultShown).IsTrue();
+            await Assert.That(resultShown).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -248,26 +248,26 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         {
             var shown = await Driver.WaitForTextInWindowAsync(
                 window, "edit", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(shown).IsTrue();
+            await Assert.That(shown).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() => cardVm.Complete(ToolCallState.Success, "Applied 1 hunk +12 -3", TimeSpan.FromMilliseconds(340)));
 
             var hasOk = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("ok", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasOk).IsTrue();
+            await Assert.That(hasOk).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var hasDuration = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("340ms", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasDuration).IsTrue();
+            await Assert.That(hasDuration).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() => cardVm.Complete(ToolCallState.Error, "Exit 1: file not found", TimeSpan.FromMilliseconds(120)));
 
             var hasErr = await Driver.WaitForConditionAsync(
                 () => UI(() => RenderedTextOf(window).Contains("err", StringComparison.Ordinal)),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasErr).IsTrue();
+            await Assert.That(hasErr).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -296,11 +296,11 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         {
             var hasTitle = await Driver.WaitForTextInWindowAsync(
                 window, "No sessions yet", TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(hasTitle).IsTrue();
+            await Assert.That(hasTitle).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var hasSubtitle = await Driver.WaitForTextInWindowAsync(
                 window, "Create a session to begin.", TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            await Assert.That(hasSubtitle).IsTrue();
+            await Assert.That(hasSubtitle).IsTrue().Because(Driver.LastWaitDiagnostic);
         }
         finally
         {
@@ -358,7 +358,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
         UI(() => Vm.IsSettingsOpen = true);
         var settingsOpen = await Driver.WaitForConditionAsync(
             () => UI(() => Vm.IsSettingsOpen), TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-        await Assert.That(settingsOpen).IsTrue();
+        await Assert.That(settingsOpen).IsTrue().Because(Driver.LastWaitDiagnostic);
 
         try
         {
@@ -367,7 +367,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
                     .OfType<TextBox>()
                     .Any(t => t.PlaceholderText == "Search models or providers…")),
                 TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            await Assert.That(found).IsTrue();
+            await Assert.That(found).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var picker = UI(() => Vm.Settings.Picker);
             await Assert.That(picker).IsNotNull();
@@ -379,7 +379,7 @@ public sealed class StandaloneControlsTests : ComponentTestBase
                     .Any(t => t.PlaceholderText == "Search models or providers…"
                         && t.Text == "qo9-model-filter")),
                 TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await Assert.That(pushed).IsTrue();
+            await Assert.That(pushed).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             UI(() => picker!.SearchText = string.Empty);
         }

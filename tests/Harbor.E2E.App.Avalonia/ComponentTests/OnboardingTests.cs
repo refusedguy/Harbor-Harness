@@ -78,7 +78,7 @@ public sealed class OnboardingTests : ComponentTestBase
         {
             var sawBrand = await Driver.WaitForTextInWindowAsync(window, "Harbor", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            await Assert.That(sawBrand).IsTrue();
+            await Assert.That(sawBrand).IsTrue().Because(Driver.LastWaitDiagnostic);
             var step = UI(() => vm.CurrentStep);
             await Assert.That(step).IsEqualTo(1);
 
@@ -140,7 +140,7 @@ public sealed class OnboardingTests : ComponentTestBase
 
             var hasApiKey = await Driver.WaitForTextInWindowAsync(window, "API key", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            await Assert.That(hasApiKey).IsTrue();
+            await Assert.That(hasApiKey).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step3-apikey")
                 .ConfigureAwait(false);
@@ -166,7 +166,7 @@ public sealed class OnboardingTests : ComponentTestBase
         {
             var hasModel = await Driver.WaitForTextInWindowAsync(window, "default model", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            await Assert.That(hasModel).IsTrue();
+            await Assert.That(hasModel).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step4-model")
                 .ConfigureAwait(false);
@@ -193,7 +193,7 @@ public sealed class OnboardingTests : ComponentTestBase
             UI(() => vm.DefaultModel = "qwen2.5-coder:7b");
             var hasTheme = await Driver.WaitForTextInWindowAsync(window, "Choose your theme", TimeSpan.FromSeconds(2))
                 .ConfigureAwait(false);
-            await Assert.That(hasTheme).IsTrue();
+            await Assert.That(hasTheme).IsTrue().Because(Driver.LastWaitDiagnostic);
 
             var path = await CaptureOnboardingWindowAsync(window, "onboarding-step5-theme")
                 .ConfigureAwait(false);

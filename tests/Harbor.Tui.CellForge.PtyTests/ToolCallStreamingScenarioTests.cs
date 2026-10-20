@@ -45,23 +45,13 @@ public sealed class ToolCallStreamingScenarioTests : CellForgePtyScenarioBase
         // The out-of-workspace path raises the approval prompt; approve with
         // "a" (always allow, remembered for the run). Re-prompt tolerant: if a
         // later iteration prompts again, approve again until content flows.
-        var approvalDeadline = TimeSpan.FromSeconds(40);
-        var approvalSw = System.Diagnostics.Stopwatch.StartNew();
-        while (approvalSw.Elapsed < approvalDeadline)
-        {
-            string[] snap = NormalizedLines();
-            if (snap.Any(x => x.Contains("pty-probe-line-alpha-423", StringComparison.Ordinal)))
-            {
-                break;
-            }
-
-            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
-            {
-                Session.SendKey("a");
-            }
-
-            await Task.Delay(500).ConfigureAwait(false);
-        }
+        // The gate and the tool output are OBSERVED states — the wait wakes on
+        // the repaint signal instead of on a fixed poll interval.
+        bool approved = await AnswerApprovalGateAsync(
+            "permission required",
+            "pty-probe-line-alpha-423",
+            TimeSpan.FromSeconds(40)).ConfigureAwait(false);
+        await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
         // The tool card streamed with the call name and the executed result.
         // Filename matching is viewport-fragile (the 30-row grid scrolls past

@@ -64,28 +64,12 @@ public sealed class TreeErrorScenarioTests : CellForgePtyScenarioBase
         // Approve with "a" (remembered for the run), then stop the tool flood
         // at the mock so the run settles after this one execution. Re-prompt
         // tolerant: approve again until the follow-up text lands.
-        bool approved = false;
-        var approvalSw = System.Diagnostics.Stopwatch.StartNew();
-        while (approvalSw.Elapsed < TimeSpan.FromSeconds(30))
-        {
-            string[] snap = NormalizedLines();
-            if (snap.Any(x => x.Contains("permission required", StringComparison.Ordinal)))
-            {
-                Session.SendKey("a");
-                if (!approved)
-                {
-                    approved = true;
-                    Server.SetResponse("test-model", "probe-treeerr-done-423j");
-                }
-            }
-
-            if (snap.Any(x => x.Contains("probe-treeerr-done-423j", StringComparison.Ordinal)))
-            {
-                break;
-            }
-
-            await Task.Delay(250).ConfigureAwait(false);
-        }
+        bool approved = await AnswerApprovalGateAsync(
+            "permission required",
+            "probe-treeerr-done-423j",
+            TimeSpan.FromSeconds(30),
+            answerKey: "a",
+            onFirstAnswer: () => Server.SetResponse("test-model", "probe-treeerr-done-423j")).ConfigureAwait(false);
 
         await Assert.That(approved).IsTrue().Because($"approval prompt never appeared:\n{ScreenText}");
 
