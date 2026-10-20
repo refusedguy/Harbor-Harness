@@ -52,11 +52,42 @@ public readonly struct Cell : IEquatable<Cell>
         (ushort)style.Attrs,
         (byte)UnicodeWidth.Width(rune));
 
-    /// <summary>Style view of this cell (colors + attributes).</summary>
+    /// <summary>
+    ///     Style view of this cell (colors + attributes).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1524 measured this getter: a cell carries its style PACKED
+    ///         (fg/bg/flags), so the getter copies three fields out of the
+    ///         cell's own representation — it allocates NOTHING and hands out
+    ///         no shared instance to mutate. The style is therefore already
+    ///         in the flyweight shape a value type can have: equal styles are
+    ///         equal BITS, and the shared form of a style is the packed
+    ///         triple, not an object. A classic flyweight (one heap object per
+    ///         distinct style, shared by the cells that use it) would ADD an
+    ///         allocation per distinct style and would grow the cell past its
+    ///         16-byte protocol budget — the measured numbers are in
+    ///         <c>tests/Harbor.Tui.CellForge.Tests/CellStyleSharedViewTests.cs</c>.
+    ///     </para>
+    ///     <para>
+    ///         <see cref="HasSameStyle" /> is the form to use when two cells'
+    ///         styles are COMPARED: it compares the packed fields directly and
+    ///         never materialises a <see cref="CellStyle" /> at all.
+    ///     </para>
+    /// </remarks>
     public CellStyle Style => new(
         PackedColor.FromRaw(Fg),
         PackedColor.FromRaw(Bg),
         (StyleAttr)Flags);
+
+    /// <summary>
+    ///     True when this cell carries the same style as <paramref name="other" />
+    ///     — a packed-field compare over the cells' own shared representation
+    ///     (fg/bg/flags), so the comparison never materialises a
+    ///     <see cref="CellStyle" /> on either side (#1524).
+    /// </summary>
+    public readonly bool HasSameStyle(in Cell other) =>
+        Fg == other.Fg && Bg == other.Bg && Flags == other.Flags;
 
     /// <summary>True when this cell is a printable space with default styling.</summary>
     public bool IsBlankSpace => Width == Narrow && Rune == ' ' && Fg == 0 && Bg == 0 && Flags == 0;
