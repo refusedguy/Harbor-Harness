@@ -16,6 +16,7 @@ the concrete impl.
 | `Tools/InMemoryMcpRegistry.cs`  | `IMcpRegistry`      | In-memory MCP server registry. Tracks registrations but cannot actually invoke — production hosts swap in a real stdio JSON-RPC client.                                 |
 | `Providers/ProviderRegistry.cs` | `IProviderRegistry` | Thread-safe provider registry with lazy `ILlmClient` instantiation and a frozen lookup table. Also exposes `ProviderRegistryBuilder`.                                   |
 | `Events/InMemoryEventBus.cs`    | `IEventBus`         | In-memory pub/sub event bus. Fixed-capacity scrollback ring, lock-free snapshot reads, pooled dead-subscriber collection, and a zero-subscriber fast path gated on an enumerated mandatory/optional sink verdict (see `docs/EVENT_BUS_SINKS.md`). |
+| `Events/EventBusScrollbackStore.cs` | (internal)      | The bus's bounded scrollback, extracted from `InMemoryEventBus` (#1512): the fixed-capacity ring, its lock, the head/count pair and the retention-arming flag (#518 — the first `GetScrollback` call arms the ring, and an unarmed ring costs nothing on the publish path). The bus keeps its public surface and delegates here. |
 | `Events/SamplingMiddleware.cs`, `Events/TypeFilterMiddleware.cs` | middleware | Composable bus middleware. `TypeFilterMiddleware` declares `SinkKind = Mandatory` (a filter is a contract on what projections may see); `SamplingMiddleware` declares `Optional` (a throttle whose own job is to drop events). |
 
 ## Why this project exists

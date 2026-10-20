@@ -32,15 +32,15 @@ producers (await PublishAsync directly)
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:188
         │ await _eventBus.PublishAsync(evt, ct)
         ▼
-InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.cs:398
-  0. fast path .................. src/Harbor.Registries/Events/InMemoryEventBus.cs:395-450
+InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.cs:353
+  0. fast path .................. src/Harbor.Registries/Events/InMemoryEventBus.cs:350-405
      (zero subscribers + no mandatory sink + ring unarmed ⇒ returns before
       touching a collection; falls through to the slow path otherwise)
   1. middleware pipeline (registration order; drop/throw ⇒ event dies here)
-     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:528 (+926-959)
-  2. scrollback ring append ...... src/Harbor.Registries/Events/InMemoryEventBus.cs:537 (+654-676)
-  3. lock-free snapshot .......... src/Harbor.Registries/Events/InMemoryEventBus.cs:540
-  4. sequential awaited fan-out .. src/Harbor.Registries/Events/InMemoryEventBus.cs:569 (+973-1075)
+     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:489 (+816-847)
+  2. scrollback ring append ...... src/Harbor.Registries/Events/InMemoryEventBus.cs:498 (+src/Harbor.Registries/Events/EventBusScrollbackStore.cs:179-201)
+  3. lock-free snapshot .......... src/Harbor.Registries/Events/InMemoryEventBus.cs:504
+  4. sequential awaited fan-out .. src/Harbor.Registries/Events/InMemoryEventBus.cs:533 (+862-956)
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
@@ -128,11 +128,11 @@ is the subscriber's business, and the live branches are:
 - **G1 — per-producer sequential order.** A single producer that `await`s each
   `PublishAsync` before the next publish is observed in publish order by every
   subscriber that stays attached: the fan-out loop awaits handlers in snapshot
-  order per event (`InMemoryEventBus.cs:569,973-1058`), and sequential awaits
+  order per event (`InMemoryEventBus.cs:533,862-956`), and sequential awaits
   serialize publishes. Tested: `EventTopologySemanticsTests.SingleProducer_OrderPreserved`.
 - **G2 — single observed sequence per publish.** All subscribers in one
   publish's snapshot receive the **same event reference in the same position**
-  of their stream (snapshot taken once at `InMemoryEventBus.cs:540`). Tested:
+  of their stream (snapshot taken once at `InMemoryEventBus.cs:504`). Tested:
   `EventTopologySemanticsTests.SingleObservedSequence_AllSubscribersSeeSameOrder`.
 - **G3 — NO wall-clock / cross-producer total order.** Concurrent publishers
   interleave arbitrarily; "channel-acceptance order" is just whichever
@@ -155,7 +155,7 @@ is the subscriber's business, and the live branches are:
   (This is stronger than "accepted ≠ processed": for the common case they
   coincide; they diverge only for over-budget slow subscribers, whose orphaned
   task stays observed via a fault-logging continuation,
-  `InMemoryEventBus.cs:1014-1027`.)
+  `InMemoryEventBus.cs:914`.)
 - **No durability in the bus.** Crash loses everything not yet in
   `ISessionStore`: the scrollback ring is memory-only, and there is no
   graceful-shutdown drain API — `IEventBus` declares no `Dispose`/`Complete`
@@ -167,9 +167,9 @@ is the subscriber's business, and the live branches are:
   `PublishAsync` calls honour the caller's `CancellationToken` — cancellation
   abandons the remaining fan-out (tail loss by design).
 - **Late subscribers get future events only.** `Subscribe` never replays
-  (`InMemoryEventBus.cs:578-587`); history is available only as an explicit
+  (`InMemoryEventBus.cs:533-542`); history is available only as an explicit
   pull via `GetScrollback` (repeatable point-in-time copy,
-  `InMemoryEventBus.cs:602-646`). Tested:
+  `src/Harbor.Registries/Events/EventBusScrollbackStore.cs:127-171`). Tested:
   `EventTopologySemanticsTests.LateSubscriber_SeesFutureOnly_ScrollbackIsSnapshot`.
   Cross-process reconnect replay exists **only** at the IPC edge via
   `lastSequence` cursor against the 1000-envelope server ring
@@ -191,14 +191,14 @@ is the subscriber's business, and the live branches are:
   the preset is `EventBusScrollback = 1000`,
   `src/Harbor.Hosting/HarborComposeOptions.cs:153`).
   Retention is now armed by the first `GetScrollback` call
-  (`InMemoryEventBus.cs:616`), so:
+  (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:141`), so:
   - an unread ring costs nothing, and the fast path is reachable for the
     shipped presets;
   - history is complete **from the first read onward**. Events published
     strictly before the first read were not retained, and a publish racing the
     arming may be missed — an accepted gap for a diagnostic pull;
   - arming is one-way and permanent, and a disabled ring (`maxScrollback <= 0`)
-    can never be armed (`InMemoryEventBus.cs:656-658`).
+    can never be armed (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:181`).
   Tested: `EventBusRetentionArmingGuardTests` (both halves — the ring stays free
   while unread and is genuinely maintained once read, so the fast path can never
   be won by silently dropping history), and the shipped-preset regression row
@@ -208,29 +208,29 @@ is the subscriber's business, and the live branches are:
 
 - **Throwing subscriber is evicted, others continue** — an exception in one
   handler marks it dead and removes it after the publish
-  (`InMemoryEventBus.cs:1046-1058`), never halting the renderer or other
+  (`InMemoryEventBus.cs:927-939`), never halting the renderer or other
   subscribers. Pre-existing test: `EventBusTests.FailingSubscriber_DoesNotBlockOthers`.
 - **Middleware failure drops the event for everyone** — a `false` return or a
   throw anywhere in the pipeline returns before scrollback and fan-out
-  (`InMemoryEventBus.cs:528-534,926-959`). Middleware is therefore a mandatory
+  (`InMemoryEventBus.cs:483-489,807-840`). Middleware is therefore a mandatory
   filter, not an optional listener.
 - **Slow-subscriber budget (A4):** each handler gets `DefaultHandlerBudget`
   (250 ms, `InMemoryEventBus.cs:118`); an over-budget handler is left behind
   (orphaned but observed), accrues a strike, and is evicted after
   `MaxSlowStrikes` (3, `InMemoryEventBus.cs:134`) consecutive strikes
-  (`InMemoryEventBus.cs:1014-1027,1030-1051`). `TimeSpan.Zero` disables the budget
+  (`InMemoryEventBus.cs:895-908,911-932`). `TimeSpan.Zero` disables the budget
   (legacy blocking semantics). Pre-existing tests:
   `EventBusBackpressureTests` (all three cases).
 - **Scrollback eviction (drop-oldest):** at capacity the oldest slot is
-  overwritten in place, head advances (`InMemoryEventBus.cs:671-674`).
+  overwritten in place, head advances (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:194-199`).
   Tested: `EventTopologySemanticsTests.Scrollback_EvictsOldest_NoLossBelowCapacity`.
 
 ## 6. Subscription lifecycle
 
 - Every `Subscribe` returns an `IDisposable`; disposal CAS-removes that exact
-  `Subscription` record (`InMemoryEventBus.cs:578-587,678-693`). Disposal is
+  `Subscription` record (`InMemoryEventBus.cs:533-542,568-583`). Disposal is
   idempotent (`_action = null` after first invoke,
-  `InMemoryEventBus.cs:1252-1266`).
+  `InMemoryEventBus.cs:1164-1178`).
 - Holders responsible for disposal: `DefaultAgent` (`_eventBusSubscription`,
   released in `Dispose`, `DefaultAgent.cs:492-498`),
   `EventBroadcaster.DisposeAsync`, `InProcessHarborClient`, the CellForge REPL
@@ -268,12 +268,12 @@ is the subscriber's business, and the live branches are:
    `Task` as an answer; criterion #2 forbade the redesign without an allocation
    sample first). Three findings, in the order they matter:
    - **There is no state machine to unbox.** `InMemoryEventBus.PublishAsync`
-     (`InMemoryEventBus.cs:398`) is not an `async` method — it is a plain method
+     (`InMemoryEventBus.cs:353`) is not an `async` method — it is a plain method
      with three returns. A state machine must exist before it can be boxed.
    - **Nothing on the synchronous path suspends.** A subscriber that returns an
      already-completed `ValueTask` — the common case, and the one
      `PublishAsync_1Sub` measures — takes `DispatchToOneAsync`'s
-     `IsCompletedSuccessfully` branch (`InMemoryEventBus.cs:1137`) and returns
+     `IsCompletedSuccessfully` branch (`InMemoryEventBus.cs:1024`) and returns
      without a real suspension, so the `async Task` helpers beneath it stay
      structs on the stack and hand back the builder's cached completed task.
    - **The bytes that remain are not the interface's.** 200 B/publish on the
