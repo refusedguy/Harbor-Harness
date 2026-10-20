@@ -34,6 +34,13 @@
 // what the guard grades — see
 // `tests/Harbor.Architecture.Tests/ExtensionAxisRegistrationRule.cs`.
 //
+// A door that ANSWERS `Result.Success()` without having registered anything is
+// the same lie in a third shape: the axis exists, the door is called, and the
+// registration it promised did not happen. `IPluginLoadHost` states that
+// contract in its own XML documentation, and
+// `tests/Harbor.Architecture.Tests/ExtensionAxisDoorHonestyRule.cs` is the
+// guard for it (#1758).
+//
 // WHAT THE REGISTRY DOES AND DOES NOT CLAIM
 // -----------------------------------------
 // It claims which axes EXIST. It does not claim they WORK: a registered axis

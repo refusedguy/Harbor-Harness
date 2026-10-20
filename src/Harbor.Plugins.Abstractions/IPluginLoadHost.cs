@@ -30,6 +30,17 @@ namespace Harbor.Plugins.Abstractions;
 ///         <see cref="RegisterTuiPlugin" /> may be called concurrently when multiple plugins
 ///         are loaded in parallel.
 ///     </para>
+///     <para>
+///         THE RESULT CONTRACT: <c>Result.Success()</c> means the contribution was
+///         REGISTERED — the host stored it and can serve it afterwards.
+///         <c>Result.Failure</c> means it was REFUSED, and the error says why. A door
+///         that answers Success while registering nothing makes "accepted" and
+///         "dropped" indistinguishable to the caller, so the architecture gate
+///         (<c>tests/Harbor.Architecture.Tests/ExtensionAxisDoorHonestyRule.cs</c>)
+///         fails that shape in every implementation of this interface (#1758). A route
+///         that cannot carry an axis answers <c>Result.Failure</c> — it does not
+///         pretend the contribution landed.
+///     </para>
 /// </remarks>
 public interface IPluginLoadHost
 {

@@ -26,7 +26,8 @@ namespace Harbor.Plugins.Host.Tests;
 ///     <para>
 ///         The parity rows pin the capability table from #1041: tools are the
 ///         only capability the split host exposes over MCP; every other door
-///         accepts (so plugin <c>Initialize</c> never throws) and discards.
+///         refuses with a reason (so plugin <c>Initialize</c> never throws) and
+///         discards the contribution (#1758).
 ///     </para>
 ///     <para>
 ///         The #1012 link set (which assemblies the host compiler resolves by
@@ -200,24 +201,41 @@ public class PluginHostJsonRpcTests
 
     /// <summary>
     ///     The #1041 capability table as an executable spec: tools are the one
-    ///     capability the split host exposes; every other door accepts (so
-    ///     plugin <c>Initialize</c> never throws) and discards — nothing but
-    ///     tools reaches <c>tools/list</c>.
+    ///     capability the split host exposes. Every other door REFUSES with a
+    ///     reason instead of accepting a registration it never performed (#1758),
+    ///     and nothing but tools reaches <c>tools/list</c>.
     /// </summary>
     [Test]
-    public async Task NonToolRegistrations_AcceptedButNeverExposedOverMcp()
+    public async Task NonToolRegistrations_RefusedWithAReason_AndNeverExposedOverMcp()
     {
         var loadHost = CreateLoadHost();
 
         var providerId = ProviderId.TryCreate("s3-probe");
         await Assert.That(providerId.IsSuccess).IsTrue();
-        await Assert.That(loadHost.RegisterProvider(providerId.Value, () => null!).IsSuccess).IsTrue();
-        await Assert.That(loadHost.RegisterAgent(AgentDefinition.CodeDefault("probe-model", "probe-provider")).IsSuccess)
-            .IsTrue();
-        await Assert.That(loadHost.RegisterTuiPlugin(new ProbeTuiPlugin()).IsSuccess).IsTrue();
-        await Assert.That(loadHost.RegisterPanelProvider(new ProbePanel()).IsSuccess).IsTrue();
-        await Assert.That(loadHost.RegisterSessionStore("s3store", () => null!).IsSuccess).IsTrue();
-        await Assert.That(loadHost.RegisterTuiBackend("s3backend", null, () => null!).IsSuccess).IsTrue();
+
+        var provider = loadHost.RegisterProvider(providerId.Value, () => null!);
+        await Assert.That(provider.IsSuccess).IsFalse();
+        await Assert.That(provider.Error).Contains("tools only");
+
+        var agent = loadHost.RegisterAgent(AgentDefinition.CodeDefault("probe-model", "probe-provider"));
+        await Assert.That(agent.IsSuccess).IsFalse();
+        await Assert.That(agent.Error).Contains("tools only");
+
+        var tui = loadHost.RegisterTuiPlugin(new ProbeTuiPlugin());
+        await Assert.That(tui.IsSuccess).IsFalse();
+        await Assert.That(tui.Error).Contains("tools only");
+
+        var panel = loadHost.RegisterPanelProvider(new ProbePanel());
+        await Assert.That(panel.IsSuccess).IsFalse();
+        await Assert.That(panel.Error).Contains("tools only");
+
+        var store = loadHost.RegisterSessionStore("s3store", () => null!);
+        await Assert.That(store.IsSuccess).IsFalse();
+        await Assert.That(store.Error).Contains("tools only");
+
+        var backend = loadHost.RegisterTuiBackend("s3backend", null, () => null!);
+        await Assert.That(backend.IsSuccess).IsFalse();
+        await Assert.That(backend.Error).Contains("tools only");
 
         var server = CreateServer(loadHost);
         using var doc = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");

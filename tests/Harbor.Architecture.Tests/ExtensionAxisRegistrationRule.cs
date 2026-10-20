@@ -34,7 +34,7 @@
 //
 // WHAT THE RULE GRADES, INSTEAD OF "HOW MANY AXES"
 // --------------------------------------------------
-// Two things, and neither of them is a count:
+// Three things, and none of them is a count:
 //
 //   1. REGISTERED. Every axis is visible in ONE list: `PluginAxisRegistry`
 //      (src/Harbor.Plugins.Abstractions/PluginAxisRegistry.cs), the product's
@@ -49,7 +49,15 @@
 //      dispatched, and its door is invoked on a receiver. This is #620's
 //      half-open detection, and it is now the load-bearing half of the rule.
 //
-// The two are separate on purpose. "Registered" is the declaration and
+//   3. HONEST. A door that answers `Result.Success()` has to have REGISTERED
+//      something — "accepted" and "dropped" must not be the same answer, or the
+//      axis set is a lie in a second way (#1758). That half lives in its own
+//      file, `tests/Harbor.Architecture.Tests/ExtensionAxisDoorHonestyRule.cs`,
+//      because it grades the IMPLEMENTATION of a door rather than the axis set,
+//      and the two have different perimeters: this file grades the declaration
+//      and the wiring, that one grades what the door answers.
+//
+// The first two are separate on purpose. "Registered" is the declaration and
 // "whole" is the wiring, and a registry that listed every axis the product
 // has — including one nobody calls — would satisfy the first and fail the
 // second. A rule that graded only the first would be satisfied by a table.
@@ -140,6 +148,12 @@
 //      set, and the rule must report the half-open axis. A grader that cannot
 //      say no is a grader that enforces nothing — which is the state #620
 //      found the freeze in.
+//
+// The third half (HONEST) has its own pair of controls in
+// `ExtensionAxisDoorHonestyRule.cs` — `TheDoorScanIsLive` and
+// `NegativeControl_TheDoorGraderCatchesAnInjectedViolation` — because it
+// grades a different inventory (the implementations of the load host) with a
+// different perimeter.
 
 using System.Collections.Frozen;
 using System.Text.RegularExpressions;
@@ -171,6 +185,12 @@ internal enum AxisDefectKind
 
     /// <summary>Two registry rows claiming the same door or the same marker.</summary>
     Duplicate,
+
+    /// <summary>
+    ///     A door that answers <c>Result.Success()</c> while registering nothing —
+    ///     the "accepted" that changed no state (#1758).
+    /// </summary>
+    SilentSuccess,
 }
 
 /// <summary>One defect, with the kind that decides which rule reports it.</summary>
@@ -575,7 +595,12 @@ internal static partial class ExtensionAxisProbe
         }
     }
 
-    private static IEnumerable<string> EnumerateSources(string repoRoot)
+    /// <summary>
+    ///     Every product <c>.cs</c> file the source scan reads. Internal so the
+    ///     door-honesty scan (#1758) walks the SAME perimeter as this one — a
+    ///     second file list would be a second answer to "what is product code".
+    /// </summary>
+    internal static IEnumerable<string> EnumerateSources(string repoRoot)
     {
         foreach (string root in ScanRoots)
         {
