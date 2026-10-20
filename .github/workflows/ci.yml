@@ -806,6 +806,9 @@ jobs:
             tests/Harbor.LoadTests/bin/Release/net10.0/*.*
             tests/Harbor.LoadTests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.LoadTests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.E2E.Framework.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             apps/Harbor.App.Cli/bin/Release/net10.0/*.*
             apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
             apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
