@@ -18,6 +18,9 @@ namespace Harbor.Plugins.Registration;
 ///     panel registration failures are routed through the host's <see cref="IPluginLoadHost" />
 ///     <c>Register*</c> methods (which return <see cref="Result" />). <b>#1758:</b> a
 ///     REFUSED registration FAILS the plugin's registration. It used to be logged and swallowed.
+///     <b>#1721:</b> a plugin that declares a <see cref="IPlugin.RequiredHarborVersion" />
+///     newer than the running Harbor is refused BEFORE it is initialized, so it contributes
+///     nothing to the host.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -32,6 +35,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
     private readonly string _pluginRoot;
     private readonly ILoggerFactory _loggerFactory;
     private readonly IPluginAuditLog? _audit;
+    private readonly Version _harborVersion;
 
     /// <summary>
     ///     Construct a new registrar.
@@ -42,16 +46,23 @@ public sealed class PluginRegistrar : IPluginRegistrar
     /// <param name="logger">Logger for diagnostics.</param>
     /// <param name="loggerFactory">Logger factory for tool/provider construction.</param>
     /// <param name="audit">Optional capability-audit sink for the tool sandbox.</param>
+    /// <param name="harborVersion">
+    ///     The Harbor version plugins are checked against (#1721). Defaults to
+    ///     <see cref="PluginLifecycle.CurrentHarborVersion" />, the same version the
+    ///     plugin is handed in <see cref="PluginContext.HarborVersion" />.
+    /// </param>
     public PluginRegistrar(
         string pluginRoot,
         ILogger<PluginRegistrar> logger,
         ILoggerFactory loggerFactory,
-        IPluginAuditLog? audit = null)
+        IPluginAuditLog? audit = null,
+        Version? harborVersion = null)
     {
         _pluginRoot = pluginRoot ?? throw new ArgumentNullException(nameof(pluginRoot));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory;
         _audit = audit;
+        _harborVersion = harborVersion ?? PluginLifecycle.CurrentHarborVersion;
     }
 
     /// <inheritdoc />
@@ -61,6 +72,33 @@ public sealed class PluginRegistrar : IPluginRegistrar
             throw new ArgumentNullException(nameof(plugin));
         if (host is null)
             throw new ArgumentNullException(nameof(host));
+
+        // #1721: the compatibility gate. A plugin that declares a Harbor newer than
+        // this runtime must not run at all. No Initialize, no Register*, no tool in
+        // the registry. The gate sits here, in front of IPlugin.Initialize, because
+        // this is the one seam both load routes pass through: the in-process
+        // CsPluginLoader and the out-of-process harbor-plugins-host both register
+        // through a PluginRegistrar.
+        Version? requiredHarborVersion = plugin.Instance.RequiredHarborVersion;
+        if (requiredHarborVersion is null)
+        {
+            _logger.LogWarning(
+                "Plugin {DisplayName} declares no RequiredHarborVersion. Loading it without a compatibility check.",
+                plugin.DisplayName);
+        }
+
+        var compatibility = PluginCompatibility.Check(
+            plugin.Instance.Name,
+            requiredHarborVersion,
+            _harborVersion);
+        if (compatibility.IsFailure)
+        {
+            _logger.LogWarning(
+                "Plugin {DisplayName} is not compatible with this Harbor: {Reason}",
+                plugin.DisplayName,
+                compatibility.Error);
+            return compatibility;
+        }
 
         var context = PluginLifecycle.BuildContext(host, plugin.Instance, _pluginRoot, plugin.SourcePath);
         var initResult = PluginLifecycle.Initialize(plugin.Instance, context);
