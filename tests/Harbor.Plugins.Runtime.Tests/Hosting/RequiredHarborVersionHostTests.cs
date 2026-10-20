@@ -1,12 +1,9 @@
 using System.Globalization;
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
-using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.Hosting;
 
@@ -97,26 +94,9 @@ public sealed class RequiredHarborVersionHostTests
         string pluginSource,
         bool continueOnError)
     {
-        var references = new PluginAssemblyReferences(
-            NullLogger<PluginAssemblyReferences>.Instance);
-
-        return new PluginHostBuilder()
-            .WithSource(new InMemoryPluginSource(
-                new[] { new PluginScript("gate.cs", pluginSource) }))
-            .WithCompiler(new CachingCompiler(
-                new RoslynPluginCompiler(references),
-                fixture.CacheDir,
-                NullLogger<CachingCompiler>.Instance))
-            .WithInstantiator(new ReflectionPluginInstantiator())
-            .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
-                NullLogger.Instance))
-            .WithOptions(o =>
-            {
-                o.PluginRoot = fixture.PluginsDir;
-                o.ContinueOnError = continueOnError;
-            })
-            .Build(NullLogger<PluginHost>.Instance);
+        var source = new InMemoryPluginSource(
+            new[] { new PluginScript("gate.cs", pluginSource) });
+        return PluginHostFactory.Build(source, fixture, continueOnError);
     }
 
     /// <summary>

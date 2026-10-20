@@ -21,32 +21,20 @@ namespace Harbor.Plugins.Runtime.Tests.Registration;
 public sealed class RequiredHarborVersionGateTests
 {
     /// <summary>
-    ///     The boundary: a plugin that asks for exactly the running version loads.
+    ///     A plugin whose declared floor is at or under the running Harbor loads.
+    ///     The boundary is inclusive, and a floor under the runtime is satisfied
+    ///     by it.
     /// </summary>
     [Test]
-    public async Task Registrar_RequiredVersionEqualsRuntime_LoadsThePlugin()
+    [Arguments("0.4.0", "0.4.0", DisplayName = "FloorEqualToTheRuntime_Loads")]
+    [Arguments("0.4.0", "0.2.0", DisplayName = "FloorUnderTheRuntime_Loads")]
+    public async Task Registrar_FloorAtOrUnderTheRuntime_LoadsThePlugin(
+        string runtimeVersion,
+        string requiredVersion)
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar(new Version(0, 4, 0));
-        var plugin = new VersionedToolPlugin("gate-equal", new Version(0, 4, 0));
-
-        var result = registrar.Register(Loaded(plugin), host);
-
-        await Assert.That(result.IsSuccess).IsTrue();
-        await Assert.That(plugin.WasInitialized).IsTrue();
-        await Assert.That(host.RegisteredTools.Count).IsEqualTo(1);
-    }
-
-    /// <summary>
-    ///     A plugin that asks for an OLDER Harbor than the running one loads: the
-    ///     declaration is a floor and the runtime is above it.
-    /// </summary>
-    [Test]
-    public async Task Registrar_RequiredVersionOlderThanRuntime_LoadsThePlugin()
-    {
-        var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar(new Version(0, 4, 0));
-        var plugin = new VersionedToolPlugin("gate-older", new Version(0, 2, 0));
+        var registrar = NewRegistrar(Version.Parse(runtimeVersion));
+        var plugin = new VersionedToolPlugin("gate-floor", Version.Parse(requiredVersion));
 
         var result = registrar.Register(Loaded(plugin), host);
 

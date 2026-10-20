@@ -3,10 +3,6 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Compilation;
-using Harbor.Plugins.Hosting;
-using Harbor.Plugins.Instantiation;
-using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -91,7 +87,7 @@ public sealed class SubdirectoryPluginTests
         await Assert.That(collected.Count).IsEqualTo(2);
 
         var source = new InMemoryPluginSource(collected);
-        var pluginHost = BuildHost(source, fixture, continueOnError: false);
+        var pluginHost = PluginHostFactory.Build(source, fixture, continueOnError: false);
 
         var result = await pluginHost.LoadAllAsync(new FakePluginLoadHost()).ConfigureAwait(false);
 
@@ -109,28 +105,6 @@ public sealed class SubdirectoryPluginTests
         await foreach (var s in source.GetScriptsAsync().ConfigureAwait(false))
             collected.Add(s);
         return collected;
-    }
-
-    private static PluginHost BuildHost(InMemoryPluginSource source, PluginTestFixture fixture, bool continueOnError)
-    {
-        var references = new PluginAssemblyReferences(
-            NullLogger<PluginAssemblyReferences>.Instance);
-        return new PluginHostBuilder()
-            .WithSource(source)
-            .WithCompiler(new CachingCompiler(
-                new RoslynPluginCompiler(references),
-                fixture.CacheDir,
-                NullLogger<CachingCompiler>.Instance))
-            .WithInstantiator(new ReflectionPluginInstantiator())
-            .WithRegistrar(new SafePluginRegistrar(
-                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
-                NullLogger.Instance))
-            .WithOptions(o =>
-            {
-                o.PluginRoot = fixture.PluginsDir;
-                o.ContinueOnError = continueOnError;
-            })
-            .Build(NullLogger<PluginHost>.Instance);
     }
 
     private static async Task WriteDuoAsync(string pluginsDir)
