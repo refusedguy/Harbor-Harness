@@ -34,6 +34,24 @@ public class McpOAuthTests : IDisposable
             Task.FromResult(_respond(request));
     }
 
+    /// <summary>
+    ///     A stub handler that records its own disposal, so a test can SEE the
+    ///     client being torn down with the component that owns it.
+    /// </summary>
+    private sealed class TrackingHandler : HttpMessageHandler
+    {
+        public bool Disposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
+            Task.FromResult(Json(new { }));
+    }
+
     private static HttpResponseMessage Json(object payload, HttpStatusCode status = HttpStatusCode.OK) =>
         new(status)
         {
@@ -189,7 +207,7 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache);
 
         handler.Logout();
@@ -204,17 +222,94 @@ public class McpOAuthTests : IDisposable
     {
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("cached", null, DateTimeOffset.UtcNow.AddHours(1)));
-        bool called = false;
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
-            new McpOAuthConfig(), cache,
-            () => { called = true; return new HttpClient(new StubHandler(_ => Json(new { }))); });
+        int requests = 0;
+        using var http = StubClient(_ =>
+        {
+            requests++;
+            return Json(new { });
+        });
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), cache, () => http);
 
         Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.HasValue).IsTrue();
         await Assert.That(result.Value.GetValueOrDefault()).IsEqualTo("cached");
-        await Assert.That(called).IsFalse();
+
+        // The property is "a cache hit touches the network ZERO times" — not
+        // "the client was never built". #1854 moved the client from per-call to
+        // per-handler, so the client exists from the start; what must not
+        // happen is a REQUEST.
+        await Assert.That(requests).IsEqualTo(0).Because(
+            "a cached token is served from disk: no request may reach the authorization server. "
+            + "The client exists (one per handler, #1854); the wire must stay quiet.");
+    }
+
+    /// <summary>
+    ///     #1854: the handler keeps ONE client. The factory is called once,
+    ///     however many OAuth calls run — before the fix it was called at every
+    ///     call site, so each refresh minted a fresh
+    ///     <see cref="HttpClient" />, a fresh
+    ///     <see cref="System.Net.Http.SocketsHttpHandler" /> and a fresh
+    ///     connection pool, none of them ever disposed.
+    /// </summary>
+    [Test]
+    public async Task Handler_ReusesOneClient_AcrossCalls()
+    {
+        int factoryCalls = 0;
+        using var http = StubClient(_ => Json(new { access_token = "fresh", expires_in = 3600 }));
+        var cache = new McpOAuthTokenCache(_root);
+
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
+            cache, () => { factoryCalls++; return http; });
+
+        // Two refreshes, not one: the cache is re-armed with an expired token
+        // before each call, so both calls reach the token endpoint. A second
+        // call that found a fresh token would prove nothing.
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        Result<Maybe<string>> first = await handler.TryGetAccessTokenResultAsync();
+        cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
+        Result<Maybe<string>> second = await handler.TryGetAccessTokenResultAsync();
+
+        await Assert.That(first.IsSuccess).IsTrue();
+        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(first.Value.GetValueOrDefault()).IsEqualTo("fresh");
+        await Assert.That(second.Value.GetValueOrDefault()).IsEqualTo("fresh");
+
+        await Assert.That(factoryCalls).IsEqualTo(1).Because(
+            "the handler speaks over ONE client: the factory is called once, however many OAuth calls "
+            + "run. Before #1854 it was called at each of the five call sites, so two refreshes meant "
+            + "two HttpClients, two SocketsHttpHandlers and two connection pools — and nobody disposed "
+            + "either of them.");
+    }
+
+    /// <summary>
+    ///     #1854: the client belongs to the handler that speaks over it, and it
+    ///     dies with it — the rule the remote transports' client factory already
+    ///     follows (#1567). The old per-call clients were disposed by nobody.
+    /// </summary>
+    [Test]
+    public async Task Handler_DisposesTheClientItSpeaksOver()
+    {
+        var tracking = new TrackingHandler();
+
+        // disposeHandler: true so the client's teardown is visible through its
+        // handler — the client does not dispose a handler it did not create.
+        using var http = new HttpClient(tracking, disposeHandler: true);
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+            new McpOAuthConfig(), new McpOAuthTokenCache(_root), () => http);
+
+        await Assert.That(tracking.Disposed).IsFalse().Because(
+            "the client is alive for as long as the handler that owns it.");
+
+        handler.Dispose();
+
+        await Assert.That(tracking.Disposed).IsTrue().Because(
+            "the handler owns the client it speaks over, so disposing the handler disposes the client "
+            + "and its handler — and the connection pool with it. A client that outlives its owner is "
+            + "the leak #1854 was about.");
     }
 
     /// <summary>
@@ -225,7 +320,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Handler_NoToken_IsAbsenceNotFailure()
     {
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), new McpOAuthTokenCache(_root));
 
         Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
@@ -240,7 +335,7 @@ public class McpOAuthTests : IDisposable
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
         using var http = StubClient(_ => Json(new { access_token = "fresh", expires_in = 3600 }));
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             cache, () => http);
 
@@ -264,7 +359,7 @@ public class McpOAuthTests : IDisposable
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
         using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             cache, () => http);
 
@@ -286,7 +381,7 @@ public class McpOAuthTests : IDisposable
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
         using var http = StubClient(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
-        var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache, () => http);
 
         Result<Maybe<string>> result = await handler.TryGetAccessTokenResultAsync();
@@ -310,14 +405,14 @@ public class McpOAuthTests : IDisposable
     public async Task Handler_ThreeOutcomes_AreDistinguishableWithoutParsingText()
     {
         // 1. absence
-        var empty = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var empty = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), new McpOAuthTokenCache(_root));
         Result<Maybe<string>> absent = await empty.TryGetAccessTokenResultAsync();
 
         // 2. a token
         var cache = new McpOAuthTokenCache(_root);
         cache.Save("srv", new McpOAuthTokens("at", null, DateTimeOffset.UtcNow.AddHours(1)));
-        var loggedIn = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var loggedIn = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), cache);
         Result<Maybe<string>> present = await loggedIn.TryGetAccessTokenResultAsync();
 
@@ -325,7 +420,7 @@ public class McpOAuthTests : IDisposable
         var staleCache = new McpOAuthTokenCache(_root);
         staleCache.Save("srv", new McpOAuthTokens("old", "rt", DateTimeOffset.UtcNow.AddMinutes(-5)));
         using var http = StubClient(_ => Json(new { error = "invalid_grant" }, HttpStatusCode.BadRequest));
-        var stale = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
+        using var stale = new McpOAuthHandler("srv", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig { TokenEndpoint = "https://x/token", ClientId = "cid" },
             staleCache, () => http);
         Result<Maybe<string>> rejected = await stale.TryGetAccessTokenResultAsync();
@@ -343,7 +438,7 @@ public class McpOAuthTests : IDisposable
     [Test]
     public async Task Handler_LoginHint_NamesTheServerAndTheCommand()
     {
-        var handler = new McpOAuthHandler("cloud", new Uri("https://mcp.example.com/mcp"),
+        using var handler = new McpOAuthHandler("cloud", new Uri("https://mcp.example.com/mcp"),
             new McpOAuthConfig(), new McpOAuthTokenCache(_root));
 
         await Assert.That(handler.LoginHint).Contains("cloud");

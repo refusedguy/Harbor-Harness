@@ -12,13 +12,28 @@ namespace Harbor.Tools.Mcp;
 ///     <see cref="TcpListener" /> with minimal HTTP parsing — no
 ///     <c>HttpListener</c> URL-ACL quirks on any OS.
 /// </summary>
-public sealed class McpOAuthHandler
+public sealed class McpOAuthHandler : IDisposable
 {
     private readonly string _server;
     private readonly Uri _serverUrl;
     private readonly McpOAuthConfig _config;
     private readonly McpOAuthTokenCache _cache;
-    private readonly Func<HttpClient> _httpFactory;
+
+    /// <summary>
+    ///     The ONE client this handler speaks over (#1854).
+    /// </summary>
+    /// <remarks>
+    ///     The handler used to call its client factory at each of its five call
+    ///     sites (discovery, token endpoint, registration endpoint, refresh,
+    ///     probe), so every OAuth request minted a fresh
+    ///     <see cref="HttpClient" /> — and with it a fresh
+    ///     <see cref="SocketsHttpHandler" />, a fresh connection pool and a
+    ///     fresh DNS resolution, none of which was ever disposed. The factory is
+    ///     now called once, here, and the client it returns is reused for every
+    ///     call this handler makes.
+    /// </remarks>
+    private readonly HttpClient _http;
+
     private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -29,7 +44,15 @@ public sealed class McpOAuthHandler
     /// <param name="serverUrl">MCP endpoint URL (discovery base).</param>
     /// <param name="config">OAuth settings from mcp.json.</param>
     /// <param name="cache">Token cache (defaults to the harbor home).</param>
-    /// <param name="httpFactory">HTTP factory (tests inject a stubbed client).</param>
+    /// <param name="httpFactory">
+    ///     HTTP factory, called ONCE. The handler takes ownership of the client
+    ///     it returns and disposes it with the handler — the rule the remote
+    ///     transports' client factory already follows (#1567). A factory that
+    ///     mints a fresh client per invocation is the defect #1854 removed (one
+    ///     <see cref="SocketsHttpHandler" /> and one connection pool per call,
+    ///     never disposed). Leave it null for the default: the handler creates
+    ///     one plain <see cref="HttpClient" /> and owns it.
+    /// </param>
     /// <param name="logger">Logger for diagnostics.</param>
     public McpOAuthHandler(
         string server,
@@ -43,7 +66,12 @@ public sealed class McpOAuthHandler
         _serverUrl = serverUrl;
         _config = config;
         _cache = cache ?? new McpOAuthTokenCache();
-        _httpFactory = httpFactory ?? (() => new HttpClient());
+
+        // One client, built once. The default is the plain client the old
+        // per-call factory produced, with the same defaults (no custom handler,
+        // no default headers, the 100s default timeout) — only the lifetime
+        // changed: one per handler instead of one per call.
+        _http = httpFactory is not null ? httpFactory() : new HttpClient();
         _logger = logger;
     }
 
@@ -114,7 +142,7 @@ public sealed class McpOAuthHandler
 
     private async Task<Result<Maybe<string>>> TryRefreshResultAsync(string refreshToken, CancellationToken ct)
     {
-        var endpoints = await McpOAuthFlow.DiscoverAsync(_httpFactory(), _serverUrl, _config, ct).ConfigureAwait(false);
+        var endpoints = await McpOAuthFlow.DiscoverAsync(_http, _serverUrl, _config, ct).ConfigureAwait(false);
         if (endpoints.TokenEndpoint is null)
         {
             if (_logger is not null) McpOAuthHandlerLog.RefreshSkippedNoTokenEndpoint(_logger, _server);
@@ -123,7 +151,7 @@ public sealed class McpOAuthHandler
 
         string clientId = _config.ClientId ?? "harbor-mcp";
         var result = await McpOAuthFlow.RefreshAsync(
-            _httpFactory(), endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
+            _http, endpoints.TokenEndpoint, clientId, _config.ClientSecret, refreshToken, ct).ConfigureAwait(false);
         if (result.IsFailure)
         {
             if (_logger is not null) McpOAuthHandlerLog.RefreshFailed(_logger, _server, result.Error);
@@ -147,7 +175,7 @@ public sealed class McpOAuthHandler
         Func<string, string, Task<string?>>? waitForCodeAsync = null,
         CancellationToken cancellationToken = default)
     {
-        var endpoints = await McpOAuthFlow.DiscoverAsync(_httpFactory(), _serverUrl, _config, cancellationToken).ConfigureAwait(false);
+        var endpoints = await McpOAuthFlow.DiscoverAsync(_http, _serverUrl, _config, cancellationToken).ConfigureAwait(false);
         if (endpoints.AuthorizationEndpoint is null || endpoints.TokenEndpoint is null)
             return Result.Failure<string>(
                 $"Cannot OAuth-login '{_server}': no authorization/token endpoint discovered and none configured. " +
@@ -158,7 +186,7 @@ public sealed class McpOAuthHandler
         {
             string redirectProbe = LoopbackRedirectUri(0);
             string? registered = await McpOAuthFlow.RegisterClientAsync(
-                _httpFactory(), endpoints.RegistrationEndpoint, redirectProbe, _config.Scopes, cancellationToken).ConfigureAwait(false);
+                _http, endpoints.RegistrationEndpoint, redirectProbe, _config.Scopes, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(registered))
             {
                 clientId = registered;
@@ -202,7 +230,7 @@ public sealed class McpOAuthHandler
                 return Result.Failure<string>("OAuth login timed out waiting for the browser redirect.");
 
             var exchanged = await McpOAuthFlow.ExchangeCodeAsync(
-                _httpFactory(), endpoints.TokenEndpoint, clientId, _config.ClientSecret,
+                _http, endpoints.TokenEndpoint, clientId, _config.ClientSecret,
                 code, redirectUri, verifier, cancellationToken).ConfigureAwait(false);
             if (exchanged.IsFailure)
                 return Result.Failure<string>($"OAuth code exchange failed: {exchanged.Error}");
@@ -222,6 +250,26 @@ public sealed class McpOAuthHandler
 
     /// <summary>Drop cached tokens (logout).</summary>
     public void Logout() => _cache.Clear(_server);
+
+    /// <summary>
+    ///     Dispose the client this handler speaks over.
+    /// </summary>
+    /// <remarks>
+    ///     The handler owns the client — the one it created, or the one the
+    ///     factory handed it — so the client dies with the handler that used
+    ///     it. The old per-call clients were disposed by nobody at all, which
+    ///     is half of why the per-call shape was a defect: every OAuth call
+    ///     left a connection pool behind.
+    /// </remarks>
+    public void Dispose()
+    {
+        _http.Dispose();
+
+        // No finalizer of its own, so nothing was queued for the finalizer
+        // thread; the call says so explicitly rather than leaving it to a
+        // reader to infer.
+        GC.SuppressFinalize(this);
+    }
 
     private static string LoopbackRedirectUri(int port) => $"http://127.0.0.1:{port}/callback";
 

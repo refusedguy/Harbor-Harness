@@ -19,6 +19,11 @@
     <!-- #1741/#1742: the same test reads the HARBOR_TELEMETRY_* names from
          HarborEnv, which lives in the contracts assembly. -->
     <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
+    <!-- #1854: DesktopProviderHttpClientTests binds the IModelCatalog /
+         ProviderConfig vocabulary the desktop provider discovery speaks, which
+         Harbor.Hosting references — declared here for the same reason as the
+         rows above: the test names the type, so the type is a real edge. -->
+    <ProjectReference Include="../../src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

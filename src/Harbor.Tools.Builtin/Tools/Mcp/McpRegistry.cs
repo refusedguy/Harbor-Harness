@@ -693,6 +693,12 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
 
         public ValueTask DisposeAsync()
         {
+            // #1854: the OAuth handler owns the client it speaks over, so it is
+            // disposed with the entry that owns the handler — in BOTH branches,
+            // not only the one that has a process or a transport to tear down.
+            _oauth?.Dispose();
+            _oauth = null;
+
             if (_process is not null)
                 return _process.DisposeAsync();
             if (_transport is not null)
@@ -704,11 +710,15 @@ public sealed class McpRegistry : IMcpRegistry, IAsyncDisposable
         ///     Synchronous teardown for sync contracts (e.g. <c>IMcpRegistry.Unregister</c>).
         ///     The stdio process is torn down synchronously; the remote transport is
         ///     abandoned (its HttpClient is finalized) — no sync-over-async bridging.
+        ///     The OAuth handler IS disposed here: its teardown is synchronous, so
+        ///     there is no bridging to avoid, and it owns the client it speaks over.
         /// </summary>
         public void DisposeSync()
         {
             _process?.DisposeSync();
             _transport = null;
+            _oauth?.Dispose();
+            _oauth = null;
         }
     }
 }

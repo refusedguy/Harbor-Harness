@@ -30,6 +30,16 @@ internal static class ProviderFactories
         var registry = new ProviderRegistry(ctx.LoggerFactory.CreateLogger<ProviderRegistry>());
         var pb = new ProviderRegistryBuilder(registry, ctx.LoggerFactory);
 
+        // BOTH flavors take their HTTP clients from the factory: the CLI flavor
+        // for its named provider clients, the desktop flavor for the providers it
+        // discovers in providers/*.json (#1854 — the desktop flavor used to build
+        // one client per discovered file, each with a private connection pool and
+        // no owner). The bootstrap scope is deliberately kept alive for the
+        // process — see the DI014 note above (CE-5 PTY-suite finding: disposing
+        // it killed every later provider HTTP call with ObjectDisposedException).
+        var bootstrapSp = services.BuildServiceProvider();
+        var httpFactory = bootstrapSp.GetRequiredService<IHttpClientFactory>();
+
         if (ctx.Options.Providers == HarborProviderFlavor.Desktop)
         {
             // Ollama talks to a local daemon: direct HttpClient from OLLAMA_HOST.
@@ -41,17 +51,12 @@ internal static class ProviderFactories
             if (ctx.Options.DesktopAuthResolver is not null && ctx.Options.DesktopModelCatalog is not null)
             {
                 JsonProviderDiscovery.RegisterDesktopProviders(
-                    pb, ctx.Options.DesktopAuthResolver, ctx.Options.DesktopModelCatalog, ctx.LoggerFactory);
+                    pb, ctx.Options.DesktopAuthResolver, ctx.Options.DesktopModelCatalog, httpFactory, ctx.LoggerFactory);
             }
         }
         else
         {
             // CLI flavor needs IHttpClientFactory named clients + AuthStore.
-            // Bootstrap scope is deliberately kept alive for the process —
-            // see the DI014 note above (CE-5 PTY-suite finding: disposing it
-            // killed every later provider HTTP call with ObjectDisposedException).
-            var bootstrapSp = services.BuildServiceProvider();
-            var httpFactory = bootstrapSp.GetRequiredService<IHttpClientFactory>();
             var authStore = bootstrapSp.GetRequiredService<AuthStore>();
             string cacheDir = Path.Combine(ctx.Options.HarborDir, "cache", "providers");
 
