@@ -77,12 +77,16 @@ on:
     branches: [ci/1919-arm64-pool]
   workflow_dispatch:
     inputs:
-      skip-resolver-off:
+      order:
         description: >
-          Run only the resolver-ON compile (the A/B needs two compiles, so
-          this halves the job's time and loses the comparison).
-        type: boolean
-        default: false
+          Which compile goes in the cold slot: `on-first` puts the resolver
+          ON compile first, `off-first` puts the resolver OFF compile first.
+          The first compile of the pair pays the cold-start cost (MSBuild's
+          worker nodes are started and their JIT is paid again), so the two
+          settings give two equations for the resolver's cost and the
+          cold-start cost.
+        type: string
+        default: on-first
 
 permissions:
   contents: read
@@ -135,6 +139,19 @@ jobs:
 
       # RUN A — the resolver as it is today.
       #
+      # BOTH compiles live in ONE step, because the ORDER is a confound and
+      # has to be visible in one place: the FIRST compile of the pair is the
+      # cold one (MSBuild's worker nodes are started and their JIT is paid
+      # again, the page cache is cold), and the second one runs on a warm
+      # runner with warm MSBuild nodes. So "resolver on" always gets the
+      # cold slot in this configuration, and the difference between the two
+      # compiles is the resolver's cost PLUS the cold-start effect — which
+      # are the same order of magnitude and must not be confused.
+      #
+      # ORDER flips it: `off-first` puts the resolver-off compile in the
+      # cold slot, so the two configurations give two equations with the
+      # resolver's cost and the cold-start effect as the unknowns.
+      #
       # `-clp:PerformanceSummary` is what makes MSBuild print the
       # performance summary, and the "Project Evaluation Performance
       # Summary" section of it is the only report of the time spent
@@ -145,62 +162,68 @@ jobs:
       # `-bl:` writes the binary log the issue asks for. It is captured and
       # NOT uploaded (hundreds of megabytes); the console log next to it
       # carries the same performance summary in text form.
-      - name: Compile A (NuGet SDK resolver enabled)
+      - name: Compile twice (resolver on, resolver off)
         shell: bash
+        env:
+          # off-first: the experiment run that controls for the cold-start
+          # order effect. The default (on-first) is the other half of the
+          # pair; see the job's comment.
+          ORDER: off-first
         run: |
           set -uo pipefail
           mkdir -p analysis
-          start=$(date +%s)
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
-            -clp:PerformanceSummary \
-            -bl:analysis/build-resolver-on.binlog \
-            > analysis/build-resolver-on.log 2>&1
-          rc=$?
-          end=$(date +%s)
-          echo "on_seconds=$((end - start))" >> "$GITHUB_ENV"
-          echo "on_rc=$rc" >> "$GITHUB_ENV"
-          tail -40 analysis/build-resolver-on.log
-          exit $rc
 
-      # The tree is cleaned between the two compiles, so RUN B is a
-      # from-scratch build like RUN A. An incremental build would compile
-      # nothing and the comparison would be meaningless.
-      - name: Clean (so the second compile is from scratch)
-        run: |
-          set -uo pipefail
-          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1
-          echo "clean_rc=$?" >> "$GITHUB_ENV"
+          compile() {
+            local tag="$1"; shift
+            local start end rc
+            start=$(date +%s)
+            "$@" > "analysis/build-${tag}.log" 2>&1
+            rc=$?
+            end=$(date +%s)
+            echo "${tag}_seconds=$((end - start))" >> "$GITHUB_ENV"
+            echo "${tag}_rc=$rc" >> "$GITHUB_ENV"
+            echo "--- ${tag}: $((end - start)) s (exit ${rc})"
+            tail -5 "analysis/build-${tag}.log"
+            return 0
+          }
+
+          # The tree is cleaned between the two compiles, so the second one
+          # is a from-scratch build like the first. An incremental build
+          # would compile nothing and the comparison would be meaningless.
+          clean() {
+            dotnet build Harbor.slnx -c Release --no-restore -t:Clean \
+              > analysis/clean.log 2>&1
+            echo "clean_rc=$?" >> "$GITHUB_ENV"
+          }
+
+          resolver_on() {
+            compile resolver-on dotnet build Harbor.slnx -c Release --no-restore \
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+              -clp:PerformanceSummary \
+              -bl:analysis/build-resolver-on.binlog
+          }
+
+          resolver_off() {
+            compile resolver-off env MSBUILDDISABLENUGETSDKRESOLVER=1 \
+              dotnet build Harbor.slnx -c Release --no-restore \
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+              -clp:PerformanceSummary \
+              -bl:analysis/build-resolver-off.binlog
+          }
+
+          case "${ORDER}" in
+            off-first) resolver_off; clean; resolver_on ;;
+            *)         resolver_on; clean; resolver_off ;;
+          esac
           exit 0
-
-      # RUN B — the resolver off. Everything else is identical, including
-      # the properties, the parallelism and the flags.
-      - name: Compile B (NuGet SDK resolver disabled)
-        if: ${{ !inputs.skip-resolver-off }}
-        shell: bash
-        run: |
-          set -uo pipefail
-          start=$(date +%s)
-          MSBUILDDISABLENUGETSDKRESOLVER=1 \
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
-            -clp:PerformanceSummary \
-            -bl:analysis/build-resolver-off.binlog \
-            > analysis/build-resolver-off.log 2>&1
-          rc=$?
-          end=$(date +%s)
-          echo "off_seconds=$((end - start))" >> "$GITHUB_ENV"
-          echo "off_rc=$rc" >> "$GITHUB_ENV"
-          tail -40 analysis/build-resolver-off.log
-          exit $rc
 
       - name: Publish the comparison
         if: always()
         shell: bash
         run: |
           set -uo pipefail
-          on_seconds="${on_seconds:-0}"
-          off_seconds="${off_seconds:-0}"
+          on_seconds="${on_seconds:-}"
+          off_seconds="${off_seconds:-}"
           args=(--run "resolver-on:analysis/build-resolver-on.log:${on_seconds}")
           if [ -f analysis/build-resolver-off.log ]; then
             args+=(--run "resolver-off:analysis/build-resolver-off.log:${off_seconds}")

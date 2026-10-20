@@ -103,6 +103,9 @@ SECTIONS = {
 # `  1234 ms  GetTargetFrameworks                       109 calls`
 ROW = re.compile(r"^\s*(?P<ms>\d+|\*)\s+ms\s+(?P<scope>\S.*?)\s+(?P<calls>\d+)\s+calls\s*$")
 
+# "Time Elapsed 00:06:12.34" — MSBuild's own report of the build's wall time.
+ELAPSED = re.compile(r"^Time Elapsed (\d+):(\d{2}):(\d{2}(?:\.\d+)?)\s*$", re.M)
+
 # The targets whose time IS a project evaluation of another project:
 # `GetTargetFrameworks` asks a referenced project for its target
 # frameworks (which evaluates it), and the two `_GetProjectReference…`
@@ -176,7 +179,8 @@ def read_run(label: str, path: str, wall: str | None) -> dict:
     file = Path(path)
     if not file.is_file():
         return {"label": label, "error": f"the performance summary {path} does not exist"}
-    sections = parse_summary(file.read_text(encoding="utf-8", errors="replace"))
+    text = file.read_text(encoding="utf-8", errors="replace")
+    sections = parse_summary(text)
     if "evaluation" not in sections:
         return {
             "label": label,
@@ -192,6 +196,14 @@ def read_run(label: str, path: str, wall: str | None) -> dict:
         wall_seconds = float(wall) if wall else None
     except ValueError:
         wall_seconds = None
+    if wall_seconds is None:
+        # The build's own report of its wall time, which the performance
+        # summary does not carry. The LAST one is the build's: a log can
+        # hold the "Time Elapsed" of a nested build too.
+        elapsed = ELAPSED.findall(text)
+        if elapsed:
+            hours, minutes, seconds = elapsed[-1]
+            wall_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
     return {
         "label": label,
         "path": path,
@@ -248,6 +260,14 @@ def render(runs: list[dict]) -> str:
         "the build)._"
     )
     lines.append("")
+    for run in ok:
+        if run["evaluation_counted"]:
+            mean = run["evaluation_total_ms"] / run["evaluation_counted"]
+            lines.append(
+                f"**`{run['label']}`: {mean:.0f} ms per evaluation** — the number "
+                f"dotnet/msbuild#4025 quotes as 180–400 ms."
+            )
+            lines.append("")
 
     if len(ok) >= 2:
         first, second = ok[0], ok[1]
@@ -271,7 +291,15 @@ def render(runs: list[dict]) -> str:
 
     lines.append("### Where the evaluation time goes (the reference-resolution targets)")
     lines.append("")
-    lines.append("| target | total time | calls |")
+    lines.append(
+        "_The times below are INCLUSIVE: a target that runs inside itself is counted at "
+        "every nesting level, and `ResolveProjectReferences` does — it resolves a "
+        "project's references, and resolving them resolves THEIR references. So these "
+        "numbers are not a cost and must not be added up; the CALL counts are the "
+        "meaningful part, and the evaluation time above is the cost._"
+    )
+    lines.append("")
+    lines.append("| target | inclusive time | calls |")
     lines.append("|---|---|---|")
     for run in ok:
         rows = [(name, ms, calls) for name, (ms, calls) in run["targets"].items()
