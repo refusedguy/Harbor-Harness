@@ -10,7 +10,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all"/>
+    <!--
+      Proj0037 (#1857) wants ExcludeAssets=runtime on every PrivateAssets=all
+      reference. It does not hold here, and the finding is scoped at this
+      element rather than silenced globally: this generator is compiled against
+      Microsoft.CodeAnalysis.CSharp 5.6.0, while the .NET 10 SDK ships an
+      older Roslyn, and the local copy of the Roslyn runtime is what lets the
+      generator load against the version it was compiled against. Excluding it
+      would change how the generator is loaded, which is a separate decision
+      from this one.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" NoWarn="Proj0037"/>
   </ItemGroup>
 
   <ItemGroup>

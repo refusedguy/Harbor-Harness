@@ -73,6 +73,9 @@
     <PackageReference Include="ZLinq.DropInGenerator">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): the package ships an analyzer and no runtime
+           assembly, so the runtime asset is excluded explicitly. -->
+      <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 

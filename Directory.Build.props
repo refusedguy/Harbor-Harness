@@ -72,6 +72,26 @@
 
     <!-- Allow unsafe: NEVER. Project rule. -->
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!--
+      NuGet audit — pinned, not inherited (#1857).
+
+      The SDK default is `NuGetAuditMode=direct` (direct dependencies only) and
+      `NuGetAuditLevel=low`. Both defaults are the wrong shape for this
+      repository: Directory.Packages.props turns on
+      `CentralPackageTransitivePinningEnabled` and pins the transitive versions
+      of SixLabors.ImageSharp and MessagePack on purpose, so a transitive
+      advisory is Harbor's subject and not the SDK's business to decide.
+      Leaving the mode at the default would let a vulnerable transitive
+      through the gate, which is exactly the class this repository has already
+      had to reason about (NU1902/NU1903 for MessagePack and ImageSharp).
+
+      `all` audits direct AND transitive dependencies; `moderate` is the
+      smallest level that still reports the advisories the audit exists for.
+      Both are pinned here so the SDK default cannot change the gate under us.
+    -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
   </PropertyGroup>
 
   <!-- NativeAOT opt-in per project; default off -->
@@ -218,39 +238,60 @@
     <NoWarn>$(NoWarn);CFE0001</NoWarn>
   </PropertyGroup>
 
-  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
+  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
+  <!--
+    Every analyzer package below carries `<ExcludeAssets>runtime</ExcludeAssets>`
+    next to `<PrivateAssets>all</PrivateAssets>` (#1857, rule Proj0037). An
+    analyzer package ships no runtime assembly, so listing `runtime` in
+    IncludeAssets is exactly the state in which the IDE offers a type the
+    program cannot load at run time. Excluding the runtime asset changes
+    nothing for these packages — they have none — and it states the intent.
+
+    The IncludeAssets list itself stays: it enumerates the asset kinds an
+    analyzer package contributes (analyzers, buildtransitive). Rule Proj0026
+    ("remove IncludeAssets when redundant") disagrees and is switched off with
+    a reason in /.globalconfig.
+  -->
+  <ItemGroup>
     <!-- Code style + quality -->
     <PackageReference Include="Roslynator.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SonarAnalyzer.CSharp">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Microsoft official analyzers -->
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Async best practices -->
     <PackageReference Include="AsyncFixer">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Reflection detection (AOT-friendliness) -->
     <PackageReference Include="ReflectionAnalyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Performance-focused analyzer -->
     <PackageReference Include="Meziantou.Analyzer">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
@@ -276,6 +317,7 @@
     -->
     <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
@@ -309,6 +351,26 @@
     -->
     <PackageReference Include="CSharpFunctionalExtensions.Analyzers">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      Project-file analyzer (#1857) — 190+ rules over the MSBuild project files
+      rather than over C#. Only three of them are adopted (Proj0037,
+      Proj0040, Proj0041) and they are errors; the rest are off with a written
+      reason, family by family, in /.globalconfig.
+
+      The severity table cannot live in .editorconfig: a diagnostic reported on
+      a project file reaches the compiler as an ADDITIONAL FILE, and Roslyn
+      applies syntax-tree level editor config only to diagnostics that have a
+      source tree. A global analyzer config is the only per-rule mechanism that
+      reaches them, which is why /.globalconfig exists. The .NET SDK discovers
+      a file named .globalconfig by walking up from the compiled sources, so
+      nothing has to be wired here for it to be picked up.
+    -->
+    <PackageReference Include="DotNetProjectFile.Analyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>

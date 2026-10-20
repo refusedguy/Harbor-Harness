@@ -143,11 +143,70 @@
     <!-- ── Scripting engines ─────────────────────────────────────────────── -->
     <PackageVersion Include="Jint" Version="4.13.0" />
     <!-- ── Roslyn analyzers (consumed via Directory.Build.props) ─────────── -->
-    <PackageVersion Include="Roslynator.Analyzers" Version="4.15.0" />
+    <!--
+      Roslynator 4.15.0 → 5.0.1 (#1851).
+
+      The version gap introduces ZERO new diagnostic ids: both packages ship
+      exactly 284 `RCS####` ids (verified by extracting them from the analyzer
+      assemblies of 4.15.0 and 5.0.1). Roslynator 5.0.0 REMOVES the
+      implementations of twenty obsolete rules (RCS0014, RCS0022, RCS0038,
+      RCS0043, RCS0047, RCS1008-RCS1010, RCS1012, RCS1035, RCS1036,
+      RCS1038/RCS1040/RCS1041/RCS1066/RCS1072/RCS1091/RCS1106,
+      RCS1176/RCS1177, RCS1237) and points at successor rules that ALREADY
+      ship in 4.15.0, so the removal can only shrink the finding surface.
+
+      5.0.0 also adds the `roslyn5.0` analyzer flavour, which is the one the
+      .NET 10 SDK (Roslyn 5.x) loads; 4.15.0 only shipped roslyn3.8/roslyn4.7.
+      That is the anti-framework-risk half of #1851: the analyzer is now built
+      against the same Roslyn major the compiler is.
+
+      No severity rows are added for this family: with no new id there is no
+      baseline to write, and the family keeps the severities it ships with.
+    -->
+    <PackageVersion Include="Roslynator.Analyzers" Version="5.0.1" />
     <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.29.0.143774" />
     <PackageVersion Include="AsyncFixer" Version="2.1.0" />
     <PackageVersion Include="ReflectionAnalyzers" Version="0.3.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.123" />
+    <!--
+      Meziantou 3.0.123 → 3.0.315 (#1851).
+
+      The gap adds 31 new rules (MA0213–MA0243) and changes NO severity on the
+      209 rules that already existed — both facts read out of the
+      `configuration/default.editorconfig` the package ships, which lists every
+      rule with its default severity.
+
+      The new rules are baselined in .editorconfig: MA0213–MA0243 keep the
+      severity the analyzer ships them with, so none of them can turn the
+      zero-warning build red on the day the version moves. The three that ship
+      as `warning` (MA0220, MA0240, MA0241) are demoted to `suggestion`: they
+      read the BannedSyntaxes.txt file, which this repository does not have, so
+      they have no input — but a future BannedSyntaxes.txt must not be able to
+      break the build by accident.
+
+      NOTE: MA0184–MA0212 exist in 3.0.123 as well and are still NOT in
+      .editorconfig. They ship `none`/`suggestion` except for nine EventSource
+      and JsonSerializer rules that ship `warning` and do not fire here. That
+      hole predates this PR and is not widened by it.
+    -->
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.315" />
+    <!--
+      DotNetProjectFile.Analyzers 1.19.1 (#1857).
+
+      190+ rules over MSBuild project files rather than over C#. Three of them
+      are adopted (Proj0037, Proj0040, Proj0041) and are errors; the rest are
+      off with a written reason, family by family, in /.globalconfig — NOT in
+      .editorconfig, because a diagnostic reported on a project file reaches the
+      compiler as an additional file and Roslyn does not apply syntax-tree
+      level editor config to those. /.globalconfig carries the reason.
+
+      The package's own `build/DotNetProjectFile.Analyzers.props` points
+      `GlobalAnalyzerConfigFiles` at a file name the package does not ship
+      (`DotNetProjectFile.globalconfig` vs the shipped
+      `DotNetProjectFile.Analyzers.globalconfig`). The SDK filters
+      non-existent entries out (`@(GlobalAnalyzerConfigFiles->Exists())`), so
+      the dangling reference is inert.
+    -->
+    <PackageVersion Include="DotNetProjectFile.Analyzers" Version="1.19.1" />
     <!--
       CSharpFunctionalExtensions.Analyzers ships CFE0001 ("check IsSuccess or
       IsFailure before accessing Value from result object"), a mechanical guard
