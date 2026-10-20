@@ -5,7 +5,9 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 
-[assembly: GenerateFakes(
+// The attribute is applied BEFORE the namespace declaration, so it is named
+// in full: a type inside a namespace is not in scope at the top level.
+[assembly: Harbor.TestKit.GenerateFakes(
     typeof(ITool),
     typeof(IToolRegistry),
     typeof(ISessionStore),
