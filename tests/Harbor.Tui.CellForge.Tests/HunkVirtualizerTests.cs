@@ -163,6 +163,47 @@ public class HunkVirtualizerTests
         await Assert.That(HunkVirtualizer.SplitPatchHunks(null).WasChunked).IsFalse();
     }
 
+    /// <summary>
+    ///     #1139: the split walks the body in place — the breaks are found
+    ///     where they are (CRLF is ONE break, a lone CR is one too) and a
+    ///     line's tabs are expanded when the line is materialized. The lines
+    ///     are the same ones the old normalize-then-split-then-replace chain
+    ///     produced, and the trailing empty line is still not a line.
+    /// </summary>
+    [Test]
+    public async Task Lone_Cr_Is_One_Break_And_Tabs_Expand_To_Two_Spaces()
+    {
+        string patch = "--- a/f.cs\r@@ -1,2 +1,2 @@\n\tcontext\n+added\twith\ttabs\n";
+        VirtualPatch parsed = HunkVirtualizer.SplitPatchHunks(patch);
+
+        await Assert.That(parsed.Preamble.Count).IsEqualTo(1);
+        await Assert.That(parsed.Preamble[0]).IsEqualTo("--- a/f.cs");
+        await Assert.That(parsed.Hunks.Count).IsEqualTo(1);
+        await Assert.That(parsed.Hunks[0].Lines.Count).IsEqualTo(2);
+        await Assert.That(parsed.Hunks[0].Lines[0]).IsEqualTo("  context");
+        await Assert.That(parsed.Hunks[0].Lines[1]).IsEqualTo("+added  with  tabs");
+        await Assert.That(parsed.TotalLines).IsEqualTo(2);
+    }
+
+    /// <summary>
+    ///     #1139: a body whose LAST line is empty drops that line (the old
+    ///     shape dropped the trailing element of the split array), while an
+    ///     empty line in the middle stays a line.
+    /// </summary>
+    [Test]
+    public async Task Trailing_Empty_Line_Is_Not_A_Line_Middle_Empty_Lines_Are()
+    {
+        VirtualPatch trailing = HunkVirtualizer.SplitPatchHunks("--- a/f.cs\n@@ -1,1 +1,1 @@\n context\n");
+        await Assert.That(trailing.Hunks.Count).IsEqualTo(1);
+        await Assert.That(trailing.Hunks[0].Lines.Count).IsEqualTo(1);
+        await Assert.That(trailing.TotalLines).IsEqualTo(1);
+
+        VirtualPatch middle = HunkVirtualizer.SplitPatchHunks("--- a/f.cs\n@@ -1,2 +1,2 @@\n\n context\n");
+        await Assert.That(middle.Hunks.Count).IsEqualTo(1);
+        await Assert.That(middle.Hunks[0].Lines.Count).IsEqualTo(2);
+        await Assert.That(middle.TotalLines).IsEqualTo(2);
+    }
+
     private static PanelContext Ctx(UiState state, int width = 80, int height = 24) =>
         new(state, width, height, null);
 
