@@ -1433,6 +1433,44 @@ jobs:
     # The runner label is the ONLY thing to change back: `ubuntu-24.04`
     # returns the shards to the x64 pool.
     #
+    # ── AND THE SPLIT WAS MEASURED, NOT ASSUMED (issue #1919, second slice)
+    # The obvious next move after #1952 was to SPLIT the shards over the two
+    # pools, so both queues drain in parallel. Measured on ONE tree
+    # (be4f8d25), three runs per configuration, the configurations rotated
+    # between the rounds (A,B,C / B,C,A / C,A,B) so that a drift in the
+    # repository's own load could not favour one arm:
+    #
+    #   A  all four shards on arm64 (what this file does)
+    #   B  core + ui on arm64, platform + e2e on x64
+    #   C  core + ui on x64, platform + e2e on arm64
+    #
+    #                  shard phase     wall after the build    wall total
+    #   A  (3 runs)   273/329/376 s    370/372/410 s           1019/995/1133 s
+    #   B  (3 runs)   295/455/203 s    795/455/315 s           1331/1352/865 s
+    #   C  (3 runs)   393/337/534 s    869/531/536 s           1633/1055/1720 s
+    #
+    # THE SPLIT LOSES, and the same numbers say why, in two facts:
+    #
+    #   * The four shards in ONE queue do NOT serialise. The arm64 pool
+    #     handed out three runners at once in every run of A (peak
+    #     parallelism 3/3/3, serialised shards 0/0/0): no shard ever sat
+    #     behind a sibling. The premise of the split (one queue means one
+    #     shard at a time) is false at this load.
+    #   * The x64 queue is the CONTENDED one. It already carries build,
+    #     coverage, aot-publish, publish and perf-gate for every run, so a
+    #     shard that joins it waits there, and the x64 jobs wait longer too
+    #     (median queue wait: aot-publish 130 s in A against 278 s in B and
+    #     294 s in C; coverage 96 s in A against 162 s in B and 227 s in C).
+    #     The run's wall is then decided by the longest x64 job, not by the
+    #     shards.
+    #
+    # So all four shards stay on `ubuntu-24.04-arm`. Dispatching a shard
+    # into the x64 pool is one `runner:` line, and while the x64 pool
+    # carries the rest of the pipeline it is a losing move: the median PR
+    # wall goes from 1019 s (A) to 1331 s (B) to 1633 s (C). The full
+    # table, the queue waits per shard and the failing runs are in the
+    # pull request.
+    #
     # WHAT AN ARM64 RUNNER NEEDS, AND WHAT THIS JOB DOES FOR IT — three
     # facts about the tree, each one measured on run 39433292136 (the
     # spike that ran these same four shards on both pools):
