@@ -2,9 +2,8 @@
 //
 // THE DEFECT
 // ----------
-// `DefaultAgent.PromptAsync` loads the session context through a Result-shaped
-// seam (`LoadSessionContextAsync` → `Result<ISessionContext>`) and then threw the
-// failure away:
+// DefaultAgent.PromptAsync loads the session context through a Result-shaped
+// seam and then threw the failure away:
 //
 //     var loaded = await LoadSessionContextAsync(state.SessionId, linkedCts.Token);
 //     if (loaded.IsFailure)
@@ -20,9 +19,9 @@
 //
 // A Result that leaves as an exception and comes back as a Result is a round
 // trip with no gain: the typed failure dies on the way out, the catch-all picks
-// up exceptions nobody meant it to (the same `catch` also covers `RunAsync`),
+// up exceptions nobody meant it to (the same catch also covers the agent loop),
 // and the reader has to reconstruct the cycle from two places. The exception
-// never left the method — it was created and caught inside the same `try` — so
+// never left the method — it was created and caught inside the same try — so
 // nothing outside could depend on its type.
 //
 // THE FIX
@@ -34,19 +33,19 @@
 // WHAT IS PINNED HERE
 // -------------------
 //   * The load failure reaches the caller as a Failure carrying the STORE's own
-//     text, byte for byte the text the old `ex.Message` path produced —
-//     `InvalidOperationException(string).Message` is the string it was given, so
-//     the round trip was text-preserving and the fix has to be too.
+//     text, byte for byte the text the old path produced — an exception built
+//     from a string keeps that string as its message, so the round trip was
+//     text-preserving and the fix has to be too.
 //   * NO exception is logged on that path: the failure is not an exception, so
 //     it must not be logged as one.
 //   * The loop never ran, the state is back to idle, and the run's completion
 //     source carries the failure — the same surfaces the old path fed.
-//   * The catch that REMAINS (for `RunAsync`, which can throw) still turns an
-//     exception into a Failure and still logs the exception. The fix removes
+//   * The catch that REMAINS (for the agent loop, which can throw) still turns
+//     an exception into a Failure and still logs the exception. The fix removes
 //     ONE bridge; it does not disarm the run boundary.
 //
-// The store fake lives here rather than in Fakes/DefaultAgentFakes.cs so this
-// file depends on nothing but the product types.
+// The store fake lives in this file rather than in the shared fakes, so the
+// test depends on nothing but the product types.
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
@@ -210,9 +209,8 @@ public sealed class DefaultAgentLoadFailureTests
 
     /// <summary>
     ///     The failure reaches the caller with the STORE's text — the text the old
-    ///     bridge produced verbatim, because
-    ///     <c>InvalidOperationException(string).Message</c> is the string it was
-    ///     given.
+    ///     bridge produced verbatim, because an exception built from a string keeps
+    ///     that string as its message.
     /// </summary>
     [Test]
     public async Task PromptAsync_SessionContextLoadFails_AnswersWithTheStoreFailure()
@@ -296,8 +294,8 @@ public sealed class DefaultAgentLoadFailureTests
     }
 
     /// <summary>
-    ///     The catch that REMAINS still works: `RunAsync` can throw, and the run
-    ///     boundary turns that into a Failure and logs the exception. The fix
+    ///     The catch that REMAINS still works: the agent loop can throw, and the
+    ///     run boundary turns that into a Failure and logs the exception. The fix
     ///     removes one bridge; it does not disarm the boundary.
     /// </summary>
     [Test]
