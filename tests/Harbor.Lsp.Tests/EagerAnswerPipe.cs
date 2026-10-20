@@ -90,7 +90,14 @@ internal sealed class EagerAnswerPipe : Stream
 
     public override void SetLength(long value) => throw new NotSupportedException();
 
-    public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    public override void Write(byte[] buffer, int offset, int count) =>
+        WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _toClient.Dispose();
+        base.Dispose(disposing);
+    }
 
     /// <summary>True once a complete request frame has been written (one request).</summary>
     private bool TryTakeCompleteRequest(out int id)
