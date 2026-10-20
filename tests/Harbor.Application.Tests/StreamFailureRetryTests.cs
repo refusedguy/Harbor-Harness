@@ -190,7 +190,7 @@ public class StreamFailureRetryTests
     public async Task FatalStreamError_FailsTheRunWithTheProviderMessage()
     {
         var client = new ScriptedLlmClient([
-            new ErrorEvent("bad key: the API key is invalid", Kind: ProviderErrorKind.Auth, StatusCode: 401)]);
+            TestEvents.LlmError("bad key: the API key is invalid", kind: ProviderErrorKind.Auth, statusCode: 401)]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
@@ -210,8 +210,8 @@ public class StreamFailureRetryTests
     public async Task SuccessfulStream_IsUnchanged_TheAssistantMessageIsPersisted()
     {
         var client = new ScriptedLlmClient([
-            new TextDeltaEvent("t", "hello"),
-            new StepFinishEvent(0, "stop", new Usage(1, 1))]);
+            TestEvents.TextDelta(delta: "hello"),
+            TestEvents.StepFinish(usage: new Usage(1, 1))]);
         var bus = new FakeEventBus();
         var loop = AgentLoopFixtures.LoopWithClock(client, bus, new ManualTimeProvider(fireTimerOnCreate: true));
         var session = new TestSessionContext(
