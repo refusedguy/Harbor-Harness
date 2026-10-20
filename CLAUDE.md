@@ -17,7 +17,7 @@
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — high-level design + principles summary.
 - **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)** — how to contribute + **principles checklist** for PRs.
 - **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 8 pattern catalog with real code (Observer, Factory, Decorator, Command, Extension points, Default members, Type unions, State).
-- **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 38 antipatterns we forbid (with before/after code).
+- **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 39 antipatterns we forbid (with before/after code).
 - **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** — 40+ recipes ("How do I...?").
 - **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 20 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
 - **[docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md)** — Roslyn `.cs` plugin system + 5 full examples.

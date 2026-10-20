@@ -447,6 +447,51 @@ fixed by this gate**: repairing it changes which providers a published binary
 sees, which is a behavioural change well outside "add a gate". It belongs to
 whoever owns provider discovery.
 
+## Known mines: what would break this publish next
+
+The sections above record what **did** break the publish. This one records what
+**would**, so the next person who reaches for it finds the reason written down instead
+of a red job and a guess.
+
+**The OpenTelemetry SDK is the standing mine.** `Harbor.Telemetry.Otlp` carries it
+(`OpenTelemetry` and `OpenTelemetry.Exporter.OpenTelemetryProtocol`, pinned at 1.20.0),
+and that project is deliberately **outside** the CLI's dependency graph. Adding the SDK
+to `apps/Harbor.App.Cli` — directly, or transitively, or by pulling it into a project
+the CLI already references — would put four assemblies that the published graph does
+not carry today into it:
+
+| assembly | net10.0 managed IL |
+|---|---|
+| `OpenTelemetry` | 338,944 bytes |
+| `OpenTelemetry.Exporter.OpenTelemetryProtocol` | 195,072 bytes |
+| `OpenTelemetry.Api` | 83,968 bytes |
+| `OpenTelemetry.Api.ProviderBuilderExtensions` | 24,576 bytes |
+
+642,560 bytes of IL before the trimmer has ruled on any of it, in a binary whose
+publish criterion is that the publish **SUCCEEDS**. The SDK assemblies carry
+`RequiresDynamicCodeAttribute` and `DynamicallyAccessedMembersAttribute`, so the
+trim/AOT analyzer's output for the published graph changes as soon as they become
+reachable — and this gate's inventory is a ratchet in **both** directions, so the
+change is reported as *new ids / changed counts* rather than as *"you broke the
+telemetry boundary"*.
+
+Two things this section is careful **not** to claim:
+
+* The `Microsoft.Extensions.*` packages the SDK pulls in are **already** in the CLI's
+  resolved package graph — `Microsoft.Extensions.Hosting` brings
+  `Microsoft.Extensions.Configuration.Binder` and friends with it. The delta is exactly
+  the four OpenTelemetry assemblies. The binder is not what makes this a mine.
+* Nothing here predicts that the publish would *fail*. It predicts that it would
+  change, and that the change would be reported in the language of the inventory
+  rather than the language of the boundary. The rule, the reasoning and the guard are
+  in [ARCHITECTURE_LAYERS.md §5.8b](./ARCHITECTURE_LAYERS.md#58b-the-telemetry-export-boundary--the-opentelemetry-sdk-stays-out-of-the-product-graph);
+  the guard that enforces it is `TelemetryOtlpBoundaryRules`.
+
+**The right way to ship OTLP** is out of process: a daemon/server publish profile, or
+an external collector. The in-process answer for every host that ships today is the
+visible sink in `Harbor.Telemetry.Core` — an `ActivityListener` / `MeterListener` over
+the canonical source and meter, no SDK, AOT-safe.
+
 ## Deliberately out of scope
 
 - **Making the publish succeed.** See the recipe section: `fulltree` fails in

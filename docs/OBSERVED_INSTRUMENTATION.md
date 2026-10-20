@@ -233,9 +233,11 @@ would change the thing it measures, or where the mechanism does not apply.
 - **The OpenTelemetry SDK in our binaries.** `Harbor.Telemetry.Otlp` is not
   referenced by the CLI or the TUI. Our binaries get observability through the
   AOT-safe sink in `Harbor.Telemetry.Core` — plain `ActivitySource`/`Meter`, no
-  reflection, no protobuf, no gRPC. The boundary is issue #1799: the OTLP
-  exporter's legitimate consumer is an *embedding JIT host* — an application that
-  references `Harbor.Telemetry.Otlp` itself. Nothing in our binaries attaches it.
+  reflection, no protobuf, no gRPC. The boundary is written down in
+  [ARCHITECTURE_LAYERS.md §5.8b](./ARCHITECTURE_LAYERS.md#58b-the-telemetry-export-boundary--the-opentelemetry-sdk-stays-out-of-the-product-graph)
+  and enforced by `TelemetryOtlpBoundaryRules`: the OTLP exporter's legitimate
+  consumer is an *embedding JIT host* — an application that references
+  `Harbor.Telemetry.Otlp` itself. Nothing in our binaries attaches it.
 - **Runtime reflection and dynamic proxies.** The decorator is emitted as plain
   C# at build time. `DispatchProxy` (`RequiresDynamicCode`) and
   `Reflection.Emit`-based proxies are forbidden by the reflection convention in

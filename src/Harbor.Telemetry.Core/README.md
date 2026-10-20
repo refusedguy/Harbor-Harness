@@ -145,3 +145,10 @@ dotnet build src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj
   under a key that does not name it, is not detected — the key-name rule is the
   primary defence.
 - AOT-safe by contract: no runtime code generation, no reflection emit, no OTEL SDK types.
+  The contract is **named and guarded**, not promised: `TelemetryOtlpBoundaryRules` in
+  [`tests/Harbor.Architecture.Tests/`](../../tests/Harbor.Architecture.Tests/) fails
+  when any product project (or the central props files) declares an `OpenTelemetry*`
+  package, when any product project references `Harbor.Telemetry.Otlp`, and when any
+  product assembly emits an `AssemblyRef` to the exporter or to an `OpenTelemetry*`
+  assembly. The rule, its measurements and the allow-list are in
+  [docs/ARCHITECTURE_LAYERS.md §5.8b](../../docs/ARCHITECTURE_LAYERS.md#58b-the-telemetry-export-boundary--the-opentelemetry-sdk-stays-out-of-the-product-graph).

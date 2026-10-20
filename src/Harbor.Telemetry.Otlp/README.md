@@ -24,14 +24,25 @@ only by `tests/Harbor.Architecture.Tests/`, which pins that boundary
 (`TelemetryOtlpBoundaryRules`).
 
 The reason is the AOT publish. `OpenTelemetry.Exporter.OpenTelemetryProtocol`
-brings protobuf/gRPC surfaces and configuration-binder diagnostics
-(SYSLIB1100/1101) into whatever binary references it, and the `aot-publish`
+implements the OTLP protobuf/gRPC framing itself and references the
+reflection-based configuration binder directly; with the SDK core that is four
+assemblies the published CLI does not carry today — `OpenTelemetry` (338,944
+bytes of net10.0 managed IL), `OpenTelemetry.Exporter.OpenTelemetryProtocol`
+(195,072), `OpenTelemetry.Api` (83,968) and
+`OpenTelemetry.Api.ProviderBuilderExtensions` (24,576). The `aot-publish`
 job publishes `apps/Harbor.App.Cli` with NativeAOT — its pass criterion is
 that the publish SUCCEEDS. So the OTLP path is deliberately kept out of the
 shipped CLI, and the shipping answer to "where does the telemetry go?" is the
 visible sink in
 [`Harbor.Telemetry.Core`](../Harbor.Telemetry.Core/README.md), which is built on
 `ActivityListener`/`MeterListener` — framework types, no SDK, AOT-safe.
+
+One measured nuance, because the obvious story is the wrong one: the
+`Microsoft.Extensions.*` packages the SDK pulls in are **already** in the
+CLI's resolved package graph (`Microsoft.Extensions.Hosting` brings
+`Microsoft.Extensions.Configuration.Binder` and friends with it). The delta is
+exactly the four OpenTelemetry assemblies above. The binder is not what makes
+this a boundary; the four assemblies are.
 
 A JIT host that wants OTLP carries this assembly itself and calls
 `HarborOtlpExporter.Attach(endpoint)`; the exporter subscribes to the canonical
@@ -49,6 +60,14 @@ same spans and measurements the visible sink does.
 |---------|---------|
 | `Harbor.Telemetry.Core` | `HarborTelemetrySources` (the `ActivitySource`/`Meter` names the exporter subscribes to) |
 
+Both packages are **Apache-2.0**; Harbor is MIT.
+
+**This project is the only one allowed to declare them.** No product project under
+`src/` or `apps/` may declare an `OpenTelemetry*` package, and none may reference
+this project — the rule, its measurements and the allow-list are in
+[docs/ARCHITECTURE_LAYERS.md §5.8b](../../docs/ARCHITECTURE_LAYERS.md#58b-the-telemetry-export-boundary--the-opentelemetry-sdk-stays-out-of-the-product-graph),
+and it is enforced by `TelemetryOtlpBoundaryRules`.
+
 ## Tests
 
 No dedicated test project. Integration-validated by daemon/server profiles and `tests/Harbor.Telemetry.Tests/` (which runs against Core, not Otlp). The boundary itself — that no product assembly references this project — is pinned by `tests/Harbor.Architecture.Tests/TelemetryOtlpBoundaryRules.cs`.
@@ -62,5 +81,14 @@ dotnet build src/Harbor.Telemetry.Otlp/Harbor.Telemetry.Otlp.csproj
 ## Known limitations
 
 - OTLP exporter only — no Jaeger, Zipkin, or Console exporter configured here.
-- CLI/TUI binaries must not reference this project; use a separate publish profile or container image that includes the exporter.
+- CLI/TUI binaries must not reference this project, and no product project may declare
+  an `OpenTelemetry*` package; use a separate publish profile or container image that
+  includes the exporter, or an external collector. Both halves are enforced by
+  `TelemetryOtlpBoundaryRules`, whose allow-list names this project as the only owner
+  of the SDK — and the allow-list is a ratchet in both directions, so an entry that
+  stops carrying the SDK is red too.
+- **Nobody in the product attaches this exporter.** That is the decision, not an
+  oversight: the shipping answer is the visible sink in
+  [`Harbor.Telemetry.Core`](../Harbor.Telemetry.Core/README.md). The consumer is an
+  embedding JIT host that carries this assembly itself.
 - The declared `Harbor.Telemetry.Core` reference binds no type (the source/meter names are compile-time constants, so Roslyn emits no assembly reference) — it is tracked in `EnforcerIntegrityTests.DeclaredButUnboundProjectReferences` rather than silently left in place.
