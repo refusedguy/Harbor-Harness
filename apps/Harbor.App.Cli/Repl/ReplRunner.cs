@@ -433,13 +433,29 @@ internal sealed class ReplRunner
     ///     <see cref="ArgumentOutOfRangeException" /> when the registry is empty —
     ///     the state of a fresh install, and of a failed plugin-load pass — and
     ///     enumerated the registry a second time to do it (#602).
+    ///     <para />
+    ///     The resolved agent carries the step budget the configuration asks
+    ///     for (#1118). The registry's builtin agents already carry it — the
+    ///     composition root projects it onto them — but this is the seam where
+    ///     the run is BOUND to the agent it is about to execute, so the budget
+    ///     is applied from the config this run just read: it covers an agent a
+    ///     plugin contributed (the plugin path registers straight into the
+    ///     registry, past the composition root) and it honours a config
+    ///     edited between composition and this run. Applying it twice is a
+    ///     no-op — the same value lands on the same axis.
     /// </remarks>
     private Maybe<AgentDefinition> FindRunAgent(HarborConfig config)
     {
         IReadOnlyList<AgentDefinition> agents = _agentRegistry.GetAllAgents();
-        return agents
+        Maybe<AgentDefinition> resolved = agents
             .TryFirst(a => a.Name.Value == config.Agent)
             .Or(() => agents.TryFirst());
+        if (resolved.HasNoValue)
+        {
+            return resolved;
+        }
+
+        return Maybe.From(AgentStepBudget.Apply(config, resolved.Value));
     }
 
     public async Task<int> RunAskAsync(string prompt)

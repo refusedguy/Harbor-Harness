@@ -1,4 +1,5 @@
 using Harbor.Application.Agents;
+using Harbor.Application.Configuration;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;
@@ -27,13 +28,22 @@ internal static class ToolsCatalog
         string[] parts = defaultModel.Split('/', 2);
         string providerId = parts[0];
         string modelId = parts.Length > 1 ? parts[1] : defaultModel;
-        ab.AddAgent(AgentDefinition.CodeDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.PlanDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.ExploreDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.AskDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.ArchitectDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.DebugDefault(modelId, providerId));
-        ab.AddAgent(AgentDefinition.OrchestratorDefault(modelId, providerId));
+
+        // #1118: the home config's `maxSteps` is the step budget of the runs
+        // this configuration starts. It is projected HERE — where the agents
+        // are declared — so every consumer of the registry (the REPL, `ask`,
+        // `run task`, the `/agent` and `/model` switches, the desktop host)
+        // inherits the same budget, and the loop's existing
+        // `MaxStepsBehavior.IsExhausted` comparison enforces it. Without this
+        // the configured value reached no agent at all and the REPL ran to the
+        // agent's own default (50 turns for `code`) whatever the config said.
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.CodeDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.PlanDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.ExploreDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.AskDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.ArchitectDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.DebugDefault(modelId, providerId)));
+        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.OrchestratorDefault(modelId, providerId)));
         return registry;
     }
 

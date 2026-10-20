@@ -455,6 +455,21 @@ still exists at `~/.harbor/config.json`. It owns:
 - Cost limit per session
 - Compaction settings
 
+**`maxSteps` is the step budget of a run.** The value is how many LLM turns an
+agent run may take: the loop stops at exactly that many turns and the run says
+it was cut off by the budget (`RunLimitKind.MaxSteps`) instead of pretending it
+finished. The budget is projected onto the agent the run starts with, so it
+holds for every entry point — the interactive REPL, `harbor ask` and
+`harbor run task` alike. It is read when the process starts, so a change to
+the key takes effect on the next start of Harbor (like `storage` and `tui`).
+A value equal to the built-in default (50) means "no budget configured": each
+agent then keeps its own step budget (`code`, `ask` and `debug` 50; `plan`,
+`architect` and `orchestrator` 100; `explore` 20), which is what every install
+that never touched the key has — 50 is the value every config save writes into
+the file, so honouring it as an override would silently halve the 100-step
+agents for users who never asked for it. Any other value is the budget of the
+run. See issue #1118.
+
 **Important:** task C1 RE-PURPOSED the `~/.harbor/config.json` path for
 `CommonConfig`. Both `HarborConfig` and `CommonConfig` are now reading/writing
 the SAME file. The two types overlap on the `apiKeys` / `LogLevel` /
