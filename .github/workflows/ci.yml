@@ -725,6 +725,9 @@ jobs:
         with:
           name: solution-binaries-ui
           path: |
+            # The CLI's own output directory: the CellForge PTY scenarios
+            # spawn apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll
+            # through a pty (tests/Harbor.Tui.CellForge.PtyTests).
             Harbor.slnx
             tests/Harbor.Tui.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
@@ -750,6 +753,9 @@ jobs:
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*.*
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.App.Avalonia.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            apps/Harbor.App.Cli/bin/Release/net10.0/*.*
+            apps/Harbor.App.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
+            apps/Harbor.App.Cli/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
