@@ -236,7 +236,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          submodules: recursive
 
       # The floors are ratchets on the ROWS of the frozen baselines: 1896 for
       # the contract assembly, 1269 for the facade. They are set AT the
