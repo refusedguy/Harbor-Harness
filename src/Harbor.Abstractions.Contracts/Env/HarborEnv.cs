@@ -40,6 +40,13 @@ public static class HarborEnv
     /// <summary>Session store id: <c>memory</c>, <c>jsonl</c>, <c>sqlite</c>, …</summary>
     public const string Storage = "HARBOR_STORAGE";
 
+    /// <summary>
+    ///     The tier a session log is written in: <c>local</c> (default) or
+    ///     <c>keyless</c> — the tier that scrubs provider credentials out of
+    ///     the log so it can be committed and replayed without them (#1740).
+    /// </summary>
+    public const string SessionTier = "HARBOR_SESSION_TIER";
+
     /// <summary>Host composition mode: <c>inprocess</c>, <c>ipc-server</c>, <c>ipc-client</c>.</summary>
     public const string Mode = "HARBOR_MODE";
 

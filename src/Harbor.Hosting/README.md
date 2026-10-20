@@ -23,6 +23,13 @@ The **composition root** for all Harbor applications. `Registration.AddHarbor(..
 - **`HarborCompositionContext`**: resolved options + `Common` config + `Harbor` config + `EventBus` + `Registries`. `EventBus` and `Registries` are assigned exactly once — by `AddHarborConfiguration` and `AddHarborRegistries` — and a module that reads one before its owner ran gets an `InvalidOperationException` naming the member and the module, not a null (#562). `HarborRegistries` takes its four registries as constructor arguments, so a half-built bundle cannot be represented.
 - **Feature flags**: controlled via MSBuild properties (`HarborWithPlugins`, `HarborWithSpectreTui`, `HarborWithAllProviders`, `HarborWithAllTools`) → `#if` constants inside modules.
 
+## Wiring
+
+The composition root reads two environment variables for storage:
+
+- `HARBOR_STORAGE` picks the session-store backend (`memory`, `jsonl`, `sqlite`).
+- `HARBOR_SESSION_TIER` picks the tier the JSONL logs are written in: `local` (the default, nothing is scrubbed) or `keyless`. In the keyless tier the store scrubs provider credentials out of every text-bearing field before the message reaches the disk, so the log can be committed and replayed without a provider key (#1740). The tier is read in `Modules/SessionLogEnvironment.cs`, and an unknown value fails the composition: the default tier is the UNSCRUBBED one, so a typo in the variable name must not fall back to it.
+
 ## Dependencies
 
 | Package | Purpose |

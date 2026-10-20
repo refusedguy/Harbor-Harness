@@ -69,10 +69,50 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
 
     private readonly string _rootDirectory;
 
+    /// <summary>
+    ///     The tier this store writes in (#1740). The default tier is the
+    ///     local one, where nothing is scrubbed — the behaviour every session
+    ///     log had before the tier existed.
+    /// </summary>
+    private readonly SessionLogTier _tier;
+
+    /// <summary>
+    ///     The scrubber the keyless tier writes through (#1740). It is built
+    ///     once, in the constructor: the set of literal secrets it knows is
+    ///     fixed for the life of the store.
+    /// </summary>
+    private readonly SecretRedactor _redactor;
+
     public JsonlSessionStore(string rootDirectory, ILogger<JsonlSessionStore> logger)
+        : this(rootDirectory, logger, SessionLogTier.Local, null)
+    {
+    }
+
+    /// <summary>
+    ///     Construct the store.
+    /// </summary>
+    /// <param name="rootDirectory">The directory the session files live in.</param>
+    /// <param name="logger">The logger.</param>
+    /// <param name="tier">
+    ///     The tier the logs are written in. <see cref="SessionLogTier.Keyless" />
+    ///     scrubs provider credentials out of every text-bearing field before
+    ///     it reaches the file (#1740).
+    /// </param>
+    /// <param name="literalSecrets">
+    ///     The credential values the process holds. The keyless tier replaces
+    ///     every occurrence of them, which is what removes a provider key
+    ///     whose shape no rule could recognise.
+    /// </param>
+    public JsonlSessionStore(
+        string rootDirectory,
+        ILogger<JsonlSessionStore> logger,
+        SessionLogTier tier,
+        IReadOnlyCollection<string>? literalSecrets = null)
     {
         _rootDirectory = rootDirectory;
         _logger = logger;
+        _tier = tier;
+        _redactor = new SecretRedactor(literalSecrets);
         _checkpoints = new JsonlCheckpointStore(this, rootDirectory, logger);
         _feedback = new JsonlFeedbackStore(this, rootDirectory, logger);
 
@@ -81,6 +121,36 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             Directory.CreateDirectory(_rootDirectory);
         }
     }
+
+    /// <summary>
+    ///     The marker the header carries for this store's tier, or null for
+    ///     the local tier — whose header keeps the bytes it always had.
+    /// </summary>
+    private string? TierMarker() =>
+        _tier == SessionLogTier.Keyless ? SessionLogTierMarkers.Keyless : null;
+
+    /// <summary>
+    ///     The message to write. In the keyless tier the text-bearing fields
+    ///     are scrubbed HERE, on the way out, so the agent keeps working with
+    ///     the real text in memory and only the file changes (#1740).
+    /// </summary>
+    private AgentMessage ForWrite(AgentMessage message) =>
+        _tier == SessionLogTier.Keyless ? _redactor.Scrub(message) : message;
+
+    /// <summary>
+    ///     The text to write, scrubbed in the keyless tier (#1740). The title
+    ///     of a session is written by the caller and can be anything the
+    ///     conversation was about, so it is scrubbed like every other
+    ///     text-bearing field.
+    /// </summary>
+    internal string ScrubTextForWrite(string text) =>
+        _tier == SessionLogTier.Keyless ? _redactor.ScrubText(text) : text;
+
+    /// <summary>
+    ///     The optional text to write, scrubbed in the keyless tier (#1740).
+    /// </summary>
+    internal string? ScrubOptionalTextForWrite(string? text) =>
+        text is null ? null : ScrubTextForWrite(text);
 
     /// <summary>
     ///     Per-session mutex. <b>#1513:</b> shared with the checkpoint axis —
@@ -142,7 +212,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     session.Id,
                     session.ProjectId,
                     session.Directory,
-                    session.Title,
+                    ScrubTextForWrite(session.Title),
                     session.Agent,
                     session.Model,
                     session.ProviderId,
@@ -152,7 +222,8 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     session.Status,
                     session.GitBranch,
                     session.GitIsDirty,
-                    session.Kind);
+                    session.Kind,
+                    TierMarker());
 
                 // #177: source-gen straight to UTF-8 bytes + newline byte, async
                 // append — no intermediate string, no Serialize + concat.
@@ -317,7 +388,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     message.ParentId,
                     message.Role,
                     message.CreatedAt,
-                    JsonlMessageCodec.SerializeMessagePayload(message));
+                    JsonlMessageCodec.SerializeMessagePayload(ForWrite(message)));
 
                 // #177: source-gen straight to UTF-8 bytes + newline byte, async
                 // append — no intermediate string, no Serialize + concat.
@@ -379,7 +450,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     message.ParentId,
                     message.Role,
                     message.CreatedAt,
-                    JsonlMessageCodec.SerializeMessagePayload(message));
+                    JsonlMessageCodec.SerializeMessagePayload(ForWrite(message)));
 
                 // #177: pre-serialized UTF-8 entry + line-wise atomic rewrite —
                 // no List<string> join of the new entry.
@@ -856,7 +927,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     session.Id,
                     session.ProjectId,
                     session.Directory,
-                    session.Title,
+                    ScrubTextForWrite(session.Title),
                     session.Agent,
                     session.Model,
                     session.ProviderId,
@@ -866,7 +937,8 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     session.Status,
                     session.GitBranch,
                     session.GitIsDirty,
-                    session.Kind);
+                    session.Kind,
+                    TierMarker());
 
                 // #460: streamed. Only the first record is replaced; every
                 // record after it is copied through byte for byte, so a

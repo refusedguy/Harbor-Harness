@@ -119,6 +119,15 @@ internal sealed record SessionReadResult(
 ///     fields and silently dropped them on first rename/rebind (V4-bugfix).
 ///     Defaults keep legacy files parseable.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#1740:</b> <see cref="Sharing" /> says which TIER wrote the file
+///         (see <see cref="SessionLogTier" />). It is omitted entirely for the
+///         local tier, so a log nobody asked to be shared keeps the exact bytes
+///         it had before the tier existed, and it is present on a keyless log so
+///         a reader can tell a shareable artifact from a private notebook.
+///     </para>
+/// </remarks>
 internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("version")] int Version,
@@ -135,7 +144,15 @@ internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("status")] SessionStatus Status = SessionStatus.Idle,
     [property: JsonPropertyName("gitBranch")] string? GitBranch = null,
     [property: JsonPropertyName("gitIsDirty")] bool GitIsDirty = false,
-    [property: JsonPropertyName("kind")] SessionKind Kind = SessionKind.User);
+    [property: JsonPropertyName("kind")] SessionKind Kind = SessionKind.User,
+    // #1740: the tier marker. Omitted when the tier is the local one, so the
+    // header of an ordinary log is byte-identical to what it was before. The
+    // JsonIgnore attribute (rather than the context-wide ignore rule) is
+    // required, because the store serializes through the source-generated
+    // metadata, which does not inherit JsonlCodecContext.JsonOptions.
+    [property: JsonPropertyName("sharing")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Sharing = null);
 
 /*
  * DDD-audit 25.08 (ROP-C Z3): <see cref="JsonlSessionStore.GetAsync" /> used to

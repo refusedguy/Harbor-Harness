@@ -37,6 +37,7 @@ public sealed class StreamingCoalescer : IDisposable;  // internal — text/thin
 public sealed record UpdateFlushPolicy;          // #1527 — how many deltas may share one published update
 // Resilience: RetryPolicy : IRetryPolicy, DefaultToolRetryDecider : IToolRetryDecider, RetryPolicyExtensions
 public sealed class RetryLlmClientDecorator : ILlmClient;  // Resilience/ — #1502: preflight transient retry on the provider stream
+public sealed class RecordedSessionLlmClient : ILlmClient;  // Agents/ — #1740: replays a recorded session instead of calling a provider
 ```
 
 Also internal but pinned by tests: `TurnRunner`, `MessageSnapshot`,
