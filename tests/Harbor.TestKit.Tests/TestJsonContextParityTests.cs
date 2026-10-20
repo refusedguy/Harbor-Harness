@@ -98,7 +98,12 @@ public class TestJsonContextParityTests
         string json = JsonSerializer.Serialize(
             new ToolPathPatchArgs("src/app.cs", "@@ -1 +1 @@"), TestJsonContext.Default.ToolPathPatchArgs);
 
-        await Assert.That(json).IsEqualTo("""{"path":"src/app.cs","patch":"@@ -1 +1 @@"}""");
+        // The default encoder escapes `+` as the six characters
+        // `\u002B` — the SAME escape the reflection path wrote, because
+        // both ride `JavaScriptEncoder.Default`. The literal below is the
+        // ESCAPED text, not a mistake: a diff here means the encoder
+        // changed, and the bytes a tool receives changed with it.
+        await Assert.That(json).IsEqualTo("""{"path":"src/app.cs","patch":"@@ -1 \u002B1 @@"}""");
     }
 
     [Test]
@@ -161,10 +166,14 @@ public class TestJsonContextParityTests
         // behaves the same way — `JsonlCodecContext` refuses a runtime type
         // it does not know, which is why the JSONL codec drops the
         // `object`-typed metadata instead of writing it.
-        InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+        NotSupportedException failure = Assert.Throws<NotSupportedException>(() =>
             JsonSerializer.Serialize(new UnregisteredPayload(), TestJsonContext.Default.Options));
 
-        await Assert.That(failure).IsNotNull();
+        // The refusal NAMES the type it could not resolve and the context
+        // that could not resolve it — the diagnostic says which context
+        // needs the registration, not merely that something went wrong.
+        await Assert.That(failure.Message).Contains("UnregisteredPayload");
+        await Assert.That(failure.Message).Contains(nameof(TestJsonContext));
     }
 
     /// <summary>
