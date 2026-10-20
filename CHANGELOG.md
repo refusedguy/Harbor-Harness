@@ -1344,6 +1344,19 @@ All notable changes to Harbor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+### #1905 — 46 правил ReflectionAnalyzers настроены по-настоящему; ни одно из них не ловит динамический код
+
+**`ReflectionAnalyzers 0.3.1` шлёт `REFL001`…`REFL046`, а не `REL0001`/`REL0002`. Мёртвые строки конфигурации убраны, 46 настоящих id настроены по одному, каждое со своей причиной.**
+
+- **Что в пакете.** 46 правил, все включены по умолчанию: 45 как `warning`, `REFL007` как `hidden`. Прочитано из `analyzers/dotnet/cs/ReflectionAnalyzers.dll` внутри nupkg 0.3.1: id, заголовки, категория (`ReflectionAnalyzers.SystemReflection`), `defaultSeverity` и `isEnabledByDefault` вынуты из метаданных сборки, а не взяты из чужого README. 45 из 46 совпали с `documentation/REFL*.md` пакета; `REFL021` в пакете задокументирован (страницы нет, в README его нет), но в сборке он есть.
+- **Мёртвая конфигурация.** `.editorconfig` настраивал `REL0001` и `REL0002` — таких id в пакете нет (нет буквы `L`, нумерация из четырёх цифр вместо трёх). Две строки не настраивали ничего; настоящие 46 правил всё это время шли со своим дефолтом и нигде не были записаны.
+- **Ни одно правило не про динамический код.** В user-string heap собранного анализатора нет ни `Assembly.Load`, ни `AssemblyLoadContext`, ни `Reflection.Emit`, ни `TypeBuilder`, ни `DynamicMethod`. Все 46 — про member-by-member рефлексию: binding flags, overloads, `nameof`, generic type arguments, `InvokeMember`. Запрет динамического кода в `src/` + `apps/` держит компилятор: `RS0030` над `BannedSymbols.DynamicCode.txt` (#1844).
+- **Измерено, а не предположено.** Прогон CI 39421864352 (`dev` @ `86b52adc`, job `build`): **41 находка, 9 правил, 18 файлов, все под `tests/`**, ноль под `src/` и `apps/`. Единица счёта — уникальная тройка `file:line:column`: лог печатает каждое предупреждение шесть раз, и счёт строк лога завышает поверхность в шесть раз.
+- **Ни одна из 41 находки — не дефект.** 33 — предпочтения в написании (`nameof`, binding flags, `typeof`). Остальные 8 приходят от четырёх правил корректности, и каждая — тест, который просит анализатор сообщить именно то, что он сообщает: об отсутствии сеттера, об отсутствии публичного метода, об отсутствии типа; либо член, который анализатор не может разрешить, потому что конкретный тип известен только в рантайме.
+- **Severity — по природе правила.** 32 правила корректности — `warning` (в `src/` и `apps/` это ошибка сборки: сломанный рефлексивный вызов там — настоящий баг). 14 правил написания — `suggestion` (видно в IDE, не повышается). Четыре правила корректности, у которых есть находки, понижены до `suggestion` **только под `tests/`** — path-scoped блок `[tests/**.cs]` в `.editorconfig`, по одной строке на правило со своей причиной, как требует `DiSeverityDemotionRules.PathScopedSection_NamesEveryRuleItSets`.
+- **Документы.** `docs/ANALYZERS.md` — таблица всех 46 правил (id, заголовок, дефолт пакета, severity Harbor, причина) и измеренная таблица находок; `docs/ARCHITECTURE_LAYERS.md` §5.8 — уточнено, что 46 правил делятся на 32 правила корректности и 14 правил написания, и названо, как это измерено; комментарий в `Directory.Build.props` больше не называет пакет «AOT-friendliness».
+
+
 ## [0.1.0-alpha] - 2026-07-16
 
 Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage, and 65 tests.
