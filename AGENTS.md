@@ -119,12 +119,12 @@ providers/                            — 13 JSON LLM provider configs (embedded
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
 docs/                                 — 74 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 43 test/bench projects, one directory each
+tests/                                — 44 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit and Harbor.Benchmarks
-                                        (`tests/` holds 45 directories: the 43 projects plus
+                                        (`tests/` holds 46 directories: the 44 projects plus
                                         `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
-                                        plain `ls -d tests/*/ | wc -l` reads 44 and is the
-                                        wrong number to quote)
+                                        plain `ls -d tests/*/ | wc -l` reads 46, two more than the
+                                        project count, and is the wrong number to quote)
 ```
 
 Two solution files exist: `Harbor.slnx` (main) and `Harbor.Samples.slnx` (samples). Building works normally (`dotnet build`); testing must be done per project — see [Build & test commands](#build--test-commands).
