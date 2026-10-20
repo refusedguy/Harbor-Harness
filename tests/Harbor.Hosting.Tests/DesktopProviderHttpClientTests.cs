@@ -31,24 +31,7 @@ namespace Harbor.Hosting.Tests;
 [NotInParallel("hosting")]
 public class DesktopProviderHttpClientTests
 {
-    /// <summary>
-    ///     An <see cref="IHttpClientFactory" /> that records what it was asked
-    ///     for. The desktop discovery resolves the factory from the container,
-    ///     so registering this instance BEFORE <c>AddHarbor</c> is what puts it
-    ///     in front of the default one (<c>AddHttpClient</c> registers the
-    ///     default with <c>TryAdd</c>, so the first registration wins).
-    /// </summary>
-    private sealed class RecordingHttpClientFactory : IHttpClientFactory
-    {
-        public List<string> Names { get; } = new();
-
-        public HttpClient CreateClient(string name)
-        {
-            Names.Add(name);
-            return new HttpClient();
-        }
-    }
-
+    /// <summary>An auth resolver that answers any provider with a fixed key.</summary>
     private sealed class StubAuthResolver : IAuthResolver
     {
         public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
