@@ -349,7 +349,7 @@ jobs:
           } > ci-os-shard.slnx
           echo "Building $# OS-shard projects and their dependency closure:"
           cat ci-os-shard.slnx
-          dotnet build ci-os-shard.slnx -c Release \
+          dotnet build Harbor.slnx -c Release \
             -p:ContinuousIntegrationBuild=true \
             -p:GenerateDocumentationFile=false
 
