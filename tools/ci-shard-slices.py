@@ -54,6 +54,10 @@ WHAT IT CHECKS
      upload globs pick them per RID. A slice that carries only the x64
      ones runs on x64 and fails on arm64 with a DllNotFoundException —
      a failure that names the missing library, not the missing glob.
+  6. Every shard says WHICH RUNNER it runs on (`runner:`), because the
+     job's `runs-on` is `${{ matrix.runner }}` — a shard without one has
+     no runner at all, and, worse, check 5 would silently stop asking
+     for the native assets that runner needs.
 
 HOW IT READS THE FILE
 
