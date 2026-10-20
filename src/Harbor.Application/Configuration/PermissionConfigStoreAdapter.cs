@@ -25,10 +25,14 @@ public sealed class PermissionConfigStoreAdapter(IConfigStore inner) : IPermissi
     /// <inheritdoc />
     public async Task<Result<Dictionary<string, List<PermissionRule>>>> LoadAsync(CancellationToken ct = default)
     {
-        var loaded = await inner.LoadAsync(ct).ConfigureAwait(false);
-        if (loaded.IsFailure)
-            return Result.Failure<Dictionary<string, List<PermissionRule>>>(loaded.Error);
-        return Result.Success(loaded.Value.Permissions);
+        // #1558: the guard + `.Value` pair is one `Map` link. `Map`
+        // short-circuits on failure and carries the store's own error across
+        // unchanged, so the adapter reports exactly what it reported before —
+        // including the hand-built re-type it used to spell out, which the
+        // architecture guard could not see because the generic argument nests
+        // two levels deep.
+        return (await inner.LoadAsync(ct).ConfigureAwait(false))
+            .Map(config => config.Permissions);
     }
 
     /// <inheritdoc />

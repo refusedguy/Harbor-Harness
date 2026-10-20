@@ -204,11 +204,14 @@ public sealed class InProcessHarborClient : IHarborClient
         }
 
         // ROP boundary #101: shared TryCreate → GetClient preamble (same as RequestDispatcher).
-        var clientResult = _providers.ResolveClient(providerId);
-        if (clientResult.IsFailure)
-            return clientResult.ConvertFailure<IReadOnlyList<ModelInfo>>();
-
-        return await clientResult.Value.GetModelsAsync(ct).ConfigureAwait(false);
+        // #1558: the guard + `.Value` pair is one `Bind` link. The registry's
+        // own error travels unchanged and the catalog read only happens for a
+        // client that resolved. The continuation returns the TASK, not the
+        // awaited value: `ConfiguredTaskAwaitable<T>` is not a `Task<T>`, so a
+        // `.ConfigureAwait(false)` inside the lambda would not bind.
+        return await _providers.ResolveClient(providerId)
+            .Bind(client => client.GetModelsAsync(ct))
+            .ConfigureAwait(false);
     }
 
     // ── Tools ──────────────────────────────────────────────────────────────

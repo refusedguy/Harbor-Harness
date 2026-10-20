@@ -24,11 +24,12 @@ public static class SessionTreeRunner
     public static async Task<Result<IReadOnlyList<string>>> BuildAsync(
         ISessionStore store, string? currentSessionId = null, CancellationToken ct = default)
     {
-        var listed = await store.ListAsync(ct: ct).ConfigureAwait(false);
-        if (listed.IsFailure)
-            return listed.ConvertFailure<IReadOnlyList<string>>();
-
-        return Result.Success(RenderForest(listed.Value, currentSessionId));
+        // #1558: the guard + `.Value` pair is one `Map` link. `Map`
+        // short-circuits on failure and carries the store's own error across
+        // unchanged, so the tree is rendered only for a session list that
+        // was actually read.
+        return (await store.ListAsync(ct: ct).ConfigureAwait(false))
+            .Map(sessions => RenderForest(sessions, currentSessionId));
     }
 
     /// <summary>

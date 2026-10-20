@@ -145,17 +145,14 @@ public static class HunkParser
         string oldPart = body[..plusIdx].Trim();
         string newPart = body[plusIdx..].Trim();
 
-        Result<(int start, int count)> oldResult = TryParseRange(oldPart, line);
-        if (oldResult.IsFailure)
-            return oldResult.ConvertFailure<HunkHeader>();
-        Result<(int start, int count)> newResult = TryParseRange(newPart, line);
-        if (newResult.IsFailure)
-            return newResult.ConvertFailure<HunkHeader>();
-
-        (int oldStart, int oldCount) = oldResult.Value;
-        (int newStart, int newCount) = newResult.Value;
-
-        return Result.Success(new HunkHeader(oldStart, oldCount, newStart, newCount));
+        // #1558: the two range parses are one rail. `Bind` hands the SAME
+        // error on and re-types it to `Result<HunkHeader>` — exactly what the
+        // old `x.ConvertFailure<HunkHeader>()` guard did — so the malformed
+        // header text and the range errors are unchanged.
+        return TryParseRange(oldPart, line)
+            .Bind(oldRange => TryParseRange(newPart, line)
+                .Bind(newRange => Result.Success(new HunkHeader(
+                    oldRange.start, oldRange.count, newRange.start, newRange.count))));
     }
 
     private static Result<(int start, int count)> TryParseRange(string s, string headerLine)
