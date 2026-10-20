@@ -66,7 +66,7 @@ public sealed class AgentListenerFanOutTests
             return ValueTask.CompletedTask;
         });
 
-        var published = new TurnStartEvent(1);
+        var published = TestEvents.TurnStart();
         await bus.PublishAsync(published);
 
         await Assert.That(received.Count).IsEqualTo(1)
@@ -88,9 +88,9 @@ public sealed class AgentListenerFanOutTests
             return ValueTask.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         subscription.Dispose();
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         await Assert.That(received.Count).IsEqualTo(1)
             .Because(
@@ -121,7 +121,7 @@ public sealed class AgentListenerFanOutTests
             return ValueTask.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(calls.Count).IsEqualTo(3)
             .Because("Every subscribed listener is invoked for the event.");
@@ -151,8 +151,8 @@ public sealed class AgentListenerFanOutTests
             return ValueTask.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart());
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         await Assert.That(survivors.Count).IsEqualTo(2)
             .Because(
@@ -188,9 +188,9 @@ public sealed class AgentListenerFanOutTests
             return ValueTask.CompletedTask;
         });
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
         agent.Dispose();
-        await bus.PublishAsync(new TurnStartEvent(2));
+        await bus.PublishAsync(TestEvents.TurnStart(2));
 
         await Assert.That(received.Count).IsEqualTo(1)
             .Because(
@@ -205,7 +205,7 @@ public sealed class AgentListenerFanOutTests
         var bus = new InMemoryEventBus();
         using DefaultAgent agent = NewAgent(bus);
 
-        await bus.PublishAsync(new TurnStartEvent(1));
+        await bus.PublishAsync(TestEvents.TurnStart());
 
         await Assert.That(bus.FastPathCount).IsEqualTo(1L)
             .Because(
