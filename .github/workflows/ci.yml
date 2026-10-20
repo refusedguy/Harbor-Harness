@@ -114,6 +114,10 @@ jobs:
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
               - 'tools/pack-validate.py'
+              # The gate that keeps the build job's per-consumer artifacts in
+              # step with the test job's shard lists. Same #618 argument:
+              # editing it must run the build job that executes it.
+              - 'tools/ci-shard-slices.py'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -556,6 +560,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # The build job uploads one artifact per consumer, and each shard's
+      # artifact carries only that shard's projects. The shard's project
+      # list and the slice's project list are the same list written twice
+      # (the `test` job's matrix and the upload steps below), so this
+      # checks that they still agree — a project added to a shard without
+      # being added to the slice fails here, with the project's name, instead
+      # of failing in the shard with a "Missing …dll" that points at the
+      # download.
+      - name: The build-output slices match the test shards
+        run: python3 tools/ci-shard-slices.py
+
       # ── Build outputs: one artifact PER CONSUMER ──────────────────────────
       #
       # Measured on run 39389070999 (artifact 12249049956): ONE artifact,
@@ -677,6 +692,9 @@ jobs:
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -725,9 +743,9 @@ jobs:
         with:
           name: solution-binaries-ui
           path: |
-            # The CLI's own output directory: the CellForge PTY scenarios
-            # spawn apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll
-            # through a pty (tests/Harbor.Tui.CellForge.PtyTests).
+            # The CLI's own output directory: CliDriver (the e2e shard) and the
+            # CellForge PTY scenarios (the ui shard) start the CLI from THERE, not
+            # from the test project's copy of the assembly.
             Harbor.slnx
             tests/Harbor.Tui.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tui.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
@@ -766,9 +784,9 @@ jobs:
         with:
           name: solution-binaries-e2e
           path: |
-            # The CLI's own output directory: CliDriver spawns
-            # apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll —
-            # not the e2e test's copy of it.
+            # The CLI's own output directory: CliDriver (the e2e shard) and the
+            # CellForge PTY scenarios (the ui shard) start the CLI from THERE, not
+            # from the test project's copy of the assembly.
             Harbor.slnx
             tests/Harbor.E2E.Cli/bin/Release/net10.0/*.*
             tests/Harbor.E2E.Cli/bin/Release/net10.0/runtimes/linux-x64/native/*
@@ -849,6 +867,9 @@ jobs:
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Telemetry.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.TestKit.Generators.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*.*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.Tools.Builtin.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
@@ -1022,7 +1043,7 @@ jobs:
             start=$(date +%s)
             dll="tests/$p/bin/Release/net10.0/$p.dll"
             if [ ! -f "$dll" ]; then
-              echo "Missing $dll — did build artifact download fail?"
+              echo "Missing $dll — the artifact for this shard does not carry it. If the project was added to this shard's list recently, add it to the matching 'Stash build outputs' step in the build job too (tools/ci-shard-slices.py checks the two lists)."
               status="FAIL"
               rc=1
             elif dotnet exec "$dll" $guard --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
