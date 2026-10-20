@@ -395,12 +395,11 @@
       assembly ships — analyzer + generated code only, per the upstream
       consumption guidance (PrivateAssets=all).
     -->
-    <PackageReference Include="ConsoleAppFramework">
+    <PackageReference Include="ConsoleAppFramework" ExcludeAssets="runtime">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
       <!-- Proj0037 (#1857): the package ships an analyzer and no runtime
            assembly, so the runtime asset is excluded explicitly. -->
-      <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 

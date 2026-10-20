@@ -36,9 +36,7 @@
       assembly does not flow to the consumers of this library — so the runtime
       asset of AutoCtor is dead weight here and is excluded.
     -->
-    <PackageReference Include="AutoCtor" PrivateAssets="all">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
+    <PackageReference Include="AutoCtor" PrivateAssets="all" ExcludeAssets="runtime"/>
   </ItemGroup>
 
 </Project>

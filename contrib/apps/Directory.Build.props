@@ -22,13 +22,13 @@
   <ItemGroup>
     <!-- Annotation attribute (compile-time only) — needed so composition roots
          can put [Exposes(typeof(IAgent))] on their BuildHost methods. -->
-    <PackageReference Include="Excubo.Analyzers.Annotations">
+    <PackageReference Include="Excubo.Analyzers.Annotations" ExcludeAssets="runtime">
       <IncludeAssets>compile; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

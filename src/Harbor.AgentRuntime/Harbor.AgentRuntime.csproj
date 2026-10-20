@@ -50,12 +50,11 @@
       Harbor.Application, which does exactly this — same setup as Abstractions
       and Registries).
     -->
-    <PackageReference Include="ZLinq.DropInGenerator">
+    <PackageReference Include="ZLinq.DropInGenerator" ExcludeAssets="runtime">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): the package ships an analyzer and no runtime
            assembly, so the runtime asset is excluded explicitly. -->
-      <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 

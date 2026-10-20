@@ -240,12 +240,17 @@
 
   <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
   <!--
-    Every analyzer package below carries `<ExcludeAssets>runtime</ExcludeAssets>`
-    next to `<PrivateAssets>all</PrivateAssets>` (#1857, rule Proj0037). An
-    analyzer package ships no runtime assembly, so listing `runtime` in
-    IncludeAssets is exactly the state in which the IDE offers a type the
-    program cannot load at run time. Excluding the runtime asset changes
-    nothing for these packages — they have none — and it states the intent.
+    Every analyzer package below carries `ExcludeAssets="runtime"` next to
+    `<PrivateAssets>all</PrivateAssets>` (#1857, rule Proj0037). An analyzer
+    package ships no runtime assembly, so listing `runtime` in IncludeAssets is
+    exactly the state in which the IDE offers a type the program cannot load
+    at run time. Excluding the runtime asset changes nothing for these packages
+    — they have none — and it states the intent.
+
+    ATTRIBUTE form, not a child element: Proj0037 reads the attribute
+    (`reference.Element.Attribute("ExcludeAssets")`) and ignores the child
+    element NuGet also accepts. NuGet reads both forms as the same item
+    metadata, so the attribute is the only form that satisfies the rule.
 
     The IncludeAssets list itself stays: it enumerates the asset kinds an
     analyzer package contributes (analyzers, buildtransitive). Rule Proj0026
@@ -254,44 +259,37 @@
   -->
   <ItemGroup>
     <!-- Code style + quality -->
-    <PackageReference Include="Roslynator.Analyzers">
+    <PackageReference Include="Roslynator.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="SonarAnalyzer.CSharp">
+    <PackageReference Include="SonarAnalyzer.CSharp" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Microsoft official analyzers -->
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Async best practices -->
-    <PackageReference Include="AsyncFixer">
+    <PackageReference Include="AsyncFixer" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Reflection detection (AOT-friendliness) -->
-    <PackageReference Include="ReflectionAnalyzers">
+    <PackageReference Include="ReflectionAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Performance-focused analyzer -->
-    <PackageReference Include="Meziantou.Analyzer">
+    <PackageReference Include="Meziantou.Analyzer" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
@@ -315,9 +313,8 @@
       Microsoft.Extensions.DependencyInjection gets checked. Default severity is
       warning.
     -->
-    <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
+    <PackageReference Include="DependencyInjection.Lifetime.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
@@ -349,9 +346,8 @@
       (docs/ROP-API-INVENTORY.md §5 — low value, Harbor's Result.Failure<T>
       sites are mostly not in an inferable position).
     -->
-    <PackageReference Include="CSharpFunctionalExtensions.Analyzers">
+    <PackageReference Include="CSharpFunctionalExtensions.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!--
@@ -368,9 +364,8 @@
       a file named .globalconfig by walking up from the compiled sources, so
       nothing has to be wired here for it to be picked up.
     -->
-    <PackageReference Include="DotNetProjectFile.Analyzers">
+    <PackageReference Include="DotNetProjectFile.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <ExcludeAssets>runtime</ExcludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>

@@ -344,7 +344,7 @@ and the `.resx` files — and reports on them. The package ships 193 rules
 
 | ID | Title | Why it is an error |
 |----|-------|--------------------|
-| **Proj0037** | Exclude runtime when all assets are private | A `PrivateAssets=all` package has no runtime assembly; without `ExcludeAssets=runtime` the IDE offers a type the program cannot load. Fixed at 18 `PackageReference` sites, one `ExcludeAssets` line each, plus one scoped `NoWarn` (see below). |
+| **Proj0037** | Exclude runtime when all assets are private | A `PrivateAssets=all` package has no runtime assembly; without `ExcludeAssets=runtime` the IDE offers a type the program cannot load. Fixed at 26 `PackageReference` sites, one `ExcludeAssets` line each, plus one scoped `NoWarn` (see below). |
 | **Proj0040** | Run NuGet security audits on transitive dependencies too | The SDK default is `direct`. Harbor pins transitive versions on purpose (`CentralPackageTransitivePinningEnabled`), so a transitive advisory is Harbor's subject. Fixed by pinning `NuGetAuditMode=all` in `Directory.Build.props`. |
 | **Proj0041** | NuGet audit level must be at least moderate | The SDK default is `low`. Fixed by pinning `NuGetAuditLevel=moderate` in `Directory.Build.props`. |
 
@@ -396,6 +396,16 @@ against Roslyn 5.6.0 while the .NET 10 SDK ships an older Roslyn, and the
 local copy of the Roslyn runtime is what lets the generator load against the
 version it was compiled against. The finding is scoped at that element with
 `NoWarn="Proj0037"` and a comment, rather than silenced globally.
+
+#### `ExcludeAssets` has to be an attribute
+
+Proj0037 reads the **attribute** form —
+`reference.Element.Attribute("ExcludeAssets")` — and ignores the child element
+`<ExcludeAssets>runtime</ExcludeAssets>` that NuGet also accepts. The first
+run of this rule reported 10 sites in `Directory.Build.props` that carried the
+child element, one per project that compiled. NuGet reads both forms as the
+same item metadata, so the attribute form is the one that satisfies the rule
+and it is what the tree now carries.
 
 ---
 
