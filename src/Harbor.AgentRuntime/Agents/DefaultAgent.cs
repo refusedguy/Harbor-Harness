@@ -439,8 +439,28 @@ public sealed class DefaultAgent : IAgent
             try
             {
                 var loaded = await LoadSessionContextAsync(state.SessionId, linkedCts.Token).ConfigureAwait(false);
-                if (loaded.IsFailure) // §4.6-ok: единственный мост Result→исключение на границе рана (catch ниже всё равно нужен ради RunAsync).
-                    throw new InvalidOperationException(loaded.Error);
+                if (loaded.IsFailure)
+                {
+                    // #1510: the load failure is a Result this method already holds.
+                    // Return it instead of throwing it and catching it back. The old
+                    // bridge manufactured an exception out of the failure, and the
+                    // catch below turned that exception into a Failure again: a
+                    // round trip with no gain. The typed failure died on the way out,
+                    // the catch-all picked up exceptions nobody meant it to catch, and
+                    // the reader had to reconstruct the cycle from two places in the
+                    // file. Nothing outside could depend on the exception type — it
+                    // was created and caught inside the same try. The catch below
+                    // stays: the agent loop can throw, and a real exception is still
+                    // a fault worth logging as one.
+                    AdvanceBoundState(static s => s with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow });
+                    DefaultAgentLog.LoadSessionContextFailed(_logger, state.SessionId, loaded.Error);
+                    // ConvertFailure carries the failure's own text across. It throws
+                    // on a success, which is why the guard above is load-bearing.
+                    var loadFailed = loaded.ConvertFailure();
+                    completion.TrySetResult(loadFailed);
+                    return loadFailed;
+                }
+
                 var result = await _agentLoop.RunAsync(loaded.Value, state.Agent, linkedCts.Token).ConfigureAwait(false);
 
                 AdvanceBoundState(static s => s with
@@ -581,8 +601,11 @@ public sealed class DefaultAgent : IAgent
 
     // rop-final-mile L6 / §4.6: the old shape unwrapped Results into exceptions
     // only for PromptAsync's catch to re-wrap them into a Failure — one Bind
-    // railway replaces both throw bridges; the single bridge left lives at the
-    // run boundary below where the catch is needed for RunAsync anyway.
+    // railway replaces both throw bridges.
+    // #1510: the last bridge is gone too. The load failure is returned as the
+    // Result it already is, so the run boundary holds NO exception of its own
+    // making — the catch below is now only there for the agent loop, which can
+    // throw.
     // The chain itself is returned to the caller; the one await is inside the
     // explicit lambda below and continues on the thread pool (ConfigureAwait).
     private Task<Result<ISessionContext>> LoadSessionContextAsync(string sessionId, CancellationToken ct)
@@ -615,5 +638,11 @@ internal static partial class DefaultAgentLog
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Dropped {Count} stale steering message(s) while rebinding agent from session {OldSession} to {NewSession}")]
     public static partial void StaleSteeringDropped(ILogger logger, int count, string oldSession, string newSession);
+
+    // #1510: the session-context load failure is a Result, not an exception, so it
+    // is logged without one. The old path logged it as a run failure, which
+    // attached the exception the bridge had just manufactured.
+    [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to load session context for session {SessionId}: {Error}")]
+    public static partial void LoadSessionContextFailed(ILogger logger, string sessionId, string error);
 
 }
