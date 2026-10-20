@@ -1,5 +1,6 @@
 namespace Harbor.Tui.CellForge.Rendering;
 
+using System.Text;
 using Harbor.Ui.Framework.Rendering;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using Harbor.Ui.Framework.Rendering.Protocol;
@@ -269,16 +270,16 @@ public static class HunkVirtualizer
     /// </summary>
     public static VirtualPatch SplitPatchHunks(string? patchText)
     {
-        string normalized = (patchText ?? string.Empty)
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-        string[] raw = normalized.Split('\n');
-        int count = raw.Length;
-        if (count > 0 && raw[count - 1].Length == 0)
-        {
-            count--;
-        }
-
+        // #1139: the old shape materialized the patch TWICE (a "\r\n" → "\n"
+        // Replace and a lone-'\r' → "\n" Replace over the whole body), split
+        // the result into a string[] (one string per line), and then Replace'd
+        // every tab in every line — four copies of the body, on a path the
+        // diff-preview panel runs on EVERY FRAME it is visible. This shape
+        // walks the body once: the breaks are found in place (CRLF is one
+        // break, a lone CR is one too — the same breaks the old normalization
+        // produced), the trailing empty line is still not a line, and a line
+        // is materialized once, with its tabs expanded.
+        string text = patchText ?? string.Empty;
         var preamble = new List<string>();
         var hunks = new List<VirtualHunk>();
         List<string>? current = null;
@@ -302,9 +303,8 @@ public static class HunkVirtualizer
             current = null;
         }
 
-        for (int i = 0; i < count; i++)
+        void Take(string line)
         {
-            string line = raw[i].Replace("\t", "  ", StringComparison.Ordinal);
             if (line.StartsWith("@@", StringComparison.Ordinal))
             {
                 Flush();
@@ -321,7 +321,7 @@ public static class HunkVirtualizer
                     currentNew = nextNew;
                 }
 
-                continue;
+                return;
             }
 
             if (current is null)
@@ -335,6 +335,58 @@ public static class HunkVirtualizer
             }
         }
 
+        // The last line of the body is not a line when it is empty (the
+        // trailing newline of a patch body) — the old shape dropped that one
+        // element from the split array. The walk therefore holds one line
+        // back and decides at the end, which is the same rule.
+        int pos = 0;
+        int pendingStart = 0;
+        int pendingLength = -1;
+
+        while (true)
+        {
+            int breakIndex = -1;
+            int nextPos = text.Length;
+            for (int i = pos; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\n')
+                {
+                    breakIndex = i;
+                    nextPos = i + 1;
+                    break;
+                }
+
+                if (c == '\r')
+                {
+                    breakIndex = i;
+                    nextPos = i + 1 < text.Length && text[i + 1] == '\n' ? i + 2 : i + 1;
+                    break;
+                }
+            }
+
+            int length = breakIndex < 0 ? text.Length - pos : breakIndex - pos;
+            if (pendingLength >= 0)
+            {
+                Take(ExpandTabs(text.AsSpan(pendingStart, pendingLength)));
+            }
+
+            pendingStart = pos;
+            pendingLength = length;
+
+            if (breakIndex < 0)
+            {
+                break;
+            }
+
+            pos = nextPos;
+        }
+
+        if (pendingLength > 0)
+        {
+            Take(ExpandTabs(text.AsSpan(pendingStart, pendingLength)));
+        }
+
         Flush();
 
         if (hunks.Count == 0 && total == 0 && preamble.Count > 0)
@@ -346,6 +398,35 @@ public static class HunkVirtualizer
         }
 
         return new VirtualPatch(preamble.ToArray(), hunks.ToArray(), total, maxNew, chunked);
+    }
+
+    /// <summary>
+    ///     One line of a patch body with every tab expanded to two spaces —
+    ///     the old shape's per-line <c>Replace("\t", "  ")</c>, materialized
+    ///     once instead of once per line plus once per tabbed line.
+    /// </summary>
+    private static string ExpandTabs(ReadOnlySpan<char> line)
+    {
+        if (line.IndexOf('\t') < 0)
+        {
+            return line.ToString();
+        }
+
+        var sb = new StringBuilder(line.Length + 8);
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '\t')
+            {
+                sb.Append("  ");
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static void FlushHunk(
