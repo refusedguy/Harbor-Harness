@@ -202,6 +202,27 @@
       CFE0002 (prefer implicit type args) is Info and stays off — see §5.
     -->
     <PackageVersion Include="CSharpFunctionalExtensions.Analyzers" Version="1.3.0" />
+    <!--
+      Microsoft.VisualStudio.Threading.Analyzers ("vs-threading") — 29 rules
+      (VSTHRD001-004, VSTHRD010-013, VSTHRD100-117, VSTHRD200-202; the
+      upstream index documents 28 of them). MIT licensed, `developmentDependency`
+      only, and it ships NO lib/ folder and declares NO package dependencies:
+      it contributes analyzer assemblies and nothing else, so nothing from it
+      reaches a product binary or a consumer's dependency graph.
+
+      Wired to src/ + apps/ only (src/Directory.Build.props and
+      apps/Directory.Build.props), not solution-wide: tests/ has its own async
+      culture and already lifts TreatWarningsAsErrors.
+
+      EXACTLY ONE RULE IS ON — VSTHRD110, at `suggestion`. Every other rule is
+      `none` with a written reason in .editorconfig: four of them are Error by
+      default and would red the build on the day the package is added, and a
+      large part of the family is written against JoinableTaskFactory, which
+      Harbor does not reference.
+
+      Issue #1852. Version pinned 2026-10-12 release of the 18.x line.
+    -->
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
     <!-- ── Performance / collections / serialization ─────────────────────── -->
     <PackageVersion Include="ZLinq" Version="1.5.6" />
     <PackageVersion Include="ZLinq.DropInGenerator" Version="1.5.6" />

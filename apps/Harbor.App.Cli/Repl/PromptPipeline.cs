@@ -184,7 +184,21 @@ internal sealed class PromptPipeline(
 
         _promptInFlight = true;
         ArmLongTurnNotify();
-        _ = RunPromptAsync(text, images, ct);
+
+        // Detached ON PURPOSE: the REPL frame loop must not wait for a model
+        // turn, so the prompt task cannot be awaited here. Observed ON PURPOSE
+        // (#1852): the house fire-and-forget helper reads the task's
+        // exception, so a fault is REPORTED at this call site instead of
+        // being parked on a discarded Task until finalization — which, for a
+        // REPL that lives for hours, is never.
+        //
+        // `RunPromptAsync` has a catch-all of its own; that is the INNER
+        // barrier. This is the OUTER one, and it is the one that survives the
+        // refactor that removes the inner one.
+        Harbor.Abstractions.Tools.TaskFireAndForget.Forget(
+            RunPromptAsync(text, images, ct),
+            ex => PromptPipelineLog.PromptTaskFaulted(logger, ex),
+            ct);
     }
 
     /// <summary>
@@ -501,4 +515,13 @@ internal static partial class PromptPipelineLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Error, Message = "Prompt failed in CellForge REPL")]
     public static partial void PromptFailed(ILogger logger, Exception ex);
+
+    /// <summary>
+    ///     The detached prompt task faulted. The prompt runner has a
+    ///     catch-all of its own, so reaching this event means the fault
+    ///     escaped that net — and the detach site is the only thing that can
+    ///     observe it (#1852).
+    /// </summary>
+    [LoggerMessage(EventId = 2, Level = LogLevel.Error, Message = "Prompt task faulted in CellForge REPL; the fault was observed at the detach site")]
+    public static partial void PromptTaskFaulted(ILogger logger, Exception ex);
 }

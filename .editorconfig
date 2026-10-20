@@ -424,6 +424,54 @@ dotnet_diagnostic.AsyncFixer05.severity = suggestion # Not used CancellationToke
 # apps/ are silent, because the zero-warning bar would have turned a hit
 # there into a build error.
 
+# --- vs-threading (Microsoft.VisualStudio.Threading.Analyzers 18.12.1) ---
+# The package ships 29 rules: VSTHRD001-004, VSTHRD010-013, VSTHRD100-117,
+# VSTHRD200-202 (VSTHRD201 included; the upstream index documents 28 of them).
+# It is wired to src/ + apps/ only — tests/ has its own async culture and
+# already lifts TreatWarningsAsErrors.
+#
+# EXACTLY ONE RULE IS ON. VSTHRD110 ("Observe result of async calls") is the
+# one this repository asks for, and it sits at `suggestion`: it is a guard on
+# the future, not a fix of a present defect, and `suggestion` is not promoted
+# by TreatWarningsAsErrors. The two sites it would have flagged are fixed in
+# #1852.
+#
+# EVERY OTHER RULE IS `none`, with a reason, because the package's defaults
+# are NOT this repository's defaults: four of its rules are Error by default
+# (VSTHRD004, VSTHRD011, VSTHRD107, VSTHRD109) and would turn existing code
+# into a red build on the day the package is added, and a large part of the
+# family is written against JoinableTaskFactory — a library Harbor does not
+# reference and does not want to.
+dotnet_diagnostic.VSTHRD001.severity = none # legacy thread switching; the package's own AdditionalFiles list SynchronizationContext.Post/Send, which the UI shells use
+dotnet_diagnostic.VSTHRD002.severity = none # synchronous waits; Harbor's sync-over-async policy is a source rule of its own (BackgroundTaskSyncResultRule, ToolDispatcherSyncResultRule)
+dotnet_diagnostic.VSTHRD003.severity = none # "awaiting foreign Tasks" is every await in the product
+dotnet_diagnostic.VSTHRD004.severity = none # Error by default; JoinableTaskFactory
+dotnet_diagnostic.VSTHRD010.severity = none # main-thread member list; Harbor's thread affinity is Avalonia's dispatcher
+dotnet_diagnostic.VSTHRD011.severity = none # Error by default; AsyncLazy<T> is a JoinableTaskFactory type
+dotnet_diagnostic.VSTHRD012.severity = none # "provide a JoinableTaskFactory where allowed"; Harbor has none
+dotnet_diagnostic.VSTHRD013.severity = none # CompletedTaskAttribute is a JoinableTaskFactory type
+dotnet_diagnostic.VSTHRD100.severity = none # async void; the four Avalonia event handlers are blessed by docs/ANTIPATTERNS.md §13
+dotnet_diagnostic.VSTHRD101.severity = none # "unsupported async delegates" is the JoinableTaskFactory event list
+dotnet_diagnostic.VSTHRD102.severity = none # "implement internal logic asynchronously"; a design guideline against a deliberate sync effect-host contract
+dotnet_diagnostic.VSTHRD103.severity = none # duplicates CS4014, which the compiler already reports as an error here
+dotnet_diagnostic.VSTHRD104.severity = none # "offer an async option"; a design guideline over public surfaces
+dotnet_diagnostic.VSTHRD105.severity = none # TaskScheduler.Current overloads are the JoinableTaskFactory ones
+dotnet_diagnostic.VSTHRD106.severity = none # InvokeAsync for async events; Harbor's events go through IEventBus
+dotnet_diagnostic.VSTHRD107.severity = none # Error by default; its advice is about `using`, not `await using`
+dotnet_diagnostic.VSTHRD108.severity = none # thread-affinity assertion; JoinableTaskFactory
+dotnet_diagnostic.VSTHRD109.severity = none # Error by default; JoinableTaskFactory
+dotnet_diagnostic.VSTHRD110.severity = suggestion # observe the result of async calls — the one rule this repository asks for
+dotnet_diagnostic.VSTHRD111.severity = none # ConfigureAwait(bool); the house rule is to always ConfigureAwait(false) in library code, which is not per-call-site checkable
+dotnet_diagnostic.VSTHRD112.severity = none # "implement IAsyncDisposable"; a design guideline
+dotnet_diagnostic.VSTHRD113.severity = none # "check for IAsyncDisposable"; a design guideline
+dotnet_diagnostic.VSTHRD114.severity = none # "do not return null from a Task-returning method"; Result<T> is this repository's answer to that question
+dotnet_diagnostic.VSTHRD115.severity = none # JoinableTaskContext with a null SynchronizationContext; JoinableTaskFactory
+dotnet_diagnostic.VSTHRD116.severity = none # ThreadStatic only on static fields; the tree has eight [ThreadStatic] sites and the rule's own guidance is not this repository's
+dotnet_diagnostic.VSTHRD117.severity = none # ThreadStatic initialization in a type initializer; same eight sites
+dotnet_diagnostic.VSTHRD200.severity = none # Async naming convention; the rule's list of async operations is the JoinableTaskFactory one
+dotnet_diagnostic.VSTHRD201.severity = none # cancel after switching to the main thread; JoinableTaskFactory, and undocumented upstream
+dotnet_diagnostic.VSTHRD202.severity = none # "remove the unnecessary async state machine"; it would fire on every async member without an await, and its fix changes the signature
+
 # ============================================================================
 # DEPENDENCY INJECTION ANALYZERS (Task A3)
 # ============================================================================

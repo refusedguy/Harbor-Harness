@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!--
+    src/Directory.Build.props — product-code analyzers.
+
+    Every project under src/ is product code: the layers the architecture
+    rules police, the code that ships in the CLI, the desktop shell and the
+    IPC endpoints. The analyzers that only make sense for product code live
+    here rather than in the root file, because the root file is inherited by
+    tests/ and samples/ as well — and those have their own async culture
+    (174 `catch (Exception)` constructions, fixtures that block on purpose)
+    and already lift TreatWarningsAsErrors.
+
+    The root file is imported FIRST, exactly as apps/Directory.Build.props
+    does it, so the shared property groups, the shared analyzer package
+    references and the /BannedSymbols.txt wiring apply here unchanged. The
+    import is what keeps this file additive: a property set in the root file
+    is still set for every project under src/.
+
+    WHY A SEPARATE FILE AT ALL
+    --------------------------
+    MSBuild imports the NEAREST Directory.Build.props and stops. Before this
+    file existed, the nearest one for a src/ project was the repository root,
+    so a package that must not reach tests/ had no home: the root file would
+    have handed it to every test project, and the apps/ file was too far up
+    the tree to reach src/.
+
+    MICROSOFT.VISUALSTUDIO.THREADING.ANALYZERS (vs-threading, 18.12.1)
+    -------------------------------------------------------------------
+    29 rules; MIT; a build-time analyzer, so nothing from it reaches a
+    product binary. Exactly ONE rule is on — VSTHRD110, "observe the result of
+    async calls", at `suggestion` — and every other rule is `none` with a
+    written reason in .editorconfig. Four of the package's rules are Error by
+    default (VSTHRD004, VSTHRD011, VSTHRD107, VSTHRD109) and would turn
+    existing code red on the day the package is added, and a large part of
+    the family is written against JoinableTaskFactory, which this repository
+    does not reference.
+
+    The rule this repository ACTUALLY enforces on that question is not the
+    package's: it is HARCH003, a Roslyn analyzer in
+    tests/Harbor.Architecture.Tests/Roslyn/UnobservedTaskAnalyzers.cs, which
+    decides "is this an unobserved Task?" by resolving the TYPE rather than by
+    matching a call's spelling. The package is the upstream reference
+    implementation; the arch suite's rule is the gate (#1852).
+  -->
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+
+  <ItemGroup>
+    <!--
+      VSTHRD110 — "observe the result of async calls". PrivateAssets=all:
+      the analyzer must not flow to anything this repository publishes.
+    -->
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
