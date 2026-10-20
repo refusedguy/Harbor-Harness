@@ -35,6 +35,16 @@ and md-lint.py, and shares their "reporting is not a gate" contract: a missing,
 empty or corrupt TRX set exits 0 with a one-line note. This script must never be
 able to fail a build.
 
+WHAT THIS IS NOT (#1884): a census. This script renders the tests that PRINTED
+something, so it sees only the tests that carry a measurement. On a full CI
+run that is ~75 rows out of ~8 000. The per-test and per-project WALL census
+(the number the ArchUnitNET spike needs to compare against) is
+`tools/test-census.py`, which reads every result, printed or not. What this
+script adds on top of that is the DURATION column (#1884): the TRX
+`UnitTestResult/@duration` attribute sits on the very element this script
+already reads, so the cost of a measurement is one more cell in a table that
+already exists: no new run, no new artifact, no new job.
+
 Usage:
   ./tools/test-measurements.py TestResults/core                       # stdout
   ./tools/test-measurements.py TestResults/core --summary "$GITHUB_STEP_SUMMARY"
@@ -77,15 +87,45 @@ def _cell(text: str) -> str:
     return flat or "(empty)"
 
 
-def collect(trx_paths: list[str]) -> list[tuple[str, str, str]]:
-    """Return (project, Class.Method, measurement) rows, in file order.
+def _duration_seconds(raw: str | None) -> float | None:
+    """TRX `@duration` is a .NET TimeSpan ("hh:mm:ss.fffffff") -> seconds.
+
+    None when the attribute is absent or unparsable: a missing duration is a
+    fact about the file, not an error, and this script never fails a build.
+    """
+    if not raw:
+        return None
+    parts = raw.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours = float(parts[0])
+        minutes = float(parts[1])
+        seconds = float(parts[2])
+    except ValueError:
+        return None
+    return hours * 3600.0 + minutes * 60.0 + seconds
+
+
+def _duration_cell(seconds: float | None) -> str:
+    if seconds is None:
+        return "—"
+    if seconds < 1.0:
+        return f"{seconds * 1000:.0f} ms"
+    return f"{seconds:.2f} s"
+
+
+def collect(trx_paths: list[str]) -> list[tuple[str, str, str, float | None]]:
+    """Return (project, Class.Method, measurement, duration) rows, in file order.
 
     A test's identity comes from <TestDefinitions> (which carries the class) and
     its text from the matching <Results> entry. TUnit writes both, but the
     result element is authoritative for the text, so the definition map is
-    consulted first and the bare method name is the fallback.
+    consulted first and the bare method name is the fallback. The duration is
+    the result element's own `@duration` (#1884), the cost of the test that
+    printed the measurement, not of the assembly.
     """
-    rows: list[tuple[str, str, str]] = []
+    rows: list[tuple[str, str, str, float | None]] = []
     for path in trx_paths:
         project = os.path.splitext(os.path.basename(path))[0]
         try:
@@ -119,24 +159,25 @@ def collect(trx_paths: list[str]) -> list[tuple[str, str, str]]:
             name = owners.get(result.get("testId") or "", "")
             if not name:
                 name = result.get("testName") or "(unknown test)"
-            rows.append((project, name, _cell(text)))
+            rows.append((project, name, _cell(text),
+                         _duration_seconds(result.get("duration"))))
     return rows
 
 
-def render(rows: list[tuple[str, str, str]], max_rows: int) -> str:
+def render(rows: list[tuple[str, str, str, float | None]], max_rows: int) -> str:
     """Markdown table. Split by project so a reader sees which suite emitted."""
     out: list[str] = []
     shown = rows[:max_rows]
-    for project in dict.fromkeys(r for r, _, _ in shown):
+    for project in dict.fromkeys(r[0] for r in shown):
         group = [r for r in shown if r[0] == project]
         out.append("")
         out.append(f"<details><summary><b>{_cell(project)}</b> — "
                    f"{len(group)} measurement(s)</summary>")
         out.append("")
-        out.append("| test | measurement |")
-        out.append("|---|---|")
-        for _, name, text in group:
-            out.append(f"| `{name}` | {text} |")
+        out.append("| test | duration | measurement |")
+        out.append("|---|---|---|")
+        for _, name, text, duration in group:
+            out.append(f"| `{name}` | {_duration_cell(duration)} | {text} |")
         out.append("")
         out.append("</details>")
     if len(rows) > max_rows:
@@ -158,10 +199,10 @@ def _self_test() -> int:
     sample = """<?xml version="1.0" encoding="utf-8"?>
 <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
   <Results>
-    <UnitTestResult testId="a" testName="Measures_Thing" outcome="Passed">
+    <UnitTestResult testId="a" testName="Measures_Thing" outcome="Passed" duration="00:00:01.2500000">
       <Output><StdOut>alloc: 42 B | p99 = 1.5 ms</StdOut></Output>
     </UnitTestResult>
-    <UnitTestResult testId="b" testName="Silent" outcome="Passed" />
+    <UnitTestResult testId="b" testName="Silent" outcome="Passed" duration="00:00:00.0100000" />
   </Results>
   <TestDefinitions>
     <UnitTest name="Measures_Thing" id="a">
@@ -182,7 +223,7 @@ def _self_test() -> int:
     if len(rows) != 1:
         problems.append(f"expected 1 row (the silent test must be skipped), got {len(rows)}")
     else:
-        project, name, text = rows[0]
+        project, name, text, duration = rows[0]
         if project != "Harbor.X.Tests":
             problems.append(f"project = {project!r}")
         if name != "ThingTests.Measures_Thing":
@@ -190,12 +231,21 @@ def _self_test() -> int:
         # The pipe is what breaks an unescaped markdown table.
         if "alloc: 42 B \\| p99 = 1.5 ms" not in text:
             problems.append(f"pipe not escaped: {text!r}")
+        # #1884: the duration column reads the result element's own @duration.
+        if duration is None or abs(duration - 1.25) > 1e-6:
+            problems.append(f"duration = {duration!r} (must be 1.25 s)")
+        table = render(rows, 10)
+        if "| test | duration | measurement |" not in table:
+            problems.append("the rendered table has no duration column")
+        if "1.25 s" not in table:
+            problems.append("the duration cell is missing from the rendered table")
 
     for problem in problems:
         print(f"  SELF-TEST FAIL: {problem}")
     if problems:
         return 1
-    print("self-test OK: row extracted, class-qualified, pipe escaped, silent test skipped.")
+    print("self-test OK: row extracted, class-qualified, pipe escaped, "
+          "duration read, silent test skipped.")
     return 0
 
 
@@ -250,7 +300,7 @@ def main() -> int:
     if args.summary:
         _write_summary(args.summary, body)
 
-    tests = len({(p, n) for p, n, _ in rows})
+    tests = len({(p, n) for p, n, _, _ in rows})
     print(f"test-measurements: {len(rows)} measurement(s) from {tests} test(s) "
           f"across {len(trx_paths)} TRX file(s)"
           + (" -> job summary" if args.summary else ""))

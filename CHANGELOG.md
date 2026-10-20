@@ -1,12 +1,3 @@
-# Changelog
-
-All notable changes to Harbor will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
 ### Proj0037/Proj0040 — корень `Directory.Build.props` импортируется относительным путём
 
 **Что измерено (CI-прогон 39425418000, dev, 2026-10-20, job `build`).** Шесть `src/`-проектов упали с `error Proj0040: Set <NuGetAuditMode> to all`, и сборка решения встала на них. Шесть — это ровно те `src/`-проекты, у которых нет ни одного `ProjectReference`: листья, которые MSBuild запускает первыми. Их ошибка закрыла остальные пятьдесят `src/`-проектов, которые до неё просто не дошли, поэтому шесть ошибок и были всем видимым ущербом. Тот же список без `Harbor.Logging` (его нет в замыкании OS-шарда) упал на macos-latest и windows-latest в `test-os` (прогон 39426312787), а минимальное исправление Proj0037 (`b6ef39d2`) убрало только первую из двух ошибок.
@@ -18,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Мёртвые чекауты сабмодуля.** Вендоренный `nickprotop/ConsoleEx` уехал в `contrib/external/` (ADR-019), и ни один job CI больше не строит дерево, которому он нужен. `submodules: recursive` убран из восемнадцати checkout-ов: `ci.yml` (×9), `benchmark.yml`, `beta.yml`, `codeql.yml`, `evals.yml`, `goldens.yml`, `meas-jit-aot.yml` (×2), `release.yml`, `test-os.yml`. Измерено на прогоне 39425418000: выборка сабмодуля занимала 2.8–3.8 с на checkout (в среднем 3.4 с) при общем времени checkout-а около 5.7 с, то есть больше половины его стоимости — за дерево, которое никто не строит. Сабмодуль по-прежнему нужен ровно одному проекту в репозитории, `contrib/tui/Harbor.Tui.NickConsoleEx`, и он его не получает.
 
 **Отчёт `contrib-dryrun`.** Обход идёт по `contrib/**/*.csproj`, и переехавший в `contrib/tui/` проект `Harbor.Tui.NickConsoleEx` давал строку `FAIL` — но не потому, что код не собирается, а потому, что его сабмодуль не выкачан. Теперь такой проект получает строку `not built (needs the vendored submodule)`: проверка стоит на самом csproj-файле (ссылка на `external/ConsoleEx`), и решение — не тянуть сабмодуль обратно в CI, а сказать правду. Это то же решение, которое уже записано в `contrib/tui/Harbor.Tui.NickConsoleEx/README.md` и в ADR-019 («unmaintained, not compiled by CI»).
+
+### #1884 — the benchmark baselines are re-measured, and the test suite can be counted again
+
+**The baselines in `docs/BENCHMARKS.md` described a tree that no longer exists.** The architecture suite's row said 45 tests / 2.19 s; in the configuration CI gates on, the suite discovers 998 tests and runs 122 s. The whole-suite row said "~493 tests in ~12 s"; the suite now discovers 8 425 tests across 36 projects, in four shards, in 402 s of test time. §6.1 of `docs/BENCHMARKS.md` is rewritten from four CI runs (every row carries its run id and its date, and the superseded rows are kept as dated records rather than deleted), §6.4 adds the CI lane walls (build job, NUKE compile step, artifact sizes, download times), and §6.5 adds the Release-vs-Debug axis with the half that is NOT measured marked as such instead of left silent.
+
+**The census tooling is new (`tools/test-census.py`).** `tools/test-measurements.py` renders the tests that PRINTED something (76 rows out of 8 310 on a full run), so it cannot answer "how many tests does this suite have" or "what does this project cost". The census reads every result the runner produced and reports, per project, the DISCOVERED count, the sum of the per-test durations, the wall and the parallelism factor, and, per test, the duration the runner measured. `tools/test-measurements.py` gained the duration column: the TRX `UnitTestResult/@duration` attribute sits on the very element that script already reads. Both tools have a `--self-test`, wired into the docs workflow.
+
+**The CI stopped producing TRX artifacts, and that is fixed.** The TUnit 1.75 upgrade changed how the runner resolves a relative `--results-directory`: the TRX files landed under the project's own output directory instead of the workspace root, so no `test-results-*` artifact was uploaded and `tools/test-measurements.py` found nothing on any run after the upgrade. The results directory is now absolute, the artifacts are back, and the census runs in the job summary of every shard.
 
 ### #1921 — три проекта из 112 собирались в Debug внутри Release-сборки
 

@@ -97,6 +97,11 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
+      # #1884. The two reporters (the measurement table and the wall census)
+      # and their self-tests: a PR that edits either must run them, for the
+      # same reason the gates above are triggered by their own sources.
+      - 'tools/test-measurements.py'
+      - 'tools/test-census.py'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -155,6 +160,9 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
+      # #1884. Same trigger as above: the two reporters and their self-tests.
+      - 'tools/test-measurements.py'
+      - 'tools/test-census.py'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
@@ -258,6 +266,19 @@ jobs:
       # baseline row that no longer matches anything.
       - name: Test-project completeness gate fails on a project left out of CI
         run: python3 tools/check-test-projects.py --self-test
+      # #1884. The last two are REPORTERS, not gates: they read the TRX
+      # artifacts a CI run produced and print what they find (the per-test
+      # measurements, the per-project wall census). They never fail a build,
+      # which is exactly why their self-tests belong here: a reporter that
+      # quietly stops reporting is green on every run and tells nobody
+      # anything, and that is the same failure shape the gates above are
+      # tested against. The census's self-test carries the load-bearing
+      # fixture: a test that printed NOTHING is still counted, which is the
+      # difference between a census and a measurement table.
+      - name: Measurement reporter still finds the tests that printed something
+        run: python3 tools/test-measurements.py --self-test
+      - name: Test census counts every test, printed or not
+        run: python3 tools/test-census.py --self-test
 
   links:
     name: internal links

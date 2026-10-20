@@ -370,7 +370,14 @@ jobs:
           # measurement a test printed was unrecoverable here. TRX is written to
           # the runner's disk and consumed by the next step — nothing is
           # uploaded, so this adds no artifact and no retention cost.
-          $trxDir = "TestResults/${{ matrix.os }}"
+          #
+          # #1884: the results directory is ABSOLUTE on purpose. After the
+          # TUnit 1.75 upgrade (b6fcc333) the runner resolves a relative
+          # --results-directory against the test app's own working directory
+          # (the assembly's output folder), so the TRX landed in
+          # tests/<project>/bin/Release/net10.0/TestResults/<os>/ and the
+          # step below found nothing. An absolute path is unambiguous.
+          $trxDir = "$env:GITHUB_WORKSPACE/TestResults/${{ matrix.os }}"
           New-Item -ItemType Directory -Force -Path $trxDir | Out-Null
           foreach ($p in $projects) {
             Write-Host "::group::dotnet exec $p"

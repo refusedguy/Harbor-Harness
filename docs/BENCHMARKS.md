@@ -14,6 +14,10 @@
 > - **Local full runs** — 2026-08-22 (i5-8250U, .NET 10.0.10) plus UiStore/streaming rows from 2026-09-10
 >   (machine n/a). Since #46 all classes use unified `[SimpleJob(warmup 3 / iter 5)]`; older rows were
 >   measured with mixed configs (2/3 or 3/10), so absolute values will shift on re-measure.
+> - **CI test shards** — the `test` job of `.github/workflows/ci.yml` on `ubuntu-24.04`, SDK 10.0.402,
+>   Release binaries, one shard per job (§6.1, §6.4). Every row carries its run id; the runs of
+>   2026-10-20 are the ones quoted. A shard wall is a wall on a shared runner, so the same shard
+>   moves by 10-30 % between runs: compare a run with a run, never with a local number.
 > - **⏳ not yet measured** — the benchmark exists in `tests/Harbor.Benchmarks` but has no run recorded
 >   here yet. Never invent a value for these; run the row locally and fill it in with machine + date.
 >   Introduced by the #408 bus split, whose rows are code-only until the next local pass.
@@ -121,13 +125,16 @@
 | Category | Count |
 |---|---:|
 | App projects (`apps/`, на диске) | 2 (`Harbor.App.Cli`, `Harbor.App.Avalonia`; WPF/MAUI/Blazor переехали в `contrib/apps/`) |
-| Source projects (`src/`, на диске) | 52 (51 в `Harbor.slnx` + `Harbor.CodeGen` build-tool вне решения) |
-| Test projects (`tests/`, csproj dirs) | 37 |
+| Source projects (`src/`, на диске) | 59 (58 в `Harbor.slnx` + `Harbor.CodeGen` build-tool вне решения) |
+| Test projects (`tests/`, csproj dirs) | 44 |
 | Sample plugins (`samples/`) | 4 |
-| **Total in `Harbor.slnx`** | **95** (src 51 + tests 37 + apps 1 + samples 4 + build 1 + tools 1) |
+| **Total in `Harbor.slnx`** | **109** (src 58 + tests 44 + apps 1 + samples 4 + build 1 + tools 1) |
 
-> Составы ниже соответствуют состоянию на дату замера (2026-07-18) — тогда в слюнксе
-> было ~60 проектов; сегодня счётчик выше приведён к актуальной структуре.
+> Recounted 2026-10-20 (#1884) against `origin/dev` at `b6ef39d2`:
+> `find src -name '*.csproj' | wc -l` → 59, `find tests -name '*.csproj' | wc -l`
+> → 44, `grep -c 'Project Path=' Harbor.slnx` → 109. The previous row (52 / 37 /
+> 95) was counted on the 2026-07-18 tree and had drifted; it described a
+> solution with 14 fewer test projects.
 
 ### 2.2 Build time
 
@@ -137,6 +144,12 @@
 | `dotnet build` Debug (incremental, warm) | ~25 s |
 | `dotnet build -c Release` (incremental, warm) | ~75 s |
 | `dotnet build -c Release --no-incremental` (full) | ~120 s |
+
+> These four rows are LOCAL numbers from the 2026-07-18 container of §1, on one
+> developer machine. The CI compile is a different animal and is measured
+> separately in §6.4: the NUKE `Compile` target takes 295-434 s on
+> `ubuntu-24.04`, and the spread between runs is wider than the difference
+> between the lane shapes.
 
 ### 2.3 Lines of code
 
@@ -1508,28 +1521,189 @@ Machine: Linux x64, .NET 10 Release JIT, in-process (no tty, no render loop).
 
 ## 6. Test suite
 
-### 6.1 Per-project results (Debug, no-build) — local run, linux-x64 container, .NET 10.0.302, pre-#186 counts
+### 6.1 Per-project results — CI, Release ✅ measured
 
-| Test project | Passed | Failed | Skipped | Duration |
-|---|---:|---:|---:|---:|
-| `Harbor.Abstractions.Tests` | 34 | 0 | 0 | 404 ms |
-| `Harbor.Core.Tests` | 51 | 0 | 1 | 694 ms |
-| `Harbor.Tui.Tests` | 220 | 0 | 0 | 1.44 s |
-| `Harbor.Tools.Builtin.Tests` | 69 | 0 | 1 | 1.21 s |
-| `Harbor.Plugins.Runtime.Tests` | 23 | 0 | 0 | 3.36 s |
-| `Harbor.Scripting.Tests` | 51 | 0 | 0 | 897 ms |
-| `Harbor.Architecture.Tests` | 45 | 0 | 0 | 2.19 s |
-| `Harbor.Config.Tests` | (all pass) | 0 | 0 | ~500 ms |
-| `Harbor.Providers.Tests` | (all pass) | 0 | 0 | ~500 ms |
-| `Harbor.Storage.Jsonl.Tests` | (all pass) | 0 | 0 | ~500 ms |
-| `Harbor.Storage.Tests` | (all pass) | 0 | 0 | ~500 ms |
-| `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
-| **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
+**Source: CI run [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352)**
+(push to `dev`, sha `86b52adc`, 2026-10-20 12:23 UTC), the four `test` shards of
+`.github/workflows/ci.yml` on `ubuntu-24.04`, .NET SDK 10.0.402, Release binaries
+built by the same run's `build` job.
 
-> +12 allocation-budget tripwires added in #186 (this change): 5 in
-> `Harbor.Registries.Tests`, 2 in `Harbor.Application.Tests`, 2 in
-> `Harbor.Storage.Jsonl.Tests`, 1 in `Harbor.Providers.Tests`, 2 in
-> `Harbor.Tui.CellForge.Tests`. Counts above predate them.
+This is the newest GREEN `dev` push at the time of writing. `dev` moved on
+after it: #1789's PTY de-serialisation (`328189e4`), the E2E framework split
+(`40df718b`), the CI lane slimming (`d611d145`), and the analyzer fixes
+(`669728ec`, `f29ce361`, `a4552fd8`, `b6ef39d2`). The build on `dev` HEAD is
+red on an unrelated analyzer diagnostic (`Proj0040`, the
+`dotnet-project-file-analyzers` package), so the HEAD tree has no green run to
+read yet. Every table below names the tree its numbers came from, and the
+deltas are stated rather than smoothed over.
+
+Every number below is **MEASURED**, and none of it is a projection:
+
+- **Discovered** is the runner's own `total:` from its "Test run summary" line,
+  which counts the tests the runner DISCOVERED. It is not the passed count: the
+  `Passed` column is separate, and the gap between the two is the skipped
+  tests, not a missing measurement.
+- **Duration** is the runner's per-assembly duration.
+- The shard wall is the job step's own wall (`Run shard <shard>`).
+
+| Test project | shard | Discovered | Passed | Skipped | Duration |
+|---|---|---:|---:|---:|---:|
+| `Harbor.Architecture.Tests` | core | 998 | 998 | 0 | 122.10 s |
+| `Harbor.Application.Tests` | core | 578 | 578 | 0 | 11.40 s |
+| `Harbor.Abstractions.Tests` | core | 257 | 257 | 0 | 36.12 s |
+| `Harbor.Core.Tests` | core | 239 | 238 | 1 | 8.90 s |
+| `Harbor.ChangeTracking.Tests` | core | 126 | 126 | 0 | 5.51 s |
+| `Harbor.Config.Tests` | core | 105 | 105 | 0 | 0.79 s |
+| `Harbor.Hosting.Tests` | core | 111 | 111 | 0 | 1.50 s |
+| `Harbor.Registries.Tests` | core | 104 | 104 | 0 | 3.44 s |
+| `Harbor.TestKit.Tests` | core | 55 | 55 | 0 | 0.89 s |
+| `Harbor.Domain.Tests` | core | 51 | 51 | 0 | 6.21 s |
+| `Harbor.Lsp.Tests` | core | 33 | 33 | 0 | 1.01 s |
+| `Harbor.Telemetry.Tests` | core | 25 | 25 | 0 | 0.98 s |
+| `Harbor.Terminal.Pty.Tests` | core | 14 | 14 | 0 | 0.78 s |
+| `Harbor.TestKit.Generators.Tests` | core | 4 | 4 | 0 | 2.00 s |
+| `Harbor.Tui.CellForge.Tests` | ui | 2 421 | 2 421 | 0 | 5.96 s |
+| `Harbor.Ui.Framework.Tests` | ui | 627 | 627 | 0 | 25.19 s |
+| `Harbor.App.Avalonia.Tests` | ui | 356 | 349 | 7 | 1.95 s |
+| `Harbor.Tui.Tests` | ui | 244 | 244 | 0 | 2.47 s |
+| `Harbor.Tui.CellForge.PtyTests` | ui | 81 | 81 | 0 | 88.48 s |
+| `Harbor.Tui.RendererTests` | ui | 40 | 40 | 0 | 0.76 s |
+| `Harbor.Terminal.Abstractions.Tests` | ui | 76 | 76 | 0 | 0.71 s |
+| `Harbor.DesignSystem.Tests` | ui | 53 | 53 | 0 | 0.70 s |
+| `Harbor.Ipc.Tests` | platform | 158 | 154 | 4 | 4.70 s |
+| `Harbor.Storage.Tests` | platform | 147 | 147 | 0 | 1.67 s |
+| `Harbor.Providers.Tests` | platform | 144 | 144 | 0 | 3.58 s |
+| `Harbor.Storage.Jsonl.Tests` | platform | 130 | 130 | 0 | 6.53 s |
+| `Harbor.Tools.Builtin.Tests` | platform | 467 | 465 | 2 | 4.41 s |
+| `Harbor.Plugins.Runtime.Tests` | platform | 105 | 105 | 0 | 3.47 s |
+| `Harbor.Transport.Remote.Tests` | platform | 17 | 17 | 0 | 0.34 s |
+| `Harbor.Plugins.Abstractions.Tests` | platform | 17 | 17 | 0 | 0.28 s |
+| `Harbor.Plugins.Host.Tests` | platform | 14 | 14 | 0 | 0.29 s |
+| `Harbor.App.Cli.Tests` | e2e | 360 | 360 | 0 | 0.99 s |
+| `Harbor.E2E.App.Avalonia` | e2e | 133 | 113 | 20 | 43.84 s |
+| `Harbor.Tui.E2E.Tests` | e2e | 56 | 55 | 1 | 0.37 s |
+| `Harbor.LoadTests` | e2e | 42 | 42 | 0 | 0.97 s |
+| `Harbor.E2E.Cli` | e2e | 37 | 37 | 0 | 3.25 s |
+| **Total (36 projects, 4 shards)** | | **8 425** | **8 390** | **35** | **402.5 s** |
+
+**Shard walls, same run** (`Run shard <shard>` step): `core` **213 s**, `ui`
+**137 s**, `platform` **30 s**, `e2e` **52 s**. The PR wall is the maximum
+shard, not the sum, so `core` is the binding shard on this run.
+
+**How to reproduce the table.** The counts and the per-assembly durations are in
+the run's job log (the "Test run summary" block per project). They are also in
+the TRX files, and `tools/test-census.py` turns those into exactly this table,
+per project and per test:
+
+```bash
+gh run download 39399653820 --name test-results-core --dir TestResults/core
+python3 tools/test-census.py TestResults/core          # the table above
+python3 tools/test-census.py TestResults/core --format csv > census.csv
+```
+
+The census reads every result the runner produced, including the ~99% of tests
+that printed nothing, so its `discovered` column is the number of tests the
+suite has, and its `wall` column is the runner's per-assembly duration read
+from the TRX `<Times>` window (95.39 s against the log's 95.47 s for the
+architecture suite on that run).
+`tools/test-measurements.py` cannot do this: it renders only the tests that
+printed a measurement, which on a full run is 76 rows out of 8 310.
+
+> **Why the run id is not the one above.** Run 39399653820 is the last `dev`
+> push whose shards still produced TRX artifacts. The TUnit 1.75 upgrade
+> (`b6fcc333`) changed how the runner resolves a relative
+> `--results-directory`: the TRX files landed under the project's own output
+> directory (`tests/<project>/bin/Release/net10.0/TestResults/<shard>/`)
+> instead of the workspace root, so neither the artifact upload nor
+> `tools/test-measurements.py` could see them and every run after the upgrade
+> produced no `test-results-*` artifact at all. This PR pins the results
+> directory to an absolute path, which restores the artifacts, and it adds the
+> census to the job summary so the table above is produced on every run.
+
+> **Superseded: the 2026-07-18 local row.** The table this section replaces said
+> 45 tests / 2.19 s for `Harbor.Architecture.Tests` and "~493" for the suite.
+> That was true of the tree of that day (a local Debug, no-build run on
+> linux-x64, .NET 10.0.302, before the #186 tripwires). It is kept here as a
+> dated record and it is NOT a baseline:
+>
+> | Test project | Passed | Failed | Skipped | Duration |
+> |---|---:|---:|---:|---:|
+> | `Harbor.Abstractions.Tests` | 34 | 0 | 0 | 404 ms |
+> | `Harbor.Core.Tests` | 51 | 0 | 1 | 694 ms |
+> | `Harbor.Tui.Tests` | 220 | 0 | 0 | 1.44 s |
+> | `Harbor.Tools.Builtin.Tests` | 69 | 0 | 1 | 1.21 s |
+> | `Harbor.Plugins.Runtime.Tests` | 23 | 0 | 0 | 3.36 s |
+> | `Harbor.Scripting.Tests` | 51 | 0 | 0 | 897 ms |
+> | `Harbor.Architecture.Tests` | 45 | 0 | 0 | 2.19 s |
+> | `Harbor.Config.Tests` | (all pass) | 0 | 0 | ~500 ms |
+> | `Harbor.Providers.Tests` | (all pass) | 0 | 0 | ~500 ms |
+> | `Harbor.Storage.Jsonl.Tests` | (all pass) | 0 | 0 | ~500 ms |
+> | `Harbor.Storage.Tests` | (all pass) | 0 | 0 | ~500 ms |
+> | `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
+> | **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
+>
+> The suite grew from ~493 to 8 425 discovered tests (17x) and the architecture
+> suite from 45 to 998 (22x) between that measurement and this one. A number
+> measured on a tree that no longer exists cannot be a baseline: a spike has
+> nothing to compare against, and a diff against 45 says nothing about 998.
+
+**The architecture suite, measured four times** (the number the ArchUnitNET
+spike asks for). Same shard, same Release binaries, different trees and
+different runner loads:
+
+| Run | Tree | Discovered | Passed | Duration | Source `[Test]` attributes |
+|---|---|---:|---:|---:|---:|
+| [39389070999](https://github.com/refusedguy/Harbor-Harness/actions/runs/39389070999) (PR branch, `3d2f76ae`, 07:49) | before #1868 | 966 | 966 | 65.88 s | 981 |
+| [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, `2435d26d`, 09:17) | before #1791 | 977 | 977 | 95.47 s | 992 |
+| [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352) (dev, `86b52adc`, 12:23) | current baseline | **998** | **998** | **122.10 s** | 1 013 |
+| [39423289101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39423289101) (PR #1939 branch, `27114126`, 12:34) | with #1789 | 1 002 | 1 002 | 119.20 s | 1 018 |
+| `dev` HEAD (`b6ef39d2`, 12:57) | current `dev` | ⏳ not measured (PROJECTION ≈ 1 030) | — | — | 1 046 |
+
+The last row is the one number in this table that is NOT a measurement, and it
+says so: `dev` HEAD has no green run (its build fails on the `Proj0040`
+analyzer diagnostic, an unrelated breakage), so the figure is extrapolated from
+the source-level count and the 15-16 attributes the runner does not discover on
+every measured tree. It is a floor for planning, not a baseline. One green run
+on `dev` HEAD replaces it.
+
+The last column of the table is the source-level `[Test]` count in
+`tests/Harbor.Architecture.Tests/`, which runs 15-16 above the discovered
+count on every one of those trees (the difference is `[Test]` occurrences that
+the runner does not discover). It is a check on the measurement, not a
+substitute for it.
+
+**What the architecture suite's wall is made of** (run 39399653820, the last
+`dev` run whose shards still produced TRX artifacts, read with
+`tools/test-census.py`): 977 tests, a sum of per-test durations of **1 108.01
+s** and a wall of **95.39 s**, a parallelism factor of **11.62**. So the suite
+is not one serial chain: it runs about a dozen lanes at once. The wall is set
+by the slowest single test, not by the total: the four
+`PanelKeyRouteReachabilityRule` tests take 79 s each, the pilot Roslyn analyzer
+test 78.9 s, and the `ProcessEnvIsolationRule` family 48-49 s each.
+
+**The closest thing to the spike's own question, already measured.**
+`PilotRoslynAnalyzerTests` runs a Roslyn analyzer over the live tree, which is
+what an ArchUnitNET-style spike would do. On run 39399653820 it printed:
+
+```
+[pilot] HARCH001+HARCH002 over 62 product compilations: 69867 ms
+```
+
+62 product compilations, 69.9 s of analyzer work, on the Release build CI
+actually gates on. That is the current cost of the existing analyzer-based
+rule, and it is the number a spike should be compared against.
+
+**What a spike can compare against now.** Before this section, the only
+numbers in this file about the architecture suite were 45 tests and 2.19 s,
+measured on a local Debug, no-build run of a tree 22x smaller, in a
+configuration CI never runs. That is replaced by four Release measurements of
+the configuration the gate actually runs (998 discovered / 122.10 s on the
+baseline run), the shape of that wall (1 108 s of test time inside a 95.39 s
+window, a parallelism factor of 11.62, a floor set by four 79 s tests), and the
+cost of the closest existing thing to the spike (a Roslyn analyzer over 62
+product compilations, 69.87 s). A spike can price itself against those. The
+Debug half of the axis and the "dependencies discovered" half are still open,
+and §6.5 says so instead of leaving them implied.
 
 ### 6.2 Test execution
 
@@ -1724,6 +1898,17 @@ tests means one flake costs the whole project), and the removal of a serial-chai
 liability. The shard rebalancing that is happening in parallel is what moves the
 critical path, and this change lowers the floor it is working against.
 
+**Re-measured on the current tree (#1884).** The paragraph above is a dated
+record of the BEFORE run; the numbers below are what the same shard costs now.
+On the baseline run of §6.1 (dev, `86b52adc`, 2026-10-20 12:23 UTC) the shard
+walls are `core` 213 s, `ui` 137 s, `platform` 30 s, `e2e` 52 s, so `ui` sits
+76 s BELOW `core`. With #1789 merged the PTY project is 87 tests / 36.77 s (run
+[39423289101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39423289101),
+PR branch `27114126`), not 81 / 104.66 s, and the `ui` shard's sum of
+per-project durations falls from 126.88 s to 75.30 s. The conclusion is
+unchanged and now has more room: `ui` would have to grow by roughly 138 s
+before it binds the PR wall.
+
 **What the three groups of tests are, priced.** The 81 tests split into three
 kinds, classified from the tree and priced with the same TRX:
 
@@ -1799,19 +1984,98 @@ The shipped behaviour is unchanged: with `TimeProvider.System` the delay takes t
 `TimerQueueTimer` path `Task.Delay(TimeSpan)` took, so a toast still leaves four seconds
 after it was pushed.
 
+### 6.4 CI lane walls: the build job, the compile step, the artifact transfer ✅ measured
+
+The test shards are half of the CI bill. The `build` job compiles everything once
+and hands the binaries to six consumers, so the compile step and the artifact
+transfer sit on the PR wall too. Every number in this section is **MEASURED**
+from the job API (`started_at` / `completed_at` per step) and from the
+artifacts' `size_in_bytes`, on `ubuntu-24.04` with SDK 10.0.402.
+
+**The build job and the compile step** (the NUKE `Compile` target, Release):
+
+| Run | Tree | `build` job wall | NUKE `Compile` step | PR wall (first job start → last job end) |
+|---|---|---:|---:|---:|
+| [39389070999](https://github.com/refusedguy/Harbor-Harness/actions/runs/39389070999) (07:49) | `3d2f76ae`, PR branch | 546 s | 389 s | 2 339 s |
+| [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (09:17) | `2435d26d`, dev | 562 s | 427 s | 2 142 s |
+| [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352) (12:23) | `86b52adc`, dev | 585 s | 434 s | 1 084 s |
+| [39424579498](https://github.com/refusedguy/Harbor-Harness/actions/runs/39424579498) (12:44) | `88e9178b`, PR branch, slim lane | 441 s | 295 s | 757 s |
+
+The last row is not on `dev`: the slim-lane work (PR #1923) is still a branch.
+Its numbers are here because they are the only measurement of the lane shape
+that PR introduces, and because the compile step there runs with the
+architecture gate OFF the PR path (the gate-on path measured 396 s on run
+39405042780, same image, same SDK, one variable).
+
+**The artifact transfer** (the `Download build outputs` step of each consumer):
+
+| Run | Artifact | Bytes | Download |
+|---|---|---:|---:|
+| 39389070999 | `solution-binaries` (one artifact for six consumers) | 469 943 655 (448.2 MiB) | core 9 s, platform **60 s**, ui 17 s, e2e 10 s, coverage 11 s, perf 10 s |
+| 39421864352 | `solution-binaries` | 508 918 319 (485.3 MiB) | core 10 s, platform 16 s, ui 8 s, e2e 16 s, coverage 12 s, perf **36 s** |
+| 39424579498 (slim lane) | `solution-binaries-core` | 97 411 842 (92.9 MiB) | 3 s |
+| | `solution-binaries-platform` | 64 004 763 (61.0 MiB) | 4 s |
+| | `solution-binaries-ui` | 86 535 886 (82.5 MiB) | 2 s |
+| | `solution-binaries-e2e` | 76 742 782 (73.2 MiB) | 4 s |
+| | `solution-binaries-perf` | 5 744 773 (5.5 MiB) | (perf-gate skipped) |
+| | `solution-binaries` (what `coverage` downloads) | 161 414 374 (153.9 MiB) | 5 s |
+
+Two things a spike should read off this table. First, the download is not a
+constant: on the one-artifact lane the `platform` shard waited 60 s for bytes
+it did not need, which is more than the shard's own test wall on some runs.
+Second, the compile step's own spread across runs (295-434 s here) is larger
+than the difference between the lane shapes, so a single run cannot separate
+"the lane got cheaper" from "the runner was faster". The range is the honest
+statement of what these numbers support.
+
+### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
+
+The architecture gate runs in **Release** in CI: `Directory.Build.props`
+(`HarborArchitectureGate`) executes the whole `Harbor.Architecture.Tests`
+assembly after it builds, and the `core` shard runs the same DLL. A baseline
+for a spike therefore has to be a Release baseline, which is what §6.1 is. The
+Debug half of the axis does not exist, and this section says so instead of
+leaving the gap silent.
+
+| Axis | Release (what CI gates on) | Debug |
+|---|---:|---|
+| Architecture suite, tests discovered | **998** (run 39421864352) | not measured |
+| Architecture suite, wall | **122.10 s** (core shard) | not measured |
+| Architecture suite, sum of per-test durations | **1 108.01 s** (run 39399653820, TRX) | not measured |
+| Analyzer population: product compilations the pilot Roslyn analyzer walked | **62** (run 39399653820) | not measured |
+| Analyzer cost over that population | **69.87 s** (run 39399653820) | not measured |
+
+Why the Debug half is empty: no CI job builds Debug (the pipeline is Release
+end to end), and the old local Debug row (45 tests / 2.19 s) is the number
+this section replaces. One local run fills the cells:
+
+```bash
+dotnet build -c Debug tests/Harbor.Architecture.Tests
+dotnet exec tests/Harbor.Architecture.Tests/bin/Debug/net10.0/Harbor.Architecture.Tests.dll \
+  --minimum-expected-tests 1 --report-trx --results-directory TestResults/debug
+python3 tools/test-census.py TestResults/debug
+```
+
+The "dependencies discovered" half of the question (the reason the axis is
+wanted: an analyzer sees fewer dependencies in a Release build) is **not
+measured in either configuration**. The pilot Roslyn analyzer's population (62
+product compilations, 69.87 s) is the closest number the repository has, and
+it is the one a spike can be priced against today.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that
 > section's provenance — §3/§4 (§1 environment, 2026-07-18) for binary size, RSS and cold start;
-> §6.1 (local run, pre-#186 counts) for the test rows.
+> §6.1 (CI run 39421864352, dev, 2026-10-20) for the test rows.
 
 | Metric | Old claim | Reality (this doc) | Why differed |
 |---|---:|---:|---|
 | Binary size | 5 MB | 109 MB (publish folder) | Old was Debug DLL alone, not publish folder |
 | RSS idle | 28 MB | ~80-120 MB (estimated) | Old was Debug `--version` exit, not real session |
 | Cold start | 38 ms | 966 ms | Old was Debug incremental, not Release from cold cache |
-| Test count | 242 | ~493 | Old was outdated; suite grew with new features |
-| Test duration | 12 s | ~25-30 s | Old was after warm build; cold is slower |
+| Test count | 242 | **8 425 discovered** (§6.1, run 39421864352) | Old was outdated; suite grew with new features |
+| Test duration | 12 s | **402.5 s** of test time, `core` shard 213 s (§6.1) | Old was after warm build, 12 projects, Debug, no-build; the suite is now 36 projects and runs in four Release shards in parallel |
+| Architecture suite | 45 tests / 2.19 s (local Debug, 2026-07-18) | **998 discovered / 122.10 s** (CI, Release, §6.1) | Same: the old row measured a tree 22x smaller, in Debug, without the CI gate |
 
 ## 8. Per-app assessment
 
@@ -1820,7 +2084,7 @@ after it was pushed.
 | Aspect | Status | Notes |
 |---|---|---|
 | Build | ✅ green | 0 warnings, 0 errors |
-| Tests | ✅ ~493 pass | All non-E2E tests pass |
+| Tests | ✅ 8 390 passed of 8 425 discovered | CI, Release, four shards (§6.1); 35 skipped, 0 failed |
 | Binary | 109 MB publish | Roslyn + Spectre dominate |
 | AOT | ✅ publishes (`fulltree`) | 29 MB self-contained binary, §4.4 |
 | Cold start | 18 ms AOT / 138 ms JIT (`--version`) | Measured §4.4 |
@@ -1863,7 +2127,7 @@ after it was pushed.
 ### What's actually fast
 
 - **Microbenchmarks**: hot paths (`ProviderRegistry.GetClient`, `ToolRegistry.ResolveTools`, `PermissionRuleset.Evaluate`, `UiStore.Dispatch`) are sub-microsecond with zero allocations — the `ArrayPool`/`StringBuilderPool`/`FrozenDictionary`/`StringPool` strategy works.
-- **Test suite**: ~493 tests in ~12 s (no-build) — TUnit source-gen is fast.
+- **Test suite**: 8 425 discovered tests, 402.5 s of test time, `core` shard 213 s (§6.1). TUnit source-gen is fast, and the four shards run in parallel.
 - **Lock-free `UiStore.Dispatch`**: 0.15 µs via CAS loop, no contention.
 
 ### What's actually slow / bloated
