@@ -38,6 +38,9 @@ internal sealed class McpStdioServer
     private readonly ILogger<McpStdioServer> _logger;
     private readonly Action? _onSessionEstablished;
 
+    /// <summary>
+    ///     Construct the MCP stdio server over the given sink.
+    /// </summary>
     /// <param name="loadHost">The sink the exposed tools come from.</param>
     /// <param name="logger">Logger for diagnostics.</param>
     /// <param name="onSessionEstablished">
