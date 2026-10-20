@@ -239,16 +239,25 @@ public sealed class ContribBoundaryNameRule
     ///     asked to accept.
     /// </summary>
     /// <remarks>
-    ///     <b>54 names, measured.</b> Taken verbatim from the red run in the #843 PR body (run
+    ///     <b>51 names, measured.</b> The list started as the red run in the #843 PR body (run
     ///     36722789493, <c>Harbor.Architecture.Tests</c>, 1,043 files read), which is the only
-    ///     reason this list is here at all: the first version of this array was empty, so the
-    ///     first CI run failed and printed the whole set. A floor that was never stood on nothing
-    ///     is not a floor, and reading 164 <c>.cs</c> files in <c>contrib/</c> by eye is how the
-    ///     count came out wrong the first time.
+    ///     reason it is here at all: the first version of this array was empty, so the first CI
+    ///     run failed and printed the whole set. A floor that was never stood on nothing is not a
+    ///     floor, and reading the <c>contrib/</c> tree by eye is how the count came out wrong the
+    ///     first time.
     ///     <para>
     ///         Every row is legal in itself, and the header says why the rule therefore counts and
-    ///         does not condemn. What the list is for is the direction of travel: 54 is the number
-    ///         to watch, and a 55th name is the finding.
+    ///         does not condemn. What the list is for is the direction of travel: the number to
+    ///         watch is the number of rows below, and a new name is the finding.
+    ///     </para>
+    ///     <para>
+    ///         The list SHRANK by one when the vendored SharpConsoleUI renderer left
+    ///         <c>src/</c> for <c>contrib/tui/</c>: <c>ToolLifecycleHandler</c> was declared on
+    ///         both sides of the boundary (by that renderer in <c>src/</c> and by the Spectre
+    ///         fullscreen renderer in <c>contrib/</c>), and with the renderer on the <c>contrib/</c>
+    ///         side it is declared on ONE side only, so it is not a crossing any more. That is the
+    ///         direction this rule wants: the row was deleted on purpose, which is what the header
+    ///         means by "deleting a row is the intended way to shrink it".
     ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBaseline =
@@ -310,7 +319,6 @@ public sealed class ContribBoundaryNameRule
         "TokenUsageView",
         "TokenUsageViewModel",
         "TokensToCompactConverter",
-        "ToolLifecycleHandler",
         "ToolStartHandler",
     ];
 
