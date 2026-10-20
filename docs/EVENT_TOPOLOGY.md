@@ -27,7 +27,7 @@ snapshot of subscribers in the publisher's own call stack**.
 ```
 producers (await PublishAsync directly)
   AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:196,241,248,260
-  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:215,269,283,298,329,375,418,480,505,516
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:574,611,705,719,734,862,982
   CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:55,83,118
   SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:188
         │ await _eventBus.PublishAsync(evt, ct)

@@ -80,7 +80,7 @@ public static class ToolBatchScheduler
 
     /// <summary>
     ///     The cap, clamped to the accepted range: a value below
-    ///     <see cref="ToolingConfig.MinMaxParallelToolCalls" /> is raised to
+    ///     <see cref="ToolSchedulingDefaults.MinMaxParallelToolCalls" /> is raised to
     ///     it, so a mis-set number serialises the batch instead of throwing
     ///     at dispatch time.
     /// </summary>
@@ -91,7 +91,7 @@ public static class ToolBatchScheduler
     ///     tests, and by the agent loop's no-DI fallback.
     /// </remarks>
     public static int NormalizeCap(int maxParallelToolCalls) =>
-        maxParallelToolCalls < ToolingConfig.MinMaxParallelToolCalls
-            ? ToolingConfig.MinMaxParallelToolCalls
+        maxParallelToolCalls < ToolSchedulingDefaults.MinMaxParallelToolCalls
+            ? ToolSchedulingDefaults.MinMaxParallelToolCalls
             : maxParallelToolCalls;
 }

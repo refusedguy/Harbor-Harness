@@ -275,7 +275,7 @@ public sealed class HarborConfig
         // #1766: the cap on concurrent parallel-safe tool calls. Persisted
         // only when it diverges from the default — same knob-noise rule as
         // the CellForge section above.
-        MaxParallelToolCalls = Tooling.MaxParallelToolCalls == ToolingConfig.DefaultMaxParallelToolCalls
+        MaxParallelToolCalls = Tooling.MaxParallelToolCalls == ToolSchedulingDefaults.DefaultMaxParallelToolCalls
             ? null
             : Tooling.MaxParallelToolCalls,
         MaxSteps = Run.MaxSteps,

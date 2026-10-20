@@ -122,7 +122,7 @@ public sealed class ToolDispatcher(
     ///     dispatch time.
     /// </summary>
     private readonly int _maxParallelToolCalls = ToolBatchScheduler.NormalizeCap(
-        maxParallelToolCalls ?? ToolingConfig.DefaultMaxParallelToolCalls);
+        maxParallelToolCalls ?? ToolSchedulingDefaults.DefaultMaxParallelToolCalls);
 
     // #1507 (#95 slice): validate/permission/retry chain lives in ToolRetryPolicy
     // (verbatim move); this dispatcher keeps thin forwarders so the

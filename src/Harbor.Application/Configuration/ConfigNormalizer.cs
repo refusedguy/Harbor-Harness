@@ -125,7 +125,7 @@ public static class ConfigNormalizer
             // the documented default; a value below the floor is refused by
             // ToolingConfig.Validate rather than silently raised here, so the
             // user sees the bad number instead of a quietly different one.
-            raw.MaxParallelToolCalls ?? ToolingConfig.DefaultMaxParallelToolCalls);
+            raw.MaxParallelToolCalls ?? ToolSchedulingDefaults.DefaultMaxParallelToolCalls);
     }
 
     private static void ApplyLimits(HarborConfig config, RawConfigDto raw)

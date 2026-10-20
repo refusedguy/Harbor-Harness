@@ -105,7 +105,45 @@ public sealed record ToolingConfig(
     // #1766: the cap on concurrent parallel-safe tool calls. The batch size
     // is model-controlled, so an uncapped batch let one response open fifty
     // file descriptors, fifty processes or fifty sockets at once.
-    [property: JsonPropertyName("maxParallelToolCalls")] int MaxParallelToolCalls = DefaultMaxParallelToolCalls)
+    [property: JsonPropertyName("maxParallelToolCalls")] int MaxParallelToolCalls = ToolSchedulingDefaults.DefaultMaxParallelToolCalls)
+{
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static ToolingConfig Default => new(
+        Array.Empty<string>(),
+        Array.Empty<string>(),
+        AutoReloadPlugins: true,
+        MaxParallelToolCalls: ToolSchedulingDefaults.DefaultMaxParallelToolCalls);
+
+    public Result<ToolingConfig> Validate()
+    {
+        if (EnabledPlugins is null) return Result.Failure<ToolingConfig>("tooling.enabledPlugins must not be null");
+        if (DisabledTools is null) return Result.Failure<ToolingConfig>("tooling.disabledTools must not be null");
+        if (MaxParallelToolCalls < ToolSchedulingDefaults.MinMaxParallelToolCalls)
+        {
+            return Result.Failure<ToolingConfig>(
+                $"tooling.maxParallelToolCalls must be >= {ToolSchedulingDefaults.MinMaxParallelToolCalls}");
+        }
+
+        return Result.Success(this);
+    }
+}
+
+/// <summary>
+///     The defaults of the tool scheduler's concurrency cap (#1766).
+/// </summary>
+/// <remarks>
+///     <para>
+///         They live in their own type, NOT inside
+///         <see cref="ToolingConfig" />, because a record's primary-constructor
+///         parameter list is evaluated in the ENCLOSING scope: a constant
+///         declared inside the record body is not in scope there, so
+///         <c>MaxParallelToolCalls = DefaultMaxParallelToolCalls</c> does not
+///         compile. Spelling the number twice instead (once in the parameter
+///         default, once in the constant) is the drift the repo keeps paying
+///         for elsewhere — one home, one number.
+///     </para>
+/// </remarks>
+public static class ToolSchedulingDefaults
 {
     /// <summary>
     ///     The default cap on concurrent parallel-safe tool calls in one
@@ -120,26 +158,6 @@ public sealed record ToolingConfig(
     ///     makes every parallel-safe call wait for the previous one.
     /// </summary>
     public const int MinMaxParallelToolCalls = 1;
-
-    // #195: fresh instance per access (see IdentityConfig.Default).
-    public static ToolingConfig Default => new(
-        Array.Empty<string>(),
-        Array.Empty<string>(),
-        AutoReloadPlugins: true,
-        MaxParallelToolCalls: DefaultMaxParallelToolCalls);
-
-    public Result<ToolingConfig> Validate()
-    {
-        if (EnabledPlugins is null) return Result.Failure<ToolingConfig>("tooling.enabledPlugins must not be null");
-        if (DisabledTools is null) return Result.Failure<ToolingConfig>("tooling.disabledTools must not be null");
-        if (MaxParallelToolCalls < MinMaxParallelToolCalls)
-        {
-            return Result.Failure<ToolingConfig>(
-                $"tooling.maxParallelToolCalls must be >= {MinMaxParallelToolCalls}");
-        }
-
-        return Result.Success(this);
-    }
 }
 
 /// <summary>

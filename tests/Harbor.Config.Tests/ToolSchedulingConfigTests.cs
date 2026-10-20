@@ -13,8 +13,8 @@ public class ToolSchedulingConfigTests
     public async Task Default_IsTen()
     {
         await Assert.That(ToolingConfig.Default.MaxParallelToolCalls).IsEqualTo(10);
-        await Assert.That(ToolingConfig.DefaultMaxParallelToolCalls).IsEqualTo(10);
-        await Assert.That(ToolingConfig.MinMaxParallelToolCalls).IsEqualTo(1);
+        await Assert.That(ToolSchedulingDefaults.DefaultMaxParallelToolCalls).IsEqualTo(10);
+        await Assert.That(ToolSchedulingDefaults.MinMaxParallelToolCalls).IsEqualTo(1);
     }
 
     [Test]
@@ -24,7 +24,7 @@ public class ToolSchedulingConfigTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Tooling.MaxParallelToolCalls)
-            .IsEqualTo(ToolingConfig.DefaultMaxParallelToolCalls);
+            .IsEqualTo(ToolSchedulingDefaults.DefaultMaxParallelToolCalls);
     }
 
     [Test]
