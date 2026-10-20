@@ -90,6 +90,9 @@ public class ExhaustiveTests
             .Because("the failure has to name the member the table forgot, not merely count it");
         await Assert.That(ex.Message).Contains("SyntheticClosedEnum")
             .Because("the failure has to name the enum the missing member belongs to");
+        await Assert.That(ex.Message).DoesNotContain("First")
+            .Because("the table DOES name First, so a failure that named it would mean the check "
+                + "read no rows at all rather than reading the table and finding the hole");
     }
 
     /// <summary>
