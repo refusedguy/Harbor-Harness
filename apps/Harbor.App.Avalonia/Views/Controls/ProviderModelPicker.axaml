@@ -24,10 +24,6 @@
         after a selection (via the VM's ModelSelected event).
     -->
 
-    <UserControl.Resources>
-        <views:BrushKeyConverter x:Key="BrushKeyConv" />
-    </UserControl.Resources>
-
     <Border Background="{DynamicResource BgAppBrush}" CornerRadius="8" Padding="12">
         <Grid RowDefinitions="Auto,Auto,Auto,*">
 
@@ -82,7 +78,7 @@
                                                 <TextBlock Text="{Binding AuthStatusIcon}"
                                                            FontFamily="{DynamicResource FontMono}"
                                                            FontSize="12"
-                                                           Foreground="{Binding AuthStatusBrushKey, Converter={StaticResource BrushKeyConv}}" />
+                                                           Foreground="{Binding AuthStatusBrushKey, Converter={x:Static views:BrushKeyConverter.Instance}}" />
                                                 <TextBlock Text="{Binding AuthStatusText}" FontSize="10"
                                                            Foreground="{StaticResource TextMutedBrush}" />
                                             </StackPanel>

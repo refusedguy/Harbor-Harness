@@ -19,11 +19,8 @@ namespace Harbor.App.Avalonia.Views;
 ///     relative to the dictionary. Resolving the key instead of the data is what
 ///     makes the claim true by construction rather than by review.
 /// </remarks>
-public sealed class ToastIconConverter : IValueConverter
+public sealed class ToastIconConverter : OneWayConverterBase<ToastIconConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly ToastIconConverter Instance = new();
-
     /// <summary>The generic info glyph — also the fallback for an unknown kind.</summary>
     private const string InfoIconResourceKey = "IcInfo";
 
@@ -47,7 +44,7 @@ public sealed class ToastIconConverter : IValueConverter
         };
 
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         // TryGetResource, not the direct indexer: it walks the merged
         // dictionaries, which is where Icons.axaml lives (App.axaml cascade
@@ -58,35 +55,36 @@ public sealed class ToastIconConverter : IValueConverter
             ? resource
             : null;
     }
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
 }
 
 /// <summary>
 ///     Converts a <see cref="ToastKind" /> to an <see cref="IBrush" /> resolved from
 ///     the application's resource dictionary via HDS theme tokens.
 /// </summary>
-public sealed class ToastBrushConverter : IValueConverter
+public sealed class ToastBrushConverter : OneWayConverterBase<ToastBrushConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly ToastBrushConverter Instance = new();
-
-    /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        string key = value switch
+    /// <summary>
+    ///     The HDS resource key that paints <paramref name="kind" />, or the
+    ///     accent brush for a value that is not a <see cref="ToastKind" />.
+    /// </summary>
+    /// <remarks>
+    ///     Static for the same reason as
+    ///     <c>ToastIconConverter.IconResourceKeyFor</c>: the mapping is the
+    ///     part worth asserting, and asserting it must not need an Avalonia
+    ///     <c>Application</c>.
+    /// </remarks>
+    public static string BrushKeyFor(ToastKind? kind) =>
+        kind switch
         {
             ToastKind.Success => "StateSuccessBrush",
             ToastKind.Warning => "StateWarningBrush",
             ToastKind.Error => "StateErrorBrush",
             _ => "AccentPrimaryBrush"
         };
-        return ThemeBrushResolver.Resolve(key);
-    }
 
     /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return ThemeBrushResolver.Resolve(BrushKeyFor(value as ToastKind?));
+    }
 }

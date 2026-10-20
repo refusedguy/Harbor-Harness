@@ -29,10 +29,6 @@
                            IsActive="{Binding $self.IsSelected, ElementName=Row}"/>
     -->
 
-    <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey" />
-    </UserControl.Resources>
-
     <Grid Margin="2,4" ColumnDefinitions="*,Auto">
         <StackPanel Grid.Column="0" Spacing="2">
             <!-- Title + dirty indicator -->
@@ -70,7 +66,7 @@
         <TextBlock Grid.Column="1"
                    Text="*"
                    FontSize="8"
-                   Foreground="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BrushKey}}"
+                   Foreground="{Binding StatusColorKey, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vw:BrushKeyConverter.Instance}}"
                    VerticalAlignment="Center" />
     </Grid>
 </UserControl>

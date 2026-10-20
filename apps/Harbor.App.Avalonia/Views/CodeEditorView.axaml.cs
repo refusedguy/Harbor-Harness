@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Threading;
 using AvaloniaEdit;
@@ -198,33 +197,19 @@ public partial class CodeEditorView : UserControl
 }
 
 /// <summary>Converts null to true (inverse of ObjectNotNullConverter).</summary>
-public sealed class ObjectIsNullConverter : IValueConverter
+public sealed class ObjectIsNullConverter : OneWayConverterBase<ObjectIsNullConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly ObjectIsNullConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is null;
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
 }
 
 /// <summary>Converts non-null to true.</summary>
-public sealed class ObjectNotNullConverter : IValueConverter
+public sealed class ObjectNotNullConverter : OneWayConverterBase<ObjectNotNullConverter>
 {
-    /// <summary>Singleton instance.</summary>
-    public static readonly ObjectNotNullConverter Instance = new();
-
     /// <inheritdoc />
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    public override object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is not null;
-
-    /// <inheritdoc />
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
 }
 
 /// <summary>

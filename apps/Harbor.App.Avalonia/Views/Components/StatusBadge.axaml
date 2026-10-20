@@ -20,10 +20,6 @@
                             BrushKey="{Binding StatusBrushKey}"/>
     -->
 
-    <UserControl.Resources>
-        <vw:BrushKeyConverter x:Key="BrushKey" />
-    </UserControl.Resources>
-
     <Border Background="{DynamicResource BgSubtleBrush}"
             BorderBrush="{DynamicResource BorderSubtleBrush}"
             BorderThickness="1"
@@ -33,7 +29,7 @@
         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
             <Ellipse Width="8"
                      Height="8"
-                     Fill="{Binding BrushKey, Converter={StaticResource BrushKey}, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                     Fill="{Binding BrushKey, Converter={x:Static vw:BrushKeyConverter.Instance}, RelativeSource={RelativeSource AncestorType=UserControl}}"
                      IsVisible="{Binding ShowDot, RelativeSource={RelativeSource AncestorType=UserControl}}" />
             <TextBlock Text="{Binding StatusText, RelativeSource={RelativeSource AncestorType=UserControl}}"
                        FontSize="11"
