@@ -102,7 +102,7 @@ public class TurnChangeSummaryTests
     private static async Task RunTurnAsync(FakeEventBus bus, IReadOnlyList<ToolCall> calls)
     {
         const string session = "s1";
-        await bus.PublishAsync(new TurnStartEvent(1, session));
+        await bus.PublishAsync(TestEvents.TurnStart(sessionId: session));
 
         AssistantMessage message = AssistantMessage.Empty(session, "test-model");
         int index = 0;
@@ -116,9 +116,9 @@ public class TurnChangeSummaryTests
             using var argsDoc = JsonDocument.Parse(args);
             message = message.AppendToolCall(ToolCallPart.Create(id, call.ToolName, argsDoc.RootElement));
             await bus.PublishAsync(ToolExecutionStartEvent.Create(id, call.ToolName, argsDoc.RootElement));
-            await bus.PublishAsync(new ToolExecutionEndEvent(id, ToolResult.Success("ok"), false));
+            await bus.PublishAsync(TestEvents.ToolExecutionEnd(id, ToolResult.Success("ok")));
         }
 
-        await bus.PublishAsync(new TurnEndEvent(message, [], session));
+        await bus.PublishAsync(TestEvents.TurnEnd(message, sessionId: session));
     }
 }
