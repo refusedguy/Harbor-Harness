@@ -201,17 +201,21 @@ public sealed class LspManager : ILspService
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             Result<Maybe<LspLocation>> found = await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
             #pragma warning restore CFE0001
-            // ROP boundary: one Match instead of IsFailure + .Value. The session
-            // reports a timeout or a malformed payload as a failure with the
-            // reason; the public ILspService surface is null/[]-typed, so the
-            // reason survives in the log.
-            return found.Match<LspLocation?>(
+            // The session reports a timeout or a malformed payload as a
+            // failure with the reason; the public ILspService surface is
+            // null/[]-typed, so the reason survives in the log.
+            if (found.IsFailure)
+            {
+                LspManagerLog.DefinitionLookupDegraded(_logger, filePath, found.Error);
+            }
+
+            // ROP boundary: one Match instead of IsFailure + .Value on the
+            // Result. The type argument is inferred, NOT spelled out: Match is
+            // an extension whose FIRST type parameter is the Result's own, so
+            // an explicit argument would bind the wrong one.
+            return found.Match(
                 static maybe => maybe.HasValue ? maybe.Value : null,
-                reason =>
-                {
-                    LspManagerLog.DefinitionLookupDegraded(_logger, filePath, reason);
-                    return null;
-                });
+                static _ => (LspLocation?)null);
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
@@ -247,15 +251,16 @@ public sealed class LspManager : ILspService
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
             Result<IReadOnlyList<LspLocation>> found = await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
             #pragma warning restore CFE0001
-            // ROP boundary: one Match instead of IsFailure + .Value (same shape
-            // as the definition lookup above).
-            return found.Match<IReadOnlyList<LspLocation>>(
+            if (found.IsFailure)
+            {
+                LspManagerLog.ReferencesLookupDegraded(_logger, filePath, found.Error);
+            }
+
+            // ROP boundary: one Match instead of IsFailure + .Value on the
+            // Result (same shape as the definition lookup above).
+            return found.Match(
                 static locations => locations,
-                reason =>
-                {
-                    LspManagerLog.ReferencesLookupDegraded(_logger, filePath, reason);
-                    return [];
-                });
+                static _ => (IReadOnlyList<LspLocation>)Array.Empty<LspLocation>());
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
