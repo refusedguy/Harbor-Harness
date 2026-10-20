@@ -74,7 +74,15 @@ public sealed class LspManager : ILspService
         string fullPath = Path.GetFullPath(filePath);
         try
         {
-            await session.OpenAsync(fullPath, text, LanguageIdFor(session.Definition), ct).ConfigureAwait(false);
+            // The session bounds its own wait (LspServerSession.DefaultRequestTimeout):
+            // a server that stopped answering fails the open instead of parking
+            // the caller on a write that never completes.
+            Result opened = await session.OpenAsync(fullPath, text, LanguageIdFor(session.Definition), ct).ConfigureAwait(false);
+            if (opened.IsFailure)
+            {
+                LspManagerLog.OpenDegraded(_logger, fullPath, opened.Error);
+                return;
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -107,8 +115,12 @@ public sealed class LspManager : ILspService
             // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
             // return or continue, a control-flow shape the analyzer does not model.
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
-            await resolved.Value.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
+            Result changed = await resolved.Value.ChangeAsync(Path.GetFullPath(filePath), newText, ct).ConfigureAwait(false);
             #pragma warning restore CFE0001
+            if (changed.IsFailure)
+            {
+                LspManagerLog.ChangeDegraded(_logger, filePath, changed.Error);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -138,8 +150,12 @@ public sealed class LspManager : ILspService
             // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
             // return or continue, a control-flow shape the analyzer does not model.
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
-            await resolved.Value.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
+            Result closed = await resolved.Value.CloseAsync(Path.GetFullPath(filePath)).ConfigureAwait(false);
             #pragma warning restore CFE0001
+            if (closed.IsFailure)
+            {
+                LspManagerLog.CloseDegraded(_logger, filePath, closed.Error);
+            }
         }
         catch (Exception ex)
         {
@@ -183,8 +199,19 @@ public sealed class LspManager : ILspService
             // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
             // return or continue, a control-flow shape the analyzer does not model.
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
-            return await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+            Result<Maybe<LspLocation>> found = await resolved.Value.FindDefinitionAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
             #pragma warning restore CFE0001
+            // ROP boundary: one Match instead of IsFailure + .Value. The session
+            // reports a timeout or a malformed payload as a failure with the
+            // reason; the public ILspService surface is null/[]-typed, so the
+            // reason survives in the log.
+            return found.Match<LspLocation?>(
+                static maybe => maybe.HasValue ? maybe.Value : null,
+                reason =>
+                {
+                    LspManagerLog.DefinitionLookupDegraded(_logger, filePath, reason);
+                    return null;
+                });
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {
@@ -218,8 +245,17 @@ public sealed class LspManager : ILspService
             // CFE0001: false positive — the IsFailure/IsSuccess guard is an early
             // return or continue, a control-flow shape the analyzer does not model.
             // The .Value is safe. Baseline: docs/ROP-API-INVENTORY.md §5.
-            return await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
+            Result<IReadOnlyList<LspLocation>> found = await resolved.Value.FindReferencesAsync(Path.GetFullPath(filePath), line, column, cts.Token).ConfigureAwait(false);
             #pragma warning restore CFE0001
+            // ROP boundary: one Match instead of IsFailure + .Value (same shape
+            // as the definition lookup above).
+            return found.Match<IReadOnlyList<LspLocation>>(
+                static locations => locations,
+                reason =>
+                {
+                    LspManagerLog.ReferencesLookupDegraded(_logger, filePath, reason);
+                    return [];
+                });
         }
         catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
         {

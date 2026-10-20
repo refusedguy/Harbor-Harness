@@ -39,10 +39,40 @@ public sealed class LspServerSession : IAsyncDisposable
     /// <summary>Budget for the initialize handshake — a hung server must not block file opens.</summary>
     public static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    ///     Default ceiling for one session operation (didOpen / didChange /
+    ///     didClose / definition / references).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A language server that stops answering is a FAILED operation, not
+    ///         a wait that never ends. Every operation on this type used to be
+    ///         bounded only by the caller's cancellation token, and the default
+    ///         token is <see cref="CancellationToken.None" /> — so a server that
+    ///         stopped answering (a wedged child, an answer lost in a demux
+    ///         race) turned into an operation that waited forever, and a
+    ///         session that waited forever turned a CI job into a hang instead
+    ///         of a red build.
+    ///     </para>
+    ///     <para>
+    ///         15 s is the same ceiling the manager applies to a lookup
+    ///         (<c>LspManager.RequestTimeout</c>) and the same one the
+    ///         initialize handshake uses, so a stalled server now degrades
+    ///         uniformly instead of hanging on one call path and timing out on
+    ///         another. It is generous for a real language server: a definition
+    ///         lookup on a cold index is seconds, not minutes.
+    ///     </para>
+    /// </remarks>
+    public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Budget for the graceful shutdown handshake on dispose.</summary>
+    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(2);
+
     private readonly LspServerDefinition _definition;
     private readonly LspClient _client;
     private readonly Process _process;
     private readonly ILogger _logger;
+    private readonly TimeSpan _requestTimeout;
     // #1095: diagnostics cache is on the LSP hot path — the server pushes
     // publishDiagnostics per keystroke on the notification thread while the
     // UI/tests pull per file via GetDiagnostics. A ConcurrentDictionary keeps
@@ -57,13 +87,16 @@ public sealed class LspServerSession : IAsyncDisposable
         LspServerDefinition definition,
         LspClient client,
         Process process,
-        ILogger logger)
+        ILogger logger,
+        TimeSpan requestTimeout)
     {
         _definition = definition;
         _client = client;
         _process = process;
         _logger = logger;
+        _requestTimeout = requestTimeout;
         _client.ServerNotification += OnServerNotification;
+        _client.Disconnected += OnClientDisconnected;
     }
 
     /// <summary>Raised when diagnostics were re-published for a file (file path form).</summary>
@@ -107,11 +140,17 @@ public sealed class LspServerSession : IAsyncDisposable
     ///         diagnostics" — the same unexplained-empty-answer bug #884 was.
     ///     </para>
     /// </remarks>
+    /// <param name="requestTimeout">
+    ///     The ceiling for one operation on this session. Defaults to
+    ///     <see cref="DefaultRequestTimeout" />; a shorter budget is how a test
+    ///     exercises the timeout path without waiting for the real one.
+    /// </param>
     public static async Task<LspServerSession> StartAsync(
         LspServerDefinition definition,
         string workspaceRoot,
         ILogger logger,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        TimeSpan? requestTimeout = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -147,7 +186,7 @@ public sealed class LspServerSession : IAsyncDisposable
 
         var client = new LspClient(process.StandardOutput.BaseStream, process.StandardInput.BaseStream, logger);
         client.Start();
-        var session = new LspServerSession(definition, client, process, logger);
+        var session = new LspServerSession(definition, client, process, logger, requestTimeout ?? DefaultRequestTimeout);
 
         try
         {
@@ -174,81 +213,195 @@ public sealed class LspServerSession : IAsyncDisposable
     }
 
     /// <summary>Send didOpen for a file (tracked by version).</summary>
-    public async Task OpenAsync(string filePath, string text, string languageId, CancellationToken ct = default)
+    /// <remarks>
+    ///     Bounded by <see cref="DefaultRequestTimeout" />: a server that stopped
+    ///     reading its input fails the operation instead of parking the caller
+    ///     on a write that never completes.
+    /// </remarks>
+    public Task<Result> OpenAsync(string filePath, string text, string languageId, CancellationToken ct = default)
     {
         int version = Interlocked.Increment(ref _documentVersion);
-        await _client.SendNotificationAsync(
-            "textDocument/didOpen",
-            new LspWire.DidOpenTextDocumentParams(new LspWire.TextDocumentItem(
-                FileUri(filePath), languageId, version, text)),
-            ct).ConfigureAwait(false);
+        return RunBoundedNotificationAsync(
+            "didOpen",
+            token => _client.SendNotificationAsync(
+                "textDocument/didOpen",
+                new LspWire.DidOpenTextDocumentParams(new LspWire.TextDocumentItem(
+                    FileUri(filePath), languageId, version, text)),
+                token),
+            ct);
     }
 
     /// <summary>Send a full-text didChange for a file.</summary>
-    public async Task ChangeAsync(string filePath, string text, CancellationToken ct = default)
+    public Task<Result> ChangeAsync(string filePath, string text, CancellationToken ct = default)
     {
         int version = Interlocked.Increment(ref _documentVersion);
-        await _client.SendNotificationAsync(
-            "textDocument/didChange",
-            new LspWire.DidChangeTextDocumentParams(
-                new LspWire.VersionedTextDocumentIdentifier(FileUri(filePath), version),
-                [new LspWire.FullTextChange(text)]),
-            ct).ConfigureAwait(false);
+        return RunBoundedNotificationAsync(
+            "didChange",
+            token => _client.SendNotificationAsync(
+                "textDocument/didChange",
+                new LspWire.DidChangeTextDocumentParams(
+                    new LspWire.VersionedTextDocumentIdentifier(FileUri(filePath), version),
+                    [new LspWire.FullTextChange(text)]),
+                token),
+            ct);
     }
 
     /// <summary>Send didClose for a file.</summary>
-    public async Task CloseAsync(string filePath, CancellationToken ct = default)
+    public Task<Result> CloseAsync(string filePath, CancellationToken ct = default)
     {
-        await _client.SendNotificationAsync(
-            "textDocument/didClose",
-            new LspWire.DidCloseTextDocumentParams(new LspWire.TextDocumentIdentifier(FileUri(filePath))),
-            ct).ConfigureAwait(false);
+        return RunBoundedNotificationAsync(
+            "didClose",
+            token => _client.SendNotificationAsync(
+                "textDocument/didClose",
+                new LspWire.DidCloseTextDocumentParams(new LspWire.TextDocumentIdentifier(FileUri(filePath))),
+                token),
+            ct);
     }
 
     /// <summary>
     ///     Resolve definition at the position (normalized to a file path).
-    ///     Malformed foreign-server payloads degrade to <c>null</c> with the
-    ///     reason in the log — never a throw (§A2).
+    ///     Malformed foreign-server payloads and a server that stopped
+    ///     answering both fail with a reason, never a throw (§A2).
     /// </summary>
-    public async Task<LspLocation?> FindDefinitionAsync(string filePath, int line, int column, CancellationToken ct)
+    /// <remarks>
+    ///     The result is <c>Result&lt;Maybe&lt;LspLocation&gt;&gt;</c>: the lookup
+    ///     can fail (timeout, malformed payload, server error), the answer can
+    ///     legitimately be absent (no definition at that position), and the
+    ///     reason is right there when it failed. A bare
+    ///     <c>LspLocation?</c> cannot tell those apart.
+    /// </remarks>
+    public async Task<Result<Maybe<LspLocation>>> FindDefinitionAsync(
+        string filePath,
+        int line,
+        int column,
+        CancellationToken ct = default)
     {
-        JsonElement? result = await _client.SendRequestAsync(
-            "textDocument/definition",
-            new LspWire.PositionParams(
-                new LspWire.TextDocumentIdentifier(FileUri(filePath)),
-                new LspWire.LspPosition(line, column)),
-            ct).ConfigureAwait(false);
-        Result<Maybe<LspLocation>> normalized = TryNormalizeFirstLocation(result, filePath);
-        if (normalized.IsFailure)
-        {
-            LspServerSessionLog.MalformedDefinitionPayload(_logger, _definition.Language, normalized.Error);
-            return null;
-        }
+        return await RunBoundedAsync<Maybe<LspLocation>>(
+            "definition",
+            async token =>
+            {
+                JsonElement? result = await _client.SendRequestAsync(
+                    "textDocument/definition",
+                    new LspWire.PositionParams(
+                        new LspWire.TextDocumentIdentifier(FileUri(filePath)),
+                        new LspWire.LspPosition(line, column)),
+                    token).ConfigureAwait(false);
+                Result<Maybe<LspLocation>> normalized = TryNormalizeFirstLocation(result, filePath);
+                if (normalized.IsFailure)
+                {
+                    LspServerSessionLog.MalformedDefinitionPayload(_logger, _definition.Language, normalized.Error);
+                }
 
-        Maybe<LspLocation> location = normalized.Value;
-        return location.HasValue ? location.Value : null;
+                return normalized;
+            },
+            ct).ConfigureAwait(false);
     }
 
     /// <summary>
     ///     Resolve references to the symbol at the position.
     ///     Malformed items are skipped leniently (count in the log).
     /// </summary>
-    public async Task<IReadOnlyList<LspLocation>> FindReferencesAsync(string filePath, int line, int column, CancellationToken ct)
+    public async Task<Result<IReadOnlyList<LspLocation>>> FindReferencesAsync(
+        string filePath,
+        int line,
+        int column,
+        CancellationToken ct = default)
     {
-        JsonElement? result = await _client.SendRequestAsync(
-            "textDocument/references",
-            new LspWire.PositionParams(
-                new LspWire.TextDocumentIdentifier(FileUri(filePath)),
-                new LspWire.LspPosition(line, column),
-                new LspWire.ReferenceContext(IncludeDeclaration: true)),
-            ct).ConfigureAwait(false);
-        IReadOnlyList<LspLocation> locations = NormalizeAllLocations(result, filePath, out string? skippedReason);
-        if (skippedReason is not null)
-        {
-            LspServerSessionLog.MalformedReferencesPayloads(_logger, _definition.Language, skippedReason);
-        }
+        return await RunBoundedAsync<IReadOnlyList<LspLocation>>(
+            "references",
+            async token =>
+            {
+                JsonElement? result = await _client.SendRequestAsync(
+                    "textDocument/references",
+                    new LspWire.PositionParams(
+                        new LspWire.TextDocumentIdentifier(FileUri(filePath)),
+                        new LspWire.LspPosition(line, column)),
+                    new LspWire.ReferenceContext(IncludeDeclaration: true)),
+                    token).ConfigureAwait(false);
+                IReadOnlyList<LspLocation> locations = NormalizeAllLocations(result, filePath, out string? skippedReason);
+                if (skippedReason is not null)
+                {
+                    LspServerSessionLog.MalformedReferencesPayloads(_logger, _definition.Language, skippedReason);
+                }
 
-        return locations;
+                return Result.Success(locations);
+            },
+            ct).ConfigureAwait(false);
+    }
+
+    // ── Bounded waits (#1885) ──────────────────────────────────────────────
+    //
+    // Every operation above runs under a deadline. A language server that
+    // stops answering is a FAILED operation: it comes back as a
+    // Result.Failure with the reason, never as a wait that never ends. The
+    // deadline is DefaultRequestTimeout (15s) unless the caller cancels
+    // first, in which case the cancellation is the caller's business and
+    // travels on unchanged.
+
+    /// <summary>
+    ///     Runs one operation under a deadline. The operation's own failure is
+    ///     a <see cref="Result{T}" />; the deadline's failure is a timeout
+    ///     <see cref="Result{T}" />. Nothing here throws for an expected
+    ///     failure.
+    /// </summary>
+    private async Task<Result<T>> RunBoundedAsync<T>(
+        string operation,
+        Func<CancellationToken, Task<Result<T>>> body,
+        CancellationToken ct,
+        TimeSpan? timeout = null)
+    {
+        TimeSpan budget = timeout ?? _requestTimeout;
+        using var deadline = new CancellationTokenSource(budget);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
+        try
+        {
+            // The WaitAsync is the outer bound: it releases the caller even if
+            // the underlying write cannot be cancelled mid-flight (a pipe write
+            // already in progress is not interruptible). The write keeps
+            // running under the write lock, so the next operation queues
+            // behind it and times out too instead of piling up.
+            return await body(linked.Token).WaitAsync(budget, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
+        {
+            LspServerSessionLog.OperationTimedOut(_logger, _definition.Language, operation, budget);
+            return Result.Failure<T>($"request-timeout ('{operation}')");
+        }
+        catch (LspRequestException ex)
+        {
+            // The server answered with a JSON-RPC error. That is an expected
+            // failure of the operation, not a defect of the session: it comes
+            // back as a failure with the reason (the manager logs it).
+            LspServerSessionLog.RequestFailed(_logger, _definition.Language, operation, ex.Message);
+            return Result.Failure<T>($"request-failed ('{operation}': {ex.Message})");
+        }
+    }
+
+    /// <summary>
+    ///     The no-answer half of <see cref="RunBoundedAsync{T}" />: a
+    ///     notification that could not be delivered inside the deadline.
+    /// </summary>
+    private async Task<Result> RunBoundedNotificationAsync(
+        string operation,
+        Func<CancellationToken, Task> body,
+        CancellationToken ct,
+        TimeSpan? timeout = null)
+    {
+        Result<bool> outcome = await RunBoundedAsync<bool>(
+            operation,
+            async token =>
+            {
+                await body(token).ConfigureAwait(false);
+                return Result.Success(true);
+            },
+            ct,
+            timeout).ConfigureAwait(false);
+
+        return outcome.IsSuccess ? Result.Success() : Result.Failure(outcome.Error);
     }
 
     /// <summary>Diagnostics last published for the file.</summary>
@@ -260,6 +413,30 @@ public sealed class LspServerSession : IAsyncDisposable
     }
 
     // ── Notifications ──────────────────────────────────────────────────────
+
+    /// <summary>
+    ///     The client's read loop ended: the server is gone, or its stdout is
+    ///     no longer being drained. Either way the child must not be left
+    ///     running: a child blocked on a full stdout pipe is a process that
+    ///     never exits on its own, and nothing would ever kill it.
+    /// </summary>
+    private void OnClientDisconnected(object? sender, EventArgs args)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
+                LspServerSessionLog.KilledAfterDisconnect(_logger, _definition.Language);
+            }
+        }
+        catch (Exception ex)
+        {
+            LspServerSessionLog.KillFailed(_logger, ex, _definition.Language);
+        }
+    }
 
     private void OnServerNotification(object? sender, LspNotificationEventArgs args)
     {
@@ -476,10 +653,11 @@ public sealed class LspServerSession : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _client.ServerNotification -= OnServerNotification;
+        _client.Disconnected -= OnClientDisconnected;
         try
         {
-            await _client.SendRequestAsync("shutdown", null).WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-            await _client.SendNotificationAsync("exit", null).ConfigureAwait(false);
+            await _client.SendRequestAsync("shutdown", null).WaitAsync(ShutdownTimeout).ConfigureAwait(false);
+            await _client.SendNotificationAsync("exit", null).WaitAsync(ShutdownTimeout).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -534,4 +712,13 @@ internal static partial class LspServerSessionLog
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "LSP: kill of {Language} server failed")]
     public static partial void KillFailed(ILogger logger, Exception ex, string language);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "LSP: {Language} server did not answer '{Operation}' within {Timeout}; degraded")]
+    public static partial void OperationTimedOut(ILogger logger, string language, string operation, TimeSpan timeout);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning, Message = "LSP: {Language} server connection lost; killed the child so it cannot block on a full pipe")]
+    public static partial void KilledAfterDisconnect(ILogger logger, string language);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "LSP: {Language} server refused '{Operation}' ({Reason}); degraded")]
+    public static partial void RequestFailed(ILogger logger, string language, string operation, string reason);
 }

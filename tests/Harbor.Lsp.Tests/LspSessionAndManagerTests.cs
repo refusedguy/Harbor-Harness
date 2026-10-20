@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Lsp;
 using Harbor.Lsp;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -100,7 +101,12 @@ public class LspServerSessionIntegrationTests
             // Diagnostics arrive as a server notification after didOpen.
             TaskCompletionSource<string> diagnosticsFor = new(TaskCreationOptions.RunContinuationsAsynchronously);
             session.DiagnosticsChanged += (_, args) => diagnosticsFor.TrySetResult(args.FilePath);
-            await session.OpenAsync(filePath, "const x = 1;", "typescript");
+
+            // The session's own deadline bounds both operations: no
+            // CancellationToken.None, so a server that stops answering fails
+            // the call instead of parking the test forever.
+            Result opened = await session.OpenAsync(filePath, "const x = 1;", "typescript");
+            await Assert.That(opened.IsSuccess).IsTrue();
             string changed = await diagnosticsFor.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
             await Assert.That(changed).IsEqualTo(filePath);
@@ -110,7 +116,9 @@ public class LspServerSessionIntegrationTests
             await Assert.That(diagnostics[0].Message).IsEqualTo("fake error");
 
             // Go-to-definition normalizes back to a local path, 0-based.
-            LspLocation? location = await session.FindDefinitionAsync(filePath, 1, 0, CancellationToken.None);
+            Result<Maybe<LspLocation>> found = await session.FindDefinitionAsync(filePath, 1, 0);
+            await Assert.That(found.IsFailure).IsFalse();
+            LspLocation? location = found.Value.HasValue ? found.Value.Value : null;
             await Assert.That(location is not null).IsTrue();
             await Assert.That(location!.FilePath).IsEqualTo(filePath);
             await Assert.That(location.Line).IsEqualTo(4);
