@@ -1186,6 +1186,12 @@ jobs:
     # the artifacts the build job produced. The arm64 runner loads the
     # arm64 natives out of the same output directory, which is why the
     # slices carry both.
+    #
+    # ── MEASUREMENT CONFIG B (issue #1919, the two-pool dispatch study) ────
+    # The shards are SPLIT over the two pools: core + ui on the arm64 pool,
+    # platform + e2e on the x64 pool. Both queues then drain in parallel, so
+    # the wall time of the test phase is the slower of the two queues instead
+    # of the sum of one queue's four shards.
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     permissions:
@@ -1217,7 +1223,7 @@ jobs:
               Harbor.TestKit.Generators.Tests
               Harbor.TestKit.Tests
           - shard: platform
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04
             guard: true
             projects: >-
               Harbor.Tools.Builtin.Tests
@@ -1243,7 +1249,7 @@ jobs:
               Harbor.Terminal.Abstractions.Tests
               Harbor.App.Avalonia.Tests
           - shard: e2e
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04
             # Same guard as the three above, and it was OFF here with nothing
             # recorded next to it (#977). The counts made this free: e2e's five
             # projects measured 36 / 104 / 39 / 272 / 28 tests on run
