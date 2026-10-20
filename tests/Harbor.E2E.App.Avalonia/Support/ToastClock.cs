@@ -1,6 +1,4 @@
-using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels;
-using Harbor.Ui.Framework.Navigation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Harbor.E2E.App.Avalonia;
@@ -59,16 +57,14 @@ public static class ToastClock
     ///     provider is built.</param>
     public static void ApplyTo(IServiceCollection services)
     {
-        // The constructor is spelled out rather than delegated to
-        // ActivatorUtilities: the explicit form cannot silently bind the
-        // clock to a different parameter, and a change to the constructor
-        // breaks the build here instead of at run time.
-        services.AddSingleton<MainViewModel>(sp => new MainViewModel(
-            sp.GetRequiredService<IContentHost>(),
-            sp.GetRequiredService<ShellInfrastructure>(),
-            sp.GetRequiredService<CommandPaletteViewModel>(),
-            sp.GetRequiredService<ProjectFileTreeScanner>(),
-            sp.GetService<IOverlayStack>(),
-            Instance));
+        // ActivatorUtilities resolves every other constructor argument from
+        // the container and binds the explicit one (the manual clock) to the
+        // TimeProvider parameter. The explicit form of a factory call would
+        // spell the constructor out, but a GetRequiredService call inside a
+        // registration factory is DI015: the analyzer reads it as a
+        // dependency of the registered service and asks for it in the same
+        // collection.
+        services.AddSingleton<MainViewModel>(sp =>
+            ActivatorUtilities.CreateInstance<MainViewModel>(sp, Instance));
     }
 }
