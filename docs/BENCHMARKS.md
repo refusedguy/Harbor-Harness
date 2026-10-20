@@ -1234,27 +1234,57 @@ Two of the gates were not merely noisy but **measuring the harness**:
 | Test | Claim | Old gate | New gate | Measured (run 39423151864) |
 |---|---|---|---|---|
 | `ToolDispatcherToolContextScalingTests.ToolContextBuilds_CostPerToolCall_StaysWithinBudget` | allocation per tool call, over a FIXED 50 000 calls | ratio `alloc(2N)/alloc(N)` ≤ 3.0 (and `time(2N)/time(N)` ≤ 3.15) | **≤ 4 000 B per call** (machine-independent, HARD) | **2 382 B** per call (135 563 152 B over 569 dispatches of 100 calls) |
-| `ToolDispatcherToolContextScalingTests.ToolContextBuilds_CostPerToolCall_StaysWithinBudget` | time per tool call, in **probe units** — the cost of one call divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ratio, above | **≤ 12 probe units per call** (machine-scaled, SOFT) | **~2.2 probe units** per call — 0.828 µs/call against a probe that costs 0.000380 ms/unit |
+| `ToolDispatcherToolContextScalingTests.ToolContextBuilds_CostPerToolCall_StaysWithinBudget` | time per tool call, in **probe units** — the cost of one call divided by the cost of one unit of the fixed calibration probe measured on the same runner in the same run | ratio, above | **≤ 60 probe units per call** (machine-scaled, SOFT) | **~2.2 probe units** per call — 0.828 µs/call against a probe that costs 0.000380 ms/unit |
 | `ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget` | allocation per tool call, over a FIXED 25 000 calls | ratio ≤ 3.0 / 3.15 | **≤ 3 500 B per call** (HARD) | **2 079 B** per call (58 421 064 B over 281 dispatches of 100 calls) |
-| `ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget` | time per tool call, in probe units | ratio, above | **≤ 35 probe units per call** (SOFT) | **~6.4 probe units** per call — 2.44 µs/call |
+| `ToolDispatcherResolveOnceTests.ExecuteAsync_CostPerToolCall_StaysWithinBudget` | time per tool call, in probe units | ratio, above | **≤ 175 probe units per call** (SOFT) | **~6.4 probe units** per call — 2.44 µs/call |
 | `CachingSystemPromptBuilderKeyScalingTests.KeyCost_PerTurn_StaysWithinBudget` | allocation per turn's key computation, over a FIXED 1 000 turns at the LARGER context | ratio ≤ 3.0 / 3.15 | **≤ 1 536 B per turn** (HARD) | **984 B** per turn (2 954 192 B over 3 002 turns) — and the **same** number at twice the context size, which is the point: the key streams the context through one bounded buffer |
-| `CachingSystemPromptBuilderKeyScalingTests.KeyCost_PerTurn_StaysWithinBudget` | time per turn's key computation, in probe units | ratio, above | **≤ 600 probe units per turn** (SOFT) | **~171 probe units** per turn — 65.0 µs/turn at 65 536 chars |
+| `CachingSystemPromptBuilderKeyScalingTests.KeyCost_PerTurn_StaysWithinBudget` | time per turn's key computation, in probe units | ratio, above | **≤ 2 400 probe units per turn** (SOFT) | **~171 probe units** per turn — 65.0 µs/turn at 65 536 chars |
 | `TurnRunnerToolTableReuseTests.RunAsync_CostPerTurn_StaysWithinBudget` | allocation per text-only turn, over a FIXED 1 000 turns against a 200-tool registry | ratio ≤ 3.0 / 3.15 | **≤ 30 000 B per turn** (HARD) | **23 010 B** per turn (34 055 168 B over 1 480 turns) |
 | `TurnRunnerToolTableReuseTests.RunAsync_CostPerTurn_StaysWithinBudget` | time per text-only turn, in probe units | ratio, above | **≤ 600 probe units per turn** (SOFT) | **~205 probe units** per turn — 77.8 µs/turn |
 | `TurnRunnerUpdateCoalescingTests.PublishCost_PerDelta_StaysWithinBudget` | allocation per published delta, over a FIXED 1 000 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 92 B per delta** (HARD) | **72 B** per delta (147 649 968 B over 1 024 turns of 2 000 deltas) |
-| `TurnRunnerUpdateCoalescingTests.PublishCost_PerDelta_StaysWithinBudget` | time per published delta, in probe units | ratio, above | **≤ 0.6 probe units per delta** (SOFT) | **~0.116 probe units** per delta — 0.044 µs/delta |
+| `TurnRunnerUpdateCoalescingTests.PublishCost_PerDelta_StaysWithinBudget` | time per published delta, in probe units | ratio, above | **≤ 6 probe units per delta** (SOFT) | **~0.116 probe units** per delta — 0.044 µs/delta |
 | `ToolRegistryDescribeOnceTests.ResolveTools_CostPerResolve_StaysWithinBudget` | allocation per first-time filtered resolve, over a FIXED 100 000 resolves | ratio ≤ 3.0 / 3.15 | **≤ 1 500 B per resolve** (HARD) | **984 B** per resolve (98 400 000 B over 100 000 resolves) |
-| `ToolRegistryDescribeOnceTests.ResolveTools_CostPerResolve_StaysWithinBudget` | time per first-time filtered resolve, in probe units | ratio, above | **≤ 8 probe units per resolve** (SOFT) | **~1.7 probe units** per resolve — 0.645 µs/resolve |
+| `ToolRegistryDescribeOnceTests.ResolveTools_CostPerResolve_StaysWithinBudget` | time per first-time filtered resolve, in probe units | ratio, above | **≤ 40 probe units per resolve** (SOFT) | **~1.7 probe units** per resolve — 0.645 µs/resolve |
 | `JsonlMessagePayloadScalingTests.SerializeMessagePayload_CostPerMessage_StaysWithinBudget` | allocation per serialized message, over a FIXED 1 000 000 messages | ratio ≤ 3.0 / 3.15 | **≤ 220 B per message** (HARD) | **145 B** per message (49 788 976 B over 21 387 batches of 16) |
-| `JsonlMessagePayloadScalingTests.SerializeMessagePayload_CostPerMessage_StaysWithinBudget` | time per serialized message, in probe units | ratio, above | **≤ 0.6 probe units per message** (SOFT) | **~0.115 probe units** per message — 0.044 µs/message |
+| `JsonlMessagePayloadScalingTests.SerializeMessagePayload_CostPerMessage_StaysWithinBudget` | time per serialized message, in probe units | ratio, above | **≤ 6 probe units per message** (SOFT) | **~0.115 probe units** per message — 0.044 µs/message |
 | `SessionFileReaderScalingTests.ReadPath_CostPerRead_StaysWithinBudget` | allocation per full session-file read, over a FIXED 8 reads of a 4 000-message file | ratio ≤ 3.0 / 3.15 | **≤ 1 600 000 B per read** (HARD) | **1 275 659 B** per read (16 583 576 B over 13 reads) |
-| `SessionFileReaderScalingTests.ReadPath_CostPerRead_StaysWithinBudget` | time per full session-file read, in probe units | ratio, above | **≤ 60 000 probe units per read** (SOFT) | **~25 200 probe units** per read — 9.59 ms/read |
+| `SessionFileReaderScalingTests.ReadPath_CostPerRead_StaysWithinBudget` | time per full session-file read, in probe units | ratio, above | **≤ 300 000 probe units per read** (SOFT) | **~25 200 probe units** per read — 9.59 ms/read |
 | `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | allocation per painted frame, over a FIXED 400 paints of a 400-line region | ratio ≤ 3.15 (time only) | **≤ 0 B per frame** (HARD — the exact zero, the strongest shape a byte claim can take) | **0 B** per frame |
-| `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | time per painted frame, in probe units | ratio, above | **≤ 900 probe units per frame** (SOFT) | **~312 probe units** per frame |
+| `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | time per painted frame, in probe units | ratio, above | **≤ 4 500 probe units per frame** (SOFT) | **~312 probe units** per frame |
 | `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | allocation per tool-start/end pair, over a FIXED 4 000 pairs | ratio ≤ 3.0 — **the same measurement on both sides** | **≤ 16 000 B per pair** (HARD) | **11 959 B** per pair (208 151 840 B over 17 404 pairs) |
-| `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | time per tool-start/end pair, in probe units | ratio, above | **≤ 40 probe units per pair** (SOFT) | **~9.6 probe units** per pair — 3.64 µs/pair |
+| `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | time per tool-start/end pair, in probe units | ratio, above | **≤ 200 probe units per pair** (SOFT) | **~9.6 probe units** per pair — 3.64 µs/pair |
 | `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | allocation per scripted delta, over a FIXED 100 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 1 700 B per delta** (HARD) | **1 300 B** per delta (71 508 360 B over 55 drives of 1 000 deltas) |
-| `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | time per scripted delta, in probe units | ratio, above | **≤ 2.6 probe units per delta** (SOFT) | **~0.87 probe units** per delta — 0.331 µs/delta |
+| `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | time per scripted delta, in probe units | ratio, above | **≤ 13 probe units per delta** (SOFT) | **~0.87 probe units** per delta — 0.331 µs/delta |
+
+**The probe-unit currency is only as stable as the yardstick behind it, and
+that is a measured finding, not a caveat.** The probe's OWN measured cost moved
+**5.3x** between two CI runs of the SAME tree: **0.000380 ms/unit** in run
+39423151864 and **0.000072 ms/unit** in run 39436405496. The consequence is
+visible in the receipt: `TurnRunnerUpdateCoalescingTests` read **0.116 probe
+units per delta** in the first run and **1.27** in the second - an 11x move -
+while its BYTE branch read **72 B per delta in both**, to the byte. So the byte
+budgets above are the branch that can fail on any runner (they are exact, and
+they are what caught the quadratic shapes), and the probe-unit budgets are the
+gross-regression detector, sized with an order-of-magnitude envelope rather
+than the 2-4x the house's earlier gates carried. Making the yardstick itself
+stable - a probe that is always measured in the same JIT tier, and a
+process-wide minimum over samples instead of a median - is the follow-up, and
+it has to retune the two gates that already ride the helper
+(`SqliteAppendCostGate`, `ProjectHistoryScalingGates`), so it is its own
+change.
+
+**The wall time, measured.** Same shard, same test counts, the CI run before the
+conversion (39423151864) and the CI run after it (39440551458) — the suite
+durations are the job log's own "Test run summary: … duration" line:
+
+| Suite | Before | After |
+|---|---|---|
+| `Harbor.Abstractions.Tests` (257 tests) | 18.542 s | **3.495 s** — the `MatchesPatternScalingGates` leg-length fix |
+| `Harbor.Application.Tests` (578 tests) | 12.009 s | **6.772 s** |
+| `Harbor.Storage.Jsonl.Tests` | 7.499 s | **4.857 s** |
+| `Harbor.Ui.Framework.Tests` | 6.840 s | **5.865 s** |
+| `Harbor.Registries.Tests` | 2.648 s | **2.179 s** |
+| `Harbor.Tui.CellForge.Tests` | 8.472 s | 8.863 s |
 
 **The leg length is FIXED now, and that is where the wall time went.** The
 shared helper's leg SCALER raised the unit count until a leg lasted ~100 ms, so
