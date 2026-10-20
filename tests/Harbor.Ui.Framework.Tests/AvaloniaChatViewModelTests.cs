@@ -3,75 +3,38 @@ using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Harbor.Ui.Framework.ViewModels;
-using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
-///     Testable <see cref="StoreSubscriberViewModel" /> that tracks
-///     <see cref="StoreSubscriberViewModel.OnStoreChanged" /> and
-///     <see cref="StoreSubscriberViewModel.OnAfterSelectorsApplied" /> calls
-///     for assertions.
-/// </summary>
-public sealed class TestableHookTrackingViewModel : StoreSubscriberViewModel
-{
-    public TestableHookTrackingViewModel()
-        : base(new TestDispatcherAdapter(), NullLogger.Instance)
-    {
-    }
-
-    public List<UiState> OnStoreChangedStates { get; } = new();
-    public List<UiState> OnAfterSelectorsAppliedStates { get; } = new();
-    public int OnStoreChangedCount { get; private set; }
-    public int OnAfterSelectorsAppliedCount { get; private set; }
-
-    protected override void OnStoreChanged(UiState state)
-    {
-        OnStoreChangedCount++;
-        OnStoreChangedStates.Add(state);
-    }
-
-    protected override void OnAfterSelectorsApplied(UiState state)
-    {
-        OnAfterSelectorsAppliedCount++;
-        OnAfterSelectorsAppliedStates.Add(state);
-    }
-
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
-    }
-}
-
-/// <summary>
 ///     Records the exact invocation order of
 ///     <see cref="StoreSubscriberViewModel.OnStoreChanged" /> and
 ///     <see cref="StoreSubscriberViewModel.OnAfterSelectorsApplied" />.
 /// </summary>
-public sealed class TrackingOrderViewModel : StoreSubscriberViewModel
+/// <remarks>
+///     The counting base this used to carry its own copy of —
+///     <c>TestableHookTrackingViewModel</c> — moved to
+///     <c>Harbor.TestKit</c> in #1549 as
+///     <see cref="CountingStoreSubscriberStub" />; the two doubles below are
+///     the test-specific specialisations of it that stayed here.
+/// </remarks>
+public sealed class TrackingOrderViewModel : CountingStoreSubscriberStub
 {
     public List<string> CallOrder { get; } = new();
-
-    public TrackingOrderViewModel()
-        : base(new TestDispatcherAdapter(), NullLogger.Instance)
-    {
-    }
 
     protected override void OnStoreChanged(UiState state)
     {
         CallOrder.Add("OnStoreChanged");
+        base.OnStoreChanged(state);
     }
 
     protected override void OnAfterSelectorsApplied(UiState state)
     {
         CallOrder.Add("OnAfterSelectorsApplied");
-    }
-
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
+        base.OnAfterSelectorsApplied(state);
     }
 }
 
@@ -79,34 +42,26 @@ public sealed class TrackingOrderViewModel : StoreSubscriberViewModel
 ///     Applies selectors inside <see cref="OnStoreChanged" /> then tracks
 ///     whether <see cref="OnAfterSelectorsApplied" /> runs afterwards.
 /// </summary>
-public sealed class SelectorTrackingViewModel : StoreSubscriberViewModel
+public sealed class SelectorTrackingViewModel : CountingStoreSubscriberStub
 {
     public bool SelectorApplied { get; private set; }
     public bool AfterHookCalled { get; private set; }
 
-    public SelectorTrackingViewModel()
-        : base(new TestDispatcherAdapter(), NullLogger.Instance)
-    {
-    }
-
     protected override void OnStoreChanged(UiState state)
     {
         ApplySelectors(state);
+        base.OnStoreChanged(state);
     }
 
     protected override void OnAfterSelectorsApplied(UiState state)
     {
         AfterHookCalled = true;
+        base.OnAfterSelectorsApplied(state);
     }
 
     public void RegisterStatusSelector()
     {
         Select(state => state.Chat.Status, v => SelectorApplied = true);
-    }
-
-    public void SimulateStateChange(UiState state)
-    {
-        ((TestDispatcherAdapter)Dispatcher).Raise(state);
     }
 }
 
@@ -120,7 +75,7 @@ public class AvaloniaChatViewModelHookTests
     [Test]
     public async Task OnAfterSelectorsApplied_IsCalled_WhenStateChanges()
     {
-        var vm = new TestableHookTrackingViewModel();
+        var vm = new CountingStoreSubscriberStub();
         var state = new UiState
         {
             Chat = ChatDomainState.Empty with
@@ -137,7 +92,7 @@ public class AvaloniaChatViewModelHookTests
     [Test]
     public async Task OnAfterSelectorsApplied_ReceivesCorrectState()
     {
-        var vm = new TestableHookTrackingViewModel();
+        var vm = new CountingStoreSubscriberStub();
         var state = new UiState
         {
             Chat = ChatDomainState.Empty with
@@ -180,7 +135,7 @@ public class AvaloniaChatViewModelHookTests
     [Test]
     public async Task OnAfterSelectorsApplied_CalledOnEveryStateChange()
     {
-        var vm = new TestableHookTrackingViewModel();
+        var vm = new CountingStoreSubscriberStub();
 
         vm.SimulateStateChange(new UiState
         {

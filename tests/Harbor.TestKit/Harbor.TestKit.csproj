@@ -14,10 +14,23 @@
     <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
     <ProjectReference Include="../../src/Harbor.Application/Harbor.Application.csproj"/>
     <ProjectReference Include="../../src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj"/>
+    <!--
+      #1549: the shared UI test doubles (TestDispatcherAdapter + the counting
+      view-model stubs) live here. They need the Ui.Framework family
+      (IDispatcherAdapter / UiState / StoreSubscriberViewModel) and the desktop
+      view-model bases (ChatViewModelBase / DiffViewModelBase). Every one of
+      these is already inside the closure of the test projects that consume
+      this library, so the reference adds no new product assembly anywhere.
+    -->
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CSharpFunctionalExtensions"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="TUnit"/>
     <PackageReference Include="TUnit.Assertions"/>
   </ItemGroup>

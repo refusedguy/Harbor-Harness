@@ -1,8 +1,7 @@
 using Harbor.Desktop.Abstractions.ViewModels;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
-using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Immutable;
 using TUnit.Assertions;
@@ -11,66 +10,22 @@ using TUnit.Assertions.Extensions;
 namespace Harbor.Ui.Framework.Tests;
 
 /// <summary>
-///     Test double for <see cref="IDispatcherAdapter" /> — no-ops so tests stay synchronous.
-/// </summary>
-internal sealed class TestDispatcherAdapter : IDispatcherAdapter
-{
-    public event EventHandler<UiState>? StateChanged;
-
-    public void Raise(UiState state) => StateChanged?.Invoke(this, state);
-
-    public void Post(Action action) => action();
-
-    public T Invoke<T>(Func<T> func) => func();
-
-    public void Bind(UiStore store)
-    {
-    }
-
-    public void Unbind(UiStore store)
-    {
-    }
-}
-
-/// <summary>
-///     Concrete <see cref="ChatViewModelBase" /> exposing protected members for testing.
-/// </summary>
-public class TestChatViewModel : ChatViewModelBase
-{
-    public TestChatViewModel(IDispatcherAdapter dispatcher, ILogger logger)
-        : base(dispatcher, logger)
-    {
-    }
-
-    public int OnStoreChangedCallCount { get; private set; }
-
-    public new void ApplySelectors(UiState state) => base.ApplySelectors(state);
-
-    protected override void OnStoreChanged(UiState state)
-    {
-        OnStoreChangedCallCount++;
-        base.OnStoreChanged(state);
-    }
-
-    public void TriggerStoreChanged(UiState state) => OnStoreChanged(state);
-
-    public void RegisterSelector<T>(
-        Func<UiState, T> read,
-        Action<T> apply,
-        IEqualityComparer<T>? cmp = null)
-        => Select(read, apply, cmp);
-}
-
-/// <summary>
 ///     Tests for <see cref="ChatViewModelBase" /> selector projections.
 /// </summary>
+/// <remarks>
+///     The double this file used to carry — a <c>TestChatViewModel</c> with an
+///     <c>OnStoreChangedCallCount</c> — and the <c>TestDispatcherAdapter</c>
+///     five files shared, both moved to <c>Harbor.TestKit</c> in #1549:
+///     <see cref="CountingChatViewModelStub" /> and
+///     <see cref="TestDispatcherAdapter" />.
+/// </remarks>
 public class ChatViewModelBaseTests
 {
     [Test]
     public async Task Constructor_DeclaresExpectedSelectors()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         var state = new UiState
         {
@@ -100,7 +55,7 @@ public class ChatViewModelBaseTests
     public async Task ApplySelectors_UpdatesProperties_WhenStateChanges()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         vm.ApplySelectors(new UiState
         {
@@ -129,7 +84,7 @@ public class ChatViewModelBaseTests
     public async Task DistinctUntilChanged_SkipsDuplicateValues()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         int applyCount = 0;
         vm.RegisterSelector(s => s.Chat.IsStreaming, v => applyCount++);
@@ -156,7 +111,7 @@ public class ChatViewModelBaseTests
     public async Task DistinctUntilChanged_AppliesOnChangedValue()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         int applyCount = 0;
         bool lastValue = false;
@@ -196,7 +151,7 @@ public class ChatViewModelBaseTests
     public async Task OnStoreChanged_CallsApplySelectors()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         var state = new UiState
         {
@@ -224,7 +179,7 @@ public class ChatViewModelBaseTests
     public async Task StateChanged_Event_TriggersSelectors()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         var state = new UiState
         {
@@ -244,7 +199,7 @@ public class ChatViewModelBaseTests
     public async Task Selectors_ProjectDerivedValues()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         vm.ApplySelectors(new UiState
         {
@@ -284,7 +239,7 @@ public class ChatViewModelBaseTests
     public async Task StreamingBuffer_UsesTextBufferOrEmpty()
     {
         var dispatcher = new TestDispatcherAdapter();
-        var vm = new TestChatViewModel(dispatcher, NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(dispatcher, NullLogger.Instance);
 
         vm.ApplySelectors(new UiState
         {

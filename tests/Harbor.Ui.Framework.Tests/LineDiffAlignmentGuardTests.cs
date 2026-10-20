@@ -1,9 +1,8 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Models;
 using Harbor.Desktop.Abstractions.ViewModels;
-using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.State;
-using Microsoft.Extensions.Logging;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -148,8 +147,8 @@ public class LineDiffAlignmentGuardTests
                              + "+++ and that is fine\n"
                              + "@@ not a hunk header @@";
 
-        var vm = new TestDiffViewModel(new TestDispatcherAdapter(), NullLogger.Instance);
-        vm.Push(ChatState(ToolResultLine(prose)));
+        var vm = new DiffViewModelTestStub();
+        vm.TriggerStoreChanged(ChatState(ToolResultLine(prose)));
 
         await Assert.That(vm.ModifiedText).IsEmpty()
             .Because("a tool result that merely mentions diff characters is not a diff");
@@ -168,8 +167,8 @@ public class LineDiffAlignmentGuardTests
                               + "+ INSERTED\n"
                               + "  charlie";
 
-        var vm = new TestDiffViewModel(new TestDispatcherAdapter(), NullLogger.Instance);
-        vm.Push(ChatState(ToolResultLine(output)));
+        var vm = new DiffViewModelTestStub();
+        vm.TriggerStoreChanged(ChatState(ToolResultLine(output)));
 
         await Assert.That(vm.ModifiedText).Contains("+ INSERTED");
         await Assert.That(vm.ModifiedText).Contains("  charlie");
@@ -185,8 +184,8 @@ public class LineDiffAlignmentGuardTests
                                + "+using System.Text;\n"
                                + " public sealed class App;";
 
-        var vm = new TestDiffViewModel(new TestDispatcherAdapter(), NullLogger.Instance);
-        vm.Push(ChatState(ToolResultLine(unified)));
+        var vm = new DiffViewModelTestStub();
+        vm.TriggerStoreChanged(ChatState(ToolResultLine(unified)));
 
         await Assert.That(vm.FilePath).IsEqualTo("src/app.cs")
             .Because("a file path is a path — the 'a/' and 'b/' prefixes are the diff's, not the file's, and the rest of the output is not a path at all");
@@ -199,18 +198,4 @@ public class LineDiffAlignmentGuardTests
 
     private static UiState ChatState(ChatLine line) =>
         new() { Chat = ChatDomainState.Empty with { Lines = ImmutableArray.Create(line) } };
-
-    /// <summary>
-    ///     Concrete <see cref="DiffViewModelBase" />: the abstract base has no
-    ///     in-repo subclass, so the store feed is driven through a test double.
-    /// </summary>
-    private sealed class TestDiffViewModel : DiffViewModelBase
-    {
-        public TestDiffViewModel(IDispatcherAdapter dispatcher, ILogger logger)
-            : base(dispatcher, logger)
-        {
-        }
-
-        public void Push(UiState state) => OnStoreChanged(state);
-    }
 }

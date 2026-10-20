@@ -4,6 +4,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Desktop.Abstractions.ViewModels;
 using Harbor.Ui.Framework.State;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -61,9 +62,9 @@ public class ToolCallStructureReachesUiTests
     }
 
     /// <summary>Runs a state through the desktop chat view-model's projection.</summary>
-    private static TestChatViewModel Project(UiState state)
+    private static CountingChatViewModelStub Project(UiState state)
     {
-        var vm = new TestChatViewModel(new TestDispatcherAdapter(), NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(new TestDispatcherAdapter(), NullLogger.Instance);
         vm.TriggerStoreChanged(state);
         return vm;
     }
@@ -81,7 +82,7 @@ public class ToolCallStructureReachesUiTests
     [Test]
     public async Task DiffPayload_ReachesTheToolCard()
     {
-        TestChatViewModel vm = Project(Reduce(EditStarted()));
+        CountingChatViewModelStub vm = Project(Reduce(EditStarted()));
 
         await Assert.That(vm.ToolCalls.Count).IsEqualTo(1);
 
@@ -237,7 +238,7 @@ public class ToolCallStructureReachesUiTests
     [Test]
     public async Task Reconcile_ReusesCardInstances()
     {
-        var vm = new TestChatViewModel(new TestDispatcherAdapter(), NullLogger.Instance);
+        var vm = new CountingChatViewModelStub(new TestDispatcherAdapter(), NullLogger.Instance);
 
         vm.TriggerStoreChanged(Reduce(EditStarted()));
         Harbor.Ui.Framework.ViewModels.ToolCallViewModel first = vm.ToolCalls[0];
