@@ -53,9 +53,14 @@ public class LspSessionBoundedWaitTests
 
     [Test]
     [Timeout(30_000)]
-    [SkipUnlessPython3]
     public async Task StalledServer_Lookup_Fails_Instead_Of_Hanging()
     {
+        // The fake server is a python3 script, so the whole test needs python3
+        // on PATH. TUnit's Skip.Unless marks the test skipped, with the reason.
+        Skip.Unless(
+            TestPaths.FindOnPath("python3") is not null,
+            "python3 is not on PATH — fake LSP server cannot run.");
+
         string scriptPath = Harbor.TestKit.TestTempDirs.NewFilePath("harbor-stalled-lsp", ".py");
         string workspace = Harbor.TestKit.TestTempDirs.NewDirectory("harbor-stalled-lsp-ws");
         Directory.CreateDirectory(workspace);
