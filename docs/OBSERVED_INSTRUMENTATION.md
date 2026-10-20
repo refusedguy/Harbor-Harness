@@ -223,9 +223,10 @@ These are non-goals, not omissions. Each of them is a place where instrumentatio
 would change the thing it measures, or where the mechanism does not apply.
 
 - **The agent-loop hot path.** The turn runner publishes a `MessageUpdateEvent`
-  per token; instrumenting that means measuring the measurer. The granularity
-  there is the *turn*, not the delta — `agent.turn` already exists, and it stays
-  the unit.
+  per streamed *batch* of deltas (#1527 coalesced the per-token publish into
+  batches; before that it was one per token); instrumenting that means measuring
+  the measurer. The granularity there is the *turn*, not the delta — `agent.turn`
+  already exists, and it stays the unit.
 - **Per-frame and per-event paths.** The CellForge render path and the event-bus
   publish path are not instrumented per frame or per event; they are measured
   in aggregate.

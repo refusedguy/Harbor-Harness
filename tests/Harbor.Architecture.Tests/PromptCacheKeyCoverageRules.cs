@@ -46,7 +46,7 @@
 // The product has exactly one `ISystemPromptBuilder` implementation
 // (`SystemPromptBuilder`), exactly one decorator (`CachingSystemPromptBuilder`),
 // and exactly one site that wraps one in the other
-// (`src/Harbor.AgentRuntime/Agents/AgentLoop.cs:135`). So
+// (`src/Harbor.AgentRuntime/Agents/AgentLoop.cs:141`). So
 // grading this PAIR is not grading a sample. If a second implementation ever
 // appears, this file stops being a coverage claim and must be widened — the
 // non-vacuity check below fails first, because the canonical files stop being

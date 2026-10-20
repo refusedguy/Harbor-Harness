@@ -1165,6 +1165,37 @@ byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
 > `test (platform)` job log on every run — cite THAT run's values when filling
 > the Measured column, never the local absolute milliseconds.
 
+### Per-delta update coalescing (#1527) — **RELATIVE**, CI merge gate ⏳ first run pending
+
+`Harbor.Application.Tests.TurnRunnerUpdateCoalescingTests`, in the `test (core)` merge-gate shard.
+
+Same relative convention as #410 / #1528 / #1531: N against 2N inside one run, no
+absolute budgets, measured through the shared `Harbor.TestKit.TestScalingGate`
+(#1652 — GC-fenced legs scaled toward ~100 ms of real work, medians over five
+rounds, x1.05 noise band on the time branch only).
+
+**Before (per streamed delta, structural):** the turn runner published one
+`MessageUpdateEvent` per delta — one record allocation plus one
+`IEventBus.PublishAsync` round-trip (a subscriber snapshot, an awaited fan-out,
+a scrollback append) for every token of every turn, on a path whose consumers
+redraw at frame rate. **After:** `UpdateCoalescer` buffers the deltas of a run
+and publishes them as one merged delta under the `UpdateFlushPolicy` (32 deltas
+/ 4096 characters / 100 ms). The merge is lossless: the published deltas,
+concatenated, are exactly the streamed deltas, and the last delta of a turn is
+published before the turn's end event.
+
+| Test | Relative claim | Gate | Measured |
+|---|---|---|---|
+| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | time over 1000 → 2000 deltas in one turn — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; a merge that re-copies the accumulated text per delta is O(N²) ≈ 4.0) | ⏳ not yet measured |
+| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | allocations over the same turns — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | ⏳ not yet measured |
+| `PublishCost_BatchedPublishes_AllocateLessThanPerDeltaPublishes` | the before/after itself: the same 2000 deltas published one by one (`UpdateFlushPolicy.PerDelta` — the pre-#1527 path) and in batches, 20 turns each | batched allocates strictly less than per-delta | ⏳ not yet measured |
+
+> The `[scaling] turnrunner-update-coalescing-scaling: ...` report line prints
+> into the `test (core)` job log on every run — cite THAT run's values when
+> filling the Measured column, never the local absolute milliseconds. The
+> before/after pair prints as `[coalescing] <deltas> deltas x <units> units —
+> per-delta: … ; batched: …`.
+
 ### Tool-context callback closures (#1529) — **RELATIVE**, CI merge gate ✅ measured
 
 `Harbor.Application.Tests.ToolDispatcherToolContextScalingTests`, in the `test (core)` merge-gate shard.

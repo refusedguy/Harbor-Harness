@@ -124,7 +124,13 @@ public sealed class AgentLoop : IAgentLoop
         // direct-construction caller keeps compiling unchanged; null keeps the
         // default forwarder. Forwarded to the compaction behavior and the
         // turn runner below.
-        ICompactionView? compactionView = null)
+        ICompactionView? compactionView = null,
+        // #1527: the flush policy of the per-delta update coalescer. Optional
+        // so every direct-construction caller keeps compiling unchanged; null
+        // keeps the shipped default (UpdateFlushPolicy.Default — the numbers
+        // are stated in ONE place so the docs, the tests and the runtime
+        // cannot drift). Forwarded to the turn runner below.
+        UpdateFlushPolicy? updateFlushPolicy = null)
     {
         _providers = providers;
         _tools = tools;
@@ -181,7 +187,8 @@ public sealed class AgentLoop : IAgentLoop
         _turnRunner = new TurnRunner(
             providers, tools, _promptBuilder, messageConverter, eventBus, logger,
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
-            _compactionBehavior, _steering, _backgroundDrain, view);
+            _compactionBehavior, _steering, _backgroundDrain, view,
+            updateFlushPolicy, _clock);
     }
 
     /// <summary>

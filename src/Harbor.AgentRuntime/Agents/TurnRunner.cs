@@ -39,6 +39,15 @@ internal sealed record TurnStepResult(
 /// </summary>
 /// <remarks>
 ///     Shares the loop's logger so log categories stay identical to pre-extraction.
+///     <para>
+///         <b>#1527:</b> the per-delta <see cref="MessageUpdateEvent" />
+///         publishes are coalesced by <see cref="UpdateCoalescer" /> into
+///         batched updates, under the <see cref="UpdateFlushPolicy" /> the
+///         loop hands down. The batch is flushed before every event that
+///         follows it and once more before the turn's end event, so the last
+///         delta of a turn is always published and the published order is the
+///         order of the deltas.
+///     </para>
 /// </remarks>
 internal sealed class TurnRunner(
     IProviderRegistry providers,
@@ -55,7 +64,13 @@ internal sealed class TurnRunner(
     CompactionBehavior compactionBehavior,
     SteeringDrainBehavior steering,
     BackgroundDrain backgroundDrain,
-    ICompactionView? compactionView = null)
+    ICompactionView? compactionView = null,
+    // #1527: the flush policy of the per-delta update coalescer, and the
+    // clock its interval bound is measured on. Both optional so every
+    // direct-construction caller keeps compiling unchanged; null keeps the
+    // shipped default (see UpdateFlushPolicy.Default).
+    UpdateFlushPolicy? updateFlushPolicy = null,
+    TimeProvider? clock = null)
 {
     // C7: bounded retry budget for the LLM streaming call site only.
     // #270: 429s draw from a separate minutes-scale budget (10 attempts from a
@@ -84,6 +99,12 @@ internal sealed class TurnRunner(
     // #1612: the history-shaping seam — truncation and the compacted view run
     // through this contract, never through the CompactionPolicy statics directly.
     private readonly ICompactionView _compactionView = compactionView ?? CompactionView.Instance;
+
+    // #1527: the coalescer's flush policy and clock. Null keeps the shipped
+    // default — the policy is stated in ONE place (UpdateFlushPolicy.Default)
+    // so the numbers in the docs, the tests and the runtime cannot drift.
+    private readonly UpdateFlushPolicy _updateFlushPolicy = updateFlushPolicy ?? UpdateFlushPolicy.Default;
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
     /// <summary>
     ///     Resolve the provider id, LLM client and concrete model for a run.
@@ -436,6 +457,14 @@ internal sealed class TurnRunner(
 
         using var coalescer = new StreamingCoalescer();
 
+        // #1527: the per-delta MessageUpdateEvent publishes are coalesced into
+        // batched updates. The coalescer owns the pending batch; the turn
+        // runner flushes it at every boundary (a change of delta kind, a
+        // tool-call event, the step finish, a stream error) and once more
+        // before MessageEndEvent — the tail guarantee: the last delta of a
+        // turn is ALWAYS published, never dropped.
+        using var updates = new UpdateCoalescer(eventBus, _updateFlushPolicy, _clock);
+
         // #1104: the output-size break below stops READING while the
         // provider pump keeps WRITING. The linked source lets this consumer
         // kill its producer on early break; everything past the loop keeps
@@ -460,7 +489,9 @@ internal sealed class TurnRunner(
                         // Flush any pending thinking before starting/continuing a text run.
                         partial = FlushThinking(coalescer, partial);
                         coalescer.AppendTextDelta(td.Delta);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
+                        // #1527: the delta is BUFFERED, not published — the
+                        // coalescer decides when the batch goes out.
+                        await updates.AppendTextAsync(td, partial, ct).ConfigureAwait(false);
                         budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(td.Delta));
                         break;
 
@@ -468,11 +499,16 @@ internal sealed class TurnRunner(
                         // Flush any pending text before starting/continuing a thinking run.
                         partial = FlushText(coalescer, partial);
                         coalescer.AppendThinkingDelta(thd.Delta);
-                        await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
+                        // #1527: buffered, like the text delta.
+                        await updates.AppendThinkingAsync(thd, partial, ct).ConfigureAwait(false);
                         budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(thd.Delta));
                         break;
 
                     case ToolCallStartEvent tcs:
+                        // #1527: the pending batch goes out BEFORE the
+                        // tool-call event, so the published order is the order
+                        // of the deltas.
+                        await updates.FlushAsync(ct).ConfigureAwait(false);
                         partial = FlushAll(coalescer, partial);
                         coalescer.StartToolCall(tcs.Id, tcs.ToolName);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
@@ -483,6 +519,10 @@ internal sealed class TurnRunner(
                         {
                             TurnRunnerLog.ToolCallDelta(logger, tcd.Id, tcd.ArgsDelta);
                         }
+                        // #1527: a tool-call fragment is never merged (its id
+                        // could belong to another call), but the pending text
+                        // batch still goes out first.
+                        await updates.FlushAsync(ct).ConfigureAwait(false);
                         coalescer.AppendToolCallDelta(tcd.Id, tcd.ArgsDelta);
                         await PublishUpdateAsync(evt, partial, ct).ConfigureAwait(false);
                         budget?.RecordOutputBytes(Encoding.UTF8.GetByteCount(tcd.ArgsDelta));
@@ -490,7 +530,7 @@ internal sealed class TurnRunner(
 
                     case StepFinishEvent sf:
                     {
-                        StepOutcome outcome = await FinalizeStepAsync(sf, coalescer, partial, malformedCalls, ct).ConfigureAwait(false);
+                        StepOutcome outcome = await FinalizeStepAsync(sf, coalescer, updates, partial, malformedCalls, ct).ConfigureAwait(false);
                         partial = outcome.Partial;
                         toolCalls.AddRange(outcome.MaterializedCalls);
                         finalUsage = outcome.FinalUsage;
@@ -499,6 +539,10 @@ internal sealed class TurnRunner(
                     }
 
                     case ErrorEvent err:
+                        // #1527: the pending batch goes out BEFORE the error
+                        // path, so the text streamed so far is not lost with
+                        // the turn.
+                        await updates.FlushAsync(ct).ConfigureAwait(false);
                         // Flush buffered deltas into the partial and report it
                         // before propagating (#270): on budget exhaustion the
                         // turn degrades with this output instead of losing it.
@@ -549,6 +593,17 @@ internal sealed class TurnRunner(
             toolCalls.Clear();
             malformedCalls.Clear();
         }
+        finally
+        {
+            // #1527 — THE TAIL GUARANTEE. Whatever the flush policy decided,
+            // the last delta of the turn is published here, BEFORE the turn's
+            // end event: a buffered delta is never dropped, and the end event
+            // never overtakes the text it closes. The abort path above lands
+            // here too, and so does a stream that threw — a delta the
+            // provider already sent is published whether or not the turn
+            // finished.
+            await updates.FlushAsync(ct).ConfigureAwait(false);
+        }
 
         partial = AppendMalformedPlaceholders(partial, malformedCalls);
 
@@ -581,7 +636,12 @@ internal sealed class TurnRunner(
     private static AssistantMessage FlushAll(StreamingCoalescer coalescer, AssistantMessage partial) =>
         MessageFlush.FlushAll(coalescer, partial);
 
-    /// <summary>Publish one MessageUpdateEvent for a coalesced stream delta.</summary>
+    /// <summary>
+    ///     Publish one MessageUpdateEvent for a stream event that is NOT a
+    ///     mergeable delta (#1527): a tool-call start, a tool-call fragment,
+    ///     the step finish. The pending delta batch is flushed before each of
+    ///     them, so the published order stays the order of the stream.
+    /// </summary>
     private Task PublishUpdateAsync(LlmEvent evt, AssistantMessage partial, CancellationToken ct) =>
         eventBus.PublishAsync(new MessageUpdateEvent(evt, partial), ct);
 
@@ -594,10 +654,16 @@ internal sealed class TurnRunner(
     private async Task<StepOutcome> FinalizeStepAsync(
         StepFinishEvent sf,
         StreamingCoalescer coalescer,
+        UpdateCoalescer updates,
         AssistantMessage partial,
         List<MalformedToolCall> malformedCalls,
         CancellationToken ct)
     {
+        // #1527: the pending batch goes out BEFORE the step finish — the
+        // finish carries the usage, the batch carries the text, and the text
+        // must not arrive after the event that closes it.
+        await updates.FlushAsync(ct).ConfigureAwait(false);
+
         partial = FlushAll(coalescer, partial);
 
         var materializedCalls = coalescer.MaterializeToolCalls(malformedCalls);
