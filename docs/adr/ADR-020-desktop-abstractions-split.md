@@ -53,6 +53,14 @@ bound from it) and `Harbor.Ui.Framework` (an empty meta-assembly; the five
 as vestigial edges in `EnforcerIntegrityTests` with the instruction *"Remove the
 reference; see issue #543 / #542"*.
 
+"Dead" means dead **in IL**, and that distinction cost one build to learn:
+`Harbor.Terminal.Abstractions` bound no type from this assembly, but it was
+load-bearing **transitively**, because `tests/Harbor.TestKit` reached
+`Harbor.Terminal.Abstractions.Renderers` through it. The split made the leaf a
+two-assembly closure, and `Harbor.TestKit` stopped compiling until it declared
+the reference it had been leaning on. The reference is now explicit there, with
+the reason in the csproj.
+
 ### The split the seam actually draws
 
 The 46 public types divide by their dependency, not by taste:
@@ -202,6 +210,9 @@ directly is what makes the closure 2 rather than 3.
 - `Harbor.TestKit` and `Harbor.Ui.Framework.Tests` reference the hub instead
   of the leaf. The TestKit closure is the same size as before the split (the
   `#188` edge moved with the view-models), and the csproj comments say so.
+- `Harbor.TestKit` gained an explicit `Harbor.Terminal.Abstractions` reference.
+  It had been reaching that assembly through the leaf, which is the one place
+  where the leaf's "dead" reference turned out to be load-bearing.
 - The Avalonia app references both halves; the CLI, `Harbor.Hosting` and
   `Harbor.Desktop.Shared` reference the leaf only.
 

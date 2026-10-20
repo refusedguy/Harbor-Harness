@@ -38,9 +38,10 @@
 
       #1899 renamed that one reference: the two view-model bases moved out of
       Harbor.Desktop.Abstractions (which is now the config-schema leaf) into
-      Harbor.Desktop.ViewModels. The closure is the same size — the leaf the
-      bases used to sit in was the thing that dragged Harbor.Application in,
-      and the assembly that replaced it carries the same #188 edge.
+      Harbor.Desktop.ViewModels. The #188 edge moved with them, so the
+      assembly that drags Harbor.Application in is the one the bases live in
+      now — and since #1889 that assembly is reached from the sibling
+      `Harbor.TestKit.Tui`, not from this core.
     -->
     <!--
       #1889: the four UI references are GONE, and with them the closure
