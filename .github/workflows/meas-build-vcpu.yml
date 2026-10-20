@@ -126,6 +126,22 @@ jobs:
             cmd: >-
               dotnet build Harbor.slnx -c Release --no-restore
               -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+          # ── arm D: the lever, if the compiler server is what serializes ──
+          #    the compiles. UseSharedCompilation=false gives every Csc task
+          #    its own compiler process, so the MSBuild node count becomes the
+          #    real concurrency limit. If D is much faster than A, the build
+          #    IS core-bound and the cores are being thrown away by the
+          #    shared compiler server — which is a lever, not a split.
+          - label: d-nosharedcompiler-r1
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -p:UseSharedCompilation=false -v:m -clp:PerformanceSummary
+          - label: d-nosharedcompiler-r2
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -p:UseSharedCompilation=false -v:m -clp:PerformanceSummary
     steps:
       - uses: actions/checkout@v7
         with:

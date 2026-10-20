@@ -88,6 +88,27 @@ def main() -> int:
         statistics.median(baseline_windows) if baseline_windows else None
     )
 
+    # Runner-speed proxy. The architecture gate is the SAME single-process
+    # workload in every arm (one Exec task running the architecture test
+    # suite), so its duration says how fast the machine that ran the build
+    # was. Dividing a run's wall by its own gate duration (relative to the
+    # baseline arm's median gate) removes the runner-speed difference — which
+    # on shared runners is worth up to 2x, and would otherwise be read as a
+    # difference between the arms.
+    gates = [
+        d.get("tasks", {}).get("Exec", {}).get("total_ms", 0) or 0
+        for d in arms.get(args.baseline, [])
+    ]
+    gates = [g for g in gates if g]
+    baseline_gate_median = statistics.median(gates) if gates else None
+
+    def normalized_wall(data: dict) -> float | None:
+        wall = data.get("wall_seconds")
+        gate = data.get("tasks", {}).get("Exec", {}).get("total_ms", 0) or 0
+        if not wall or not gate or not baseline_gate_median:
+            return None
+        return wall * (baseline_gate_median / gate)
+
     print(
         f"{'arm':<12} {'n':>2} {'wall (s)':<30} {'avg cores':>10} {'max cores':>10} "
         f"{'Csc (s)':>9} {'Csc n':>6} {'gate (s)':>9} {'wall ratio':>30} {'window ratio':>30}"
@@ -120,6 +141,15 @@ def main() -> int:
             f"{(fmt_range(ratios) if ratios else 'n/a'):>30} "
             f"{(fmt_range(window_ratios) if window_ratios else 'n/a'):>30}"
         )
+        normalized = [
+            w for w in (normalized_wall(d) for d in data) if w is not None
+        ]
+        if normalized and baseline_median:
+            norm_ratios = [w / baseline_median for w in normalized]
+            print(
+                f"{'':<12} {'':>2} speed-normalized wall ratio: "
+                f"{fmt_range(norm_ratios)}"
+            )
 
     print()
     for label, data in sorted(runs.items()):
