@@ -262,12 +262,12 @@ public class FullLayerMatrixTests
         [
             new DocumentedException(
                 "Harbor.Terminal.Abstractions",
-                "ITuiPlugin is TUI vocabulary; the registrar registers TUI plugins.",
-                ["PluginRegistrar.cs"]),
+                "ITuiPlugin is TUI vocabulary; the registrar registers TUI plugins, and the #1758 recorder forwards the same doors.",
+                ["PluginRegistrar.cs", "RecordingPluginLoadHost.cs"]),
             new DocumentedException(
                 "Harbor.Ui.Framework.State",
-                "Registered TUI plugins carry view-model/state payloads.",
-                ["PanelRegistryPluginAdapter.cs", "PluginRegistrar.cs"]),
+                "Registered TUI plugins carry view-model/state payloads; the #1758 recorder forwards the panel door.",
+                ["PanelRegistryPluginAdapter.cs", "PluginRegistrar.cs", "RecordingPluginLoadHost.cs"]),
         ],
     };
 

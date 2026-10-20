@@ -7,6 +7,9 @@
 - [x] Tool / Provider / Agent / Panel registration dispatch
 - [x] SafePluginRegistrar (try/catch per plugin)
 - [x] Panel adapter for ITuiPanelPlugin
+- [x] A refused registration fails the plugin's registration (#1758). The
+      registrar used to log the refusal and answer `Success`, so a caller
+      could not tell "fully wired" from "half-wired"
 
 ## TODO
 
@@ -16,7 +19,9 @@
 
 ## Known issues
 
-- No conflict resolution — last-writer-wins for duplicate tool names.
+- No conflict resolution between two plugins claiming the same tool name: the
+  second registration is refused (a `Result.Failure`), and since #1758 that
+  refusal fails the second plugin's registration.
 
 ## Next priorities
 

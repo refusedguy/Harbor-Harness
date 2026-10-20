@@ -7,6 +7,9 @@
 - [x] All five pipeline contracts (`IPluginSource`, `IPluginCompiler`, `IPluginInstantiator`, `IPluginRegistrar`, `IPluginLoadHost`)
 - [x] Immutable data types (`PluginScript`, `CompiledPluginAssembly`, `LoadedPlugin`, `CompilationResult`)
 - [x] XML docs on every public type
+- [x] `IPluginLoadHost` doors report the OUTCOME of a registration (#1758):
+      `Success` = registered and observable, `Failure` = not registered, with a
+      reason. A host that does not carry a door MUST refuse it.
 
 ## TODO
 

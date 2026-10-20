@@ -16,8 +16,8 @@ namespace Harbor.Plugins.Registration;
 ///     calls <see cref="IPlugin.Initialize" />, then dispatches each <c>Register*</c>
 ///     method based on which sub-interfaces the plugin implements. Tool / provider / agent /
 ///     panel registration failures are routed through the host's <see cref="IPluginLoadHost" />
-///     <c>Register*</c> methods (which return <see cref="Result" />); the registrar logs but
-///     does not abort on per-item failures.
+///     <c>Register*</c> methods (which return <see cref="Result" />). <b>#1758:</b> a
+///     REFUSED registration FAILS the plugin's registration. It used to be logged and swallowed.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -67,17 +67,20 @@ public sealed class PluginRegistrar : IPluginRegistrar
         if (initResult.IsFailure)
             return initResult;
 
-        // Result.Try (CSharpFunctionalExtensions 3.7.0) is the library form of
-        // wrapping a throwing call in a Result: same catch scope, same text.
-        // The nested panel-plugin catch below is deliberately kept — it logs
-        // and CONTINUES rather than failing the whole registration.
-        return Result.Try(
+        var recorder = new RecordingPluginLoadHost(host);
+        // Result.Try (CSharpFunctionalExtensions 3.7.0) wraps a throwing call in a
+        // Result: same catch scope, same text. The nested panel-plugin catch below
+        // is deliberately kept. It logs and CONTINUES rather than failing the whole.
+        var outcome = Result.Try(
             () =>
             {
+                // #1758: every door is called through the recorder, so a refusal
+                // is remembered and can fail the registration at the end. The
+                // recorder forwards the host's own Result unchanged.
                 if (plugin.Instance is IToolPlugin toolPlugin)
                 {
                     toolPlugin.RegisterTools(new ToolRegistryBuilderAdapter(
-                        host,
+                        recorder,
                         plugin.Instance.Name,
                         plugin.DeclaredCapabilities,
                         _audit,
@@ -86,15 +89,15 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 }
                 if (plugin.Instance is IProviderPlugin providerPlugin)
                 {
-                    providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(host, _logger, _loggerFactory));
+                    providerPlugin.RegisterProviders(new ProviderRegistryBuilderAdapter(recorder, _logger, _loggerFactory));
                 }
                 if (plugin.Instance is IAgentPlugin agentPlugin)
                 {
-                    agentPlugin.RegisterAgents(new AgentRegistryBuilderAdapter(host, _logger));
+                    agentPlugin.RegisterAgents(new AgentRegistryBuilderAdapter(recorder, _logger));
                 }
                 if (plugin.Instance is ITuiPlugin tuiPlugin)
                 {
-                    var r = host.RegisterTuiPlugin(tuiPlugin);
+                    var r = recorder.RegisterTuiPlugin(tuiPlugin);
                     if (r.IsFailure)
                         _logger.LogWarning("Failed to register TUI plugin {Name}: {Error}", tuiPlugin.Name, r.Error);
                 }
@@ -106,7 +109,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                     // the renderer starts.
                     try
                     {
-                        panelPlugin.RegisterPanels(new PanelRegistryPluginAdapter(host, _logger));
+                        panelPlugin.RegisterPanels(new PanelRegistryPluginAdapter(recorder, _logger));
                     }
                     catch (Exception ex)
                     {
@@ -123,7 +126,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 {
                     try
                     {
-                        storePlugin.RegisterSessionStores(new SessionStoreRegistrarAdapter(host, _logger));
+                        storePlugin.RegisterSessionStores(new SessionStoreRegistrarAdapter(recorder, _logger));
                     }
                     catch (Exception ex)
                     {
@@ -134,7 +137,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 {
                     try
                     {
-                        backendPlugin.RegisterTuiBackends(new TuiBackendRegistrarAdapter(host, _logger));
+                        backendPlugin.RegisterTuiBackends(new TuiBackendRegistrarAdapter(recorder, _logger));
                     }
                     catch (Exception ex)
                     {
@@ -143,6 +146,14 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 }
             },
             ex => $"Register threw: {ex.Message}");
+
+        if (outcome.IsFailure)
+            return outcome;
+
+        // #1758: a door that refused a registration did not register anything, so
+        // the plugin did not arrive wired. Reporting Success here is what made
+        // "accepted" and "silently dropped" the same answer to the caller.
+        return recorder.ToResult();
     }
 
     // ── Backend registrar adapters ───────────────────────────────────────────────
