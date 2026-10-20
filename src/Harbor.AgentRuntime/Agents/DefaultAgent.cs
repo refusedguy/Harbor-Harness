@@ -454,7 +454,9 @@ public sealed class DefaultAgent : IAgent
                     // a fault worth logging as one.
                     AdvanceBoundState(static s => s with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow });
                     DefaultAgentLog.LoadSessionContextFailed(_logger, state.SessionId, loaded.Error);
-                    var loadFailed = Result.Failure(loaded.Error);
+                    // ConvertFailure carries the failure's own text across. It throws
+                    // on a success, which is why the guard above is load-bearing.
+                    var loadFailed = loaded.ConvertFailure();
                     completion.TrySetResult(loadFailed);
                     return loadFailed;
                 }
