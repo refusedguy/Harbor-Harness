@@ -68,6 +68,16 @@ public interface ITool
     /// <summary>
     ///     Whether this tool can run in parallel with other tool calls in the same turn.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see cref="ExecutionMode.Sequential" /> means the call must run
+    ///         ALONE: the dispatcher treats it as a barrier — the parallel-safe
+    ///         group before it drains first, it runs by itself, and the group
+    ///         after it starts only once it has finished (#1766). It does NOT
+    ///         mean "the whole batch runs serially": the calls around it keep
+    ///         their own concurrency.
+    ///     </para>
+    /// </remarks>
     public ExecutionMode ExecutionMode { get; }
 
     /// <summary>
@@ -130,12 +140,14 @@ public interface ITool
 public enum ExecutionMode
 {
     /// <summary>
-    ///     Can run in parallel with other tool calls.
+    ///     Can run in parallel with other tool calls, up to the dispatcher's
+    ///     concurrency cap.
     /// </summary>
     Parallel,
 
     /// <summary>
-    ///     Must run sequentially (e.g. <c>bash</c> with side effects).
+    ///     Must run alone (e.g. <c>bash</c> with side effects): the call is a
+    ///     barrier — nothing else of the batch runs while it does (#1766).
     /// </summary>
     Sequential
 }

@@ -95,23 +95,49 @@ public sealed record IdentityConfig(
 }
 
 /// <summary>
-///     Plugin + builtin-tool toggles.
+///     Plugin + builtin-tool toggles, and how many tool calls of one
+///     assistant step may run at once.
 /// </summary>
 public sealed record ToolingConfig(
     IReadOnlyList<string> EnabledPlugins,
     IReadOnlyList<string> DisabledTools,
-    [property: JsonPropertyName("autoReloadPlugins")] bool AutoReloadPlugins = true)
+    [property: JsonPropertyName("autoReloadPlugins")] bool AutoReloadPlugins = true,
+    // #1766: the cap on concurrent parallel-safe tool calls. The batch size
+    // is model-controlled, so an uncapped batch let one response open fifty
+    // file descriptors, fifty processes or fifty sockets at once.
+    [property: JsonPropertyName("maxParallelToolCalls")] int MaxParallelToolCalls = DefaultMaxParallelToolCalls)
 {
+    /// <summary>
+    ///     The default cap on concurrent parallel-safe tool calls in one
+    ///     batch (#1766). Ten is the point where a step that reads a handful
+    ///     of files stops paying for the scheduler, and the point where a
+    ///     fifty-call batch stops being a thundering herd.
+    /// </summary>
+    public const int DefaultMaxParallelToolCalls = 10;
+
+    /// <summary>
+    ///     The lowest cap the scheduler accepts: one call at a time, which
+    ///     makes every parallel-safe call wait for the previous one.
+    /// </summary>
+    public const int MinMaxParallelToolCalls = 1;
+
     // #195: fresh instance per access (see IdentityConfig.Default).
     public static ToolingConfig Default => new(
         Array.Empty<string>(),
         Array.Empty<string>(),
-        AutoReloadPlugins: true);
+        AutoReloadPlugins: true,
+        MaxParallelToolCalls: DefaultMaxParallelToolCalls);
 
     public Result<ToolingConfig> Validate()
     {
         if (EnabledPlugins is null) return Result.Failure<ToolingConfig>("tooling.enabledPlugins must not be null");
         if (DisabledTools is null) return Result.Failure<ToolingConfig>("tooling.disabledTools must not be null");
+        if (MaxParallelToolCalls < MinMaxParallelToolCalls)
+        {
+            return Result.Failure<ToolingConfig>(
+                $"tooling.maxParallelToolCalls must be >= {MinMaxParallelToolCalls}");
+        }
+
         return Result.Success(this);
     }
 }

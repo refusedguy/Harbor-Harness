@@ -120,7 +120,12 @@ public static class ConfigNormalizer
         config.Tooling = new ToolingConfig(
             (raw.EnabledPlugins ?? new List<string>()).AsReadOnly(),
             (raw.DisabledTools ?? new List<string>()).AsReadOnly(),
-            raw.AutoReloadPlugins ?? true);
+            raw.AutoReloadPlugins ?? true,
+            // #1766: the cap on concurrent parallel-safe tool calls. Absent =
+            // the documented default; a value below the floor is refused by
+            // ToolingConfig.Validate rather than silently raised here, so the
+            // user sees the bad number instead of a quietly different one.
+            raw.MaxParallelToolCalls ?? ToolingConfig.DefaultMaxParallelToolCalls);
     }
 
     private static void ApplyLimits(HarborConfig config, RawConfigDto raw)

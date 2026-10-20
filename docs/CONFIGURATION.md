@@ -473,6 +473,8 @@ still exists at `~/.harbor/config.json`. It owns:
 - Default max steps per agent run
 - Cost limit per session
 - Compaction settings
+- Max concurrent parallel-safe tool calls per assistant step
+  (`"maxParallelToolCalls"`, default `10`, #1766 — the tool scheduler's cap)
 
 **`maxSteps` is the step budget of a run.** The value is how many LLM turns an
 agent run may take: the loop stops at exactly that many turns and the run says

@@ -101,6 +101,14 @@ public sealed class ConfigSaveLoadClosureTests
     ///                 precisely the state this issue is about preventing.
     ///             </description>
     ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 <c>ToolingConfig.Validate</c> (<c>maxParallelToolCalls</c>
+    ///                 at least 1, #1766). <c>set</c> has no key for it, so
+    ///                 nothing in the product can write a bad value here — only
+    ///                 a hand-edited file can, the same shape as the row above.
+    ///             </description>
+    ///         </item>
     ///     </list>
     /// </remarks>
     private static readonly (string Key, string Value, Action<HarborConfig> Poison, string Rule)[] PoisonedValues =

@@ -87,6 +87,28 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 > safer than the bash escape hatch (`webfetch` parses HTML server-side, `patch` validates
 > context before mutating, `ripgrep` is 10–100× faster than `grep` on large repos).
 
+### What "Mode" means at dispatch time (#1766)
+
+The **Mode** column above is the *whole* exclusivity policy — the dispatcher reads each
+tool's own `ITool.ExecutionMode` and decides per call, not per batch:
+
+- **`Parallel`** — the call may run alongside other `Parallel` calls of the same batch, in a
+  pool capped at **10** concurrent calls by default. The cap is `maxParallelToolCalls` in
+  `~/.harbor/config.json` (`"maxParallelToolCalls": 4` sets it to 4; `1` makes the batch
+  fully serial). The excess **waits for a slot** instead of starting at once — the batch size
+  is chosen by the model, so an uncapped batch meant 50 simultaneous file descriptors,
+  processes or sockets.
+- **`Sequential`** — the call is a **barrier**: the `Parallel` group before it drains first,
+  it runs **alone**, and the group after it starts only once it has finished. A `write`
+  therefore never overlaps a `read` from the same batch, while the reads around it keep
+  their own concurrency (before #1766 one `Sequential` call made the whole batch serial).
+
+> **Known limitation — the classification is unary.** A call is exclusive or parallel-safe
+> based on its own tool; nothing compares siblings. Two calls that conflict with *each
+> other* but not with the rest of the batch (two writes to the same path) are not detected.
+> What the barrier *does* guarantee is the ordering around an exclusive call: a read before
+> a write of the same path finishes first, and a read after it starts after.
+
 ---
 
 ## 2. Per-tool reference

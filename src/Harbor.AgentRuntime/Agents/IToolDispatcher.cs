@@ -10,8 +10,10 @@ namespace Harbor.Application.Agents;
 public interface IToolDispatcher
 {
     /// <summary>
-    ///     Execute a batch of tool calls either sequentially (if any tool
-    ///     declares <see cref="ExecutionMode.Sequential" />) or in parallel.
+    ///     Execute a batch of tool calls: parallel-safe calls share a capped
+    ///     pool, and a call whose tool declares
+    ///     <see cref="ExecutionMode.Sequential" /> runs alone as a barrier
+    ///     (#1766). Results come back in the model's order.
     /// </summary>
     /// <param name="toolCalls">The tool calls emitted by the model this turn.</param>
     /// <param name="session">The session context (used for tool contexts).</param>

@@ -34,6 +34,9 @@ public sealed class RawConfigDto
     [JsonPropertyName("enabledPlugins")] public List<string>? EnabledPlugins { get; set; }
     [JsonPropertyName("disabledTools")] public List<string>? DisabledTools { get; set; }
     [JsonPropertyName("autoReloadPlugins")] public bool? AutoReloadPlugins { get; set; }
+
+    // #1766: the cap on concurrent parallel-safe tool calls. Null = default.
+    [JsonPropertyName("maxParallelToolCalls")] public int? MaxParallelToolCalls { get; set; }
     [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }

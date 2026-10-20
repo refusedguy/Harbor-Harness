@@ -272,6 +272,12 @@ public sealed class HarborConfig
         EnabledPlugins = Tooling.EnabledPlugins.ToList(),
         DisabledTools = Tooling.DisabledTools.ToList(),
         AutoReloadPlugins = !Tooling.AutoReloadPlugins, // null when default — keep config.json free of knob noise
+        // #1766: the cap on concurrent parallel-safe tool calls. Persisted
+        // only when it diverges from the default — same knob-noise rule as
+        // the CellForge section above.
+        MaxParallelToolCalls = Tooling.MaxParallelToolCalls == ToolingConfig.DefaultMaxParallelToolCalls
+            ? null
+            : Tooling.MaxParallelToolCalls,
         MaxSteps = Run.MaxSteps,
         CostLimit = Cost.Limit,
         Compaction = Compaction,

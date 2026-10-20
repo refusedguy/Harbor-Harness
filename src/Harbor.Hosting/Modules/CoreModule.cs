@@ -71,7 +71,13 @@ internal static class CoreModule
             sp.GetRequiredService<ILogger<ToolDispatcher>>(),
             sp.GetRequiredService<IApprovalCoordinator>(),
             sp.GetRequiredService<IToolRetryDecider>(),
-            hookRunner: sp.GetService<IHookRunner>()));
+            hookRunner: sp.GetService<IHookRunner>(),
+            // #1766: the cap on concurrent parallel-safe tool calls, read from
+            // the config the composition root already loaded (the same
+            // composition-time read `autoReloadPlugins` gets in the registries
+            // module). The dispatcher is a singleton, so the value is fixed for
+            // the process — a config change needs a restart.
+            maxParallelToolCalls: ctx.Harbor.Tooling.MaxParallelToolCalls));
         // #480 A10: the run's cross-cutting behaviours are the CONTAINER's list.
         // AgentLoop used to spell them out as a literal in its own constructor,
         // which made a third run-level concern reachable only by editing the

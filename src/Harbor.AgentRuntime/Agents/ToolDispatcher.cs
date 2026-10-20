@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using Harbor.Abstractions.Extensions;
+using Harbor.Application.Configuration;
 using Harbor.Application.Hooks;
 using Harbor.Application.Resilience;
 using Microsoft.Extensions.Logging;
@@ -14,12 +15,16 @@ namespace Harbor.Application.Agents;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>Execution modes:</b> if any tool in the batch declares
-///         <see cref="ExecutionMode.Sequential" /> (e.g. <c>bash</c>,
-///         <c>write</c>), the entire batch runs sequentially. Otherwise
-///         the batch runs in parallel via <see cref="Task.WhenAll" /> with
-///         an ArrayPool-rented task array (avoids the LINQ
-///         <c>Select(...).ToArray()</c> allocation).
+///         <b>Scheduling (#1766):</b> the batch is scheduled PER CALL, not per
+///         batch. A call whose tool declares
+///         <see cref="ExecutionMode.Sequential" /> is EXCLUSIVE — a barrier:
+///         the parallel-safe group before it drains first, it runs alone, and
+///         the group after it starts only once it has finished. Every other
+///         call runs in a pool capped at the configured maximum
+///         (<see cref="ToolingConfig.MaxParallelToolCalls" />), and the excess
+///         waits for a slot instead of starting at once. Before #1766 the
+///         decision was taken once per batch, so ONE sequential call made all
+///         five reads serial too.
 ///     </para>
 ///     <para>
 ///         <b>Per-tool-call lifecycle:</b>
@@ -81,7 +86,10 @@ public sealed class ToolDispatcher(
     TimeProvider? clock = null,
     // PX4: user hooks (PreToolUse/PostToolUse). Null (tests, manual
     // construction, fallback loops) keeps the legacy hooks-free path.
-    IHookRunner? hookRunner = null) : IToolDispatcher
+    IHookRunner? hookRunner = null,
+    // #1766: the cap on concurrent parallel-safe tool calls. Null keeps the
+    // documented default; the host injects the configured value.
+    int? maxParallelToolCalls = null) : IToolDispatcher
 {
     private static readonly ActivitySource Source = new("Harbor");
     private const string ToolNameTag = "gen_ai.tool.name";
@@ -105,6 +113,16 @@ public sealed class ToolDispatcher(
     private readonly TimeSpan _abandonGrace = abandonGrace ?? AbandonGraceDefault;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly IHookRunner? _hooks = hookRunner;
+
+    /// <summary>
+    ///     The cap on concurrent parallel-safe tool calls in one batch
+    ///     (#1766). One slot per running call; the excess waits for a slot
+    ///     instead of starting at once. Clamped to the accepted range, so a
+    ///     mis-set number serialises the batch instead of throwing at
+    ///     dispatch time.
+    /// </summary>
+    private readonly int _maxParallelToolCalls = ToolBatchScheduler.NormalizeCap(
+        maxParallelToolCalls ?? ToolingConfig.DefaultMaxParallelToolCalls);
 
     // #1507 (#95 slice): validate/permission/retry chain lives in ToolRetryPolicy
     // (verbatim move); this dispatcher keeps thin forwarders so the
@@ -136,10 +154,11 @@ public sealed class ToolDispatcher(
     private static readonly CancellationToken TerminalEventToken = CancellationToken.None;
 
     /// <summary>
-    ///     Execute a batch of tool calls either sequentially (if any tool
-    ///     declares <see cref="ExecutionMode.Sequential" />) or in parallel.
-    ///     Returns a <see cref="ToolResultMessage" /> ready to append to
-    ///     the session.
+    ///     Execute a batch of tool calls: parallel-safe calls share a capped
+    ///     pool, and a call that declares
+    ///     <see cref="ExecutionMode.Sequential" /> runs alone as a barrier
+    ///     (#1766). Returns a <see cref="ToolResultMessage" /> ready to append
+    ///     to the session.
     /// </summary>
     public async Task<ToolResultMessage> ExecuteAsync(
         IReadOnlyList<ToolCallPart> toolCalls,
@@ -149,78 +168,53 @@ public sealed class ToolDispatcher(
         CancellationToken ct,
         TimeSpan? toolExecutionTimeout = null)
     {
-        // #1100: resolve once per call. HasSequentialTool used to resolve
-        // every name (TryCreate+GetTool), then ExecuteSingleAsync resolved
-        // the same names again — 2N registry hits per N-call turn. One pass
-        // here feeds both the sequential gate and dispatch.
+        // #1100: resolve once per call. The old sequential gate used to
+        // resolve every name (TryCreate+GetTool), then ExecuteSingleAsync
+        // resolved the same names again — 2N registry hits per N-call turn.
+        // One pass here feeds both the scheduler and dispatch.
         var resolved = new Result<ITool>[toolCalls.Count];
         for (int i = 0; i < toolCalls.Count; i++)
         {
             resolved[i] = ResolveTool(toolCalls[i].ToolName);
         }
 
-        bool hasSequential = HasSequentialTool(resolved);
-
         var results = new List<ToolResultEntry>(toolCalls.Count);
 
-        if (hasSequential)
+        // #1766: the schedule is decided PER CALL, not per batch. The batch
+        // walks left to right; a parallel-safe run goes to the capped pool,
+        // and an exclusive call is a barrier — the group before it has
+        // drained by the time it runs, and the group after it starts only
+        // once it has finished.
+        int cursor = 0;
+        while (cursor < toolCalls.Count)
         {
-            for (int i = 0; i < toolCalls.Count; i++)
+            if (ToolBatchScheduler.IsExclusive(resolved[cursor]))
             {
-                var tc = toolCalls[i];
-                // #401: an accepted stop ends NEW work. A sequential batch is
-                // the shape where the gap is widest — call k finishing is the
-                // natural moment for the user to press Stop, and without this
-                // gate the very next iteration would start anyway.
-                if (ct.IsCancellationRequested)
-                {
-                    results.Add(NotStartedBecauseStopped(tc));
-                    continue;
-                }
+                results.Add(await RunExclusiveAsync(
+                    cursor,
+                    toolCalls,
+                    resolved,
+                    session,
+                    partial,
+                    agent,
+                    ct,
+                    toolExecutionTimeout).ConfigureAwait(false));
+                cursor++;
+                continue;
+            }
 
-                // #401 B2: the in-flight side of the same boundary — a
-                // sequential call that outlives the stop gets the grace, then
-                // Abandoned, instead of holding the run open indefinitely.
-                Task<ToolResultEntry> pending = ExecuteSingleAsync(tc, resolved[i], session, partial, agent, ct, toolExecutionTimeout);
-                results.Add(await AwaitOneWithAbandonAsync(pending, tc, ct).ConfigureAwait(false));
-            }
-        }
-        else
-        {
-            // Rent the task array from the ArrayPool — Task.WhenAll accepts an IEnumerable<Task>,
-            // so we can pass a Span-based slice without the secondary ToArray() allocation.
-            // The pooled array is cleared before return so the Task references don't keep
-            // the underlying async state machines alive longer than necessary.
-            Task<ToolResultEntry>[]? tasks = null;
-            try
-            {
-                tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(toolCalls.Count);
-                for (int i = 0; i < toolCalls.Count; i++)
-                {
-                    // #401: the dispatch loop is the acceptance boundary. Each
-                    // iteration is a fresh `ExecuteSingleAsync` invocation, so a
-                    // cancel landing between iterations would otherwise start
-                    // calls the user asked to stop. Dispatch is cheap and
-                    // synchronous up to the permission gate, so the window is
-                    // real (a permission-gate cancel from iteration k-1 lands
-                    // inside this loop) rather than theoretical.
-                    tasks[i] = ct.IsCancellationRequested
-                        ? Task.FromResult(NotStartedBecauseStopped(toolCalls[i]))
-                        : ExecuteSingleAsync(toolCalls[i], resolved[i], session, partial, agent, ct, toolExecutionTimeout);
-                }
-
-                var entries = await AwaitAllWithAbandonAsync(
-                    tasks, toolCalls, toolCalls.Count, ct).ConfigureAwait(false);
-                results.AddRange(entries);
-            }
-            finally
-            {
-                if (tasks is not null)
-                {
-                    Array.Clear(tasks, 0, toolCalls.Count);
-                    ArrayPool<Task<ToolResultEntry>>.Shared.Return(tasks);
-                }
-            }
+            int end = ToolBatchScheduler.EndOfParallelGroup(resolved, cursor);
+            results.AddRange(await RunParallelGroupAsync(
+                cursor,
+                end,
+                toolCalls,
+                resolved,
+                session,
+                partial,
+                agent,
+                ct,
+                toolExecutionTimeout).ConfigureAwait(false));
+            cursor = end;
         }
 
         return new ToolResultMessage(
@@ -231,30 +225,171 @@ public sealed class ToolDispatcher(
     }
 
     /// <summary>
-    ///     Check if any resolved tool in the batch declares <see cref="ExecutionMode.Sequential" />.
-    ///     If so, the entire batch must run sequentially (otherwise sequential
-    ///     tools would race on shared state like the file system or shell).
+    ///     Run one EXCLUSIVE call alone (#1766) — the barrier. Nothing else
+    ///     of the batch is in flight when it starts, and nothing starts
+    ///     until it has finished.
     /// </summary>
-    /// <remarks>
-    ///     ROP-B П.19: the 4-level nested IsSuccess ladder collapses to a single
-    ///     combinator predicate per call. Unresolvable entries fold to
-    ///     <see langword="false" /> here — their proper error entries are still
-    ///     produced per-call by <see cref="ExecuteSingleAsync" />.
-    ///     #1100: runs over the pre-resolved batch (one TryCreate+GetTool per
-    ///     call in ExecuteAsync), not over raw names — no second resolve.
-    /// </remarks>
-    private bool HasSequentialTool(IReadOnlyList<Result<ITool>> preResolved)
+    private async Task<ToolResultEntry> RunExclusiveAsync(
+        int index,
+        IReadOnlyList<ToolCallPart> toolCalls,
+        Result<ITool>[] resolved,
+        ISessionContext session,
+        AssistantMessage partial,
+        AgentDefinition agent,
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout)
     {
-        for (int i = 0; i < preResolved.Count; i++)
+        var tc = toolCalls[index];
+
+        // #401: an accepted stop ends NEW work. A barrier is exactly where
+        // the gap is widest — the previous group has just drained, and the
+        // next one has not started.
+        if (ct.IsCancellationRequested)
         {
-            Result<ITool> entry = preResolved[i];
-            if (entry.IsSuccess && entry.Value.ExecutionMode == ExecutionMode.Sequential)
-            {
-                return true;
-            }
+            return NotStartedBecauseStopped(tc);
         }
 
-        return false;
+        // #401 B2: the in-flight side of the same boundary — an exclusive
+        // call that outlives the stop gets the grace, then Abandoned,
+        // instead of holding the run open indefinitely.
+        Task<ToolResultEntry> pending = ExecuteSingleAsync(
+            tc, resolved[index], session, partial, agent, ct, toolExecutionTimeout);
+        return await AwaitOneWithAbandonAsync(pending, tc, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Run one parallel-safe group <c>[start, end)</c> in a pool capped
+    ///     at <c>_maxParallelToolCalls</c> (#1766). The excess waits for a
+    ///     slot instead of starting at once, so the number of calls in flight
+    ///     never exceeds the cap.
+    /// </summary>
+    private async Task<ToolResultEntry[]> RunParallelGroupAsync(
+        int start,
+        int end,
+        IReadOnlyList<ToolCallPart> toolCalls,
+        Result<ITool>[] resolved,
+        ISessionContext session,
+        AssistantMessage partial,
+        AgentDefinition agent,
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout)
+    {
+        int count = end - start;
+        Task<ToolResultEntry>[]? tasks = null;
+        try
+        {
+            // Rent the task array from the ArrayPool — Task.WhenAll accepts an IEnumerable<Task>,
+            // so we can pass a Span-based slice without the secondary ToArray() allocation.
+            // The pooled array is cleared before return so the Task references don't keep
+            // the underlying async state machines alive longer than necessary.
+            tasks = ArrayPool<Task<ToolResultEntry>>.Shared.Rent(count);
+
+            // #1766: the cap. One slot per running call; the group may never
+            // have more than the cap in flight.
+            using var gate = new SemaphoreSlim(_maxParallelToolCalls, _maxParallelToolCalls);
+
+            for (int k = 0; k < count; k++)
+            {
+                int index = start + k;
+                // #401: the dispatch loop is the acceptance boundary. Each
+                // iteration is a fresh `ExecuteSingleAsync` invocation, so a
+                // cancel landing between iterations would otherwise start
+                // calls the user asked to stop. Dispatch is cheap and
+                // synchronous up to the permission gate, so the window is
+                // real (a permission-gate cancel from iteration k-1 lands
+                // inside this loop) rather than theoretical.
+                tasks[k] = ct.IsCancellationRequested
+                    ? Task.FromResult(NotStartedBecauseStopped(toolCalls[index]))
+                    : RunGatedAsync(
+                        index,
+                        gate,
+                        toolCalls,
+                        resolved,
+                        session,
+                        partial,
+                        agent,
+                        ct,
+                        toolExecutionTimeout);
+            }
+
+            return await AwaitAllWithAbandonAsync(
+                tasks, toolCalls, count, start, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (tasks is not null)
+            {
+                Array.Clear(tasks, 0, count);
+                ArrayPool<Task<ToolResultEntry>>.Shared.Return(tasks);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Run one call under the group's concurrency cap (#1766). The call
+    ///     waits for a slot; it does not start until it has one, and the
+    ///     number of calls in flight never exceeds the cap.
+    /// </summary>
+    private async Task<ToolResultEntry> RunGatedAsync(
+        int index,
+        SemaphoreSlim gate,
+        IReadOnlyList<ToolCallPart> toolCalls,
+        Result<ITool>[] resolved,
+        ISessionContext session,
+        AssistantMessage partial,
+        AgentDefinition agent,
+        CancellationToken ct,
+        TimeSpan? toolExecutionTimeout)
+    {
+        // The wait for a slot is cancellable: a stop while a call is queued
+        // ends the wait — it does not leave the call hanging on the gate,
+        // and it does not swallow the token.
+        try
+        {
+            await gate.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // #401: the call never started, so it is a "not started" entry —
+            // not an abandoned one, and it publishes no start event.
+            return NotStartedBecauseStopped(toolCalls[index]);
+        }
+
+        try
+        {
+            // The token may have fired between the dispatch-loop check and
+            // the slot acquisition (#401): re-check before the tool runs.
+            if (ct.IsCancellationRequested)
+            {
+                return NotStartedBecauseStopped(toolCalls[index]);
+            }
+
+            return await ExecuteSingleAsync(
+                toolCalls[index],
+                resolved[index],
+                session,
+                partial,
+                agent,
+                ct,
+                toolExecutionTimeout).ConfigureAwait(false);
+        }
+        finally
+        {
+            // The group can be over while this call is still running — the
+            // #401 abandon path gives a stuck call a bounded grace and then
+            // reports it Abandoned without waiting for it. The gate is
+            // disposed by then, and releasing a slot on a disposed semaphore
+            // throws, so the release is guarded: the slot died with the
+            // group.
+            try
+            {
+                gate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // The group already finished; nothing is waiting for this slot.
+            }
+        }
     }
 
     /// <summary>
@@ -370,10 +505,22 @@ public sealed class ToolDispatcher(
     ///     straggler gets the grace period, then Abandoned — every call is
     ///     still answered, so the provider wire contract holds.
     /// </summary>
+    /// <param name="tasks">
+    ///     The group's tasks, indexed from 0 — the group's own slice, not the
+    ///     whole batch.
+    /// </param>
+    /// <param name="toolCalls">The whole batch's calls.</param>
+    /// <param name="count">How many of <paramref name="tasks" /> belong to the group.</param>
+    /// <param name="toolCallOffset">
+    ///     Where the group starts in <paramref name="toolCalls" /> (#1766: the
+    ///     batch is scheduled in groups, and the group is a slice of it).
+    /// </param>
+    /// <param name="ct">The run token.</param>
     private async Task<ToolResultEntry[]> AwaitAllWithAbandonAsync(
         Task<ToolResultEntry>[] tasks,
         IReadOnlyList<ToolCallPart> toolCalls,
         int count,
+        int toolCallOffset,
         CancellationToken ct)
     {
         Task<ToolResultEntry[]> all = Task.WhenAll(new ArraySegment<Task<ToolResultEntry>>(tasks, 0, count));
@@ -404,7 +551,7 @@ public sealed class ToolDispatcher(
         {
             resolved[i] = tasks[i].IsCompletedSuccessfully
                 ? await tasks[i].ConfigureAwait(false)
-                : await AbandonLeftoverAsync(tasks[i], toolCalls[i]).ConfigureAwait(false);
+                : await AbandonLeftoverAsync(tasks[i], toolCalls[toolCallOffset + i]).ConfigureAwait(false);
         }
 
         return resolved;
