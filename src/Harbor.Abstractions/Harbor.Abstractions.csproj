@@ -79,6 +79,33 @@
   </ItemGroup>
 
   <!--
+    #1845: the public-API freeze of #428 moves from a 607-line python text
+    scan (tools/check-public-api-abstractions.py, deleted by that issue) to
+    the COMPILER's symbol table. Microsoft.CodeAnalysis.PublicApiAnalyzers
+    reads the public surface off the semantic model, so it sees what a line
+    scan cannot: generic arity, protected-internal / private-protected,
+    explicit interface implementations, ref/out/in/params, parameter default
+    values, readonly/record structs, init accessors, and — the class the old
+    gate had none of — NULLABILITY (RS0036/RS0037/RS0041).
+
+    The baseline is the analyzer's own format:
+      src/Harbor.Abstractions/PublicAPI.Shipped.txt    (frozen surface)
+      src/Harbor.Abstractions/PublicAPI.Unshipped.txt  (pending changes)
+    Both are picked up as analyzer additional files by the package's own
+    buildTransitive targets, so nothing has to list them here.
+
+    Analyzer-only: PrivateAssets=all keeps it out of the NuGet package, and
+    IncludeAssets hands the compiler the analyzer and nothing else — no
+    runtime assembly, no AOT surface, no consumer impact.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
     ZLinq replaces System.Linq throughout Harbor.Abstractions.
     The implicit "System.Linq" using injected by the SDK is removed here so
     that all LINQ operators resolve to ZLinq's zero-allocation equivalents

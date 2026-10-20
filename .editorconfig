@@ -513,6 +513,65 @@ dotnet_diagnostic.VSTHRD200.severity = none # Async naming convention; the rule'
 dotnet_diagnostic.VSTHRD201.severity = none # cancel after switching to the main thread; JoinableTaskFactory, and undocumented upstream
 dotnet_diagnostic.VSTHRD202.severity = none # "remove the unnecessary async state machine"; it would fire on every async member without an await, and its fix changes the signature
 
+# --- Public API (Microsoft.CodeAnalysis.PublicApiAnalyzers 5.6.0) ---
+# The public-API freeze of #428, expressed as a COMPILE-time gate (#1845).
+# The package is referenced by exactly two projects — Harbor.Abstractions and
+# Harbor.Abstractions.Contracts, the two assemblies #428 freezes — with
+# PrivateAssets=all, so these diagnostics exist in no other project in the
+# tree. "Errors on the frozen surface and nowhere else" is therefore a fact
+# about the package graph, not a promise made by this file.
+#
+# The severities are written as `error` rather than left to
+# TreatWarningsAsErrors, and that is deliberate: the analyzer package's own
+# buildTransitive props appends every RS id to `WarningsNotAsErrors` when
+# `CodeAnalysisTreatWarningsAsErrors` is false, so the promotion to error
+# would depend on a property inside a package rather than on a decision
+# recorded here. `severity = error` does not go through that promotion, so
+# the gate stays an error even if the repo's warnings-as-errors policy is
+# ever relaxed.
+#
+# RS0016 — a public symbol is not in the declared API. The gate's core.
+dotnet_diagnostic.RS0016.severity = error
+# RS0017 — a declared API symbol is not in the code (deleted, or renamed).
+# The other half of the gate: a removal cannot land silently.
+dotnet_diagnostic.RS0017.severity = error
+# RS0022 — a constructor makes a non-inheritable base class inheritable and
+# so exposes the base's protected members. Fires only on unshipped API, so
+# it is a rule about what may be ADDED to the frozen surface.
+dotnet_diagnostic.RS0022.severity = error
+# RS0024 — the public API files are invalid (unparseable content).
+dotnet_diagnostic.RS0024.severity = error
+# RS0025 — a symbol appears more than once in the public API files.
+dotnet_diagnostic.RS0025.severity = error
+# RS0026 — do not add several public overloads with optional parameters.
+# Breaks compatibility when the API is EXTENDED, which is the case the
+# freeze exists for.
+dotnet_diagnostic.RS0026.severity = error
+# RS0027 — a public API with optional parameters must have the most
+# parameters among its public overloads. Same back-compat family as RS0026.
+dotnet_diagnostic.RS0027.severity = error
+# RS0036 — a declared API symbol is missing its nullability annotations.
+# Nullability is part of the signature a NuGet consumer compiles against,
+# so `string` -> `string?` is a breaking change and the old text scan could
+# not see it at all.
+dotnet_diagnostic.RS0036.severity = error
+# RS0037 — the public API files must carry `#nullable enable`, or the
+# analyzer cannot track nullability at all. The baseline files do.
+dotnet_diagnostic.RS0037.severity = error
+# RS0041 — a public member uses an oblivious reference type. Off while the
+# tree is not at 100% annotation: the analyzer's own documentation
+# recommends disabling this rule until an existing project is fully
+# annotated, and a rule that fires on every pre-existing member trains
+# people to ignore it. RS0036 (annotate the DECLARED API) is the rule that
+# is enforced, and it is the one that protects consumers.
+dotnet_diagnostic.RS0041.severity = none
+# RS0048 — a public API file is missing or is not an analyzer additional
+# file. Without it the analyzer would silently track nothing.
+dotnet_diagnostic.RS0048.severity = error
+# RS0050 — a symbol is marked as removed in the API files but still exists
+# in the source. The removal marker and the code must agree.
+dotnet_diagnostic.RS0050.severity = error
+
 # ============================================================================
 # DEPENDENCY INJECTION ANALYZERS (Task A3)
 # ============================================================================

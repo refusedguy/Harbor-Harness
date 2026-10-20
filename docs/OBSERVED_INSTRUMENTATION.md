@@ -278,7 +278,11 @@ same span and instrument names.
 - **The frozen public API.** Adding a public type to
   `Harbor.Abstractions.Contracts` is an additive change to a frozen surface, and
   the repository's mechanism for that is the public-API baseline: the type is
-  added to `PublicAPI.Baseline.txt` in the same diff, where a reviewer sees it.
+  added to `PublicAPI.Shipped.txt` in the same diff, where a reviewer sees it.
+  Since #1845 that baseline is the compiler's own — `PublicApiAnalyzers`
+  reports the missing row as `RS0016` and the build fails without it — and the
+  re-signing rule is enforced per commit by
+  `tools/check-public-api-resign.py`.
   The attribute is not an extension point: it is a marker for our own generator,
   and it registers no axis, opens no door, and changes no plugin contract.
 - **The telemetry boundary.** `Harbor.Telemetry.Core` implements the contracts in

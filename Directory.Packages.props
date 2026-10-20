@@ -67,6 +67,21 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
+    <!--
+      PublicApiAnalyzers (RS0016/RS0017/RS0022/RS0024/RS0025/RS0026/RS0027/
+      RS0036/RS0037/RS0041/RS0048/RS0050) is the public-API freeze of #428,
+      expressed as a COMPILE-time gate instead of a text scan (#1845). The
+      version is pinned to the same 5.6.0 as the two sibling
+      Microsoft.CodeAnalysis.* analyzer packages above, so one Roslyn analyzer
+      wave is in the tree rather than two. MIT, Microsoft, dotnet/roslyn.
+
+      Referenced ONLY by the two frozen assemblies (Harbor.Abstractions and
+      Harbor.Abstractions.Contracts) — the freeze covers those two and not the
+      other 90-odd projects, and the package is not transitively visible
+      (PrivateAssets=all), so the RS00xx diagnostics cannot appear anywhere
+      else in the tree.
+    -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
     <!-- ── Microsoft.Data.* (storage drivers) ────────────────────────────── -->
     <!--
       Microsoft.Data.Sqlite 10.0.13 is the same servicing release as the

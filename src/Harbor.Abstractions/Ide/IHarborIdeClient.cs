@@ -19,7 +19,7 @@ namespace Harbor.Abstractions.Ide;
 ///         implement" until the out-of-process plugin story matures. The contract is kept
 ///         because <c>docs/IDE_INTEGRATION_PATTERNS.md</c> §7.5 names it as the seam a
 ///         future VS Code / JetBrains adapter would implement, and because it is frozen in
-///         <c>PublicAPI.Baseline.txt</c>. Deleting it would take a published promise
+///         <c>PublicAPI.Shipped.txt</c>. Deleting it would take a published promise
 ///         away while the decision that would replace it is still open.
 ///     </para>
 ///     <para>
