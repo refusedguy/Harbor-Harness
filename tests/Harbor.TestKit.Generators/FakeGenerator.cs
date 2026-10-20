@@ -566,14 +566,17 @@ public sealed class FakeGenerator : IIncrementalGenerator
         {
             parts.Add("class");
         }
-        else if (typeParameter.HasNotNullConstraint)
-        {
-            parts.Add("notnull");
-        }
 
         foreach (ITypeSymbol constraint in typeParameter.ConstraintTypes)
         {
             parts.Add(Render(constraint));
+        }
+
+        // "notnull" only when nothing else says it: a type constraint already
+        // implies it, and spelling both out is noise the compiler may flag.
+        if (typeParameter.HasNotNullConstraint && typeParameter.ConstraintTypes.Length == 0)
+        {
+            parts.Add("notnull");
         }
 
         if (typeParameter.HasConstructorConstraint)
