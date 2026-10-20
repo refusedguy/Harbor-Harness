@@ -7,31 +7,38 @@
 # leaks in commits.
 name: codeql
 
-# The pull_request trigger was removed (owner decision, 2026-10-20).
+# WHERE THE PR SCAN RUNS, AND WHY ONLY THERE
 #
-# A PR's merge commit and the push to dev carry the same content, so the
-# mainline scan sees exactly what a PR-lane scan would have seen, one step
-# later. What the PR lane cost, measured over the last 24 h: 11.5
+# A PR's merge commit and the push to that branch carry the same content,
+# so a PR-lane scan and the branch's push scan see the same code. The only
+# thing the PR lane buys is TIMING: the finding arrives before the merge
+# instead of after it.
+#
+# That matters exactly where the merge is a release, so the pull_request
+# trigger is scoped to `master` (the release branch, whose push is what the
+# `publish` job ships from). A PR into `dev` is covered by the push scan of
+# dev, which runs minutes after the merge, and the dev tree is a working
+# branch, not a release.
+#
+# What the unscoped PR lane cost, measured over the last 24 h: 11.5
 # runner-minutes per attempt (mean of 17 runs) and an 11-minute hold on a
-# runner slot, in a pool whose queueing is our real bottleneck. At 20 open
-# PRs that is 20 slots held for 11 minutes each. No ruleset is enforced on
-# dev/master, so the PR-lane result gated nothing: it was advice, not a
-# check.
+# runner slot, in a pool whose queueing is the actual bottleneck. At 20 open
+# PRs that is 20 slots held for 11 minutes each, for advice rather than a
+# check (no ruleset is enforced on dev/master).
 #
-# The mainline scan is therefore the security gate: every push to dev and
-# to master is scanned, and the weekly cron covers the branches that did
-# not move.
-#
-# To restore the early warning, re-add exactly this block:
-#   pull_request:
-#     branches: [master, dev]
-#     paths:
-#       - "src/**"
-#       - "apps/**"
-#       - ".github/workflows/codeql.yml"
+# The `concurrency` group below drops a superseded run of the same branch
+# (PR lane only); pushes are never cancelled, so the mainline scan always
+# runs.
 on:
   push:
     branches: [master, dev]
+  pull_request:
+    # The release gate: a PR into master is scanned before it ships.
+    branches: [master]
+    paths:
+      - "src/**"
+      - "apps/**"
+      - ".github/workflows/codeql.yml"
   schedule:
     - cron: "17 3 * * 1" # Mondays 03:17 UTC, off-peak
 
