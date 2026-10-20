@@ -284,7 +284,7 @@ internal sealed class SharedSourceTreeSnapshot
     private static int _instancesCreated;
     private static int _lineViewComputations;
 
-    private readonly ConcurrentDictionary<string, Lazy<SourceTreeFile>> _files =
+    private readonly ConcurrentDictionary<string, Lazy<SourceTreeFile?>> _files =
         new(StringComparer.Ordinal);
 
     private readonly ConcurrentDictionary<string, Lazy<ImmutableArray<string>>> _enumerations =
@@ -362,9 +362,9 @@ internal sealed class SharedSourceTreeSnapshot
     /// <returns>The file view, or <c>null</c> when the file cannot be read.</returns>
     internal SourceTreeFile? Get(string absolutePath)
     {
-        Lazy<SourceTreeFile> lazy = _files.GetOrAdd(
+        Lazy<SourceTreeFile?> lazy = _files.GetOrAdd(
             absolutePath,
-            path => new Lazy<SourceTreeFile>(
+            path => new Lazy<SourceTreeFile?>(
                 () => ReadFile(path),
                 LazyThreadSafetyMode.ExecutionAndPublication));
 
