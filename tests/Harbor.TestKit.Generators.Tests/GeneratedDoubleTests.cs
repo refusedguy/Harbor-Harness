@@ -32,6 +32,8 @@ public class GeneratedDoubleTests
     {
         var tool = new GeneratedFakeTool
         {
+            // The recording is opt-in: it allocates on every call.
+            RecordCalls = true,
             Name = ToolName.Create("generated_tool"),
             DisplayName = "Generated Tool",
             Description = "A double emitted by the generator.",

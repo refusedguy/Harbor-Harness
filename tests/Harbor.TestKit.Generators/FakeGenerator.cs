@@ -872,11 +872,15 @@ public sealed class FakeGenerator : IIncrementalGenerator
         sb.AppendLine("public partial class " + fake.ClassName + " : global::" + fake.InterfaceName);
         sb.AppendLine("{");
 
-        sb.AppendLine("    private readonly List<global::Harbor.TestKit.Generated.FakeCall> _calls = [];");
+        sb.AppendLine("    private readonly global::System.Collections.Generic.List<global::Harbor.TestKit.Generated.FakeCall> _calls = [];");
         sb.AppendLine("    private readonly object _callsLock = new();");
         sb.AppendLine();
-        sb.AppendLine("    /// <summary>Whether calls are recorded in <see cref=\"RecordedCalls\" />. Turn it off in a hot loop.</summary>");
-        sb.AppendLine("    public bool RecordCalls { get; set; } = true;");
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    ///     Whether calls are recorded in <see cref=\"RecordedCalls\" />. OFF by");
+        sb.AppendLine("    ///     default: a record allocates on every call, and a double that sits");
+        sb.AppendLine("    ///     in a measured path must cost nothing.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public bool RecordCalls { get; set; }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Every call made on this double, in order.</summary>");
         sb.AppendLine("    public global::System.Collections.Generic.IReadOnlyList<global::Harbor.TestKit.Generated.FakeCall> RecordedCalls");

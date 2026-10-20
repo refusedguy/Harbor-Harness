@@ -65,10 +65,11 @@ The defaults are chosen to fail LOUDLY, never silently:
 - a collection defaults to `[]`, a `JsonDocument` to `{"type":"object"}`, a
   `Channel<T>` to an unbounded channel, an `IDisposable` to a no-op.
 
-Every call is recorded in `RecordedCalls` (a `FakeCall` per call: the member
-name and its arguments). `RecordCalls = false` turns the recording off in a hot
-loop — the check is at the call site, so a disabled recording allocates
-nothing.
+Every call can be recorded in `RecordedCalls` (a `FakeCall` per call: the
+member name and its arguments). The recording is **opt-in**
+(`RecordCalls = true`): a record allocates on every call, and a double that
+sits in a measured path must cost nothing. The check is at the call site, so
+a disabled recording allocates nothing at all.
 
 An **overloaded** member name gets no configurable property: two overloads
 would generate the same `{Member}Result`, and a numbered suffix is a trap. An
