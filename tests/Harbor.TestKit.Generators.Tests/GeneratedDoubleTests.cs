@@ -4,7 +4,12 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
-using Harbor.TestKit.Generated;
+
+// The generated doubles are named with an ALIAS: this file's namespace sits
+// under Harbor.TestKit, and the hand-written Harbor.TestKit.FakeSessionStore
+// would otherwise win the simple-name lookup over the generated one.
+using GeneratedFakeSessionStore = Harbor.TestKit.Generated.FakeSessionStore;
+using GeneratedFakeTool = Harbor.TestKit.Generated.FakeTool;
 
 namespace Harbor.TestKit.Generators.Tests;
 
@@ -26,7 +31,7 @@ public class GeneratedDoubleTests
     [Test]
     public async Task GeneratedTool_ImplementsTheInterface_AndAnswersTheConfiguredValue()
     {
-        var tool = new FakeTool
+        var tool = new GeneratedFakeTool
         {
             Name = ToolName.Create("generated_tool"),
             DisplayName = "Generated Tool",
@@ -49,7 +54,7 @@ public class GeneratedDoubleTests
     [Test]
     public async Task GeneratedSessionStore_FailsLoudly_UntilTheMemberIsConfigured()
     {
-        var store = new FakeSessionStore();
+        var store = new GeneratedFakeSessionStore();
 
         // The default of a Result-returning member is a FAILURE, not a silent
         // success carrying a null value: `default(Result<T>)` would look like
