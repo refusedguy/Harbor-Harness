@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### #1822 — тесты сериализуют через source-generated контекст, как это делает продукт
 
-**Продуктовая сторона System.Text.Json уже едет на source generation (21 `JsonSerializerContext` в `src/`). Тестовая — нет: 62 вызова `JsonSerializer.*` в `tests/` брали reflection-резолвер, пока 22 соседних вызова в тех же файлах уже ехали на `JsonlCodecContext.Default.*` / `RemoteJsonContext.Default.*` / `McpJsonSerializerContext.Default.*`. Теперь едут все, кроме одного — и тот описан.**
+**Продуктовая сторона System.Text.Json уже едет на source generation (21 `JsonSerializerContext` в `src/`). Тестовая — нет: из 76 вызовов `JsonSerializer.*` в `tests/` (измерено сканером самого гейта по `origin/dev`) 55 брали reflection-резолвер, пока 21 в тех же файлах уже ехали на `JsonlCodecContext.Default.*` / `RemoteJsonContext.Default.*` / `McpJsonSerializerContext.Default.*`. Теперь едут все, кроме трёх — и все три описаны.**
 
 **Что это даёт помимо скорости.** Reflection-вызов **не проверяется на компиляции**: опечатка в имени члена DTO компилируется, сериализуется в ДРУГОЙ ключ, и тест проверяет не то поле — оставаясь зелёным. Source-generated контекст называет тип и его члены, поэтому компилятор их видит. Это тот класс ложно-зелёных тестов, о котором тикет.
 
