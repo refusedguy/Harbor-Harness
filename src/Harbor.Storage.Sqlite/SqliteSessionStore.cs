@@ -252,7 +252,53 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
         }
     }
 
+    /// <summary>
+    ///     Read all messages for a session in chronological order.
+    /// </summary>
+    /// <remarks>
+    ///     <b>#1744:</b> this returns the LOG's rows — what the database holds,
+    ///     unaltered. The reader's view of the same read (the transcript with
+    ///     the interrupted turns closed in memory, and what the read could not
+    ///     deliver) is <see cref="GetTranscriptAsync" />.
+    /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
+    {
+        var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+        if (read.IsFailure)
+            return read.ConvertFailure<IReadOnlyList<AgentMessage>>();
+
+        // (read.Value is guarded by the failure check above.)
+        var messages = read.Value.Messages;
+        return Result.Success(messages);
+    }
+
+    /// <summary>
+    ///     Read the session's transcript: the messages a reader gets — with the
+    ///     turns the log never closed closed in memory — together with what the
+    ///     read could not deliver (#1744).
+    /// </summary>
+    /// <remarks>
+    ///     A row is written in one transaction, so a row can never be half
+    ///     written the way a JSONL record can. What CAN happen is a row that
+    ///     does not decode (a corrupt payload): it is skipped and counted, and
+    ///     when it is the newest row the tail of the session is missing.
+    /// </remarks>
+    public async Task<Result<SessionTranscript>> GetTranscriptAsync(string sessionId, CancellationToken ct = default)
+    {
+        var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+        if (read.IsFailure)
+            return read.ConvertFailure<SessionTranscript>();
+
+        // (read.Value is guarded by the failure check above.)
+        var transcript = read.Value.Transcript;
+        return Result.Success(transcript);
+    }
+
+    /// <summary>
+    ///     ONE read of a session: the log's rows and the reader's view of the
+    ///     same read, from the same pass over the table (#1744).
+    /// </summary>
+    private async Task<Result<SqliteSessionRead>> ReadSessionAsync(string sessionId, CancellationToken ct)
     {
         // #199: the expected "not found" outcome is decided before the try
         // boundary so it stays a plain failure (no throw). Absence (None) is
@@ -260,9 +306,9 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
         // the other stores.
         var row = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
         if (row.IsFailure)
-            return row.ConvertFailure<IReadOnlyList<AgentMessage>>();
+            return row.ConvertFailure<SqliteSessionRead>();
         if (row.Value.HasNoValue) // guarded: .Value only read after the failure check.
-            return Result.Failure<IReadOnlyList<AgentMessage>>(SessionStoreErrors.SessionNotFound(sessionId));
+            return Result.Failure<SqliteSessionRead>(SessionStoreErrors.SessionNotFound(sessionId));
 
         return await Result.Try(async () =>
         {
@@ -279,6 +325,9 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
 
             var result = new List<AgentMessage>();
             var skipped = new List<string>();
+            // #1744: whether the NEWEST row is one of the unreadable ones —
+            // the rows arrive in order, so the last one read is the tail.
+            bool tailUnreadable = false;
             using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
@@ -289,16 +338,30 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
                 // per-line parse (see ParseMessagesFromDiskAsync).
                 var msg = SqliteMappers.TryDeserializeMessage(role, payload);
                 if (msg.IsSuccess)
+                {
                     result.Add(msg.Value); // guarded by the IsSuccess check.
+                    tailUnreadable = false;
+                }
                 else
+                {
                     skipped.Add(msg.Error);
+                    tailUnreadable = true;
+                }
             }
 
             if (skipped.Count > 0)
                 SqliteSessionStoreLog.SkippedUnreadableMessages(_logger, skipped.Count, sessionId, string.Join("; ", skipped));
 
-            return (IReadOnlyList<AgentMessage>)result;
-        }, ResultErrors.Message).ConfigureAwait(false);
+            // The reader's view: the turns the log never closed closed in
+            // memory, plus what the read could not deliver.
+            var unclosed = TranscriptInspector.FindUnclosedToolCalls(result);
+            var integrity = new TranscriptIntegrity(skipped.Count, tailUnreadable, unclosed);
+            var balanced = TranscriptInspector.CloseUnclosedToolCalls(result);
+
+            return Result.Success(new SqliteSessionRead(result, new SessionTranscript(balanced, integrity)));
+        }, ResultErrors.Message)
+            .Bind(x => x)
+            .ConfigureAwait(false);
     }
 
     public async Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
@@ -655,6 +718,18 @@ public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
         return conn;
     }
 }
+
+/// <summary>
+///     One read of a session: the log's rows and the reader's view of the same
+///     read (#1744). Both come from ONE pass over the table — a second read
+///     would be a second snapshot, and the two halves could describe different
+///     moments.
+/// </summary>
+/// <param name="Messages">The log's messages, in chronological order.</param>
+/// <param name="Transcript">The reader's view: the closed transcript and its integrity.</param>
+internal sealed record SqliteSessionRead(
+    IReadOnlyList<AgentMessage> Messages,
+    SessionTranscript Transcript);
 
 /// <summary>
 ///     SG8: BCL <c>[LoggerMessage]</c> delegates for <see cref="SqliteSessionStore" />.

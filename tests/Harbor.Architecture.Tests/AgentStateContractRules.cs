@@ -116,7 +116,7 @@ public sealed class AgentStateContractRules
         ],
         Controls =
         [
-            // Verbatim src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:119 as it shipped — the #559 spelling.
+            // Verbatim DefaultAgent as it shipped — the #559 spelling.
             new ScanControl("Shipped.cs", """
                 /// <summary>
                 ///     Current agent state snapshot. null until Initialize is called.
@@ -206,8 +206,7 @@ public sealed class AgentStateContractRules
     [Test]
     public async Task FabricationScan_FlagsTheSpellingThatShipped()
     {
-        // Verbatim on purpose: this is src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:119 exactly as it shipped,
-        // check-doc-cites: record-drift src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:119 now="" [#947: cited line is blank; repair deferred to the owner's decision] -->
+        // Verbatim on purpose: this is DefaultAgent exactly as it shipped,
         // rewritten only into the form the scanner takes. A miss means rule 2 is
         // inert and its passing on the real tree means nothing.
         const string Shipped = """

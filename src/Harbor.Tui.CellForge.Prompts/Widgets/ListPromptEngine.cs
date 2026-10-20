@@ -196,6 +196,232 @@ public sealed class ListPromptTree<T> where T : notnull
 }
 
 /// <summary>
+/// Which mode of a list prompt a command is live in: the scope gate that
+/// replaced the two <c>when</c>-clauses the old <c>switch</c> carried on its
+/// two <see cref="KeyCode.Char"/> arms (<c>SearchEnabled</c> and
+/// <c>!SearchEnabled</c>). A command in <see cref="Any"/> is live in both
+/// modes — the arrows, Home/End and the page keys.
+/// </summary>
+internal enum ListPromptScope
+{
+    /// <summary>Live in every mode.</summary>
+    Any = 0,
+
+    /// <summary>Live only while the incremental search is on.</summary>
+    Search = 1,
+
+    /// <summary>Live only while the incremental search is off (the vim keys).</summary>
+    Navigation = 2,
+}
+
+/// <summary>
+/// The gesture a list-prompt command fires on: the key code, an optional
+/// exact rune, and whether the press must be typeable text.
+/// </summary>
+/// <remarks>
+/// Modifiers are tested exactly where the old <c>switch</c> tested them: a
+/// char gesture refuses a command modifier (Ctrl/Alt/Meta — that chord
+/// belongs to the host) through <see cref="KeyModifierGate.AcceptsTypedChar"/>,
+/// while the named keys do not look at modifiers at all, so a chorded arrow
+/// still navigates, exactly as before.
+/// </remarks>
+/// <param name="Key">The key code that fires the command.</param>
+/// <param name="Character">The exact rune that fires it (null = any rune).</param>
+/// <param name="TypedOnly">Whether the press must be typeable text.</param>
+internal readonly record struct ListPromptGesture(KeyCode Key, Rune? Character = null, bool TypedOnly = false)
+{
+    /// <summary>Whether the gesture fires on <paramref name="key"/>.</summary>
+    public bool Matches(in KeyEvent key)
+    {
+        if (key.Key != Key)
+        {
+            return false;
+        }
+
+        if (Character is { } rune && key.Character != rune)
+        {
+            return false;
+        }
+
+        return !TypedOnly || key.Modifiers.AcceptsTypedChar();
+    }
+}
+
+/// <summary>
+/// The state surface a list-prompt command drives. Deliberately non-generic:
+/// a command moves the cursor and edits the search text, never the leaf
+/// payload, so the command vocabulary stays one closed set instead of one set
+/// per payload type.
+/// </summary>
+internal interface IListPromptTarget
+{
+    /// <summary>Whether the incremental search is on.</summary>
+    bool SearchEnabled { get; }
+
+    /// <summary>The current incremental-search text.</summary>
+    string SearchText { get; }
+
+    /// <summary>Steps the cursor by a signed delta in the active (leaf or flat) space.</summary>
+    bool MoveBy(int delta);
+
+    /// <summary>Parks the cursor on the first/last navigable row.</summary>
+    bool MoveToEdge(bool toStart);
+
+    /// <summary>Jumps by whole pages.</summary>
+    bool PageBy(int pages);
+
+    /// <summary>Applies a search string: jumps to the first match and stores the text.</summary>
+    bool ApplySearch(string search);
+
+    /// <summary>Cycles to the next search match.</summary>
+    bool CycleSearchMatch();
+}
+
+/// <summary>
+/// One action of a list prompt, as an object (GoF Command — the repo's §4
+/// convention: a command is an object, not a <c>switch</c> arm). The command
+/// owns its own precondition (<see cref="CanExecute"/>, the old
+/// <c>when</c>-clause) and its action (<see cref="Execute"/>), so
+/// <see cref="ListPromptState{T}.Update"/> is a table lookup plus an execute
+/// and a new key is one row.
+/// </summary>
+internal interface IListPromptCommand
+{
+    /// <summary>Whether the command may run for this key right now.</summary>
+    bool CanExecute(IListPromptTarget target, in KeyEvent key);
+
+    /// <summary>Runs the command; true when the state changed.</summary>
+    bool Execute(IListPromptTarget target, in KeyEvent key);
+}
+
+/// <summary>Moves the cursor by a signed delta (Up/Down, and the vim j/J/k/K).</summary>
+/// <param name="Delta">The signed step.</param>
+internal sealed record ListPromptMoveByCommand(int Delta) : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => true;
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) => target.MoveBy(Delta);
+}
+
+/// <summary>Parks the cursor on the first/last navigable row (Home/End, and the vim g/G).</summary>
+/// <param name="ToStart">True for the first row, false for the last.</param>
+internal sealed record ListPromptMoveToEdgeCommand(bool ToStart) : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => true;
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) => target.MoveToEdge(ToStart);
+}
+
+/// <summary>Jumps by whole pages (PageUp/PageDown).</summary>
+/// <param name="Pages">The signed page count.</param>
+internal sealed record ListPromptPageByCommand(int Pages) : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => true;
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) => target.PageBy(Pages);
+}
+
+/// <summary>Shrinks the incremental search by one character (Backspace).</summary>
+internal sealed record ListPromptSearchBackspaceCommand : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => target.SearchText.Length > 0;
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) => target.ApplySearch(target.SearchText[..^1]);
+}
+
+/// <summary>Cycles to the next search match (Tab).</summary>
+internal sealed record ListPromptSearchCycleCommand : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => target.SearchText.Length > 0;
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) => target.CycleSearchMatch();
+}
+
+/// <summary>Appends the typed rune to the incremental search (any typed char).</summary>
+internal sealed record ListPromptSearchTypeCommand : IListPromptCommand
+{
+    /// <inheritdoc/>
+    public bool CanExecute(IListPromptTarget target, in KeyEvent key) => !Rune.IsControl(key.Character);
+
+    /// <inheritdoc/>
+    public bool Execute(IListPromptTarget target, in KeyEvent key) =>
+        target.ApplySearch(target.SearchText + char.ConvertFromUtf32(key.Character.Value));
+}
+
+/// <summary>
+/// One row of the list prompt's command table: the gesture that fires the
+/// command, the scope the command is live in, and the command itself.
+/// </summary>
+/// <param name="Gesture">The gesture that fires the command.</param>
+/// <param name="Scope">The mode the command is live in.</param>
+/// <param name="Command">The command to run.</param>
+internal sealed record ListPromptBinding(
+    ListPromptGesture Gesture,
+    ListPromptScope Scope,
+    IListPromptCommand Command);
+
+/// <summary>
+/// The list prompt's command table: gesture → command, in lookup order (#1547).
+/// </summary>
+/// <remarks>
+/// One row per gesture, in the order the old <c>switch</c> evaluated its
+/// arms: the navigation keys first (live in every mode), then the
+/// incremental-search commands (live only while the search is on), then the
+/// vim commands (live only while it is off). The vim rows reuse the SAME
+/// command objects as the arrow keys — <c>j</c>/<c>J</c> is the same move as
+/// Down, <c>g</c> the same as Home — which is the duplication the old
+/// <c>switch</c> + <c>UpdateVim</c> pair carried.
+/// </remarks>
+internal static class ListPromptCommandTable
+{
+    /// <summary>
+    /// The move commands, shared by the arrow rows and the vim rows: the
+    /// vim keys are not a second implementation of "move", they are the
+    /// same command behind a second gesture.
+    /// </summary>
+    private static readonly ListPromptMoveByCommand MoveDown = new(1);
+    private static readonly ListPromptMoveByCommand MoveUp = new(-1);
+    private static readonly ListPromptMoveToEdgeCommand MoveToFirst = new(true);
+    private static readonly ListPromptMoveToEdgeCommand MoveToLast = new(false);
+
+    /// <summary>The table: the first row whose gesture matches and whose
+    /// command may run is the one that runs.</summary>
+    internal static readonly ListPromptBinding[] Bindings =
+    [
+        // ── navigation: live in every mode ────────────────────────────────
+        new(new ListPromptGesture(KeyCode.Up), ListPromptScope.Any, MoveUp),
+        new(new ListPromptGesture(KeyCode.Down), ListPromptScope.Any, MoveDown),
+        new(new ListPromptGesture(KeyCode.Home), ListPromptScope.Any, MoveToFirst),
+        new(new ListPromptGesture(KeyCode.End), ListPromptScope.Any, MoveToLast),
+        new(new ListPromptGesture(KeyCode.PageUp), ListPromptScope.Any, new ListPromptPageByCommand(-1)),
+        new(new ListPromptGesture(KeyCode.PageDown), ListPromptScope.Any, new ListPromptPageByCommand(1)),
+
+        // ── incremental search: live only while the search is on ───────────
+        new(new ListPromptGesture(KeyCode.Backspace), ListPromptScope.Search, new ListPromptSearchBackspaceCommand()),
+        new(new ListPromptGesture(KeyCode.Tab), ListPromptScope.Search, new ListPromptSearchCycleCommand()),
+        new(new ListPromptGesture(KeyCode.Char, TypedOnly: true), ListPromptScope.Search, new ListPromptSearchTypeCommand()),
+
+        // ── vim keys: live only while the search is off ────────────────────
+        new(new ListPromptGesture(KeyCode.Char, new Rune('j'), TypedOnly: true), ListPromptScope.Navigation, MoveDown),
+        new(new ListPromptGesture(KeyCode.Char, new Rune('J'), TypedOnly: true), ListPromptScope.Navigation, MoveDown),
+        new(new ListPromptGesture(KeyCode.Char, new Rune('k'), TypedOnly: true), ListPromptScope.Navigation, MoveUp),
+        new(new ListPromptGesture(KeyCode.Char, new Rune('K'), TypedOnly: true), ListPromptScope.Navigation, MoveUp),
+        new(new ListPromptGesture(KeyCode.Char, new Rune('g'), TypedOnly: true), ListPromptScope.Navigation, MoveToFirst),
+        new(new ListPromptGesture(KeyCode.Char, new Rune('G'), TypedOnly: true), ListPromptScope.Navigation, MoveToLast),
+    ];
+}
+
+/// <summary>
 /// Navigable list state (Spectre.Console <c>ListPromptState{T}</c> ported onto
 /// CellForge <see cref="KeyEvent"/> input): leaf-index table, wrap-around,
 /// incremental search (type/Backspace/Tab-cycle), vim keys, and paging.
@@ -204,7 +430,7 @@ public sealed class ListPromptTree<T> where T : notnull
 /// returning false) — upstream assumes a non-empty list, our pickers do not.
 /// </summary>
 /// <typeparam name="T">Leaf payload type.</typeparam>
-public sealed class ListPromptState<T> where T : notnull
+public sealed class ListPromptState<T> : IListPromptTarget where T : notnull
 {
     private readonly Func<T, string> _converter;
     private readonly List<int>? _leafIndexes;
@@ -364,9 +590,12 @@ public sealed class ListPromptState<T> where T : notnull
     public bool PageBy(int pages) => MoveBy(pages * PageSize);
 
     /// <summary>
-    /// Handles one key: arrows/Home/End/PageUp/PageDown always; <c>j</c>/<c>k</c>/<c>g</c>/<c>G</c>
-    /// when search is off; incremental search (type/Backspace/Tab-cycle) when on.
-    /// Returns true when the cursor or the search text moved.
+    /// Handles one key through the command table
+    /// (<see cref="ListPromptCommandTable"/>): the navigation commands
+    /// (arrows/Home/End/paging) in every mode, the incremental-search
+    /// commands (type/Backspace/Tab-cycle) while the search is on, the vim
+    /// commands (j/J/k/K/g/G) while it is off. Returns true when the cursor
+    /// or the search text moved.
     /// </summary>
     /// <remarks>
     /// Intentional deviation from upstream: Spectre.Console cannot tell a
@@ -381,33 +610,27 @@ public sealed class ListPromptState<T> where T : notnull
             return false;
         }
 
-        switch (key.Key)
+        ListPromptScope scope = SearchEnabled ? ListPromptScope.Search : ListPromptScope.Navigation;
+        ListPromptBinding[] bindings = ListPromptCommandTable.Bindings;
+
+        for (int i = 0; i < bindings.Length; i++)
         {
-            case KeyCode.Up:
-                return MoveBy(-1);
-            case KeyCode.Down:
-                return MoveBy(1);
-            case KeyCode.Home:
-                return MoveToLeafOrFlat(0, fromStart: true);
-            case KeyCode.End:
-                return MoveToLeafOrFlat(Items.Count - 1, fromStart: false);
-            case KeyCode.PageUp:
-                return PageBy(-1);
-            case KeyCode.PageDown:
-                return PageBy(1);
-            case KeyCode.Backspace when SearchEnabled && SearchText.Length > 0:
-                return ApplySearch(SearchText[..^1]);
-            case KeyCode.Tab when SearchEnabled && SearchText.Length > 0:
-                return CycleSearchMatch();
-            case KeyCode.Char when SearchEnabled
-                && key.Modifiers.AcceptsTypedChar()
-                && !Rune.IsControl(key.Character):
-                return ApplySearch(SearchText + char.ConvertFromUtf32(key.Character.Value));
-            case KeyCode.Char when !SearchEnabled && key.Modifiers.AcceptsTypedChar():
-                return UpdateVim(key.Character.Value);
-            default:
-                return false;
+            ListPromptBinding binding = bindings[i];
+
+            if (binding.Scope != ListPromptScope.Any && binding.Scope != scope)
+            {
+                continue;
+            }
+
+            if (!binding.Gesture.Matches(in key) || !binding.Command.CanExecute(this, in key))
+            {
+                continue;
+            }
+
+            return binding.Command.Execute(this, in key);
         }
+
+        return false;
     }
 
     /// <summary>
@@ -491,11 +714,21 @@ public sealed class ListPromptState<T> where T : notnull
         return true;
     }
 
-    private bool MoveToLeafOrFlat(int flatIndex, bool fromStart)
+    /// <summary>
+    /// Parks the cursor on the first/last navigable row: the first/last leaf
+    /// in Leaf mode, the first/last flat row otherwise (Multiple parks on
+    /// headers too, so groups stay toggleable).
+    /// </summary>
+    /// <remarks>
+    /// The command-facing member of <see cref="IListPromptTarget"/>: Home/End
+    /// and the vim g/G all land here, which is why the old per-key
+    /// <c>MoveToLeafOrFlat</c> call sites disappeared.
+    /// </remarks>
+    bool IListPromptTarget.MoveToEdge(bool toStart)
     {
         if (Mode != ListSelectionMode.Leaf)
         {
-            return SetFlatIndex(Math.Clamp(flatIndex, 0, Items.Count - 1));
+            return SetFlatIndex(Math.Clamp(toStart ? 0 : Items.Count - 1, 0, Items.Count - 1));
         }
 
         if (_leafIndexes is null || _leafIndexes.Count == 0)
@@ -503,26 +736,7 @@ public sealed class ListPromptState<T> where T : notnull
             return false;
         }
 
-        return SetFlatIndex(fromStart ? _leafIndexes[0] : _leafIndexes[^1]);
-    }
-
-    private bool UpdateVim(int codepoint)
-    {
-        switch (codepoint)
-        {
-            case 'j':
-            case 'J':
-                return MoveBy(1);
-            case 'k':
-            case 'K':
-                return MoveBy(-1);
-            case 'g':
-                return MoveToLeafOrFlat(0, fromStart: true);
-            case 'G':
-                return MoveToLeafOrFlat(Items.Count - 1, fromStart: false);
-            default:
-                return false;
-        }
+        return SetFlatIndex(toStart ? _leafIndexes[0] : _leafIndexes[^1]);
     }
 
     private int NearestLeaf(int flatIndex)
@@ -556,7 +770,11 @@ public sealed class ListPromptState<T> where T : notnull
         return _converter(node.Data).Contains(search, StringComparison.OrdinalIgnoreCase);
     }
 
-    private bool ApplySearch(string search)
+    /// <summary>
+    /// Applies a search string: jumps to the first matching row and stores
+    /// the text. The command-facing member of <see cref="IListPromptTarget"/>.
+    /// </summary>
+    bool IListPromptTarget.ApplySearch(string search)
     {
         int index = Index;
         for (int i = 0; i < Items.Count; i++)
@@ -578,7 +796,11 @@ public sealed class ListPromptState<T> where T : notnull
         return true;
     }
 
-    private bool CycleSearchMatch()
+    /// <summary>
+    /// Cycles to the next matching row for the current search text. The
+    /// command-facing member of <see cref="IListPromptTarget"/>.
+    /// </summary>
+    bool IListPromptTarget.CycleSearchMatch()
     {
         var matches = new List<int>();
         for (int i = 0; i < Items.Count; i++)

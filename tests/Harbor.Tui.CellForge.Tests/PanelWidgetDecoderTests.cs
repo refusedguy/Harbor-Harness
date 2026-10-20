@@ -50,8 +50,83 @@ public class PanelWidgetDecoderTests
     {
         await Assert.That(Joined(new PanelProgress("build", 0.5))).IsEqualTo("build [########--------] 50%");
         await Assert.That(Joined(new PanelTable(["a", "b"], [["1", "2"]]))).IsEqualTo("a | b\n-----\n1 | 2");
-        await Assert.That(Joined(new PanelTree([(0, "root"), (1, "leaf")]))).IsEqualTo("root\n  leaf");
+        await Assert.That(Joined(new PanelTree([new PanelTreeBranch("root", [new PanelTreeLeaf("leaf")])])))
+            .IsEqualTo("root\n  leaf");
         await Assert.That(Joined(new PanelForm("opts", [("k", "v")]))).IsEqualTo("opts\nk: v");
+    }
+
+    /// <summary>
+    ///     #1521: the tree is a part-whole structure, so a parent owns its
+    ///     children. The rows are the ones the flat depth list produced: one
+    ///     row per node, two spaces of indent per level.
+    /// </summary>
+    [Test]
+    public async Task Tree_Nesting_Zero_One_And_Many()
+    {
+        // 0 children.
+        await Assert.That(Joined(new PanelTree([new PanelTreeLeaf("solo")]))).IsEqualTo("solo");
+        await Assert.That(Joined(new PanelTree([new PanelTreeBranch("solo")]))).IsEqualTo("solo");
+
+        // 1 child.
+        await Assert.That(Joined(new PanelTree([new PanelTreeBranch("root", [new PanelTreeLeaf("child")])])))
+            .IsEqualTo("root\n  child");
+
+        // N children, two levels deep: a parent, then its own children.
+        await Assert.That(Joined(new PanelTree(
+        [
+            new PanelTreeBranch(
+                "root",
+                [
+                    new PanelTreeBranch("a", [new PanelTreeLeaf("a1"), new PanelTreeLeaf("a2")]),
+                    new PanelTreeLeaf("b"),
+                ]),
+        ]))).IsEqualTo("root\n  a\n    a1\n    a2\n  b");
+    }
+
+    /// <summary>
+    ///     #1521: an empty tree is empty rows, not a missing widget. The
+    ///     decoder claims it, the same way the flat depth list did.
+    /// </summary>
+    [Test]
+    public async Task Tree_Empty_Renders_No_Rows()
+    {
+        await Assert.That(Joined(new PanelTree())).IsEqualTo(string.Empty);
+        await Assert.That(Joined(new PanelTree([]))).IsEqualTo(string.Empty);
+    }
+
+    /// <summary>
+    ///     #1521: the tree decoder claims the tree shape and nothing else.
+    ///     An unknown widget falls through to the legacy shapes.
+    /// </summary>
+    [Test]
+    public async Task Tree_Decoder_Declines_A_Non_Tree_Widget()
+    {
+        var decoder = new PanelWidgetDecoders.Tree();
+
+        bool claimed = decoder.TryDecode(
+            new PanelForm("opts", [("k", "v")]),
+            new PanelContext(new UiState(), 80, 24),
+            out IReadOnlyList<string>? rows);
+
+        await Assert.That(claimed).IsFalse();
+        await Assert.That(rows).IsNull();
+    }
+
+    /// <summary>
+    ///     #1521: siblings keep their order, and a subtree mounted twice is
+    ///     rendered twice. The walk follows the structure, it does not
+    ///     de-duplicate it.
+    /// </summary>
+    [Test]
+    public async Task Tree_Keeps_Sibling_Order()
+    {
+        IPanelTreeNode shared = new PanelTreeLeaf("shared");
+
+        await Assert.That(Joined(new PanelTree(
+        [
+            new PanelTreeBranch("root", [shared, shared]),
+            new PanelTreeLeaf("last"),
+        ]))).IsEqualTo("root\n  shared\n  shared\nlast");
     }
 
     [Test]

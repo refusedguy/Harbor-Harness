@@ -195,6 +195,17 @@ jobs:
           sudo systemctl stop snapd.service snapd.socket || true
           taskset -c 1 dotnet run -c Release --no-build -- --filter '*CellSimd*' --job Short
 
+      # #1524: the cell style on the diff hot path. The style access row is the
+      # shape the issue named ("Cell.Style builds a CellStyle per access"), the
+      # rebuilt-compare row is the diff path before #1524, and the packed-compare
+      # row is the path after it. The step also echoes the distinct-vs-cells
+      # ratio (STYLE-DISTINCT), which is the issue's own gate number.
+      - name: Bench CellStyle shared view
+        working-directory: tests/Harbor.Benchmarks
+        run: |
+          sudo systemctl stop snapd.service snapd.socket || true
+          taskset -c 1 dotnet run -c Release --no-build -- --filter '*CellStyle*' --job Short
+
       # #1532: the prompt-cache key is a per-turn hot path (it is read once per
       # turn even on a hit). Build_Hit/Build_Miss cover it; the CachingPrompt
       # scaling-gate rows in docs/BENCHMARKS.md are filled from this step.

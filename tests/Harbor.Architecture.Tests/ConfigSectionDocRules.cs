@@ -293,7 +293,7 @@ public sealed class ConfigSectionDocRules
         ];
 
         await Assert.That(ConfigSectionDocProbe.FindMultiSummaryBlocks(duplicated).Count).IsEqualTo(1)
-            .Because("this is ConfigSections.cs:97-102 verbatim in shape, and it is the only thing "
+            .Because("this is the `ToolingConfig` declaration verbatim in shape, and it is the only thing "
                 + "the rule is for. If the scanner misses it, the rule above is green because it "
                 + "read nothing, not because the source is correct.");
 

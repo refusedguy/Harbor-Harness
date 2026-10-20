@@ -26,17 +26,17 @@
 // and every one of them is a real site in this repo today:
 //
 //   1. `catch (Exception ex) when (ex is IOException or ...)` — narrowed by an
-//      exception filter. Live examples: ImageAttachmentReader.cs:73, :96,
-//      FileClaimRegistry.cs:149 (moved verbatim to Harbor.ChangeTracking by
+//      exception filter. Live examples: ImageAttachmentReader (two catch arms),
+//      FileClaimRegistry (moved verbatim to Harbor.ChangeTracking by
 //      #1616 — content, line numbering untouched),
-//      src/Harbor.SessionContext/Sessions/WorkspaceInspector.cs:142,
-//      SkillUpdater.cs:273.
+//      WorkspaceInspector.MaxStderrInError,
+//      SkillUpdater.FindRepositoryRoot.
 //      Converting these would swallow exceptions the author chose to let escape.
 //   2. `catch (IOException)` / `catch (JsonException)` — narrowed by type.
-//      Live examples: DaemonBindPolicy.cs:233,253; HostsCatalog.cs:87,92;
-//      PluginScript.cs:124.
+//      Live examples: PskStore.Load and PskStore.Save; HostsCatalog.DefaultPath (two arms);
+//      PluginScript.Hash.
 //   3. More than one `catch` arm — a dispatch, not a single net. `Result.Try`
-//      has one handler. IdeSessionBridge.cs:193-205 routes cancellation and
+//      has one handler. IdeSessionBridge.RunPromptAsync routes cancellation and
 //      general faults to DIFFERENT messages and must keep doing so.
 //
 // A fourth shape needs an explicit entry rather than a structural test: a try

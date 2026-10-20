@@ -13,10 +13,10 @@
 // FOUR more hand-written writers of the same session token spend, in a
 // notation no C# scan can see:
 //
-//   StatusBarView.axaml:57   {Binding TokensIn,  StringFormat='↓ {0:N0}'}
-//   StatusBarView.axaml:66   {Binding TokensOut, StringFormat='↑ {0:N0}'}
-//   TokenUsageView.axaml:20  {Binding TotalTokensIn,  StringFormat='{}{0:N0}'}
-//   TokenUsageView.axaml:28  {Binding TotalTokensOut, StringFormat='{}{0:N0}'}
+//   StatusBarView    `TokensIn`    {Binding TokensIn,  StringFormat='↓ {0:N0}'}
+//   StatusBarView    `TokensOut`   {Binding TokensOut, StringFormat='↑ {0:N0}'}
+//   TokenUsageView   `TotalTokensIn`  {Binding TotalTokensIn,  StringFormat='{}{0:N0}'}
+//   TokenUsageView   `TotalTokensOut` {Binding TotalTokensOut, StringFormat='{}{0:N0}'}
 //
 // `N0` is a fifth notation: a thousands separator and no scale at all, so the
 // same session reads `12,499` in the desktop GUI and `12.5K` in the status bar
@@ -208,7 +208,7 @@ public sealed class TokenCellSingleHomeRules
             1,
             "CONVENTION 'F1 + K/M' (the K branch), magnitude A, reader: a human watching the "
             + "projected status bar every turn. Reached through StatusBarFacts.Tokens "
-            + "(StatusBarFacts.cs:100). It is one of the three precisions ADR-010 §6 leaves "
+            + "(StatusBarFacts.Of). It is one of the three precisions ADR-010 §6 leaves "
             + "open between 'F1' (120.0K), 'F2' and '0.#' (120K) — frozen here, not chosen."),
 
         new LineHome(
@@ -270,7 +270,7 @@ public sealed class TokenCellSingleHomeRules
             1,
             "The M branch of the same writer, and the one place the tree contradicts ITSELF "
             + "inside a single expression: F1 for 'K' and F2 for 'M', one line apart "
-            + "(PanelRows.cs:642 against :644). ADR-010 §2.2 records this as confirmed rather "
+            + "(both in `PanelText.Bar`). ADR-010 §2.2 records this as confirmed rather "
             + "than assumed. It is drift, not a convention, and it is the cheapest thing here "
             + "for the owner to overrule."),
 
@@ -279,8 +279,8 @@ public sealed class TokenCellSingleHomeRules
             @"< 1_000_000 => (tokens / 1000.0).ToString(""0.#"", System.Globalization.CultureInfo.InvariantCulture) + ""k"",",
             1,
             "MAGNITUDE A' — the PER-MESSAGE token spend, not the session total. Reached only "
-            + "from StreamCoalescer.cs:312, which feeds it _msgTokensIn/_msgTokensOut, "
-            + "accumulated per message at StreamCoalescer.cs:361-362. This is the one rendering "
+            + "from StreamCoalescer.FinishStream, which feeds it _msgTokensIn/_msgTokensOut, "
+            + "accumulated per message at StreamCoalescer.FormatDuration. This is the one rendering "
             + "in the table that is a DIFFERENT quantity sharing a notation with a session "
             + "cell, and it is why the count of 'copies' cannot be settled by reading shapes."),
 
@@ -315,7 +315,7 @@ public sealed class TokenCellSingleHomeRules
             @"| {TokensIn}↑ {TokensOut}↓{queue} |",
             1,
             "CONVENTION 'RAW, no suffix', magnitude A, reader: a human on the plain or ANSI "
-            + "renderer — every renderer except CellForge (StatusBarView.cs:54,58 paints it). "
+            + "renderer — every renderer except CellForge (whose StatusBarView renderer paints it). "
             + "A session on 12 499 tokens therefore reads '12499↑ 87↓' here, '12.5K↑ 87↓' in "
             + "the CellForge footer and '12.5k↑ 87↓' in the status widget: the divergence does "
             + "not even line up along renderer families. This line carries no scale, which is "
@@ -346,7 +346,7 @@ public sealed class TokenCellSingleHomeRules
             @"{Binding TotalTokensIn, StringFormat='{}{0:N0}'}",
             1,
             "CONVENTION 'N0', magnitude A, reader: a human who opened the desktop token-usage "
-            + "overlay. Same magnitude as the status bar beside it — TokenUsageViewModel.cs:135 "
+            + "overlay. Same magnitude as the status bar beside it — TokenUsageViewModel.RecordUsage "
             + "assigns state.Chat.Cost.TokensIn, the identical field — rendered a different "
             + "way on the same screen. In the very same view, #942 already moved the MONEY cell "
             + "out of markup for exactly this reason; the token cells were left behind."),
@@ -386,14 +386,14 @@ public sealed class TokenCellSingleHomeRules
         // policed them would be the #591 failure mode — half a rule, reporting a
         // plausible 0.
         //
-        //   TuiViewModels.cs:115        `ctx: {RequestTokens / 1000}k/{ContextPct}%`
+        //   StatusBarViewModel.Formatted        `ctx: {RequestTokens / 1000}k/{ContextPct}%`
         //     CONTEXT OCCUPANCY, a different magnitude, and one the repo separates
         //     on purpose (#623/#630): ContextUsage.DisplayedInputTokens itself splits
         //     "paid" from "occupied". Uniting it with the spend above would be a
         //     regression. Rule B misses it because it is scaled by interpolation,
         //     with no format specifier — which is rule B's stated limitation.
         //
-        //   SharedDataModels.cs:120     `{ContextWindow / 1000}K ctx · …`
+        //   ModelEntryViewModel.Summary     `{ContextWindow / 1000}K ctx · …`
         //     A model CAPABILITY — a catalogue fact, not a measurement. Dead in
         //     production use (ADR-010 §4.5), and a separate decision about that.
         //

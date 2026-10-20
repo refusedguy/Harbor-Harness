@@ -33,8 +33,78 @@ public sealed record PanelProgress(string Label, double Fraction);
 /// <summary>Header + data rows → <c>a | b</c> rows with a separator line.</summary>
 public sealed record PanelTable(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
 
-/// <summary>Depth-indented nodes → one row per node.</summary>
-public sealed record PanelTree(IReadOnlyList<(int Depth, string Label)> Nodes);
+/// <summary>
+///     Component of a panel tree: a labelled node that is either a leaf or a
+///     composite. Leaf and composite are reached through this ONE interface,
+///     so the code that walks a tree never branches on the kind of node it
+///     stands on (#1521, Composite).
+/// </summary>
+public interface IPanelTreeNode
+{
+    /// <summary>The node's own text, without indentation.</summary>
+    string Label { get; }
+
+    /// <summary>
+    ///     The node's children, in render order. Empty for a leaf.
+    /// </summary>
+    IReadOnlyList<IPanelTreeNode> Children { get; }
+}
+
+/// <summary>Leaf component of a panel tree: a node without children.</summary>
+/// <param name="Label">The node's own text.</param>
+public sealed record PanelTreeLeaf(string Label) : IPanelTreeNode
+{
+    /// <inheritdoc />
+    public IReadOnlyList<IPanelTreeNode> Children { get; } = Array.Empty<IPanelTreeNode>();
+}
+
+/// <summary>
+///     Composite component of a panel tree: a node that owns an ordered list
+///     of children.
+/// </summary>
+public sealed record PanelTreeBranch : IPanelTreeNode
+{
+    /// <summary>Creates a branch over the given children.</summary>
+    /// <param name="label">The node's own text.</param>
+    /// <param name="children">
+    ///     The children, in render order. Copied into the branch, so the tree
+    ///     is an immutable snapshot: a list the caller keeps mutating cannot
+    ///     change the tree under the decoder, and a cycle cannot be built
+    ///     through it.
+    /// </param>
+    public PanelTreeBranch(string label, IEnumerable<IPanelTreeNode>? children = null)
+    {
+        Label = label;
+        Children = children is null ? [] : [.. children];
+    }
+
+    /// <inheritdoc />
+    public string Label { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<IPanelTreeNode> Children { get; }
+}
+
+/// <summary>
+///     Part-whole tree of panel nodes → one indented row per node. The
+///     hierarchy lives in the structure (a parent owns its children), not in
+///     a depth number next to a label (#1521).
+/// </summary>
+public sealed record PanelTree
+{
+    /// <summary>Creates a tree over the given roots.</summary>
+    /// <param name="roots">
+    ///     The top-level nodes, in render order. Copied into the tree, for
+    ///     the same reason <see cref="PanelTreeBranch" /> copies its children.
+    /// </param>
+    public PanelTree(IEnumerable<IPanelTreeNode>? roots = null)
+    {
+        Roots = roots is null ? [] : [.. roots];
+    }
+
+    /// <summary>The top-level nodes, in render order.</summary>
+    public IReadOnlyList<IPanelTreeNode> Roots { get; }
+}
 
 /// <summary>Titled form → title row plus <c>name: value</c> rows.</summary>
 public sealed record PanelForm(string Title, IReadOnlyList<(string Name, string Value)> Fields);
@@ -85,8 +155,17 @@ public static class PanelWidgetDecoders
         }
     }
 
+    /// <summary>
+    ///     Tree widget → one indented row per node. The tree is walked as the
+    ///     part-whole structure it is: the walk stands on a parent, resolves
+    ///     the subtree of every child and hands that subtree down. No node
+    ///     looks up its own children, and no node is matched by its type.
+    /// </summary>
     public sealed class Tree : IPanelWidgetDecoder
     {
+        /// <summary>Spaces of indentation per level of nesting.</summary>
+        private const int IndentPerLevel = 2;
+
         public int Priority => 100;
 
         public bool TryDecode(object widget, PanelContext ctx, out IReadOnlyList<string>? rows)
@@ -97,8 +176,41 @@ public static class PanelWidgetDecoders
                 return false;
             }
 
-            rows = t.Nodes.Select(n => $"{new string(' ', Math.Max(n.Depth, 0) * 2)}{n.Label}").ToArray();
+            rows = Rows(t.Roots);
             return true;
+        }
+
+        /// <summary>
+        ///     One walk over the part-whole tree: a parent before its
+        ///     children, siblings in order. The walk is iterative, so a deep
+        ///     chain cannot overflow the stack. That is the same reason
+        ///     <c>TreeView</c>'s subscription walk is iterative.
+        /// </summary>
+        /// <param name="roots">The tree's top-level nodes.</param>
+        /// <returns>One row per node, indented by its depth.</returns>
+        private static IReadOnlyList<string> Rows(IReadOnlyList<IPanelTreeNode> roots)
+        {
+            var rows = new List<string>();
+            var pending = new Stack<(IPanelTreeNode Node, int Depth)>();
+
+            for (int i = roots.Count - 1; i >= 0; i--)
+            {
+                pending.Push((roots[i], 0));
+            }
+
+            while (pending.Count > 0)
+            {
+                (IPanelTreeNode node, int depth) = pending.Pop();
+                rows.Add(new string(' ', depth * IndentPerLevel) + node.Label);
+
+                IReadOnlyList<IPanelTreeNode> children = node.Children;
+                for (int i = children.Count - 1; i >= 0; i--)
+                {
+                    pending.Push((children[i], depth + 1));
+                }
+            }
+
+            return rows;
         }
     }
 

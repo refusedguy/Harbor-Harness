@@ -4,9 +4,9 @@
 // --------------------
 // #535 was filed as a capability-rules item: `RecentItemsService` sits in
 // `Harbor.Desktop.Shared` and calls `File.Exists` / `File.ReadAllText` /
-// `File.WriteAllText` (`:89,:90,:117`) and `Directory.CreateDirectory` (`:110`),
+// `File.WriteAllText` and `Directory.CreateDirectory`,
 // so two rows in `PresentationCapabilityRules.KnownViolations` kept the rule
-// green. It also reads `Environment.GetFolderPath(UserProfile)` (`:45`), which
+// green. It also reads `Environment.GetFolderPath(UserProfile)`, which
 // the capability rules cannot see, because it is neither `File.*` nor
 // `Directory.*`.
 //
@@ -212,7 +212,7 @@ public sealed class DesktopSharedTakesNoIoRules
             // #535 names GetFolderPath in prose; documenting it must not trip the rule.
             new ScanControl(
                 "Prose.cs",
-                "// #535: it also reads Environment.GetFolderPath(UserProfile) at :45.",
+                "// #535: it also reads Environment.GetFolderPath(UserProfile).",
                 null),
             // CurrentDirectory is not user-profile reach — deliberately not ruled.
             new ScanControl("Strings.cs", "            string cwd = Environment.CurrentDirectory;", null),

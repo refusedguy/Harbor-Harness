@@ -77,6 +77,15 @@ public sealed class DeferredSessionStore : ISessionStore
     }
 
     /// <inheritdoc />
+    public Task<Result<SessionTranscript>> GetTranscriptAsync(string sessionId, CancellationToken ct = default)
+    {
+        var current = Current;
+        return current is not null
+            ? current.GetTranscriptAsync(sessionId, ct)
+            : Task.FromResult(Result.Failure<SessionTranscript>(NotReady));
+    }
+
+    /// <inheritdoc />
     public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default)
     {
         var current = Current;

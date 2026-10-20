@@ -26,7 +26,7 @@
 //          SessionFactory.ResolveAgentDefinitionAsync ?? the default    ← #683
 //
 // Q2 is the one that was still duplicated, and the remaining copy is not a taste question.
-// #683's own comment, at SessionLifecycleService.cs:188-193, names the straggler:
+// #683's own comment, at SessionLifecycleService.OpenSessionAsync, names the straggler:
 //
 //   "Falling back to 'whichever entry the registry enumerates first' is what #683 removed
 //    from the sibling path; leaving it here would reopen the same hole one method away."
@@ -79,8 +79,7 @@
 //   CollapseWhitespace/StripWhitespace.
 // * contrib/ is not scanned. It is not in Harbor.slnx, nothing in apps/ or src/ references
 //   it, and no CI job compiles it (AGENTS.md §Project structure). Its single
-//   `globals.Agents.GetAllAgents()` (contrib/scripting/.../JintScriptEngine.cs:437) is a
-// check-doc-cites: record-drift contrib/scripting/.../JintScriptEngine.cs:437 now="unresolved" [the path is elided with `...` and contrib/ is excluded by construction] -->
+//   `globals.Agents.GetAllAgents()` (in contrib's `JintScriptEngine`) is a
 //   name LIST for a scripting sandbox, not a resolution at all.
 //
 // NON-VACUITY

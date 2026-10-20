@@ -27,7 +27,7 @@
 // sweep was not useless, because asking "where is it now?" found the shape it
 // missed:
 //
-//     src/Harbor.Application/Providers/ProviderHealthCheck.cs:54
+//     ProviderHealthCheck
 //         return Result.Failure<ProviderHealth>(Classify(result.Error));
 //
 // Same operation, different spelling: the re-type's error is piped through a
@@ -112,7 +112,7 @@ public class ResultFailureConversionTests
     private static readonly Dictionary<string, string> Exemptions = new(StringComparer.Ordinal)
     {
         ["src/Harbor.Tui.CellForge.Syntax/Widgets/JsonThemeLoader.cs"] =
-            "The receiver is ThemeParseResult (src/Harbor.DesignSystem/DesignSystem/ThemeJson.cs:11) — "
+            "The receiver is `ThemeParseResult` — "
             + "a hand-rolled `sealed record` with its own IsSuccess/Error/Theme, not a Result<T>. "
             + "ConvertFailure is an instance member of the Result family and does not exist on it, so "
             + "there is nothing to call. Making ThemeParseResult a Result<HarborTheme> would remove the "
@@ -243,7 +243,7 @@ public class ResultFailureConversionTests
             .Because(
                 "The sibling guard's family is an ASSEMBLED message: `MapErrorFailureShapeTests` requires "
                 + "either a `$\"…{x.Error}\"` interpolation or a `+ x.Error` concatenation. This argument "
-                + "is neither — it opens with `Classify(` — so ProviderHealthCheck.cs:54 sat outside BOTH "
+                + "is neither — it opens with `Classify(` — so ProviderHealthCheck sat outside BOTH "
                 + "guards. Asserted on the text itself rather than by re-implementing the sibling's regex, "
                 + "because a local copy of another file's pattern would rot silently and turn a documented "
                 + "gap into a false claim. The gap is closed by Rule 2 above, not by widening Rule 1.");

@@ -472,12 +472,22 @@ public sealed class DefaultInterfaceMemberRule
             + "success for work it never did.",
             ""),
         new(
+            "Harbor.Abstractions.Sessions.ISessionStore",
+            "GetTranscriptAsync",
+            DimDirection.Conservative,
+            "Fails loudly: a store that cannot say what its read could not deliver (#1744) "
+            + "must not answer with a transcript that reads as complete. The omission is "
+            + "visible to the caller, which is the direction #579's convention requires — "
+            + "and a transcript that hides a cut-off tail is the exact lie the member "
+            + "exists to remove.",
+            ""),
+        new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",
             "HandleKey",
             DimDirection.Conservative,
             "Returns false: the key falls through to the next view. Conservative (#579 row 5) — but "
             + "the hook has ZERO callers, since key handling moved to the reducer "
-            + "(AppMsg.KeyInput via KeyEventAdapter.cs:23-27), so it is also dead.",
+            + "(AppMsg.KeyInput via KeyEventAdapter.ToKeyInput), so it is also dead.",
             ""),
         new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",

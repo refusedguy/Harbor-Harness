@@ -21,8 +21,8 @@
 // So the duplication is ELEVEN sites, not nine, and it spans TWO of the three
 // factories rather than one. #764's list of nine line numbers is exactly the
 // `SessionNotFound` sites; the two `MessageNotFound` sites —
-// MemorySessionStore.cs:69 and :107 — are not in the issue at all. Any count
-// check-doc-cites: record-drift MemorySessionStore.cs:69 now="return Task.FromResult(Result.Failure(SessionStoreErrors.…" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
+// MemorySessionStore.UpdateMessageAsync and `MemorySessionStore.DeleteAsync` —
+// are not in the issue at all. Any count
 // downstream of that list was wrong by two, and the missing two are a different
 // shape, so "the same literal nine times" understated both the size and the
 // variety of the duplication.
@@ -33,14 +33,11 @@
 // factories. The holes are the only thing that varies, and they vary the way
 // the parameter name varies at the equivalent factory call site:
 //
-//   MemorySessionStore.cs:146  $"Session '{session.Id}' not found."
-// check-doc-cites: record-drift MemorySessionStore.cs:146 now="}" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
+//   MemorySessionStore.UpdateStatsAsync  $"Session '{session.Id}' not found."
 //       == SessionStoreErrors.SessionNotFound(session.Id)
-//   MemorySessionStore.cs:69   $"Message '{message.Id}' not found in session '{sessionId}'."
-// check-doc-cites: record-drift MemorySessionStore.cs:69 now="return Task.FromResult(Result.Failure(SessionStoreErrors.…" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
+//   MemorySessionStore.UpdateMessageAsync   $"Message '{message.Id}' not found in session '{sessionId}'."
 //       == SessionStoreErrors.MessageNotFound(sessionId, message.Id)
-//   MemorySessionStore.cs:107  $"Message '{messageId}' not found in session '{sessionId}'."
-// check-doc-cites: record-drift MemorySessionStore.cs:107 now="return Task.FromResult(Result.Failure<int>(SessionStoreEr…" [#947: written over `$"Message '{messageId}' not found in ses`; repair deferred to the owner's symbol-rename decision] -->
+//   MemorySessionStore.DeleteAsync  $"Message '{messageId}' not found in session '{sessionId}'."
 //       == SessionStoreErrors.MessageNotFound(sessionId, messageId)
 //
 // A person sees the same string whichever backend `HARBOR_STORAGE` selects
@@ -63,8 +60,7 @@
 // eleven sites — GetAsync, AppendMessageAsync, GetMessagesAsync, DeleteAsync
 // (MemorySessionStoreRopTests:31-38). The other SEVEN are pinned by nothing:
 //
-//   MemorySessionStore.cs:63, 69, 99, 107, 126, 136, 146
-// check-doc-cites: record-drift MemorySessionStore.cs:63 now="return Task.FromResult(Result.Success());" [#947: written over `return Task.FromResult(Result.Failure($"`; repair deferred to the owner's symbol-rename decision] -->
+//   MemorySessionStore.AppendMessageAsync, 69, 99, 107, 126, 136, 146
 //
 // Those seven are the hole. A twelfth literal, or a divergent spelling at any
 // of them, would compile, would ship, and would not turn any test red — and
@@ -525,7 +521,7 @@ public sealed class SessionStoreFailureTextParityRules
         await Assert.That(Drifted).IsNotIn(MeasuredHomeShapes)
             .Because(
                 "Control for R1. The tools in Harbor.Tools.Builtin really do say \"Session '{id}' "
-                + "was not found.\" (SessionReadTool.cs:117, SessionSteerTool.cs:148) — a different "
+                + "was not found.\" (SessionReadTool.ExecuteAsync, SessionSteerTool.ExecuteAsync) — a different "
                 + "surface with deliberately different wording, which is why the store perimeter here "
                 + "is the three storage projects and not the whole tree. If a store ever adopts that "
                 + "wording, R1 must see it as a shape the home does not declare. If this assertion "

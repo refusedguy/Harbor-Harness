@@ -7,13 +7,13 @@
 // `EnforcerIntegrityTests` read a table, take a project-directory name out of
 // it, and assert that the project exists:
 //
-//   :247  `OutOfScopeAssemblies`          -> "no such src project"
-//   :255  `SharedSourceFolders`           -> "no such src folder"
-//   :423  `DeclaredButUnboundProjectReferences.To` -> "no such src project"
-//   :467  `DocumentedExceptions`          -> "no src project directory"
+//   `OutOfScopeAssemblies`               -> "no such src project"
+//   `SharedSourceFolders`                -> "no such src folder"
+//   `DeclaredButUnboundProjectReferences.To` -> "no such src project"
+//   `DocumentedExceptions`               -> "no src project directory"
 //
 // Every one of them asks `RepoPaths.FindProjectDir(name) is null`. And
-// `FindProjectDir` is not an existence check. Read `RepoPaths.cs:85-86`: it
+// `FindProjectDir` is not an existence check. Read `RepoPaths.FindProjectDir`: it
 // returns null when `RepoRoot` is null, and otherwise hands the name straight to
 // `Path.Combine(RepoRoot, "src", projectDir)`.
 //
@@ -22,7 +22,7 @@
 // not running from a checkout. Inside a checkout the answer is non-null for
 // EVERY name, including names that have never existed. So all four checks
 // reduce to "is the repository root discoverable", which a different test
-// (`RepositoryInventory_IsDiscoverable`, :158) already asserts.
+// (`RepositoryInventory_IsDiscoverable`) already asserts.
 //
 // A stale table row therefore cannot be caught, and "the guard is green" is
 // indistinguishable from "the guard read nothing". This is the #877 defect
@@ -38,8 +38,8 @@
 // `src/` project that does not exist. All six are `Harbor.Hosting` ->
 // a Spectre/Termina/TerminalGui/RazorConsole renderer, and all six were moved
 // out of `src/` into `contrib/tui/` (they are the renderers AGENTS.md calls
-// unmaintained and out of CI). `Harbor.Hosting.csproj:158-165` still declares
-// all six, inside
+// unmaintained and out of CI). `Harbor.Hosting.csproj`'s `HarborWithSpectreTui`
+// ItemGroup still declares all six, inside
 //
 //     <ItemGroup Condition="'$(HarborWithSpectreTui)' == 'true'">
 //
@@ -52,8 +52,8 @@
 // rows are not lying about the edge; they are lying about where it lives. And
 // the fix is NOT "delete the six rows": `ReadProjectReferences` does not
 // evaluate `Condition`, so it still reports those six as declared references,
-// and `DeclaredProjectReferences_AreJustifiedByTheMatrix` (:328) consults this
-// same table at :352 to decide whether a declared edge is justified. Delete the
+// and `DeclaredProjectReferences_AreJustifiedByTheMatrix` consults this
+// same table to decide whether a declared edge is justified. Delete the
 // rows and that rule starts reporting six unjustified ProjectReferences that
 // are permitted by nothing. Restoring the rows is what is already there.
 //
@@ -69,15 +69,15 @@
 // measurement is what makes the decision possible. `FindProjectDir` has 15 call
 // sites, and the fix is not a one-line change to a helper:
 //
-//   * TEN want a PATH, which is exactly what `Path.Combine` is. SharedSourceLinkRules
-//     (:258, :418), SessionStoreFailureTextParityRules:554, ProviderCatalogueBudgetRules
-//     (:99, :116), ProviderAuthSingleAnswerRules:90, CellForgeEngineAtomicityRules:439
-//     and AbstractionsNamespaceOwnershipRules:478 all resolve it and walk it. Several
+//   * TEN want a PATH, which is exactly what `Path.Combine` is. SharedSourceLinkRules,
+//     SessionStoreFailureTextParityRules, ProviderCatalogueBudgetRules,
+//     ProviderAuthSingleAnswerRules, CellForgeEngineAtomicityRules
+//     and AbstractionsNamespaceOwnershipRules all resolve it and walk it. Several
 //     already pair it with their own `Directory.Exists` — CellForgeEngineCseOwnershipTests
-//     (:137, :265) is the pattern this file argues for, written twice, in the same
+//     is the pattern this file argues for, written twice, in the same
 //     project, while the four sites above skip the second half.
 //   * ONE is a FILTER where a real existence test would silently narrow what is
-//     scanned: `EnforcerIntegrityTests:602`, the one #949 flagged. It is what builds
+//     scanned: `EnforcerIntegrityTests.NamedRuleTargets`, the one #949 flagged. It is what builds
 //     `SrcAssemblyNames()`, and it decides the input to two matrix guards.
 //   * FOUR are the dead checks measured here.
 //
@@ -133,7 +133,7 @@
 //
 // The red run also corrected the file. It flagged S125 on the header's quoted
 // `=>` expression-bodied member as commented-out code; the header now cites
-// `RepoPaths.cs:85-86` in prose instead of quoting the member, since a build
+// `RepoPaths.FindProjectDir` in prose instead of quoting the member, since a build
 // gate that claims zero warnings is not a gate if the guard's own header
 // introduces one.
 
@@ -245,7 +245,8 @@ public sealed class ExistenceCheckLivenessRule
     ///         Six of forty-two rows, all of them
     ///         <c>Harbor.Hosting -&gt; a renderer</c>, and all six name a project
     ///         that moved from <c>src/</c> to <c>contrib/tui/</c> on 2026-08-23.
-    ///         <c>Harbor.Hosting.csproj:158-165</c> still declares the reference,
+    ///         <c>Harbor.Hosting.csproj</c>'s <c>HarborWithSpectreTui</c> ItemGroup
+    ///         still declares the reference,
     ///         inside an <c>ItemGroup</c> conditioned on
     ///         <c>$(HarborWithSpectreTui)</c> — a property defined nowhere, so the
     ///         group never opens and the edge really is dead, which is what the
@@ -304,8 +305,8 @@ public sealed class ExistenceCheckLivenessRule
             .IsEqualTo(string.Join(" | ", MeasuredStaleRows))
             .Because(
                 "EnforcerIntegrityTests carries four checks that read a permission table and assert the "
-                + "named project exists — OutOfScopeAssemblies (:247), SharedSourceFolders (:255), "
-                + "DeclaredButUnboundProjectReferences.To (:423), DocumentedExceptions (:467). All four "
+                + "named project exists — OutOfScopeAssemblies, SharedSourceFolders, "
+                + "DeclaredButUnboundProjectReferences.To, DocumentedExceptions. All four "
                 + "ask RepoPaths.FindProjectDir(name) is null, and FindProjectDir is a Path.Combine, not an "
                 + "existence test: inside a checkout it returns non-null for every name, so none of the four "
                 + "can fail. These are the rows a real check would report. This is the #877 defect class — a "

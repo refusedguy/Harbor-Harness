@@ -142,6 +142,89 @@ public sealed class RetryPolicy : IRetryPolicy
     }
 
     /// <summary>
+    ///     The value-shaped retry path (#1514): the attempt reports its
+    ///     failure as a value, the verdict is read from the failure's
+    ///     transport classification, and the exhausted (or fatal) failure
+    ///     travels back to the caller as a value. Same budget, same backoff
+    ///     mechanics and same rate-limit split as the exception path — the
+    ///     difference is where the failure is read from, not how long the
+    ///     policy waits.
+    /// </summary>
+    public async Task<Result<T, StreamFailure>> ExecuteValueAsync<T>(
+        Func<CancellationToken, Task<Result<T, StreamFailure>>> operation,
+        RetryOptions options,
+        Action<StreamFailure, int>? onRetry,
+        CancellationToken ct)
+    {
+        if (operation is null) throw new ArgumentNullException(nameof(operation));
+        if (options.MaxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(options));
+        if (options.EffectiveRateLimitAttempts < 1) throw new ArgumentOutOfRangeException(nameof(options));
+        if (options.BaseDelay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(options));
+
+        int attempt = 0;
+        int rateLimitAttempts = 0;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            attempt++;
+
+            Result<T, StreamFailure> outcome = await operation(ct).ConfigureAwait(false);
+            if (outcome.IsSuccess)
+            {
+                return outcome;
+            }
+
+            StreamFailure failure = outcome.Error;
+
+            // #1514: the verdict is read from the VALUE. A cancelled run is
+            // not retried, and neither is a fatal kind (auth, malformed
+            // stream) — both come back as the failure they are, so the
+            // caller decides what to do with it.
+            if (ct.IsCancellationRequested || !IsTransient(failure.Kind))
+            {
+                return outcome;
+            }
+
+            // Rate limits use a dedicated minutes-scale budget while all other
+            // transients share the general one (see #270).
+            bool rateLimited = IsRateLimit(failure.Kind);
+            int consumed;
+            int limit;
+            if (rateLimited)
+            {
+                rateLimitAttempts++;
+                consumed = rateLimitAttempts;
+                limit = options.EffectiveRateLimitAttempts;
+            }
+            else
+            {
+                consumed = attempt;
+                limit = options.MaxAttempts;
+            }
+
+            if (consumed >= limit)
+            {
+                // The budget is spent. The failure travels back as a value —
+                // the turn runner reads it and degrades with the partial
+                // output instead of dying terminally.
+                return outcome;
+            }
+
+            onRetry?.Invoke(failure, attempt);
+
+            // The value carries no server-provided Retry-After hint (the
+            // failure holds the message, the kind and the provider body), so
+            // the exponentially scaled backoff applies — rate-limit-rooted
+            // for 429s. Same wait as the exception path, which never saw a
+            // hint on a stream error either.
+            TimeSpan delay = rateLimited
+                ? ComputeRateLimitDelay(options, rateLimitAttempts)
+                : ComputeDelay(options, attempt);
+            await Task.Delay(delay, _time, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     ///     Exponential backoff for the retry that follows the failure of
     ///     attempt <paramref name="failedAttempt" />:
     ///     <c>BaseDelay · 2^(attempt − 1)</c>, capped at <see cref="MaxBackoff" />.
@@ -235,9 +318,16 @@ public sealed class RetryPolicy : IRetryPolicy
     public static bool IsRateLimit(Exception ex) => ex switch
     {
         HttpRequestException hre => hre.StatusCode == HttpStatusCode.TooManyRequests,
-        LlmStreamErrorException streamError => streamError.Kind == ProviderErrorKind.RateLimit,
+        LlmStreamErrorException streamError => IsRateLimit(streamError.Kind),
         _ => false,
     };
+
+    /// <summary>
+    ///     Whether the failure KIND is a rate limit (HTTP 429 / provider
+    ///     <c>RateLimit</c>): such failures draw from the separate
+    ///     minutes-scale budget instead of the general transient budget.
+    /// </summary>
+    public static bool IsRateLimit(ProviderErrorKind kind) => kind == ProviderErrorKind.RateLimit;
 
     /// <summary>
     ///     Read a server-provided Retry-After hint carried out-of-band on the
