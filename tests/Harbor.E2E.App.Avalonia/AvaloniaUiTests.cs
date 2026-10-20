@@ -822,10 +822,22 @@ public sealed class AvaloniaUiTests
 
         await Driver.ScreenshotAsync("18-multiple-toasts").ConfigureAwait(false);
 
-        // Wait for auto-dismiss deterministically so the next test starts clean.
+        // Tear the toast down deterministically so the next test starts clean.
+        // The product's 4s auto-dismiss timer is exercised — and asserted — by
+        // ToastNotification_DisplaysAndDismisses; waiting it out here spent
+        // four seconds of a fully serialised project on a timer this test
+        // never asserted (#1790).
+        Driver.OnUIThread(() =>
+        {
+            if (Driver.MainWindow.DataContext is MainViewModel vm)
+            {
+                vm.Toasts.Clear();
+            }
+        });
+        await Driver.ShowMainWindowAsync().ConfigureAwait(false);
         await Driver.WaitForConditionAsync(
             () => !Driver.GetAllVisibleText().Contains("First toast body", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(6),
+            TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
     }
 

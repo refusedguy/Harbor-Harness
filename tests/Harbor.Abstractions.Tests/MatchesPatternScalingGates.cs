@@ -27,6 +27,19 @@ namespace Harbor.Abstractions.Tests;
 // and 2N-rule windows must both allocate 0 B; the helper measures the
 // allocation but is told NOT to ratio-assert it (a ratio over "0 / 0 B" is a
 // number invented for the caller), so the exact-zero asserts below stand.
+//
+// [NotInParallel] is the BARE form, and it is load-bearing (#1790). The gate
+// reads wall-clock elapsed, and elapsed time is not thread-local: a
+// neighbouring test burning cores — or, under the server GC every CI job
+// enables, a collection that pauses this thread mid-window — decides the
+// ratio. The receipt is run 38129838108 (PR #1285, commit b5db32e2), where
+// the very same tree measured time x3.10 against the x3.00 limit while the
+// same run measured alloc x1.99: textbook linear memory with an inflated
+// stopwatch, on a tree that had passed the identical 536-test binary forty
+// minutes earlier. A NAMED key would not have helped — it excludes only
+// same-key peers, and every other class in this assembly still runs
+// alongside — so the only form that delivers "nothing else runs in this
+// window" is the bare one. See docs/TEST_PATTERNS.md §Parallelism.
 [NotInParallel]
 public sealed class MatchesPatternScalingGates
 {
