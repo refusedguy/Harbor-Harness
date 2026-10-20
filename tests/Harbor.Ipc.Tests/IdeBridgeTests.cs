@@ -84,6 +84,26 @@ public class IdeBridgeTests
         await Assert.That(ex.Code).IsEqualTo(IdeRpcException.InvalidParams);
     }
 
+    /// <summary>
+    ///     The malformed-params answer is a wire contract, and #1849 changed the
+    ///     exception behind it, not the answer: the bridge now keeps the
+    ///     <c>JsonException</c> as the cause of the RPC error, and the editor
+    ///     still reads the same code and the same message. This test pins that.
+    /// </summary>
+    [Test]
+    public async Task InjectPrompt_Malformed_Params_Is_InvalidParams_And_Says_Why()
+    {
+        await using var harness = new IdeHarness(sessionId: "s1");
+
+        // `prompt` is a number, so the params object does not deserialize: this
+        // is the JsonException path in ParseInjectParams.
+        IdeRpcException ex = await Assert.That(async () =>
+            await harness.RequestAsync("inject_prompt", """{"prompt":123}""")).Throws<IdeRpcException>();
+
+        await Assert.That(ex.Code).IsEqualTo(IdeRpcException.InvalidParams);
+        await Assert.That(ex.Message).StartsWith("Malformed params:");
+    }
+
     [Test]
     public async Task ReadStream_Pushes_Stream_Notifications()
     {

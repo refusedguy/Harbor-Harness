@@ -110,7 +110,14 @@ public sealed class JsonConfigStore : IConfigStore
                 }
                 catch (JsonException je)
                 {
-                    throw new InvalidDataException($"config.json is corrupt: {je.Message}");
+                    // #1849: the JsonException is the CAUSE, not just a message. The
+                    // wrapper keeps the user-visible text exactly as it was, because
+                    // a corrupt config.json is the bug report a user sends and the
+                    // text it produces must not change. The chain now carries the
+                    // parse error itself, so the stack and the JSON position that
+                    // says WHICH key failed are no longer thrown away with the
+                    // exception object.
+                    throw new InvalidDataException($"config.json is corrupt: {je.Message}", je);
                 }
             }, ResultErrors.Message)
             .Bind(raw => ConfigNormalizer.Normalize(raw))

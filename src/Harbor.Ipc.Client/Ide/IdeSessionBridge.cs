@@ -317,7 +317,13 @@ public sealed class IdeSessionBridge : IIdeSessionBridge
         }
         catch (JsonException ex)
         {
-            throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}");
+            // #1849: keep the JsonException as the cause instead of flattening it
+            // into the message. What the editor sees on the wire is unchanged,
+            // because the framing server writes the code and the message and
+            // nothing else. The exception chain now carries the parse error, so
+            // the malformed-params answer can be traced to the key that did not
+            // deserialize.
+            throw new IdeRpcException(IdeRpcException.InvalidParams, $"Malformed params: {ex.Message}", ex);
         }
     }
 
