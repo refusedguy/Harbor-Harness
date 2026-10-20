@@ -182,8 +182,8 @@ the message each time).
 | `DefaultAgentSingleSourceTests.CoreFallbackConstant_IsDerivedFromTheOneAgentNameConstant` | `DefaultAgentSingleSourceTests.cs:349` | 1 | style | fix-the-rule |
 | `EnforcerIntegrityTests.DocumentedExceptions_AreScopedToNamedFiles` | `EnforcerIntegrityTests.cs:461` | 1 | defect | keep |
 | `EnforcerIntegrityTests.Matrix_AllowedEntries_AreLive` | `EnforcerIntegrityTests.cs:278` | 2 | noise | ledger-edit |
-| `FullLayerMatrixTests.EverySrcAssembly_ReferenceSet_MatchesMatrix` | `FullLayerMatrixTests.cs:725` | 3 | defect | keep |
-| `FullLayerMatrixTests.Matrix_CoversExactlyTheSrcInventory` | `FullLayerMatrixTests.cs:856` | 1 | defect | keep |
+| `FullLayerMatrixTests.EverySrcAssembly_ReferenceSet_MatchesMatrix` | `FullLayerMatrixTests.cs:755` | 3 | defect | keep |
+| `FullLayerMatrixTests.Matrix_CoversExactlyTheSrcInventory` | `FullLayerMatrixTests.cs:886` | 1 | defect | keep |
 | `KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree` | `KeyGateFamilyRules.cs:741` | 1 | defect | keep |
 | `MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaNullableOutParameter` | `MaybeAbsenceTests.cs:225` | 1 | defect | keep |
 | `McpHttpClientOwnershipRules.Assert_TheClientHasExactlyOneOwnerAndItIsNotPublic` | `McpHttpClientOwnershipRules.cs:160` | 1 | defect | keep |

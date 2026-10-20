@@ -140,7 +140,7 @@
       "reason": "A src assembly with no matrix row is an assembly no layer rule constrains - unbounded reach. The rule names the assembly.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:725 — 'Harbor.Registries: no matrix row'"
+        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:755 — 'Harbor.Registries: no matrix row'"
       ]
     },
     {
@@ -149,7 +149,7 @@
       "reason": "The same hole from the other side: the src inventory has an assembly the matrix does not cover, so that assembly is unconstrained.",
       "ratchet": "keep",
       "evidence": [
-        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:856 — 'missingRows: [Harbor.Registries]'"
+        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:886 — 'missingRows: [Harbor.Registries]'"
       ]
     },
     {
