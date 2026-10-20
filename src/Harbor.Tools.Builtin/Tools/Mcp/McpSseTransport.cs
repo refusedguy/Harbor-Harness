@@ -25,13 +25,14 @@ namespace Harbor.Tools.Mcp;
 ///     <c>Authorization</c> header wins, else the OAuth token provider result
 ///     is attached as <c>Bearer</c>.
 /// </summary>
-public sealed class McpSseTransport : McpRemoteTransportBase
+public sealed class McpSseTransport : IMcpRemoteTransport
 {
     private readonly Uri _endpoint;
     private readonly IReadOnlyDictionary<string, string>? _headers;
     private readonly Func<CancellationToken, Task<Result<Maybe<string>>>>? _oauthTokenProvider;
     private readonly ILogger? _logger;
     private readonly TimeSpan _requestTimeout;
+    private readonly McpHttpClientFactory _clients;
     private bool _disposed;
 
     public McpSseTransport(
@@ -46,16 +47,14 @@ public sealed class McpSseTransport : McpRemoteTransportBase
         _oauthTokenProvider = oauthTokenProvider;
         _logger = logger;
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(60);
-    }
 
-    /// <summary>
-    ///     The client is NOT bounded: the GET stream outlives any single
-    ///     request, so the client's own timeout is infinite and each attempt is
-    ///     bounded by its own linked cancellation source instead. The client
-    ///     itself is assembled by the base's Factory Method (#1567); the timeout
-    ///     is the only thing that differs from the streamable-HTTP transport.
-    /// </summary>
-    protected override TimeSpan ClientTimeout => Timeout.InfiniteTimeSpan;
+        // The client is NOT bounded: the GET stream outlives any single
+        // request, so the client's own timeout is infinite and each attempt is
+        // bounded by its own linked cancellation source instead. The client
+        // itself is assembled by the factory (#1567); the timeout is the only
+        // thing that differs from the streamable-HTTP transport.
+        _clients = new McpHttpClientFactory(Timeout.InfiniteTimeSpan);
+    }
 
     /// <summary>
     ///     Result railway for the round-trip (#201 C4, sealed to the interface in
@@ -69,14 +68,14 @@ public sealed class McpSseTransport : McpRemoteTransportBase
     ///     document" (202 Accepted, empty body) — a different state from a failure,
     ///     which is why the value is a <see cref="Maybe{T}" /> and not a null.
     /// </summary>
-    public override async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
+    public async Task<Result<Maybe<JsonElement>>> TryRoundTripAsync(
         JsonElement request,
         int? expectedId = null,
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var sw = Stopwatch.StartNew();
-        HttpClient client = GetClient();
+        HttpClient client = _clients.Client;
         string body = request.GetRawText();
         int attempt = 1;
 
@@ -135,7 +134,7 @@ public sealed class McpSseTransport : McpRemoteTransportBase
         }
     }
 
-    public override ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         if (_disposed)
         {
@@ -143,7 +142,7 @@ public sealed class McpSseTransport : McpRemoteTransportBase
         }
 
         _disposed = true;
-        DisposeClient();
+        _clients.Dispose();
         return ValueTask.CompletedTask;
     }
 
