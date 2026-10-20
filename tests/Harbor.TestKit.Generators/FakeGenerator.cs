@@ -160,7 +160,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
         var visited = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         CollectBaseInterfaces(symbol, interfaces, visited);
 
-        var members = new List<IMemberSymbol>();
+        var members = new List<ISymbol>();
         var memberKeys = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (INamedTypeSymbol iface in interfaces)
@@ -187,7 +187,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
                             return null;
                         }
 
-                        if (method.ReturnType.RefKind != RefKind.None)
+                        if (method.RefKind != RefKind.None)
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 FakeDiagnostics.UnsupportedShape,
@@ -208,8 +208,9 @@ public sealed class FakeGenerator : IIncrementalGenerator
 
                     case IPropertySymbol property:
                     {
-                        if (!property.IsAbstract)
+                        if (!IsAbstractMember(property))
                         {
+                            // Default interface member — inherited, not re-implemented.
                             continue;
                         }
 
@@ -239,7 +240,7 @@ public sealed class FakeGenerator : IIncrementalGenerator
         members = members
             .OrderBy(static m => m.Name, StringComparer.Ordinal)
             .ThenBy(static m => m.Kind.ToString(), StringComparer.Ordinal)
-            .ThenBy(static m => MemberKey(m), StringComparer.Ordinal)
+            .ThenBy(MemberKey, StringComparer.Ordinal)
             .ToList();
 
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -249,14 +250,14 @@ public sealed class FakeGenerator : IIncrementalGenerator
         // NO configurable property: it returns the generated default inline, and
         // a test that needs a different answer overrides that overload.
         var overloads = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (IGrouping<string, IMemberSymbol> group in members
+        foreach (IGrouping<string, ISymbol> group in members
                      .Where(static m => m is IMethodSymbol)
                      .GroupBy(static m => m.Name, StringComparer.Ordinal))
         {
             overloads[group.Key] = group.Count();
         }
 
-        foreach (IMemberSymbol member in members)
+        foreach (ISymbol member in members)
         {
             switch (member)
             {
@@ -347,6 +348,32 @@ public sealed class FakeGenerator : IIncrementalGenerator
             collected.Add(iface);
             CollectBaseInterfaces(iface, collected, visited);
         }
+    }
+
+    /// <summary>
+    ///     Is this property an ABSTRACT interface member, or a default interface
+    ///     member (one with a body)? The property symbol's own
+    ///     <c>IsAbstract</c> is not enough on its own — the accessors are what
+    ///     carry the answer, and a default member's getter HAS a body.
+    /// </summary>
+    private static bool IsAbstractMember(IPropertySymbol property)
+    {
+        if (!property.IsAbstract)
+        {
+            return false;
+        }
+
+        if (property.GetMethod is { } getter && !getter.IsAbstract)
+        {
+            return false;
+        }
+
+        if (property.SetMethod is { } setter && !setter.IsAbstract)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static string MemberKey(ISymbol member) => member switch
