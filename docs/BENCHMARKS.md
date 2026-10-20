@@ -1165,7 +1165,7 @@ byte-identical (pinned by `JsonlMessagePayloadShapeTests`, including the
 > `test (platform)` job log on every run — cite THAT run's values when filling
 > the Measured column, never the local absolute milliseconds.
 
-### Per-delta update coalescing (#1527) — **RELATIVE**, CI merge gate ⏳ first run pending
+### Per-delta update coalescing (#1527) — **RELATIVE**, CI merge gate ✅ measured
 
 `Harbor.Application.Tests.TurnRunnerUpdateCoalescingTests`, in the `test (core)` merge-gate shard.
 
@@ -1186,15 +1186,17 @@ published before the turn's end event.
 
 | Test | Relative claim | Gate | Measured |
 |---|---|---|---|
-| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | time over 1000 → 2000 deltas in one turn — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; a merge that re-copies the accumulated text per delta is O(N²) ≈ 4.0) | ⏳ not yet measured |
-| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | allocations over the same turns — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | ⏳ not yet measured |
-| `PublishCost_BatchedPublishes_AllocateLessThanPerDeltaPublishes` | the before/after itself: the same 2000 deltas published one by one (`UpdateFlushPolicy.PerDelta` — the pre-#1527 path) and in batches, 20 turns each | batched allocates strictly less than per-delta | ⏳ not yet measured |
+| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | time over 1000 → 2000 deltas in one turn — leg-scaled, medians of 5 rounds, linux-gated | ratio ≤ 3.0 (linear ≈ 2.0; a merge that re-copies the accumulated text per delta is O(N²) ≈ 4.0) | **x1.73** — CI run 39391423885, `test (core)`, median of 5 legs of 1001 units (small 104.185 ms / 79 124 144 B, large 180.269 ms / 144 526 600 B) |
+| `PublishCost_DoubledDeltas_StaysWithinGrowthLimit` | allocations over the same turns — runner-independent half of the claim | ratio ≤ 3.0, strict (no band, #1652) | **x1.83** — same run |
+| `PublishCost_BatchedPublishes_AllocateLessThanPerDeltaPublishes` | the before/after itself: the same 2000 deltas published one by one (`UpdateFlushPolicy.PerDelta` — the pre-#1527 path) and in batches, 20 turns each | batched allocates strictly less than per-delta | **x3.03 less memory, x2.11 faster** — same run: 2000 deltas x 20 units — per-delta 15.885 ms / 8 759 864 B; batched 7.519 ms / 2 895 680 B |
 
 > The `[scaling] turnrunner-update-coalescing-scaling: ...` report line prints
 > into the `test (core)` job log on every run — cite THAT run's values when
 > filling the Measured column, never the local absolute milliseconds. The
 > before/after pair prints as `[coalescing] <deltas> deltas x <units> units —
-> per-delta: … ; batched: …`.
+> per-delta: … ; batched: …`. A **passing** gate's line lands in the shard's
+> TRX (and the job summary), not in the console log — the console only shows a
+> gate's line when it skips.
 
 ### Tool-context callback closures (#1529) — **RELATIVE**, CI merge gate ✅ measured
 
