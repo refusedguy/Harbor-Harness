@@ -22,7 +22,7 @@
 //     and three live overrides;
 //   * `OverlayStack.RouteKey` is a real public method, correctly implemented and
 //     covered by `OverlayModalTests`;
-//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:163` prints the host pattern in a `<code>` block.
+//   * `src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs:180` prints the host pattern in a `<code>` block.
 //
 // A contributor greps "keys route top-down through OnKey", finds all of that,
 // writes a layer with an `OnKey` — and it is never called. The adapter test

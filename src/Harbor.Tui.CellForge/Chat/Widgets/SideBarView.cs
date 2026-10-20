@@ -363,13 +363,38 @@ public static class SideBarView
             {
                 Y = Section(buffer, rect, labelX, Y, "SESSIONS", headingStyle);
                 int sessionRows = Math.Min(sessions.Count, Math.Max(0, rect.Bottom - 2 - Y));
+                // One row buffer for the whole section. The row used to be
+                // built as "marker + ' ' + title" — a fresh string per visible
+                // session per frame, and the sidebar paints every frame. The
+                // buffer is sized by the row budget (the sidebar's inner
+                // width), so it is bounded by the viewport and is allocated
+                // once per painted section, not once per row.
+                int budget = Math.Max(0, innerW - 1);
+                Span<char> row = stackalloc char[budget];
                 for (int i = 0; i < sessionRows; i++)
                 {
                     var session = sessions[i];
-                    string marker = session.IsActive ? "▸" : " ";
-                    string display = marker + " " + session.Title;
+                    char marker = session.IsActive ? '▸' : ' ';
+                    // The same characters, in the same order, as the
+                    // concatenated row: the marker, the separator, and the
+                    // title truncated to what the row budget has left.
+                    int total = Math.Min(2 + session.Title.Length, budget);
+                    if (total > 0)
+                    {
+                        row[0] = marker;
+                        if (total > 1)
+                        {
+                            row[1] = ' ';
+                            int take = Math.Min(session.Title.Length, total - 2);
+                            if (take > 0)
+                            {
+                                session.Title.AsSpan(0, take).CopyTo(row[2..]);
+                            }
+                        }
+                    }
+
                     var rowStyle = session.IsActive ? valueStyle : labelStyle;
-                    Y = ValueLine(buffer, rect, labelX, Y, innerW, display.AsSpan(), rowStyle);
+                    Y = ValueLine(buffer, rect, labelX, Y, innerW, row[..total], rowStyle);
                     if (Y < rect.Bottom - 1 && !string.IsNullOrEmpty(session.MetaLine))
                     {
                         Y = ValueLine(buffer, rect, labelX + 2, Y, innerW - 2, session.MetaLine.AsSpan(), labelStyle);

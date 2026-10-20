@@ -79,6 +79,23 @@ public sealed class OverlayStack
 {
     private readonly List<IOverlayLayer> _layers = [];
 
+    /// <summary>
+    ///     Scratch: the visible fragments of the layer being painted. Owned by
+    ///     the stack rather than allocated per painted frame (#1140) — the
+    ///     stack is render-thread-owned (see the class header) and
+    ///     <see cref="PaintOver" /> is not re-entrant, so the list cannot be
+    ///     aliased by two paints at once. It is cleared before every use, so a
+    ///     frame never sees the previous frame's rects.
+    /// </summary>
+    private readonly List<UIR.Rect> _fragments = new(4);
+
+    /// <summary>
+    ///     Scratch: the opaque bounds above the layer being painted. Same
+    ///     ownership and same re-entrancy argument as
+    ///     <see cref="_fragments" />.
+    /// </summary>
+    private readonly List<UIR.Rect> _occluders = new(4);
+
     /// <summary>Layers bottom-to-top (paint order).</summary>
     public IReadOnlyList<IOverlayLayer> Layers => _layers;
 
@@ -213,10 +230,15 @@ public sealed class OverlayStack
         }
 
         var screen = new UIR.Rect(0, 0, buffer.Cols, buffer.Rows);
-        // Lists are per-call locals (overlays are off the steady-state hot path:
-        // empty-stack paint returns before any allocation).
-        var frags = new List<UIR.Rect>(4);
-        var occluders = new List<UIR.Rect>(4);
+        // Scratch lists owned by the stack, not per-call locals: an overlay
+        // that is up is painted on every frame, and two list allocations per
+        // painted frame were the price of the fragment/occluder bookkeeping.
+        // The stack is render-thread-owned (see the class header) and this
+        // method is not re-entrant — a layer's Paint writes to the buffer and
+        // never calls back into the stack — so the lists cannot be aliased by
+        // two paints at once.
+        List<UIR.Rect> frags = _fragments;
+        List<UIR.Rect> occluders = _occluders;
         for (int i = 0; i < _layers.Count; i++)
         {
             var layer = _layers[i];

@@ -1121,6 +1121,64 @@ expansion now goes through a pooled buffer, and the commit that fixes it says so
 > the `test (ui)` job log on every run, and `tools/test-measurements.py` lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
 > Measured column, never local absolute milliseconds.
+### CellForge per-frame snapshot gate (#1140) — **PER-UNIT BUDGET**, CI merge gate
+
+`Harbor.Tui.CellForge.Tests.FrameSnapshotCostGate`, in the `test (ui)` merge-gate shard.
+
+The slice: the CellForge renderer paints a frame by walking the layout tree
+and painting every panel, and the surfaces below rebuilt a snapshot of their
+own state on **every** frame, whether or not anything had changed. The
+session tab strip derived its whole plan again per painted frame (two scratch
+`int[]` arrays, an `ImmutableArray<TabCell>` builder, a cell array, and a
+cleaned + truncated title string per visible tab); the toast overlay built its
+row as a fresh string per toast per frame; the overlay stack allocated two
+`List<Rect>` scratch lists per painted frame; the sidebar's session row was a
+fresh string per visible session per frame.
+
+The tab-strip plan is now memoised against (the strip snapshot, the width) —
+the snapshot is an immutable value the reducer replaces only when a tab
+really changes — and the rows are written into stack buffers.
+
+**The gate is a BUDGET PER UNIT OF WORK since #1747, not a ratio.** The unit
+is ONE PAINTED FRAME of the surface, so the budget is a constant number of
+bytes per frame: machine-independent, so it is compared as measured, with no
+band — the branch that can be a hard gate on any runner. The time budget is
+in **probe units** (the cost of one frame divided by the cost of one unit of
+the fixed calibration probe measured on the same runner in the same run), so
+the runner's speed cancels and the budget is a constant in a
+machine-independent currency.
+
+| Test | Claim | Gate | Measured |
+|---|---|---|---|
+| `TabStrip_SteadyStateFrame_CostPerFrame_StaysWithinBudget` | allocation per painted tab-strip frame — 6 open tabs at 80 columns, one panel painted 2 000 times | ≤ 256 B per frame (machine-independent, HARD) | **0 B** per frame (run 39399184283, PR #1908) — **before: 2 688 B** per frame, the same instrument on the pre-#1140 tree (run 39391746836) |
+| `TabStrip_SteadyStateFrame_CostPerFrame_StaysWithinBudget` | time per painted tab-strip frame, in **probe units** | ≤ 5 000 probe units per frame (machine-scaled, SOFT — stands down when the measurement is not trusted) | **7.2** probe units per frame — 0.0027 ms/frame against a probe that costs 0.000380 ms/unit, spread 1.24×, trusted (run 39399184283); before: **21.5** probe units per frame — 0.0082 ms/frame, spread 1.32×, trusted (run 39391746836) |
+| `ToastOverlay_SteadyStateFrame_CostPerFrame_StaysWithinBudget` | allocation per painted overlay frame — one toast in the overlay stack, painted 2 000 times | ≤ 128 B per frame (machine-independent, HARD) | **0 B** per frame (run 39399184283, PR #1908) — **before: 560 B** per frame, the same instrument on the pre-#1140 tree (run 39391746836) |
+| `ToastOverlay_SteadyStateFrame_CostPerFrame_StaysWithinBudget` | time per painted overlay frame, in **probe units** | ≤ 5 000 probe units per frame (machine-scaled, SOFT) | **3.4** probe units per frame — 0.0013 ms/frame against a probe that costs 0.000380 ms/unit (run 39399184283); before: **3.8** probe units per frame — 0.0015 ms/frame (run 39391746836). Both legs stood down on the time branch — the toast leg's spread was 1.60× over 5 rounds, above the 1.50× trust ceiling — so the time number is reported, not asserted |
+
+The byte ceilings are the regression line, not a description of the cost: the
+measured value on the fixed tree is **0 B per painted frame** for both
+surfaces — the strip paints from the memoised plan and the toast from a
+stack buffer, and neither allocates in the steady state — while the same
+instrument on the pre-#1140 tree measured 2 688 B and 560 B per frame and
+**failed both ceilings**. So the gate is red on the tree the slice fixes and
+green on the tree it leaves, on the same runner and in the same run.
+
+Two positive controls keep the byte budget from being satisfied by measuring
+nothing (#591):
+
+- `TabStrip_ChangedStripFrame_PaysTheLayoutTheMemoRemoves` — a frame on
+  which the tab set changed (a fresh strip snapshot) still pays the whole
+  layout: **2 480 B** per changed frame against a floor of 96 B (run
+  39399184283). So the work the memo removes from the quiet frames is a real
+  allocation of a known size, and the quiet-frame budget is a budget on that
+  work — not on nothing.
+- `ToastRow_RemovedStringBuild_WasARealAllocation` — the removed row build,
+  verbatim, measured in isolation: **360 B** per row build against a floor
+  of 48 B. The buffer that replaced it removed something real.
+
+> The `[perf-gate] cellforge-tabstrip-frame: measured …` report line prints
+> into the `test (ui)` job log on every run — cite THAT run's values when
+> filling the Measured column, never the local absolute milliseconds.
 
 ### Perf-gate inventory (#1747) — every gate, one verdict
 
@@ -1137,6 +1195,7 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Ui.Framework.Tests.StorePathScalingGates.Cost_GrowsSubLinearly_InDeltas` | ratio | `time(2N)/time(N)` and `alloc(2N)/alloc(N)` ≤ 3.0 over 1000/2000 deltas; GC-fenced legs, best-of-3 | **keep** — fenced legs, measured 1.99 against a 3.00 limit (run 36860503050). Next in line for the constant conversion, but its `TheRatioRuleAnswersTheDeclaredQuestion` positive control is written around the ratio rule, so that conversion is its own change |
 | `Harbor.Ui.Framework.Tests.ProjectHistoryScalingGates` | ratio | `time(2N)/time(N)` ≤ 3.0 over 512/1024 transcript lines; best-of-5, no fence, no leg scaling | **convert to a constant** — done in #1747. This was the ×3.10 red (#1285) |
 | `Harbor.Storage.Tests.SqliteAppendScalingGate` | ratio | `time(2N)/time(N)` ≤ 3.0 over 1024/2048 appends; best-of-3, no fence | **convert to a constant** — done in #1747, as `SqliteAppendCostGate`. This was the "ratio 3.102 vs limit 3.00" red |
+| `Harbor.Tui.CellForge.Tests.FrameSnapshotCostGate` | absolute bytes per painted frame | ≤ 256 B / ≤ 128 B per painted tab-strip / overlay frame; time in probe units | **keep** — a constant budget per unit of work, in the house `PerfGate` shape. The pre-#1140 tree measures 2 688 B and 560 B per frame against it and fails both ceilings (run 39391746836); the fixed tree measures 0 B per frame on both (run 39399184283) |
 | `Harbor.Application.Tests.ToolDispatcherResolveOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — the ratio's measurement is already hardened (legs scaled toward ~100 ms, medians of 5, GC fence, ×1.05 band on the time branch) |
 | `Harbor.Application.Tests.TurnRunnerToolTableReuseTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
 | `Harbor.Application.Tests.CachingSystemPromptBuilderKeyScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
