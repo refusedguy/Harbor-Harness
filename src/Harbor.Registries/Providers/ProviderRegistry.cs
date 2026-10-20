@@ -36,6 +36,12 @@ public sealed class ProviderRegistry : IProviderRegistry
     // 5 minutes — one dataset, one freshness story now.
     private readonly ConcurrentDictionary<ProviderId, CatalogEntry> _catalogCache = new();
 
+    // #1878: the catalogue TTL is read through an injected clock, not through
+    // DateTimeOffset.UtcNow. TimeProvider is the BCL clock seam the product
+    // already uses (AgentLoop, ToolDispatcher, RetryPolicy, MascotDirector),
+    // so the cache can be aged in a test instead of by waiting five minutes.
+    private readonly TimeProvider _time;
+
     private static readonly TimeSpan ModelCatalogTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>TTL-cached model catalog entry (ROP-C П.7).</summary>
@@ -51,9 +57,19 @@ public sealed class ProviderRegistry : IProviderRegistry
 
     public ProviderRegistry() : this(NullLogger<ProviderRegistry>.Instance) { }
 
-    public ProviderRegistry(ILogger<ProviderRegistry> logger)
+    /// <summary>
+    ///     Construct the registry with a logger and an optional clock.
+    /// </summary>
+    /// <param name="logger">Logger for registry diagnostics.</param>
+    /// <param name="timeProvider">
+    ///     Clock source for the model catalogue TTL (#1878). Production passes
+    ///     nothing and reads <see cref="TimeProvider.System" />; a test passes
+    ///     a manual clock so the catalogue entry can be aged on demand.
+    /// </param>
+    public ProviderRegistry(ILogger<ProviderRegistry> logger, TimeProvider? timeProvider = null)
     {
         _logger = logger;
+        _time = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -107,7 +123,7 @@ public sealed class ProviderRegistry : IProviderRegistry
     /// <inheritdoc />
     public async Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default)
     {
-        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
+        if (_catalogCache.TryGetValue(providerId, out var cached) && cached.ExpiresAt > _time.GetUtcNow())
         {
             return Result.Success(cached.Models);
         }
@@ -119,7 +135,7 @@ public sealed class ProviderRegistry : IProviderRegistry
         }
 
         var models = await client.Value.GetModelsAsync(cancellationToken).ConfigureAwait(false);
-        return models.Tap(v => _catalogCache[providerId] = new CatalogEntry(v, DateTimeOffset.UtcNow.Add(ModelCatalogTtl)));
+        return models.Tap(v => _catalogCache[providerId] = new CatalogEntry(v, _time.GetUtcNow().Add(ModelCatalogTtl)));
     }
 
     /// <inheritdoc />
@@ -157,10 +173,16 @@ public sealed class ProviderRegistry : IProviderRegistry
                 {
                     try
                     {
+                        // #1878: one clock read per fan-out task, used by both
+                        // the freshness check and the entry written below —
+                        // two reads could stamp the same provider with two
+                        // different ExpiresAt values.
+                        var now = _time.GetUtcNow();
+
                         // #1108: the fan-out reads the same TTL catalog cache
                         // as GetModelsCachedAsync — no second freshness story.
                         if (_catalogCache.TryGetValue(pid, out var cached)
-                            && cached.ExpiresAt > DateTimeOffset.UtcNow)
+                            && cached.ExpiresAt > now)
                         {
                             return Result.Success<IReadOnlyList<ModelInfo>>(cached.Models);
                         }
@@ -187,7 +209,7 @@ public sealed class ProviderRegistry : IProviderRegistry
                         // CFE0001 models, and a read inside a branch is what it reports.
                         // #1108: written to the shared TTL cache, so a later
                         // GetModelsCachedAsync (or fan-out) reuses it until expiry.
-                        _catalogCache[pid] = new CatalogEntry(models.Value, DateTimeOffset.UtcNow.Add(ModelCatalogTtl));
+                        _catalogCache[pid] = new CatalogEntry(models.Value, now.Add(ModelCatalogTtl));
                         return models;
                     }
                     catch (OperationCanceledException ex)
