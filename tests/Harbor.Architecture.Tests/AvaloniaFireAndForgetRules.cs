@@ -1,8 +1,56 @@
-// AvaloniaFireAndForgetRules.cs — source-level guard for §FP-003 in the Avalonia
-// desktop shell (issue #569).
+// AvaloniaFireAndForgetRules.cs — the RETIRED pattern matcher, kept as a
+// NON-GATING ORACLE.
 //
-// THE DEFECT THIS GUARDS
-// ----------------------
+// THIS FILE NO LONGER DECIDES ANYTHING
+// ------------------------------------
+// The rule that decides "is this an unobserved Task?" is HARCH003, a real
+// Roslyn analyzer:
+//
+//     tests/Harbor.Architecture.Tests/Roslyn/UnobservedTaskAnalyzers.cs
+//     tests/Harbor.Architecture.Tests/UnobservedTaskRuleTests.cs
+//
+// It asks the TYPE question — "is the value of this expression a Task?" —
+// where the matcher below asks the SPELLING question — "does this line
+// contain a call whose NAME looks async-shaped?". The two disagree in both
+// directions, and both directions are the point:
+//
+//   * A method called `Fetch()` that returns a Task is an unobserved Task.
+//     The spelling matcher cannot see it; the type can.
+//   * A method called `DoWorkAsync()` that returns `int` is NOT a Task. The
+//     spelling matcher flags it — a false positive on correct code, which is
+//     how a guard gets deleted — and the type does not.
+//
+// The coverage is NOT weaker for the migration, and the argument is a
+// containment one rather than a promise:
+//
+//   * The matcher covers two shapes: the explicit `_ =` discard and the
+//     expression-bodied void member (`public void M() => Produce();`).
+//     HARCH003 covers the SAME two shapes, and decides each of them by
+//     type.
+//   * Every site the matcher flags with a task-SHAPED spelling is a site
+//     whose expression is Task-TYPED — with one exception, the matcher's own
+//     false positive: a call named `…Async` that returns `int`. HARCH003
+//     does not flag that one, and SHOULD NOT: it is correct code.
+//   * So the semantic rule's findings CONTAIN the matcher's, and the
+//     difference is exactly the set of false positives the matcher had.
+//
+// The matcher is kept for two reasons, both of them about the DIFFERENTIAL
+// rather than about the verdict:
+//
+//   1. The differential needs a second opinion, and a second opinion that is
+//      a COPY of the first one agrees with itself and proves nothing. This
+//      is the matcher's own detector, reached through the same runner the
+//      rule used.
+//   2. A change in the matcher is visible in the diff. A matcher that is
+//      quietly edited is a matcher whose history nobody can read.
+//
+// The tests below are therefore the ORACLE's non-vacuity — the planted
+// controls prove the detector can still fail, and the discovery floor proves
+// the walk still finds the shell. The GATE over the desktop shell is
+// HARCH003's, and it lives in `UnobservedTaskRuleTests.cs`.
+//
+// THE DEFECT THIS GUARDED
+// -----------------------
 // `_ = SomeAsync()` throws away a Task with nobody watching it. .NET Core does
 // NOT surface an unobserved fault at the throw site: the exception is parked on
 // the Task and the process-wide `TaskScheduler.UnobservedTaskException` event
@@ -11,27 +59,10 @@
 // no log, no toast, no red surface.
 //
 // `Harbor.Abstractions.Tools.TaskFireAndForget.Forget` exists for exactly this
-// case. Its own XML doc states the rule this file enforces:
+// case. Its own XML doc states the rule this file enforced:
 //
 //     "The `Run` contract of effect hosts stays synchronous, so awaiting is
 //      not an option — but every fault is now observable."
-//
-// WHY A SOURCE-TEXT RULE AND NOT AN ANALYZER
-// ------------------------------------------
-// Two reasons, both deliberate.
-//
-//   1. The interesting sites are *expression-bodied* discards
-//      (`private void OpenFile() => _ = _workspaceCommands.OpenFileAsync();`)
-//      and *statement-position discards inside a void member*
-//      (`public void BranchSession() => _sessions.BranchCommand.ExecuteAsync(null);`).
-//      The second shape has no `_ =` at all — a grep for `_ = ` cannot find it,
-//      which is exactly how it survived the original audit. A discard rule has
-//      to look at the enclosing member's return type, which is what
-//      `IsUnobservedTaskDiscard` does below.
-//   2. The rule spans `apps/Harbor.App.Avalonia`, which this test project does
-//      not reference (and must not: it is an app, a composition root). A
-//      source-text scan needs no reference edge, exactly as MaybeAbsenceTests
-//      documents for its own app-scoped rules.
 //
 // SCOPE — AND WHY IT IS THIS NARROW
 // ---------------------------------
@@ -98,7 +129,9 @@ using System.Text.RegularExpressions;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
-///     §FP-003 guard: no unobserved Task discard in the Avalonia desktop shell.
+///     The RETIRED pattern matcher for §FP-003 in the Avalonia desktop shell
+///     (issue #569), kept as the non-gating oracle HARCH003 is measured
+///     against.
 /// </summary>
 public class AvaloniaFireAndForgetRules
 {
@@ -195,8 +228,17 @@ public class AvaloniaFireAndForgetRules
         + "|" + VoidParameterlessMemberDroppingTask.ToString(),
         RegexOptions.Compiled);
 
-    /// <summary>The rule as data: one documented shape, a custom parser, planted controls, a floor.</summary>
-    private static readonly ScanRule Rule = new()
+    /// <summary>
+    ///     The rule as data: one documented shape, a custom parser, planted
+    ///     controls, a floor.
+    /// </summary>
+    /// <remarks>
+    ///     The rule is the ORACLE now. It is reached by the differential in
+    ///     `UnobservedTaskRuleTests.cs` through the same runner, so the
+    ///     comparison is between two detectors and not between a detector and
+    ///     a copy of it.
+    /// </remarks>
+    internal static readonly ScanRule Rule = new()
     {
         Id = "AvaloniaFireAndForget",
         Trees = ["apps/Harbor.App.Avalonia"],
@@ -280,20 +322,18 @@ public class AvaloniaFireAndForgetRules
     }
 
     // ── the rule ──────────────────────────────────────────────────────────
-
-    [Test]
-    public async Task AvaloniaShell_StartsNoTaskWithoutObservingItsFault()
-    {
-        List<string> violations = ScanRunner.Evaluate(Rule);
-
-        await Assert.That(violations).IsEmpty()
-            .Because(
-                "§FP-003. Every one of these is a Task whose exception nobody observes. "
-                + "In the desktop shell that means a failed save / open / diagnostics read goes silently "
-                + "unreported. `TaskFireAndForget.Forget` exists for exactly this contract — the surrounding "
-                + "member is synchronous and cannot await, which is not the defect; losing the fault is. "
-                + string.Join("\n", violations));
-    }
+    //
+    // There is deliberately NO live verdict test here any more. This matcher
+    // used to gate the desktop shell; the gate is HARCH003's now — a real
+    // analyzer that decides the same question by TYPE — and the matcher is
+    // kept as the oracle the differential compares against. The live
+    // comparison lives in `UnobservedTaskRuleTests.cs`, where both detectors
+    // are reachable.
+    //
+    // The tests that REMAIN below are the oracle's non-vacuity: the planted
+    // controls prove the detector can still fail, and the discovery floor
+    // proves the walk still reaches the shell. A differential against a
+    // broken oracle would be a differential against nothing.
 
     // ── non-vacuity ───────────────────────────────────────────────────────
 

@@ -132,7 +132,20 @@ public sealed class MessagePackRpcServer : IAsyncDisposable
     {
         await foreach (var stream in acceptReader.ReadAllAsync(ct).ConfigureAwait(false))
         {
-            _ = HandleClientAsync(stream, ct);
+            // Detached ON PURPOSE: the accept loop must not wait for one client
+            // before accepting the next, so the handler's task cannot be awaited
+            // here. Observed ON PURPOSE (#1852): the house fire-and-forget
+            // helper reads the task's exception, so a fault is REPORTED at this
+            // call site instead of being parked on a discarded Task until
+            // finalization — which, in a server that runs for days, is never.
+            //
+            // `HandleClientAsync` has a catch-all of its own; that is the INNER
+            // barrier. This is the OUTER one, and it is the one that survives
+            // the refactor that removes the inner one.
+            TaskFireAndForget.Forget(
+                HandleClientAsync(stream, ct),
+                ex => MessagePackRpcServerLog.ClientHandlerTaskFaulted(_logger, ex),
+                ct);
         }
     }
 
@@ -611,4 +624,13 @@ internal static partial class MessagePackRpcServerLog
 
     [LoggerMessage(EventId = 17, Level = LogLevel.Debug, Message = "Could not deliver error response; connection likely broken")]
     public static partial void CouldNotDeliverErrorResponse(ILogger logger, Exception ex);
+
+    /// <summary>
+    ///     The accept loop's client handler faulted. The handler has a
+    ///     catch-all of its own, so reaching this event means the fault
+    ///     escaped that net — and the accept loop is the only thing that can
+    ///     observe it (#1852).
+    /// </summary>
+    [LoggerMessage(EventId = 18, Level = LogLevel.Error, Message = "Client handler task faulted; the fault was observed at the accept loop")]
+    public static partial void ClientHandlerTaskFaulted(ILogger logger, Exception ex);
 }

@@ -31,6 +31,7 @@ Harbor runs three layers of static analysis + DI validation:
 | **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
+| **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
 ### Reflection rules (ReflectionAnalyzers 0.3.1)
 
@@ -211,6 +212,56 @@ blocks were inert configuration that read like live policy.
 `tests/Harbor.Architecture.Tests/` fails if such a block reappears, and
 `DiSeverityOverrides_AreScopedToExactlyTheDeclaredRoot` pins this one path as
 the entire surface.
+
+### Threading rules (Microsoft.VisualStudio.Threading.Analyzers 18.12.1)
+
+The Visual Studio SDK's threading/async analyzer family. 29 rules ship in the
+package — `VSTHRD001`–`VSTHRD004`, `VSTHRD010`–`VSTHRD013`,
+`VSTHRD100`–`VSTHRD117`, `VSTHRD200`–`VSTHRD202` (`VSTHRD201` is in the
+package; the upstream index documents 28 of the 29). MIT licensed,
+`developmentDependency` only, and it ships **no `lib/` folder and declares no
+package dependencies** — it contributes analyzer assemblies and nothing else,
+so nothing from it reaches a product binary or a consumer's dependency graph.
+
+**Scope: `src/` and `apps/` only.** It is referenced from
+`src/Directory.Build.props` and `apps/Directory.Build.props`, not from the
+root file, because the root file is inherited by `tests/` too — and the test
+tree has its own async culture (fixtures that block on purpose, 174 catch-all
+handlers) and already lifts `TreatWarningsAsErrors`.
+
+**Exactly one rule is on:**
+
+| ID | Title | Harbor | Why |
+|----|-------|--------|-----|
+| **VSTHRD110** | Observe result of async calls | **suggestion** | The one rule this repository asks for. `suggestion` and not `error` because both sites it flags are places where the fault is already handled inside the callee: it is a guard on the future, not a fix of a present defect, and `error` would mean a red build on two places there is nothing to fix. |
+
+**Every other rule is `none`, with a written reason** in `.editorconfig`.
+That is not housekeeping — the package's defaults are not this repository's
+defaults:
+
+- **Four rules are `Error` by default** (`VSTHRD004`, `VSTHRD011`,
+  `VSTHRD107`, `VSTHRD109`). Adding the package without demoting them turns
+  existing code into a red build on the day it lands.
+- **A large part of the family is written against `JoinableTaskFactory`**,
+  which Harbor does not reference and does not want to: `VSTHRD004`,
+  `VSTHRD011`, `VSTHRD012`, `VSTHRD013`, `VSTHRD105`–`VSTHRD109`,
+  `VSTHRD115`, `VSTHRD201`.
+- **`VSTHRD100` (async void)** would fire on the four Avalonia event
+  handlers, which `docs/ANTIPATTERNS.md` §13 blesses.
+- **`VSTHRD103`** duplicates `CS4014`, which the compiler already reports as
+  an error here.
+- **`VSTHRD116`/`VSTHRD117`** (`ThreadStatic`) would fire on the tree's eight
+  `[ThreadStatic]` sites.
+
+**The gate that actually decides "is this an unobserved Task?" is not the
+package's.** It is `HARCH003`, a Roslyn analyzer in
+`tests/Harbor.Architecture.Tests/Roslyn/UnobservedTaskAnalyzers.cs`, which
+resolves the TYPE of the discarded expression instead of matching a call's
+spelling — so it sees a `Task`-returning method whose name says nothing about
+being asynchronous, and a type *derived* from `Task`, and it does not flag a
+method named `…Async` that returns `int`. The pattern matcher it replaced
+(`AvaloniaFireAndForgetRules.cs`) survives as the non-gating **oracle** the
+differential compares against; see that file's header. Issue #1852.
 
 ### Banned APIs (`BannedSymbols.txt`, `BannedSymbols.DynamicCode.txt`)
 
