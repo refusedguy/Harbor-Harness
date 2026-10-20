@@ -26,6 +26,19 @@
 
     Platform VMs in apps/Harbor.App.* derive from the abstract VMs here and add
     platform-specific bindings (AvaloniaDispatcher, WPF Dispatcher, Blazor JSInterop).
+
+    The promise was KEPT here, and it took a removal to keep it. #1835 found
+    TEN abstract VMs published in Harbor.Desktop.Abstractions with ZERO
+    implementors anywhere in the tree — public surface in a packable package
+    with nothing deriving from them — and deleted them. What came to this
+    assembly is three bases, and the promise holds for two of them:
+    apps/Harbor.App.Avalonia derives ChatViewModel and CommandPaletteViewModel
+    from here. The WPF / MAUI / Blazor apps live under contrib/ and are not
+    built by CI, so they are not a reason for anything here to be public.
+    DiffViewModelBase is the third: it has no shipped subclass (Harbor.TestKit
+    builds a stub on it), and
+    tests/Harbor.Architecture.Tests/PublicAbstractBaseLivenessRules.cs is what
+    stops a fourth base from being published the same way.
   -->
 
   <PropertyGroup>

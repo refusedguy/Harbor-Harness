@@ -12,7 +12,7 @@ Until #1899 this assembly was `Harbor.Desktop.Abstractions/ViewModels/` — the
 which held 46 public types, 9 project references and an 18-assembly dependency
 closure. It was a hub wearing a leaf's name.
 
-#1899 split that assembly at the measured dependency seam:
+In #1899 the assembly was split at the measured dependency seam:
 
 | assembly | holds | Harbor references | closure |
 |---|---|---|---|

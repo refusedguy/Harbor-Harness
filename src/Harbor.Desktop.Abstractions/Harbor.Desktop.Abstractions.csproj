@@ -5,7 +5,7 @@
     every Harbor desktop app (Avalonia, WPF, MAUI, Blazor).
 
     #1899: this assembly USED to hold the whole desktop UI layer — 46 public
-    types, 9 project references, a 18-assembly dependency closure — under a
+    types, 9 project references, an 18-assembly dependency closure — under a
     name that promised a contract layer. It was a hub wearing a leaf's name.
     The split put the concrete view-models in `Harbor.Desktop.ViewModels`,
     and what is left here is the part the name always described: the config
