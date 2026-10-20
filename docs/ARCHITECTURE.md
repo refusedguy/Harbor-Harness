@@ -275,6 +275,11 @@ Two loading paths:
 - **Out-of-process:** `Harbor.Plugins.Host` is a standalone exe hosting plugins
   over MCP stdio (`McpPluginLoadHost`, `McpStdioServer`).
 
+`RequiredHarborVersion` is enforced at the registration boundary, the one seam both
+loading paths pass through: a plugin that declares a newer Harbor than the one
+running is refused before it is initialized (#1721,
+`src/Harbor.Plugins.Registration/PluginCompatibility.cs`).
+
 ### 9. JSONL session storage
 
 - Append-only, atomic writes.

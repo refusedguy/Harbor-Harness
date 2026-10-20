@@ -229,14 +229,16 @@ The modes are:
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
 | `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 27` |
+| `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
 | `tools/check-reference-trimmer.py` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
 | `tools/check-test-dup.py` | a test body is a copy of another test body | docs.yml | selftest, testdup | advisory | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
 | `tools/check-test-json-reflection.py` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
-| `tools/check-test-packages.py` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 40 --min-packages 1400 --min-output-dirs 40` |
+| `tools/check-test-packages.py` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 50 --min-packages 1400 --min-output-dirs 40` |
 | `tools/check-test-projects.py` | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
+| `tools/check-tunit-analyzer-gate.py` | TUnit's own analyzers are armed: a planted offender fails the build and a planted waiver does not | ci.yml | build | gate | `--selftest` | — | — |
 | `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
 | `tools/ci-shard-slices.py` | the build-output slices match the test shards | ci.yml | build | gate | — | — | — |
 | `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
@@ -247,10 +249,9 @@ The modes are:
 | `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
 | `tools/normalize-mtimes.py` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
 | `tools/pack-validate.py` | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | build, selftest | gate | `--selftest` | — | — |
-| `tools/test-census.py` | the per-test and per-project wall census of a CI run | docs.yml | selftest | reporter | `--self-test` | — | — |
+| `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
-| `tools/test-skips.py` | the tests a run skipped, and the reason each declared | docs.yml, test-os.yml | selftest, test-os | reporter | `--self-test` | — | — |
-
+| `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

@@ -9,25 +9,25 @@
     "normalisation": "comments dropped; string literals -> S; char literals -> C; numeric literals -> N; identifiers -> I; whitespace collapsed"
   },
   "census": {
-    "files": 1037,
-    "lines": 207182,
-    "methods": 10618,
-    "test_methods": 6804
+    "files": 1044,
+    "lines": 209083,
+    "methods": 10653,
+    "test_methods": 6830
   },
   "metrics": {
-    "groups": 184,
-    "intra_file_groups": 103,
-    "cross_file_groups": 81,
+    "groups": 183,
+    "intra_file_groups": 104,
+    "cross_file_groups": 79,
     "exact_groups": 98,
-    "duplicate_lines": 2694,
-    "group_lines": 4683,
+    "duplicate_lines": 2664,
+    "group_lines": 4629,
     "shape_coincidences": 0,
-    "files": 1037,
-    "lines": 207182,
-    "methods": 10618,
-    "test_methods": 6804
+    "files": 1044,
+    "lines": 209083,
+    "methods": 10653,
+    "test_methods": 6830
   },
-  "blocking_duplicate_lines": 2435,
+  "blocking_duplicate_lines": 2405,
   "groups": {
     "00c25fe277a33905527cc4696dd798419f502485": {
       "members": [
@@ -233,18 +233,6 @@
       "files": 3,
       "exact": 3,
       "shape": "13d36b4340e709f5b78238d3b76d16516cd254db"
-    },
-    "0f9f8a59d8c198bb0ea32b7bebc301e00343efcd": {
-      "members": [
-        "tests/Harbor.Tools.Builtin.Tests/PatchToolTests.cs::ExecuteAsync_FileNotFound_ReturnsError#0",
-        "tests/Harbor.Tools.Builtin.Tests/RipGrepToolTests.cs::ExecuteAsync_PathNotFound_ReturnsError#0",
-        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::ExecuteAsync_NonExistentDir_ReturnsError#0"
-      ],
-      "count": 3,
-      "lines": 6,
-      "files": 3,
-      "exact": 0,
-      "shape": "54058500eddeb97bbb740a1beef71cf6b0c8048f"
     },
     "111b43dddb28bd87540721a0a5e2075b94e708e3": {
       "members": [
@@ -848,17 +836,6 @@
       "exact": 2,
       "shape": "72c31397e29c5a8913ec8654cc9bead3990c4ad8"
     },
-    "56168acd46ca01ad919963bc04570be83c063938": {
-      "members": [
-        "tests/Harbor.Tools.Builtin.Tests/RipGrepToolTests.cs::ExecuteAsync_GlobFilterLimitsFileTypes_WhenRgInstalled#0",
-        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::ExecuteAsync_HidesHiddenFilesByDefault#0"
-      ],
-      "count": 2,
-      "lines": 18,
-      "files": 2,
-      "exact": 0,
-      "shape": "851c44113cab5455cafc2b368ee5a3ecc7e2948d"
-    },
     "577ee4c01234bc96b86523c0ef18af341dfd434b": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_MismatchedState_FallsBackToLegacy#0",
@@ -1340,6 +1317,17 @@
       "exact": 3,
       "shape": "d0212af24dd724e3c71f11272dc70f2df3ad7d25"
     },
+    "a8b5744eb66492401a6278959a9e7d1750292968": {
+      "members": [
+        "tests/Harbor.Tools.Builtin.Tests/PatchToolTests.cs::ExecuteAsync_FileNotFound_ReturnsError#0",
+        "tests/Harbor.Tools.Builtin.Tests/TreeToolTests.cs::ExecuteAsync_NonExistentDir_ReturnsError#0"
+      ],
+      "count": 2,
+      "lines": 6,
+      "files": 2,
+      "exact": 0,
+      "shape": "54058500eddeb97bbb740a1beef71cf6b0c8048f"
+    },
     "a8c4bf7a8a1fe5a4d4e5405347c15d4e489be558": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_State_MirrorsSelectableCount#0",
@@ -1357,10 +1345,10 @@
         "tests/Harbor.Application.Tests/ToolDispatcherToolContextScalingTests.cs::DispatchLegAsync#0"
       ],
       "count": 2,
-      "lines": 9,
+      "lines": 14,
       "files": 2,
       "exact": 2,
-      "shape": "c1e6ffa3b961646da009fc00b2bfe547ab482fd8"
+      "shape": "3a6e95329cb2a354e015e9a11c2c55352d499005"
     },
     "a91fc3093d9d5ba703722804804c55b86fc2a153": {
       "members": [
@@ -2032,6 +2020,17 @@
       "exact": 2,
       "shape": "fb626370512677e837571e889621e5ac768abb06"
     },
+    "f5c1ca3ad2a775f06a608ff1356938cb4783d49c": {
+      "members": [
+        "tests/Harbor.Plugins.Runtime.Tests/Registration/RequiredHarborVersionGateTests.cs::Registrar_RequiredVersionEqualsRuntime_LoadsThePlugin#0",
+        "tests/Harbor.Plugins.Runtime.Tests/Registration/RequiredHarborVersionGateTests.cs::Registrar_RequiredVersionOlderThanRuntime_LoadsThePlugin#0"
+      ],
+      "count": 2,
+      "lines": 7,
+      "files": 1,
+      "exact": 2,
+      "shape": "97318a82298140b649a48fbedd028b7bf6b8c814"
+    },
     "f6e891c1d0cd1a3ca3f4a4ce939959452b7b49a8": {
       "members": [
         "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_ToolTextWithTrailingWhitespace_ParsesPath#0",
@@ -2054,17 +2053,6 @@
       "files": 1,
       "exact": 2,
       "shape": "4ccfdb45c996d3756af663830dde9c195669c1a1"
-    },
-    "f9bac17da94bc141ec82b6db4560bc844d6b20de": {
-      "members": [
-        "tests/Harbor.Application.Tests/WorkspaceInspectorTests.cs::GitAvailable#0",
-        "tests/Harbor.ChangeTracking.Tests/SkipWhenGitMissing.cs::Available#0"
-      ],
-      "count": 2,
-      "lines": 18,
-      "files": 2,
-      "exact": 2,
-      "shape": "cd675316043f4cf327b15ace49434bce7cfc5be1"
     },
     "fa098888d204635e9fa1acb3668f3760ec337cbb": {
       "members": [

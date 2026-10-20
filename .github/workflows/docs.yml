@@ -38,6 +38,13 @@
 #             It lives here rather than in ci.yml because it needs no .NET
 #             SDK and because ci.yml is the workflow the dotnet matrix owns.
 #
+#   merge-loss  the local squash-merges: a pull request that touches
+#             `.github/workflows/` cannot be merged through the GitHub API with
+#             this repository's token (no `workflow` scope), so it is merged
+#             LOCALLY with `git merge --squash`, and the resolution dropped
+#             whole sections of files. The job walks those merges and asks
+#             whether what they dropped is still missing. No dotnet, no
+
 # THE FLOORS ARE THE POINT
 #
 #   `--min-files` / `--min-refs` / `--min-lines` make a narrowed scan fail
@@ -124,6 +131,23 @@ on:
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
       - 'tools/check-public-api-resign.py'
+      - 'tools/check-public-api-resign.py'
+      # merged LOCALLY (the token has no `workflow` scope), and the local
+      # squash-merge dropped content. The gate has to run on every such pull
+      # request, and on the push that lands it — so the trigger is the
+      # workflow files themselves, not the gate's own sources alone.
+      - '.github/workflows/**'
+      - 'tools/check-local-merge-loss.py'
+      - 'tools/merge-loss-exceptions.txt'
+      # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
+      # The merge-loss gate. A pull request that touches a workflow file is
+      # merged LOCALLY (the token has no `workflow` scope), and the local
+      # squash-merge dropped content. The gate has to run on every such pull
+      # request, and on the push that lands it — so the trigger is the
+      # workflow files themselves, not the gate's own sources alone.
+      - '.github/workflows/**'
+      - 'tools/check-local-merge-loss.py'
+      - 'tools/merge-loss-exceptions.txt'
       # #1888. The gate policy's own checker, and the three tools whose
       # self-test no workflow ran until the policy asked for one. A PR that
       # edits any of them must run the checker, because the checker's
@@ -298,6 +322,11 @@ jobs:
       # from a rule that found nothing, and the load-bearing fixture is the
       # planted duplicate — the gate MUST fail on it, and MUST stay quiet on
       # a same-shape body that shares no identifiers with it.
+      - name: Merge-loss checker reports a dropped line
+        run: python3 tools/check-local-merge-loss.py --self-test
+      # #1778. The eighth gate is the only one that reads the TEST tree, and
+      # the only one that asks whether a test body is a copy of another test
+
       - name: Duplicate-test-body gate fails on a planted duplicate
         run: python3 tools/check-test-dup.py --self-test
       # #1847. The second duplication detector, the one that scans the
@@ -616,6 +645,102 @@ jobs:
   # inside `tools/check-dup-jscpd.py`, and it is a build-time tool: it never
   # reaches the product, and no `PackageReference` is added, so the
   # dependency gate does not see it.
+  merge-loss:
+    name: local squash-merges dropped nothing
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The gate needs the pull request's HEAD commit to know what the pull
+      # request intended, and it reads that SHA out of the merge commit's
+      # body. GitHub keeps `refs/pull/<n>/head` for every pull request ever
+      # merged, so one fetch per merge brings the heads in. A head that is
+      # missing makes the gate ERROR rather than skip: a gate that cannot
+      # see a merge is a gate that is blind to it.
+      - name: Fetch the pull request heads the history names
+        run: |
+          set -eu
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/dev:refs/remotes/origin/dev"
+          for pr in $(git log --first-parent --format=%B origin/dev \
+                      | grep -o 'Squash-merged into dev (PR #[0-9]*' \
+                      | grep -o '[0-9]*' | sort -u); do
+            git fetch --no-tags --quiet origin \
+              "+refs/pull/$pr/head:refs/remotes/pull/$pr/head" || true
+          done
+      - name: The local squash-merges dropped nothing
+        run: >-
+          python3 tools/check-local-merge-loss.py
+          --range origin/dev --tip HEAD --min-merges 1
+
+  # #1823. Ninth question, and the only one about the LISTS rather than
+  # about the test bodies: does every test project in the solution actually
+  # run in CI?
+  #
+  # The shard lists in ci.yml are hand-written. There are six of them across
+  # two workflow files, plus a derived list in the NUKE `Test` target, and
+  # nothing compared them against the tree.
+  #
+  # The obvious question has the wrong answer, and the repository says so:
+  # TUnit discovers a REFERENCED test project's classes in every project
+  # that references it (tests/Harbor.E2E.App.Avalonia/E2eShards.cs, and the
+  # TRX of run 39399653820, where 26 of Harbor.E2E.App.Avalonia's 133
+  # tests are Harbor.E2E.Framework.StateTestRunnerTests). So a test project
+  # reaches a CI run through its OWN list entry OR through a listed project
+  # that references it, and the gate has to count both.
+  #
+  # What the gate finds on dev@8be16392, with 43 .csproj under tests/ and 38
+  # test projects carrying tests:
+  #
+  #   * every one of the 38 is discovered by some CI run, so nothing is
+  #     silently unrun -- the hole the issue was filed about does not
+  #     exist in the shape the issue described;
+  #   * Harbor.E2E.Framework's 26 tests run SIX times per CI run, in each
+  #     of the six listed projects that reference it: 156 executions of 26
+  #     tests, about 1.06 s of duplicated test time;
+  #   * Harbor.Ipc.Tests references that framework and names none of its
+  #     types, so the reference buys nothing: 13 product assemblies dragged
+  #     into the IPC closure, and a sixth copy of the 26 tests;
+  #   * Harbor.Terminal.Abstractions.Tests references Harbor.TestKit and
+  #     names none of its types: 4 product assemblies dragged in for
+  #     nothing;
+  #   * Harbor.TestKit.Tests references Harbor.TestKit and names none of
+  #     its types, a leftover of the TestKit split: 16 product assemblies
+  #     dragged in for nothing;
+  #   * Harbor.E2E.App.Avalonia defines the two-process split (E2eShards)
+  #     that would put the framework's tests in one shard, and CI runs the
+  #     project once without a filter, so the partition is dead code.
+  #
+  # WHY THIS JOB LIVES HERE AND NOT IN ci.yml: the gate is stdlib python
+  # with no SDK, no restore and no build, and this workflow is the one that
+  # stays SDK-free. It reads ci.yml and test-os.yml as FILES, so the lists
+  # it checks living in a different workflow is not a problem. A job in
+  # ci.yml would inherit ci.yml's change filter and would be skipped on the
+  # PRs where a new test project is added, which is exactly the PR the gate
+  # exists for.
+  #
+  # The floors are a ratchet, set AT the measured counts rather than below
+  # them: a floor with slack cannot tell "the tree got smaller" from "the
+  # matcher stopped matching". Measured on this tree: 43 .csproj under
+  # tests/, 38 test projects carrying tests, 7 CI lists, 37 distinct
+  # projects the lists name, 41 projects discovered by a CI run. A PR that
+  # legitimately removes a project lowers them in the same diff, where a
+  # reviewer sees it.
+  #
+  # The gate runs in BASELINE MODE: the holes the tree has today are
+  # recorded in tools/test-project-baseline.txt, one row per hole with a
+  # reason and an owner, and only NEW holes fail. A gate that is red on
+  # today's tree is a gate nobody lands, and a gate nobody lands protects
+  # nothing. The baseline is a ratchet in both directions: a row the tree
+  # no longer produces fails too, so a closed hole cannot stay blessed.
+  #
+  # The non-vacuity proof is the gate's own --self-test, run in the
+  # `selftest` job above.
+
   dupjscpd:
     name: duplication (jscpd)
     runs-on: ubuntu-latest

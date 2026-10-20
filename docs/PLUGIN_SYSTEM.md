@@ -276,6 +276,40 @@ public interface ITuiPanelPlugin : IPlugin
 }
 ```
 
+## Version compatibility (#1721)
+
+`RequiredHarborVersion` is a **minimum**, and it is enforced. The registration
+layer checks it in front of `IPlugin.Initialize`, so an incompatible plugin
+contributes nothing to the host: no tool, no provider, no agent, no panel, and
+no half-initialized state left behind.
+
+| Running Harbor | Declared `RequiredHarborVersion` | Result |
+|---|---|---|
+| 0.4.0 | 0.4.0 | loads, because the boundary is inclusive |
+| 0.4.0 | 0.2.0 | loads, because the declaration is a floor and the runtime is above it |
+| 1.0.0 | 0.4.0 | loads, because a Harbor newer than the plugin asks for still satisfies it |
+| 0.4.0 | 0.6.0 | refused. The plugin is not initialized and does not load |
+| 0.4.0 | not declared | loads. There is no floor to enforce, and the host logs the missing declaration |
+
+The refusal names the plugin, the Harbor version it needs and the Harbor version
+that is running:
+
+> `Plugin 'web-search' requires Harbor >= 0.6.0, but this Harbor is 0.4.0. The plugin was not loaded.`
+
+Versions are compared component-wise with an unspecified component read as 0, so
+`0.4` and `0.4.0` name the same Harbor. A plugin may declare major and minor only.
+
+Where the refusal lands: the registrar returns a failed `Result`, and the load
+path logs it. Under `ContinueOnError=false` (the single-plugin API) the whole
+load fails with that reason. Under the default `ContinueOnError=true` the
+incompatible plugin is skipped and the other plugins still load. Either way the
+plugin does not appear in the loaded-plugins list, because it did not load.
+
+The gate lives in `src/Harbor.Plugins.Registration/PluginCompatibility.cs` and is
+called from `PluginRegistrar.Register`, the one seam both load routes pass
+through: the out-of-process `harbor-plugins-host` and the legacy in-process
+`CsPluginLoader`.
+
 ## Minimal example — a hello tool
 
 Drop this into `~/.harbor/plugins/HelloWorldPlugin.cs`:
@@ -354,9 +388,11 @@ process**; only the tool capability crosses the wire (capability parity table:
       - Miss → RoslynPluginCompiler compiles to in-memory assembly, write dll to cache
    b. Instantiation layer: ReflectionPluginInstantiator finds IPlugin impls, calls
       Activator.CreateInstance (parameterless ctor). Does NOT call Initialize.
-   c. Registration layer: PluginRegistrar builds PluginContext, calls
-      plugin.Initialize(context), then dispatches Register*() based on which
-      sub-interface(s) the type implements:
+   c. Registration layer: PluginRegistrar checks the plugin's
+      RequiredHarborVersion against the running Harbor and refuses an
+      incompatible plugin BEFORE it is initialized (#1721). Then it builds
+      PluginContext, calls plugin.Initialize(context), and dispatches
+      Register*() based on which sub-interface(s) the type implements:
           IToolPlugin     → RegisterTools (served over MCP tools/list + tools/call)
           IProviderPlugin → refused with a reason (this route exposes tools
                             only), logged and discarded
