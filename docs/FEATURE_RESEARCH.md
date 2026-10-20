@@ -388,7 +388,7 @@ To recreate orca's component stack in Avalonia, add these NuGet packages to `Har
 <!-- (use Material Design icons — closest 1:1 mapping to lucide's flat outline style) -->
 
 <!-- Diff view (replaces Monaco diff + diff-match-patch) -->
-<PackageReference Include="DiffPlex" Version="1.7.2" />
+<PackageReference Include="DiffPlex" Version="1.9.0" />
 <!-- DiffPlex is the .NET diff library; render its output via AvaloniaEdit -->
 
 <!-- Drag and drop (Avalonia built-in via DragDrop event) -->
@@ -1515,7 +1515,7 @@ This section catalogs features that appear in **3 or more** of the 4 repos but a
 
 **Source libraries:** `@sanity/diff-match-patch 3.2` (Orca), `diff 8.0.4` (Kilo, OpenCode), `@pierre/diffs 1.2.10` (Kilo, OpenCode — structured AI-reviewable diffs).
 
-**.NET equivalent:** `DiffPlex 1.7.2` (diff engine), `AvaloniaEdit 11.0.6` (text editor with syntax highlighting via TextMate). Render side-by-side: two `AvaloniaEdit` instances, left = before, right = after, with +/- line backgrounds.
+**.NET equivalent:** `DiffPlex 1.9.0` (diff engine), `AvaloniaEdit 11.0.6` (text editor with syntax highlighting via TextMate). Render side-by-side: two `AvaloniaEdit` instances, left = before, right = after, with +/- line backgrounds.
 
 **Recommendation:** MUST. Build `DiffView` Avalonia `UserControl` that takes `before: string, after: string, language: string` and renders a side-by-side highlighted diff. Use in `Harbor.Tui.Avalonia` for the `Edit`/`Write`/`Patch` tool output. In SpectreTui, render unified diff with syntax highlighting via Spectre.Console.
 
@@ -2096,7 +2096,7 @@ Every MUST feature is gated by at least one of these mechanisms. The SpectreTui 
 | LiveChartsCore | 2.0.0-rc5.4 | Charts (cost/token meter) | MIT |
 | LiveChartsCore.Avalonia | 2.0.0-rc5.4 | Avalonia bindings for LiveCharts | MIT |
 | Projektanker.Icons.Avalonia | 9.8.1 | Icon library (lucide equivalent) | MIT |
-| DiffPlex | 1.7.2 | Diff engine | MIT |
+| DiffPlex | 1.9.0 | Diff engine | MIT |
 | FuzzySharp | 2.0.2 | Fuzzy string matching | MIT |
 | Pty.Net | 0.5.81 | Cross-platform PTY (node-pty equivalent) | MIT |
 | Svg.Skia | 3.0.0 | SVG rendering (for mermaid diagrams) | MIT |
@@ -2167,7 +2167,7 @@ A small `SOURCE_REV` file at the repo root records the full monorepo commit SHA 
 | ANSI parser | `vte` 0.15 + `ansi-to-tui` 7.0 + `ansi-width` 0.1 + `anstyle` 1.0 + `anstyle-lossy` + `anstyle-parse` | Zero-copy ANSI/SGR state machines | `Harbor.Tui.Ansi.Ansi.cs` (we already have a parser) |
 | Embedded terminal | `alacritty_terminal` 0.26 + `portable-pty` 0.9 + `termwiz` 0.23 | Native terminal emulation in-pane (for `run_terminal_command` output) | **Pty.Net 0.5.81** (cross-platform PTY) + custom VT100 emulator |
 | Fuzzy matching | `nucleo` (Helix's matcher, git pin) + `fuzzy-matcher` 0.3.7 | Sub-millisecond fuzzy on 100k+ entries | **FuzzySharp 2.0.2** (we already plan to use) |
-| Diff engine | `similar` 2.7 | Myers diff + word-level diffs | **DiffPlex 1.7.2** |
+| Diff engine | `similar` 2.7 | Myers diff + word-level diffs | **DiffPlex 1.9.0** |
 | Git | `gix` 0.83 (pure-Rust) + `git2` 0.20 (libgit2 bindings, vendored) | Status, worktree creation, blame | **LibGit2Sharp 0.31.0** / **DotnetGitLib** |
 | Worktree speedup | `xai-fast-worktree` (in-tree) | Hard-link based worktree creation (10x faster than `git worktree add`) | Hand-roll: copy + hard-link `CreateHardLink` Win32 / `link(2)` POSIX |
 | SQLite journal | `xai-sqlite-journal` (in-tree) | ACP session journaling | **Microsoft.Data.Sqlite 10.0.0** (we already use) |
