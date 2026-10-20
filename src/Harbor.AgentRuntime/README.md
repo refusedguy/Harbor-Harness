@@ -11,6 +11,12 @@ Namespaces are unchanged (`Harbor.Application.Agents`,
 existing usings keep compiling — same backward-compat convention as the
 earlier verbatim extractions (#1464, #1475, #1480 and #1613's Hooks move).
 
+`Resilience/RetryLlmClientDecorator.cs` is the one file here that is NOT from
+the extraction: #1502 added it next to the concrete `RetryPolicy` it news up,
+because `Harbor.Application` — where the decorator was written first — binds
+no moved type (the extraction's edge is one-way, AgentRuntime → Application).
+Its namespace is still `Harbor.Application.Resilience`, like its siblings.
+
 ## Public API
 
 Consumers bind the same types they did before the extraction — the move is
@@ -29,6 +35,7 @@ public interface IPipelineBehavior { ... }         // Agents/Pipeline/ — run-l
 //             CompactionBehavior, SteeringDrainBehavior
 public sealed class StreamingCoalescer : IDisposable;  // internal — text/thinking/tool-call delta coalescing
 // Resilience: RetryPolicy : IRetryPolicy, DefaultToolRetryDecider : IToolRetryDecider, RetryPolicyExtensions
+public sealed class RetryLlmClientDecorator : ILlmClient;  // Resilience/ — #1502: preflight transient retry on the provider stream
 ```
 
 Also internal but pinned by tests: `TurnRunner`, `MessageSnapshot`,

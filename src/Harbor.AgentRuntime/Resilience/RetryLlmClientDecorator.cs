@@ -7,8 +7,25 @@
 // retries, so a transient failure (DNS, connection reset, HTTP 429, 5xx,
 // provider timeout) ends the stream on the first occurrence at the provider
 // seam. The classification machinery already existed and had two owners in the
-// tree — `RetryPolicy`/`IExceptionClassifier` (Application layer) and the
-// tool-side `IToolRetryDecider` loop — but nothing on the ILlmClient seam.
+// tree — `RetryPolicy`/`IExceptionClassifier` and the tool-side
+// `IToolRetryDecider` loop — but nothing on the ILlmClient seam.
+//
+// WHY THIS FILE LIVES IN Harbor.AgentRuntime (and not in Harbor.Application):
+// the decorator news up the concrete `RetryPolicy` in its wiring helper, and
+// #1623 moved the resilience IMPLEMENTATIONS (`RetryPolicy`,
+// `RetryPolicyExtensions`, `DefaultToolRetryDecider`) out of
+// `Harbor.Application` into `Harbor.AgentRuntime` — a one-way edge
+// (AgentRuntime → Application). A file in `Harbor.Application` therefore
+// cannot name `RetryPolicy` any more: Application binds no moved type, and
+// adding the reverse reference would close the cycle the extraction opened on
+// purpose. The contracts the decorator consumes (`IRetryPolicy`,
+// `RetryOptions`) stayed in `Harbor.Application`, so the decorator needs
+// nothing else from it.
+//
+// The namespace stays `Harbor.Application.Resilience` — the same
+// "namespaces unchanged" convention the #1623 extraction used for the files
+// it moved (see src/Harbor.AgentRuntime/README.md), so every existing
+// `using` keeps compiling.
 //
 // What this decorator is NOT, deliberately: a second copy of the retry loop
 // itself. The first event of the stream (the "preflight", see below) is driven
