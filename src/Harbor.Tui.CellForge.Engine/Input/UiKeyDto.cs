@@ -1,10 +1,13 @@
 // #436: engine-owned port of the UiKeyDto half of
-// src/Harbor.Ui.Framework.Rendering/Input/IKeyVocabulary.cs — verbatim except its namespace.
+// src/Harbor.Ui.Framework.Rendering/Input/UiKeyDto.cs — verbatim except its namespace.
 // The engine is a standalone leaf (zero Harbor references); this vocabulary lives here now.
 // NOT ported: IKeyVocabulary/DefaultKeyVocabulary — they delegate to the key
 // mapper, which stays renderer-side. The engine produces UiKeyDto values from
 // wheel ticks; the host maps them into store messages through KeyEventAdapter, the single
 // Rendering→State crossing point (#33/T1), unchanged.
+// #1621: the shared side split its UiKeyDto half into its own file, so the two
+// halves can be compared file-to-file (the DTO vocabulary is the engine's
+// source of truth; see CellForgeEngineVocabularyParityRules).
 namespace Harbor.Tui.CellForge.Input;
 
 /// <summary>

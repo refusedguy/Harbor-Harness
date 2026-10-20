@@ -116,6 +116,30 @@ the markdown tokenizers (`CodeTokenizer`, `CodeSyntaxTokenizer`,
 `InlineImageLayer`, `MarkdownEditOps` and `GlowEffect` — moved to
 `Harbor.Tui.CellForge` under `Chat/Rendering` (#436).
 
+#### The vocabulary ports are guarded (#1621)
+
+The vocabulary above is a **port**: #436 made this project a standalone leaf,
+and a leaf cannot borrow `Harbor.Ui.Framework.Rendering`, so the cell/screen/
+input vocabulary was copied here and the two copies were kept in sync **by
+hand**. #1621 declares this side the source of truth and turns the hand-sync
+into a checked fact:
+
+- the shared twins live in `Harbor.Ui.Framework.Rendering` (`Cell`, `Rect`,
+  `ScreenBuffer`, `CellDiffOption`, `UnicodeWidth`, the `KeyEvent` family,
+  `UiKeyDto`, `IFocusTarget`) and in `Harbor.DesignSystem` (`CellStyle`,
+  `RgbColor`);
+- `tests/Harbor.Architecture.Tests/CellForgeEngineVocabularyParityRules.cs`
+  compares every twin against the file here, line for line, and reports a
+  difference as drift — so a one-sided edit is a red row instead of two grids
+  that quietly disagree at the edge of a line;
+- `tests/Harbor.Architecture.Tests/CellForgeEngineAtomicityRules.cs` pins the
+  inventory: the vocabulary is declared in this assembly and in its twin, and
+  in no third one.
+
+Exactly one spelling difference is sanctioned: the engine is BCL-only, so the
+`Ensure.NotNull` guard alias is spelled `ArgumentNullException.ThrowIfNull`
+here (the alias's own delegate — behavior-identical by construction).
+
 ## Wiring
 
 The engine has **no `HARBOR_TUI` value and no DI module of its own** — it is

@@ -36,10 +36,19 @@ serve CellForge, the Avalonia desktop app and the Blazor surface.
 
 `Input/` holds the BCL-only key model that keeps this project a leaf:
 `KeyEvent`, `KeyCode`, `KeyEventType`, `KeyModifiers`, and the
-`UiKeyDto`/`UiKeyKind`/`UiKeyMods` record struct with `IKeyVocabulary` and
+`UiKeyDto`/`UiKeyKind`/`UiKeyMods` record struct
+([`UiKeyDto.cs`](./Input/UiKeyDto.cs)) with `IKeyVocabulary` and
 `DefaultKeyVocabulary` ([`IKeyVocabulary.cs`](./Input/IKeyVocabulary.cs)).
 `KeyEventMapper` maps the vocabulary onto a concrete backend; `IFocusTarget` is
 the focus-stack contract.
+
+The cell/screen/input vocabulary here is copied into
+[`Harbor.Tui.CellForge.Engine`](../Harbor.Tui.CellForge.Engine/README.md) —
+that project is a standalone leaf and cannot borrow from here (#436), so #1621
+declares the ENGINE side the source of truth and guards this side against
+drift: `tests/Harbor.Architecture.Tests/CellForgeEngineVocabularyParityRules.cs`
+compares the two files line for line, so a one-sided edit is a red row instead
+of two grids that quietly disagree.
 
 ### Cell-diff protocol
 

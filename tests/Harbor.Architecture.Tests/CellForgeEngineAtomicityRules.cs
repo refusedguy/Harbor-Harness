@@ -1093,4 +1093,214 @@ public sealed class CellForgeEngineAtomicityRules
                 + "whole-file leaves, and the re-home check grades AutocompleteMode's move out of "
                 + "AutocompleteTrigger.cs without retyping any chat caller. Drift: " + Offenders(drift));
     }
+
+    // ── #1621 engine C1: the vocabulary's source of truth ───────────────────
+    //
+    // #436 made the engine a standalone leaf (zero Harbor references), and the
+    // price of that leaf was a SECOND COPY of the cell/screen/input vocabulary:
+    // Cell, Rect, ScreenBuffer, CellStyle, KeyEvent and friends live in the
+    // engine AND in the shared rendering layer, and the two copies are kept in
+    // sync BY HAND. #1621 names the two ways out:
+    //
+    //   * merge the vocabularies — the shared layer would have to reference
+    //     the engine, which inverts the layering the engine's isolation bought
+    //     (Harbor.Ui.Framework.Rendering is the renderer-agnostic shared layer;
+    //     a CellForge-specific engine under it is a backend-specific dependency
+    //     in the wrong direction), and it would collapse the dual-vocabulary
+    //     boundary ScreenSession is the documented crossing point of;
+    //   * make one side the source of truth and GUARD the other side against
+    //     drift — which is what this table and
+    //     CellForgeEngineVocabularyParityRules do.
+    //
+    // The table below is the second way made checkable. The ENGINE side is the
+    // source of truth (it is the leaf; it is the side that cannot borrow), and
+    // each row names the shared twin that must stay a verbatim copy of it, the
+    // type names the pair declares, and the spelling differences that are
+    // SANCTIONED — today exactly one, the guard retype #1627 batch B already
+    // used: the engine is BCL-only, so `Ensure.NotNull` (Harbor.Extensions) is
+    // spelled `ArgumentNullException.ThrowIfNull` there, and the alias's own
+    // delegate makes the two behavior-identical by construction.
+    //
+    // A row appearing here is a new pair: the engine file, the shared twin and
+    // the type names are all spelled out, so a new copy of the vocabulary
+    // cannot appear beside the old one without this table naming it.
+
+    /// <summary>
+    ///     One sanctioned spelling difference between an engine vocabulary file
+    ///     and its shared twin: the shared side's spelling, and the engine's.
+    /// </summary>
+    /// <param name="Shared">How the shared twin spells the line.</param>
+    /// <param name="Engine">How the engine spells the same line.</param>
+    internal readonly record struct VocabularyRewrite(string Shared, string Engine);
+
+    /// <summary>
+    ///     One vocabulary pair: the engine's copy (the source of truth), the
+    ///     shared twin that must stay identical to it, the type names the pair
+    ///     declares, and the sanctioned spelling differences between them.
+    /// </summary>
+    /// <param name="EngineFile">The engine file, relative to the engine project directory.</param>
+    /// <param name="SharedProject">The shared project directory that holds the twin.</param>
+    /// <param name="SharedFile">The twin file, relative to the shared project directory.</param>
+    /// <param name="TypeNames">Every public type name the pair declares.</param>
+    /// <param name="Rewrites">The sanctioned spelling differences, if any.</param>
+    internal sealed record VocabularyPair(
+        string EngineFile,
+        string SharedProject,
+        string SharedFile,
+        string[] TypeNames,
+        VocabularyRewrite[] Rewrites);
+
+    /// <summary>
+    ///     The vocabulary pairs, engine side first. The engine file is the source
+    ///     of truth; the shared twin is the copy that must not drift from it.
+    /// </summary>
+    internal static readonly VocabularyPair[] VocabularyPairs =
+    [
+        new("Rendering/Cell.cs", "Harbor.Ui.Framework.Rendering", "Cell.cs", ["Cell"], []),
+        new("Rendering/Rect.cs", "Harbor.Ui.Framework.Rendering", "Rect.cs", ["Rect"], []),
+        new("Rendering/CellDiffOption.cs", "Harbor.Ui.Framework.Rendering", "CellDiffOption.cs",
+            ["CellDiffOption"], []),
+        new("Rendering/UnicodeWidth.cs", "Harbor.Ui.Framework.Rendering", "UnicodeWidth.cs",
+            ["UnicodeWidth"],
+            [
+                // #1627 batch B's guard retype: the engine is BCL-only, so the
+                // alias (Harbor.Abstractions.Extensions.Ensure.NotNull, carried by
+                // Harbor.Extensions) is spelled as its own delegate there.
+                // Ensure.NotNull forwards to ArgumentNullException.ThrowIfNull,
+                // so the two spellings throw the same exception with the same
+                // parameter name — behavior-identical by construction.
+                new("Harbor.Abstractions.Extensions.Ensure.NotNull(text);",
+                    "ArgumentNullException.ThrowIfNull(text);"),
+            ]),
+        new("Rendering/ScreenBuffer.cs", "Harbor.Ui.Framework.Rendering", "ScreenBuffer.cs",
+            ["ScreenBuffer"], []),
+        // CellStyle and RgbColor live in the DesignSystem package under their
+        // historical Harbor.Ui.Framework.* namespaces, so the twin is there and
+        // not in the rendering project.
+        new("Rendering/CellStyle.cs", "Harbor.DesignSystem", "DesignSystem/CellStyle.cs",
+            ["StyleAttr", "PackedColor", "CellStyle"], []),
+        new("Capabilities/RgbColor.cs", "Harbor.DesignSystem", "DesignSystem/RgbColor.cs",
+            ["RgbColor"], []),
+        new("Input/KeyEvent.cs", "Harbor.Ui.Framework.Rendering", "Input/KeyEvent.cs", ["KeyEvent"], []),
+        new("Input/KeyCode.cs", "Harbor.Ui.Framework.Rendering", "Input/KeyCode.cs", ["KeyCode"], []),
+        new("Input/KeyEventType.cs", "Harbor.Ui.Framework.Rendering", "Input/KeyEventType.cs",
+            ["KeyEventType"], []),
+        new("Input/KeyModifiers.cs", "Harbor.Ui.Framework.Rendering", "Input/KeyModifiers.cs",
+            ["KeyModifiers"], []),
+        new("Input/UiKeyDto.cs", "Harbor.Ui.Framework.Rendering", "Input/UiKeyDto.cs",
+            ["UiKeyKind", "UiKeyMods", "UiKeyDto"], []),
+        new("Input/IFocusTarget.cs", "Harbor.Ui.Framework.Rendering", "Input/IFocusTarget.cs",
+            ["IFocusTarget"], []),
+    ];
+
+    /// <summary>
+    ///     A public type declaration, by simple name. Modifiers are consumed in
+    ///     any order and any number, so <c>public readonly record struct</c> and
+    ///     <c>public sealed partial class</c> are both matched, and a field
+    ///     (<c>public static readonly UiKeyDto Unknown</c>) is not — the shape
+    ///     after the modifiers must be a type keyword.
+    /// </summary>
+    private static readonly Regex PublicTypeDeclaration = new(
+        @"^\s*public\s+(?:(?:sealed|static|readonly|partial|ref|record|abstract|unsafe|new)\s+)*(?:struct|class|enum|interface)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+
+    /// <summary>
+    ///     Every public type name the vocabulary declares, across all pairs.
+    /// </summary>
+    private static readonly HashSet<string> VocabularyTypeNames =
+        new(VocabularyPairs.SelectMany(p => p.TypeNames), StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The vocabulary is declared in exactly two assemblies — the engine and
+    ///     the shared twin the table names — and in no third one. This is the
+    ///     inventory half of #1621: the parity rule
+    ///     (<see cref="CellForgeEngineVocabularyParityRules" />) grades the two
+    ///     copies against each other, and this one grades that there are only
+    ///     two of them. A third copy in a third assembly is the silent fork the
+    ///     issue names: a fix lands in whichever copy the author had open, and
+    ///     every rule here grades only the two it knows about.
+    /// </summary>
+    [Test]
+    public async Task TheEngineVocabularyIsDeclaredInTheEngineAndItsSharedTwinAndNowhereElse()
+    {
+        if (RepoPaths.RepoRoot is not { } root)
+        {
+            return;
+        }
+
+        var drift = new List<string>();
+
+        foreach (VocabularyPair pair in VocabularyPairs)
+        {
+            string enginePath = Path.Combine(root, "src", ProjectDir, pair.EngineFile.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(enginePath))
+            {
+                drift.Add($"src/{ProjectDir}/{pair.EngineFile} — the engine side of the vocabulary is gone; "
+                          + "update the row in the same commit or the twin has no source of truth left");
+            }
+
+            string sharedPath = Path.Combine(root, "src", pair.SharedProject, pair.SharedFile.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(sharedPath))
+            {
+                drift.Add($"src/{pair.SharedProject}/{pair.SharedFile} — the shared twin is gone; "
+                          + "the vocabulary now exists in one assembly only, which is a different architecture");
+            }
+        }
+
+        // Which assemblies declare a vocabulary type name at all.
+        var declaringProjects = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        foreach (string csproj in RepoPaths.EnumerateSrcProjects())
+        {
+            string project = Path.GetFileName(Path.GetDirectoryName(csproj)!) ?? string.Empty;
+            foreach (string file in RepoPaths.EnumerateCsFiles(project))
+            {
+                if (SourceScan.TryReadAllText(file) is not { } text)
+                {
+                    continue;
+                }
+
+                foreach (Match match in PublicTypeDeclaration.Matches(text))
+                {
+                    string name = match.Groups["name"].Value;
+                    if (!VocabularyTypeNames.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    if (!declaringProjects.TryGetValue(name, out SortedSet<string> projects))
+                    {
+                        projects = new SortedSet<string>(StringComparer.Ordinal);
+                        declaringProjects[name] = projects;
+                    }
+
+                    projects.Add(project);
+                }
+            }
+        }
+
+        foreach (VocabularyPair pair in VocabularyPairs)
+        {
+            foreach (string name in pair.TypeNames)
+            {
+                var expected = new SortedSet<string>(StringComparer.Ordinal) { ProjectDir, pair.SharedProject };
+                var actual = declaringProjects.TryGetValue(name, out SortedSet<string>? found)
+                    ? found
+                    : new SortedSet<string>(StringComparer.Ordinal);
+
+                if (!expected.SetEquals(actual))
+                {
+                    drift.Add($"{name} — declared in [{string.Join(", ", actual)}], expected exactly "
+                              + $"[{string.Join(", ", expected)}] (the engine and its shared twin, and nothing else)");
+                }
+            }
+        }
+
+        await Assert.That(drift).IsEmpty()
+            .Because(
+                "#1621: the engine's cell/screen/input vocabulary is copied into the shared rendering layer "
+                + "because the engine must stay a zero-Harbor-reference leaf, and the two copies were kept in "
+                + "sync by hand. The engine side is the source of truth, the shared twin is the copy, and this "
+                + "table names both — so a third copy of a vocabulary type in a third assembly is a fork that "
+                + "every other rule here would grade only one side of. Drift: " + Offenders(drift));
+    }
 }
