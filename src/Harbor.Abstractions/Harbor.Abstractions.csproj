@@ -96,10 +96,12 @@
 
     Analyzer-only: PrivateAssets=all keeps it out of the NuGet package, and
     IncludeAssets hands the compiler the analyzer and nothing else — no
-    runtime assembly, no AOT surface, no consumer impact.
+    runtime assembly, no AOT surface, no consumer impact. ExcludeAssets=runtime
+    is the repo's analyzer-package convention (#1857, rule Proj0037): the
+    package ships no runtime assembly, and Proj0037 reads the ATTRIBUTE.
   -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
