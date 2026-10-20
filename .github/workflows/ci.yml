@@ -118,6 +118,14 @@ jobs:
               # step with the test job's shard lists. Same #618 argument:
               # editing it must run the build job that executes it.
               - 'tools/ci-shard-slices.py'
+              # The build-output cache's mtime normalisation (issue #1927).
+              # It runs INSIDE the build job, and it decides whether MSBuild
+              # may skip a project — so an edit to it must set dotnet=true,
+              # or the edit lands unvalidated (issue #618's argument again,
+              # with a sharper payload: an edit that makes the tool skip the
+              # wrong files builds stale binaries, and a stale build is not
+              # a red build).
+              - 'tools/normalize-mtimes.py'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -300,6 +308,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      # The build-output cache (#1927) is WRITTEN by this job on a push to
+      # dev/master and on a manual dispatch. The cache service is reached
+      # through the runner's own runtime token, but the job is granted the
+      # narrow scope that covers cache management so that the grant and the
+      # capability agree.
+      actions: write
     env:
       # ── The architecture gate, off the PR path only ──────────────────────
       #
@@ -324,10 +338,27 @@ jobs:
       # build/_build. To put the gate back on the PR path, delete this env
       # block: the value is the only thing that turns it off.
       HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      # The NuGet global-packages folder is PINNED (#1927). The restored
+      # obj/*.csproj.nuget.g.props and obj/project.assets.json carry
+      # ABSOLUTE paths into it, so a cached build is only valid for the
+      # folder it was built against. The value IS the runner default
+      # (/home/runner/.nuget/packages), written down explicitly so that the
+      # cache key and the restore agree by construction — and it is part of
+      # the key, so a runner that moves the folder gets a cold build
+      # instead of a wrong one.
+      NUGET_PACKAGES: /home/runner/.nuget/packages
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+        with:
+          # The FULL history, not the default depth-1 (#1927). The cache
+          # entry is keyed by the commit its outputs were built from, and
+          # the mtime normalisation below needs that commit's TREE to know
+          # which files differ from the cached base — a depth-1 clone does
+          # not have it. This repository's whole history is 25 MiB, and the
+          # cost is paid by ONE job (this one), not by the shards.
+          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
@@ -344,6 +375,96 @@ jobs:
           dotnet-version: "10.0.402"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
+
+      # ── The build-output cache (issue #1927) ──────────────────────────────
+      #
+      # MSBuild is ALREADY incremental: CoreCompile skips a project whose
+      # output is newer than its inputs. CI is cold only because obj/ and
+      # bin/ are absent, so every pull request recompiles all 104 projects.
+      # These three steps restore those two directories and let MSBuild
+      # decide the fine-grained work; the rest of the build is unchanged.
+      #
+      # The key is deliberately COARSE — it names the TOOLCHAIN, not the
+      # source tree:
+      #
+      #   msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+      #
+      #   * <os>-<arch>      the runner family (this job is pinned to
+      #                      ubuntu-24.04: a label that moves would move the
+      #                      compiler with it)
+      #   * sdk<sdk>         the RESOLVED SDK version, because a different
+      #                      compiler writes different bytes into the same obj/
+      #   * nuget<packages>  the NuGet global-packages folder, because the
+      #                      restored obj/*.nuget.g.props and
+      #                      obj/project.assets.json carry absolute paths
+      #                      into it (see NUGET_PACKAGES above)
+      #   * <props hash>     Directory.Packages.props, Directory.Build.props,
+      #                      Directory.Build.targets and global.json — the
+      #                      inputs that move the package graph, the
+      #                      compiler flags and the SDK
+      #   * <sha>            the commit the outputs are built from. It rolls
+      #                      the entry forward, and it is also how the mtime
+      #                      step below learns which commit the restored
+      #                      outputs belong to.
+      #
+      # restore-keys holds the same prefix WITHOUT the sha, so a run that
+      # finds no entry for its own commit restores the most recent entry
+      # built from the same toolchain — the base branch's cache.
+      - name: Compute the build-output cache key
+        id: cache-key
+        shell: bash
+        run: |
+          set -euo pipefail
+          props="${{ hashFiles('Directory.Packages.props', 'Directory.Build.props', 'Directory.Build.targets', 'global.json') }}"
+          # The RESOLVED version, not the requested one: global.json decides
+          # which SDK actually runs, and the outputs are that SDK's bytes.
+          sdk="$(dotnet --version | tail -n 1 | tr -d '[:space:]')"
+          prefix="msbuild-v1-${{ runner.os }}-${{ runner.arch }}-sdk${sdk}-nuget${NUGET_PACKAGES}-${props}"
+          echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "cache prefix: ${prefix}"
+          echo "cache key:    ${prefix}-${{ github.sha }}"
+
+      - name: Restore the build outputs (obj/ + bin/)
+        id: cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            **/obj
+            **/bin
+          key: ${{ steps.cache-key.outputs.key }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.prefix }}-
+
+      # The checkout gave every source file the CURRENT clock, so every
+      # restored output looks stale and MSBuild would rebuild the whole
+      # solution — the trap #1927 names. This step puts the mtimes back
+      # where the truth is:
+      #
+      #   * a file that DIFFERS from the commit the cache was built from
+      #     gets "now"      -> MSBuild rebuilds it, and through the project
+      #                         graph its dependents;
+      #   * a file that is IDENTICAL to it gets that commit's time, which
+      #     is older than the restored outputs -> MSBuild skips it.
+      #
+      # The base commit is the last field of the cache key that MATCHED
+      # (the key ends in the commit the outputs were built from).
+      - name: Normalise the source mtimes (so MSBuild can skip the unchanged)
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          key="${{ steps.cache-restore.outputs.cache-matched-key }}"
+          base="${key##*-}"
+          echo "restored cache entry: ${key} (built from ${base})"
+          rc=0
+          python3 tools/normalize-mtimes.py --repo "$GITHUB_WORKSPACE" --base "$base" || rc=$?
+          if [ "$rc" -eq 3 ]; then
+            echo "::error::the cached base ${base} could not be resolved, so the changed set is unknown: the restored outputs cannot be told apart from stale ones. They are discarded and the tree is rebuilt from scratch."
+            find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
+            exit 0
+          fi
+          exit "$rc"
 
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also re-runs the 47-rule architecture gate embedded in
@@ -911,6 +1032,31 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # ── Save the build outputs ────────────────────────────────────────────
+      #
+      # The PULL REQUEST lane never writes. A pull request would create one
+      # entry per run (the key ends in the commit), and the repository's
+      # 10 GB cache budget would fill up with pull-request entries and evict
+      # the ones the base branch needs — that is the thrash the rule exists
+      # to prevent.
+      #
+      # dev and master push, and so does a MANUAL workflow_dispatch: that is
+      # the deliberate way to exercise the cache end to end on a branch that
+      # is not dev/master, and a manual run is rare enough not to thrash.
+      #
+      # The save happens LAST, after the build, the pack and the artifact
+      # uploads: an entry is only worth keeping if the run it came from was
+      # green.
+      - name: Save the build outputs (dev/master pushes and manual runs)
+        if: >-
+          (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
+          || github.event_name == 'workflow_dispatch'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            **/obj
+            **/bin
+          key: ${{ steps.cache-key.outputs.key }}
 
   test:
     needs: [changes, build]
