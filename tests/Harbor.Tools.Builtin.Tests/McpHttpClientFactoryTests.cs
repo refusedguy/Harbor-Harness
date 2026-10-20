@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Harbor.Tools.Mcp;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -170,12 +171,21 @@ public class McpHttpClientFactoryTests
         Type[] owners = [.. candidates
             .Where(t => t is not null)
             .Select(t => t!)
-            .Where(t => t.Namespace == "Harbor.Tools.Mcp" && ProducesHttpClient(t))];
+            .Where(t => t.Namespace == "Harbor.Tools.Mcp" && !IsCompilerGenerated(t) && ProducesHttpClient(t))];
 
         await Assert.That(owners).IsEquivalentTo(new[] { typeof(McpHttpClientFactory) }).Because(
             "the client must have exactly one owner. A second declaration is a second copy of the assembly step, "
             + "which is the duplication #1567 removed.");
     }
+
+    /// <summary>
+    ///     Whether the type is a compiler artefact — the lambda inside
+    ///     <c>McpOAuthHandler</c>'s constructor compiles into one, and it is
+    ///     not a second place where the assembly is written.
+    /// </summary>
+    private static bool IsCompilerGenerated(Type type)
+        => type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
+            || type.Name.Contains('<', StringComparison.Ordinal);
 
     /// <summary>
     ///     Whether the type declares a member that hands back an
@@ -184,7 +194,7 @@ public class McpHttpClientFactoryTests
     private static bool ProducesHttpClient(Type type)
     {
         foreach (MethodInfo method in type
-            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            .GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
         {
             if (method.ReturnType == typeof(HttpClient))
             {
@@ -193,7 +203,7 @@ public class McpHttpClientFactoryTests
         }
 
         foreach (PropertyInfo property in type
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            .GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
         {
             if (property.PropertyType == typeof(HttpClient))
             {

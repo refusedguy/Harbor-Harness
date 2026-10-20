@@ -73,6 +73,7 @@
 
 using System.Net.Http;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Harbor.Tools.Mcp;
 
 namespace Harbor.Architecture.Tests;
@@ -366,6 +367,16 @@ public class McpHttpClientOwnershipRules
     ///     Every type in the MCP namespace that declares a member producing an
     ///     <see cref="HttpClient" /> — the candidates for "the owner".
     /// </summary>
+    /// <remarks>
+    ///     Compiler-generated types are excluded, and they have to be: the
+    ///     lambda inside <c>McpOAuthHandler</c>'s constructor
+    ///     (<c>() =&gt; new HttpClient()</c>) compiles into a nested
+    ///     <c>&lt;&gt;c</c> display class whose method returns an
+    ///     <see cref="HttpClient" />. That closure is a compiler artefact,
+    ///     not a second place where the assembly is written — the OAuth client
+    ///     is a different concern (it builds the OAuth client's factory, not a
+    ///     transport's client), and this rule deliberately does not judge it.
+    /// </remarks>
     private static List<Type> ClientOwners()
     {
         Type?[] candidates;
@@ -386,6 +397,11 @@ public class McpHttpClientOwnershipRules
                 continue;
             }
 
+            if (IsCompilerGenerated(type))
+            {
+                continue;
+            }
+
             if (DeclaresAnHttpClientProducer(type))
             {
                 result.Add(type);
@@ -394,6 +410,14 @@ public class McpHttpClientOwnershipRules
 
         return result;
     }
+
+    /// <summary>
+    ///     Whether the type is a compiler artefact — a lambda closure or a
+    ///     generated iterator, not a declaration anybody wrote.
+    /// </summary>
+    private static bool IsCompilerGenerated(Type type)
+        => type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false)
+            || type.Name.Contains('<', StringComparison.Ordinal);
 
     /// <summary>
     ///     The name the failure messages use for the owner — the type that
