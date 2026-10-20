@@ -33,16 +33,21 @@
 // The classes this assembly DISCOVERS are the union of two projects:
 //
 //   * `tests/Harbor.E2E.App.Avalonia` — its own fifteen classes;
-//   * `tests/Harbor.E2E.Framework` — a REFERENCED TEST PROJECT. TUnit
-//     discovers and runs a referenced test project's classes inside every
-//     project that references it, so `StateTestRunnerTests` and its 26 cases
-//     are part of this assembly's 133.
+//   * `tests/Harbor.E2E.Framework` — a REFERENCED project. TUnit discovers
+//     and runs a referenced TEST project's classes inside every project that
+//     references it, so a test class added there is part of this assembly's
+//     run even though this project never names it.
 //
 // The second half is the dangerous one. A filter that named only the first
-// project's classes would drop those 26 tests from CI SILENTLY: the shard
-// would still exit 0 and the suite would still be green. The rule therefore
-// grades the union, and the generator (`tools/gen-e2e-shards.py`) derives the
-// same union from the same source.
+// project's classes would drop the second project's tests from CI SILENTLY:
+// the shard would still exit 0 and the suite would still be green. The rule
+// therefore grades the union, and the generator
+// (`tools/gen-e2e-shards.py`) derives the same union from the same source.
+//
+// (The union was 16 classes until #1943 moved `StateTestRunnerTests` into a
+// project of its own that nothing references — the trap is still live for
+// the next test class added to the referenced project, which is why the
+// universe is derived rather than written down.)
 //
 // HOW THE UNIVERSE IS DERIVED
 // ---------------------------

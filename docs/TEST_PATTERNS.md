@@ -866,13 +866,13 @@ Two things make that safe, and both are gates rather than comments:
   `E2eAvaloniaShardCoverageRules` in
   [`tests/Harbor.Architecture.Tests`](../tests/Harbor.Architecture.Tests/),
   which re-derives the class universe from the tree — including the classes of
-  the REFERENCED `Harbor.E2E.Framework` project, whose 26 cases TUnit also
-  runs inside this assembly, and which a filter that forgot them would drop
-  silently — and fails when one is missing. That check is an architecture rule
-  rather than a test inside the E2E assembly on purpose: a new class there is
-  an UNKEYED test, and its presence reshuffles an order-fragile suite. The
-  first version of the shard table shipped such a guard and it cost two real
-  failures before it was removed (PR #1818).
+  the REFERENCED `Harbor.E2E.Framework` project, which TUnit also runs inside
+  every project that references it, and which a filter that forgot them would
+  drop silently — and fails when one is missing. That check is an architecture
+  rule rather than a test inside the E2E assembly on purpose: a new class
+  there is an UNKEYED test, and its presence reshuffles an order-fragile
+  suite. The first version of the shard table shipped such a guard and it cost
+  two real failures before it was removed (PR #1818).
 * **The runner proves what ran.** It enumerates the assembly's tests with
   `--list-tests json`, compares that map against each shard's TRX, and fails
   naming the class and the shard if a filter dropped anything.

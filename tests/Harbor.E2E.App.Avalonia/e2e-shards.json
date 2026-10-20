@@ -8,9 +8,12 @@
     "costsFrom": "the TRX durations of the CI run named below",
     "measuredFromCiRun": "39404823168",
     "measuredFromArtifact": "test-results-e2e",
-    "measuredAtUtc": "2026-10-20T11:00:03Z",
+    "measuredAtUtc": "2026-10-20T14:07:29Z",
     "trxFiles": [
       "Harbor.E2E.App.Avalonia.trx"
+    ],
+    "classesInTheMeasurementButNotInTheTree": [
+      "StateTestRunnerTests"
     ]
   },
   "totals": {
@@ -18,40 +21,39 @@
     "dedicatedClasses": [
       "SettingsTests"
     ],
-    "measuredTests": 133,
-    "measuredTestSeconds": 58.59
+    "measuredTests": 107,
+    "measuredTestSeconds": 58.42
   },
   "shards": [
     {
       "id": "shard-0",
       "classes": [
         "AvaloniaUiTests",
-        "CommandPaletteTests",
         "FocusSessionTests",
         "MicroControlsTests",
-        "OverlaySurfacesTests",
+        "OnboardingTests",
+        "ShellChromeTests",
         "StandaloneControlsTests",
         "StatusBarTests"
       ],
       "dedicated": false,
-      "measuredSeconds": 28.36,
-      "measuredTests": 56
+      "measuredSeconds": 28.27,
+      "measuredTests": 57
     },
     {
       "id": "shard-1",
       "classes": [
         "ChatViewTests",
+        "CommandPaletteTests",
         "ComponentGoldenFramesTests",
         "GoldenFrameTests",
-        "OnboardingTests",
+        "OverlaySurfacesTests",
         "SessionListTests",
-        "ShellChromeTests",
-        "StateTestRunnerTests",
         "ToastTests"
       ],
       "dedicated": false,
-      "measuredSeconds": 28.32,
-      "measuredTests": 72
+      "measuredSeconds": 28.24,
+      "measuredTests": 45
     },
     {
       "id": "shard-2",

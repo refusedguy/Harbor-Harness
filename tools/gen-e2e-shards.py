@@ -342,7 +342,6 @@ def main() -> int:
     if unknown:
         print(f"gen-e2e-shards.py: warning: TRX names classes the tree does not have: "
               f"{', '.join(unknown)}", file=sys.stderr)
-
     # A dedicated class runs in a process of its own. The repository documents
     # one: `SettingsTests.Settings_Cancel_RevertsChanges` is skipped with the
     # reason "orphaned dispatcher continuations from previously-initialized
@@ -400,6 +399,12 @@ def main() -> int:
             "measuredFromArtifact": args.measured_artifact,
             "measuredAtUtc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "trxFiles": [os.path.basename(path) for path in args.trx],
+            # Classes the measurement names that the tree no longer has: the
+            # measurement is older than the tree. They cost nothing here (a
+            # class that moved to a project of its own is not discovered here
+            # any more), but the plan says so rather than leaving a reader to
+            # compare the counts.
+            "classesInTheMeasurementButNotInTheTree": unknown,
         },
         "totals": {
             "shards": args.shards,
