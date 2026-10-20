@@ -423,6 +423,30 @@ public sealed class UnguardedResultReadAnalyzerTests
                 + "dominance model failing to recognise a guard shape the tree uses constantly "
                 + "(early return, early continue, fail-fast throw, `&&` short circuit, property "
                 + "pattern). Reported " + analyzerSites.Count + " site(s).");
+
+        // The differential's exact table, pinned. The live tree has ONE baselined
+        // site under the text rule — the SettingsViewModel ctor, which reads
+        // `.Value` off a computed receiver — and the analyzer sees exactly the
+        // same two reads and nothing else: every other Result read in the tree
+        // is protected by a guard the dominance model recognises.
+        var expectedSites = new List<string>
+        {
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:162",
+            "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs:168",
+        };
+
+        await Assert.That(string.Join(" | ", analyzerSites)).IsEqualTo(string.Join(" | ", expectedSites))
+            .Because(
+                "the analyzer's live-tree footprint is pinned: the two SettingsViewModel reads "
+                + "(the common-config and the app-config load in the ctor) and NOTHING else. Both "
+                + "read `.Value` off a COMPUTED receiver — `LoadAsync().GetAwaiter().GetResult()` — "
+                + "so no check can dominate them, and they are the real defect the text rule "
+                + "baselines. A site on the left that is not on the right is a read the analyzer "
+                + "found that the tree does not know about; a site on the right that is not on the "
+                + "left is a read the analyzer missed. Analyzer: "
+                + string.Join(" | ", analyzerSites));
+
+        PrintDifferential(textHits, analyzerSites);
     }
 
     // =====================================================================
