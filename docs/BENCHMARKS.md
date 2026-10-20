@@ -1666,7 +1666,8 @@ different runner loads:
 | [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, `2435d26d`, 09:17) | before #1791 | 977 | 977 | 95.47 s | 992 |
 | [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352) (dev, `86b52adc`, 12:23) | with #1868 | 998 | 998 | 122.10 s | 1 013 |
 | [39423289101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39423289101) (PR #1939 branch, `27114126`, 12:34) | with #1789 | 1 002 | 1 002 | 119.20 s | 1 018 |
-| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | current baseline | **1 032** | **1 032** | **78.75 s** | 1 053 |
+| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | the baseline row of §6.1 | **1 032** | **1 032** | **78.75 s** | 1 053 |
+| [39450959681](https://github.com/refusedguy/Harbor-Harness/actions/runs/39450959681) (PR branch, `f2491032`, 15:5x) | after #1791's shared tree snapshot | 1 068 | 1 068 | 89.43 s | 1 089 |
 
 The last column is the source-level `[Test]` count in
 `tests/Harbor.Architecture.Tests/`, which runs 15-21 above the discovered
@@ -1674,13 +1675,19 @@ count on every one of those trees (the difference is `[Test]` occurrences that
 the runner does not discover). It is a check on the measurement, not a
 substitute for it.
 
-**Read the count, not the wall.** The five runs above discovered 966, 977,
-998, 1 002 and 1 032 tests, and the wall ranged from 65.88 s to 122.10 s for
+**Read the count, not the wall.** The runs above discovered 966, 977, 998,
+1 002, 1 032 and 1 068 tests, and the wall ranged from 65.88 s to 122.10 s for
 nearly the same suite. The wall moved by 2x between runs on trees that differ
 by 4 % in test count, because a shared runner's load moves it and because the
 architecture suite's wall is set by a handful of long tests (§ below). The
 discovered count is the stable number; the wall is a range, and a spike should
 be compared against the count first and the wall second.
+
+The last row is also the newest tree, and it shows what a code change does to
+the wall without touching the count much: #1791's shared tree snapshot (one
+compilation for the rules that read the same tree) landed between the two, and
+the four `PanelKeyRouteReachabilityRule` tests fell from 112 s to 73 s. The
+suite grew by 36 tests and got faster.
 
 **What the architecture suite's wall is made of** (run 39438762137, read with
 `tools/test-census.py`): 1 032 tests, a sum of per-test durations of **1 888.72
