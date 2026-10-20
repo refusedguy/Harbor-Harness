@@ -252,11 +252,11 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 case IIfStatementOperation ifStatement:
                     if (ReferenceEquals(current, ifStatement.Then))
                     {
-                        facts.Merge(ConditionFacts(ifStatement.Condition, model).WhenTrue);
+                        facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenTrue);
                     }
                     else if (ReferenceEquals(current, ifStatement.Else))
                     {
-                        facts.Merge(ConditionFacts(ifStatement.Condition, model).WhenFalse);
+                        facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenFalse);
                     }
 
                     break;
@@ -265,11 +265,11 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 case IConditionalOperation conditional:
                     if (ReferenceEquals(current, conditional.WhenTrue))
                     {
-                        facts.Merge(ConditionFacts(conditional.Condition, model).WhenTrue);
+                        facts.Merge(FactsOfCondition(conditional.Condition, model).WhenTrue);
                     }
                     else if (ReferenceEquals(current, conditional.WhenFalse))
                     {
-                        facts.Merge(ConditionFacts(conditional.Condition, model).WhenFalse);
+                        facts.Merge(FactsOfCondition(conditional.Condition, model).WhenFalse);
                     }
 
                     break;
@@ -280,7 +280,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 case IBinaryOperation andOperation when andOperation.Kind == BinaryOperatorKind.And:
                     if (ReferenceEquals(current, andOperation.RightOperand))
                     {
-                        facts.Merge(ConditionFacts(andOperation.LeftOperand, model).WhenTrue);
+                        facts.Merge(FactsOfCondition(andOperation.LeftOperand, model).WhenTrue);
                     }
 
                     break;
@@ -288,7 +288,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
                 case IBinaryOperation orOperation when orOperation.Kind == BinaryOperatorKind.Or:
                     if (ReferenceEquals(current, orOperation.LeftOperand))
                     {
-                        facts.Merge(ConditionFacts(orOperation.LeftOperand, model).WhenFalse);
+                        facts.Merge(FactsOfCondition(orOperation.LeftOperand, model).WhenFalse);
                     }
 
                     break;
@@ -344,7 +344,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // condition being FALSE.
             case IIfStatementOperation ifStatement
                 when ifStatement.Else is null && EndsFlow(ifStatement.Then):
-                facts.Merge(ConditionFacts(ifStatement.Condition, model).WhenFalse);
+                facts.Merge(FactsOfCondition(ifStatement.Condition, model).WhenFalse);
                 break;
 
             // An assignment may have replaced the value the fact was about.
@@ -421,12 +421,12 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     /// <summary>
     ///     What a condition establishes when it is true, and when it is false.
     /// </summary>
-    private readonly record struct ConditionFacts(Facts WhenTrue, Facts WhenFalse);
+    private readonly record struct ConditionOutcome(Facts WhenTrue, Facts WhenFalse);
 
     /// <summary>
     ///     The facts a condition establishes on each of its two outcomes.
     /// </summary>
-    private static ConditionFacts ConditionFacts(IOperation? condition, SemanticModel model)
+    private static ConditionOutcome FactsOfCondition(IOperation? condition, SemanticModel model)
     {
         var whenTrue = new Facts();
         var whenFalse = new Facts();
@@ -461,8 +461,8 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 
             case IUnaryOperation negated when negated.Kind == UnaryOperatorKind.Not:
             {
-                ConditionFacts inner = ConditionFacts(negated.Operand, model);
-                return new ConditionFacts(inner.WhenFalse, inner.WhenTrue);
+                ConditionOutcome inner = FactsOfCondition(negated.Operand, model);
+                return new ConditionOutcome(inner.WhenFalse, inner.WhenTrue);
             }
 
             // `A && B` is true when BOTH are true: a fact holds when it holds
@@ -470,9 +470,9 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // false, so only a fact that holds in BOTH false branches survives.
             case IBinaryOperation andOperation when andOperation.Kind == BinaryOperatorKind.And:
             {
-                ConditionFacts left = ConditionFacts(andOperation.LeftOperand, model);
-                ConditionFacts right = ConditionFacts(andOperation.RightOperand, model);
-                return new ConditionFacts(
+                ConditionOutcome left = FactsOfCondition(andOperation.LeftOperand, model);
+                ConditionOutcome right = FactsOfCondition(andOperation.RightOperand, model);
+                return new ConditionOutcome(
                     left.WhenTrue.Union(right.WhenTrue),
                     left.WhenFalse.Intersect(right.WhenFalse));
             }
@@ -482,16 +482,16 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
             // is true, so only a fact that holds in BOTH true branches survives.
             case IBinaryOperation orOperation when orOperation.Kind == BinaryOperatorKind.Or:
             {
-                ConditionFacts left = ConditionFacts(orOperation.LeftOperand, model);
-                ConditionFacts right = ConditionFacts(orOperation.RightOperand, model);
-                return new ConditionFacts(
+                ConditionOutcome left = FactsOfCondition(orOperation.LeftOperand, model);
+                ConditionOutcome right = FactsOfCondition(orOperation.RightOperand, model);
+                return new ConditionOutcome(
                     left.WhenTrue.Intersect(right.WhenTrue),
                     left.WhenFalse.Union(right.WhenFalse));
             }
         }
 
         AddPatternFacts(condition?.Syntax, model, whenTrue, whenFalse);
-        return new ConditionFacts(whenTrue, whenFalse);
+        return new ConditionOutcome(whenTrue, whenFalse);
     }
 
     /// <summary>
@@ -507,7 +507,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 
         foreach (IsPatternExpressionSyntax isPattern in syntax.DescendantNodesAndSelf().OfType<IsPatternExpressionSyntax>())
         {
-            if (isPattern.Pattern is not RecursivePatternExpressionSyntax recursive)
+            if (isPattern.Pattern is not RecursivePatternSyntax recursive)
             {
                 continue;
             }
@@ -537,9 +537,9 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
         IOperation? switched = (switchCase.Parent as ISwitchOperation)?.Value;
         string? subjectKey = KeyOf(switched);
 
-        foreach (RecursivePatternExpressionSyntax recursive in switchCase.Syntax
+        foreach (RecursivePatternSyntax recursive in switchCase.Syntax
                      .DescendantNodesAndSelf()
-                     .OfType<RecursivePatternExpressionSyntax>())
+                     .OfType<RecursivePatternSyntax>())
         {
             ApplyPatternRequirement(recursive, subjectKey, whenTrue, whenFalse);
         }
@@ -552,7 +552,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     ///     recursive pattern and records what it means for the pattern's value.
     /// </summary>
     private static void ApplyPatternRequirement(
-        RecursivePatternExpressionSyntax recursive,
+        RecursivePatternSyntax recursive,
         string? subjectKey,
         Facts whenTrue,
         Facts whenFalse)
@@ -568,13 +568,24 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
 
         foreach (SubpatternSyntax subpattern in clause.Subpatterns)
         {
-            if (subpattern is not PropertySubpatternSyntax propertySubpattern)
+            // A property subpattern reads `Name: pattern`. The typed accessor
+            // for the NAME is not a stable surface — Roslyn 4.x called the
+            // node `PropertySubpatternSyntax` and 5.x calls it
+            // `SubpatternSyntax`, and the accessor was renamed inside 5.x — so
+            // the requirement is read from the subpattern's own two-token
+            // shape. Only `IsSuccess: true` and `IsFailure: false` establish
+            // a fact; every other shape establishes none, which is the safe
+            // direction (a missed report, never a false accusation). The TYPE
+            // the rule judges is still resolved by symbol.
+            string shape = subpattern.ToString();
+            int colon = shape.IndexOf(':');
+            if (colon < 0)
             {
                 continue;
             }
 
-            string name = propertySubpattern.ExpressionColon.Name.Identifier.ValueText;
-            string required = propertySubpattern.ExpressionColon.Pattern.ToString();
+            string name = shape[..colon].Trim();
+            string required = shape[(colon + 1)..].Trim();
 
             bool demandsSuccess =
                 (name == "IsSuccess" && required == "true")
