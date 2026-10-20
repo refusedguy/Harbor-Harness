@@ -145,22 +145,74 @@ public sealed class DefaultAgent : IAgent
     public Maybe<AgentState> State => _state is { } bound ? Maybe.From(bound) : Maybe<AgentState>.None;
 
     /// <summary>
-    ///     <see cref="State" /> as a plain record, for the paths that have
-    ///     already established the agent is bound. Unlike the old
-    ///     <c>State = null!</c> auto-property this throws a NAMED error rather
-    ///     than handing back a null the compiler promised was a value, so
-    ///     "read before Initialize" surfaces at the call site instead of as an
-    ///     NRE a few frames deeper.
+    ///     The reason a read of the bound state answers with when no session has
+    ///     been bound yet.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    ///     <see cref="Initialize" /> has not been called yet.
-    /// </exception>
-    private AgentState BoundState
+    /// <remarks>
+    ///     <para>
+    ///         One wording for the whole corridor: the two <see cref="PromptAsync" />
+    ///         overloads and the internal read seam name the same condition and the
+    ///         same fix, so a caller grepping for the reason finds exactly one
+    ///         answer instead of two near-synonyms (#1583).
+    ///     </para>
+    ///     <para>
+    ///         The text names <see cref="Initialize" /> — the method that actually
+    ///         binds a session — where the old wording said
+    ///         <c>Call InitializeAsync first</c>, a method no caller can invoke:
+    ///         <see cref="IAgent.Initialize" /> is the only entry point, and it is
+    ///         not async.
+    ///     </para>
+    /// </remarks>
+    private const string NotInitializedDiagnostic =
+        "Agent is not initialized. Bind a session with Initialize(session, agent) first.";
+
+    /// <summary>
+    ///     <see cref="State" /> as a plain record, for the paths that have
+    ///     already established the agent is bound — and a named failure for the
+    ///     path that has not.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1583: this used to be a THROWING accessor
+    ///         (<c>_state ?? throw new InvalidOperationException(...)</c>). The
+    ///         throw sat in the middle of the agent-run corridor: a host or a
+    ///         plugin that read the bound state before the bind got an exception
+    ///         unwound through the layers instead of a <c>Result.Failure</c>
+    ///         naming the fix. "Not bound yet" is an expected answer, not a
+    ///         programming error, so the read is Result-shaped end to end now and
+    ///         the run boundary hands the reason to the caller.
+    ///     </para>
+    /// </remarks>
+    private Result<AgentState> ReadBoundState()
+        => _state is { } bound
+            ? Result.Success<AgentState>(bound)
+            : Result.Failure<AgentState>(NotInitializedDiagnostic);
+
+    /// <summary>
+    ///     Advance the bound state: read the CURRENT snapshot, apply
+    ///     <paramref name="project" />, publish the result.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         #1583: the write-side counterpart of the Result-shaped
+    ///         <see cref="ReadBoundState" /> read, and the reason the throwing
+    ///         accessor could go. The old spelling
+    ///         (<c>BoundState = BoundState with { ... }</c>) READ the field and
+    ///         threw out of the corridor when the field was absent.
+    ///     </para>
+    ///     <para>
+    ///         "Advance the bound state" is only meaningful while a state is
+    ///         bound; with none bound there is nothing to advance, and the run
+    ///         boundary has already refused the run by then. The read and the
+    ///         write stay one step, exactly as they were.
+    ///     </para>
+    /// </remarks>
+    private void AdvanceBoundState(Func<AgentState, AgentState> project)
     {
-        get => _state ?? throw new InvalidOperationException(
-            $"{nameof(DefaultAgent)}.{nameof(State)} was read before {nameof(Initialize)}. "
-            + "Bind a session with Initialize(session, agent) first.");
-        set => _state = value;
+        if (_state is { } current)
+        {
+            _state = project(current);
+        }
     }
 
     /// <summary>
@@ -254,8 +306,14 @@ public sealed class DefaultAgent : IAgent
         // #559: the guard the old `State is null` check wanted, spelled against
         // the field instead of the projection. One read, so a concurrent rebind
         // cannot split the snapshot the message is stamped from.
-        if (_state is not { } state)
-            return Result.Failure("Agent is not initialized. Call InitializeAsync first.");
+        // #1583: that one read is now the Result-shaped seam, so a read before
+        // Initialize answers with the named reason instead of an exception
+        // unwound through the layers.
+        Result<AgentState> bound = ReadBoundState();
+        if (bound.IsFailure)
+            return Result.Failure(bound.Error);
+
+        AgentState state = bound.Value;
 
         var userMessage = new UserMessage(
             Guid.NewGuid().ToString("N"),
@@ -293,8 +351,14 @@ public sealed class DefaultAgent : IAgent
     /// <returns>Success on completion (or after steering an active run), or failure with an error message.</returns>
     public async Task<Result> PromptAsync(UserMessage message, CancellationToken ct = default)
     {
-        if (_state is not { } state)
-            return Result.Failure("Agent is not initialized.");
+        // #1583: the read-before-Initialize seam is Result-shaped, so the run
+        // boundary answers with the named reason instead of an exception thrown
+        // out of the corridor.
+        Result<AgentState> bound = ReadBoundState();
+        if (bound.IsFailure)
+            return Result.Failure(bound.Error);
+
+        AgentState state = bound.Value;
 
         bool acquired;
         try
@@ -314,10 +378,14 @@ public sealed class DefaultAgent : IAgent
             // still held but the run already flipped its state to idle — in
             // that case steering would strand the message until an unknown
             // future run, so we keep the explicit failure instead.
-            // #559: deliberately a FRESH read through BoundState, not the
-            // snapshot taken at the top of the method — seeing a run that
-            // started after that snapshot is the whole point of this re-check.
-            if (BoundState.IsRunning)
+            // #559: deliberately a FRESH read, not the snapshot taken at the top
+            // of the method — seeing a run that started after that snapshot is
+            // the whole point of this re-check.
+            // #1583: the field, spelled the way WaitForIdleAsync spells it,
+            // because "not bound" and "not running" are the same answer here:
+            // the seam's failure branch would say exactly this, and the seam
+            // must not throw on the way to saying it.
+            if (_state is { IsRunning: true })
             {
                 DefaultAgentLog.PromptRoutedToSteering(_logger, state.Agent.Name.Value);
                 Steer(message);
@@ -364,7 +432,7 @@ public sealed class DefaultAgent : IAgent
             // that raced between State.IsRunning flipping true and the swap.
             var completion = StartRunCompletion();
 
-            BoundState = BoundState with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow };
+            AdvanceBoundState(static s => s with { IsRunning = true, StartedAt = DateTimeOffset.UtcNow });
 
             var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(AbortToken, ct);
 
@@ -375,25 +443,25 @@ public sealed class DefaultAgent : IAgent
                     throw new InvalidOperationException(loaded.Error);
                 var result = await _agentLoop.RunAsync(loaded.Value, state.Agent, linkedCts.Token).ConfigureAwait(false);
 
-                BoundState = BoundState with
+                AdvanceBoundState(static s => s with
                 {
                     IsRunning = false,
                     LastActivityAt = DateTimeOffset.UtcNow
-                };
+                });
 
                 completion.TrySetResult(result);
                 return result;
             }
             catch (OperationCanceledException) when (linkedCts.Token.IsCancellationRequested)
             {
-                BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                AdvanceBoundState(static s => s with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow });
                 var cancelled = Result.Failure("Agent was cancelled.");
                 completion.TrySetResult(cancelled);
                 return cancelled;
             }
             catch (Exception ex)
             {
-                BoundState = BoundState with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow };
+                AdvanceBoundState(static s => s with { IsRunning = false, LastActivityAt = DateTimeOffset.UtcNow });
                 DefaultAgentLog.AgentRunFailed(_logger, ex, state.SessionId);
                 var failed = Result.Failure(ex.Message);
                 // #1105: waiters hold a non-generic Task — they cannot observe
