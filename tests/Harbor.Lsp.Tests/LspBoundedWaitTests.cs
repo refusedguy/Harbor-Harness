@@ -52,6 +52,7 @@ public class LspSessionBoundedWaitTests
         """;
 
     [Test]
+    [Timeout(30_000)]
     [SkipUnlessPython3]
     public async Task StalledServer_Lookup_Fails_Instead_Of_Hanging()
     {

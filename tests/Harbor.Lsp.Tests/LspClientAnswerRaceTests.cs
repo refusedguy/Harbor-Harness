@@ -19,7 +19,8 @@ namespace Harbor.Lsp.Tests;
 public class LspClientAnswerRaceTests
 {
     [Test]
-    public async Task Answer_That_Arrives_Before_The_Writer_Returns_Is_Not_Dropped()
+    [Timeout(30_000)]
+    public async Task Answer_That_Arrives_Before_The_Writer_Returns_Is_Not_Dropped(CancellationToken cancellationToken)
     {
         using var pipe = new EagerAnswerPipe();
         await using var client = new LspClient(pipe.ToClient, pipe.FromClient, NullLogger.Instance);
@@ -29,8 +30,10 @@ public class LspClientAnswerRaceTests
         };
         client.Start();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        JsonElement? result = await client.SendRequestAsync("textDocument/definition", null, cts.Token);
+        // The runner's timeout is the bound: if the answer is dropped, the
+        // requester waits until the runner stops the test and the test fails.
+        // A dropped answer is a failure, not a hang.
+        JsonElement? result = await client.SendRequestAsync("textDocument/definition", null, cancellationToken);
 
         await Assert.That(result is not null).IsTrue();
         await Assert.That(result!.Value.GetProperty("ok").GetBoolean()).IsTrue();
