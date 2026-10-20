@@ -1,0 +1,329 @@
+name: meas-build-vcpu
+
+# Issue #1929 — the falsification test for "the build is limited by the
+# runner's 4 vCPU, not by the project dependency graph".
+#
+# WHAT THIS MEASURES
+# ------------------
+# The same commit, the same runner, the same command, with ONE variable
+# changed: how many compilers may run at once.
+#
+#   arm A (baseline)  -p:MaxCpuCount=0       what CI runs today (all cores)
+#   arm B             -p:MaxCpuCount=1       the property the issue prescribes
+#   arm C             -maxcpucount:1         the canonical MSBuild switch
+#
+# The verdict is the RATIO t(C)/t(A) — not the absolute time, because a build
+# has both a parallel part (the compiler work) and a serial part (restore,
+# the architecture gate, per-project fixed overhead). Only the ratio separates
+# them.
+#
+# arm B exists because `-p:MaxCpuCount` is a PROPERTY, while MSBuild's
+# `-maxcpucount` is a SWITCH: if the property is inert, arm B measures
+# nothing and arm C is the real serial arm. arm C is therefore the control
+# that keeps the experiment honest.
+#
+# WHY IT IS ITS OWN WORKFLOW
+# --------------------------
+# ci.yml is a gate. A measurement that runs a build four times slower than
+# the gate must not be wired into it, and it must not be on the PR path.
+# Same shape as meas-jit-aot.yml: push- or dispatch-triggered, uploads
+# artefacts, gates nothing. The numbers land in docs/BENCHMARKS.md.
+#
+# WHY THE `push` TRIGGER
+# -----------------------
+# `workflow_dispatch` only fires for workflows that exist on the DEFAULT
+# branch, and this experiment must not touch default. So it is triggered by
+# pushing the measurement branch, exactly like meas-jit-aot.yml does for its
+# own branch.
+#
+# WHAT THIS IS NOT: A SECOND MEASUREMENT LANE
+# --------------------------------------------
+# The nightly lane (PR #1923, `nightly.yml`, the `measurement` job) owns the
+# PERIODIC measurement of the same Release compile: it runs on a schedule and
+# on every merge into dev/master, with the MSBuild binary log and the
+# analyzer profile. This file is the ONE-OFF falsification harness for #1929
+# and it stays on its own branch; it is not a second lane and it must not
+# become one. Two things the nightly lane's probes need, both measured here:
+#
+#   1. The serial probe must use the SWITCH, not the property.
+#      `-p:MaxCpuCount=1` is INERT: MSBuild reads `-maxcpucount` as a switch,
+#      and the `MaxCpuCount` property appears in no MSBuild target and in no
+#      global-property lookup. Measured here: the property arm is
+#      indistinguishable from the baseline (wall ratio 1.08), and the switch
+#      arm is too (1.01). The property in the repository's own
+#      `build/_build/Targets/CompileTarget.cs` is a no-op for the same
+#      reason.
+#   2. The architecture gate has to be OUT of a compile-phase measurement,
+#      or SUBTRACTED from it: it is 29..39 % of the wall (79..154 s of a
+#      253..409 s build) and it is a single process, so it is serial in
+#      every arm. This harness keeps the gate ON (it measures the shape the
+#      NUKE Compile target runs) and subtracts it in the "ratio without the
+#      gate" column; the nightly job switches it off, which is the right
+#      shape for a compile-phase measurement.
+#
+# THE MEASURED COMPILE IS A COLD ONE
+# ----------------------------------
+# Every arm here starts from a fresh checkout with no `obj/`, so it measures
+# a from-scratch Release compile of the whole tree. The PR lane's build is
+# incremental since #1927's build-output cache landed (it restores the base
+# branch's obj/ and rebuilds what changed), so the PR lane's wall time is
+# NOT this number. The nightly lane's measurement job, on a fresh checkout,
+# measures the same cold compile this file does.
+
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "What this dispatch measures (free text)"
+        required: false
+        default: ""
+  push:
+    branches: [ci/1929-vcpu-falsification]
+    # Only the harness itself re-runs the matrix. A docs-only commit must
+    # not spend 14 build slots.
+    paths:
+      - '.github/workflows/meas-build-vcpu.yml'
+      - 'tools/measure-build-cpu.py'
+      - 'tools/aggregate-build-vcpu.py'
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: ${{ matrix.label }}
+    # Pinned, not `ubuntu-latest`, for the same reason ci.yml's build job is
+    # pinned: the label moves (ubuntu-latest switches to Ubuntu 26.04 in
+    # November 2026), and a CPU-utilisation number without the image it was
+    # measured on is a number without a denominator. The four runs cited in
+    # docs/BENCHMARKS.md §6.7 were taken on `ubuntu-latest` on 2026-10-20,
+    # which was Ubuntu 24.04 then.
+    runs-on: ubuntu-24.04
+    # Arm C compiles the whole tree strictly sequentially: ~4x the wall time
+    # of arm A. This is a hang detector, not a budget.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── arm A: the CI baseline, repeated three times ──────────────────
+          - label: a-prop0-r1
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          - label: a-prop0-r2
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          - label: a-prop0-r3
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          # ── arm B: the property the issue prescribes ──────────────────────
+          - label: b-prop1-r1
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=1 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          - label: b-prop1-r2
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=1 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          - label: b-prop1-r3
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=1 -p:ContinuousIntegrationBuild=true
+              -v:m -clp:PerformanceSummary
+          # ── arm C: the canonical MSBuild switch (the real serial arm) ────
+          - label: c-m1-r1
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -maxcpucount:1 -v:m -clp:PerformanceSummary
+          - label: c-m1-r2
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -maxcpucount:1 -v:m -clp:PerformanceSummary
+          - label: c-m1-r3
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -maxcpucount:1 -v:m -clp:PerformanceSummary
+          # ── timeline arms: normal verbosity, so "Done Building Project" ──
+          #    lines appear and the projects-in-flight profile is MEASURED
+          - label: a-verbose
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -v:n -clp:PerformanceSummary
+          - label: c-verbose
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -maxcpucount:1 -v:n -clp:PerformanceSummary
+          # ── calibration: the EXACT command ci.yml runs, no extra flags ────
+          #    (ties this experiment back to the issue's 362.7 s number)
+          - label: a-ci-exact
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+          # ── arm D: the lever, if the compiler server is what serializes ──
+          #    the compiles. UseSharedCompilation=false gives every Csc task
+          #    its own compiler process, so the MSBuild node count becomes the
+          #    real concurrency limit. If D is much faster than A, the build
+          #    IS core-bound and the cores are being thrown away by the
+          #    shared compiler server — which is a lever, not a split.
+          - label: d-nosharedcompiler-r1
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -p:UseSharedCompilation=false -v:m -clp:PerformanceSummary
+          - label: d-nosharedcompiler-r2
+            cmd: >-
+              dotnet build Harbor.slnx -c Release --no-restore
+              -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+              -p:UseSharedCompilation=false -v:m -clp:PerformanceSummary
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # Restore is timed separately and is NOT part of the compared numbers:
+      # it is identical in every arm and it is not compilation.
+      - name: Restore (timed, excluded from the ratio)
+        env:
+          LABEL: ${{ matrix.label }}
+        run: |
+          set +e
+          start=$(date +%s)
+          dotnet restore Harbor.slnx
+          rc=$?
+          end=$(date +%s)
+          {
+            echo "restore_seconds=$((end - start))"
+            echo "restore_exit=$rc"
+          } > "restore-$LABEL.txt"
+          exit $rc
+
+      # The measured step. measure-build-cpu.py runs the command, samples
+      # /proc/stat once a second and timestamps every output line.
+      - name: Build (timed, CPU-sampled)
+        env:
+          LABEL: ${{ matrix.label }}
+          BUILD_CMD: ${{ matrix.cmd }}
+        run: |
+          set +e
+          python3 tools/measure-build-cpu.py --label "$LABEL" --out-dir meas -- bash -c "$BUILD_CMD"
+          rc=$?
+          echo "build_exit=$rc" >> "restore-$LABEL.txt"
+          exit $rc
+
+      # WHAT THE RUNNER IS, and WHAT THE METER READS. The busy-core number
+      # is derived from the jiffy deltas of /proc/stat, so the divisor has to
+      # be the number of CPUs /proc/stat accounts for — which is not
+      # necessarily the number the job can run on.
+      - name: Runner diagnostics
+        if: always()
+        run: |
+          {
+            echo "nproc=$(nproc)"
+            echo "procstat_cpu_lines=$(grep -c '^cpu' /proc/stat)"
+            echo "affinity=$(taskset -pc $$ 2>/dev/null | tail -1)"
+            echo "cgroup_cpu_max=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo n/a)"
+            echo "cgroup_cpu_quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null || echo n/a)"
+            echo "cgroup_cpu_period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null || echo n/a)"
+            # The image the numbers belong to, the way the nightly lane's
+            # measurement job records it: a label that moves is not a
+            # denominator.
+            echo "runner_image=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "kernel=$(uname -sr)"
+            echo "os=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
+            echo "dotnet_sdk=$(dotnet --version 2>/dev/null)"
+            echo "utc=$(date -u +%FT%TZ)"
+          } | tee runner-diag.txt
+
+      # The calibration of the meter, end to end: a known 4-way load must
+      # read as four busy cores and a known 1-way load as one. One job is
+      # enough — it is the same runner image as every other job.
+      - name: CPU-meter calibration (known 1-way and 4-way loads)
+        if: always() && matrix.label == 'a-ci-exact'
+        run: |
+          for n in 1 4; do
+            for i in $(seq 1 "$n"); do
+              ( end=$((SECONDS + 20)); while [ $SECONDS -lt $end ]; do :; done ) &
+            done
+            python3 tools/measure-build-cpu.py --label "calib-$n-way" \
+              --out-dir calib -- bash -c "sleep 20"
+            wait
+          done
+
+      - name: Report
+        if: always()
+        env:
+          LABEL: ${{ matrix.label }}
+        run: |
+          python3 - <<'PY'
+          import json, os, glob
+          label = os.environ["LABEL"]
+          path = f"meas/{label}.json"
+          restore = ""
+          rp = f"restore-{label}.txt"
+          if os.path.exists(rp):
+              restore = open(rp).read().strip().replace("\n", " ")
+          if not os.path.exists(path):
+              print(f"{label}: NO MEASUREMENT FILE {restore}")
+              raise SystemExit(0)
+          d = json.load(open(path))
+          cpu = d["cpu"]
+          pf = d.get("projects_in_flight", {})
+          tasks = d.get("tasks", {})
+          csc = tasks.get("Csc", {})
+          gate = tasks.get("Exec", {})
+          print(f"{label}: wall={d['wall_seconds']}s exit={d['exit_code']} "
+                f"ncpu={d.get('ncpu')} ncpu_stat={d.get('ncpu_stat')} "
+                f"avg_cores={cpu.get('avg_busy_cores')} max_cores={cpu.get('max_busy_cores')} "
+                f"at_3_5_cores={cpu.get('fraction_at_or_above_3_5_cores')} "
+                f"csc={csc.get('calls')}calls/{csc.get('total_ms')}ms "
+                f"gate={gate.get('total_ms')}ms "
+                f"max_projects_in_flight={pf.get('max_in_flight')} "
+                f"frac_ge4_in_flight={pf.get('fraction_at_or_above_4')} {restore}")
+          print(f"{label}: process CPU seconds: {d.get('process_cpu_seconds')}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write(f"| {label} | {d['wall_seconds']} | {cpu.get('avg_busy_cores')} "
+                       f"| {cpu.get('max_busy_cores')} | {csc.get('total_ms')} "
+                       f"| {csc.get('calls')} | {gate.get('total_ms')} "
+                       f"| {pf.get('max_in_flight')} "
+                       f"| {pf.get('fraction_at_or_above_4')} |\n")
+          for calib in sorted(glob.glob("calib/calib-*.json")):
+              c = json.load(open(calib))
+              print(f"  CALIBRATION {c['label']}: avg_cores="
+                    f"{c['cpu'].get('avg_busy_cores')} ncpu_stat={c.get('ncpu_stat')}")
+          PY
+
+      - name: Upload measurement
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-vcpu-${{ matrix.label }}
+          path: |
+            meas/${{ matrix.label }}.json
+            meas/${{ matrix.label }}.log
+            restore-${{ matrix.label }}.txt
+            runner-diag.txt
+            calib/calib-*.json
+            tests/Harbor.Architecture.Tests/obj/Release/net10.0/harbor-arch-gate.log
+          retention-days: 30
+          if-no-files-found: warn
