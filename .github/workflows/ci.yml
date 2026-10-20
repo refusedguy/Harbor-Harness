@@ -1186,6 +1186,11 @@ jobs:
     # the artifacts the build job produced. The arm64 runner loads the
     # arm64 natives out of the same output directory, which is why the
     # slices carry both.
+    #
+    # ── MEASUREMENT CONFIG C (issue #1919, the two-pool dispatch study) ────
+    # The mirror of config B: core + ui on the x64 pool, platform + e2e on
+    # the arm64 pool. If the split is what buys the wall time, this arm must
+    # show the same shape as B and not the shape of A.
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     permissions:
@@ -1197,7 +1202,7 @@ jobs:
         shard: [core, platform, ui, e2e]
         include:
           - shard: core
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04
             # MinimumExpectedTests guard: a silent zero-test regression must
             # fail loudly (MTP exit code 8), never pass as "green".
             guard: true
@@ -1230,7 +1235,7 @@ jobs:
               Harbor.Plugins.Host.Tests
               Harbor.Ipc.Tests
           - shard: ui
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04
             guard: true
             # PerfTests live in renderer-perf-gate.yml — do not duplicate.
             projects: >-
