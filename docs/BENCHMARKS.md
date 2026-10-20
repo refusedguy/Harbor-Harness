@@ -1494,18 +1494,19 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --treenode-filter "*/*/*Allocation*"
 ```
 
-### 6.3 CI test-suite wall: `Harbor.E2E.App.Avalonia` (CI run 39399653820, dev, 2026-10-20)
+### 6.3 CI test-suite wall: `Harbor.E2E.App.Avalonia` (CI runs 39417846300 and 39421557542, dev and this PR, 2026-10-20)
 
-> **Provenance.** The TRX artifacts of CI run 39399653820 (branch `dev`): the project's
-> TRX-reported wall, and the per-test `duration` column read per test name. The rows below
-> are the whole of the toast cost in that project. Every one of them is a four-second wait
-> that a PRODUCT timer forced from inside the code under test.
+> **Provenance.** The `test (e2e)` shard of two CI runs on the same tree, one before the change and one after: `dev` at 8be16392 (run 39417846300) and this branch (run 39421557542). Both rows are the same measurement, taken from the shard log: the process wall from the `dotnet exec` group marker to the TUnit summary, and TUnit's own reported duration. The test counts are identical, so the difference is the wall and not a lost test.
 
-| Project | Wall before | Wall after | Δ |
+| Metric | dev (8be16392, run 39417846300) | this PR (run 39421557542) | Δ |
 |---|---:|---:|---:|
-| `Harbor.E2E.App.Avalonia` | **53.43 s** | ⏳ not yet measured (this PR's own run) | −20.5 s of product-timer wait (−38 %) |
+| process wall | 46.06 s | **20.72 s** | **−25.34 s (−55 %)** |
+| TUnit duration (sum of the test durations) | 45.477 s | **20.387 s** | **−25.09 s (−55 %)** |
+| tests | 133 (113 passed, 20 skipped) | 133 (113 passed, 20 skipped) | unchanged |
 
-#### What the 20.5 s was
+#### What the removed time was
+
+On the run the change was measured against (CI run 39399653820, dev, TRX) the project's wall was **53.43 s**, and five tests were four-second waits that a PRODUCT timer forced from inside the code under test:
 
 | Test | Duration (run 39399653820) |
 |---|---:|
@@ -1516,14 +1517,15 @@ dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --tr
 | `ToastTests.Toast_LongMessage_WrapsWithinMaxWidth` | 4.04 s |
 | **Total** | **20.5 s, 38 % of the project's 53.43 s wall** |
 
+`AvaloniaUiTests.MultipleToasts_StackVertically` waited on the same timer and is not in that table, so the removed time is larger than the 20.5 s those five rows add up to.
+
 The wait was `await Task.Delay(TimeSpan.FromSeconds(4))` in
 `apps/Harbor.App.Avalonia/ViewModels/MainViewModel.cs:530`, the toast auto-dismiss.
 It is a PRODUCT timer, so no test-side change could shorten it: the delay was in
 the code under test. #1945 makes the delay read an injected `TimeProvider` (the
 seam `AgentLoop`, `ToolDispatcher`, `RetryPolicy` and `MascotDirector` already use),
-so the five tests step a manual clock instead of sleeping, and the four-second
-contract is still asserted, against the production constant
-`MainViewModel.ToastAutoDismissDelay`.
+so the tests step a manual clock instead of sleeping, and the four-second contract
+is still asserted, against the production constant `MainViewModel.ToastAutoDismissDelay`.
 
 The shipped behaviour is unchanged: with `TimeProvider.System` the delay takes the same
 `TimerQueueTimer` path `Task.Delay(TimeSpan)` took, so a toast still leaves four seconds
