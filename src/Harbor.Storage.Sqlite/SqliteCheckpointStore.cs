@@ -19,7 +19,7 @@
 //     connection string and PRAGMAs; the axis never opens one of its own.
 //   * the schema           -> _owner.EnsureInitialized() — the STORE's
 //     one-time initialization.
-//   * the typed parameters -> SqliteSessionStore.IntParam/LongParam/StampParam
+//   * the typed parameters -> SqliteSessionStore.IntParam/StampParam
 //     — the STORE's own builders (#1534), so both halves format a column the
 //     same way.
 //   * the logger           -> the store's own logger, handed over: the log
