@@ -203,6 +203,12 @@ NON-VACUITY
   (Harbor.AgentRuntime) out of the Application perimeter (the Permissions
   #1615 and Onboarding #1614 extractions landed first); recomputed from
   `--report` on the merged tree: 13 / 7 / 143, and the floors are 13 / 7 / 143.
+  #1624 then moved the session-context cohort (Harbor.SessionContext) out of
+  the same perimeter; recomputed from `--report` on this tree: 13 / 7 / 130,
+  and the floors are 13 / 7 / 130. The perimeter is a SCOPE, not a claim about
+  the repository: a sibling assembly that is not guarded is still built by the
+  solution and still has to compile, and widening this list is a reviewable
+  diff whenever the owner wants it.
 
   --self-test runs fifteen fixtures covering every vacuity shape measured while
   writing this: a declared package nothing uses, a used namespace nothing

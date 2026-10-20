@@ -168,6 +168,9 @@ public class FullLayerMatrixTests
         // over Harbor.Application's configuration family (0 reverse edges).
         "Harbor.Onboarding",
         "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime",
+        // #1624: session-context cohort (compaction/prompt/tracker + workspace
+        // probes + session fork), extracted from Harbor.Application.
+        "Harbor.SessionContext",
         "Harbor.Registries",
         "Harbor.Plugins.Abstractions",
         "Harbor.Plugins.Runtime",
@@ -534,7 +537,10 @@ public class FullLayerMatrixTests
         ["Harbor.Hooks"] = new(Layer.Application, ["Harbor.Abstractions.Contracts"]),
         // #1616: verified-change pipeline, verbatim extract from Harbor.Application;
         // reads (never re-exports) its run vocabulary — Application keeps it so Application stays a leaf over Abstractions.
-        ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts"]),
+        ["Harbor.ChangeTracking"] = new(Layer.Application, ["Harbor.Application", "Harbor.Extensions", "Harbor.Abstractions.Contracts",
+            // #1624: the run records (IsolatedWorkspace / RunManifest / RunState) moved
+            // with the session-context cohort.
+            "Harbor.SessionContext"]),
         // #1615: Harbor.Permissions — Application-layer sibling like Harbor.Registries,
         // the verbatim extraction of Application/Permissions. PermissionService /
         // ApprovalCoordinator / the path policies bind the contracts-assembly
@@ -560,7 +566,20 @@ public class FullLayerMatrixTests
             // #1623: the extracted loop binds IHookRunner (UserHookGates, CompactionBehavior,
             // ToolDispatcher) — the edge Application keeps on its own row, plus Diagnostics
             // Abstractions for the telemetry measurements the loop publishes.
-            "Harbor.Hooks", "Harbor.Application"]),
+            "Harbor.Hooks", "Harbor.Application",
+            // #1624: the loop reads the session-context cohort — CompactionView,
+            // CachingSystemPromptBuilder, MessageConverter, WorkspaceContextSource.
+            "Harbor.SessionContext"]),
+        // #1624: session-context cohort (Sessions/* — CompactionService, CompactionPolicy,
+        // CompactionView, SystemPromptBuilder, CachingSystemPromptBuilder, MessageConverter,
+        // TokenTracker, WorkspaceContextSource, WorkspaceInspector, SessionForkService,
+        // IsolatedWorkspace, ToolResultContextTrim — plus the ISkillProvider default),
+        // verbatim extract from Harbor.Application, one-way edge; reads the residue
+        // vocabulary (Resilience contracts for the summary retry, the workspace-context
+        // service) via the Application reference and nothing else. Application binds no
+        // moved type, so the edge cannot close into a cycle.
+        ["Harbor.SessionContext"] = new(Layer.Application, ["Harbor.Abstractions", "Harbor.Extensions",
+            "Harbor.Application"]),
         // #1623: agent loop (Agents/AgentLoop..RunBudgetTracker, Agents/Pipeline/*, Resilience impls) —
         // verbatim extract from Harbor.Application, one-way edge; reads the loop vocabulary
         // (Hooks/Sessions/Resources/Telemetry/Resilience contracts) via the Application reference and nothing else.
@@ -636,7 +655,7 @@ public class FullLayerMatrixTests
             // Wires DI over the whole graph incl. contrib renderers — free tier.
             "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
             "Harbor.Diagnostics.Abstractions", "Harbor.Telemetry.Core",
-            "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.Registries",
+            "Harbor.Application", "Harbor.Onboarding", "Harbor.Hooks", "Harbor.Permissions", "Harbor.AgentRuntime", "Harbor.SessionContext", "Harbor.Registries",
             "Harbor.Desktop.Abstractions",
             "Harbor.Terminal.Abstractions", "Harbor.Ui.Framework.State",
             // #667: FileTreeLoader, registered in TuiModule. First direct edge

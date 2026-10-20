@@ -5,9 +5,12 @@
 // the shared run vocabulary the pipeline reads rather than owns: RunId
 // (Models.Identifiers) and WorkspaceContract/WorkspaceIsolation (Models). The
 // staying Application side is read through the ProjectReference the same way:
-// Harbor.Application.Sessions declares IsolatedWorkspace / RunManifest / RunState
-// (sessions/IsolatedWorkspace.cs) and WorkspacePaths / IWorkspacePaths
-// (sessions/WorkspacePaths.cs) — the pipeline consumes them, nothing re-exports.
+// Harbor.Application.Sessions declares WorkspacePaths / IWorkspacePaths
+// (sessions/WorkspacePaths.cs) — the pipeline consumes them, nothing
+// re-exports. The run records moved with the session-context cohort (#1624):
+// IsolatedWorkspace / RunManifest / RunState now live in
+// Harbor.SessionContext, in the SAME Harbor.Application.Sessions namespace,
+// so this using still resolves them — the assembly edge is what changed.
 global using System.Text.Json;
 global using CSharpFunctionalExtensions;
 global using Harbor.Abstractions.Models;

@@ -27,7 +27,7 @@ services.AddSingleton<ISessionStore>(new JsonlSessionStore(sessionsDir, logger))
 ```
 
 The agent persists messages as they flow via `ISessionStore.AppendMessageAsync`
-(see `src/Harbor.Application/Agents/DefaultAgent.cs:293`). Anchored-summary compaction is owned by `CompactionService` in `Harbor.Application` (`src/Harbor.Application/Sessions/CompactionService.cs`) and folds old turns into a summary line in the same store.
+(see `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:293`). Anchored-summary compaction is owned by `CompactionService` in `Harbor.Application` (`src/Harbor.SessionContext/Sessions/CompactionService.cs`) and folds old turns into a summary line in the same store.
 
 ## See also
 

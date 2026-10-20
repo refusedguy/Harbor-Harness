@@ -345,9 +345,10 @@ jobs:
       # a dependency lowers them in the same diff. Recomputed when the perimeter
       # widened to four projects (was 9 / 6 / 75 over two), and again after
       # #1623 moved the agent loop out of the Application perimeter
-      # (--report: 13 / 7 / 143).
+      # (--report: 13 / 7 / 143), and again after #1624 moved the
+      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 143
+        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 130
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

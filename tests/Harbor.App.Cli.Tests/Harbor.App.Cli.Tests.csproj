@@ -31,6 +31,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\apps\Harbor.App.Cli\Harbor.App.Cli.csproj"/>
+    <!-- #1624: binds the moved session-context types directly. -->
+    <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
     <ProjectReference Include="..\..\tests\Harbor.TestKit\Harbor.TestKit.csproj"/>
   </ItemGroup>
 

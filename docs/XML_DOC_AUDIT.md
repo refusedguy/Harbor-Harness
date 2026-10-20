@@ -30,7 +30,7 @@ rows that carry a project-relative path and a line:
 
 The three `CompactionService.cs` rows #807 opened with are the mild case — the
 file is alive, the members are alive, they just moved to
-`src/Harbor.Application/Sessions/CompactionPolicy.cs` when #472 split the god
+`src/Harbor.SessionContext/Sessions/CompactionPolicy.cs` when #472 split the god
 object. Find them there **by name**: `TruncateToFit`, `TruncateToFitStrict`,
 `MaterializeCompactedView`. No line numbers are given here on purpose; see
 "Why no line numbers" below.
@@ -588,35 +588,35 @@ this document's answer.
 | Harbor.Application/Resources/CoreResources.cs | 5 | class CoreResources | **NO** | HIGH |
 | Harbor.Application/Resources/CoreResources.cs | 10 | public static string GetLog(string name) => Log.GetString(name) ?? name; | **NO** | HIGH |
 | Harbor.Application/Resources/CoreResources.cs | 11 | public static string GetError(string name) => Error.GetString(name) ?? name; | **NO** | HIGH |
-| Harbor.Application/Sessions/CachingSystemPromptBuilder.cs | 31 | class CachingSystemPromptBuilder | YES | MED |
-| Harbor.Application/Sessions/CachingSystemPromptBuilder.cs | 47 | public async Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Sessions/CompactionService.cs | 24 | class CompactionService | YES | HIGH |
-| Harbor.Application/Sessions/CompactionService.cs | 166 | int ReserveTokens | YES | LOW |
-| Harbor.Application/Sessions/CompactionService.cs | 171 | int KeepRecentTokens | YES | LOW |
-| Harbor.Application/Sessions/CompactionService.cs | 176 | int TailTurns | YES | LOW |
-| Harbor.Application/Sessions/CompactionService.cs | 209 | public static IReadOnlyList<AgentMessage> TruncateToFit( | YES | MED |
-| Harbor.Application/Sessions/CompactionService.cs | 300 | public static IReadOnlyList<AgentMessage> TruncateToFitStrict( | YES | MED |
-| Harbor.Application/Sessions/CompactionService.cs | 382 | public static IReadOnlyList<AgentMessage> MaterializeCompactedView(IReadOnlyList<AgentMessage> messages) | YES | MED |
-| Harbor.Application/Sessions/CompactionService.cs | 439 | public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) | YES | MED |
-| Harbor.Application/Sessions/CompactionService.cs | 446 | public async Task<Result<CompactionResult>> CompactAsync( | YES | MED |
-| Harbor.Application/Sessions/MessageConverter.cs | 6 | class MessageConverter | YES | MED |
-| Harbor.Application/Sessions/MessageConverter.cs | 14 | public IReadOnlyList<LlmMessage> ToLlmMessages(IReadOnlyList<AgentMessage> messages) | YES | MED |
-| Harbor.Application/Sessions/SystemPromptBuilder.cs | 12 | class SystemPromptBuilder | YES | MED |
-| Harbor.Application/Sessions/SystemPromptBuilder.cs | 45 | public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default) | YES | HIGH |
-| Harbor.Application/Sessions/TokenTracker.cs | 6 | class TokenTracker | **NO** | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 24 | int ReserveTokens | **NO** | LOW |
-| Harbor.Application/Sessions/TokenTracker.cs | 33 | public void RecordTurnUsage(Usage usage) | **NO** | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 42 | public int Estimate(string text) => _estimator.Estimate(text); | **NO** | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 44 | public int EstimateMessage(AgentMessage message) => _estimator.EstimateMessage(message); | **NO** | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 46 | public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => _estimator.EstimateMessages(messages); | **NO** | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 49 | public void RecordAppendedMessage(AgentMessage message) | YES | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 56 | public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) | YES | MED |
-| Harbor.Application/Sessions/TokenTracker.cs | 78 | public TokenStats GetStats() | **NO** | HIGH |
-| Harbor.Application/Sessions/WorkspaceContextSource.cs | 34 | class WorkspaceContextSource | YES | MED |
-| Harbor.Application/Sessions/WorkspaceContextSource.cs | 45 | public static IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory) | YES | HIGH |
-| Harbor.Application/Sessions/WorkspaceContextSource.cs | 80 | public static string? FormatMcpInstructions(IReadOnlyList<McpServerInstructions>? servers) | YES | HIGH |
-| Harbor.Application/Sessions/WorkspaceContextSource.cs | 101 | public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory) | YES | HIGH |
-| Harbor.Application/Sessions/WorkspaceContextSource.cs | 114 | public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory, string? globalSkillsDir) | YES | HIGH |
+| Harbor.SessionContext/Sessions/CachingSystemPromptBuilder.cs | 31 | class CachingSystemPromptBuilder | YES | MED |
+| Harbor.SessionContext/Sessions/CachingSystemPromptBuilder.cs | 47 | public async Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default) | YES | HIGH |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 24 | class CompactionService | YES | HIGH |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 166 | int ReserveTokens | YES | LOW |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 171 | int KeepRecentTokens | YES | LOW |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 176 | int TailTurns | YES | LOW |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 209 | public static IReadOnlyList<AgentMessage> TruncateToFit( | YES | MED |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 300 | public static IReadOnlyList<AgentMessage> TruncateToFitStrict( | YES | MED |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 382 | public static IReadOnlyList<AgentMessage> MaterializeCompactedView(IReadOnlyList<AgentMessage> messages) | YES | MED |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 439 | public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) | YES | MED |
+| Harbor.SessionContext/Sessions/CompactionService.cs | 446 | public async Task<Result<CompactionResult>> CompactAsync( | YES | MED |
+| Harbor.SessionContext/Sessions/MessageConverter.cs | 6 | class MessageConverter | YES | MED |
+| Harbor.SessionContext/Sessions/MessageConverter.cs | 14 | public IReadOnlyList<LlmMessage> ToLlmMessages(IReadOnlyList<AgentMessage> messages) | YES | MED |
+| Harbor.SessionContext/Sessions/SystemPromptBuilder.cs | 12 | class SystemPromptBuilder | YES | MED |
+| Harbor.SessionContext/Sessions/SystemPromptBuilder.cs | 45 | public Task<string> BuildAsync(SystemPromptContext context, CancellationToken ct = default) | YES | HIGH |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 6 | class TokenTracker | **NO** | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 24 | int ReserveTokens | **NO** | LOW |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 33 | public void RecordTurnUsage(Usage usage) | **NO** | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 42 | public int Estimate(string text) => _estimator.Estimate(text); | **NO** | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 44 | public int EstimateMessage(AgentMessage message) => _estimator.EstimateMessage(message); | **NO** | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 46 | public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => _estimator.EstimateMessages(messages); | **NO** | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 49 | public void RecordAppendedMessage(AgentMessage message) | YES | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 56 | public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) | YES | MED |
+| Harbor.SessionContext/Sessions/TokenTracker.cs | 78 | public TokenStats GetStats() | **NO** | HIGH |
+| Harbor.SessionContext/Sessions/WorkspaceContextSource.cs | 34 | class WorkspaceContextSource | YES | MED |
+| Harbor.SessionContext/Sessions/WorkspaceContextSource.cs | 45 | public static IReadOnlyList<ContextFile> LoadContextFiles(string workingDirectory) | YES | HIGH |
+| Harbor.SessionContext/Sessions/WorkspaceContextSource.cs | 80 | public static string? FormatMcpInstructions(IReadOnlyList<McpServerInstructions>? servers) | YES | HIGH |
+| Harbor.SessionContext/Sessions/WorkspaceContextSource.cs | 101 | public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory) | YES | HIGH |
+| Harbor.SessionContext/Sessions/WorkspaceContextSource.cs | 114 | public static IReadOnlyList<SkillDescriptor> LoadSkills(string workingDirectory, string? globalSkillsDir) | YES | HIGH |
 | Harbor.Application/Telemetry/GenAiTags.cs | 3 | class GenAiTags | **NO** | MED |
 | Harbor.Application/Telemetry/HarborTelemetry.cs | 5 | class HarborTelemetry | **NO** | MED |
 

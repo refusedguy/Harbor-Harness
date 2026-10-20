@@ -35,7 +35,7 @@ namespace Harbor.Application.Sessions;
 ///         Per-turn cost is bounded: two directory enumerations plus reading at
 ///         most the first few lines of every skill file and the full text of the
 ///         two context files. The expensive prompt assembly itself stays behind
-///         <see cref="CachingSystemPromptBuilder" />'s content hash.
+///         <c>CachingSystemPromptBuilder</c>'s content hash.
 ///     </para>
 /// </remarks>
 public sealed class WorkspaceContextService : IWorkspaceContextSource

@@ -150,7 +150,7 @@ internal static partial class PromptClockProbe
     /// instead of reporting an empty violation list.
     /// </summary>
     internal const string CanonicalFile =
-        "src/Harbor.Application/Sessions/SystemPromptBuilder.cs";
+        "src/Harbor.SessionContext/Sessions/SystemPromptBuilder.cs";
 
     /// <summary>Repository roots the scan walks.</summary>
     private static readonly string[] ScanRoots = ["src"];

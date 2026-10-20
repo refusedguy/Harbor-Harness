@@ -99,7 +99,7 @@ internal static partial class PromptSectionPolicyProbe
     /// reporting an empty violation list.
     /// </summary>
     internal const string CanonicalFile =
-        "src/Harbor.Application/Sessions/SystemPromptBuilder.cs";
+        "src/Harbor.SessionContext/Sessions/SystemPromptBuilder.cs";
 
     /// <summary>Repository roots the scan walks. <c>contrib/</c> and <c>apps/</c> are excluded.</summary>
     private static readonly string[] ScanRoots = ["src"];

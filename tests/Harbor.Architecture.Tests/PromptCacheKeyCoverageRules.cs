@@ -105,11 +105,11 @@ internal static partial class PromptCacheKeyProbe
 {
     /// <summary>The prompt renderer: the file whose context reads the key must cover.</summary>
     internal const string CanonicalRenderFile =
-        "src/Harbor.Application/Sessions/SystemPromptBuilder.cs";
+        "src/Harbor.SessionContext/Sessions/SystemPromptBuilder.cs";
 
     /// <summary>The decorator that derives the key.</summary>
     internal const string CanonicalKeyFile =
-        "src/Harbor.Application/Sessions/CachingSystemPromptBuilder.cs";
+        "src/Harbor.SessionContext/Sessions/CachingSystemPromptBuilder.cs";
 
     /// <summary>
     ///     Reads both canonical files and reports the coverage delta.

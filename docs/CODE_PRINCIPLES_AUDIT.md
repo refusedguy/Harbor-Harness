@@ -334,7 +334,7 @@ public sealed class ToolRegistry {
 
 ### §OOP-007 — CompactionService.ReserveTokens / KeepRecentTokens: mutable properties
 
-**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.SessionContext/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 89, 94, 99
 
@@ -982,7 +982,7 @@ private static List<AgentMessage> SnapshotMessages(IReadOnlyList<AgentMessage> m
 
 ### §LOW-002 — CompactionService.AppendFormattedMessage: GetRawText per tool call
 
-**Файл:** `src/Harbor.Application/Sessions/CompactionService.cs`  
+**Файл:** `src/Harbor.SessionContext/Sessions/CompactionService.cs`  
 **Severity:** low  
 **Line:** 316
 
@@ -1165,7 +1165,7 @@ CLAUDE.md заявляет: "Core can be published as NativeAOT". Это зна�
 | `src/Harbor.Tui.Abstractions/State/UiStore.cs` | §PERF-007, ~~§FP-007~~ (RESOLVED) | medium |
 | `src/Harbor.Tui.Abstractions/State/TuiEffectHost.cs` | §FP-006 | **high** |
 | `src/Harbor.Application/Permissions/PermissionService.cs` | §ROP-002 | **high** |
-| `src/Harbor.Application/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
+| `src/Harbor.SessionContext/Sessions/CompactionService.cs` | §OOP-007, §LOW-002 | low |
 | `src/Harbor.Registries/Events/InMemoryEventBus.cs` | §PERF-008 | medium |
 | `src/Harbor.Registries/Tools/ToolRegistry.cs` | §OOP-005, §GOF-001 | low |
 | `src/Harbor.Tools.Builtin/Bash/BashTool.cs` | §PERF-006 | medium |

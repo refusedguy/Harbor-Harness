@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>true</IsPackable>
+    <PackageId>Harbor.SessionContext</PackageId>
+    <Description>Harbor session context — compaction, system prompt assembly, token tracking, workspace inspection and session forking (#1624).</Description>
+    <PackageTags>harbor;ai;agent;session;compaction;prompt</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    #1624: the session-context cohort (Sessions/* — compaction, prompt
+    assembly, token tracking, workspace inspection, session forking, result
+    trimming) extracted verbatim from Harbor.Application into its own
+    assembly, plan A part 2/4 of the Application decomp split. One-way edge:
+    SessionContext -> Application only. Application holds the shared
+    vocabulary this cohort reads and does NOT bind any moved type:
+
+      - Harbor.Application.Resilience (IRetryPolicy / RetryOptions) — the
+        retry seam CompactionService drives for the summary LLM call. The
+        CONTRACT files deliberately stay in Harbor.Application: the loop's
+        RetryPolicy / DefaultToolRetryDecider implementations live in
+        Harbor.AgentRuntime and read the same contracts, so moving them here
+        would have split one vocabulary across two assemblies.
+      - Harbor.Application.Sessions (IWorkspaceContextSource /
+        WorkspaceContextService) — the injectable workspace-context seam the
+        static WorkspaceContextSource forwarder delegates to (#1523). The
+        static forwarder moved (it is the workspace half of this cohort); the
+        service and its interface stayed in Application, which is the
+        leaf-over-Abstractions assembly the cohort reads them from.
+
+    Two files moved BEYOND the issue's list, and both because the cohort
+    bound them in code (a reference either way would have flipped the edge
+    into a cycle):
+
+      - Sessions/CompactionView.cs — the default ICompactionView
+        implementation (#1612), a forwarder over the CompactionPolicy
+        statics that moved with them.
+      - Skills/SkillProvider.cs — the default ISkillProvider implementation,
+        which reads the workspace context through WorkspaceContextSource.
+
+    Namespaces are UNCHANGED (Harbor.Application.Sessions /
+    Harbor.Application.Skills) per the NetArchLayerRules backward-compat
+    convention, so every consumer keeps compiling: the move is rename-only.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
+    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
+    <PackageReference Include="ZLinq"/>
+    <!--
+      ZLinq.DropInGenerator emits source-generated extension methods that take
+      priority over System.Linq's. Combined with `<Using Remove="System.Linq" />`
+      below, every LINQ call site in Harbor.SessionContext resolves to ZLinq's
+      zero-allocation pipeline without rewriting call sites (moved verbatim from
+      Harbor.Application, which does exactly this — same setup as Abstractions,
+      Registries and AgentRuntime).
+    -->
+    <PackageReference Include="ZLinq.DropInGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Linq"/>
+  </ItemGroup>
+
+</Project>

@@ -24,10 +24,10 @@
         backward-compat convention).
       - Loop vocabulary read via the ProjectReference below: Harbor.Hooks
         (IHookRunner, HookDecision, HookVerdict — now its own assembly, #1596),
-        Harbor.Application .Sessions (CompactionPolicy, CompactionView,
+        Harbor.SessionContext (.Sessions CompactionPolicy, CompactionView,
         CachingSystemPromptBuilder, MessageConverter, WorkspaceContextSource —
-        #1624 will extract), .Resources (CoreResources) and .Telemetry (#1626
-        will extract).
+        extracted by #1624), Harbor.Application .Resources (CoreResources) and
+        .Telemetry (#1626 will extract).
   -->
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
@@ -35,6 +35,8 @@
     <ProjectReference Include="..\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <ProjectReference Include="..\Harbor.Hooks\Harbor.Hooks.csproj"/>
     <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1624: the loop reads CompactionView / CachingSystemPromptBuilder / MessageConverter / WorkspaceContextSource from the session-context cohort. -->
+    <ProjectReference Include="..\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

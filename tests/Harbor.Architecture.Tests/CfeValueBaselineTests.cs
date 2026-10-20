@@ -134,7 +134,7 @@ public sealed class CfeValueBaselineTests
             "if (IsFailure) { log; return Result.Success(); } then early return"),
         new("src/Harbor.Onboarding/Onboarding/OnboardingWizard.cs", "TryFetchLiveModelsAsync",
             "if (IsFailure) { print reason; return null; } early return"),
-        new("src/Harbor.Application/Sessions/SessionForkService.cs", "ForkAsync",
+        new("src/Harbor.SessionContext/Sessions/SessionForkService.cs", "ForkAsync",
             "if (IsFailure) { return Result.Failure(...); } early return"),
         new("src/Harbor.Lsp/LspManager.cs", "NotifyChangeAsync",
             "if (IsFailure) { return; } early return"),

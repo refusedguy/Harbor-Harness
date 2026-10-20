@@ -2171,7 +2171,7 @@ long-term memory repeat mistakes, forget project conventions, and can't
 learn from past sessions. Kilo's memory system is the most sophisticated
 open-source implementation.
 
-**Harbor implication:** Harbor has `Harbor.Application/Sessions/CompactionService.cs`
+**Harbor implication:** Harbor has `Harbor.SessionContext/Sessions/CompactionService.cs`
 for short-term context compression, but no long-term memory. **P1 to add
 `Harbor.Memory` package** modeled on `kilo-memory`. Effort: L (40 hours).
 
