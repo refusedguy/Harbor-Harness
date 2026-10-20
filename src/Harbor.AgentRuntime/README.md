@@ -34,6 +34,7 @@ public interface IPipelineBehavior { ... }         // Agents/Pipeline/ — run-l
 // behaviors: LoggingBehavior, PermissionCheckBehavior, MaxStepsBehavior,
 //             CompactionBehavior, SteeringDrainBehavior
 public sealed class StreamingCoalescer : IDisposable;  // internal — text/thinking/tool-call delta coalescing
+public sealed record UpdateFlushPolicy;          // #1527 — how many deltas may share one published update
 // Resilience: RetryPolicy : IRetryPolicy, DefaultToolRetryDecider : IToolRetryDecider, RetryPolicyExtensions
 public sealed class RetryLlmClientDecorator : ILlmClient;  // Resilience/ — #1502: preflight transient retry on the provider stream
 ```
@@ -41,7 +42,17 @@ public sealed class RetryLlmClientDecorator : ILlmClient;  // Resilience/ — #1
 Also internal but pinned by tests: `TurnRunner`, `MessageSnapshot`,
 `MessageFlush`, `ToolTableBuilder`, `ListenerRegistry`, `BackgroundDrain`,
 `BackgroundTaskRegistry`, `AgentSteeringQueue`, `DefaultSessionContext`,
-`UserHookGates`, `ToolRetryPolicy`, `StreamingCoalescerJsonContext`.
+`UserHookGates`, `ToolRetryPolicy`, `StreamingCoalescerJsonContext`,
+`UpdateCoalescer`.
+
+`UpdateCoalescer` (#1527) owns the per-delta `MessageUpdateEvent` publishes:
+it buffers the deltas of a run and publishes them as one merged delta under
+the `UpdateFlushPolicy` the loop hands down. The policy is a value, so a host
+that needs a different granularity passes its own `UpdateFlushPolicy` to
+`AgentLoop`; null keeps `UpdateFlushPolicy.Default` (32 deltas / 4096
+characters / 100 ms). The merge never drops a delta: the last delta of a turn
+and every terminal event are published, in order, before the event that
+follows them.
 
 ## Wiring
 
