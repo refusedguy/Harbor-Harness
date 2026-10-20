@@ -550,8 +550,8 @@ jobs:
   # `origin/dev`: the python gate finds 206 groups / 2987 duplicated lines
   # in `tests/`, jscpd finds 286 clones / 8353 duplicated lines over
   # `src/` + `apps/` + `tests/`, and the two overlap on 1965 lines. Neither
-  # is a subset of the other: jscpd flags 397 files the python gate does
-  # not, the python gate flags 72 files jscpd does not.
+  # is a subset of the other: jscpd flags 94 files the python gate does
+  # not, the python gate flags 113 files jscpd does not.
   #
   # WHY THE RULE IS A TOTAL AND NOT jscpd's OWN `--fail-on-new-clones`
   # jscpd ships a baseline gate, and it was measured on 13 real commits of

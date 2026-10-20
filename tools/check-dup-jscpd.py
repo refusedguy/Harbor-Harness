@@ -25,10 +25,10 @@ docs/DEVELOPMENT.md §"The second duplication detector"):
 
   Overlap, measured line by line on the test tree: the python gate's 6548
   duplicated lines and jscpd's overlap on 1965 of them (30.0% of the
-  python gate's, 23.7% of jscpd's). 37 of the python gate's 206 groups sit
+  python gate's, 23.3% of jscpd's). 37 of the python gate's 206 groups sit
   entirely inside a jscpd clone, 25 partly, and 144 not at all. The two
-  detectors are complements, not substitutes: jscpd flags 397 files with
-  duplication that the python gate does not, and the python gate flags 72
+  detectors are complements, not substitutes: jscpd flags 94 files with
+  duplication that the python gate does not, and the python gate flags 113
   files that jscpd does not.
 
 WHY THE BASELINE IS A TOTAL AND NOT A LIST OF CLONES
