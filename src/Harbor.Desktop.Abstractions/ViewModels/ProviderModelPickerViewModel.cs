@@ -51,10 +51,10 @@ public partial class ProviderModelPickerViewModel : ObservableObject, IAsyncData
     ///     is the fix, not a second shared literal.
     ///     <para>
     ///         This is also the ONE declaration of the catalogue wait in the
-    ///         project. <c>ProviderBrowserViewModel</c> and
-    ///         <c>ProviderModelPickerViewModelBase</c> bound the same registry
+    ///         project. <c>ProviderBrowserViewModel</c> bound the same registry
     ///         fan-out through the same <see cref="AsyncFeed{T}" /> and used to
-    ///         hold private copies of the number (#685).
+    ///         hold a private copy of the number (#685). The abstract base that
+    ///         used to carry a second copy is gone (#1835).
     ///     </para>
     /// </remarks>
     public static readonly TimeSpan UiFeedbackBudget = TimeSpan.FromSeconds(5);

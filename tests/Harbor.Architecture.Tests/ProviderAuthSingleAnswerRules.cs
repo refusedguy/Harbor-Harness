@@ -38,8 +38,8 @@
 //
 // SCOPE, deliberately narrow: the two view-models in
 // src/Harbor.Desktop.Abstractions/ViewModels/ that render an auth verdict.
-// The catalogue surfaces (ProviderBrowserViewModel and the unreferenced
-// ProviderModelPickerViewModelBase) are outside this rule — they render no auth
+// The catalogue surfaces (ProviderBrowserViewModel and
+// ProviderModelPickerViewModel) are outside this rule — they render no auth
 // verdict — and widening the scan would make the gate red on files this change
 // does not own. Their half of the subject is not abandoned, only moved:
 // ProviderCatalogueBudgetRules (#685) governs the catalogue-wait budget across

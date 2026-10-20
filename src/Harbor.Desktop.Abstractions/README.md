@@ -6,16 +6,26 @@ UI-framework-agnostic contracts shared by every Harbor desktop app
 ## What's shared
 
 - **Base view-models** (`ViewModels/`): `ChatViewModelBase`,
-  `SessionListViewModelBase`, `ProviderBrowserViewModelBase`,
-  `SettingsViewModelBase`, `CodeEditorViewModelBase`, `DiffViewModelBase`,
-  `TokenUsageViewModelBase`, `CommandPaletteViewModelBase`,
-  `ToastNotificationViewModelBase`, plus newer bases for theme settings,
-  focus sessions and provider/model pickers
-  (`ThemeSettingsViewModelBase`, `FocusSessionViewModelBase`,
-  `ProviderModelPickerViewModelBase`). Each holds the observable state for its
-  screen; platform VMs derive from these and add platform-specific bindings.
-  All derive from <see cref="Harbor.Ui.Framework.ViewModels.StoreSubscriberViewModel" />,
+  `DiffViewModelBase` and `CommandPaletteViewModelBase`. Each holds the
+  observable state for its screen; a platform VM derives from one of them and
+  adds platform-specific bindings. All three derive from
+  <see cref="Harbor.Ui.Framework.ViewModels.StoreSubscriberViewModel" />,
   which provides store-subscription + selector-based projection.
+  The shipped desktop app (`apps/Harbor.App.Avalonia`) derives its chat VM and
+  its command palette from the two matching bases; `DiffViewModelBase` has no
+  shipped subclass yet and is kept only because `Harbor.TestKit` builds a stub
+  on it (#1835 tracks that).
+  **#1835 removed the ten bases no shipped app derived from** —
+  `SessionListViewModelBase`, `ProviderBrowserViewModelBase`,
+  `SettingsViewModelBase`, `CodeEditorViewModelBase` / `EditorTabViewModelBase`,
+  `TokenUsageViewModelBase`, `ToastNotificationViewModelBase`,
+  `ThemeSettingsViewModelBase`, `FocusSessionViewModelBase` and
+  `ProviderModelPickerViewModelBase`. They were public surface in a packable
+  package with zero implementors; the concrete view-models that carry the same
+  state (`DiffViewModel`, `FocusSessionViewModel`, `ProviderBrowserViewModel`,
+  `ProviderModelPickerViewModel`, …) live here and do not derive from them.
+  `tests/Harbor.Architecture.Tests/PublicAbstractBaseLivenessRules.cs` keeps
+  the next one from being published.
 - **Configuration** (`Configuration/`): `IAppConfigStore<T>` /
   `ICommonConfigStore` plus the shared config DTOs (`AppConfigBase`,
   `CommonConfig`, `CompositeConfig<T>`). Since #534 this leaf holds the
