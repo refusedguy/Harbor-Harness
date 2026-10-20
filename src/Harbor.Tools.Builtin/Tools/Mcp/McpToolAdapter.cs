@@ -28,7 +28,12 @@ public sealed class McpToolAdapter : ITool
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
     public string? PromptSnippet => $"mcp {_server}/{_toolName}: {Description}";
     public IReadOnlyList<string> PromptGuidelines { get; } = Array.Empty<string>();
-    public JsonDocument ParameterSchema { get; } = JsonDocument.Parse("""
+    /// <summary>
+    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
+    ///     below is a compile-time constant, so re-parsing it for every tool
+    ///     instance was pure allocation churn.
+    /// </summary>
+    private static readonly JsonDocument Schema = JsonDocument.Parse("""
         {
           "type": "object",
           "properties": {
@@ -36,6 +41,8 @@ public sealed class McpToolAdapter : ITool
           }
         }
         """);
+    /// <inheritdoc />
+    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args) =>
         JsonArgValidator.OptionalObject(args, "arguments", "'arguments' must be a JSON object.");
