@@ -6,8 +6,9 @@ Stdlib only — no pip, no network, no dotnet.
 WHAT THIS IS FOR
 ----------------
 Issue #1564 counted the tool names written out as string literals across the
-product: "bash" seventy times, "read", "write", "edit", "patch" and the rest
-another hundred and thirty, spread over fifty files. Every one of those
+product. Measured on `origin/dev`: 259 of them in 51 files under `src/` alone
+("bash" seventy times, "edit" 21, "write" 19, "patch" 15, "read" 14, "glob"
+13), and 276 across `src/` and `apps/`, over 62 files. Every one of those
 literals is a fact about a tool written down a second time, and a fact written
 twice is two facts to keep in step. The failure mode is silent: a rule that
 names "basn" matches nothing, and a rule that matches nothing looks exactly
