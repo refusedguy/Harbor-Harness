@@ -1340,7 +1340,7 @@ public class ProcessEnvIsolationRule
     internal static IReadOnlyList<TypeSite> DiscoverTypesInProject(string project) =>
         DiscoverTypesInProjects([project]);
 
-    private static readonly ConcurrentDictionary<string, IReadOnlyList<TypeSite>> TypeSitesByProject =
+    private static readonly ConcurrentDictionary<string, Lazy<IReadOnlyList<TypeSite>>> TypeSitesByProject =
         new(StringComparer.Ordinal);
 
     private static IReadOnlyList<TypeSite> DiscoverTypesInProjects(IReadOnlyList<string> projects)
@@ -1354,7 +1354,16 @@ public class ProcessEnvIsolationRule
 
         foreach (string project in projects)
         {
-            found.AddRange(TypeSitesByProject.GetOrAdd(project, p => ParseProject(root, p)));
+            // The lazy, not a plain value: two callers can reach the same
+            // project at the same time, and a project parsed twice is a
+            // project parsed twice.
+            Lazy<IReadOnlyList<TypeSite>> sites = TypeSitesByProject.GetOrAdd(
+                project,
+                p => new Lazy<IReadOnlyList<TypeSite>>(
+                    () => ParseProject(root, p),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
+
+            found.AddRange(sites.Value);
         }
 
         return found;

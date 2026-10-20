@@ -186,7 +186,22 @@ internal sealed class SourceTreeFile
     private readonly Lazy<ImmutableArray<string>> _strippedNewlineLines;
     private readonly Lazy<ImmutableArray<string>> _strippedReadLineLines;
 
-    private SourceTreeFile(
+    /// <summary>
+    ///     Creates a file view over content that is already read.
+    /// </summary>
+    /// <remarks>
+    ///     Internal rather than private because the snapshot is the thing that
+    ///     reads the disk: the file view itself is a value, and a value with a
+    ///     private constructor that only its owner can build is a value the
+    ///     owner cannot build either.
+    /// </remarks>
+    /// <param name="path">Absolute path of the file.</param>
+    /// <param name="text">The file's content.</param>
+    /// <param name="strippedText">The content with its comments blanked out.</param>
+    /// <param name="rawLineCount">How many lines the raw content has.</param>
+    /// <param name="length">The file's length in bytes.</param>
+    /// <param name="lastWriteUtc">The file's last write time.</param>
+    internal SourceTreeFile(
         string path,
         string text,
         string strippedText,
