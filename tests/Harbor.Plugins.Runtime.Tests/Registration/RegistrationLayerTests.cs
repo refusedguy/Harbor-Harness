@@ -128,6 +128,73 @@ public sealed class RegistrationLayerTests
             .IsEqualTo("/home/me/.harbor/plugins/data/capture-1");
     }
 
+    /// <summary>
+    ///     Test 5: #1758, a door that REFUSES a registration must fail the
+    ///     plugin's registration. The registrar used to log the refusal and then
+    ///     hand the plugin back as <c>Success</c>, so the caller could not tell
+    ///     "fully wired" from "half-wired", and the load path went on to log
+    ///     "Loaded plugin X" for a plugin that had contributed nothing.
+    /// </summary>
+    [Test]
+    public async Task Registrar_HostRefusesTheDoor_TheRegistrationFails()
+    {
+        var host = new RefusingPluginLoadHost();
+        var registrar = new PluginRegistrar(
+            "/home/me/.harbor/plugins",
+            NullLogger<PluginRegistrar>.Instance,
+            NullLoggerFactory.Instance);
+        var plugin = new FakeToolPlugin("reg-refused", "tool_refused");
+        var loaded = new LoadedPlugin(
+            plugin,
+            plugin.Name,
+            plugin.Version,
+            plugin.GetType(),
+            "/home/me/.harbor/plugins/reg-refused.cs",
+            "abc",
+            false);
+
+        var result = registrar.Register(loaded, host);
+
+        await Assert.That(result.IsFailure).IsTrue()
+            .Because("the host refused the tool registration, so the plugin did not arrive wired. "
+                   + "Answering Success here is what let a dropped registration look like an active plugin");
+        await Assert.That(result.Error).Contains("rejected")
+            .Because("the failure must say that the registration was rejected, not merely that something "
+                   + "went wrong");
+        await Assert.That(result.Error).Contains(RefusingPluginLoadHost.Reason)
+            .Because("the host's own reason is what the user needs: the door was refused because the "
+                   + "route does not carry that capability");
+    }
+
+    /// <summary>
+    ///     Test 6: #1758, a host that ACCEPTS every door still yields a
+    ///     successful registration. The refusal path must not turn every plugin
+    ///     into a failure.
+    /// </summary>
+    [Test]
+    public async Task Registrar_HostAcceptsEveryDoor_TheRegistrationSucceeds()
+    {
+        var host = new FakePluginLoadHost();
+        var registrar = new PluginRegistrar(
+            "/home/me/.harbor/plugins",
+            NullLogger<PluginRegistrar>.Instance,
+            NullLoggerFactory.Instance);
+        var plugin = new FakeToolPlugin("reg-accepted", "tool_accepted");
+        var loaded = new LoadedPlugin(
+            plugin,
+            plugin.Name,
+            plugin.Version,
+            plugin.GetType(),
+            "/home/me/.harbor/plugins/reg-accepted.cs",
+            "abc",
+            false);
+
+        var result = registrar.Register(loaded, host);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(host.RegisteredTools.Count).IsEqualTo(1);
+    }
+
     private sealed class FakeToolPlugin : IToolPlugin
     {
         private readonly string _toolName;

@@ -151,6 +151,88 @@ public sealed class HostingLayerTests
     }
 
     /// <summary>
+    ///     Test 5: #1758, the LOAD PATH surfaces a refused registration. With
+    ///     ContinueOnError=false the whole load fails, naming the plugin: a
+    ///     plugin whose registration the host refused did not load, and saying
+    ///     otherwise is the #1758 defect one level up.
+    /// </summary>
+    [Test]
+    public async Task Host_RefusedRegistration_FailsTheLoad()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("host-refused").ConfigureAwait(false);
+        Directory.CreateDirectory(fixture.CacheDir);
+
+        var host = new RefusingPluginLoadHost();
+        var references = new PluginAssemblyReferences(
+            NullLogger<PluginAssemblyReferences>.Instance);
+
+        var pluginHost = new PluginHostBuilder()
+            .WithSource(new InMemoryPluginSource(
+                new[] { new PluginScript("test.cs", SamplePluginSource.HelloWorld("HostRefused")) }))
+            .WithCompiler(new CachingCompiler(
+                new RoslynPluginCompiler(references),
+                fixture.CacheDir,
+                NullLogger<CachingCompiler>.Instance))
+            .WithInstantiator(new ReflectionPluginInstantiator())
+            .WithRegistrar(new SafePluginRegistrar(
+                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
+                NullLogger.Instance))
+            .WithOptions(o =>
+            {
+                o.PluginRoot = fixture.PluginsDir;
+                o.ContinueOnError = false;
+            })
+            .Build(NullLogger<PluginHost>.Instance);
+
+        var result = await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
+
+        await Assert.That(result.IsFailure).IsTrue()
+            .Because("the host refused the tool registration, so the plugin did not load. The load result "
+                   + "must say so instead of reporting a plugin that contributed nothing");
+    }
+
+    /// <summary>
+    ///     Test 6: #1758, the same refusal under ContinueOnError=true leaves the
+    ///     rest of the run alone, but the refused plugin is NOT in the loaded
+    ///     list. That list is what the caller reports to the user as "active".
+    /// </summary>
+    [Test]
+    public async Task Host_RefusedRegistration_ContinueOnError_OmitsThePlugin()
+    {
+        using var fixture = await PluginTestFixture.CreateAsync("host-refused-coe").ConfigureAwait(false);
+        Directory.CreateDirectory(fixture.CacheDir);
+
+        var host = new RefusingPluginLoadHost();
+        var references = new PluginAssemblyReferences(
+            NullLogger<PluginAssemblyReferences>.Instance);
+
+        var pluginHost = new PluginHostBuilder()
+            .WithSource(new InMemoryPluginSource(
+                new[] { new PluginScript("test.cs", SamplePluginSource.HelloWorld("HostRefusedCoe")) }))
+            .WithCompiler(new CachingCompiler(
+                new RoslynPluginCompiler(references),
+                fixture.CacheDir,
+                NullLogger<CachingCompiler>.Instance))
+            .WithInstantiator(new ReflectionPluginInstantiator())
+            .WithRegistrar(new SafePluginRegistrar(
+                new PluginRegistrar(fixture.PluginsDir, NullLogger<PluginRegistrar>.Instance, NullLoggerFactory.Instance),
+                NullLogger.Instance))
+            .WithOptions(o =>
+            {
+                o.PluginRoot = fixture.PluginsDir;
+                o.ContinueOnError = true;
+            })
+            .Build(NullLogger<PluginHost>.Instance);
+
+        var result = await pluginHost.LoadAllAsync(host).ConfigureAwait(false);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Count).IsEqualTo(0)
+            .Because("a plugin whose registration was refused did not load, so it must not appear in the "
+                   + "loaded list. The list is what the caller reports as 'plugin active'");
+    }
+
+    /// <summary>
     ///     Inline compiler that returns a fixed assembly — used by the builder-missing-source
     ///     test so we don't pay the Roslyn startup cost.
     /// </summary>

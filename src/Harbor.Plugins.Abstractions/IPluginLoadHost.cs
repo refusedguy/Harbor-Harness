@@ -74,7 +74,11 @@ public interface IPluginLoadHost
     ///     Register a tool instance contributed by a plugin.
     /// </summary>
     /// <param name="tool">The tool to register.</param>
-    /// <returns>Success, or failure with an error message (e.g. name collision).</returns>
+    /// <returns>
+    ///     <c>Success</c> when the tool is registered and observable through the host;
+    ///     <c>Failure</c> with a reason when it was NOT registered (e.g. a name
+    ///     collision, or a host that does not carry this door).
+    /// </returns>
     public Result RegisterTool(ITool tool);
 
     /// <summary>
@@ -83,14 +87,22 @@ public interface IPluginLoadHost
     /// </summary>
     /// <param name="providerId">The provider id to register under.</param>
     /// <param name="factory">Factory producing the <see cref="ILlmClient" />.</param>
-    /// <returns>Success, or failure with an error message.</returns>
+    /// <returns>
+    ///     <c>Success</c> when the provider is registered and observable through the
+    ///     host; <c>Failure</c> with a reason when it was NOT registered (e.g. a host
+    ///     that does not carry this door).
+    /// </returns>
     public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory);
 
     /// <summary>
     ///     Register an agent contributed by a plugin.
     /// </summary>
     /// <param name="agent">The agent definition to register.</param>
-    /// <returns>Success, or failure with an error message (e.g. name collision).</returns>
+    /// <returns>
+    ///     <c>Success</c> when the agent is registered and observable through the host;
+    ///     <c>Failure</c> with a reason when it was NOT registered (e.g. a name
+    ///     collision, or a host that does not carry this door).
+    /// </returns>
     public Result RegisterAgent(AgentDefinition agent);
 
     /// <summary>
@@ -98,7 +110,11 @@ public interface IPluginLoadHost
     ///     view-model registration until the TUI renderer is constructed.
     /// </summary>
     /// <param name="plugin">The TUI plugin to register.</param>
-    /// <returns>Success, or failure with an error message.</returns>
+    /// <returns>
+    ///     <c>Success</c> when the TUI plugin is registered and observable through the
+    ///     host; <c>Failure</c> with a reason when it was NOT registered (e.g. a host
+    ///     that does not carry this door).
+    /// </returns>
     public Result RegisterTuiPlugin(ITuiPlugin plugin);
 
     /// <summary>
@@ -107,7 +123,11 @@ public interface IPluginLoadHost
     ///     <c>PanelRegistry</c> picks it up when the TUI renderer starts.
     /// </summary>
     /// <param name="panel">The panel provider to register.</param>
-    /// <returns>Success, or failure with an error message (e.g. empty id, name collision).</returns>
+    /// <returns>
+    ///     <c>Success</c> when the panel provider is registered and observable through
+    ///     the host; <c>Failure</c> with a reason when it was NOT registered (e.g. an
+    ///     empty id, a name collision, or a host that does not carry this door).
+    /// </returns>
     public Result RegisterPanelProvider(IPanelProvider panel);
 
     /// <summary>
@@ -125,7 +145,11 @@ public interface IPluginLoadHost
     /// </remarks>
     /// <param name="backendId">Backend id, as spelled in <c>HARBOR_STORAGE</c>.</param>
     /// <param name="factory">Constructs the store.</param>
-    /// <returns>Success, or failure with an error message (e.g. empty id).</returns>
+    /// <returns>
+    ///     <c>Success</c> when the store is registered and selectable through the
+    ///     host; <c>Failure</c> with a reason when it was NOT registered (e.g. an empty
+    ///     id, a name collision, or a host that does not carry this door).
+    /// </returns>
     public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory);
 
     /// <summary>
@@ -143,6 +167,10 @@ public interface IPluginLoadHost
     /// <param name="backendId">Backend id, as spelled in <c>HARBOR_TUI</c>.</param>
     /// <param name="aliases">Optional legacy spellings resolved to <paramref name="backendId" />.</param>
     /// <param name="factory">Constructs the renderer; invoked when the backend is selected or swapped to.</param>
-    /// <returns>Success, or failure with an error message (e.g. empty id).</returns>
+    /// <returns>
+    ///     <c>Success</c> when the backend is registered and selectable through the
+    ///     host; <c>Failure</c> with a reason when it was NOT registered (e.g. an empty
+    ///     id, a name collision, or a host that does not carry this door).
+    /// </returns>
     public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory);
 }

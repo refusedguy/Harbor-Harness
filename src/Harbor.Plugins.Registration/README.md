@@ -14,7 +14,10 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
 
 ## Public API
 
-- `PluginRegistrar` — dispatches `IPlugin.Initialize` + `Register*` methods into `IPluginLoadHost`
+- `PluginRegistrar` — dispatches `IPlugin.Initialize` + `Register*` methods into `IPluginLoadHost`.
+  A door that REFUSES a registration fails the plugin's registration (#1758): the
+  registrar used to log the refusal and answer `Success`, so the caller could not
+  tell a fully-wired plugin from one whose provider/agent/panel/store was dropped.
 - `SafePluginRegistrar` — try/catch decorator over any `IPluginRegistrar` (one bad plugin doesn't kill the pipeline)
 - `PanelRegistryPluginAdapter` — internal adapter for `ITuiPanelPlugin` -> `IPluginLoadHost.RegisterPanelProvider`
 
