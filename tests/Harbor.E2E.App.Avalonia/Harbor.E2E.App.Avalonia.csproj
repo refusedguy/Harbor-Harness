@@ -5,14 +5,24 @@
     desktop app, with SCREENSHOT capture.
 
     Uses Avalonia.Headless (in-process off-screen renderer) to spin up the
-    actual App + MainWindow + full DI host (AppHost.BuildAsync) on the test
-    thread, drive it like a user would, and capture PNG screenshots of the
-    rendered window to ~/.harbor/test-screenshots/.
+    actual App + MainWindow + full DI host (AppHost.BuildAsync) on a
+    dedicated UI pump thread, drive it like a user would, and capture PNG
+    screenshots of the rendered window.
+
+    ONE PROCESS PER SHARD (#1790): the Avalonia Application, the $HOME the
+    driver sets and the Harbor home CommonConfig.OverrideHarborHomeForTests
+    pins are all process-wide, so two classes cannot drive one window in one
+    process. CI therefore runs this assembly once per shard of
+    `e2e-shards.json`, each with its own --treenode-filter; see
+    tools/run-e2e-avalonia-shards.py.
 
     Output:
-      * Test results (pass/fail per TUnit).
-      * PNGs at ~/.harbor/test-screenshots/01-main-window.png, etc.
-        Inspect these to SEE what the UI looks like without running the app.
+      * Test results (pass/fail per TUnit), one TRX per shard.
+      * PNGs. A local run writes them to docs/screenshots/ and
+        ~/.harbor/test-screenshots-comp-ct/; a sharded run writes them under
+        the shard's own directory (HARBOR_E2E_SHARD_DIR), so two processes
+        cannot delete each other's frames. Inspect these to SEE what the UI
+        looks like without running the app.
   -->
 
   <PropertyGroup>
