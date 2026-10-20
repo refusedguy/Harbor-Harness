@@ -105,7 +105,7 @@
 //
 // THE TEXT MATCHER IS THE PILOT'S ORACLE, NOT A RULE
 // --------------------------------------------------
-// `PilotRoslynAnalyzerTests` measures a Roslyn analyzer against a text rule: a
+// `Roslyn/ArchAnalyzerPromotionTests.cs` measures a Roslyn analyzer against a text rule: a
 // differential needs BOTH implementations, and a copy of the pattern would be a
 // second implementation rather than a comparison. That is why `Rule` below — the
 // matcher, its baseline and its controls — is still here after the enforcement

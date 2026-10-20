@@ -1,16 +1,16 @@
 // NamespaceOwnershipControlTests.cs — the non-vacuity controls for HARCH002,
-// the namespace-ownership analyzer in `Roslyn/HarborArchAnalyzers.cs`.
+// the namespace-ownership analyzer in `src/Harbor.Arch.Analyzers/`.
 //
 // WHY THIS FILE EXISTS
 // --------------------
-// The pilot's own control (`PilotRoslynAnalyzerTests`) plants a block-scoped
-// namespace in a project that does not own the root, and the same namespace in
-// a project that does. Three shapes the rule is written around are planted
-// nowhere:
+// The promoted rule's own control (`Roslyn/ArchAnalyzerPromotionTests.cs`) plants a
+// block-scoped namespace in a project that does not own the root, and the same
+// namespace in a project that does. Three shapes the rule is written around are
+// planted nowhere:
 //
 //   1. The FILE-SCOPED form, `namespace X;`, which is the form the
 //      repository's own source uses. A rule that recognised only the
-//      block-scoped form would pass the pilot's control and see nothing in the
+//      block-scoped form would pass the planted control and see nothing in the
 //      tree.
 //   2. The NESTED declaration, where the outer declaration is the violation
 //      and the inner one is part of it. The rule reports the outermost
@@ -30,16 +30,18 @@
 //
 // WHAT THIS FILE IS NOT
 // ---------------------
-// A gate over the live tree. The pilot's differential is that gate, and this
+// A gate over the live tree. The differential is that gate, and this
 // file does not repeat it.
 //
-// The rule under test is `Roslyn/HarborArchAnalyzers.cs`; the harness that
+// The rule under test is `src/Harbor.Arch.Analyzers/NamespaceOwnershipAnalyzer.cs`;
+// the harness that
 // gives it a compilation is `Roslyn/RoslynProjectCompilation.cs`. The controls
 // below drive the REAL analyzer over synthetic source, which is the only way
 // "it can fail" means anything.
 
 using System.Collections.Immutable;
 using System.Globalization;
+using Harbor.Arch.Analyzers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;

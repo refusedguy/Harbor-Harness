@@ -139,9 +139,9 @@
 // SEVERITY
 // --------
 // One id per rule, so `.editorconfig` can configure THIS rule without
-// touching its neighbours (the same reason the pilot's HARCH001/HARCH002 are
+// touching its neighbours (the same reason the promoted HARCH001/HARCH002 are
 // separate ids). The analyzer is not a build-time analyzer yet — it runs
-// IN-PROCESS from the architecture test suite, the way the pilot's do — so
+// IN-PROCESS from the architecture test suite, the way HARCH003 is — so
 // there is no `.editorconfig` row to add until promotion.
 
 using System.Collections.Immutable;
@@ -175,7 +175,7 @@ public sealed class UnguardedResultReadAnalyzer : DiagnosticAnalyzer
     /// <summary>The rule as the compiler sees it.</summary>
     /// <remarks>
     ///     The nine-argument constructor is used positionally, for the same
-    ///     reason as the pilot's descriptors (HARCH001/HARCH002): the argument
+    ///     reason as the promoted descriptors (HARCH001/HARCH002): the argument
     ///     NAMES of the descriptor's constructors are not part of the contract
     ///     this project can check. The order is (id, title, messageFormat,
     ///     category, defaultSeverity, isEnabledByDefault, description,

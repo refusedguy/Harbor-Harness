@@ -22,8 +22,9 @@
 //     spelling matcher flags it — a false positive on correct code, which is
 //     how a guard gets deleted — and the type does not.
 //
-// The house pattern for this class of rule is the Roslyn pilot (#1729,
-// `Roslyn/HarborArchAnalyzers.cs`): one diagnostic id per rule, a descriptor
+// The house pattern for this class of rule is the Roslyn pilot (#1729),
+// whose two rules now live in `src/Harbor.Arch.Analyzers/`: one diagnostic id
+// per rule, a descriptor
 // built POSITIONALLY (the argument names of `DiagnosticDescriptor`'s
 // constructors are not part of any contract this project can check, and a
 // named argument that turns out to be spelled differently is a build break in
@@ -94,7 +95,7 @@ public sealed class UnobservedTaskAnalyzer : DiagnosticAnalyzer
     /// <summary>The rule as the compiler sees it.</summary>
     /// <remarks>
     ///     The nine-argument constructor is used positionally on purpose, for
-    ///     the same reason as the pilot's descriptors: the argument NAMES of
+    ///     the same reason as the promoted descriptors: the argument NAMES of
     ///     the constructors are not part of a contract this project can
     ///     check. The order is (id, title, messageFormat, category,
     ///     defaultSeverity, isEnabledByDefault, description, helpLinkUri,

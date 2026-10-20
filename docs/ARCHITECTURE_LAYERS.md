@@ -1086,7 +1086,7 @@ the product tree is not).
 
 **What is left of the text rule, and why.** The matcher, its baseline and its ten planted
 controls survive in `ReflectionConventionRule.Rule` — as the **oracle of the #1729 pilot**
-(`PilotRoslynAnalyzerTests`), which measures a Roslyn analyzer against a text rule and
+(`Roslyn/ArchAnalyzerPromotionTests.cs`), which measures a Roslyn analyzer against a text rule and
 therefore needs both implementations. It gates nothing: the compiler decides, on every
 build, for every product project, and it decides on the SYMBOL rather than on the
 spelling. The two tests that keep the oracle honest
