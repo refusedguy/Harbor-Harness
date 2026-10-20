@@ -7,6 +7,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Hosting;
 using Harbor.Terminal.Abstractions;
 using Harbor.Terminal.Abstractions.Plugins;
 using Harbor.Ui.Framework.Panels;
@@ -33,6 +34,16 @@ namespace Harbor.Plugins.Host;
 ///         The refusal is ANSWERED, never thrown, so a plugin's <c>Initialize</c>
 ///         still does not fail over an axis this route does not carry — the
 ///         registration is reported as refused and the plugin load continues.
+///     </para>
+///     <para>
+///         WHICH axis this route carries, and WHY the others do not cross its
+///         process boundary, is declared once in
+///         <c>PluginRouteAxisRegistry</c>
+///         (src/Harbor.Plugins.Hosting/PluginRouteAxisRegistry.cs) — and the
+///         refusal messages are BUILT from that declaration, so the reason a
+///         plugin author reads is the reason the product declares (#1723). The
+///         verdict per axis is not repeated here: a second copy is a second
+///         thing to drift.
 ///     </para>
 /// </remarks>
 internal sealed class McpPluginLoadHost : IPluginLoadHost
@@ -62,48 +73,61 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
     public Result RegisterProvider(ProviderId providerId, Func<ILlmClient> factory)
     {
         McpPluginLoadHostLog.ProviderRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), providerId);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; provider '{providerId}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterProvider),
+            providerId.Value));
     }
 
     public Result RegisterAgent(AgentDefinition agent)
     {
         McpPluginLoadHostLog.AgentRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), agent.Name);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; agent '{agent.Name}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterAgent),
+            agent.Name.Value));
     }
 
     public Result RegisterTuiPlugin(ITuiPlugin plugin)
     {
         McpPluginLoadHostLog.TuiRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), plugin.Name);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; TUI plugin '{plugin.Name}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterTuiPlugin),
+            plugin.Name));
     }
 
     public Result RegisterPanelProvider(IPanelProvider panel)
     {
         McpPluginLoadHostLog.PanelRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), panel.Id);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; panel '{panel.Id}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterPanelProvider),
+            panel.Id));
     }
 
     // #581: the MCP stdio server exposes tools only. These two doors exist so the
     // interface stays uniformly implementable — an MCP-hosted plugin calling them
     // gets a loud "not exposed" log and an explicit refusal instead of a compile
     // error against a sealed seam, and instead of a Success that registered
-    // nothing (#1758).
+    // nothing (#1758). The reason each door gives is the one the route declares
+    // in PluginRouteAxisRegistry (#1723).
     public Result RegisterSessionStore(string backendId, Func<ISessionStore> factory)
     {
         McpPluginLoadHostLog.SessionStoreRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; session store '{backendId}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterSessionStore),
+            backendId));
     }
 
     public Result RegisterTuiBackend(string backendId, IReadOnlyList<string>? aliases, Func<ITuiRenderer> factory)
     {
         McpPluginLoadHostLog.TuiBackendRefused(LoggerFactory.CreateLogger<McpPluginLoadHost>(), backendId);
-        return Result.Failure(
-            $"The out-of-process plugin host exposes tools only; TUI backend '{backendId}' was not registered.");
+        return Result.Failure(PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterTuiBackend),
+            backendId));
     }
 }
 

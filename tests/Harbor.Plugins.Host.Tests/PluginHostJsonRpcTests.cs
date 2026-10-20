@@ -206,6 +206,12 @@ public class PluginHostJsonRpcTests
     ///     reason instead of accepting a registration it never performed (#1758),
     ///     and nothing but tools reaches <c>tools/list</c>.
     /// </summary>
+    /// <remarks>
+    ///     The REASON each refusal gives is the one the product declares
+    ///     (<c>PluginRouteAxisRegistry</c>, #1723) — the carriage suite in
+    ///     <c>PluginRouteAxisCarriageTests</c> pins that; here the verdict and
+    ///     the axis name are what matters.
+    /// </remarks>
     [Test]
     public async Task NonToolRegistrations_RefusedWithAReason_AndNeverExposedOverMcp()
     {
@@ -216,27 +222,27 @@ public class PluginHostJsonRpcTests
 
         var provider = loadHost.RegisterProvider(providerId.Value, () => null!);
         await Assert.That(provider.IsSuccess).IsFalse();
-        await Assert.That(provider.Error).Contains("tools only");
+        await Assert.That(provider.Error).Contains("IProviderPlugin");
 
         var agent = loadHost.RegisterAgent(AgentDefinition.CodeDefault("probe-model", "probe-provider"));
         await Assert.That(agent.IsSuccess).IsFalse();
-        await Assert.That(agent.Error).Contains("tools only");
+        await Assert.That(agent.Error).Contains("IAgentPlugin");
 
         var tui = loadHost.RegisterTuiPlugin(new ProbeTuiPlugin());
         await Assert.That(tui.IsSuccess).IsFalse();
-        await Assert.That(tui.Error).Contains("tools only");
+        await Assert.That(tui.Error).Contains("ITuiPlugin");
 
         var panel = loadHost.RegisterPanelProvider(new ProbePanel());
         await Assert.That(panel.IsSuccess).IsFalse();
-        await Assert.That(panel.Error).Contains("tools only");
+        await Assert.That(panel.Error).Contains("ITuiPanelPlugin");
 
         var store = loadHost.RegisterSessionStore("s3store", () => null!);
         await Assert.That(store.IsSuccess).IsFalse();
-        await Assert.That(store.Error).Contains("tools only");
+        await Assert.That(store.Error).Contains("ISessionStorePlugin");
 
         var backend = loadHost.RegisterTuiBackend("s3backend", null, () => null!);
         await Assert.That(backend.IsSuccess).IsFalse();
-        await Assert.That(backend.Error).Contains("tools only");
+        await Assert.That(backend.Error).Contains("ITuiBackendPlugin");
 
         var server = CreateServer(loadHost);
         using var doc = await CallAsync(server, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""");
