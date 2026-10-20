@@ -31,7 +31,7 @@ internal static class ToolOutputCollapse
     {
         output ??= string.Empty;
         int totalLines = CountLines(output);
-        if (totalLines <= maxLines && CountRunes(output) <= maxChars)
+        if (!IsOverflow(output, maxLines, maxChars))
         {
             return new CollapseResult(output, Overflow: false);
         }
@@ -57,14 +57,55 @@ internal static class ToolOutputCollapse
         return new CollapseResult(head, Overflow: true);
     }
 
+    /// <summary>
+    /// The overflow predicate of <see cref="Collapse" />, on a span: true when
+    /// the output busts the line budget OR the char budget.
+    /// </summary>
+    /// <remarks>
+    /// #1139: the paint/measure path asked <see cref="Collapse" /> for its
+    /// <c>Overflow</c> flag and threw the preview away — but reaching the flag
+    /// meant handing the method a <see cref="string" />, and the callers were
+    /// trimming the tool output into a fresh copy of the WHOLE body first (the
+    /// output of a <c>bash</c> card is routinely tens of kilobytes, and the
+    /// card is re-measured and re-painted on every frame). This predicate
+    /// answers the same question over a span: nothing is copied, nothing is
+    /// materialized, and the flag is exactly the one <see cref="Collapse" />
+    /// reports — <c>Collapse</c> itself defers to this method, so the two can
+    /// never disagree.
+    /// </remarks>
+    internal static bool IsOverflow(ReadOnlySpan<char> output, int maxLines, int maxChars)
+    {
+        int totalLines = CountLines(output);
+        return totalLines > maxLines || CountRunes(output) > maxChars;
+    }
+
     /// <summary>Tail collapse for shell output: label + last lines.</summary>
     public static string CollapseTail(string output, int maxLines, int maxChars)
     {
         output ??= string.Empty;
+        return CollapseTailCore(output.AsSpan(), maxLines, maxChars, output);
+    }
+
+    /// <summary>
+    /// Tail collapse over a span: the tail is materialized, the rest of the
+    /// output never is (#1139).
+    /// </summary>
+    /// <remarks>
+    /// The string overload hands the whole output in and gets the whole output
+    /// back when it fits — no copy. The span overload cannot do that, so it
+    /// materializes only what it returns: the label, the visible tail lines and
+    /// the rune-capped tail. Everything past the tail is never touched, which
+    /// is the whole point of the paint path calling it.
+    /// </remarks>
+    internal static string CollapseTail(ReadOnlySpan<char> output, int maxLines, int maxChars)
+        => CollapseTailCore(output, maxLines, maxChars, whole: null);
+
+    private static string CollapseTailCore(ReadOnlySpan<char> output, int maxLines, int maxChars, string? whole)
+    {
         int totalLines = CountLines(output);
         if (totalLines <= maxLines && CountRunes(output) <= maxChars)
         {
-            return output;
+            return whole ?? output.ToString();
         }
 
         int count = Math.Max(1, totalLines - Math.Max(0, maxLines - 1));
@@ -76,26 +117,25 @@ internal static class ToolOutputCollapse
 
         int keep = Math.Min(maxLines - 1, totalLines);
         // Last `keep` lines re-joined by '\n' == the suffix starting at that line.
-        string tail = keep >= totalLines ? output : output[LineStart(output, totalLines - keep)..];
+        ReadOnlySpan<char> tail = keep >= totalLines ? output : output[LineStart(output, totalLines - keep)..];
         int available = maxChars - CountRunes(label) - 1;
         if (available <= 0)
         {
             return label;
         }
 
-        string tailRunes = tail;
-        int tailCount = CountRunes(tail);
-        if (tailCount > available)
+        ReadOnlySpan<char> tailRunes = tail;
+        if (CountRunes(tail) > available)
         {
             tailRunes = TakeLastRunes(tail, available);
         }
 
-        return label + "\n" + tailRunes;
+        return string.Concat(label, "\n", tailRunes.ToString());
     }
 
     /// <summary><c>Split('\n').Length</c> without the array: every '\n'
     /// starts a new line, so even <c>""</c> is one line.</summary>
-    private static int CountLines(string text)
+    private static int CountLines(ReadOnlySpan<char> text)
     {
         int lines = 1;
         for (int i = 0; i < text.Length; i++)
@@ -112,7 +152,7 @@ internal static class ToolOutputCollapse
     /// <summary>Index of the take-th <c>'\n'</c> (end of the <c>take</c>-line
     /// head prefix). Call only when <c>take</c> is strictly below the line
     /// count, so the terminator exists.</summary>
-    private static int TakeEnd(string text, int take)
+    private static int TakeEnd(ReadOnlySpan<char> text, int take)
     {
         int seen = 0;
         for (int i = 0; i < text.Length; i++)
@@ -133,7 +173,7 @@ internal static class ToolOutputCollapse
     /// <summary>Start offset of 0-based line <paramref name="index"/>
     /// (just past the <c>index</c>-th <c>'\n'</c>). Call only with
     /// <c>0 &lt; index &lt; lines</c>.</summary>
-    private static int LineStart(string text, int index)
+    private static int LineStart(ReadOnlySpan<char> text, int index)
     {
         int seen = 0;
         for (int i = 0; i < text.Length; i++)
@@ -252,7 +292,7 @@ internal static class ToolOutputCollapse
         return new CommandCollapse(text + "…", Overflow: true, lines);
     }
 
-    internal static int CountRunes(string text)
+    internal static int CountRunes(ReadOnlySpan<char> text)
     {
         int count = 0;
         int i = 0;
@@ -299,11 +339,11 @@ internal static class ToolOutputCollapse
         return text[..i];
     }
 
-    private static string TakeLastRunes(string text, int maxRunes)
+    private static ReadOnlySpan<char> TakeLastRunes(ReadOnlySpan<char> text, int maxRunes)
     {
         if (maxRunes <= 0)
         {
-            return string.Empty;
+            return ReadOnlySpan<char>.Empty;
         }
 
         int count = 0;
