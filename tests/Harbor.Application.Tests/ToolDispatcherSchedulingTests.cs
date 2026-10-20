@@ -49,13 +49,13 @@ public class ToolDispatcherSchedulingTests
     private static ToolDispatcher NewDispatcher(
         IToolRegistry registry,
         IPermissionService permissions,
-        int? maxParallelToolCalls = null) =>
+        int? cap = null) =>
         new(
             registry,
             permissions,
             new FakeEventBus(),
             NullLogger<ToolDispatcher>.Instance,
-            maxParallelToolCalls: maxParallelToolCalls);
+            maxParallelToolCalls: cap);
 
     private static IPermissionService AllowAll() =>
         new PermissionService(
