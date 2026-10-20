@@ -1074,6 +1074,45 @@ across a thread hop is the difference between two unrelated counters (#741);
 the keyless attribute is the only form that actually delivers "nothing else in
 this assembly allocates while the window is open".
 
+### Per-event string shredding — the TUI event path (#1139) — **PER-UNIT BUDGET**, CI merge gate
+
+`Harbor.Tui.CellForge.Tests.EventStringShreddingGates`, in the `test (ui)` merge-gate shard.
+
+The slice (issue #1139, slice 3 — slices 1 and 2 landed via #1134 and #1143): the
+CellForge event path copied whole strings where a span would do, and the copies
+were paid per event and per frame.
+
+| Site | The copy | Paid |
+|---|---|---|
+| `ToolCardTracker.EnsureCard(JsonElement)` | the args JSON (`GetRawText`) plus the summary, shaped for a card that ALREADY EXISTS — the LLM's `ToolCallStart` opens the card first and the string overload discards the shaped args | per tool call |
+| `ToolCallBlock` measure + paint | `Output.TrimEnd('\n')` — a fresh copy of the WHOLE tool body, three times per frame (a command's stdout always ends with a newline, so the trim always copies) | per frame, per card |
+| `HunkVirtualizer.SplitPatchHunks` | `Replace("\r\n")` + `Replace('\r')` over the whole patch body, a `string[]` of the lines, and a `Replace("\t", "  ")` per line — four copies of the body | per frame, per change |
+
+**The gate is a BUDGET PER UNIT OF WORK (#1747), not a ratio.** A byte budget is
+machine-independent and is compared as measured, with no band; the time budget is
+in **probe units** — the cost of one unit of work divided by the cost of one unit
+of the fixed calibration probe measured on the SAME runner in the SAME run — so the
+runner's speed cancels. The time branch asserts only when the measurement is
+trusted (reproducible spread, long enough leg); otherwise it reports and stands
+down.
+
+| Test | Unit of work | Gate | Measured BEFORE (run 39390539021) |
+|---|---|---|---|
+| `ToolStart_On_An_Open_Card_CostsWithinBudget` | one tool-start event on a card the LLM already opened | ≤ **8 B** per event (HARD) + ≤ 1.0 probe units (SOFT) | **104.0 B** per event, **0.5** probe units (0.0002 ms/unit, trusted) |
+| `ToolCardFrame_CostsWithinBudget` | one painted frame of a timeline carrying a 64 KiB tool card | ≤ **4 KiB** per frame (HARD) + ≤ 700 probe units (SOFT) | **131 144 B** per frame (two copies of the body), **339.1** probe units (0.1290 ms/unit) |
+| `PatchSplit_CostsWithinBudget` | one split of a 1000-line CRLF patch with tabbed lines | ≤ **128 KiB** per split (HARD) + ≤ 1400 probe units (SOFT) | **175 248 B** per split, **682.7** probe units (0.2580 ms/unit) |
+
+The BEFORE column is the run of the **gate-only commit** (the first commit of
+PR #1910): the gate landed before the fix on purpose, because a budget pinned
+from a tree that still shreds strings says nothing about the fix. Every budget
+above sits below that measured cost — so the pre-slice shape fails the gate — and
+above what the slice leaves behind.
+
+> The `[perf-gate] tool-start-event-cost: measured …` report lines print into
+> the `test (ui)` job log on every run, and `tools/test-measurements.py` lifts
+> them into the job summary (#618) — cite THAT run's values when filling a
+> Measured column, never local absolute milliseconds.
+
 ### Perf-gate inventory (#1747) — every gate, one verdict
 
 The discipline #1747 asks for, in one table: **measure → report → assert
@@ -1104,6 +1143,7 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Storage.Jsonl.Tests.JsonlAllocationBudgetTests` | absolute bytes | ≤ 8 KB/line, ≤ 512 KB/read | **keep** — a byte budget is already machine-independent and already per unit of work |
 | `Harbor.Registries.Tests.EventBusAllocationTests` / `ToolRegistryAllocationTests` (file `AllocationBudgetTests.cs`) | absolute bytes | 0 B on the fast paths, ≤ 1–2 KB/publish on the fan-out | **keep** — same |
 | `Harbor.Tui.CellForge.Tests.AllocationBudgetTests` | absolute bytes | 0 B per event | **keep** — same |
+| `Harbor.Tui.CellForge.Tests.EventStringShreddingGates` | absolute bytes + probe units | ≤ 8 B per tool-start event, ≤ 4 KiB per painted frame, ≤ 128 KiB per patch split; the time branch in probe units | **keep** — a per-unit byte budget with a probe-unit time budget, added by #1139 for the TUI event path |
 | `Harbor.Tui.CellForge.Tests.PerfBudgetTests` | absolute bytes, time reported | 0 B per frame; frame time printed, never gated (#996) | **keep** — the model of the discipline |
 | `Harbor.Ui.Framework.Tests.StoreDispatchAllocTests` | differential bytes | per-dispatch cost of the store, measured against a bare store | **keep** — machine-independent and per unit of work |
 | `Harbor.Application.Tests.AgentLoopAllocationTests` | absolute bytes | ≤ 512 KB / ≤ 2560 KB per turn, each with a `≥ 0` floor (#741) | **keep** — same |
