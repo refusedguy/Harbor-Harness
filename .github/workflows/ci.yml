@@ -307,6 +307,83 @@ jobs:
       - name: Check the resolved package set of every test and sample project
         run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
 
+  test-sdk-absent:
+    name: no VSTest SDK in the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019), and the gate excludes contrib/external/ anyway.
+      - uses: actions/checkout@v7
+      - name: No-VSTest-SDK gate fails on an injected reference
+        run: python3 tools/check-no-test-sdk.py --self-test
+      - name: Check that no project file declares Microsoft.NET.Test.Sdk
+        run: python3 tools/check-no-test-sdk.py --min-files 150
+
+  reference-trimmer:
+    name: unused references (ReferenceTrimmer)
+    needs: changes
+    if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # No `submodules: recursive`: the vendored ConsoleEx submodule left the
+      # product (ADR-019); nothing in this workflow builds contrib/external/.
+      - uses: actions/checkout@v7
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+      # The restore has to run with the property too: the package has to be in
+      # the assets file before the compiler can load the analyzer, and a
+      # restore without the property would write an assets file the build
+      # then does not agree with.
+      - name: Restore the solution with the ReferenceTrimmer analyzer
+        run: dotnet restore Harbor.slnx -p:HarborReferenceTrimmer=true
+      - name: Build the solution and collect the analyzer's findings
+        run: |
+          dotnet build Harbor.slnx -c Release --no-restore \
+            -p:HarborReferenceTrimmer=true \
+            -p:TreatWarningsAsErrors=false \
+            -p:GenerateDocumentationFile=true \
+            -p:HarborArchGate=false \
+            -p:MaxCpuCount=0 \
+            -flp:"logfile=rt-warnings.log;warningsonly" \
+            -flp2:"logfile=rt-errors.log;errorsonly"
+      # The coverage list is the answer to "how many projects did the analyzer
+      # actually run in". The analyzer writes its declared-reference table
+      # into each project's intermediate directory, so the table's own file
+      # names are the evidence — and the gate checks the count against a
+      # floor, because a scan that silently narrowed must go red, not quiet.
+      - name: Coverage — the projects the analyzer actually ran in
+        run: |
+          find . -name '_ReferenceTrimmer_DeclaredReferences.tsv' \
+                   -not -path './.git/*' -not -path './external/*' \
+            | sed 's|/obj/.*||' | sed 's|^\./||' | sort -u > rt-coverage.txt
+          echo "the analyzer ran in $(wc -l < rt-coverage.txt) project(s)"
+      - name: Upload the findings artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reference-trimmer-findings
+          path: |
+            rt-warnings.log
+            rt-coverage.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: The gate is red when the tool is not allowed to answer
+        if: always()
+        run: python3 tools/check-reference-trimmer.py --self-test
+      - name: Gate — no unused reference outside the baseline
+        if: always()
+        run: python3 tools/check-reference-trimmer.py --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
+
   build:
     needs: changes
     if: (needs.changes.outputs.dotnet == 'true' || github.event_name == 'workflow_dispatch') && github.actor != 'dependabot[bot]'
