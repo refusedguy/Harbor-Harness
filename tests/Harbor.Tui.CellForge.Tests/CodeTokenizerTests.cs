@@ -22,70 +22,24 @@ public class CodeTokenizerTests
         await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.KeywordStyle);
     }
 
+    // #1770: the language groups used to be one copy-pasted method each. The
+    // assert never changed — only the (code, language, keyword) triple did.
+    // Every row keeps its original test name as the case display name.
     [Test]
-    public async Task CSharp_Keyword_Highlighted()
+    [Arguments("class Foo {}", "csharp", "class", DisplayName = "CSharp_Keyword_Highlighted")]
+    [Arguments("namespace Harbor {}", "cs", "namespace", DisplayName = "CSharp_Alias_Cs_Highlighted")]
+    [Arguments("function f() {}", "js", "function", DisplayName = "Js_Keyword_Highlighted")]
+    [Arguments("interface I {}", "typescript", "interface", DisplayName = "Ts_Alias_Keyword_Highlighted")]
+    [Arguments("def f():", "python", "def", DisplayName = "Python_Keyword_Highlighted")]
+    [Arguments("None", "py", "None", DisplayName = "Python_Alias_Py_Highlighted")]
+    [Arguments("func main() {}", "go", "func", DisplayName = "Go_Keyword_Highlighted")]
+    [Arguments("fn main() {}", "rust", "fn", DisplayName = "Rust_Keyword_Highlighted")]
+    [Arguments("let x = 1;", "rs", "let", DisplayName = "Rust_Alias_Rs_Highlighted")]
+    [Arguments("SELECT a FROM t", "sql", "SELECT", DisplayName = "Sql_Keyword_Highlighted")]
+    [Arguments("select a from t", "sql", "select", DisplayName = "Sql_Lowercase_Keyword_Highlighted")]
+    public async Task Keyword_IsHighlighted(string code, string language, string keyword)
     {
-        await AssertFirstKeyword("class Foo {}", "csharp", "class");
-    }
-
-    [Test]
-    public async Task CSharp_Alias_Cs_Highlighted()
-    {
-        await AssertFirstKeyword("namespace Harbor {}", "cs", "namespace");
-    }
-
-    [Test]
-    public async Task Js_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("function f() {}", "js", "function");
-    }
-
-    [Test]
-    public async Task Ts_Alias_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("interface I {}", "typescript", "interface");
-    }
-
-    [Test]
-    public async Task Python_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("def f():", "python", "def");
-    }
-
-    [Test]
-    public async Task Python_Alias_Py_Highlighted()
-    {
-        await AssertFirstKeyword("None", "py", "None");
-    }
-
-    [Test]
-    public async Task Go_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("func main() {}", "go", "func");
-    }
-
-    [Test]
-    public async Task Rust_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("fn main() {}", "rust", "fn");
-    }
-
-    [Test]
-    public async Task Rust_Alias_Rs_Highlighted()
-    {
-        await AssertFirstKeyword("let x = 1;", "rs", "let");
-    }
-
-    [Test]
-    public async Task Sql_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("SELECT a FROM t", "sql", "SELECT");
-    }
-
-    [Test]
-    public async Task Sql_Lowercase_Keyword_Highlighted()
-    {
-        await AssertFirstKeyword("select a from t", "sql", "select");
+        await AssertFirstKeyword(code, language, keyword);
     }
 
     [Test]
@@ -97,20 +51,51 @@ public class CodeTokenizerTests
         await Assert.That(spans[0].Style).IsEqualTo(CellStyle.Plain);
     }
 
+    // #1770: the "one span, one style" families used to be one method per
+    // input. One table per style keeps the expected style a literal in the
+    // assert — a table per style is one behaviour, and the row says which
+    // input it is.
     [Test]
-    public async Task UnknownLanguage_NoKeywords()
+    [Arguments("class x", "brainfuck", DisplayName = "UnknownLanguage_NoKeywords")]
+    [Arguments("class x", null, DisplayName = "NullLanguage_NoKeywords")]
+    [Arguments("abc123", "csharp", DisplayName = "DigitMidWord_StaysPlain")]
+    public async Task SingleSpan_HasPlainStyle(string code, string? language)
     {
-        var spans = CodeTokenizer.Tokenize("class x", "brainfuck");
+        var spans = CodeTokenizer.Tokenize(code, language);
         await Assert.That(spans.Count).IsEqualTo(1);
         await Assert.That(spans[0].Style).IsEqualTo(CellStyle.Plain);
     }
 
     [Test]
-    public async Task NullLanguage_NoKeywords()
+    [Arguments("'it'", "python", DisplayName = "SingleQuoted_String_Highlighted")]
+    [Arguments("`tmpl`", "js", DisplayName = "Backtick_String_Highlighted")]
+    public async Task SingleSpan_HasStringStyle(string code, string? language)
     {
-        var spans = CodeTokenizer.Tokenize("class x", null);
+        var spans = CodeTokenizer.Tokenize(code, language);
         await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CellStyle.Plain);
+        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.StringStyle);
+    }
+
+    [Test]
+    [Arguments("// hello", "csharp", DisplayName = "SlashSlash_Comment_Highlighted")]
+    [Arguments("# hello", "python", DisplayName = "Hash_Comment_Highlighted")]
+    [Arguments("/* hi */", "go", DisplayName = "Block_Comment_Highlighted")]
+    public async Task SingleSpan_HasCommentStyle(string code, string? language)
+    {
+        var spans = CodeTokenizer.Tokenize(code, language);
+        await Assert.That(spans.Count).IsEqualTo(1);
+        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.CommentStyle);
+    }
+
+    [Test]
+    [Arguments("42", "csharp", DisplayName = "Integer_Highlighted")]
+    [Arguments("3.14", "python", DisplayName = "Float_Highlighted")]
+    [Arguments("0xFF", "rust", DisplayName = "Hex_Highlighted")]
+    public async Task SingleSpan_HasNumberStyle(string code, string? language)
+    {
+        var spans = CodeTokenizer.Tokenize(code, language);
+        await Assert.That(spans.Count).IsEqualTo(1);
+        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.NumberStyle);
     }
 
     [Test]
@@ -123,52 +108,12 @@ public class CodeTokenizerTests
     }
 
     [Test]
-    public async Task SingleQuoted_String_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("'it'", "python");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.StringStyle);
-    }
-
-    [Test]
-    public async Task Backtick_String_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("`tmpl`", "js");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.StringStyle);
-    }
-
-    [Test]
     public async Task EscapedQuote_StaysOneStringSpan()
     {
         var spans = CodeTokenizer.Tokenize("\"a\\\"b\"", "csharp");
         await Assert.That(spans.Count).IsEqualTo(1);
         await Assert.That(spans[0].Text).IsEqualTo("\"a\\\"b\"");
         await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.StringStyle);
-    }
-
-    [Test]
-    public async Task SlashSlash_Comment_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("// hello", "csharp");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.CommentStyle);
-    }
-
-    [Test]
-    public async Task Hash_Comment_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("# hello", "python");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.CommentStyle);
-    }
-
-    [Test]
-    public async Task Block_Comment_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("/* hi */", "go");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.CommentStyle);
     }
 
     [Test]
@@ -193,38 +138,6 @@ public class CodeTokenizerTests
         await Assert.That(inBlock).IsFalse();
         await Assert.That(second[0].Text).IsEqualTo("still comment */");
         await Assert.That(second[0].Style).IsEqualTo(CodeTokenizer.CommentStyle);
-    }
-
-    [Test]
-    public async Task Integer_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("42", "csharp");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.NumberStyle);
-    }
-
-    [Test]
-    public async Task Float_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("3.14", "python");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.NumberStyle);
-    }
-
-    [Test]
-    public async Task Hex_Highlighted()
-    {
-        var spans = CodeTokenizer.Tokenize("0xFF", "rust");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CodeTokenizer.NumberStyle);
-    }
-
-    [Test]
-    public async Task DigitMidWord_StaysPlain()
-    {
-        var spans = CodeTokenizer.Tokenize("abc123", "csharp");
-        await Assert.That(spans.Count).IsEqualTo(1);
-        await Assert.That(spans[0].Style).IsEqualTo(CellStyle.Plain);
     }
 
     [Test]

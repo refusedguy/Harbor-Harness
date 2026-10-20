@@ -205,38 +205,21 @@ public class GenericGalleryGoldenTests
         }
     }
 
+    // #1770: the scripted-free gallery goldens used to be one copy-pasted
+    // method each. The assert never changed — only the entry name did. Every
+    // row keeps its original test name as the case display name. The scripted
+    // entries keep their own methods: a script is not an attribute constant.
     [Test]
-    public async Task SingleStatic_Golden()
+    [Arguments("single-static", DisplayName = "SingleStatic_Golden")]
+    [Arguments("two-pane-stack", DisplayName = "TwoPaneStack_Golden")]
+    [Arguments("two-pane-side", DisplayName = "TwoPaneSide_Golden")]
+    [Arguments("field-empty", DisplayName = "FieldEmpty_Golden")]
+    [Arguments("field-filled", DisplayName = "FieldFilled_Golden")]
+    [Arguments("list-basic", DisplayName = "ListBasic_Golden")]
+    [Arguments("three-pane", DisplayName = "ThreePane_Golden")]
+    public async Task GalleryEntry_Golden(string entryName)
     {
-        Verify(Entry("single-static"));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task TwoPaneStack_Golden()
-    {
-        Verify(Entry("two-pane-stack"));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task TwoPaneSide_Golden()
-    {
-        Verify(Entry("two-pane-side"));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task FieldEmpty_Golden()
-    {
-        Verify(Entry("field-empty"));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task FieldFilled_Golden()
-    {
-        Verify(Entry("field-filled"));
+        Verify(Entry(entryName));
         await Task.CompletedTask;
     }
 
@@ -245,13 +228,6 @@ public class GenericGalleryGoldenTests
     {
         // Scripted proof: virtual typing reaches the hosted field.
         Verify(Entry("field-typed"), input => input.SendText("hi"));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task ListBasic_Golden()
-    {
-        Verify(Entry("list-basic"));
         await Task.CompletedTask;
     }
 
@@ -272,13 +248,6 @@ public class GenericGalleryGoldenTests
     {
         // Scripted proof: virtual Tab moves the focus marker across panes.
         Verify(Entry("focus-cycle"), input => input.SendSimple(EngineInput.KeyCode.Tab));
-        await Task.CompletedTask;
-    }
-
-    [Test]
-    public async Task ThreePane_Golden()
-    {
-        Verify(Entry("three-pane"));
         await Task.CompletedTask;
     }
 }

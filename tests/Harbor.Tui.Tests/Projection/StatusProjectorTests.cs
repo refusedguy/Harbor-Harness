@@ -26,34 +26,20 @@ public class StatusProjectorTests
         await Assert.That(model.Segments.Any(s => s.Text.Contains("↑"))).IsFalse();
     }
 
+    // #1770: the status-glyph vectors used to be one copy-pasted method each.
+    // The assert never changed — only the (status, glyph, style) triple did.
+    // Every row keeps its original test name as the case display name.
     [Test]
-    public async Task ProjectStatusBar_RunningState_GlyphIsAccent()
+    [Arguments("running", "▌", UiSpanStyle.Accent, DisplayName = "ProjectStatusBar_RunningState_GlyphIsAccent")]
+    [Arguments("error", "✗", UiSpanStyle.Danger, DisplayName = "ProjectStatusBar_ErrorState_GlyphIsDanger")]
+    [Arguments("compacting", "◐", UiSpanStyle.Default, DisplayName = "ProjectStatusBar_CompactingState_GlyphIsDefault")]
+    public async Task ProjectStatusBar_StatusGlyph_UsesTheStatusStyle(string status, string glyph, UiSpanStyle expected)
     {
-        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "running" } };
+        var state = new UiState { Chat = ChatDomainState.Empty with { Status = status } };
         var model = StatusProjector.ProjectStatusBar(state);
 
-        var statusSegment = model.Segments.First(s => s.Text.StartsWith("▌"));
-        await Assert.That(statusSegment.Style).IsEqualTo(UiSpanStyle.Accent);
-    }
-
-    [Test]
-    public async Task ProjectStatusBar_ErrorState_GlyphIsDanger()
-    {
-        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "error" } };
-        var model = StatusProjector.ProjectStatusBar(state);
-
-        var statusSegment = model.Segments.First(s => s.Text.StartsWith("✗"));
-        await Assert.That(statusSegment.Style).IsEqualTo(UiSpanStyle.Danger);
-    }
-
-    [Test]
-    public async Task ProjectStatusBar_CompactingState_GlyphIsDefault()
-    {
-        var state = new UiState { Chat = ChatDomainState.Empty with { Status = "compacting" } };
-        var model = StatusProjector.ProjectStatusBar(state);
-
-        var statusSegment = model.Segments.First(s => s.Text.StartsWith("◐"));
-        await Assert.That(statusSegment.Style).IsEqualTo(UiSpanStyle.Default);
+        var statusSegment = model.Segments.First(s => s.Text.StartsWith(glyph));
+        await Assert.That(statusSegment.Style).IsEqualTo(expected);
     }
 
     [Test]

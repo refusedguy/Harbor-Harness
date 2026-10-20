@@ -14,6 +14,15 @@ namespace Harbor.Domain.Tests;
 /// </summary>
 public class JsonElementFormatterTests
 {
+    // #1770: the round-trip vectors used to be one copy-pasted method each.
+    // The assert never changed, only the (id, tool, args) triple did. Every
+    // row keeps its original test name as the case display name. The payloads
+    // are const fields so the rows stay raw-JSON literals.
+    private const string ObjectArgs = """{"path":"README.md","limit":10}""";
+    private const string EmptyObjectArgs = """{}""";
+    private const string NestedArgs = """{"items":[1,"two",{"three":true}],"n":1.5,"z":null}""";
+    private const string UnicodeArgs = """{"text":"héllo"}""";
+
     private static ToolCallPart PartWithArgs(string id, string tool, string argsJson)
     {
         // Clone detaches from the pooled document (see #87.2); the part owns
@@ -52,35 +61,16 @@ public class JsonElementFormatterTests
         await Assert.That(MemoryPackFormatterProvider.IsRegistered<JsonElement>()).IsTrue();
     }
 
+    // #1770: the round-trip vectors used to be one copy-pasted method each.
+    // The assert never changed, only the (id, tool, args) triple did. Every
+    // row keeps its original test name as the case display name.
     [Test]
-    public async Task RoundTrip_ObjectArgs_PreservesRawJson()
+    [Arguments("tc1", "read", ObjectArgs, DisplayName = "RoundTrip_ObjectArgs_PreservesRawJson")]
+    [Arguments("tc2", "bash", EmptyObjectArgs, DisplayName = "RoundTrip_EmptyObjectArgs_PreservesRawJson")]
+    [Arguments("tc3", "write", NestedArgs, DisplayName = "RoundTrip_NestedArgs_PreservesRawJson")]
+    [Arguments("tc4", "edit", UnicodeArgs, DisplayName = "RoundTrip_UnicodeArgs_PreservesRawJson")]
+    public async Task RoundTrip_PreservesRawJson(string id, string tool, string args)
     {
-        const string args = """{"path":"README.md","limit":10}""";
-
-        await AssertRoundTrips(PartWithArgs("tc1", "read", args), args);
-    }
-
-    [Test]
-    public async Task RoundTrip_EmptyObjectArgs_PreservesRawJson()
-    {
-        const string args = """{}""";
-
-        await AssertRoundTrips(PartWithArgs("tc2", "bash", args), args);
-    }
-
-    [Test]
-    public async Task RoundTrip_NestedArgs_PreservesRawJson()
-    {
-        const string args = """{"items":[1,"two",{"three":true}],"n":1.5,"z":null}""";
-
-        await AssertRoundTrips(PartWithArgs("tc3", "write", args), args);
-    }
-
-    [Test]
-    public async Task RoundTrip_UnicodeArgs_PreservesRawJson()
-    {
-        const string args = """{"text":"héllo"}""";
-
-        await AssertRoundTrips(PartWithArgs("tc4", "edit", args), args);
+        await AssertRoundTrips(PartWithArgs(id, tool, args), args);
     }
 }
