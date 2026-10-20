@@ -101,38 +101,55 @@ public sealed class FakeGenerator : IIncrementalGenerator
 
             foreach (TypedConstant argument in attribute.ConstructorArguments)
             {
-                if (argument.Kind != TypedConstantKind.Type || argument.Value is not INamedTypeSymbol symbol)
+                // A `params Type[]` constructor reaches metadata as ONE array
+                // argument, not one argument per element.
+                if (argument.Kind == TypedConstantKind.Array)
                 {
-                    request.Diagnostics.Add(Diagnostic.Create(
-                        FakeDiagnostics.NotAnInterface,
-                        Location.None,
-                        argument.ToString()));
+                    foreach (TypedConstant item in argument.Values)
+                    {
+                        AddFake(item, request, opted);
+                    }
+
                     continue;
                 }
 
-                string fullName = symbol.ToDisplayString();
-
-                if (symbol.TypeKind != TypeKind.Interface)
-                {
-                    request.Diagnostics.Add(Diagnostic.Create(FakeDiagnostics.NotAnInterface, Location.None, fullName));
-                    continue;
-                }
-
-                if (!opted.Add(fullName))
-                {
-                    request.Diagnostics.Add(Diagnostic.Create(FakeDiagnostics.DuplicateOptIn, Location.None, fullName));
-                    continue;
-                }
-
-                GeneratedFake? fake = BuildFake(symbol, request.Diagnostics);
-                if (fake is not null)
-                {
-                    request.Fakes.Add(fake);
-                }
+                AddFake(argument, request, opted);
             }
         }
 
         return request;
+    }
+
+    private static void AddFake(TypedConstant argument, FakeRequest request, HashSet<string> opted)
+    {
+        if (argument.Kind != TypedConstantKind.Type || argument.Value is not INamedTypeSymbol symbol)
+        {
+            request.Diagnostics.Add(Diagnostic.Create(
+                FakeDiagnostics.NotAnInterface,
+                Location.None,
+                argument.ToString()));
+            return;
+        }
+
+        string fullName = symbol.ToDisplayString();
+
+        if (symbol.TypeKind != TypeKind.Interface)
+        {
+            request.Diagnostics.Add(Diagnostic.Create(FakeDiagnostics.NotAnInterface, Location.None, fullName));
+            return;
+        }
+
+        if (!opted.Add(fullName))
+        {
+            request.Diagnostics.Add(Diagnostic.Create(FakeDiagnostics.DuplicateOptIn, Location.None, fullName));
+            return;
+        }
+
+        GeneratedFake? fake = BuildFake(symbol, request.Diagnostics);
+        if (fake is not null)
+        {
+            request.Fakes.Add(fake);
+        }
     }
 
     private static GeneratedFake? BuildFake(INamedTypeSymbol symbol, List<Diagnostic> diagnostics)
