@@ -2472,10 +2472,19 @@ runs the architecture gate), and the project dispatch timeline.
 **Provenance.** The same matrix was run four times, on three trees (the branch
 before its rebase onto `dev`, after it, and after the final rebase): CI runs
 39448423292, 39454123726, 39462228165 and 39467297561, 2026-10-20. Twelve
-replicates per arm, pooled. Runner: `ubuntu-latest`, AMD EPYC 9V74 / 9V45,
-4 vCPU (`nproc`=4, `/proc/stat` accounts for 4 CPUs, affinity `0-3`, no cgroup
-quota), .NET SDK 10.0.402. The restore is timed separately and is in none of
-the numbers below.
+replicates per arm, pooled. Runner: `ubuntu-latest`, which was Ubuntu 24.04
+on that date (AMD EPYC 9V74 / 9V45, 4 vCPU: `nproc`=4, `/proc/stat` accounts
+for 4 CPUs, affinity `0-3`, no cgroup quota), .NET SDK 10.0.402. The harness
+is pinned to `ubuntu-24.04` from here on, for the reason ci.yml's build job
+gives: the label moves, and a CPU-utilisation number without the image it was
+measured on is a number without a denominator. The restore is timed
+separately and is in none of the numbers below.
+
+**The measured compile is a COLD one.** Every run starts from a fresh
+checkout with no `obj/`, so it measures a from-scratch Release compile of the
+whole tree. The PR lane's build is incremental since #1927's build-output
+cache landed (it restores the base branch's `obj/` and rebuilds what
+changed), so the PR lane's wall time is NOT the number below.
 
 **The meter is calibrated, not asserted.** A known 1-way load reads 1.11 busy
 cores and a known 4-way load reads 4.00 (`calib-1-way` / `calib-4-way` in the
@@ -2549,11 +2558,14 @@ issue, and not for the number in the issue.**
   the issue proposes first ("src+apps | tests") buys nothing, because the
   test projects depend on the product projects, so the halves run one after
   the other.
-* The architecture gate caps the win. It is a single process running the whole
-  architecture suite: 80..139 s, 29..38 % of the build, and it can only run
-  after both halves are compiled. Realistic ceiling: ~120 s of compile plus
-  ~120 s of gate = ~240..260 s against 348 s now, about 1.4x, not the 209 s
-  the issue quotes.
+* The architecture gate caps the win on the lanes where it still runs. It is
+  a single process running the whole architecture suite: 80..139 s, 29..38 %
+  of the build, and it can only run after both halves are compiled. On the
+  PR lane the gate is off (dev switches it off there), so the ceiling on
+  that lane is the halves' compile time alone; on the push and nightly
+  lanes, where the gate still runs, the realistic ceiling is ~120 s of
+  compile plus ~120 s of gate = ~240..260 s against 348 s now, about 1.4x,
+  not the 209 s the issue quotes.
 * `-p:UseSharedCompilation=false` (arm D) is not the answer: 2.4x slower on
   the wall (487.8..911.4 s), because every compilation then pays the Roslyn
   start-up cost and four of them oversubscribe the same four cores.
@@ -2568,6 +2580,32 @@ issue, and not for the number in the issue.**
 above is a projection from the measured CPU work, not a measured split. It
 does not attribute the compile phase between the analyzers and the actual
 compilation. And it does not measure a runner with more than 4 vCPU.
+
+**Where this sits against the nightly lane (#1923).** The nightly lane's
+`measurement` job owns the PERIODIC measurement of the same Release compile
+(the binary log, the analyzer profile, the CPU samples on a schedule and on
+every merge into dev/master). This section is the ONE-OFF falsification for
+issue #1929, and its harness stays on its branch; it is not a second lane.
+Two corrections that lane's probes need, both measured here:
+
+1. Its serial probe has to use the SWITCH. `-p:MaxCpuCount=1` is inert:
+   MSBuild reads `-maxcpucount` as a switch, and the `MaxCpuCount` property
+   appears in no MSBuild target and in no global-property lookup. A probe
+   that names the property measures the all-cores build twice, and reads
+   1.0 for the wrong reason.
+2. The architecture gate has to be out of a compile-phase measurement, or
+   subtracted from it. It is 29..38 % of the wall (80..139 s of a
+   254..409 s build) and it is a single process, so it is serial in every
+   arm. The nightly job switches it off (`HarborArchGate: 'false'`), which
+   is the right shape; this harness keeps it on, because it measures the
+   shape the NUKE `Compile` target runs, and subtracts it in the "ratio
+   without the gate" column.
+
+The three tools are the reusable instrument (`tools/measure-build-cpu.py`
+runs a command and meters it, `tools/aggregate-build-vcpu.py` turns the runs
+into the table, `tools/measure-project-graph.py` parses the graph), and the
+nightly lane's analysis step can read the same measurements instead of
+growing a second parser.
 
 ## 7. Comparison with previous (inflated) numbers
 
