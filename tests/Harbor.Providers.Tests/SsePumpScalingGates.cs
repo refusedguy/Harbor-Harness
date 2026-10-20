@@ -45,7 +45,42 @@ namespace Harbor.Providers.Tests;
 public class SsePumpScalingGates
 {
     /// <summary>Growth allowed for a doubled stream, on time and allocations (#410 shape).</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Data lines in the stream the gate MEASURES at - twice
+    ///     <see cref="SmallDataLines" />, because a per-pass cost that grows
+    ///     with the stream length must land in the measurement instead of
+    ///     hiding behind the smaller stream.
+    /// </summary>
+    private const int MeasuredDataLines = LargeDataLines;
+
+    /// <summary>
+    ///     Pump passes per measured leg - the FIXED amount of work. 100 passes
+    ///     over the 192-data-line stream is about 37 ms of real work on the
+    ///     CI runner.
+    /// </summary>
+    private const int PassesPerLeg = 100;
+
+    /// <summary>
+    ///     Allocation budget for ONE pump pass over the 192-data-line stream,
+    ///     in bytes. Machine-independent, so it is compared as measured, with
+    ///     no band. Pinned from the CI measurement of the ratio gate this
+    ///     replaced (run 39423151864): 885 503 064 B over 559 passes =
+    ///     1 583 905 B per pass. The budget leaves ~1.45x headroom.
+    /// </summary>
+    private const long MaxBytesPerPass = 2_300_000;
+
+    /// <summary>
+    ///     Time budget for ONE pump pass, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 208.811 ms over 559 passes = 373 us per
+    ///     pass against a probe that costs 0.000380 ms/unit, i.e. ~980 probe
+    ///     units per pass. The budget leaves ~15x headroom, because the
+    ///     probe's OWN measured cost moved 5.3x between two CI runs of the
+    ///     same tree (0.000380 ms/unit in run 39423151864, 0.000072 ms/unit in
+    ///     run 39436405496) - the BYTE budget is the branch that can fail on
+    ///     any runner.
+    /// </summary>
+    private const double MaxProbeUnitsPerPass = 15_000.0;
 
     /// <summary>Data lines per small leg — 4 KB payload each, control lines per data line.</summary>
     private const int SmallDataLines = 96;
@@ -64,39 +99,52 @@ public class SsePumpScalingGates
     /// <summary>The one payload materialisation the pump allows (the SseLineHandler contract).</summary>
     private static string? _held;
 
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>pump(2N)/pump(N) &lt;= 3</c> for time and allocations
+    ///     over a 96-data-line against a 192-data-line stream, decided by the
+    ///     shared TestScalingGate (#1652). It is now:
+    ///     <code>
+    ///     bytes per pump pass   &lt;= 2 300 000   (machine-independent, HARD)
+    ///     probe units per pass  &lt;= 15 000       (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (100 pump passes over the
+    ///     192-data-line stream - the LARGER one, so a per-pass cost that
+    ///     grows with the stream length lands in the measurement) on the SAME
+    ///     runner in the SAME run. The allocation branch is machine-independent
+    ///     and is asserted hard; the time branch is in PROBE UNITS and stands
+    ///     down when the rounds do not reproduce each other. The report prints
+    ///     on every run, pass or fail.
+    /// </summary>
     [Test]
-    [Timeout(180_000)]
-    public async Task Pump_DoubledStream_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task Pump_CostPerPass_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes (SseWireDecodeAllocationTests convention).
 
         ReplayableStream small = new(BuildBody(SmallDataLines));
-        ReplayableStream large = new(BuildBody(LargeDataLines));
+        ReplayableStream large = new(BuildBody(MeasuredDataLines));
 
         // Non-vacuity, warmed pass: one pump over the small body really did
-        // hand every payload to the handler before any ratio is decided —
+        // hand every payload to the handler before any budget is decided -
         // a gate over a stream the pump silently skips is the #591 shape.
         small.Reset();
         await CompatSsePump.PumpLinesAsync(small, LineAsync, CancellationToken.None);
         await Assert.That(_payloads).IsEqualTo(SmallDataLines);
         await Assert.That(_held).IsNotNull();
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => MeasureLeg(small, SmallDataLines, units),
-            measureLargeLeg: units => MeasureLeg(large, LargeDataLines, units),
-            initialUnits: 4,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: passes => MeasureLeg(large, MeasuredDataLines, passes),
+            units: PassesPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "sse-pump-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "sse-pump-cost",
+                MaxBytesPerUnit = MaxBytesPerPass,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerPass,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "pump(2N)/pump(N)",
-            linearWhy: "Linear is 2.00: the doubled stream doubles payload and control lines alike, while the per-unit " +
-                       "pump state (pipe reader, pooled decode window) does not scale with N, so an O(N^2) or " +
-                       "per-unit-leaking regression would land at 4.00 (or worse) and cannot hide under this bound.");
+        await result.AssertWithinBudgetsAsync("sse pump pass over a 192-data-line stream");
     }
 
     /// <summary>
@@ -107,7 +155,7 @@ public class SsePumpScalingGates
     ///     and the sentinel (exactly <c>2*N + 1</c> control lines: event +
     ///     keep-alive per data line, blank lines are skipped, one <c>[DONE]</c>).
     /// </summary>
-    private static async Task<TestScalingGateLeg> MeasureLeg(ReplayableStream stream, int dataLines, int units)
+    private static async Task<PerfGateLeg> MeasureLeg(ReplayableStream stream, int dataLines, int units)
     {
         _payloads = 0;
         _control = 0;
@@ -135,7 +183,7 @@ public class SsePumpScalingGates
                 + "the pump skipped part of the stream, so the ratio gates a walk that never happened.");
         }
 
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
     }
 
     private static Task<bool> LineAsync(ReadOnlySpan<char> line, CancellationToken ct)

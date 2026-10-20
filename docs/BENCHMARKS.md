@@ -1208,7 +1208,7 @@ nothing (#591):
 
 ### The ratio-form gates become per-unit budgets (#1948) — **PER-UNIT BUDGET**, CI merge gate
 
-Eleven gates move from the RELATIVE form to the #1747 form: a **budget per unit
+Fifteen gates move from the RELATIVE form to the #1747 form: a **budget per unit
 of work**, with the amount of work FIXED, the allocation branch
 machine-independent and hard, the time branch in **probe units** and soft.
 
@@ -1254,6 +1254,12 @@ Two of the gates were not merely noisy but **measuring the harness**:
 | `GenericLiveRegionTests.Region_Paint_CostPerFrame_StaysWithinBudget` | time per painted frame, in probe units | ratio, above | **≤ 4 500 probe units per frame** (SOFT) | **~312 probe units** per frame |
 | `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | allocation per tool-start/end pair, over a FIXED 4 000 pairs | ratio ≤ 3.0 — **the same measurement on both sides** | **≤ 16 000 B per pair** (HARD) | **11 959 B** per pair (208 151 840 B over 17 404 pairs) |
 | `AgentReducerToolBoundaryTests.ToolBoundary_CostPerPair_StaysWithinBudget` | time per tool-start/end pair, in probe units | ratio, above | **≤ 200 probe units per pair** (SOFT) | **~9.6 probe units** per pair — 3.64 µs/pair |
+| `BashArgMatcherScalingGates.Cost_PerSplit_StaysWithinBudget` | allocation per argv split of the 512-token command, over a FIXED 20 000 splits | ratio ≤ 3.0 / 3.15 | **≤ 56 000 B per split** (HARD) | **38 000 B** per split (1 520 000 040 B over 40 000 splits) |
+| `BashArgMatcherScalingGates.Cost_PerSplit_StaysWithinBudget` | time per argv split, in probe units | ratio, above | **≤ 250 000 probe units per split** (SOFT) | **~17 100 probe units** per split — 6.51 µs/split |
+| `SsePumpScalingGates.Pump_CostPerPass_StaysWithinBudget` | allocation per pump pass over the 192-data-line stream, over a FIXED 100 passes | ratio ≤ 3.0 / 3.15 | **≤ 2 300 000 B per pass** (HARD) | **1 583 905 B** per pass (885 503 064 B over 559 passes) |
+| `SsePumpScalingGates.Pump_CostPerPass_StaysWithinBudget` | time per pump pass, in probe units | ratio, above | **≤ 15 000 probe units per pass** (SOFT) | **~980 probe units** per pass — 373 µs/pass |
+| `OpenAiCompatibleRequestBuildScalingTests.BuildRequest_CostPerBuild_StaysWithinBudget` | allocation per request build over the 400-tool-call request, over a FIXED 500 builds | ratio ≤ 3.0 / 3.15 | **≤ 320 000 B per build** (HARD) | **227 288 B** per build (230 291 408 B over 1 013 builds) |
+| `OpenAiCompatibleRequestBuildScalingTests.BuildRequest_CostPerBuild_StaysWithinBudget` | time per request build, in probe units | ratio, above | **≤ 6 800 probe units per build** (SOFT) | **~453 probe units** per build — 180 µs/build |
 | `MatchesPatternScalingGates.Cost_PerCall_StaysWithinBudget` | allocation per `Evaluate` miss-walk, over a FIXED 2 400 calls against the 512-rule ruleset | ratio ≤ 3.0 / 3.15 | **≤ 0 B per call** (HARD — the exact zero) | **0 B** per call (876 361 ms / 0 B over 40 000 calls) |
 | `MatchesPatternScalingGates.Cost_PerCall_StaysWithinBudget` | time per `Evaluate` miss-walk, in probe units | ratio, above | **≤ 3 000 probe units per call** (SOFT) | **~110 probe units** per call at 512 rules — 43.8 µs/call against a probe that costs 0.000380 ms/unit |
 | `StorePathScalingGates.Cost_PerDelta_StaysWithinBudget` | allocation per scripted delta, over a FIXED 100 000 deltas | ratio ≤ 3.0 / 3.15 | **≤ 1 700 B per delta** (HARD) | **1 300 B** per delta (71 508 360 B over 55 drives of 1 000 deltas) |
@@ -1340,9 +1346,9 @@ measurement, not the claim, is what is wrong).
 | `Harbor.Storage.Jsonl.Tests.JsonlMessagePayloadScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
 | `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the pre-#1533 shape runs report-only | **convert to a constant** — done in #1948; the pre-#1533 companion stays on the ratio helper because it never gated anything |
 | `Harbor.Abstractions.Tests.MatchesPatternScalingGates` | ratio + exact zero | ≤ 3.0 through `TestScalingGate`; the allocation claim is **exactly 0 B**, not a ratio | **convert to a constant** — done in #1948, once #1889 gave this assembly the TestKit reference: **0 B per Evaluate call** (the exact zero, which is the strongest shape a byte claim can take) and 3 000 probe units per call. Its LEG LENGTH was fixed in the same change (the legs were 876–1 838 ms against a 100 ms target, and 26.5 s of the gate's 27.9 s went to proving a ratio that never moved) |
-| `Harbor.Domain.Tests.BashArgMatcherScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
-| `Harbor.Providers.Tests.OpenAiCompatibleRequestBuildScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
-| `Harbor.Providers.Tests.SsePumpScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **keep** — same |
+| `Harbor.Domain.Tests.BashArgMatcherScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948: 56 000 B per split (hard) and 250 000 probe units per split (soft) |
+| `Harbor.Providers.Tests.OpenAiCompatibleRequestBuildScalingTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948: 320 000 B per build (hard) and 6 800 probe units per build (soft) |
+| `Harbor.Providers.Tests.SsePumpScalingGates` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948: 2 300 000 B per pump pass (hard) and 15 000 probe units per pass (soft) |
 | `Harbor.Application.Tests.ToolDispatcherToolContextScalingTests` | ratio | ≤ 3.0, through `TestScalingGate`; the 2N leg read **time x4.69 with alloc x1.99** (run 39423151864) because the fake event bus's retained event pile made the GC's marking cost grow with the dispatch count | **convert to a constant** — done in #1948; the harness's retained pile is cleared between dispatches |
 | `Harbor.Registries.Tests.ToolRegistryDescribeOnceTests` | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |
 | `Harbor.Storage.Jsonl.Tests.SessionFileReaderScalingTests` (read path) | ratio | ≤ 3.0, through `TestScalingGate` | **convert to a constant** — done in #1948 |

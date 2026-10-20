@@ -37,9 +37,48 @@ namespace Harbor.Domain.Tests;
 [NotInParallel]
 public sealed class BashArgMatcherScalingGates
 {
+    /// <summary>Tokens in the small command the gate measures against.</summary>
     private const int Tokens = 256;
-    private const double GrowthLimit = 3.0;
+
+    /// <summary>
+    ///     Tokens in the command the gate MEASURES at - twice
+    ///     <see cref="Tokens" />, because a per-split cost that grows with the
+    ///     token count must land in the measurement instead of hiding behind
+    ///     the smaller command.
+    /// </summary>
+    private const int MeasuredTokens = Tokens * 2;
+
+    /// <summary>Splits in one burst window.</summary>
     private const int CallsPerWindow = 200;
+
+    /// <summary>
+    ///     Splits per measured leg - the FIXED amount of work. 20 000 splits
+    ///     is 100 burst windows over the 512-token command, about 66 ms of
+    ///     real work on the CI runner.
+    /// </summary>
+    private const int SplitsPerLeg = 20_000;
+
+    /// <summary>
+    ///     Allocation budget for ONE split of the 512-token command, in bytes.
+    ///     Machine-independent, so it is compared as measured, with no band.
+    ///     Pinned from the CI measurement of the ratio gate this replaced (run
+    ///     39423151864): 1 520 000 040 B over 40 000 splits = 38 000 B per
+    ///     split. The budget leaves ~1.47x headroom.
+    /// </summary>
+    private const long MaxBytesPerSplit = 56_000;
+
+    /// <summary>
+    ///     Time budget for ONE split, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 260.250 ms over 40 000 splits = 6.51 us
+    ///     per split against a probe that costs 0.000380 ms/unit, i.e. ~17 100
+    ///     probe units per split. The budget leaves ~15x headroom, because the
+    ///     probe's OWN measured cost moved 5.3x between two CI runs of the
+    ///     same tree (0.000380 ms/unit in run 39423151864, 0.000072 ms/unit in
+    ///     run 39436405496) - the BYTE budget is the branch that can fail on
+    ///     any runner.
+    /// </summary>
+    private const double MaxProbeUnitsPerSplit = 250_000.0;
 
     private static string BuildCommand(int tokens)
     {
@@ -55,18 +94,17 @@ public sealed class BashArgMatcherScalingGates
     }
 
     /// <summary>
-    ///     One measured leg: <paramref name="units" /> burst windows worth of
-    ///     splits over <paramref name="command" />, timed and allocation-counter'd
-    ///     as one window. The #1652 leg scaler multiplies
-    ///     <paramref name="units" /> until the window reaches a measurable
-    ///     duration; the command (N vs 2N tokens) stays the dimension the gate
-    ///     is about.
+    ///     One measured leg: <paramref name="splits" /> splits over
+    ///     <paramref name="command" />, timed and allocation-counter'd as one
+    ///     window. The command is FIXED, so the budget is a per-split number
+    ///     and the runner's load cannot move it.
     /// </summary>
-    private static TestScalingGateLeg DriveSplit(string command, int units)
+    private static PerfGateLeg DriveSplit(string command, int splits)
     {
         long before = GC.GetAllocatedBytesForCurrentThread();
         var sw = Stopwatch.StartNew();
-        for (int u = 0; u < units; u++)
+        int bursts = splits / CallsPerWindow;
+        for (int u = 0; u < bursts; u++)
         {
             for (int i = 0; i < CallsPerWindow; i++)
             {
@@ -79,36 +117,47 @@ public sealed class BashArgMatcherScalingGates
         }
 
         sw.Stop();
-        return new TestScalingGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>cost(2N)/cost(N) &lt;= 3</c> for both time and
+    ///     allocations over a 256-token against a 512-token command, decided
+    ///     by the shared TestScalingGate (#1652). It is now:
+    ///     <code>
+    ///     bytes per split  &lt;= 56 000    (machine-independent, HARD)
+    ///     probe units/split &lt;= 250 000   (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (20 000 splits of the
+    ///     512-token command - the LARGER one, so a per-split cost that grows
+    ///     with the token count lands in the measurement) on the SAME runner in
+    ///     the SAME run. The allocation branch is machine-independent and is
+    ///     asserted hard; the time branch is in PROBE UNITS and stands down
+    ///     when the rounds do not reproduce each other. The report prints on
+    ///     every run, pass or fail.
+    /// </summary>
     [Test]
-    [Timeout(120_000)]
-    public async Task Cost_GrowsLinearly_InArgvTokens()
+    [Timeout(300_000)]
+    public async Task Cost_PerSplit_StaysWithinBudget()
     {
         string small = BuildCommand(Tokens);
-        string large = BuildCommand(Tokens * 2);
+        string large = BuildCommand(MeasuredTokens);
 
         // Non-vacuity: the doubled command really tokenizes to twice the argv.
         await Assert.That(BashArgMatcher.SplitArgv(small).Count).IsEqualTo(Tokens + 1);
-        await Assert.That(BashArgMatcher.SplitArgv(large).Count).IsEqualTo(Tokens * 2 + 1);
+        await Assert.That(BashArgMatcher.SplitArgv(large).Count).IsEqualTo(MeasuredTokens + 1);
 
-        // Warm-up and leg scaling live in TestScalingGate (#1652): its probes
-        // are discarded measurements, and the folded unit count raises the
-        // window until one leg is too long for a scheduler transient to
-        // double the ratio (the #1642 flake shape).
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(DriveSplit(small, units)),
-            measureLargeLeg: units => Task.FromResult(DriveSplit(large, units)),
-            initialUnits: CallsPerWindow,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: splits => Task.FromResult(DriveSplit(large, splits)),
+            units: SplitsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "bash-argv-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "bash-argv-cost",
+                MaxBytesPerUnit = MaxBytesPerSplit,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerSplit,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "time(2N)/time(N)",
-            linearWhy: "Linear is 2.00 and O(N^2) is 4.00.");
+        await result.AssertWithinBudgetsAsync("bash argv split per split");
     }
 }

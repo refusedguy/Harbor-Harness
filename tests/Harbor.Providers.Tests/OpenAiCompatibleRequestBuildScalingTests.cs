@@ -37,11 +37,41 @@ public class OpenAiCompatibleRequestBuildScalingTests
     /// <summary>Tool calls in the small request; the large one doubles it.</summary>
     private const int ToolCalls = 200;
 
-    /// <summary>Request builds per leg's unit (one build is sub-millisecond noise).</summary>
-    private const int Iterations = 30;
+    /// <summary>
+    ///     Tool calls in the request the gate MEASURES at - twice
+    ///     <see cref="ToolCalls" />, because a per-build cost that grows with
+    ///     the tool-call count must land in the measurement instead of hiding
+    ///     behind the smaller request.
+    /// </summary>
+    private const int MeasuredToolCalls = ToolCalls * 2;
 
-    /// <summary>Growth allowed for a doubled input, on cost and allocations.</summary>
-    private const double GrowthLimit = 3.0;
+    /// <summary>
+    ///     Request builds per measured leg - the FIXED amount of work. 500
+    ///     builds is about 90 ms of real work on the CI runner.
+    /// </summary>
+    private const int BuildsPerLeg = 500;
+
+    /// <summary>
+    ///     Allocation budget for ONE request build over the 400-tool-call
+    ///     request, in bytes. Machine-independent, so it is compared as
+    ///     measured, with no band. Pinned from the CI measurement of the ratio
+    ///     gate this replaced (run 39423151864): 230 291 408 B over 1 013
+    ///     builds = 227 288 B per build. The budget leaves ~1.41x headroom.
+    /// </summary>
+    private const long MaxBytesPerBuild = 320_000;
+
+    /// <summary>
+    ///     Time budget for ONE request build, in PROBE UNITS (see
+    ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
+    ///     Pinned from the same run: 182.752 ms over 1 013 builds = 180 us per
+    ///     build against a probe that costs 0.000380 ms/unit, i.e. ~453 probe
+    ///     units per build. The budget leaves ~15x headroom, because the
+    ///     probe's OWN measured cost moved 5.3x between two CI runs of the
+    ///     same tree (0.000380 ms/unit in run 39423151864, 0.000072 ms/unit in
+    ///     run 39436405496) - the BYTE budget is the branch that can fail on
+    ///     any runner.
+    /// </summary>
+    private const double MaxProbeUnitsPerBuild = 6_800.0;
 
     private static readonly JsonDocument ArgsDoc = JsonDocument.Parse("""{"path":"a.txt"}""");
 
@@ -82,7 +112,7 @@ public class OpenAiCompatibleRequestBuildScalingTests
     ///     One measured leg: <paramref name="units" /> builds of the same
     ///     request, timed and allocation-counter'd as one window.
     /// </summary>
-    private static (double Ms, long Allocated) Measure(OpenAiCompatibleLlmClient client, LlmRequest request, int units)
+    private static PerfGateLeg Measure(OpenAiCompatibleLlmClient client, LlmRequest request, int units)
     {
         long before = GC.GetAllocatedBytesForCurrentThread();
         var sw = Stopwatch.StartNew();
@@ -92,35 +122,47 @@ public class OpenAiCompatibleRequestBuildScalingTests
         }
 
         sw.Stop();
-        return (sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, GC.GetAllocatedBytesForCurrentThread() - before);
     }
 
-    private static TestScalingGateLeg AsLeg((double Ms, long Allocated) leg) => new(leg.Ms, leg.Allocated);
-
+    /// <summary>
+    ///     THE GATE IS A BUDGET PER UNIT OF WORK (#1948), not a ratio. It used
+    ///     to be <c>build(2N)/build(N) &lt;= 3</c> for time and allocations
+    ///     over 200 against 400 tool calls, decided by the shared
+    ///     TestScalingGate (#1652). It is now:
+    ///     <code>
+    ///     bytes per build   &lt;= 320 000    (machine-independent, HARD)
+    ///     probe units/build &lt;= 6 800      (machine-scaled time, SOFT)
+    ///     </code>
+    ///     measured over a FIXED amount of work (500 builds of the 400-tool-call
+    ///     request - the LARGER one, so a per-build cost that grows with the
+    ///     tool-call count lands in the measurement) on the SAME runner in the
+    ///     SAME run. The allocation branch is machine-independent and is
+    ///     asserted hard; the time branch is in PROBE UNITS and stands down
+    ///     when the rounds do not reproduce each other. The report prints on
+    ///     every run, pass or fail.
+    /// </summary>
     [Test]
-    [Timeout(120_000)]
-    public async Task BuildRequest_DoubledToolCalls_StaysWithinGrowthLimit()
+    [Timeout(300_000)]
+    public async Task BuildRequest_CostPerBuild_StaysWithinBudget()
     {
         if (!OperatingSystem.IsLinux())
             return; // GC accounting varies across OS runtimes.
 
         var client = CreateClient();
-        var small = AssistantRequest(ToolCalls);
-        var large = AssistantRequest(ToolCalls * 2);
+        var large = AssistantRequest(MeasuredToolCalls);
 
-        TestScalingGateResult result = await TestScalingGate.MeasureAsync(
-            measureSmallLeg: units => Task.FromResult(AsLeg(Measure(client, small, units))),
-            measureLargeLeg: units => Task.FromResult(AsLeg(Measure(client, large, units))),
-            initialUnits: Iterations,
-            options: new TestScalingGateOptions
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: builds => Task.FromResult(Measure(client, large, builds)),
+            units: BuildsPerLeg,
+            options: new PerfGateOptions
             {
-                Label = "compat-build-scaling",
-                GrowthLimit = GrowthLimit,
+                Label = "compat-build-cost",
+                MaxBytesPerUnit = MaxBytesPerBuild,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerBuild,
             });
 
-        await result.AssertWithinLimitsAsync(
-            topic: "build(2N)/build(N)",
-            linearWhy: "Linear is 2.00, so this bound separates linear from quadratic without depending on how fast this runner is.");
+        await result.AssertWithinBudgetsAsync("openai-compatible request build per build");
     }
 
     [Test]
