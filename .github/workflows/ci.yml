@@ -686,6 +686,23 @@ jobs:
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         run: bash build/build.sh Compile --configuration Release
 
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+
       # #1882. The issue's question, asked of the tree that was just built:
       # is a banned assembly in the OUTPUT DIRECTORY of a test or sample
       # project? The `test/sample package set` job below answers the same
