@@ -103,6 +103,13 @@ internal sealed class ChunkedLineReader : IDisposable
     internal bool SawOversizedRecord { get; private set; }
 
     /// <summary>
+    ///     True when the dropped oversized record was the LAST one — the file
+    ///     ends in a record too large to hold, so the tail of the log is
+    ///     missing rather than the middle of it (#1744).
+    /// </summary>
+    internal bool SawOversizedTail { get; private set; }
+
+    /// <summary>
     ///     Refills the block. False at the ceiling or at end of stream — the
     ///     last record, if the file carried no terminator after it, is then
     ///     still in the block and comes out of
@@ -316,6 +323,7 @@ internal sealed class ChunkedLineReader : IDisposable
             if (oversized)
             {
                 SawOversizedRecord = true;
+                SawOversizedTail = true;
             }
 
             return false;

@@ -252,13 +252,41 @@ internal sealed class SessionSwitchManager(IReplHost host, Action onSwitched)
                 return null;
             }
 
-            var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
-            if (history.IsSuccess && history.Value.Count > 0)
+            // #1744: the TRANSCRIPT, not the raw message list. A session whose
+            // last turn was cut in half is replayed with the interrupted calls
+            // closed and marked, so the reader SEES that the turn was never
+            // closed instead of wondering why a tool call has no answer.
+            var transcript = await store.GetTranscriptAsync(session.Id, ct).ConfigureAwait(false);
+            if (transcript.IsSuccess)
             {
-                host.Bridge.ReplayHistory(history.Value);
+                if (transcript.Value.Messages.Count > 0)
+                {
+                    host.Bridge.ReplayHistory(transcript.Value.Messages);
+                }
+
+                return transcript.Value.Messages;
             }
 
-            return history.IsSuccess ? history.Value : null;
+            if (transcript.IsFailure)
+            {
+                // The failure arm, and it is LOUD: a store that cannot report
+                // a transcript state (an out-of-tree one) still has its
+                // messages, so the reader gets them — without the
+                // interrupted-turn marker, which is less and not wrong — but
+                // the gap is said out loud instead of passing for a whole
+                // transcript.
+                Announce("! " + transcript.Error + " — показан исходный журнал сессии");
+
+                var history = await store.GetMessagesAsync(session.Id, ct).ConfigureAwait(false);
+                if (history.IsSuccess && history.Value.Count > 0)
+                {
+                    host.Bridge.ReplayHistory(history.Value);
+                }
+
+                return history.IsSuccess ? history.Value : null;
+            }
+
+            return null;
         }
 
         public async Task RefreshSidebarAsync(Session session, IReadOnlyList<AgentMessage>? history, CancellationToken ct)

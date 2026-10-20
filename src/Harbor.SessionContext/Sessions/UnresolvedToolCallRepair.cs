@@ -56,9 +56,7 @@ public static class UnresolvedToolCallRepair
     /// </summary>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    public static string NotStartedText(string toolName) =>
-        $"{UnresolvedToolCall.NotStartedCode}: tool '{toolName}' was never started — the turn ended before it ran. "
-        + "The call had no effect and is safe to retry.";
+    public static string NotStartedText(string toolName) => UnresolvedToolCall.NotStartedText(toolName);
 
     /// <summary>
     ///     The text the model reads back for a call whose outcome is unknown:
@@ -66,10 +64,7 @@ public static class UnresolvedToolCallRepair
     /// </summary>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    public static string OutcomeUnknownText(string toolName) =>
-        $"{UnresolvedToolCall.OutcomeUnknownCode}: tool '{toolName}' has no recorded result — the turn ended before its outcome was captured. "
-        + "The call may have taken effect: retry only if the operation is read-only or idempotent; "
-        + "if it may have side effects, first verify external state or ask the user. Do not retry blindly.";
+    public static string OutcomeUnknownText(string toolName) => UnresolvedToolCall.OutcomeUnknownText(toolName);
 
     /// <summary>
     ///     The model-facing text for a code.
@@ -77,10 +72,7 @@ public static class UnresolvedToolCallRepair
     /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
     /// <param name="toolName">The tool the model asked for.</param>
     /// <returns>The model-facing explanation, carrying the code.</returns>
-    public static string TextFor(string code, string toolName) =>
-        string.Equals(code, UnresolvedToolCall.NotStartedCode, StringComparison.Ordinal)
-            ? NotStartedText(toolName)
-            : OutcomeUnknownText(toolName);
+    public static string TextFor(string code, string toolName) => UnresolvedToolCall.TextFor(code, toolName);
 
     /// <summary>
     ///     Build the tool results that answer the calls an assistant message

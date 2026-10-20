@@ -37,10 +37,24 @@ internal readonly record struct SessionFileStat(DateTimeOffset LastWriteUtc, lon
 ///     the parse was taken from so subsequent reads can detect freshness with a
 ///     single stat.
 /// </summary>
+/// <param name="FileLastWriteUtc">The file's last-write stamp the parse was taken from.</param>
+/// <param name="FileLength">The file's length the parse was taken from.</param>
+/// <param name="Messages">
+///     The LOG's messages — what the file holds, unaltered. This is what
+///     <c>GetMessagesAsync</c> hands back: a fork copies them and the stats
+///     fold over them, so nothing may be added to them behind the store's back.
+/// </param>
+/// <param name="Transcript">
+///     The READER's view of the same read: the messages with the turns the log
+///     never closed closed in memory, plus what the read could not deliver
+///     (#1744). Derived from <paramref name="Messages" /> and never written
+///     back.
+/// </param>
 internal sealed record SessionCacheEntry(
     DateTimeOffset FileLastWriteUtc,
     long FileLength,
-    IReadOnlyList<AgentMessage> Messages)
+    IReadOnlyList<AgentMessage> Messages,
+    SessionTranscript Transcript)
 {
     /// <summary>True when this entry was parsed from exactly this file state.</summary>
     internal bool IsFreshFor(SessionFileStat stat) =>
@@ -70,12 +84,33 @@ internal sealed record SessionCacheEntry(
 ///         rewritten (a title edit) between the two reads, and the export
 ///         would carry a header that contradicts the history under it.
 ///     </para>
+///     <para>
+///         <b>#1744:</b> <see cref="UnreadableRecordCount" /> and
+///         <see cref="IsTailTruncated" /> say what the read could NOT
+///         deliver. A record whose bytes are not a complete document is
+///         skipped — its content is unknowable — but the skip is counted and
+///         reported, so it never reads as "the agent never said that".
+///     </para>
 /// </remarks>
 internal sealed record MessageReadSnapshot(
     IReadOnlyList<AgentMessage> Messages,
     SessionFileStat Stat,
     bool IsStable,
-    SessionHeaderEntry? Header = null);
+    SessionHeaderEntry? Header = null,
+    int UnreadableRecordCount = 0,
+    bool IsTailTruncated = false);
+
+/// <summary>
+///     One cold read of a session: the log's messages and the reader's view of
+///     the same read (#1744). Both come from ONE pass over the file — a second
+///     read would be a second generation, and the two halves could describe
+///     different moments.
+/// </summary>
+/// <param name="Messages">The log's messages, in chronological order.</param>
+/// <param name="Transcript">The reader's view: the closed transcript and its integrity.</param>
+internal sealed record SessionReadResult(
+    IReadOnlyList<AgentMessage> Messages,
+    SessionTranscript Transcript);
 
 /// <summary>
 ///     Line-1 header of a session file. Optional trailing fields carry the
