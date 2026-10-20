@@ -78,9 +78,11 @@
       below, every LINQ call site in Harbor.Application resolves to ZLinq's
       zero-allocation pipeline without rewriting call sites.
     -->
-    <PackageReference Include="ZLinq.DropInGenerator">
+    <PackageReference Include="ZLinq.DropInGenerator" ExcludeAssets="runtime">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): the package ships an analyzer and no runtime
+           assembly, so the runtime asset is excluded explicitly. -->
     </PackageReference>
   </ItemGroup>
 

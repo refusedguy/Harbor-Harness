@@ -77,7 +77,47 @@
 
     <!-- Allow unsafe: NEVER. Project rule. -->
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <!--
+      NuGet audit — pinned, not inherited (#1857).
+
+      The SDK default is `NuGetAuditMode=direct` (direct dependencies only) and
+      `NuGetAuditLevel=low`. Both defaults are the wrong shape for this
+      repository: Directory.Packages.props turns on
+      `CentralPackageTransitivePinningEnabled` and pins the transitive versions
+      of SixLabors.ImageSharp and MessagePack on purpose, so a transitive
+      advisory is Harbor's subject and not the SDK's business to decide.
+      Leaving the mode at the default would let a vulnerable transitive
+      through the gate, which is exactly the class this repository has already
+      had to reason about (NU1902/NU1903 for MessagePack and ImageSharp).
+
+      `all` audits direct AND transitive dependencies; `moderate` is the
+      smallest level that still reports the advisories the audit exists for.
+      Both are pinned here so the SDK default cannot change the gate under us.
+    -->
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
   </PropertyGroup>
+
+  <!--
+    The project-file analyzer's severity table reaches the compiler through
+    this item (#1857). `EditorConfigFiles` is what the C# task passes to the
+    compiler as /analyzerconfig:, and the file is added HERE rather than left
+    to the SDK's discovery, because the SDK discovers a `.globalconfig` by
+    walking up from the COMPILED SOURCES: a project that compiles no source
+    file of its own (a meta-package, a test project whose sources moved into
+    Harbor.TestKit) would discover nothing, and every rule in the table would
+    fall back to its shipped default — which is Warning, and
+    TreatWarningsAsErrors promotes that to an error.
+
+    The file is named `Directory.Build.globalconfig` rather than
+    `.globalconfig` so the SDK's discovery does not add the same file twice
+    (two copies make Roslyn report a duplicate-key warning for every key in
+    it, and that warning is an error here).
+  -->
+  <ItemGroup>
+    <EditorConfigFiles Include="$(MSBuildThisFileDirectory)Directory.Build.globalconfig" />
+  </ItemGroup>
 
   <!-- NativeAOT opt-in per project; default off -->
   <PropertyGroup>
@@ -223,38 +263,57 @@
     <NoWarn>$(NoWarn);CFE0001</NoWarn>
   </PropertyGroup>
 
-  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->  <ItemGroup>
+  <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
+  <!--
+    Every analyzer package below carries `ExcludeAssets="runtime"` next to
+    `<PrivateAssets>all</PrivateAssets>` (#1857, rule Proj0037). An analyzer
+    package ships no runtime assembly, so listing `runtime` in IncludeAssets is
+    exactly the state in which the IDE offers a type the program cannot load
+    at run time. Excluding the runtime asset changes nothing for these packages
+    — they have none — and it states the intent.
+
+    ATTRIBUTE form, not a child element: Proj0037 reads the attribute
+    (`reference.Element.Attribute("ExcludeAssets")`) and ignores the child
+    element NuGet also accepts. NuGet reads both forms as the same item
+    metadata, so the attribute is the only form that satisfies the rule.
+
+    The IncludeAssets list itself stays: it enumerates the asset kinds an
+    analyzer package contributes (analyzers, buildtransitive). Rule Proj0026
+    ("remove IncludeAssets when redundant") disagrees and is switched off with
+    a reason in /Directory.Build.globalconfig.
+  -->
+  <ItemGroup>
     <!-- Code style + quality -->
-    <PackageReference Include="Roslynator.Analyzers">
+    <PackageReference Include="Roslynator.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="SonarAnalyzer.CSharp">
+    <PackageReference Include="SonarAnalyzer.CSharp" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Microsoft official analyzers -->
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Async best practices -->
-    <PackageReference Include="AsyncFixer">
+    <PackageReference Include="AsyncFixer" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Reflection detection (AOT-friendliness) -->
-    <PackageReference Include="ReflectionAnalyzers">
+    <PackageReference Include="ReflectionAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Performance-focused analyzer -->
-    <PackageReference Include="Meziantou.Analyzer">
+    <PackageReference Include="Meziantou.Analyzer" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -279,7 +338,7 @@
       Microsoft.Extensions.DependencyInjection gets checked. Default severity is
       warning.
     -->
-    <PackageReference Include="DependencyInjection.Lifetime.Analyzers">
+    <PackageReference Include="DependencyInjection.Lifetime.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -312,7 +371,26 @@
       (docs/ROP-API-INVENTORY.md §5 — low value, Harbor's Result.Failure<T>
       sites are mostly not in an inferable position).
     -->
-    <PackageReference Include="CSharpFunctionalExtensions.Analyzers">
+    <PackageReference Include="CSharpFunctionalExtensions.Analyzers" ExcludeAssets="runtime">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      Project-file analyzer (#1857) — 190+ rules over the MSBuild project files
+      rather than over C#. Only three of them are adopted (Proj0037,
+      Proj0040, Proj0041) and they are errors; the rest are off with a written
+      reason, family by family, in /Directory.Build.globalconfig.
+
+      The severity table cannot live in .editorconfig: a diagnostic reported on
+      a project file reaches the compiler as an ADDITIONAL FILE, and Roslyn
+      applies syntax-tree level editor config only to diagnostics that have a
+      source tree. A global analyzer config is the only per-rule mechanism that
+      reaches them, which is why /Directory.Build.globalconfig exists, and it
+      is wired to the compiler by hand in this file (see the EditorConfigFiles
+      item above) because the SDK's own discovery of a `.globalconfig` walks up
+      from the compiled sources and misses every project that compiles none.
+    -->
+    <PackageReference Include="DotNetProjectFile.Analyzers" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -335,12 +413,18 @@
     <HarborArchGate Condition="'$(HarborArchGate)' == ''">true</HarborArchGate>
   </PropertyGroup>
 
+  <!--
+    The Condition below is ONE line on purpose. An attribute value that spans
+    several lines crashes the project-file analyzer (#1857) with
+    `AD0001: ... 'end' must not be less than 'start'`: the analyzer looks for
+    the closing quote on the attribute's first line only, and a value that
+    continues on the next line leaves it with an end position of (0,0).
+    MSBuild has no way to express several conditions on one attribute without
+    a multi-line value, so the conjunction is one long line.
+  -->
   <Target Name="HarborArchitectureGate"
           AfterTargets="Build"
-          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true'
-                     AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests'
-                     AND '$(DesignTimeBuild)' != 'true'
-                     AND '$(BuildingInsideVisualStudio)' != 'true'">
+          Condition="'$(Configuration)' == 'Release' AND '$(HarborArchGate)' == 'true' AND '$(MSBuildProjectName)' == 'Harbor.Architecture.Tests' AND '$(DesignTimeBuild)' != 'true' AND '$(BuildingInsideVisualStudio)' != 'true'">
     <!-- Evaluated HERE, at execution time: at Directory.Build.props import
          time $(IntermediateOutputPath) is still empty, which used to scatter
          the gate log into the project dir instead of obj/. -->

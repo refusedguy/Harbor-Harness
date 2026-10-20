@@ -28,6 +28,7 @@ Harbor runs three layers of static analysis + DI validation:
 | `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
+| **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
 | **`DependencyInjection.Lifetime.Analyzers`** | **solution-wide** | **DI001–DI027** |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 
@@ -68,6 +69,28 @@ warnings are warnings nobody reads.
 > configured ids that do not exist in the package — they were dead
 > configuration, and the real rules have always run at their default
 > severity. See #1905.
+### Version baseline, and what a version move may change
+
+The two families in the table above are the ones a version move has been
+measured against.
+Both are read out of the shipped packages, not out of a changelog summary.
+
+| Family | Pinned | Decision |
+|--------|--------|----------|
+| `Roslynator.Analyzers` | 5.0.1 | **No severity rows.** The 4.15.0 → 5.0.1 gap introduces **zero** new diagnostic ids: both packages ship exactly 284 `RCS####` ids, read out of the analyzer assemblies. Roslynator 5.0.0 removes the *implementations* of twenty obsolete rules (RCS0014, RCS0022, RCS0038, RCS0043, RCS0047, RCS1008–RCS1010, RCS1012, RCS1035, RCS1036, RCS1038/RCS1040/RCS1041/RCS1066/RCS1072/RCS1091/RCS1106, RCS1176/RCS1177, RCS1237) and points at successor rules that already ship in 4.15.0, so the move can only shrink the finding surface. 5.0.0 also adds the `roslyn5.0` analyzer flavour, which is the one the .NET 10 SDK (Roslyn 5.x) loads; 4.15.0 only shipped roslyn3.8/roslyn4.7. |
+| `Meziantou.Analyzer` | 3.0.315 | **31 new rows, one per new rule.** The 3.0.123 → 3.0.315 gap adds `MA0213`–`MA0243` and changes **no** severity on the 209 rules that already existed — both facts read out of the `configuration/default.editorconfig` the package ships, which lists every rule with its default severity. Each new rule is baselined to the severity the analyzer ships it with, so the move cannot turn the zero-warning build red on the day it lands. The three that ship as `warning` (MA0220, MA0240, MA0241) read the `BannedSyntaxes.txt` file, which this repository does not have, so they have no input; they are advisory here so that adding that file later cannot break the build either. |
+
+**The rule for the next move is the one these two moves established:** a
+version bump lands with a **baseline**, not with a finding. Every id the new
+version adds gets a row with a written reason, at the severity the new version
+ships it with, and it is promoted one rule at a time afterwards — never the
+other way round, because `TreatWarningsAsErrors=true` turns a pre-existing
+finding into a red build the moment the version moves.
+
+One hole is known and is not widened by this table: `MA0184`–`MA0212` exist in
+3.0.123 as well and are still not in `.editorconfig`. Nine of them ship
+`warning` (the EventSource and JsonSerializer rules) and none of them fires
+here.
 
 ### DI lifetime rules (DependencyInjection.Lifetime.Analyzers 2.18.24)
 
@@ -308,6 +331,97 @@ Available attributes from `Excubo.Analyzers.DependencyInjection`:
 | `[As(typeof(T))]` | Like Exposes but for `As<T>` semantic (rarely used). |
 | `[IgnoreDependency(typeof(T))]` | Suppress EDI04 for the given dep type. |
 | `[DependencyInjectionPoint]` | Marks a method as a DI entry point (single attribute per method). |
+
+### Project-file rules (`DotNetProjectFile.Analyzers` 1.19.1)
+
+This analyzer is the odd one out in the table above: it does not look at C# at
+all. It reads the **MSBuild project files** — every `.csproj`, the nearest
+`Directory.Build.props`, the nearest `Directory.Packages.props`, `global.json`
+and the `.resx` files — and reports on them. The package ships 193 rules
+(`Proj0001`–`Proj6014`).
+
+**Three of them are adopted, and they are errors:**
+
+| ID | Title | Why it is an error |
+|----|-------|--------------------|
+| **Proj0037** | Exclude runtime when all assets are private | A `PrivateAssets=all` package has no runtime assembly; without `ExcludeAssets=runtime` the IDE offers a type the program cannot load. Fixed at 26 `PackageReference` sites, one `ExcludeAssets` line each, plus one scoped `NoWarn` (see below). |
+| **Proj0040** | Run NuGet security audits on transitive dependencies too | The SDK default is `direct`. Harbor pins transitive versions on purpose (`CentralPackageTransitivePinningEnabled`), so a transitive advisory is Harbor's subject. Fixed by pinning `NuGetAuditMode=all` in `Directory.Build.props`. |
+| **Proj0041** | NuGet audit level must be at least moderate | The SDK default is `low`. Fixed by pinning `NuGetAuditLevel=moderate` in `Directory.Build.props`. |
+
+**One rule is demoted because it contradicts this repository:**
+
+| ID | Title | Severity | Why |
+|----|-------|----------|-----|
+| Proj0039 | Treat all warnings as errors is a bad practice | none | The zero-warning gate (`TreatWarningsAsErrors=true` in `Directory.Build.props`) is load-bearing here. Rejected with a reason, not silently. |
+
+**Two rules stay visible because the decision is the owner's, not the build's:**
+
+| ID | Title | Severity | Why |
+|----|-------|----------|-----|
+| Proj0043 | Use lock files | suggestion | 157 `PackageReference`s times a lock file is a large diff that has to be reconciled with dependabot first. Not adopted silently. |
+| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. |
+
+**Everything else is off, family by family, with the reason written next to it**
+in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig).
+
+#### Why the severity table is not in `.editorconfig`
+
+A diagnostic reported on a project file reaches the compiler as an **additional
+file**, and Roslyn resolves a diagnostic's severity in this order
+(`CSharpDiagnosticFilter.GetDiagnosticReport` in `dotnet/roslyn`):
+
+1. command line (`/nowarn`, `/warnaserror`)
+2. editor config, **syntax tree** level — needs `diagnostic.Location.SourceTree`
+3. global analyzer config, **compilation** level
+
+An additional-file diagnostic has no source tree, so step 2 never applies to it.
+A `dotnet_diagnostic.ProjXXXX.severity` line in `.editorconfig` is therefore
+**ignored** for these rules, and so is the category-scoped bulk form
+(`dotnet_analyzer_diagnostic.category-<X>.severity`), which is gated on the same
+thing. A **global analyzer config** is the only per-rule mechanism that reaches
+them — which is what the package's own documentation points at.
+
+The file is added to `EditorConfigFiles` in `Directory.Build.props` — the
+item the C# task passes to the compiler as `/analyzerconfig:` — rather than
+left to the SDK's discovery, because the SDK discovers a `.globalconfig` by
+walking up from the **compiled sources**: a project that compiles no source
+file of its own (a meta-package like `src/Harbor.Ui.Framework`, a test
+project whose sources moved into `Harbor.TestKit`) discovers nothing at all,
+and every rule in the table falls back to its shipped default, which is
+`Warning` — promoted to an error by `TreatWarningsAsErrors`.
+
+It is named `Directory.Build.globalconfig` rather than `.globalconfig` so the
+SDK's discovery does not add the same file a second time: two copies of one
+file make Roslyn report a duplicate-key warning for every key in it, and that
+warning is an error here. `global_level = 100` puts it above anything a
+package ships (the dotnet-project-file-analyzers package's own global config
+sits at `-1`).
+
+The file sits at the repository root and is the only place in this repository
+where a diagnostic severity is written down outside `.editorconfig`.
+
+#### The two places Proj0037 is scoped instead of fixed
+
+`src/Harbor.CodeGen/Harbor.CodeGen.csproj` and
+`tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj` reference
+`Microsoft.CodeAnalysis.CSharp` with `PrivateAssets=all`, and the rule asks for
+`ExcludeAssets=runtime` there. It does not hold: both generators are compiled
+against Roslyn 5.6.0 while the .NET 10 SDK ships an older Roslyn, and the
+local copy of the Roslyn runtime is what lets a generator load against the
+version it was compiled against. The finding is scoped at those two elements
+with `NoWarn="Proj0037"` and a comment, rather than silenced globally. The
+canonical fix (exclude the runtime asset) lands when the repository's Roslyn
+pin and the SDK's Roslyn are aligned.
+
+#### `ExcludeAssets` has to be an attribute
+
+Proj0037 reads the **attribute** form —
+`reference.Element.Attribute("ExcludeAssets")` — and ignores the child element
+`<ExcludeAssets>runtime</ExcludeAssets>` that NuGet also accepts. The first
+run of this rule reported 10 sites in `Directory.Build.props` that carried the
+child element, one per project that compiled. NuGet reads both forms as the
+same item metadata, so the attribute form is the one that satisfies the rule
+and it is what the tree now carries.
 
 ---
 

@@ -53,6 +53,7 @@
     <PackageReference Remove="ReflectionAnalyzers"/>
     <PackageReference Remove="Microsoft.CodeAnalysis.BannedApiAnalyzers"/>
     <PackageReference Remove="Meziantou.Analyzer"/>
+    <PackageReference Remove="DotNetProjectFile.Analyzers"/>
   </ItemGroup>
 
 </Project>

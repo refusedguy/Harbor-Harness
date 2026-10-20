@@ -17,19 +17,31 @@
     Excubo.Analyzers.DependencyInjectionValidation is the analyzer that enforces it.
   -->
 
-  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))"/>
+  <!--
+    Imported by RELATIVE path, not by the GetPathOfFileAbove function: MSBuild
+    evaluates both to the same file (this directory's parent), but the
+    project-file analyzer (#1857) can only follow an import it can resolve on
+    disk, and a property function is not resolvable to it. With the function
+    form the analyzer never sees the solution-wide props.
+  -->
+  <Import Project="../Directory.Build.props"/>
 
   <ItemGroup>
     <!-- Annotation attribute (compile-time only) — needed so composition roots
          can put [Exposes(typeof(IAgent))] on their BuildHost methods. -->
-    <PackageReference Include="Excubo.Analyzers.Annotations">
+    <PackageReference Include="Excubo.Analyzers.Annotations" ExcludeAssets="runtime">
       <IncludeAssets>compile; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): PrivateAssets=all means the package is not a runtime
+           dependency of the app, so the runtime asset is excluded explicitly.
+           The package does have a runtime assembly, but it was already outside
+           IncludeAssets — this states the intent rather than changing it. -->
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <!-- Proj0037 (#1857): an analyzer package has no runtime assembly. -->
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>

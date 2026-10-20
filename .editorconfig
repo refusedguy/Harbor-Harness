@@ -405,6 +405,47 @@ dotnet_diagnostic.MA0181.severity = suggestion # use ReadOnlyMemory
 dotnet_diagnostic.MA0182.severity = suggestion # use FrozenSet
 dotnet_diagnostic.MA0183.severity = suggestion # use FrozenDictionary
 
+# --- Meziantou 3.0.315 (new rules, MA0213-MA0243) ---
+# The 3.0.123 -> 3.0.315 gap adds these 31 rules and changes no severity on the
+# 209 that already existed (both read out of the `configuration/default.editorconfig`
+# the package ships). Each new rule is baselined to the severity the analyzer
+# ships it with, so the version move cannot turn the zero-warning build red on
+# the day it lands. The three that ship as `warning` (MA0220, MA0240, MA0241)
+# read the BannedSyntaxes.txt file, which this repository does not have, so
+# they have no input -- they are advisory here so that adding that file later
+# cannot break the build either.
+dotnet_diagnostic.MA0213.severity = none # Simplify negated boolean expression (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0214.severity = none # Use 'await' instead of returning the task (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0215.severity = none # Return the task instead of awaiting it (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0216.severity = suggestion # Remove unnecessary closed modifier (ships suggestion by default; not adopted yet)
+dotnet_diagnostic.MA0217.severity = none # Use a static lambda (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0218.severity = suggestion # The language attribute is empty (ships suggestion by default; not adopted yet)
+dotnet_diagnostic.MA0219.severity = silent # Set the language attribute in XML comment (ships silent by default; not adopted yet)
+dotnet_diagnostic.MA0220.severity = suggestion # The configured regular expression is not valid (ships warning; reads BannedSyntaxes.txt, which this repo does not have)
+dotnet_diagnostic.MA0221.severity = none # TryGetValue method should use [MaybeNullWhen(false)] on the value parameter (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0222.severity = none # JsonSourceGenerationOptions should set RespectNullableAnnotations (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0223.severity = none # JsonSourceGenerationOptions should set RespectRequiredConstructorParameters (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0224.severity = none # JsonSerializerOptions should set RespectNullableAnnotations (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0225.severity = none # JsonSerializerOptions should set RespectRequiredConstructorParameters (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0226.severity = none # EventSource class should be sealed (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0227.severity = none # Avoid using 'Enumerable.Contains' on a set (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0228.severity = none # The event id of an EventSource must be greater than zero (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0229.severity = none # The event id of an EventSource is already used by another event (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0230.severity = none # The event name of an EventSource is already used by another event (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0231.severity = none # An EventSource event method must not be static (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0232.severity = none # An EventSource event method must not be an explicit interface implementation (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0233.severity = none # An abstract EventSource must not declare event methods (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0234.severity = none # The event id written by an EventSource event method must match its [Event] attribute (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0235.severity = none # The payload written by an EventSource event method must match its parameters (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0236.severity = none # The payload written by an EventSource event method must use the order of its parameters (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0237.severity = none # An EventSource event method writing a related activity id must declare it as its first parameter (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0238.severity = none # The parameter type of an EventSource event method is not supported (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0239.severity = none # Use 'typeof' instead of 'GetType()' when the type is sealed (ships none by default; not adopted yet)
+dotnet_diagnostic.MA0240.severity = suggestion # Do not use banned syntax (ships warning; reads BannedSyntaxes.txt, which this repo does not have)
+dotnet_diagnostic.MA0241.severity = suggestion # The banned syntax entry is not valid (ships warning; reads BannedSyntaxes.txt, which this repo does not have)
+dotnet_diagnostic.MA0242.severity = suggestion # Use a value factory to compute the value only when the key is not in the ConcurrentDictionary (ships suggestion by default; not adopted yet)
+dotnet_diagnostic.MA0243.severity = none # Use an escape sequence for invisible characters (ships none by default; not adopted yet)
+
 # --- AsyncFixer ---
 dotnet_diagnostic.AsyncFixer01.severity = suggestion # Unnecessary async/await
 dotnet_diagnostic.AsyncFixer02.severity = suggestion # Long-running operation

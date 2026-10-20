@@ -1,0 +1,419 @@
+is_global = true
+global_level = 100
+
+#
+# Directory.Build.globalconfig — severity table for the analyzer families whose
+# diagnostics are NOT reported on a C# source tree.
+#
+# WHY THIS FILE EXISTS AND WHY IT IS NOT .editorconfig
+# ----------------------------------------------
+# DotNetProjectFile.Analyzers reports on MSBuild project files, which reach the
+# compiler as ADDITIONAL FILES. Roslyn resolves a diagnostic's severity in this order
+# (dotnet/roslyn, CSharpDiagnosticFilter.GetDiagnosticReport):
+#
+#   1. command line (/nowarn, /warnaserror)
+#   2. editor config, SYNTAX TREE level   <- needs diagnostic.Location.SourceTree
+#   3. global analyzer config, COMPILATION level
+#
+# A diagnostic reported on an additional file has no SourceTree, so step 2 never
+# applies to it: a `dotnet_diagnostic.ProjXXXX.severity` line in .editorconfig is
+# IGNORED for these rules. The same is true of the category-scoped bulk form
+# (`dotnet_analyzer_diagnostic.category-<X>.severity`), which is gated on
+# diagnostic.Location.SourceTree as well. A global analyzer config is the only
+# per-rule mechanism that reaches them, which is why the package's own
+# documentation points at a global config rather than .editorconfig.
+#
+# WHY THE FILE IS NAMED Directory.Build.globalconfig AND NOT .globalconfig
+# -----------------------------------------------------------------------
+# The .NET SDK discovers a file named exactly `.globalconfig` by walking up from
+# the COMPILED SOURCES (Microsoft.Managed.Core.targets: _AllDirectoriesAbove is
+# built from @(Compile)). A project that compiles no source file of its own —
+# a meta-package like src/Harbor.Ui.Framework, a test project whose sources
+# moved into Harbor.TestKit — therefore discovers NO global config at all, and
+# every rule in this table silently falls back to its shipped default (Warning,
+# which TreatWarningsAsErrors promotes to an error). That is not hypothetical:
+# the second CI run of this branch reported forty-odd rules at their shipped
+# default on exactly those projects.
+#
+# So the file is added to `EditorConfigFiles` explicitly in Directory.Build.props
+# — that is the item the C# task passes to the compiler as /analyzerconfig: —
+# and it is named so the SDK's own discovery does not add it a second time
+# (two copies of one file would make Roslyn report a duplicate-key warning for
+# every key in it, and that warning is an error here).
+#
+# `global_level = 100` puts this file above anything a package ships: the
+# dotnet-project-file-analyzers package's own global config sits at -1.
+#
+# WHAT IS IN HERE
+# --------------
+# Only three of the 190+ rules are adopted (Proj0037, Proj0040, Proj0041) and they
+# are errors. Two more (Proj0043, Proj0044) stay visible as suggestions because the
+# lock-file question is an owner decision, not a build rule. Every other rule is
+# off, and each family block says why. The rules that are off are off BY FAMILY and
+# BY NAMED REASON, not by a blanket switch: a family that has a real finding in
+# this tree gets its own row with its own reason.
+
+# NOTE: `is_enabled_by_default` and the shipped default severity of every Proj rule
+# is Warning (dotnet-project-file-analyzers Rule.New: defaultSeverity = Warning unless
+# the category is SyntaxError). With TreatWarningsAsErrors=true an unlisted rule
+# would be a build error, so the table below is exhaustive on purpose.
+
+# --------------------------------------------------------------------------
+# General — MSBuild project-file rules
+#
+# Style and structure of the project files themselves. Harbor's project files are
+#   grouped by concern and deliberately not alphabetised, carry a hand-written
+#   comment above every analyzer block, and are not SDK-generated. The rules in
+#   this block are not adopted: they are the analyzer's opinion about how a project
+#   file should look, and adopting them one by one is a decision this PR does not
+#   make. The six rules that ARE decided are listed at the end of this file.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0001.severity = none  # MS Build project file could not be located
+dotnet_diagnostic.Proj0002.severity = none  # Upgrade legacy MS Build project files
+dotnet_diagnostic.Proj0003.severity = none  # Define usings explicit
+dotnet_diagnostic.Proj0004.severity = none  # Run NuGet security audits automatically
+dotnet_diagnostic.Proj0005.severity = none  # Define package reference assets as attributes
+dotnet_diagnostic.Proj0006.severity = none  # Add additional files to improve static code analysis
+dotnet_diagnostic.Proj0007.severity = none  # Remove empty nodes
+dotnet_diagnostic.Proj0008.severity = none  # Remove folder nodes
+dotnet_diagnostic.Proj0009.severity = none  # Use the TargetFramework node for a single target framework
+dotnet_diagnostic.Proj0010.severity = none  # Define OutputType explicitly
+dotnet_diagnostic.Proj0011.severity = none  # Define properties once
+dotnet_diagnostic.Proj0012.severity = none  # Reassign properties with different value
+dotnet_diagnostic.Proj0013.severity = none  # Include package references only once
+dotnet_diagnostic.Proj0014.severity = none  # Include project references only once
+dotnet_diagnostic.Proj0015.severity = none  # Order package references alphabetically
+dotnet_diagnostic.Proj0016.severity = none  # Order project references alphabetically
+dotnet_diagnostic.Proj0017.severity = none  # Can't create alias for static using directive
+dotnet_diagnostic.Proj0018.severity = none  # Order using directives by type
+dotnet_diagnostic.Proj0019.severity = none  # Order using directives alphabetically
+dotnet_diagnostic.Proj0020.severity = none  # Item group should only contain nodes of a single type
+dotnet_diagnostic.Proj0021.severity = none  # Build actions should have a single task
+dotnet_diagnostic.Proj0022.severity = none  # Build action includes should exist
+dotnet_diagnostic.Proj0023.severity = none  # Use forward slashes in paths
+dotnet_diagnostic.Proj0024.severity = none  # Order package versions alphabetically
+dotnet_diagnostic.Proj0025.severity = none  # Migrate from ruleset file to .globalconfig file
+dotnet_diagnostic.Proj0026.severity = none  # Remove IncludeAssets when redundant
+dotnet_diagnostic.Proj0027.severity = none  # Override <TargetFrameworks> with <TargetFrameworks>
+dotnet_diagnostic.Proj0028.severity = none  # Define conditions on level 1
+dotnet_diagnostic.Proj0029.severity = none  # Use C# specific properties only when applicable
+dotnet_diagnostic.Proj0030.severity = none  # Use VB.NET specific properties only when applicable
+dotnet_diagnostic.Proj0031.severity = none  # Adopt preferred casing of nodes
+dotnet_diagnostic.Proj0032.severity = none  # Migrate away from BinaryFormatter
+dotnet_diagnostic.Proj0033.severity = none  # Project reference includes should exist
+dotnet_diagnostic.Proj0034.severity = none  # Import statement could not be resolved
+dotnet_diagnostic.Proj0035.severity = none  # Remove deprecated RestoreProjectStyle property
+dotnet_diagnostic.Proj0036.severity = none  # Remove None when redundant
+dotnet_diagnostic.Proj0038.severity = none  # Fully specify NoWarn rule IDs
+dotnet_diagnostic.Proj0042.severity = none  # Enable <ContinuousIntegrationBuild> when running in CI pipeline
+dotnet_diagnostic.Proj0045.severity = none  # Convention-based MSBuild file names should use correct casing
+dotnet_diagnostic.Proj0046.severity = none  # Update statements should change state
+dotnet_diagnostic.Proj0047.severity = none  # Label item groups that disable compliation items
+dotnet_diagnostic.Proj0048.severity = none  # Language version should be set to an explicit version number
+dotnet_diagnostic.Proj0049.severity = none  # Prefer the latest released language version
+dotnet_diagnostic.Proj0050.severity = none  # Enforce code-style in builds
+dotnet_diagnostic.Proj0051.severity = none  # Project reference must be case-consistent with the file system
+dotnet_diagnostic.Proj0052.severity = none  # Prefer attributes over element
+dotnet_diagnostic.Proj0053.severity = none  # Run analyzers during build
+dotnet_diagnostic.Proj0054.severity = none  # Avoid changing compiler tools
+dotnet_diagnostic.Proj0055.severity = none  # Enable nullability analysis for C#
+dotnet_diagnostic.Proj0056.severity = none  # Enable nullability analysis for F#
+dotnet_diagnostic.Proj0057.severity = none  # Keep paths portable
+dotnet_diagnostic.Proj0058.severity = none  # Remove legacy project nodes
+
+# --------------------------------------------------------------------------
+# Packaging
+#
+# Harbor ships exactly one NuGet package (Harbor.Abstractions) and it is
+#   configured in its own project file. These rules describe the packaging
+#   metadata of a package we mostly do not build, so they stay off.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0200.severity = none  # Define IsPackable explicitly
+dotnet_diagnostic.Proj0201.severity = none  # Define the project version explicitly
+dotnet_diagnostic.Proj0202.severity = none  # Define the project description explicitly
+dotnet_diagnostic.Proj0203.severity = none  # Define the project authors explicitly
+dotnet_diagnostic.Proj0204.severity = none  # Define the project tags explicitly
+dotnet_diagnostic.Proj0205.severity = none  # Define the project repository URL explicitly
+dotnet_diagnostic.Proj0206.severity = none  # Define the project URL explicitly
+dotnet_diagnostic.Proj0207.severity = none  # Define the project copyright explicitly
+dotnet_diagnostic.Proj0208.severity = none  # Define the project release notes explicitly
+dotnet_diagnostic.Proj0209.severity = none  # Define the project readme file explicitly
+dotnet_diagnostic.Proj0210.severity = none  # Define the project license explicitly
+dotnet_diagnostic.Proj0211.severity = none  # Avoid using deprecated license definition
+dotnet_diagnostic.Proj0212.severity = none  # Define the project icon file explicitly
+dotnet_diagnostic.Proj0213.severity = none  # Define the project icon URL explicitly
+dotnet_diagnostic.Proj0214.severity = none  # Define the NuGet project ID explicitly
+dotnet_diagnostic.Proj0215.severity = none  # Provide a compliant NuGet package icon
+dotnet_diagnostic.Proj0216.severity = none  # Define the product name ID explicitly
+dotnet_diagnostic.Proj0217.severity = none  # Define requiring license acceptance explicitly
+dotnet_diagnostic.Proj0218.severity = none  # Symbol package format snupkg requires debug type portable
+dotnet_diagnostic.Proj0219.severity = none  # Packable projects should be libraries
+dotnet_diagnostic.Proj0220.severity = none  # Symbol package format snupkg requires include symbols to be enabled
+dotnet_diagnostic.Proj0240.severity = none  # Enable package validation
+dotnet_diagnostic.Proj0241.severity = none  # Enable package baseline validation
+dotnet_diagnostic.Proj0242.severity = none  # Generate NuGet packages conditionally
+dotnet_diagnostic.Proj0243.severity = none  # Generate software bill of materials
+dotnet_diagnostic.Proj0244.severity = none  # Generate documentation file
+dotnet_diagnostic.Proj0245.severity = none  # Don’t mix Version and VersionPrefix/VersionSuffix
+dotnet_diagnostic.Proj0246.severity = none  # Define VersionPrefix if VersionSuffix is defined
+dotnet_diagnostic.Proj0247.severity = none  # Enable strict mode for package baseline validation
+dotnet_diagnostic.Proj0248.severity = none  # Enable strict mode for package runtime compatibility validation
+dotnet_diagnostic.Proj0249.severity = none  # Enable strict mode for package framework compatibility validation
+dotnet_diagnostic.Proj0250.severity = none  # Generate API compatibility suppression file
+dotnet_diagnostic.Proj0251.severity = none  # Enable API compatibility attribute checks
+dotnet_diagnostic.Proj0252.severity = none  # Enable API compatibility parameter name checks
+dotnet_diagnostic.Proj0253.severity = none  # Versions should be compliant with Semantic Versioning
+dotnet_diagnostic.Proj0254.severity = none  # Version prefixes should be compliant with Semantic Versioning
+
+# --------------------------------------------------------------------------
+# NuGet configuration
+#
+# Harbor's package sources come from the environment, not from a NuGet.config
+#   in the tree.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0300.severity = none  # Configure NuGet explicitly
+dotnet_diagnostic.Proj0301.severity = none  # Clear previously defined package sources
+dotnet_diagnostic.Proj0302.severity = none  # NuGet authentication should be secure
+dotnet_diagnostic.Proj0303.severity = none  # Define a mapping for each package source
+dotnet_diagnostic.Proj0304.severity = none  # Package source mappings should be unique
+dotnet_diagnostic.Proj0305.severity = none  # Last source map should map all packages
+dotnet_diagnostic.Proj0306.severity = none  # Avoid local package sources
+
+# --------------------------------------------------------------------------
+# Publishing
+#
+# Publishing shape is decided by the release pipeline, not per project.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0400.severity = none  # Define the project publishability explicitly
+dotnet_diagnostic.Proj0401.severity = none  # Only publish executables
+
+# --------------------------------------------------------------------------
+# Test projects
+#
+# The test-project rules are about the SDK bridge that #1801 is removing; the
+#   project files are not changed here.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0450.severity = none  # Test projects should not be packable
+dotnet_diagnostic.Proj0451.severity = none  # Test projects should not be publishable
+dotnet_diagnostic.Proj0452.severity = none  # Test projects require Microsoft.NET.Test.Sdk
+dotnet_diagnostic.Proj0453.severity = none  # Using Microsoft.NET.Test.Sdk implies a test project
+
+# --------------------------------------------------------------------------
+# Licensing
+#
+# Third-party license metadata is a release-process concern.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0500.severity = none  # Only include packages with an explicitly defined license
+dotnet_diagnostic.Proj0501.severity = none  # Package only contains a deprecated license URL
+dotnet_diagnostic.Proj0502.severity = none  # Only include packages compliant with project
+dotnet_diagnostic.Proj0503.severity = none  # Package license is unknown
+dotnet_diagnostic.Proj0504.severity = none  # Package license has changed
+dotnet_diagnostic.Proj0505.severity = none  # Third-party license registry requires include
+dotnet_diagnostic.Proj0506.severity = none  # Third-party license registry requires hash
+dotnet_diagnostic.Proj0507.severity = none  # Third-party license registry must be unconditional
+dotnet_diagnostic.Proj0508.severity = none  # Order third-party licenses alphabetically
+dotnet_diagnostic.Proj0509.severity = none  # NuGet package cache could not be resolved
+
+# --------------------------------------------------------------------------
+# Packaging — conditional package generation
+#
+# Harbor does not generate a package on build outside the release pipeline.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0600.severity = none  # Avoid generating packages on build if not packable
+
+# --------------------------------------------------------------------------
+# SDK
+#
+# The SDK project-file rules apply to the .net.csproj proxy shape, which Harbor
+#   does not use.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0700.severity = none  # Avoid defining <Compile> items in SDK project
+
+# --------------------------------------------------------------------------
+# Central Package Management
+#
+# Harbor already enables CPM in Directory.Packages.props; the remaining rules
+#   describe a different CPM layout.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0800.severity = none  # Configure Central Package Management
+dotnet_diagnostic.Proj0801.severity = none  # Include 'Directory.Packages.props'
+dotnet_diagnostic.Proj0802.severity = none  # Enable Central Package Management centrally
+dotnet_diagnostic.Proj0803.severity = none  # Only use VersionOverride when CPM is enabled
+dotnet_diagnostic.Proj0804.severity = none  # Only use Version when CPM is not enabled
+dotnet_diagnostic.Proj0805.severity = none  # Define version for PackageReference
+dotnet_diagnostic.Proj0806.severity = none  # VersionOverride should change the version
+dotnet_diagnostic.Proj0807.severity = none  # Use Directory.Packages.props only for Central Package Management
+dotnet_diagnostic.Proj0808.severity = none  # Define CPM related configuration only in Directory.Packages.props
+dotnet_diagnostic.Proj0809.severity = none  # Global package references are meant for private assets only
+dotnet_diagnostic.Proj0810.severity = none  # Remove unused package versions
+dotnet_diagnostic.Proj0811.severity = none  # Directory.Build.props and Directory.Packages.props should be in the same directory
+dotnet_diagnostic.Proj0812.severity = none  # Remove redundant packages references that are globally referenced
+dotnet_diagnostic.Proj0813.severity = none  # Global package references only work when CPM is enabled
+
+# --------------------------------------------------------------------------
+# Analyzers
+#
+# Harbor wires its analyzers through Directory.Build.props, not per package.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj1001.severity = none  # Use analyzers for packages
+dotnet_diagnostic.Proj1002.severity = none  # Use Microsoft's analyzers
+dotnet_diagnostic.Proj1003.severity = none  # Use Sonar analyzers
+dotnet_diagnostic.Proj1004.severity = none  # .NET Project File Analyzers SDK not longer requires separate package
+dotnet_diagnostic.Proj1005.severity = none  # Suppress NuGet issues per package
+dotnet_diagnostic.Proj1006.severity = none  # Suppress NuGet advisories per vulnerability
+dotnet_diagnostic.Proj1007.severity = none  # Non-Roslyn languages require .NET Project File Analyzers SDK
+dotnet_diagnostic.Proj1008.severity = none  # Remove configuration for not-configurable rule
+dotnet_diagnostic.Proj1009.severity = none  # Remove configuration for dropped rule
+dotnet_diagnostic.Proj1010.severity = none  # Avoid enabling deprecated rules
+
+# --------------------------------------------------------------------------
+# Other
+#
+# Tooling conventions (Moq, Coverlet, TUnit executable shape) are not gates.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj1100.severity = none  # Avoid using Moq
+dotnet_diagnostic.Proj1101.severity = none  # Package references should have stable versions
+dotnet_diagnostic.Proj1102.severity = none  # Use Coverlet Collector or MSBuild
+dotnet_diagnostic.Proj1103.severity = none  # TUnit test projects must be executable
+dotnet_diagnostic.Proj1104.severity = none  # TUnit conflicts with Microsoft.NET.Test.Sdk
+
+# --------------------------------------------------------------------------
+# Other — private assets
+#
+# Overlaps Proj0037, which is the rule this PR adopts.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj1200.severity = none  # Exclude private assets as project file dependency
+
+# --------------------------------------------------------------------------
+# Design
+#
+# Project-reference design rules are a design decision, not a build gate.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj1300.severity = none  # Avoid project references to executables
+dotnet_diagnostic.Proj1301.severity = none  # Project references of packable targets should be packable
+dotnet_diagnostic.Proj1302.severity = none  # Avoid project references to test projects
+dotnet_diagnostic.Proj1303.severity = none  # Avoid project references to benchmark projects
+
+# --------------------------------------------------------------------------
+# Formatting
+#
+# The project files follow the repository's own 2-space XML convention, which this
+#   rule does not model.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj1700.severity = none  # Indent XML
+dotnet_diagnostic.Proj1701.severity = none  # Use CDATA for large texts
+dotnet_diagnostic.Proj1702.severity = none  # Omit XML declarations
+dotnet_diagnostic.Proj1703.severity = none  # MSBuild child elements should be separated by an empty line
+
+# --------------------------------------------------------------------------
+# Resource files
+#
+# Harbor embeds no .resx resources in the shipped assemblies.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj2000.severity = none  # Embed valid resource files
+dotnet_diagnostic.Proj2001.severity = none  # Define data in a resource file
+dotnet_diagnostic.Proj2002.severity = none  # Sort resource file values alphabetically
+dotnet_diagnostic.Proj2003.severity = none  # Add invariant fallback resources
+dotnet_diagnostic.Proj2004.severity = none  # Add invariant fallback values
+dotnet_diagnostic.Proj2005.severity = none  # Escape XML nodes of resource values
+dotnet_diagnostic.Proj2100.severity = none  # Indent RESX
+
+# --------------------------------------------------------------------------
+# Generic
+#
+# The repository's own file conventions are enforced by .editorconfig and the
+#   documentation linters, not by a project-file analyzer.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj3000.severity = none  # Only use UTF-8 without BOM
+dotnet_diagnostic.Proj3001.severity = none  # Track uses of "TODO" tags
+dotnet_diagnostic.Proj3002.severity = none  # Remove commented-out code
+dotnet_diagnostic.Proj3003.severity = none  # Trim whitespace
+
+# --------------------------------------------------------------------------
+# INI files
+#
+# Harbor has no .ini inputs in the build.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj4000.severity = none  # Invalid INI file
+dotnet_diagnostic.Proj4001.severity = none  # Invalid INI header
+dotnet_diagnostic.Proj4002.severity = none  # Invalid INI key-value pair
+dotnet_diagnostic.Proj4010.severity = none  # Sections should contain at least one key-value pair
+dotnet_diagnostic.Proj4011.severity = none  # Define INI keys once
+
+# --------------------------------------------------------------------------
+# Global analyzer config
+#
+# These rules police the .globalconfig format itself. Proj4031 would fire on
+#   this very file if it were analysed as an additional file; it is not.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj4025.severity = none  # Remove section header
+dotnet_diagnostic.Proj4026.severity = none  # Specify is_global
+dotnet_diagnostic.Proj4027.severity = none  # Use valid diagnostic severity value
+dotnet_diagnostic.Proj4028.severity = none  # Use explicit diagnostic severity level
+dotnet_diagnostic.Proj4029.severity = none  # Use known diagnostic IDs
+dotnet_diagnostic.Proj4030.severity = none  # Avoid global diagnostic suppression
+dotnet_diagnostic.Proj4031.severity = none  # Avoid global diagnostic severity configuration
+
+# --------------------------------------------------------------------------
+# Editorconfig
+#
+# The repository's .editorconfig format is policed by the documentation linters.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj4050.severity = none  # Header must be a GLOB
+dotnet_diagnostic.Proj4051.severity = none  # Use equals sign for key-value assignments
+dotnet_diagnostic.Proj4052.severity = none  # Use global configuration for Roslyn diagnostics
+
+# --------------------------------------------------------------------------
+# SLNX solution files
+#
+# Harbor already uses .slnx; the remaining rules describe a different shape.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj5000.severity = none  # Use SLNX solution files
+dotnet_diagnostic.Proj5001.severity = none  # Remove SLN solution files
+dotnet_diagnostic.Proj5005.severity = none  # Omit Project ID's
+dotnet_diagnostic.Proj5006.severity = none  # Included files should exist
+
+# --------------------------------------------------------------------------
+# global.json
+#
+# global.json is owned by the SDK pin, not by a project-file rule.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj6000.severity = none  # Invalid JSON file
+dotnet_diagnostic.Proj6010.severity = none  # global.json should exist
+dotnet_diagnostic.Proj6011.severity = none  # Specify SDK version
+dotnet_diagnostic.Proj6012.severity = none  # Specify SDK version roll-forward policy
+dotnet_diagnostic.Proj6013.severity = none  # Disable SDK version roll-forward when using lock files
+dotnet_diagnostic.Proj6014.severity = none  # Specify stable SDK version
+
+# --------------------------------------------------------------------------
+# ADOPTED RULES
+#
+# These are the three rules this PR turns on, plus the one the issue says has to be
+# demoted, plus the two that stay visible pending an owner decision. Each row names
+# its rule and says what authorises it.
+# --------------------------------------------------------------------------
+dotnet_diagnostic.Proj0037.severity = error
+# Exclude runtime when all assets are private — adopted: an analyzer
+#   package has no runtime assembly, and the IDE must not offer one.
+
+dotnet_diagnostic.Proj0040.severity = error
+# Run NuGet security audits on transitive dependencies too — adopted: Harbor
+#   pins transitive versions on purpose, so transitive advisories are its subject.
+
+dotnet_diagnostic.Proj0041.severity = error
+# NuGet audit level must be at least moderate — adopted: the SDK default is
+#   'low', which under-reports the advisories the audit exists for.
+
+dotnet_diagnostic.Proj0039.severity = none
+# Treat all warnings as errors is a bad practice — this contradicts the
+#   zero-warning gate that Directory.Build.props builds on (TreatWarningsAsErrors=true).
+#   Rejected with a reason, not silently.
+
+dotnet_diagnostic.Proj0043.severity = suggestion
+# Use lock files — an owner decision, deliberately not taken here:
+#   157 PackageReferences times a lock file is a large diff that has to be
+#   reconciled with dependabot first.
+
+dotnet_diagnostic.Proj0044.severity = suggestion
+# Enable RestoreLockedMode when ContinuousIntegrationBuild is on —
+#   follows Proj0043; both wait on the same owner decision.

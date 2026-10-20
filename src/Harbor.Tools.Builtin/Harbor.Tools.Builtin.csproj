@@ -29,7 +29,14 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing"/>
     <!-- SG3 spike (issue 1244): generator packages are PrivateAssets=all only. -->
-    <PackageReference Include="AutoCtor" PrivateAssets="all"/>
+    <!--
+      Proj0037 (#1857) wants ExcludeAssets=runtime on every PrivateAssets=all
+      reference. A source generator that shipped a runtime assembly could not
+      have its generated code depend on it — PrivateAssets=all means the
+      assembly does not flow to the consumers of this library — so the runtime
+      asset of AutoCtor is dead weight here and is excluded.
+    -->
+    <PackageReference Include="AutoCtor" PrivateAssets="all" ExcludeAssets="runtime"/>
   </ItemGroup>
 
 </Project>
