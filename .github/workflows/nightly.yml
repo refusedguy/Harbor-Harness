@@ -108,11 +108,19 @@ jobs:
       proceed: ${{ steps.decide.outputs.proceed }}
       reason: ${{ steps.decide.outputs.reason }}
     steps:
-      - name: Check out dev (the branch the work happens on)
-        if: github.event_name == 'schedule'
+      # The checkout is NOT conditional any more (#1753). Two things need the
+      # tree on disk: the queue-wait action at the end of this job is a LOCAL
+      # action, so the runner has to have the repository before it can run it,
+      # and the schedule path below reads dev's newest commit age from git.
+      # With the checkout limited to scheduled runs, a push run reached the
+      # local action with an empty workspace and the whole lane died in the
+      # GATE job — so the coverage job below never ran at all.
+      - name: Check out the tree (the local action at the end of this job lives in it)
         uses: actions/checkout@v7
         with:
-          ref: dev
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push or a dispatch run checks out what was pushed.
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
           fetch-depth: 1
 
       - name: Decide whether this run duplicates a push-run
@@ -222,13 +230,28 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Build the tree the coverage runs against
+      - name: Build the tree the coverage runs against (with symbols)
         run: |
           # pipefail is load-bearing: `... | tee build.log` reports tee's
           # exit code, so without it a FAILED build would leave this job
           # green.
           set -o pipefail
-          bash build/build.sh Compile --configuration Release 2>&1 | tee build.log
+          # The symbols are LOAD-BEARING (#1753). Release strips them
+          # (Directory.Build.props sets DebugType=none for Release, so the
+          # packages carry no PDB), and the coverage engine on Linux
+          # instruments the assemblies STATICALLY — the instrumentation maps
+          # IL back to source lines THROUGH the portable PDB next to each
+          # DLL. With no PDB there is nothing to instrument: run 39508517419
+          # produced 20 EMPTY cobertura files and "Total - Line: N/A" in
+          # every suite, and the summary said "No cobertura files produced".
+          # The same build as the NUKE one (dotnet build of Harbor.slnx, the
+          # properties CompileTarget passes) plus the two that keep the PDBs.
+          dotnet build Harbor.slnx -c Release --nologo \
+            -p:DebugType=portable \
+            -p:DebugSymbols=true \
+            -p:ContinuousIntegrationBuild=true \
+            -p:MaxCpuCount=0 \
+            2>&1 | tee build.log
 
       - name: Publish the analyzer inventory of the test projects
         if: always()
