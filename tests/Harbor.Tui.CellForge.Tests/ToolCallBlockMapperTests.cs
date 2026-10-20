@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework;
@@ -22,20 +23,33 @@ public class ToolCallBlockMapperTests
         return GridDump.Art(buffer);
     }
 
+    // #1810: the two mapper tables name EVERY member of ToolCallState, and
+    // the totality guard below proves it. Before, each table named three of
+    // the six — Pending, Cancelled and TimedOut had no row here at all, so a
+    // change to what those states paint was not caught by this file.
+
     [Test]
-    public async Task Pill_Maps_All_States()
+    [Arguments(ToolCallState.Pending, "pending", DisplayName = "Pill_Maps_All_States_Pending")]
+    [Arguments(ToolCallState.Running, "running", DisplayName = "Pill_Maps_All_States_Running")]
+    [Arguments(ToolCallState.Success, "ok", DisplayName = "Pill_Maps_All_States_Success")]
+    [Arguments(ToolCallState.Error, "err", DisplayName = "Pill_Maps_All_States_Error")]
+    [Arguments(ToolCallState.Cancelled, "cancelled", DisplayName = "Pill_Maps_All_States_Cancelled")]
+    [Arguments(ToolCallState.TimedOut, "timeout", DisplayName = "Pill_Maps_All_States_TimedOut")]
+    public async Task Pill_Maps_All_States(ToolCallState state, string expectedPill)
     {
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Running)).IsEqualTo("running");
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Success)).IsEqualTo("ok");
-        await Assert.That(StatusMappers.ToolCallStateToPill(ToolCallState.Error)).IsEqualTo("err");
+        await Assert.That(StatusMappers.ToolCallStateToPill(state)).IsEqualTo(expectedPill);
     }
 
     [Test]
-    public async Task BrushKey_Maps_All_States()
+    [Arguments(ToolCallState.Pending, "MochaOverlay2", DisplayName = "BrushKey_Maps_All_States_Pending")]
+    [Arguments(ToolCallState.Running, "MochaYellow", DisplayName = "BrushKey_Maps_All_States_Running")]
+    [Arguments(ToolCallState.Success, "MochaGreen", DisplayName = "BrushKey_Maps_All_States_Success")]
+    [Arguments(ToolCallState.Error, "MochaRed", DisplayName = "BrushKey_Maps_All_States_Error")]
+    [Arguments(ToolCallState.Cancelled, "MochaOverlay1", DisplayName = "BrushKey_Maps_All_States_Cancelled")]
+    [Arguments(ToolCallState.TimedOut, "MochaRed", DisplayName = "BrushKey_Maps_All_States_TimedOut")]
+    public async Task BrushKey_Maps_All_States(ToolCallState state, string expectedBrush)
     {
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Running)).IsEqualTo("MochaYellow");
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Success)).IsEqualTo("MochaGreen");
-        await Assert.That(StatusMappers.ToolCallStateToBrushKey(ToolCallState.Error)).IsEqualTo("MochaRed");
+        await Assert.That(StatusMappers.ToolCallStateToBrushKey(state)).IsEqualTo(expectedBrush);
     }
 
     [Test]
@@ -264,6 +278,27 @@ public class ToolCallBlockMapperTests
             string art = PaintHeader(block);
             await Assert.That(art).IsNotEmpty();
         }
+    }
+
+    /// <summary>
+    /// #1810: the totality check for the two mapper tables above. Both name
+    /// every member of <c>ToolCallState</c>, and this says so — a member
+    /// added to the enum has no row until it gets one.
+    /// </summary>
+    /// <remarks>
+    /// The guard above walks <c>Enum.GetValues</c> over the PRODUCT and
+    /// proves every state paints something. This one walks the TABLE and
+    /// proves every state is NAMED. A table that forgot a member would leave
+    /// the first guard green and the second one red.
+    /// </remarks>
+    [Test]
+    public async Task Every_State_Has_A_Row_In_Every_Table()
+    {
+        await Assert.That(Enum.GetValues<ToolCallState>().Length).IsGreaterThan(0).Because("the enum has members to name");
+        Exhaustive.AssertAllCases<ToolCallState>([
+            (typeof(ToolCallBlockMapperTests), nameof(Pill_Maps_All_States)),
+            (typeof(ToolCallBlockMapperTests), nameof(BrushKey_Maps_All_States)),
+        ], "every ToolCallState must have a row in a table");
     }
 
     [Test]
