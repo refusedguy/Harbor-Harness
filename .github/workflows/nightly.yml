@@ -411,46 +411,48 @@ jobs:
         with:
           job-name: coverage
 
-  # ── the build measurement: an MSBuild binary log, and what it says ────────
+  # ── the build measurement: the periodic vCPU falsification ───────────────
   #
-  # Issue #1801 measured that the NUKE `Compile` step is 372.5 s on a 4-vCPU
-  # runner — 69 % of the `build` job and 20 % of all PR runner-minutes — and
-  # asked for the analyzer profile ("take a profile and find which analyzer
-  # costs more than all the others together"). This job is the answer: it
-  # takes the MSBuild BINARY LOG of the same build and publishes the
-  # expensive tasks, the expensive analyzers and the node utilisation.
+  # Issue #1929 asks a falsifiable question: is the CI build limited by the
+  # runner's 4 vCPU, or by the shape of the project dependency graph? The
+  # one-off harness for it is `.github/workflows/meas-build-vcpu.yml`
+  # (dev's, on its own branch); this job is its PERIODIC counterpart: the
+  # same two arms, on the schedule and on every merge into dev/master, so
+  # the answer is a trend rather than a single reading.
   #
-  # TWO PROBES THAT TURN AN INFERENCE INTO A MEASUREMENT
-  # ------------------------------------------------------
-  # The dependency-graph analysis of run 39389070999 concluded that for
-  # 344.9 s of the 362.7 s compile step at least four projects were runnable
-  # at the same time, and from that inferred that the 4-vCPU runner is the
-  # constraint — which is what #1929 ("split the compile into two parallel
-  # jobs") would be built on. That is a conclusion from a scheduling MODEL,
-  # not a measurement of the runner. These two probes measure it:
+  # The two arms, and the instrument, are dev's:
   #
-  #   1. CPU UTILISATION. /proc/stat is sampled every 2 s for the whole
-  #      compile. The average and the peak are reported as a percentage of
-  #      the runner's vCPUs: ~400 % means all four cores are busy (the build
-  #      is CPU-bound and more cores WOULD help); ~100-200 % means the runner
-  #      is idle half the time and the cost is elsewhere (I/O, the
-  #      dependency chain, or the runner's own noise).
-  #   2. PARALLEL EFFICIENCY. The same compile is run a second time with
-  #      -p:MaxCpuCount=1 (strictly serial) and the ratio
-  #      serial / parallel is reported: ~4 means perfectly parallel and
-  #      core-bound; ~2-2.5 means half-serialised (more cores would not help
-  #      much); ~1 means the dependency chain is the constraint.
+  #   arm A (baseline)  -p:MaxCpuCount=0     what CI runs (all cores)
+  #   arm C (serial)    -maxcpucount:1       the canonical MSBuild SWITCH
   #
-  # Both are MEASUREMENTS, never gates: this job cannot fail a build, and it
-  # is not a required check. The serial compile roughly doubles this job's
-  # time, which is exactly why the job lives on the schedule and not on the
-  # PR path.
+  # The SWITCH, not the property, and that is a measured fact, not a
+  # preference: `-p:MaxCpuCount=1` is INERT (MSBuild reads `-maxcpucount` as
+  # a switch; the `MaxCpuCount` property appears in no MSBuild target and in
+  # no global-property lookup), and the property arm measured a wall ratio
+  # of 1.08 against the baseline — indistinguishable from not changing
+  # anything. The repository's own CompileTarget passes the property, so it
+  # is a no-op there too.
   #
-  # The measurement does not consume the build-output slices: it builds the
-  # tree itself, from source, with the same commands the NUKE `Compile`
-  # target runs (RestoreTarget and CompileTarget in build/_build/Targets/).
-  # The slices carry BUILD OUTPUTS; this job needs the build itself, with
-  # the binary log attached.
+  # THE ARCHITECTURE GATE IS OFF HERE, and it has to be: it is a
+  # single-process run of the architecture test suite (29..39 % of the wall,
+  # 79..154 s of a 253..409 s build), so it is serial in every arm and
+  # dilutes the ratio by a fixed amount. The nightly job switches it off,
+  # which is the right shape for a compile-phase measurement.
+  #
+  # The instrument is `tools/measure-build-cpu.py` (dev's): it runs the
+  # command, samples /proc/stat once a second, and writes the wall time,
+  # the CPU utilisation (average and peak busy cores, and how long the
+  # machine sat at 3.5+), MSBuild's own task aggregates (the `Csc` work, the
+  # `Exec` gate) and the project timeline (how many projects were in flight
+  # over time — the "was the graph ever able to keep four compilers busy?"
+  # question, measured instead of modelled). `tools/aggregate-build-vcpu.py`
+  # turns the per-run JSONs into the ratio table.
+  #
+  # It is a MEASUREMENT, never a gate: the job cannot fail the build, and
+  # it is not on the PR path. The binary log is deliberately NOT taken:
+  # MSBuild warns that the binary logger "can experience measurable
+  # overhead" on large builds, and the artifact budget of this repository is
+  # 500 MB in total.
   measurement:
     needs: [gate]
     if: >-
@@ -462,20 +464,23 @@ jobs:
       contents: read
       actions: read
     env:
-      # The architecture gate is OFF here, and it must be: the gate runs the
-      # whole Harbor.Architecture.Tests assembly INSIDE the build (68 s), and
-      # that work is not what this job measures. Measuring a compile that
-      # carries 68 s of unrelated work would make both numbers (the CPU
-      # utilisation and the serial/parallel ratio) describe the wrong thing.
+      # The architecture gate is OUT of a compile-phase measurement: it is
+      # serial in every arm and would dilute the ratio.
       HarborArchGate: 'false'
     steps:
       - uses: actions/checkout@v7
         with:
+          # No `submodules: recursive`: the vendored ConsoleEx submodule left
+          # the product (ADR-019) and nothing in the build graph references it.
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push run checks out what was pushed.
           ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
+          # The exact SDK global.json asks for — the same one the build job
+          # installs, so the numbers are comparable with the CI compile.
           dotnet-version: "10.0.402"
           cache: true
           cache-dependency-path: "Directory.Packages.props"
@@ -499,13 +504,6 @@ jobs:
             echo "utc=$(date -u +%FT%TZ)"
           } | tee analysis/environment.txt
 
-      # The same two commands the NUKE `Compile` target runs, with the binary
-      # log added: `dotnet restore Harbor.slnx` and then
-      # `dotnet build Harbor.slnx -c Release --no-restore
-      # -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true`. The NUKE
-      # bootstrap (one extra project: build/_build.csproj) is NOT part of
-      # this measurement, so the number is comparable with the CI compile
-      # step, not with the whole NUKE invocation.
       - name: Restore
         run: |
           set -uo pipefail
@@ -517,409 +515,105 @@ jobs:
           echo "restore_rc=$rc" >> "$GITHUB_ENV"
           exit $rc
 
-      # PROBE 1 + the binary log: the all-cores compile, with /proc/stat
-      # sampled every 2 s from before the compile starts until it ends.
-      - name: Build with a binary log (all cores, CPU sampled)
-        run: |
-          set -uo pipefail
-          # The sampler writes "<epoch> <total> <busy> <idle>" per line,
-          # where total/busy/idle are the /proc/stat jiffy counters
-          # (busy = total - idle - iowait).
-          (
-            while true; do
-              printf '%s ' "$(date +%s.%N)" >> analysis/cpu-parallel.samples
-              awk '/^cpu /{t=$2+$3+$4+$5+$6+$7+$8+$9; i=$5+$6; print t, t-i, i}' /proc/stat \
-                >> analysis/cpu-parallel.samples
-              sleep 2
-            done
-          ) &
-          sampler=$!
-          start=$(date +%s)
-          # `-clp:PerformanceSummary` makes MSBuild print the performance
-          # summary, whose "Project Evaluation Performance Summary" section
-          # is the only report of the time spent EVALUATING projects (as
-          # opposed to running targets in them). It is what
-          # tools/msbuild-evaluation-cost.py reads, and it is produced by the
-          # console logger's parallel variant, so a parallel build has it.
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
-            -clp:PerformanceSummary \
-            -bl:build.binlog 2>&1 | tee analysis/compile-parallel.log
-          rc=${PIPESTATUS[0]}
-          end=$(date +%s)
-          kill "$sampler" 2>/dev/null || true
-          wait "$sampler" 2>/dev/null || true
-          echo "build_seconds=$((end - start))" >> "$GITHUB_ENV"
-          echo "build_rc=$rc" >> "$GITHUB_ENV"
-          exit $rc
-
-      # PROBE 2: the same compile, strictly serial (-p:MaxCpuCount=1).
+      # ARM A — the baseline: all cores, exactly what CI compiles with.
       #
-      # The tree is CLEANED first, so the serial compile is a from-scratch
-      # build like the parallel one was — an incremental build would compile
-      # nothing and the ratio would be meaningless. The clean is timed on its
-      # own and reported separately, because only this compile pays it and
-      # charging it to the serial number would inflate the ratio.
-      - name: Clean (so the serial compile is from scratch)
+      # `-v:m` (normal verbosity) is not decoration: MSBuild prints the
+      # "is building" line only there, and the project timeline — the number
+      # of projects in flight over time — is read out of it.
+      - name: Arm A — the all-cores compile (the baseline)
         run: |
           set -uo pipefail
-          start=$(date +%s)
-          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1
-          rc=$?
-          end=$(date +%s)
-          echo "clean_seconds=$((end - start))" >> "$GITHUB_ENV"
-          echo "clean_rc=$rc" >> "$GITHUB_ENV"
-          exit 0
+          python3 tools/measure-build-cpu.py --label a-prop0-r1 --out-dir meas -- \
+            dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -v:m -clp:PerformanceSummary || true
 
-      - name: Build again, strictly serial (CPU sampled)
+      # The tree is cleaned between the arms, so the second one is a
+      # from-scratch build like the first: an incremental build would compile
+      # nothing and the ratio would be meaningless.
+      - name: Clean (so the serial arm is a from-scratch build)
         run: |
           set -uo pipefail
-          (
-            while true; do
-              printf '%s ' "$(date +%s.%N)" >> analysis/cpu-serial.samples
-              awk '/^cpu /{t=$2+$3+$4+$5+$6+$7+$8+$9; i=$5+$6; print t, t-i, i}' /proc/stat \
-                >> analysis/cpu-serial.samples
-              sleep 2
-            done
-          ) &
-          sampler=$!
-          start=$(date +%s)
-          dotnet build Harbor.slnx -c Release --no-restore \
-            -p:MaxCpuCount=1 -p:ContinuousIntegrationBuild=true \
-            -clp:PerformanceSummary \
-            2>&1 | tee analysis/compile-serial.log
-          rc=${PIPESTATUS[0]}
-          end=$(date +%s)
-          kill "$sampler" 2>/dev/null || true
-          wait "$sampler" 2>/dev/null || true
-          echo "serial_seconds=$((end - start))" >> "$GITHUB_ENV"
-          echo "serial_rc=$rc" >> "$GITHUB_ENV"
-          exit 0
+          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > analysis/clean.log 2>&1 || true
+          echo "clean_rc=$?" >> "$GITHUB_ENV"
 
-      # The binlog CLI (baronfel.binlog.cli): the same analysis engine as the
-      # binlog MCP server, with `expensive-tasks`, `expensive-analyzers` and
-      # `timeline` commands, and compact JSON output. Pinned: a measurement
-      # that changes shape when the tool changes is not a measurement.
-      # continue-on-error: the tool is an instrument, and an instrument that
-      # cannot be installed must not take the measurement down with it.
-      - name: Install the binlog CLI
-        continue-on-error: true
-        run: dotnet tool install --global baronfel.binlog.cli --version 0.0.14
+      # ARM C — the strictly serial compile. The SWITCH (`-maxcpucount:1`),
+      # not the property: the property is inert, and the switch is the
+      # control that keeps the experiment honest.
+      - name: Arm C — the strictly serial compile
+        run: |
+          set -uo pipefail
+          python3 tools/measure-build-cpu.py --label c-m1-r1 --out-dir meas -- \
+            dotnet build Harbor.slnx -c Release --no-restore \
+            -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
+            -maxcpucount:1 -v:m -clp:PerformanceSummary || true
 
-      - name: Analyse the binary log
-        continue-on-error: true
+      # The ratio table, and the reading it implies. The aggregator prints
+      # the wall range, the CPU utilisation, the compiler work and the
+      # ratio against the baseline arm.
+      - name: Publish the ratio and the CPU utilisation
+        if: always()
         shell: bash
         run: |
           set -uo pipefail
-          BINLOG="$HOME/.dotnet/tools/binlog"
-          export PATH="$HOME/.dotnet/tools:$PATH"
-          mkdir -p analysis
-          if [ -x "$BINLOG" ]; then
-            "$BINLOG" expensive-tasks build.binlog --top 15 > analysis/tasks.json 2>analysis/tasks.err || true
-            "$BINLOG" expensive-analyzers build.binlog --top 10 > analysis/analyzers.json 2>analysis/analyzers.err || true
-            "$BINLOG" expensive-projects build.binlog --top 10 > analysis/projects.json 2>analysis/projects.err || true
-            "$BINLOG" timeline build.binlog > analysis/timeline.json 2>analysis/timeline.err || true
-          else
-            echo "the binlog CLI is not installed — the summary will carry the wall times only"
-          fi
-          # The MSBuild-native replay: MSBuild can replay a binary log, and
-          # the `performancesummary` file logger parameter writes the same
-          # summary the console logger prints at the end of a build.
-          dotnet msbuild build.binlog -noconlog \
-            -flp:"v=diag;logfile=full.log;performancesummary" \
-            > analysis/replay.log 2>&1 || true
-          ls -la analysis || true
+          {
+            echo "## Build measurement (the periodic vCPU falsification)"
+            echo
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| restore wall time | ${restore_seconds:-n/a} s |"
+            echo "| nproc | $(nproc) |"
+            echo "| dotnet SDK | $(dotnet --version) |"
+            echo "| runner image | ${ImageOS:-unknown} (${ImageVersion:-unknown}) |"
+            echo "| kernel | $(uname -sr) |"
+            echo
+            python3 tools/aggregate-build-vcpu.py meas --baseline a-prop0 || true
+            echo
+            echo "_The ratio is the number that adjudicates #1929: ~4 means the"
+            echo "build is core-bound (more cores would help), ~2-2.5 means"
+            echo "half-serialised, ~1 means the dependency chain is the"
+            echo "constraint. The architecture gate is off, so the wall is the"
+            echo "compile alone._"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       # The project-EVALUATION cost of each compile (#1919). This is the
       # instrument that used to live in .github/workflows/evaluation-cost.yml
-      # — a manual A/B workflow that could not be dispatched at all, because
+      # — a manual workflow that could not be dispatched at all, because
       # GitHub will not dispatch a workflow that does not exist on the
       # default branch. It reads the performance summary the compile printed
-      # (-clp:PerformanceSummary) and the wall time, and reports the time
-      # spent evaluating projects. It is a REPORTER: it never fails the job.
+      # (-clp:PerformanceSummary) and the wall time.
+      #
+      # The measure tool prefixes every log line with the elapsed seconds, so
+      # the raw console log is reconstructed before the summary is read out
+      # of it: the summary rows are "   12 ms  Scope  3 calls", and the
+      # parser reads them from the start of the line.
       - name: Publish the project-evaluation cost
         if: always()
         shell: bash
         run: |
           set -uo pipefail
-          args=(--run "all-cores:analysis/compile-parallel.log:${build_seconds:-0}")
-          if [ -f analysis/compile-serial.log ]; then
-            args+=(--run "serial:analysis/compile-serial.log:${serial_seconds:-0}")
+          args=()
+          for label in a-prop0-r1 c-m1-r1; do
+            raw="meas/${label}.log"
+            [ -f "$raw" ] || continue
+            clean="analysis/${label}.log"
+            sed -E 's/^[0-9]+\.[0-9]+ \| //' "$raw" > "$clean"
+            wall=$(python3 -c "import json,sys;print(int(json.load(open('meas/${label}.json'))['wall_seconds']))" 2>/dev/null || echo 0)
+            args+=(--run "${label}:${clean}:${wall}")
+          done
+          if [ ${#args[@]} -gt 0 ]; then
+            python3 tools/msbuild-evaluation-cost.py "${args[@]}" --summary "$GITHUB_STEP_SUMMARY" || true
           fi
-          python3 tools/msbuild-evaluation-cost.py "${args[@]}" \
-            --summary "$GITHUB_STEP_SUMMARY" || true
 
-      - name: Publish the measurement into the job summary
-        if: always()
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          summary = os.environ["GITHUB_STEP_SUMMARY"]
-          analysis = Path("analysis")
-
-          def number(name, default="n/a"):
-              raw = os.environ.get(name, "")
-              return raw if raw else default
-
-          def load(name):
-              path = analysis / name
-              if not path.exists():
-                  return None
-              try:
-                  return json.loads(path.read_text(encoding="utf-8", errors="replace"))
-              except (OSError, ValueError):
-                  return None
-
-          def environment():
-              values = {}
-              path = analysis / "environment.txt"
-              if path.exists():
-                  for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                      name, _, value = raw.partition("=")
-                      values[name.strip()] = value.strip()
-              return values
-
-          def cpu_profile(name, ncpu):
-              """Average and peak CPU utilisation from the /proc/stat samples.
-
-              Each sample is "<epoch> <total> <busy> <idle>" in jiffies, the
-              counters of the `cpu` line (all cores). The utilisation of the
-              runner is the fraction of the elapsed jiffies that were NOT
-              idle, scaled by the number of vCPUs: 400 % on a 4-vCPU runner
-              means every core was busy for the whole sample, 100 % means one
-              core's worth of work.
-              """
-              path = analysis / name
-              if not path.exists():
-                  return None
-              samples = []
-              for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                  parts = raw.split()
-                  if len(parts) < 4:
-                      continue
-                  try:
-                      samples.append((float(parts[1]), float(parts[2])))
-                  except ValueError:
-                      continue
-              if len(samples) < 2:
-                  return None
-              utilisations = []
-              for (total_a, busy_a), (total_b, busy_b) in zip(samples, samples[1:]):
-                  d_total = total_b - total_a
-                  d_busy = busy_b - busy_a
-                  if d_total <= 0:
-                      continue
-                  utilisations.append(100.0 * ncpu * (d_busy / d_total))
-              if not utilisations:
-                  return None
-              return {
-                  "samples": len(utilisations),
-                  "average": sum(utilisations) / len(utilisations),
-                  "peak": max(utilisations),
-                  "min": min(utilisations),
-              }
-
-          env = environment()
-          ncpu = int(env.get("nproc", "1") or 1)
-
-          lines = [
-              "## Build measurement (MSBuild binary log)",
-              "",
-              "| metric | value |",
-              "|---|---|",
-              f"| restore wall time | {number('restore_seconds')} s |",
-              f"| build wall time, all cores (`MaxCpuCount=0`) | {number('build_seconds')} s |",
-              f"| build wall time, serial (`MaxCpuCount=1`) | {number('serial_seconds')} s |",
-              f"| clean (paid only by the serial compile) | {number('clean_seconds')} s |",
-              f"| restore / build / serial exit code | {number('restore_rc')} / {number('build_rc')} / {number('serial_rc')} |",
-              f"| clean exit code | {number('clean_rc')} |",
-              "",
-          ]
-
-          # PROBE 2 — the parallel-efficiency ratio, and what it decides.
-          parallel = number("build_seconds", "")
-          serial = number("serial_seconds", "")
-          ratio = None
-          if parallel.isdigit() and serial.isdigit() and int(parallel) > 0:
-              ratio = int(serial) / int(parallel)
-          lines += ["### Parallel efficiency", "",
-                    "| metric | value |", "|---|---|"]
-          if ratio is None:
-              lines += ["| serial / all-cores ratio | n/a |", ""]
-          else:
-              verdict = (
-                  "core-bound: more cores would help, and #1929 (split the compile "
-                  "into two parallel jobs) is worth measuring"
-                  if ratio >= 3.0 else
-                  "half-serialised: more cores would not help much — the levers are "
-                  "the obj/+bin/ cache (#1927) and taking the architecture gate out "
-                  "of the build (#1920)"
-                  if ratio >= 1.8 else
-                  "fully serialised: the dependency chain is the constraint, and both "
-                  "#1929 and the cache are largely pointless"
-              )
-              lines += [
-                  f"| serial / all-cores ratio | **{ratio:.2f}** |",
-                  f"| reading | {verdict} |",
-                  "",
-              ]
-
-          # PROBE 1 — the CPU utilisation of the runner.
-          lines += ["### CPU utilisation of the runner", "",
-                    "| compile | average | peak | min | samples |", "|---|---|---|---|---|"]
-          for label, sample in (("all cores (`MaxCpuCount=0`)", "cpu-parallel.samples"),
-                                ("serial (`MaxCpuCount=1`)", "cpu-serial.samples")):
-              profile = cpu_profile(sample, ncpu)
-              if profile is None:
-                  lines += [f"| {label} | n/a | n/a | n/a | 0 |"]
-              else:
-                  lines += [
-                      f"| {label} | {profile['average']:.0f} % | {profile['peak']:.0f} % | "
-                      f"{profile['min']:.0f} % | {profile['samples']} |"
-                  ]
-          lines += [
-              "",
-              f"_Percentages are of the runner's {ncpu} vCPUs: 100 % is one core's "
-              f"worth of work, {ncpu * 100} % is every core busy._",
-              "",
-          ]
-
-          lines += ["### Environment", "", "| key | value |", "|---|---|"]
-          for key in ("nproc", "dotnet_sdk", "dotnet_sdks", "runner_image",
-                      "runner_image_version", "kernel", "os", "utc"):
-              lines.append(f"| {key} | {env.get(key, 'n/a')} |")
-          lines.append("")
-
-          def rows(payload, limit=15):
-              """Pull (label, duration) pairs out of an unknown JSON shape.
-
-              The CLI's JSON contract is not something this workflow should
-              depend on: a renamed property must degrade the TABLE, not
-              break the job. So the walk looks for any object that carries a
-              duration-ish number and a name-ish string, and sorts those.
-
-              The duration key is chosen by PRIORITY, not by iteration
-              order: an explicit "duration"/"elapsed" wins over a bare
-              "time", which may well be a start or end timestamp.
-              """
-              priority = (("duration", "elapsed"), ("ms", "millisecond"),
-                          ("second", "sec"), ("time",))
-              found = []
-
-              def duration_of(node):
-                  best = None
-                  for rank, needles in enumerate(priority):
-                      for key, value in node.items():
-                          if (isinstance(value, (int, float))
-                                  and not isinstance(value, bool)
-                                  and any(needle in key.lower() for needle in needles)):
-                              if best is None or rank < best[0]:
-                                  best = (rank, float(value))
-                      if best is not None:
-                          return best[1]
-                  return best[1] if best else None
-
-              def label_of(node):
-                  for key, value in node.items():
-                      low = key.lower()
-                      if (not isinstance(value, str) or len(value) > 120
-                              or not any(t in low for t in ("name", "task", "target",
-                                                           "project", "analyzer", "id",
-                                                           "path", "file"))):
-                          continue
-                      # An ISO timestamp is a timestamp, not a label.
-                      if re.match(r"^\d{4}-\d{2}-\d{2}T", value):
-                          continue
-                      return value
-                  return None
-
-              def walk(node):
-                  if isinstance(node, dict):
-                      duration = duration_of(node)
-                      if duration is not None:
-                          label = label_of(node)
-                          if label:
-                              found.append((label, duration))
-                      for value in node.values():
-                          walk(value)
-                  elif isinstance(node, list):
-                      for item in node:
-                          walk(item)
-
-              walk(payload)
-              found.sort(key=lambda pair: pair[1], reverse=True)
-              return found[:limit]
-
-          def table(title, pairs, unit="duration (as reported)"):
-              if not pairs:
-                  return [f"_{title}: no data._", ""]
-              out = [f"**{title}**", "", f"| item | {unit} |", "|---|---|"]
-              for label, duration in pairs:
-                  out.append(f"| {label} | {duration:g} |")
-              out.append("")
-              return out
-
-          for title, filename in (
-              ("Most expensive MSBuild tasks", "tasks.json"),
-              ("Most expensive Roslyn analyzers", "analyzers.json"),
-              ("Most expensive projects", "projects.json"),
-          ):
-              payload = load(filename)
-              lines += table(title, rows(payload) if payload is not None else [])
-
-          # The node utilisation / timeline, whatever shape it arrives in.
-          timeline = load("timeline.json")
-          if timeline is not None:
-              flat = json.dumps(timeline)
-              nodes = re.findall(r'"nodes"\s*:\s*(\d+)', flat)
-              lines += ["**Timeline / node utilisation**", ""]
-              if nodes:
-                  lines += [f"- nodes reported: {nodes[0]}", ""]
-              else:
-                  lines += ["_the timeline command returned no node count; open the binlog artifact._", ""]
-
-          # The MSBuild-native performance summary from the replay, when the
-          # replay produced one. The format is "    12.34s CoreCompile", and
-          # it lives in the "Performance Summary:" SECTION of the log — the
-          # diagnostic log above it is full of other lines that would match
-          # the same shape, so only the section is read.
-          perf = Path("full.log")
-          if perf.exists():
-              entries = []
-              in_summary = False
-              for raw in perf.read_text(encoding="utf-8", errors="replace").splitlines():
-                  if "Performance Summary:" in raw:
-                      in_summary = True
-                      continue
-                  if not in_summary:
-                      continue
-                  match = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)s\s+(\S.*)$", raw)
-                  if match:
-                      entries.append((match.group(2).strip(), float(match.group(1))))
-              entries.sort(key=lambda pair: pair[1], reverse=True)
-              lines += table("MSBuild performance summary (replay)", entries[:15], "seconds")
-
-          lines += [
-              "_This job never fails the build: it measures. The binary log is "
-              "uploaded as an artifact, so the MSBuild Structured Log Viewer can "
-              "be pointed at the same data._",
-          ]
-          with open(summary, "a", encoding="utf-8") as fh:
-              fh.write("\n".join(lines) + "\n")
-          print("\n".join(lines))
-          PY
-
-      - name: Upload the binary log
+      - name: Upload the measurements
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: build-binlog
-          path: build.binlog
+          name: build-measurement
+          path: |
+            meas/*.json
+            meas/*.log
+            analysis/environment.txt
           if-no-files-found: warn
           retention-days: 14
 

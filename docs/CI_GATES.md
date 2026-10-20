@@ -238,7 +238,7 @@ The modes are:
 
 | Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|
-| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
 | `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-abstractions-contract.py` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
 | `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |

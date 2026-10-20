@@ -505,7 +505,7 @@ jobs:
         if: always()
         uses: ./.github/actions/queue-wait
         with:
-          job-name: public-api snapshot (Abstractions)
+          job-name: public-api freeze
   test-packages:
     name: test/sample package set
     needs: changes
@@ -645,7 +645,7 @@ jobs:
         if: always()
         uses: ./.github/actions/queue-wait
         with:
-          job-name: no-VSTest-SDK
+          job-name: no VSTest SDK in the tree
   reference-trimmer:
     name: unused references (ReferenceTrimmer)
     needs: changes
@@ -717,7 +717,7 @@ jobs:
         if: always()
         uses: ./.github/actions/queue-wait
         with:
-          job-name: reference trimmer
+          job-name: unused references (ReferenceTrimmer)
 
   build:
     needs: changes
