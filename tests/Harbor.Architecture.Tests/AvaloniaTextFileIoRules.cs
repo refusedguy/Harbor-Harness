@@ -475,7 +475,7 @@ public class AvaloniaTextFileIoRules
                 + "probe runs on the dispatcher the user is looking at. Go through the Domain "
                 + $"{PortContractName} (Harbor.Abstractions, beside `IDirectoryLister`), implemented in "
                 + $"Harbor.Application beside `SystemDirectoryLister`, registered in "
-                + "ServiceRegistration.RegisterAppServices (which AppHost.cs:78 calls), and injected into "
+                + "ServiceRegistration.RegisterAppServices (which AppHost.cs:79 calls), and injected into "
                 + "the view-model. Path strings are still the view-model's business: `Path.GetFileName` "
                 + "is how the tab is labelled. " + string.Join("\n", violations));
     }
@@ -776,7 +776,7 @@ public class AvaloniaTextFileIoRules
                 + $"A port that exists and is registered nowhere compiles, passes every other gate and "
                 + "substitutes nothing — `IGitQuery` was in exactly that state and the palette went on "
                 + "speaking to no one. Register it in ServiceRegistration.RegisterAppServices, the method "
-                + "AppHost.cs:78 calls at startup, next to the IDirectoryLister line #492 added. #934.");
+                + "AppHost.cs:79 calls at startup, next to the IDirectoryLister line #492 added. #934.");
         }
 
         if (!consumedByViewModel)

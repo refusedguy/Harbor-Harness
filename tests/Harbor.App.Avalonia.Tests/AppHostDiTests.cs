@@ -28,7 +28,7 @@ namespace Harbor.App.Avalonia.Tests;
 // ViewInflationTests — which already holds `avalonia-headless` and so sits in
 // the same keyed bucket without ever excluding this class. The two swap the
 // same `HOME` and both call AppHost.BuildAsync, which reads it back through
-// AppHost.ResolveHarborDir (AppHost.cs:121-126). Keyless was the alternative and
+// AppHost.ResolveHarborDir (AppHost.cs:124-129). Keyless was the alternative and
 // #700 already priced it: it holds this whole assembly alone for all 28 of
 // these methods, forever.
 [NotInParallel("process-env")]

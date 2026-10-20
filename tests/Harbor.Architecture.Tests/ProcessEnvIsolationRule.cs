@@ -32,7 +32,7 @@
 // `Harbor.App.Avalonia.Tests` alone for the whole of every one of its test
 // methods, forever. #700 priced exactly that and refused it, and it was right.
 // Its conclusion was "prefer not writing process state at all", which is not
-// available for this subject: `AppHost.ResolveHarborDir` (AppHost.cs:121-126)
+// available for this subject: `AppHost.ResolveHarborDir` (AppHost.cs:124-129)
 // resolves the home from `GetFolderPath(SpecialFolder.UserProfile)` with a
 // `$HOME` fallback and takes no parameter.
 //
@@ -275,7 +275,7 @@ public class ProcessEnvIsolationRule
             "ViewInflationTests",
             "HOME. AppHostDiTests writes it in a process-lifetime Lazy and never restores it; "
             + "ViewInflationTests writes and restores it. Both call AppHost.BuildAsync, which reaches "
-            + "AppHost.ResolveHarborDir (AppHost.cs:121-126) — GetFolderPath(UserProfile) with a $HOME "
+            + "AppHost.ResolveHarborDir (AppHost.cs:124-129) — GetFolderPath(UserProfile) with a $HOME "
             + "fallback. ViewInflationTests already held `avalonia-headless`, which AppHostDiTests does "
             + "not, so the two sat in different scheduler buckets and overlapped."),
 

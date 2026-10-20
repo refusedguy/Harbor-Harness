@@ -28,7 +28,7 @@
 //   AvaloniaConfig.FontFamily   = "Inter"      (AvaloniaConfig.cs)
 //
 // and the desktop composition root says:
-//   apps/Harbor.App.Avalonia/AppHost.cs:99      DefaultStorageBackend = "memory"
+//   apps/Harbor.App.Avalonia/AppHost.cs:102      DefaultStorageBackend = "memory"
 //
 // Three sources, one setting, no two in agreement. The empty-unset contract in
 // ADR-008 is only meaningful if the empty value survives the round trip — and

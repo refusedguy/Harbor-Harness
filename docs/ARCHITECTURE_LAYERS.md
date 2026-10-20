@@ -1413,7 +1413,7 @@ and the synchronous `File.Exists` was a blocking `stat` on the UI thread, reache
 calls that were already async. It now goes through the Domain `ITextFileStore`
 (Harbor.Abstractions, beside `IDirectoryLister`), implemented by `SystemTextFileStore` in
 Harbor.Application beside `SystemDirectoryLister` and registered in
-`ServiceRegistration.RegisterAppServices`, the method `AppHost.cs:78` calls.
+`ServiceRegistration.RegisterAppServices`, the method `AppHost.cs:79` calls.
 
 The guard is `tests/Harbor.Architecture.Tests/AvaloniaTextFileIoRules.cs` — a separate file,
 because two capabilities in one rule is a rule that will drift. **Its perimeter is the

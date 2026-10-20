@@ -21,7 +21,7 @@ The Avalonia app is the strategic cross-platform desktop GUI for Harbor (Windows
 - [x] Plugin panel host view (right dock)
 - [x] Toast notifications stack
 - [x] Desktop event routing into the shared UI framework reducers (`Hosting/UiEventRouter.cs`)
-- [x] Tool registry built via `Harbor.Hosting` `ToolsCatalog.CreateToolRegistry` with `HarborToolSetKind.Standard10` (`AppHost.cs:100`)
+- [x] Tool registry built via `Harbor.Hosting` `ToolsCatalog.CreateToolRegistry` with `HarborToolSetKind.Standard10` (`AppHost.cs:103`)
 - [x] API keys resolved through `AuthStore` (`Services/CommonConfigAuthResolver.cs`)
 
 ## TODO

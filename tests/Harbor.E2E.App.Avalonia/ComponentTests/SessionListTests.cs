@@ -247,10 +247,13 @@ public sealed class SessionListTests : ComponentTestBase
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Assert.That(hasKeep).IsTrue().Because(Driver.LastWaitDiagnostic);
 
-        // The "Opened: Delete me" toast lingers ~4s — poll deterministically until gone.
+        // The "Opened: Delete me" toast lingers for the shell's four-second
+        // toast lifetime. Step the clock past it instead of waiting it out,
+        // then poll for the render to catch up.
+        ToastClock.AdvancePastToastDeadline();
         bool toastGone = await Driver.WaitForConditionAsync(
             () => !Driver.GetAllVisibleText().Contains("Delete me", StringComparison.Ordinal),
-            TimeSpan.FromSeconds(6),
+            TimeSpan.FromSeconds(2),
             TimeSpan.FromMilliseconds(20)).ConfigureAwait(false);
         await Assert.That(toastGone).IsTrue().Because(Driver.LastWaitDiagnostic);
 

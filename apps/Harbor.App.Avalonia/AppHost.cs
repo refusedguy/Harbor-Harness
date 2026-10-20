@@ -31,6 +31,7 @@ internal static class AppHost
     ///     Build the DI host. Safe to call from Main before the Avalonia lifetime starts.
     /// </summary>
     /// <param name="args">Command-line args (forwarded to <see cref="Host.CreateApplicationBuilder" />).</param>
+    /// <param name="configureServices">Optional last word on the registrations, applied before the container is built so a test host can substitute a service. Production passes null.</param>
     /// <returns>A started <see cref="IHost" />. Dispose on shutdown.</returns>
     // [Exposes(typeof(T))] declarations are validated by Excubo.Analyzers.DependencyInjectionValidation
     // (EDI01–EDI04) and exercised at runtime by Harbor.App.Avalonia.Tests/AppHostDiTests.cs.
@@ -62,7 +63,7 @@ internal static class AppHost
     [Exposes(typeof(ICommonConfigStore))]
     [Exposes(typeof(CommonConfig))]
     [Exposes(typeof(CompositeConfig<AvaloniaConfig>))]
-    public static async Task<IHost> BuildAsync(string[] args)
+    public static async Task<IHost> BuildAsync(string[] args, Action<IServiceCollection>? configureServices = null)
     {
         string harborDir = ResolveHarborDir();
         var builder = Host.CreateApplicationBuilder(args);
@@ -78,6 +79,8 @@ internal static class AppHost
         ServiceRegistration.RegisterAppServices(builder.Services);
         ServiceRegistration.RegisterHarborClient(builder.Services);
         ViewModelRegistration.Register(builder.Services);
+        // The test seam: a host that substitutes a service applies it last.
+        configureServices?.Invoke(builder.Services);
 
         var host = builder.Build();
         UiEventRouter.Bind(host.Services);

@@ -1494,6 +1494,41 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --treenode-
 dotnet run --project tests/Harbor.Registries.Tests -c Release --no-build -- --treenode-filter "*/*/*Allocation*"
 ```
 
+### 6.3 CI test-suite wall: `Harbor.E2E.App.Avalonia` (CI run 39399653820, dev, 2026-10-20)
+
+> **Provenance.** The TRX artifacts of CI run 39399653820 (branch `dev`): the project's
+> TRX-reported wall, and the per-test `duration` column read per test name. The rows below
+> are the whole of the toast cost in that project. Every one of them is a four-second wait
+> that a PRODUCT timer forced from inside the code under test.
+
+| Project | Wall before | Wall after | Δ |
+|---|---:|---:|---:|
+| `Harbor.E2E.App.Avalonia` | **53.43 s** | ⏳ not yet measured (this PR's own run) | −20.5 s of product-timer wait (−38 %) |
+
+#### What the 20.5 s was
+
+| Test | Duration (run 39399653820) |
+|---|---:|
+| `SessionListTests.SessionList_Deleted_RemovedFromList` | 4.46 s |
+| `ToastTests.Toast_AutoDismiss_After4Seconds` | 4.39 s |
+| `AvaloniaUiTests.ToastNotification_DisplaysAndDismisses` | 4.15 s |
+| `ToastTests.Toast_Multiple_StackedVertically` | 4.05 s |
+| `ToastTests.Toast_LongMessage_WrapsWithinMaxWidth` | 4.04 s |
+| **Total** | **20.5 s, 38 % of the project's 53.43 s wall** |
+
+The wait was `await Task.Delay(TimeSpan.FromSeconds(4))` in
+`apps/Harbor.App.Avalonia/ViewModels/MainViewModel.cs:530`, the toast auto-dismiss.
+It is a PRODUCT timer, so no test-side change could shorten it: the delay was in
+the code under test. #1945 makes the delay read an injected `TimeProvider` (the
+seam `AgentLoop`, `ToolDispatcher`, `RetryPolicy` and `MascotDirector` already use),
+so the five tests step a manual clock instead of sleeping, and the four-second
+contract is still asserted, against the production constant
+`MainViewModel.ToastAutoDismissDelay`.
+
+The shipped behaviour is unchanged: with `TimeProvider.System` the delay takes the same
+`TimerQueueTimer` path `Task.Delay(TimeSpan)` took, so a toast still leaves four seconds
+after it was pushed.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that
