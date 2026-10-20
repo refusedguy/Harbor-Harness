@@ -122,6 +122,11 @@
         <!-- #1769: the test-double generator (a Roslyn component) and its guard. -->
         <Project Path="tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj"/>
         <Project Path="tests/Harbor.TestKit.Generators.Tests/Harbor.TestKit.Generators.Tests.csproj"/>
+        <!-- #1875: the source-generated test doubles, in their own part. The
+             generator runs over THIS project, so the doubles are compiled here
+             and reach a consumer as an ordinary assembly reference. Its
+             closure is three: itself and the two contract assemblies. -->
+        <Project Path="tests/Harbor.TestKit.Generated/Harbor.TestKit.Generated.csproj"/>
         <!-- #1772/#1773: the TestKit family. `Support` and `Tui` are the two
              siblings that keep the shared helpers reachable from test projects
              whose product-assembly closure does not cover the whole TestKit

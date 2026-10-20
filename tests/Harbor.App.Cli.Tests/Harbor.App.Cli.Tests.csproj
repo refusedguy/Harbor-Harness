@@ -38,6 +38,12 @@
          Harbor.Tui.CellForge.Engine only, which this project already has,
          so the reference adds no product assembly. -->
     <ProjectReference Include="..\Harbor.TestKit.Tui\Harbor.TestKit.Tui.csproj"/>
+    <!-- #1875: the source-generated doubles (Harbor.TestKit.Generated.Fake*)
+         live in their OWN assembly since #1875, and this project uses them, so
+         it takes that part as well as the core kit. The part adds no product
+         assembly to the closure: its own closure is itself plus the two
+         contract assemblies. -->
+    <ProjectReference Include="..\Harbor.TestKit.Generated\Harbor.TestKit.Generated.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

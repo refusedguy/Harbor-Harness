@@ -1,0 +1,91 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!--
+      #1875: the source-generated test doubles live in their OWN assembly, so a
+      test project that needs a double and nothing else does not pull the core
+      kit (`Harbor.TestKit`) into its closure.
+
+      The NAMESPACE stays `Harbor.TestKit` (and `Harbor.TestKit.Generated` for
+      the emitted doubles): the generator hard-codes both — the marker by its
+      metadata name `Harbor.TestKit.GenerateFakesAttribute`, the emitted
+      namespace by the constant `GeneratedNamespace` in
+      `tests/Harbor.TestKit.Generators/FakeGenerator.cs`. Moving the TYPES to a
+      different assembly therefore changes no consumer's `using` line, and the
+      generator needs no change either.
+    -->
+    <RootNamespace>Harbor.TestKit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The twelve opted-in interfaces live in the two contract assemblies and
+      nowhere else: `ITool`, `IToolRegistry`, `ISessionStore`,
+      `ISessionContext`, `ILlmClient`, `IProviderRegistry`, `IAgent`,
+      `IAgentLoop`, `IAgentRegistry`, `IEventBus` and `IEventBusMiddleware` in
+      `Harbor.Abstractions`, `IPermissionService` in
+      `Harbor.Abstractions.Contracts`. Both are declared explicitly rather than
+      leaned on transitively, the same way `Harbor.TestKit.Support` declares
+      them — `Harbor.Abstractions` does reference
+      `Harbor.Abstractions.Contracts`, so the second edge adds no assembly to
+      any consumer's closure; it states the dependency instead of hiding it.
+
+      The closure of this part is therefore THREE: itself and the two contract
+      assemblies. It reaches no product assembly beyond the two every test
+      project already has, and `tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs`
+      pins that.
+    -->
+    <ProjectReference Include="../../src/Harbor.Abstractions/Harbor.Abstractions.csproj"/>
+    <ProjectReference Include="../../src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      #1769/#1875: the test-double generator runs over THIS project as an
+      analyzer and emits the `Harbor.TestKit.Generated.Fake*` classes — a
+      concrete class per opted-in interface, never a proxy. It is build-time
+      only: the generator assembly is not referenced
+      (ReferenceOutputAssembly=false) and nothing of it reaches a consumer.
+
+      The generator used to run over the CORE kit. It runs over this part
+      instead, so the doubles are compiled HERE and reach a consumer as an
+      ordinary assembly reference — consumers do not re-run the generator and
+      do not each get their own copy of the doubles.
+
+      `OutputItemType` is written in the CHILD-ELEMENT form every other
+      analyzer reference in this repository uses (src/Harbor.Tui.CellForge,
+      src/Harbor.Terminal.Abstractions, tests/Harbor.Terminal.Abstractions.Tests,
+      ...). The attribute form is legal MSBuild, but the repository's own
+      reference reader — `RepoPaths.ReadProjectReferences`, which the layering
+      rules and the #1889 composition guard both walk — recognises only the
+      child element. An attribute-form analyzer edge is therefore invisible to
+      it, and the build-time-only generator would land in this part's
+      DECLARED closure as if it were a runtime dependency. The build is
+      identical either way; only what the tooling sees changes.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit.Generators\Harbor.TestKit.Generators.csproj"
+                      ReferenceOutputAssembly="false">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    NO PackageReference here, on purpose. The emitted doubles answer a
+    `Result`-returning member with `CSharpFunctionalExtensions.Result`, so the
+    package is a compile-time dependency of the GENERATED code — and it
+    arrives through `Harbor.Abstractions`, which declares it. Thirty-odd
+    projects in this tree use `CSharpFunctionalExtensions` without declaring
+    it, for the same reason.
+
+    Declaring it here as well would be a `RT0003` candidate in
+    `tools/check-reference-trimmer.py` — "a PackageReference the compiler
+    never uses" — whenever the trimmer cannot see the usage inside GENERATED
+    code. The package is already in the closure either way, so declaring it
+    buys nothing and risks a finding.
+  -->
+
+</Project>
