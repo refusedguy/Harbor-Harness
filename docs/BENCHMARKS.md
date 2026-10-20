@@ -1283,17 +1283,19 @@ it has to retune the two gates that already ride the helper
 change.
 
 **The wall time, measured.** Same shard, same test counts, the CI run before the
-conversion (39423151864) and the CI run after it (39440551458) — the suite
+conversion (39423151864) and the CI run after it (39453986590) — the suite
 durations are the job log's own "Test run summary: … duration" line:
 
 | Suite | Before | After |
 |---|---|---|
-| `Harbor.Abstractions.Tests` (257 tests) | 18.542 s | **3.495 s** — the `MatchesPatternScalingGates` leg-length fix |
-| `Harbor.Application.Tests` (578 tests) | 12.009 s | **6.772 s** |
-| `Harbor.Storage.Jsonl.Tests` | 7.499 s | **4.857 s** |
-| `Harbor.Ui.Framework.Tests` | 6.840 s | **5.865 s** |
-| `Harbor.Registries.Tests` | 2.648 s | **2.179 s** |
-| `Harbor.Tui.CellForge.Tests` | 8.472 s | 8.863 s |
+| `Harbor.Abstractions.Tests` (257 tests) | 18.542 s | **4.014 s** — the `MatchesPatternScalingGates` leg-length fix |
+| `Harbor.Application.Tests` (578 tests) | 12.009 s | **6.927 s** |
+| `Harbor.Storage.Jsonl.Tests` | 7.499 s | **5.164 s** |
+| `Harbor.Ui.Framework.Tests` | 6.840 s | **5.660 s** |
+| `Harbor.Registries.Tests` | 2.648 s | **2.166 s** |
+| `Harbor.Domain.Tests` | 3.117 s | **2.464 s** |
+| `Harbor.Providers.Tests` | 5.572 s | **1.509 s** |
+| `Harbor.Tui.CellForge.Tests` | 8.472 s | 8.216 s |
 
 **The leg length is FIXED now, and that is where the wall time went.** The
 shared helper's leg SCALER raised the unit count until a leg lasted ~100 ms, so
