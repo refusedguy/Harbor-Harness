@@ -31,7 +31,11 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS0649;CS0169;CS1591;CA1416</NoWarn>
 
-    <!-- Don't let CPM reject NUKE's transitive deps. -->
+    <!-- Don't let CPM reject NUKE's transitive deps. The copy of this
+         property in build/_build.csproj is the one that decides (the SDK
+         imports Directory.Build.props first and Directory.Packages.props
+         second, so the root file turns CPM back on after this file set it
+         off) — keep both in step when either changes. -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
 

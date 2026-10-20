@@ -172,8 +172,12 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 
 **Key difference from `Directory.Build.props`:** `Directory.Packages.props` is **only** evaluated during NuGet restore. It does not affect compilation or build properties. It only affects which NuGet package versions get restored.
 
-Harbor's `Directory.Packages.props` now carries **78 `<PackageVersion>` entries**
+Harbor's `Directory.Packages.props` now carries **79 `<PackageVersion>` entries**
 — the original migration shipped 41; the desktop/UI sprint added the rest.
+
+**One project is outside this file.** The NUKE build project (`build/_build.csproj`)
+turns CPM off for itself and pins its own dependency chain inline, so its
+versions live in that file, not here. See [§4.4](#44-the-one-project-outside-cpm-build_buildcsproj).
 
 ### 3.4 Evaluation order
 
@@ -195,6 +199,7 @@ When you run `dotnet build src/Harbor.Application/Harbor.Application.csproj`, MS
 |----------------|---------------|
 | Add a new NuGet package to one project | The project's `.csproj` (add `<PackageReference Include="X"/>` — **no Version**) **AND** `Directory.Packages.props` (add `<PackageVersion Include="X" Version="..."/>`) |
 | Upgrade a package version | `Directory.Packages.props` (change the `Version` attribute) — that's it |
+| Upgrade a package the **NUKE build project** consumes | `build/_build.csproj` (change the `Version` attribute) — CPM is off for that project, so this file has no say; see [§4.4](#44-the-one-project-outside-cpm-build_buildcsproj) |
 | Remove a package from one project | The project's `.csproj` (delete the `<PackageReference>`) — leave `Directory.Packages.props` alone (it's harmless to keep an unused `PackageVersion`) |
 | Change a build property (target framework, nullable, etc.) | `Directory.Build.props` |
 | Add a test-only setting | `Directory.Build.targets` (since it depends on `$(IsTestProject)`) |
@@ -226,7 +231,7 @@ The file opens with a 28-line comment explaining:
 - `ManagePackageVersionsCentrally=true` — the master switch. When `true`, NuGet requires every `PackageReference` to resolve its version from a `PackageVersion` entry in this file (or a parent `Directory.Packages.props`).
 - `CentralPackageTransitivePinningEnabled=true` — additionally pins transitive dependencies. If package A depends on package B v1.0, and you declare `B v2.0` in this file, NuGet will use `B v2.0` instead of `B v1.0`. Without this, NuGet would let the transitive `B v1.0` win.
 
-### 4.3 The 78 `<PackageVersion>` entries
+### 4.3 The 79 `<PackageVersion>` entries
 
 Grouped top-to-bottom, in the order the file declares them (the counts are the
 file's own, recounted; the rows sum to the total at the bottom):
@@ -246,25 +251,81 @@ file's own, recounted; the rows sum to the total at the bottom):
 | Alternative UI stacks | 15 | `Terminal.Gui`, `Termina`, `RazorConsole.Core`, `Avalonia`, `Avalonia.Desktop`, `Avalonia.Themes.Fluent`, `Avalonia.Fonts.Inter`, `Avalonia.Headless`, `Avalonia.Skia`, `Avalonia.Diagnostics`, `Avalonia.AvaloniaEdit`, `Markdig`, `AvalonEdit`, `Dirkster.AvalonDock`, `LiveChartsCore.SkiaSharpView.WPF` |
 | .NET MAUI (workload-supplied) | 6 | `Microsoft.Maui.Controls`, `Microsoft.Maui.Controls.Xaml`, `Microsoft.Maui.Essentials`, `Microsoft.Maui.Core`, `Microsoft.Maui.Resizetizer`, `Microsoft.Maui.Controls.Build.Tasks` |
 | Scripting engines | 1 | `Jint` |
-| Roslyn analyzers | 6 | `Roslynator.Analyzers`, `SonarAnalyzer.CSharp`, `AsyncFixer`, `ReflectionAnalyzers`, `Meziantou.Analyzer`, `CSharpFunctionalExtensions.Analyzers` |
+| Roslyn analyzers | 8 | `Roslynator.Analyzers`, `SonarAnalyzer.CSharp`, `AsyncFixer`, `ReflectionAnalyzers`, `Meziantou.Analyzer`, `DotNetProjectFile.Analyzers`, `Microsoft.VisualStudio.Threading.Analyzers`, `CSharpFunctionalExtensions.Analyzers` |
 | Performance / collections / serialization | 6 | `ZLinq`, `ZLinq.DropInGenerator`, `NonBlocking`, `MemoryPack`, `MemoryPack.Core`, `CSharpFunctionalExtensions` |
 | MessagePack | 1 | `MessagePack` |
 | SQLite native driver | 1 | `SQLitePCLRaw.lib.e_sqlite3` |
 | CLI parsing (sourcegen, AOT-first) | 1 | `ConsoleAppFramework` |
 | Source generators | 2 | `Termina.Generators`, `AutoCtor` |
-| NUKE build system | 1 | `Nuke.Common` |
 | DI analyzers | 3 | `DependencyInjection.Lifetime.Analyzers`, `Excubo.Analyzers.DependencyInjectionValidation`, `Excubo.Analyzers.Annotations` |
 | Serilog | 5 | `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Sinks.File`, `Serilog.Sinks.Console`, `Serilog.Sinks.Async` |
 | Diff | 1 | `DiffPlex` |
-| **Total (at migration time; now 78)** | **78** | |
+| **Total (at migration time; now 79)** | **79** | |
 
-### 4.4 Note on `Markdig` version
+### 4.4 The one project outside CPM: `build/_build.csproj`
+
+`build/_build.csproj` is the NUKE build entry point. It is the only project in
+the repo that is **not** governed by this file, and that is deliberate.
+
+**Why.** Two files switch CPM off for it — `build/Directory.Build.props` and
+`build/_build.csproj` both set:
+
+```xml
+<ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+<CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+```
+
+The copy in `build/_build.csproj` is the one that decides, and the reason is
+the import order: the SDK imports `Directory.Build.props` first and
+`Directory.Packages.props` second (`Microsoft.Common.props` imports
+`NuGet.props`, which imports the central file). So the root file's
+`ManagePackageVersionsCentrally=true` lands AFTER the local
+`Directory.Build.props` set it to `false`, and only the project file's own
+PropertyGroup — evaluated after both imports — survives.
+
+The build project is a tool, not a shipped assembly. It wants a permissive
+environment (analyzers off, `TreatWarningsAsErrors` off) so NUKE's generated
+code compiles cleanly, and it pins its own dependency chain inline instead of
+inheriting the solution-wide strictness.
+
+**The rule that follows, and it is the whole point.** A version lives in
+exactly one place. Because CPM is off for this project, the versions it
+consumes are decided in `build/_build.csproj` and NOWHERE ELSE:
+
+| Package | Version | Decided in |
+|---|---|---|
+| `Nuke.Common` | 10.1.0 | `build/_build.csproj` |
+| `System.Security.Cryptography.Xml` | 10.0.13 | `build/_build.csproj` |
+| `Microsoft.Build` | 18.0.2 | `build/_build.csproj` |
+| `Microsoft.Build.Tasks.Core` | 18.0.2 | `build/_build.csproj` |
+| `Microsoft.Build.Utilities.Core` | 18.0.2 | `build/_build.csproj` |
+| `NuGet.Packaging` | 6.12.5 | `build/_build.csproj` |
+
+There is deliberately **no** `Nuke.Common` entry in `Directory.Packages.props`.
+It used to be there, and it was dead: with CPM off for the only project that
+references NUKE, the entry never took part in any restore, while the comment
+next to it claimed a version that was not the one the build used — two
+contradictory answers to the same question in one file. #1896 removed it.
+
+**Why the pins exist at all.** `CentralPackageTransitivePinningEnabled` is off
+for this project too, so nothing lifts NUKE's transitive tree to a patched
+version. Each pin holds a specific line:
+
+- `System.Security.Cryptography.Xml 10.0.13` — NUKE's tree pulls 9.0.0, which
+  is inside 11 advisory ranges. Removing the pin re-opens all 11.
+- `Microsoft.Build* 18.0.2` — the floor `Nuke.ProjectModel 10.1.0` requires for
+  `net10.0`. A pin below it is NU1605 ("Detected package downgrade"), an error
+  rather than a warning.
+- `NuGet.Packaging 6.12.5` — above the 6.12.1 NUKE asks for, and it closes
+  GHSA-g4vj-cjjj-v7hg.
+
+### 4.5 Note on `Markdig` version
 
 The current `Directory.Packages.props` pins `Markdig` to `1.4.2`. The previous per-csproj declarations used `0.38.0`. The migration to CPM consolidated to the latest stable (`1.3.2` at the time of writing); the pin has since moved to `1.4.2`, which adds the `IsAotCompatible` / `IsTrimmable` assembly metadata and a set of CommonMark conformance fixes. The strict GFM pipe-table mode that 1.4.0 introduced (`PipeTableOptions.UseGfmRules`) is opt-in and defaults to `false`, so the parsed output of the two consumers — `Harbor.Desktop.Shared` and `Harbor.App.Avalonia` — does not change unless they ask for it. If your build fails on Markdig API changes (the 1.x release was a breaking change from 0.x), check the [Markdig release notes](https://github.com/xoofx/markdig/releases) and either:
 - Downgrade `Markdig` to `0.38.0` in `Directory.Packages.props` (1-line change), or
 - Update the call sites to the new 1.x API.
 
-### 4.5 Packages that will be added in the desktop-app sprint
+### 4.6 Packages that will be added in the desktop-app sprint
 
 The new `apps/Harbor.App.*` + `desktop/Harbor.Desktop.*` projects (per `docs/DESKTOP_APP_PLAN.md`) will require these additional packages, to be added to `Directory.Packages.props`:
 
@@ -589,7 +650,7 @@ If a vulnerable transitive shows up, add it to `Directory.Packages.props` with t
 
 ### 9.4 Harbor's current transitive pinning status
 
-Harbor pins **78** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
+Harbor pins **79** packages directly. The transitives that matter (e.g. `Microsoft.Extensions.Configuration.Binder`, which is pulled in transitively by `Terminal.Gui`) are NOT explicitly pinned in `Directory.Packages.props` — they get whatever version the direct dependency asked for. With `CentralPackageTransitivePinningEnabled=true`, this is safe as long as the direct dependencies are current. Subagent C verified there are no known vulnerabilities via `dotnet list package --vulnerable`.
 
 ---
 

@@ -3,7 +3,9 @@
   Directory.Packages.props — Central Package Management (CPM) for the Harbor solution.
 
   Every NuGet package consumed by any project in the repo has its version pinned
-  here. Individual .csproj files declare only `<PackageReference Include="..." />`
+  here, with ONE exception: the NUKE build project under build/ turns CPM off
+  for itself and pins its own dependency chain inline, in build/_build.csproj.
+  Individual .csproj files declare only `<PackageReference Include="..." />`
   (no Version attribute) and inherit the version from this file.
 
   See docs/CENTRAL_PACKAGE_MANAGEMENT.md for the full guide.
@@ -340,15 +342,26 @@
          Every 4.x-only diagnostic (ACTR010-ACTR030) belongs to that IoC
          container and cannot fire without a [ServiceProvider] type. -->
     <PackageVersion Include="AutoCtor" Version="4.0.2" />
-    <!-- ── NUKE build system (consumed by build/_build.csproj only) ─────── -->
+    <!-- ── NUKE build system ──────────────────────────────────────────── -->
     <!--
-      NUKE is pinned to 9.0.4 — the latest stable as of 2026-Q1. The build/
-      project uses a local Directory.Build.props that disables analyzers,
-      TreatWarningsAsErrors, and CPM-transitive pinning so the bootstrap
-      project can build cleanly even when the solution-wide strict settings
-      would otherwise reject NUKE's generated code.
+      NO Nuke.Common ENTRY HERE, ON PURPOSE.
+
+      The NUKE version lives in build/_build.csproj, and only there. That
+      project turns Central Package Management OFF for itself — the
+      PropertyGroup in build/_build.csproj sets
+      ManagePackageVersionsCentrally=false, and it is THAT copy that
+      decides, not the one in build/Directory.Build.props: the SDK imports
+      Directory.Build.props first and this file second, so a
+      <PackageVersion> written here would never take part in the build
+      project's restore. It would be dead text, and the comment beside it a
+      second answer to "which NUKE do we build with?" that the build does
+      not agree with. #1896 removed the dead entry and the contradiction
+      that came with it.
+
+      To change the NUKE version, change it in build/_build.csproj — and
+      read the comment there first: the NUKE version decides the
+      Microsoft.Build* floor beside it, and a stale floor is NU1605.
     -->
-    <PackageVersion Include="Nuke.Common" Version="10.1.0" />
     <!-- ── DI analyzers ──────────────────────────────────────────────────── -->
     <!--
       DependencyInjection.Lifetime.Analyzers (DI001–DI022, DI024–DI027; 26

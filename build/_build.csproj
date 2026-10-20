@@ -6,7 +6,8 @@
     Lives in build/ (NOT src/, apps/, or tests/) so the solution-wide
     Directory.Build.props / targets / CPM analyzers don't apply. Instead, the
     sibling build/Directory.Build.props gives NUKE a permissive environment
-    (analyzers OFF, CPM OFF, TreatWarningsAsErrors OFF).
+    (analyzers OFF, TreatWarningsAsErrors OFF), and the PropertyGroup below
+    turns CPM off (it is that copy which decides — see the comment there).
 
     Run via the bootstrap scripts:
         ./build.sh Compile          [Linux / macOS]
@@ -34,31 +35,77 @@
       Disable Central Package Management for THIS project only. The solution-
       wide Directory.Packages.props enables CPM; NUKE is a build tool, not
       a shipped assembly, so we let it pin its own dep chain inline.
+
+      The consequence, written down so the next reader does not have to
+      derive it: with CPM off here, THIS FILE is the only place the NUKE
+      and MSBuild versions are decided. Directory.Packages.props therefore
+      carries NO Nuke.Common entry — a pin there would be dead text for
+      this project, and the comment beside it a second, contradictory answer
+      to "which NUKE do we build with?". #1896 removed that entry for
+      exactly this reason.
+
+      Why the property is repeated HERE and not only in
+      build/Directory.Build.props: the SDK imports Directory.Build.props
+      first and Directory.Packages.props second (Microsoft.Common.props
+      imports NuGet.props, which imports the central file), so the root
+      file's ManagePackageVersionsCentrally=true lands AFTER the local
+      Directory.Build.props set it to false. This PropertyGroup is
+      evaluated after both imports, so the value below is the one that
+      survives. Change it here.
     -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <!--
+    THE VERSIONS BELOW ARE DECIDED HERE AND NOWHERE ELSE.
+
+    Two properties above make that true, and they are also the reason the
+    pins are needed at all:
+
+      - ManagePackageVersionsCentrally=false — no central version catalogue
+        applies to this project, so a version written anywhere else would
+        be ignored here.
+      - CentralPackageTransitivePinningEnabled=false — nothing lifts NUKE's
+        transitive tree to a patched version, so every package that has to
+        leave its vulnerable version is pinned explicitly below.
+
+    Nuke.Common 9.0.4 → 10.1.0, the current stable (published 2025-12-02).
+    10.1.0 is what moves the Microsoft.Build* floor below from 17.x to
+    18.0.2: Nuke.ProjectModel 10.1.0 asks for Microsoft.Build 18.0.2 from its
+    net10.0 group (17.14.28 from net9.0, 17.11.48 from net8.0), and this
+    project targets net10.0, so net10.0 is the group NuGet resolves.
+
+    The pins, and what each one holds back:
+
+      - System.Security.Cryptography.Xml 10.0.13 — KEEP THIS PIN, it is
+        load-bearing. NUKE's tree pulls 9.0.0, and 9.0.0 is inside 11
+        advisory ranges (GHSA-c399-9853-6jmj / CVE-2026-96959,
+        GHSA-7hqp-7c5m-4vq6 / CVE-2026-96960, GHSA-r955-8q5j-3h83 /
+        CVE-2026-96958, and eight more). 10.0.13 is outside every one of
+        them. REMOVING THE PIN RE-OPENS ALL 11 ON THE TRANSITIVE 9.0.0 —
+        the assembly the build process would then load. It also has to be
+        >= 10.0.13 and not merely >= 10.0.0: the band
+        >= 10.0.0, <= 10.0.12 is what 10.0.11 and 10.0.12 are still inside
+        of — the same three CVEs.
+      - Microsoft.Build, .Tasks.Core, .Utilities.Core 18.0.2 — 18.0.2 is the
+        floor Nuke.ProjectModel 10.1.0 requires, not the newest 18.x. A
+        direct pin BELOW what NUKE requires is NU1605 ("Detected package
+        downgrade"), an error rather than a warning, so 17.14.28 would no
+        longer restore next to NUKE 10.1.0. It is not the newest 18.x on
+        purpose either: 18.10.1 and later ship net11.0 assets, which a
+        net10.0 project cannot consume (NU1202). 18.0.2 closes the
+        advisories the old 17.12.6 transitive carried (GHSA-w3q9-fxm7-j8fq,
+        GHSA-h4j7-5rxr-p4wc) and adds none of its own.
+      - NuGet.Packaging 6.12.5 — Nuke.Tooling 10.1.0 still asks for 6.12.1;
+        6.12.5 sits above it (no NU1605) and closes NU1901: GHSA-g4vj-cjjj-v7hg.
+  -->
   <ItemGroup>
-    <PackageReference Include="Nuke.Common" Version="9.0.4"/>
-    <!--
-      Direct pins override Nuke.Common 9.0.4's vulnerable transitive tree.
-      The pins stay; only their versions move. Removing any of them re-opens
-      the advisories the pin was put there to close:
-      - System.Security.Cryptography.Xml 8.0.0 → 10.0.13. Nuke's own tree pulls
-        9.0.0 (11 advisories) and its 8.0.0 group carries 12 (NU1903:
-        GHSA-cvvh-rhrc-wg4q, GHSA-g8r8-53c2-pm3f, GHSA-mmjf-rqrv-855v,
-        GHSA-w3x6-4m5h-cxqf, …). 10.0.11 was itself inside the affected range
-        >= 10.0.0, <= 10.0.12 (NU1903: GHSA-r955-8q5j-3h83,
-        GHSA-c399-9853-6jmj, GHSA-7hqp-7c5m-4vq6); 10.0.13 closes that range
-        and carries 0 advisories for this package.
-      - Microsoft.Build* 17.12.6 → 17.14.28 (NU1903: GHSA-w3q9-fxm7-j8fq, GHSA-h4j7-5rxr-p4wc)
-      - NuGet.Packaging 6.12.1 → 6.12.5 (NU1901: GHSA-g4vj-cjjj-v7hg)
-    -->
+    <PackageReference Include="Nuke.Common" Version="10.1.0"/>
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13"/>
-    <PackageReference Include="Microsoft.Build" Version="17.14.28"/>
-    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28"/>
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.28"/>
+    <PackageReference Include="Microsoft.Build" Version="18.0.2"/>
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="18.0.2"/>
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2"/>
     <PackageReference Include="NuGet.Packaging" Version="6.12.5"/>
   </ItemGroup>
 
