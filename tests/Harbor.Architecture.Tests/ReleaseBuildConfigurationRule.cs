@@ -215,7 +215,7 @@ internal static class ReleaseConfigurationProbe
         try
         {
             string projectDir = Path.GetDirectoryName(csprojPath)!;
-            var result = new List<(string, bool)>();
+            var result = new List<(string Child, bool StatesConfiguration)>();
 
             foreach (XElement element in XDocument.Load(csprojPath, LoadOptions.None).Descendants())
             {
