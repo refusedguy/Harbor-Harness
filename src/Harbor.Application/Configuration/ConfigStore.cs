@@ -110,11 +110,13 @@ public sealed class JsonConfigStore : IConfigStore
                 }
                 catch (JsonException je)
                 {
-                    // #1848: the JsonException is the INNER exception, not a
-                    // substring of the message. Interpolating je.Message kept
-                    // the text and dropped the stack trace and the JSON position
-                    // of the malformed key, and a corrupt config is what a user
-                    // sends us in a bug report. The message text is unchanged.
+                    // #1848 and #1849: the JsonException is the CAUSE, not just a
+                    // message. Interpolating je.Message kept the text and dropped
+                    // the stack trace and the JSON position of the malformed key,
+                    // and a corrupt config is what a user sends us in a bug report.
+                    // The message text is unchanged, so what the user reads stays
+                    // exactly as it was, and the chain now carries the parse error
+                    // itself.
                     throw new InvalidDataException($"config.json is corrupt: {je.Message}", je);
                 }
             }, ResultErrors.Message)
