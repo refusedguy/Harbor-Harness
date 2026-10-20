@@ -259,15 +259,15 @@ public sealed class CellForgeDiffEncoderBoundaryRules
     [Test]
     public async Task NonVacuity_The_Scanner_Finds_A_Planted_Violation_And_Ignores_A_Clean_Line()
     {
-        const string qualified = "dst.SetDiffOption(x, y, (UIR.CellDiffOption)(byte)src.GetDiffOption(x, y), 0);";
-        const string unqualified = "var option = (CellDiffOption)(byte)raw;";
-        const string explicit = "dst.SetDiffOption(x, y, MapDiffOption(src.GetDiffOption(x, y)), 0);";
+        const string qualifiedCast = "dst.SetDiffOption(x, y, (UIR.CellDiffOption)(byte)src.GetDiffOption(x, y), 0);";
+        const string unqualifiedCast = "var option = (CellDiffOption)(byte)raw;";
+        const string explicitMapping = "dst.SetDiffOption(x, y, MapDiffOption(src.GetDiffOption(x, y)), 0);";
 
-        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(qualified)).IsTrue()
+        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(qualifiedCast)).IsTrue()
             .Because("the qualified cast is the shape #1519 removed, and the matcher must still find it");
-        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(unqualified)).IsTrue()
+        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(unqualifiedCast)).IsTrue()
             .Because("the unqualified cast is the same hazard, and the matcher must find it too");
-        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(explicit)).IsFalse()
+        await Assert.That(DiffEncoderBoundaryProbe.IsNumericDiffOptionCast(explicitMapping)).IsFalse()
             .Because("the explicit mapping is what the bridge uses now; a matcher that flagged it "
                    + "would make the rule unsatisfiable");
     }
