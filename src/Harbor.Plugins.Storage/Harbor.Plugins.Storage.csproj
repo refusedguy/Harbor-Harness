@@ -9,8 +9,7 @@
       - CompositePluginSource         (fan-in over multiple sources)
       - EmbeddedResourcePluginSource  (reads .cs from assembly resources)
 
-    Depends only on Harbor.Plugins.Abstractions. Knows nothing about
-    compilation, instantiation, registration, or hosting.
+    Knows nothing about compilation, instantiation, registration, or hosting.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

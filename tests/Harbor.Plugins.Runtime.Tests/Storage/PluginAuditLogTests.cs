@@ -8,6 +8,7 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.Storage;
@@ -155,15 +156,7 @@ public sealed class PluginAuditLogTests
             NullLogger.Instance,
             capabilities: policy.GetGrantedCapabilities(loaded!),
             audit: audit);
-        var ctx = new ToolContext(
-            SessionId: "session-1",
-            MessageId: "msg-1",
-            CallId: "call-1",
-            Agent: "code",
-            Abort: CancellationToken.None,
-            Messages: Array.Empty<AgentMessage>(),
-            ReportProgress: (_, _) => Task.CompletedTask,
-            Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+        var ctx = TestToolContext.Create(sessionId: "session-1", messageId: "msg-1", callId: "call-1");
         var result = await tool.ExecuteAsync(
             JsonDocument.Parse("""{"url":"https://www.google.com/search?q=hello"}""").RootElement.Clone(),
             ctx);

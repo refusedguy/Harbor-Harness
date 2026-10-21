@@ -842,19 +842,17 @@ public class JsonlUnboundedAllocationTests
     }
 
     [Test]
-    public async Task UpdateMessage_SeveralMessagesWithTheSameId_DropsThemAll()
+    public async Task UpdateMessage_SeveralMessagesWithTheSameId_TheSurfaceShowsOneOfThem()
     {
         // The read path is "latest id wins", so a file can legitimately hold
-        // several records for one id (an update that raced an append). Every one
-        // of them is stale, so every one of them has to go — a plan that dropped
-        // only the first would leave a duplicate that the reader then silently
-        // picks between.
+        // several records for one id (an update that raced an append). They
+        // are VERSIONS of one message, not four messages: the surface shows
+        // the latest one, and the log keeps the rest (#1752 — an edit appends
+        // a version, it does not rewrite the record it replaces).
         var (store, sessionId) = await SeedAsync(3);
         try
         {
-            string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
-
-            // Three more records for the seeded m1. The reader collapses these
+            // Three more records for the seeded m1. The surface collapses these
             // to one m1 (latest wins), so the file really does hold four.
             await AppendFatMessageAsync(store, sessionId, "m1", 11);
             await AppendFatMessageAsync(store, sessionId, "m1", 22);
@@ -866,12 +864,18 @@ public class JsonlUnboundedAllocationTests
             var reread = await store.GetMessagesAsync(sessionId);
             await Assert.That(reread.IsSuccess).IsTrue();
 
-            // Exactly one m1 — all four stale ones went, not just the first —
-            // and it is the one we just wrote.
+            // Exactly one m1 in the surface — and it is the one we just wrote.
             await Assert.That(reread.Value.Count(m => m.Id == "m1")).IsEqualTo(1);
             await Assert.That(((UserMessage)reread.Value.Single(m => m.Id == "m1")).Content)
                 .IsEqualTo("final body");
             await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m2", "m1" });
+
+            // The versions that were replaced are still in the log — nothing
+            // was dropped.
+            var log = await store.GetSessionLogAsync(sessionId);
+            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log.Value.Count(e => e.Kind == Harbor.Abstractions.Sessions.SessionLogEntryKind.Message))
+                .IsEqualTo(7);
         }
         finally
         {
@@ -880,11 +884,12 @@ public class JsonlUnboundedAllocationTests
     }
 
     [Test]
-    public async Task UpdateMessage_DropsTheStaleEntryAndLeavesTheRestReadable()
+    public async Task UpdateMessage_AppendsANewVersionAndLeavesTheRestReadable()
     {
-        // The rewrite's correctness contract, unchanged by streaming: the old
-        // entry goes, the fresh one lands WHERE THE OLD ONE STOOD (#1798 — the
-        // record keeps its position in the file), everything else survives.
+        // The edit's correctness contract: the fresh version is APPENDED, the
+        // version it replaces stays in the log, and the message keeps its
+        // place in the conversation (#1798 — the place a message holds is
+        // where it was written FIRST).
         var (store, sessionId) = await SeedAsync(3);
         try
         {
@@ -980,7 +985,11 @@ public class JsonlUnboundedAllocationTests
             var result = await store.DeleteMessagesAfterAsync(sessionId, "m1");
 
             await Assert.That(result.IsSuccess).IsTrue();
-            await Assert.That(result.Value).IsEqualTo(3); // m2, m3, and the duplicate
+
+            // Two MESSAGES left the surface: m2 and m3. The duplicate m1 is
+            // not a message of its own — it is another version of the anchor,
+            // and the anchor stays (#1752).
+            await Assert.That(result.Value).IsEqualTo(2);
 
             var reread = await store.GetMessagesAsync(sessionId);
             await Assert.That(reread.IsSuccess).IsTrue();
@@ -1016,12 +1025,12 @@ public class JsonlUnboundedAllocationTests
     }
 
     [Test]
-    public async Task DeleteMessagesAfter_RewindToTheLastMessage_LeavesTheFileAlone()
+    public async Task DeleteMessagesAfter_RewindToTheLastMessage_ChangesNothingInTheSurface()
     {
-        // Found, zero removed. The pre-#460 code only rewrote when something
-        // was actually dropped, so the mtime stayed put and the store's parse
-        // cache stayed warm. A streaming plan can find its target and still
-        // have nothing to do; that must stay a no-op.
+        // Found, zero removed: the anchor is the last message, so nothing
+        // leaves the surface. The rewind is still an EVENT (#1752), so the file
+        // grows by that one record — the log says the rewind happened, and
+        // the surface is exactly what it was.
         var (store, sessionId) = await SeedAsync(3);
         try
         {
@@ -1032,8 +1041,11 @@ public class JsonlUnboundedAllocationTests
 
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value).IsEqualTo(0);
-            await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo(before);
+            await Assert.That((await File.ReadAllTextAsync(path)).Length).IsGreaterThan(before.Length);
             await Assert.That(LeftoverTemps(store)).IsEmpty();
+
+            var surface = await store.GetMessagesAsync(sessionId);
+            await Assert.That(surface.Value.Count).IsEqualTo(3);
         }
         finally
         {
