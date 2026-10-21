@@ -1,6 +1,6 @@
 # Harbor.Tools.Builtin
 
-The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 24 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`.
+The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 25 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`, `spill_read`.
 
 > Plugins can add more tools via `IToolPlugin` — see [`docs/PLUGIN_SYSTEM.md`](../../docs/PLUGIN_SYSTEM.md). The full tool reference with examples and the "when to use X vs Y" matrix lives in [`docs/TOOLS_CATALOG.md`](../../docs/TOOLS_CATALOG.md).
 
@@ -80,6 +80,13 @@ model never to call it.
 ## Usage
 
 Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
+`src/Harbor.Hosting/Modules/ToolsCatalog.cs:75-109`), not via a registration facade here.
+Fifteen tools are registered in every preset (`read`, `write`, `edit`, `bash`, `glob`,
+`grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `harbor_inspect`,
+`goal`, `spill_read`); `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`,
+`mcp_prompt`, `session_read`, `session_steer`, `plugin_manager` and
+`ask_user_question` join when the host selects `HarborToolSetKind.Full14`
+(25 tools total). `tools.freeze()` runs after
 `src/Harbor.Hosting/Modules/ToolsCatalog.cs:83-117`), not via a registration facade here.
 Ten tools are always registered; `task`, `webfetch`, `ripgrep`, and `mcp` join when the
 host selects `HarborToolSetKind.Full14` (14 tools total). `tools.freeze()` runs after

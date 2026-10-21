@@ -57,7 +57,15 @@ internal static class CoreModule
         // needs the registry while the tool registry is being built) and
         // publishes ONE instance of each. Registering them here as well would
         // have produced two providers and a doubled merge.
-        services.AddSingleton<MessageConverter>();
+        // #1748: the converter is the CONTEXT BOUNDARY — the single choke point
+        // between the domain transcript and the provider request — so it is
+        // where the inline budget and the spill area are applied. The store is
+        // resolved OPTIONALLY: a host that wires none keeps the historical
+        // head + marker behaviour, and a tool output that does not fit is cut
+        // rather than spilled.
+        services.AddSingleton(sp => new MessageConverter(
+            sp.GetService<IToolOutputSpillStore>(),
+            ctx.Harbor.ToolOutput.SpillMaxChars));
         services.AddSingleton<IRetryPolicy, RetryPolicy>();
         services.AddSingleton<IToolRetryDecider, DefaultToolRetryDecider>();
         // PX4: user hooks (plain shell commands from ~/.harbor/hooks.json —

@@ -33,12 +33,14 @@
    - [skill](#skill)
    - [read_mcp_resource](#read_mcp_resource)
    - [mcp_prompt](#mcp_prompt)
+   - [lsp](#lsp)
    - [session_read](#session_read)
    - [session_steer](#session_steer)
    - [harbor_inspect](#harbor_inspect)
-- [plugin_manager](#plugin_manager)
-      - [goal](#goal)
+   - [plugin_manager](#plugin_manager)
+   - [goal](#goal)
    - [ask_user_question](#ask_user_question)
+   - [spill_read](#spill_read)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
 5. [Building your own tool — WebFetchTool walkthrough](#5-building-your-own-tool--webfetchtool-walkthrough)
@@ -52,21 +54,21 @@
 
 ## 1. Inventory
 
-Harbor ships **24 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **25 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 24 tools
+> (the CLI default — the enum name predates the tool count) registers all 25 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer` + `harbor_inspect` + `plugin_manager` + `goal` + `ask_user_question`);
-> `Standard10` (name likewise predates the count — 14 members today) omits the ten
-> heavier ones (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`,
-> `session_read`, `session_steer`, `plugin_manager`, `ask_user_question`).
+> `session_steer` + `harbor_inspect` + `plugin_manager` + `goal` + `ask_user_question` +
+> `spill_read`); `Standard10` (name likewise predates the count — 15 members today) omits
+> the ten heavier ones (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`,
+> `mcp_prompt`, `session_read`, `session_steer`, `plugin_manager`, `ask_user_question`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 22. `plugin_manager` requires the plugin runtime to be compiled in
+> catalog registers 23. `plugin_manager` requires the plugin runtime to be compiled in
 > (`HarborWithPlugins=true`, the default). `goal` registers either way — it is the one
 > tool whose store dependency is optional, and it says so when it is called.
 
@@ -96,6 +98,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
 | 23 | `goal` | Sequential | Allow | Report the goal as complete, or as blocked with a reason |
 | 24 | `ask_user_question` | Sequential | Allow | Ask the user a structured question and read the answer back |
+| 25 | `spill_read` | Parallel | Allow | Read back a tool output that was too large to fit the context |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1005,6 +1008,57 @@ parts (images, embedded resources) are skipped with a note.
 
 ---
 
+### `lsp`
+
+**Description.** Language-server intelligence over the builtin servers: the
+diagnostics a file publishes, where a symbol is declared, and every place it is
+used. Eleven servers are wired — TypeScript, Python, Go, Rust, C#, C/C++, Java,
+HTML, CSS, JSON and Lua — and the one that handles the file's extension is the
+one that answers.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "action": { "type": "string", "enum": ["diagnostics", "definition", "references"], "description": "Which LSP query to run" },
+    "path":   { "type": "string", "description": "File path (absolute or workspace-relative)" },
+    "line":   { "type": "integer", "description": "1-based line of the symbol (required for definition/references)" },
+    "column": { "type": "integer", "description": "0-based column of the symbol (default 0)" }
+  },
+  "required": ["action", "path"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Compiler-level errors in a file, after an edit
+{"action": "diagnostics", "path": "src/Harbor.AgentRuntime/Agents/TurnRunner.cs"}
+
+// 2. Where is this type declared?
+{"action": "definition", "path": "src/Harbor.Hosting/Modules/ToolsCatalog.cs", "line": 163, "column": 21}
+
+// 3. Every place this method is called
+{"action": "references", "path": "src/Harbor.AgentRuntime/Agents/TurnRunner.cs", "line": 42, "column": 8}
+```
+
+**Permissions.** Allow — the tool runs a language server, and it never writes the
+file it is asked about. Its safety profile is `Path()`, so the traversal guard
+applies to the path the model names.
+
+**Mode.** `Sequential` (it talks to a language-server process).
+
+**Tips.**
+- The position is 1-based in the line and 0-based in the column.
+- Read the file first: the language server sees the content that was opened, and
+  a file nobody opened answers "no diagnostics published".
+- A file whose extension no builtin server handles is refused with an
+  explanatory message, not an exception.
+
+---
+
 ### `session_read`
 
 **Description.** Reads a *peer* session — one spawned earlier by `task` or
@@ -1346,6 +1400,70 @@ question channel is what the answer gates, not the permission system.
   and a leading `!` skips the rest of the batch.
 ---
 
+### `spill_read`
+
+**Description.** Reads back a tool output that did not fit the model context
+(#1748). A tool result longer than the inline budget (`toolOutput.spillMaxChars`
+in `config.json`, 2000 by default) is written to Harbor's private spill area
+(`$HARBOR_HOME/spill/<session>/`), and the model receives a preview plus a
+pointer instead of a silent cut:
+
+```
+…[spilled: this output is 48312 chars and did not fit the context. Full output:
+/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt (48312 bytes).
+Read it back with spill_read {"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt"}]
+```
+
+The read is paged by line, so re-reading the tail of a huge output does not
+re-create the overflow the spill solved.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "path":   { "type": "string",  "description": "Path of the spilled output, from the '[spilled: ...]' marker" },
+    "offset": { "type": "integer", "description": "1-based start line (optional)" },
+    "limit":  { "type": "integer", "description": "Max lines to return (optional)" }
+  },
+  "required": ["path"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Read the whole spilled output (the first 2000 lines)
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt"}
+
+// 2. Read the window around the error
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt", "offset": 1200, "limit": 200}
+
+// 3. Continue where the previous read stopped
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt", "offset": 1400}
+```
+
+**Permissions.** Allow — the tool is confined by the store to the CURRENT
+session's spill directory, so it can only reach the output of a tool the agent
+itself ran. It is declared `Opaque` on purpose: a path-taking declaration would
+put it under the workspace confinement, which downgrades an out-of-workspace
+path from "allow" to "ask" — and the spill area is outside the workspace by
+definition.
+
+**Mode.** `Parallel` (a read).
+
+**Tips.**
+- The path comes from the `[spilled: ...]` marker in the tool result — there is
+  no other way to learn it.
+- A file that is gone (the spill area is swept on a TTL) reads back as
+  "Spill file not found" — the full output is still in the session log.
+- If the store could not write the file at all, the tool result carries the
+  ORIGINAL output instead of a pointer: an overfull context is recoverable, a
+  silently cut one is not.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1370,6 +1488,7 @@ question channel is what the answer gates, not the permission system.
 | Add or remove a plugin | `plugin_manager` | `bash cp` | The change is proposed and the user approves it |
 | Find out what this runtime offers | `harbor_inspect` | reading the docs | Reads the live registries, so it cannot describe a runtime that is not the one running |
 | Ask the user which way to go | `ask_user_question` | (nothing) | A structured question with a bounded wait; a permission prompt cannot carry a choice |
+| Read a tool output that was too big for the context | `spill_read` | `read` | The path is outside the workspace; `read` would ask for permission on every window |
 
 ---
 

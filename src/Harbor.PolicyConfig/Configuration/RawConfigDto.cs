@@ -52,6 +52,14 @@ public sealed class RawConfigDto
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
     [JsonPropertyName("secondaryModel")] public string? SecondaryModel { get; set; }
+
+    /// <summary>
+    ///     The tool-output budget (#1748): the inline budget per tool result and
+    ///     how long a spilled output is kept. Absent means "not configured" —
+    ///     the defaults apply.
+    /// </summary>
+    [JsonPropertyName("toolOutput")] public ToolOutputConfig? ToolOutput { get; set; }
+
     [JsonPropertyName("permissions")] public Dictionary<string, List<PermissionRule>>? Permissions { get; set; }
 
     /// <summary>

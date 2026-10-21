@@ -713,7 +713,7 @@ jobs:
   # equals the tree or it does not, and a record quoting an old count cannot
   # make the number agree.
   #
-  # --min-facts is the floor. Measured today: 6 counts compared. The floor is
+  # --min-facts is the floor. Measured today: 8 counts compared. The floor is
   # 5, so a rule that silently stops matching drives the number down and this
   # job goes red instead of reporting a clean tree — the #591 shape, which the
   # --self-test also pins from the other side.
@@ -1221,7 +1221,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The pinned tool schemas agree with the declarations
-        run: python3 tools/check-tool-schema-pin.py --min-tools 21
+        run: python3 tools/check-tool-schema-pin.py --min-tools 25
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

@@ -149,6 +149,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -185,6 +190,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -241,6 +251,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -291,6 +306,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -343,6 +363,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -405,6 +430,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),

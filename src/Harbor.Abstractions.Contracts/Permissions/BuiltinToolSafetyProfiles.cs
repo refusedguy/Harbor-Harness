@@ -141,6 +141,16 @@ public static class BuiltinToolSafetyProfiles
         // against it and change the verdict for a tool whose own gate already
         // asks about every change.
         new(WellKnownTools.PluginManager, ToolSafetyProfile.Opaque),
+
+        // #1748: the way back to a tool output that was spilled to a file. The
+        // ARGUMENT is a path, and the row still says Opaque on purpose: a
+        // path-taking declaration would put the tool under the workspace
+        // confinement, which downgrades an out-of-workspace path from "allow"
+        // to "ask" — and the spill area is outside the workspace by
+        // definition, so every re-read would ask the user, and a headless run
+        // would be denied. The confinement this tool needs is the store's: it
+        // refuses any path outside the CURRENT session's spill directory.
+        new(WellKnownTools.SpillRead, ToolSafetyProfile.Opaque) { Category = ToolCategory.Read }
     ];
 
     /// <summary>

@@ -177,6 +177,7 @@ internal static class ToolsCatalog
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
         ISessionStore? sessionStore = null,
         ISkillRegistry? skillRegistry = null,
+        IToolOutputSpillStore? spillStore = null,
         IInstalledPluginInventory? pluginInventory = null)
     {
         var registry = new ToolRegistry();
@@ -257,6 +258,13 @@ internal static class ToolsCatalog
             sessionStore as ISessionGoalStore, lf.CreateLogger<GoalTool>()));
         tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));
         tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
+        // #1748: the way back to a tool output that did not fit the context.
+        // The tool is registered whenever a spill store is wired; without one
+        // there is nothing to read back, and the pointer would be a lie.
+        if (spillStore is not null)
+        {
+            tb.AddTool(lf => new SpillReadTool(spillStore, lf.CreateLogger<SpillReadTool>()));
+        }
         if (full)
         {
             // #1759: the model-facing question channel. It is a FULL-set tool
