@@ -9,12 +9,14 @@ namespace Harbor.TestKit;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         The 8-argument <see cref="ToolContext" /> literal used to be copy-pasted
-///         into every test file that exercised a tool — 24 copies in 19 files at
-///         the time of this change. Every copy was a hand-maintained contract: a
-///         change to the record's signature broke 24 places, and a copy that
-///         drifted (a different session id, a missing working directory) was
-///         invisible until a test failed for the wrong reason.
+///         The 8-argument <see cref="ToolContext" /> literal used to be
+///         copy-pasted into every test file that exercised a tool. Measured on
+///         the tree this factory replaced, there were <b>39 such constructions
+///         in 34 files</b> — 352 lines. Every copy was a hand-maintained
+///         contract: a change to the record's signature broke all of them at
+///         once, and a copy that drifted (a different session id, a missing
+///         working directory) was invisible until a test failed for the wrong
+///         reason.
 ///     </para>
 ///     <para>
 ///         The defaults reproduce the canonical copy exactly:
@@ -46,6 +48,16 @@ namespace Harbor.TestKit;
 ///         files that were already migrated: the core references this part,
 ///         the namespace is <c>Harbor.TestKit</c> in both, and the type name
 ///         did not change, so <c>using Harbor.TestKit;</c> still finds it.
+///     </para>
+///     <para>
+///         The tree now holds one construction of a <see cref="ToolContext" />
+///         outside this file, and it is the one in
+///         <c>tests/Harbor.TestKit.Tests/TestToolContextTests.cs</c> — the test
+///         that holds this factory against the literal it replaced. The
+///         measured chain is <b>39 (34 files, 352 lines) -&gt; 9 (9 files, 81
+///         lines) -&gt; 1</b>, and the permission answer the copies spelled out
+///         went <b>59 -&gt; 7</b> <c>new PermissionResponse(PermissionAction.X,
+///         false)</c> literals.
 ///     </para>
 /// </remarks>
 public static class TestToolContext
