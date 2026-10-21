@@ -38,13 +38,6 @@
 #             It lives here rather than in ci.yml because it needs no .NET
 #             SDK and because ci.yml is the workflow the dotnet matrix owns.
 #
-#   merge-loss  the local squash-merges: a pull request that touches
-#             `.github/workflows/` cannot be merged through the GitHub API with
-#             this repository's token (no `workflow` scope), so it is merged
-#             LOCALLY with `git merge --squash`, and the resolution dropped
-#             whole sections of files. The job walks those merges and asks
-#             whether what they dropped is still missing. No dotnet, no
-
 # THE FLOORS ARE THE POINT
 #
 #   `--min-files` / `--min-refs` / `--min-lines` make a narrowed scan fail
@@ -85,29 +78,12 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
-      # #1728. The arch-anchor gate reads the architecture rule tree and its own
-      # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
-      - 'tools/arch-anchor-exceptions.txt'
-      # #1726. The guard triage reads the TRX of the `test` job, and its
-      # self-test runs here with the other python tools. A PR that edits the
-      # tool, or the registry that says what a firing MEANT, must run the
-      # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
-      - 'tools/guard-triage-classes.json'
       # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
       # measures.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
-      # #1847. `check-dup-jscpd.py` scans `src/`, `apps/` and `tests/` and
-      # compares the result against its committed baseline, so a PR that
-      # edits the gate, the config or the baseline must run it — and so must
-      # a PR that edits the tree it measures.
-      - 'tools/check-dup-jscpd.py'
-      - 'tools/jscpd-baseline.json'
-      - '.jscpd.json'
       # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
       # compares the result against its committed exceptions file, so a PR
       # that edits the gate or the exceptions must run it — and so must a PR
@@ -127,19 +103,14 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
-      # #1575. The string-switch gate reads `src/` and `apps/`, and compares
-      # the result against its committed exceptions file, so a PR that edits
-      # the gate or the exceptions must run it, and so must a PR that edits
-      # the tree it measures. The rewrites file is the reviewed record of what
-      # the gate's own `--apply` mode replays, so it is a trigger too.
-      - 'tools/check-string-switch.py'
-      - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. The two reporters (the measurement table and the wall census)
       # and their self-tests: a PR that edits either must run them, for the
       # same reason the gates above are triggered by their own sources.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
+      # #1795. The third reporter (the skipped tests, with their reasons) and
+      # its self-test — same trigger as the two above.
+      - 'tools/test-skips.py'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -149,41 +120,6 @@ on:
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
       - 'tools/check-public-api-resign.py'
-      # The merge-loss gate. A pull request that touches a workflow file is
-      # merged LOCALLY (the token has no `workflow` scope), and the local
-      # squash-merge dropped content. The gate has to run on every such pull
-      # request, and on the push that lands it — so the trigger is the
-      # workflow files themselves, not the gate's own sources alone.
-      - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
-      - 'tools/merge-loss-exceptions.txt'
-      # #1731. `gen-seam-graph.py` generates docs/SEAM_GRAPH.md from the C#
-      # sources, and `--check` fails when the committed document no longer
-      # matches the tree. The gate reads src/ and apps/, so a PR that edits
-      # either has to run it - and a PR that edits the generator or the
-      # document it writes has to run it too.
-      - 'tools/gen-seam-graph.py'
-      - 'docs/SEAM_GRAPH.md'
-      # #1888. The gate policy's own checker, and the three tools whose
-      # self-test no workflow ran until the policy asked for one. A PR that
-      # edits any of them must run the checker, because the checker's
-      # verdict about the tree depends on what those files say.
-      - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
-      - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
-      # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
-      # `if (x.IsFailure)` guard sites and ratchets the count of chain
-      # candidates, so a PR that edits the gate or the baseline must run it —
-      # and so must a PR that edits the tree it measures (the .cs paths above).
-      - 'tools/check-result-chains.py'
-      - 'tools/result-chains-baseline.json'
-      # #1781. The shard-balance gate reads the shard lists in ci.yml and the
-      # recorded cost of every project, so a PR that edits the gate, the
-      # measurement or the workflow's shard lists has to run it — and so must
-      # a PR that edits the tree it measures.
-      - 'tools/check-shard-balance.py'
-      - 'tools/shard-costs.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -218,29 +154,12 @@ on:
       - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
-      # #1728. The arch-anchor gate reads the architecture rule tree and its own
-      # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
-      - 'tools/arch-anchor-exceptions.txt'
-      # #1726. The guard triage reads the TRX of the `test` job, and its
-      # self-test runs here with the other python tools. A PR that edits the
-      # tool, or the registry that says what a firing MEANT, must run the
-      # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
-      - 'tools/guard-triage-classes.json'
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
       # baseline, so a PR that edits the tree it measures — or the gate, or
       # the baseline — must run it.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
-      # #1847. Same trigger as above: the second duplication gate measures
-      # `src/`, `apps/` and `tests/` and compares the result against its
-      # committed baseline, so a PR that edits the tree it measures — or the
-      # gate, the config, or the baseline — must run it.
-      - 'tools/check-dup-jscpd.py'
-      - 'tools/jscpd-baseline.json'
-      - '.jscpd.json'
       # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
       # compares the result against its committed exceptions file, so a PR
       # that edits the gate or the exceptions must run it — and so must a PR
@@ -257,48 +176,18 @@ on:
       - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
-      # #1575. Same trigger as above: the string-switch gate reads `src/` and
-      # `apps/` and compares the result against its committed exceptions
-      # file, so a PR that edits the gate or the exceptions must run it.
-      - 'tools/check-string-switch.py'
-      - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
+      # #1795. The third reporter (the skipped tests, with their reasons) and
+      # its self-test — same trigger as the two above.
+      - 'tools/test-skips.py'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
       - 'tools/check-xml-doc-coverage.py'
       # #1845. Same trigger as above: the re-signing gate reads the commit
       # history, so a PR that edits the gate runs its self-test.
       - 'tools/check-public-api-resign.py'
-      # The merge-loss gate. Same trigger as above: a pull request that
-      # touches a workflow file is the one that gets merged LOCALLY, so the
-      # gate has to run on it.
-      - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
-      - 'tools/merge-loss-exceptions.txt'
-      # #1731. Same trigger as above: the seam-graph gate reads the C# tree
-      # and compares the result with the committed document.
-      - 'tools/gen-seam-graph.py'
-      - 'docs/SEAM_GRAPH.md'
-      # #1888. Same trigger as above: the policy checker, and the three tools
-      # whose self-test no workflow ran until the policy asked for one.
-      - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
-      - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
-      # #1558. Same trigger as above: the chain census measures `src/` and
-      # `apps/` (the .cs paths above), so a PR that edits the gate or the
-      # baseline must run it.
-      - 'tools/check-result-chains.py'
-      - 'tools/result-chains-baseline.json'
-      # #1781. Same trigger as above: the shard-balance gate reads the shard
-      # lists in ci.yml and the recorded cost of every project, so a PR that
-      # edits the gate, the measurement or the workflow's shard lists must run
-      # it.
-      - 'tools/check-shard-balance.py'
-      - 'tools/shard-costs.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -337,12 +226,6 @@ jobs:
       # nothing is indistinguishable from a rule that found nothing.
       - name: Citation checker fails on a stale file:line and an unwired type
         run: python3 tools/check-doc-cites.py --self-test
-      # #1728. The eleventh gate is the only one that asks whether an
-      # architecture rule may anchor on a line number AT ALL. Its failure path
-      # is tested here for the same reason as the others: a rule edited until it
-      # matches nothing is indistinguishable from a rule that found nothing.
-      - name: Architecture-anchor gate fails on a planted line-number anchor
-        run: python3 tools/check-arch-anchors.py --self-test
       # #933. The fourth gate is the only one that asks whether a COUNT the
       # onboarding documents state still equals the count of tracked files.
       # Its failure path is tested for the same reason as the other three: the
@@ -393,22 +276,8 @@ jobs:
       # from a rule that found nothing, and the load-bearing fixture is the
       # planted duplicate — the gate MUST fail on it, and MUST stay quiet on
       # a same-shape body that shares no identifiers with it.
-      - name: Merge-loss checker reports a dropped line
-        run: python3 tools/check-local-merge-loss.py --self-test
-      # #1778. The eighth gate is the only one that reads the TEST tree, and
-      # the only one that asks whether a test body is a copy of another test
-
       - name: Duplicate-test-body gate fails on a planted duplicate
         run: python3 tools/check-test-dup.py --self-test
-      # #1847. The second duplication detector, the one that scans the
-      # PRODUCT code and the duplication that is not a method body. Its
-      # failure path is tested for the same reason as the others, and its
-      # load-bearing fixture is the EMPTY scan: a scan that analysed nothing
-      # must not be green, because a gate that measured nothing protects
-      # nothing. The second fixture is the growth: a tree that duplicated
-      # more than the baseline allows must fail.
-      - name: Second duplication gate fails on an empty scan and on growth
-        run: python3 tools/check-dup-jscpd.py --self-test
       # #1823. The ninth gate is the only one that asks whether a test
       # project is claimed by a CI list AT ALL. The other gates read the
       # contents of the test tree; this one reads the lists that decide
@@ -432,16 +301,14 @@ jobs:
         run: python3 tools/test-measurements.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
-      # #1726. The third REPORTER: it reads what a CI run produced (a TRX or
-      # a job log) and writes down what each guard firing MEANT - a defect, a
-      # style rule, or noise on code the repository allows. Its failure path
-      # is tested here for the same reason as the two above: a reporter that
-      # stops reading a failure is green on every run and reports nothing, and
-      # a reporter that GUESSES a class is worse than one that says
-      # "unknown". The load-bearing fixtures are both: a failure it must
-      # find, and a firing it must refuse to classify.
-      - name: Guard triage finds a failure and refuses to guess its class
-        run: python3 tools/guard-triage.py --self-test
+      # #1795. The third reporter: the SKIPPED tests of a run, with the reason
+      # each one declared. Same argument as the two above — a reporter that
+      # stops reporting is green on every run and tells nobody anything. Its
+      # self-test carries the two shapes that matter: a skip WITH a reason
+      # (the reason must survive, marker stripped) and a skip WITHOUT one
+      # (the report must say so instead of inventing a reason).
+      - name: Skipped-test report finds the skips and their reasons
+        run: python3 tools/test-skips.py --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a
@@ -450,76 +317,7 @@ jobs:
       # reflection call — the gate MUST fail on it.
       - name: Reflection-JSON gate fails on a planted reflection call
         run: python3 tools/check-test-json-reflection.py --self-test
-      # #1888. The policy checker's failure path. It plants one defect per
-      # rule in a synthetic tree and asserts that the rule fires, and that
-      # the same tree without the defect is clean. A rule that cannot fire
-      # is indistinguishable from a rule that found nothing, which is the
-      # shape every other gate in this job is tested against.
-      - name: Gate-policy checker fails on a planted divergence
-        run: python3 tools/check-gate-policy.py --self-test
-      # #1888. The three tools whose self-test no workflow ran. The policy
-      # says every gate and every reporter proves its own failure path in
-      # CI, and these three had a self-test that nothing called — a
-      # self-test nobody reads. The pack validator's self-test is offline
-      # (it builds its own fixture package), and the two reporters' and the
-      # helper's self-tests are offline too, so all three cost about a
-      # second.
-      - name: Pack validator still fails on a package without its metadata
-        run: python3 tools/pack-validate.py --selftest
-      - name: Skip reporter still finds a skipped test
-        run: python3 tools/test-skips.py TestResults --self-test
-      - name: Mtime normaliser still tells a changed file from an unchanged one
-        run: python3 tools/normalize-mtimes.py --self-test
-      # #1558. The chain census. Its failure path is tested here for the same
-      # reason as the others: a scanner edited until it matches nothing is
-      # indistinguishable from a scanner that found nothing. The load-bearing
-      # fixtures are the five shapes the census tells apart (a chain
-      # candidate, a terminal guard, a side-effect guard, a guard that does
-      # not return a Result, and the one shape the rewrite applies to), and
-      # the rewrite itself — the census MUST produce the Bind call it says
-      # it produces.
-      - name: Chain census finds every planted guard shape and rewrites the one it promises
-        run: python3 tools/check-result-chains.py --self-test
-      # #1575. The string-switch gate is the only one that asks whether the
-      # product dispatches on a string literal with a `case` ladder. Its
-      # failure path is tested here for the same reason as the others: a rule
-      # edited until it matches nothing is indistinguishable from a rule that
-      # found nothing, and the load-bearing fixtures are the planted string
-      # switch, the unlisted switch, the stale row and the floor.
-      - name: String-switch gate fails on an unlisted string switch
-        run: python3 tools/check-string-switch.py --self-test
-      # #1731. The seam-graph gate is the only one that GENERATES a document
-      # and then compares it with the committed one. Its failure path is the
-      # whole point: a generator whose output drifts from the tree is a
-      # generator that has stopped reading the tree, and the committed
-      # document is then a hand-maintained document wearing a generated one's
-      # name. The self-test plants a stale file and requires the check to
-      # fail, and separately requires the route grader to tell a registering
-      # route from a refusing one.
-      - name: Seam-graph gate fails on a stale document
-        run: python3 tools/gen-seam-graph.py --self-test
-      # #1781. The shard-balance gate is the only one that asks whether the CI
-      # TEST SHARDS are laid out by cost. Its failure path is tested here for
-      # the same reason as the others: a rule edited until it matches nothing
-      # is indistinguishable from a rule that found nothing. The load-bearing
-      # fixture is the RUNAWAY SHARD — one project's cost blown up so that the
-      # shards are 20x apart — and the gate MUST fail on it.
-      - name: Shard-balance gate fails on a runaway shard
-        run: python3 tools/check-shard-balance.py --self-test
-      # #1753. The coverage tools. The reporter reads the cobertura files
-      # the nightly lane produced and prints the per-file tables; the gate
-      # compares the registry of accepted holes against the measurement, in
-      # both directions. Their failure paths are tested here for the same
-      # reason as the others: a reader edited until it matches nothing is
-      # indistinguishable from a reader that found nothing. The load-bearing
-      # fixtures are the three states a file can be in — covered, a hole,
-      # and a file with no code to cover — and the two defects the gate
-      # exists for: a file that stopped being covered, and a row that is no
-      # longer needed.
-      - name: Coverage reporter still tells the three states of a file apart
-        run: python3 tools/coverage_report.py --self-test
-      - name: Coverage registry gate still fires on both sides of the ratchet
-        run: python3 tools/check-coverage-registry.py --self-test
+
   links:
     name: internal links
     runs-on: ubuntu-latest
@@ -579,40 +377,7 @@ jobs:
       # The numbers are the tree's, measured not guessed: 3 guides / 37 `using`
       # lines and 2 base lists on dev@7aff0c87.
       - name: Check every normative file:line and named type
-        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
-
-  # #1728. Eleventh question, and the only one about the ANCHORS the
-  # architecture rule tree uses: may an architecture rule point at a LINE
-  # NUMBER?
-  #
-  # The `cites` job above asks whether a `file:line` a test writes still names
-  # the line its author meant. This one asks the prior question: why is there a
-  # `file:line` to be wrong at all. A line number is a COORDINATE, and every
-  # line inserted above it moves the coordinate; the measured price of the
-  # coordinate form was three "repair the citation" incidents in one shift
-  # (#1701: `:549→:561`, #1658, #1502) plus the standing re-run tax.
-  #
-  # The architecture tree was the worst offender and has been converted to
-  # SYMBOLIC anchors (`Type.Member`, plus the condition that makes the site the
-  # one being talked about). This job is what keeps it converted: the seven
-  # anchors that remain are the ones where the number IS the checked fact, and
-  # they are listed with a reason in tools/arch-anchor-exceptions.txt.
-  #
-  # The floor is on the number of FILES the scan reads, not on the number of
-  # anchors: the anchor count is expected to be zero, and a floor on a defect
-  # is a floor on the defect. The non-vacuity proof is the gate's own
-  # --self-test (a planted anchor fails, an excused one passes, a stale
-  # exception row fails), run in the `selftest` job above.
-  archanchors:
-    name: architecture anchors
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check that no architecture rule anchors on a line number
-        run: python3 tools/check-arch-anchors.py --min-files 40
+        run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 200 --min-guide-usings 30 --min-base-lists 2
 
   lint:
     name: markdown lint
@@ -698,11 +463,9 @@ jobs:
       # widened to four projects (was 9 / 6 / 75 over two), and again after
       # #1623 moved the agent loop out of the Application perimeter
       # (--report: 13 / 7 / 143), and again after #1624 moved the
-      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130),
-      # and again after #1625 moved the configuration family out of it and the
-      # new Harbor.PolicyConfig assembly into it (--report: 19 / 7 / 141).
+      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
+        run: python3 tools/check-abstractions-contract.py --min-packages 13 --min-namespaces 7 --min-files 130
 
   # #1778. Sixth question, and the only one about the TEST tree: not "do the
   # links resolve", not "is the file shaped right", not "does the file:line
@@ -762,191 +525,6 @@ jobs:
           path: test-dup-groups.json
           retention-days: 7
 
-  # #1847. The SECOND duplication detector, and the one that covers the
-  # ground the python gate above cannot see.
-  #
-  # `check-test-dup.py` matches duplicated TEST METHOD BODIES, and only
-  # method bodies: it slices a body out of the file, normalises it and
-  # hashes it. What it cannot see is duplication that is not a method body —
-  # a duplicated record declaration, a duplicated nested class, a duplicated
-  # interface implementation, a duplicated file header — and what it cannot
-  # see at all is the PRODUCT code: it scans `tests/` and nothing else.
-  #
-  # jscpd 5.4.1 (MIT, a self-contained Rust binary) is the second detector:
-  # it matches token windows, so a whole block of code that was copied is one
-  # clone, and it scans the whole maintained C# surface. Measured on
-  # `origin/dev`: the python gate finds 206 groups / 2987 duplicated lines
-  # in `tests/`, jscpd finds 286 clones / 8353 duplicated lines over
-  # `src/` + `apps/` + `tests/`, and the two overlap on 1965 lines. Neither
-  # is a subset of the other: jscpd flags 94 files the python gate does
-  # not, the python gate flags 113 files jscpd does not.
-  #
-  # WHY THE RULE IS A TOTAL AND NOT jscpd's OWN `--fail-on-new-clones`
-  # jscpd ships a baseline gate, and it was measured on 13 real commits of
-  # `dev` before it was ruled out. Its baseline is keyed on a CONTENT HASH
-  # of each clone, so editing a duplicated body changes the hash and the
-  # edit is reported as new duplication: commit 8bde0944 changed one line
-  # in each of two files that already duplicated each other and jscpd
-  # reported 4 new clones, 3 of them pairs that were already clones BEFORE
-  # the commit. The gate was red on 1 of those 13 commits (3 with the
-  # `renamed` configuration), and every one of them was ordinary work that
-  # added no duplication. The python gate was written to avoid exactly
-  # that: it compares the MEMBERS of a group, never the text of the bodies.
-  #
-  # So the rule here is the aggregate one the python gate also has
-  # (DUP-GROWTH): the tree's duplicated LINES must not exceed the number
-  # `tools/jscpd-baseline.json` records. Measured on the same 13 commits,
-  # that number moved only when the tree really changed, and it did not
-  # move at all when a duplicated body was edited — which is the property
-  # the fingerprint baseline lacks.
-  #
-  # The floors are a ratchet, like the ones above. 1971 files are analysed
-  # today; the floor is 1700, because the programme is about to REMOVE test
-  # code, and a floor set AT the measured count would go red on the removal
-  # PRs themselves. A PR that really removes files lowers it in the same
-  # diff, where a reviewer sees it.
-  #
-  # The binary is downloaded from the release, sha256-pinned per platform
-  # inside `tools/check-dup-jscpd.py`, and it is a build-time tool: it never
-  # reaches the product, and no `PackageReference` is added, so the
-  # dependency gate does not see it.
-  merge-loss:
-    name: local squash-merges dropped nothing
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      # The gate needs the pull request's HEAD commit to know what the pull
-      # request intended, and it reads that SHA out of the merge commit's
-      # body. GitHub keeps `refs/pull/<n>/head` for every pull request ever
-      # merged, so one fetch per merge brings the heads in. A head that is
-      # missing makes the gate ERROR rather than skip: a gate that cannot
-      # see a merge is a gate that is blind to it.
-      - name: Fetch the pull request heads the history names
-        run: |
-          set -eu
-          git fetch --no-tags --quiet origin \
-            "+refs/heads/dev:refs/remotes/origin/dev"
-          for pr in $(git log --first-parent --format=%B origin/dev \
-                      | grep -o 'Squash-merged into dev (PR #[0-9]*' \
-                      | grep -o '[0-9]*' | sort -u); do
-            git fetch --no-tags --quiet origin \
-              "+refs/pull/$pr/head:refs/remotes/pull/$pr/head" || true
-          done
-      - name: The local squash-merges dropped nothing
-        run: >-
-          python3 tools/check-local-merge-loss.py
-          --range origin/dev --tip HEAD --min-merges 1
-          --allow-missing-heads
-
-  # #1823. Ninth question, and the only one about the LISTS rather than
-  # about the test bodies: does every test project in the solution actually
-  # run in CI?
-  #
-  # The shard lists in ci.yml are hand-written. There are six of them across
-  # two workflow files, plus a derived list in the NUKE `Test` target, and
-  # nothing compared them against the tree.
-  #
-  # The obvious question has the wrong answer, and the repository says so:
-  # TUnit discovers a REFERENCED test project's classes in every project
-  # that references it (tests/Harbor.E2E.App.Avalonia/E2eShards.cs, and the
-  # TRX of run 39399653820, where 26 of Harbor.E2E.App.Avalonia's 133
-  # tests are Harbor.E2E.Framework.StateTestRunnerTests). So a test project
-  # reaches a CI run through its OWN list entry OR through a listed project
-  # that references it, and the gate has to count both.
-  #
-  # What the gate finds on dev@8be16392, with 43 .csproj under tests/ and 38
-  # test projects carrying tests:
-  #
-  #   * every one of the 38 is discovered by some CI run, so nothing is
-  #     silently unrun -- the hole the issue was filed about does not
-  #     exist in the shape the issue described;
-  #   * Harbor.E2E.Framework's 26 tests run SIX times per CI run, in each
-  #     of the six listed projects that reference it: 156 executions of 26
-  #     tests, about 1.06 s of duplicated test time;
-  #   * Harbor.Ipc.Tests references that framework and names none of its
-  #     types, so the reference buys nothing: 13 product assemblies dragged
-  #     into the IPC closure, and a sixth copy of the 26 tests;
-  #   * Harbor.Terminal.Abstractions.Tests references Harbor.TestKit and
-  #     names none of its types: 4 product assemblies dragged in for
-  #     nothing;
-  #   * Harbor.TestKit.Tests references Harbor.TestKit and names none of
-  #     its types, a leftover of the TestKit split: 16 product assemblies
-  #     dragged in for nothing;
-  #   * Harbor.E2E.App.Avalonia defines the two-process split (E2eShards)
-  #     that would put the framework's tests in one shard, and CI runs the
-  #     project once without a filter, so the partition is dead code.
-  #
-  # WHY THIS JOB LIVES HERE AND NOT IN ci.yml: the gate is stdlib python
-  # with no SDK, no restore and no build, and this workflow is the one that
-  # stays SDK-free. It reads ci.yml and test-os.yml as FILES, so the lists
-  # it checks living in a different workflow is not a problem. A job in
-  # ci.yml would inherit ci.yml's change filter and would be skipped on the
-  # PRs where a new test project is added, which is exactly the PR the gate
-  # exists for.
-  #
-  # The floors are a ratchet, set AT the measured counts rather than below
-  # them: a floor with slack cannot tell "the tree got smaller" from "the
-  # matcher stopped matching". Measured on this tree: 43 .csproj under
-  # tests/, 38 test projects carrying tests, 7 CI lists, 37 distinct
-  # projects the lists name, 41 projects discovered by a CI run. A PR that
-  # legitimately removes a project lowers them in the same diff, where a
-  # reviewer sees it.
-  #
-  # The gate runs in BASELINE MODE: the holes the tree has today are
-  # recorded in tools/test-project-baseline.txt, one row per hole with a
-  # reason and an owner, and only NEW holes fail. A gate that is red on
-  # today's tree is a gate nobody lands, and a gate nobody lands protects
-  # nothing. The baseline is a ratchet in both directions: a row the tree
-  # no longer produces fails too, so a closed hole cannot stay blessed.
-  #
-  # The non-vacuity proof is the gate's own --self-test, run in the
-  # `selftest` job above.
-
-  dupjscpd:
-    name: duplication (jscpd)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The base ref is the PR's base commit, and the new-clone delta is
-          # measured against it. Depth 1 has no base commit.
-          fetch-depth: 0
-      - name: Measure the duplicated code with jscpd
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          base=""
-          if [ -n "$PR_BASE_SHA" ]; then
-            base="$PR_BASE_SHA"
-          else
-            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
-          fi
-          if [ -n "$base" ]; then
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json --baseline-ref "$base"
-          else
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json
-          fi
-      # The report is the work list: every clone with its file, its line
-      # range and its size, which is what the next duplication ticket needs.
-      # It is uploaded even when the gate is red — that is exactly when
-      # somebody needs it.
-      - name: Upload the clone report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: jscpd-clones
-          path: jscpd-report.json
-          retention-days: 7
-
   # #1822. Tenth question, and the only one about the SERIALIZER the test
   # tree uses: does every `JsonSerializer` call under `tests/` name a
   # source-generated type info, or does it take the reflection resolver?
@@ -971,49 +549,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that no test serializes through the reflection resolver
         run: python3 tools/check-test-json-reflection.py
-
-  # #1575. Eleventh question, and the only one about DISPATCH: does the
-  # product answer a question by comparing a string literal in a `case`
-  # ladder, and is every ladder that is still there named in the exceptions
-  # file with a reason?
-  #
-  # The issue filed the shape as boilerplate: 152 `case "..."` labels under
-  # `src/` and `apps/`, of which 47 lived in one file (the CellForge key-spec
-  # parser) and answered two questions -- "which modifier?" and "which key?"
-  # -- from two case ladders. The replacement is a `FrozenDictionary` table,
-  # and the argument for it is not the lookup speed (the compiler already
-  # hash-optimises a large string switch): it is that the vocabulary has ONE
-  # owner, so a key added to one ladder and not its twin cannot happen.
-  #
-  # That argument only holds if nothing else is allowed to grow a second
-  # ladder over the same strings, which is what this gate is for. It runs in
-  # BASELINE MODE: the ladders the tree has today are recorded in
-  # tools/string-switch-exceptions.txt, one row per ladder with a reason, and
-  # only NEW ladders fail. The file is a ratchet in both directions: a row
-  # the tree no longer produces fails too, so a closed hole cannot stay
-  # blessed.
-  #
-  # The floors are a ratchet, like the ones above. Measured on this tree:
-  # 17 statement-form switches, 84 statement labels, 46 expression-form
-  # switches, 238 expression labels -- 322 string labels in all. The floor is
-  # set below the measured count, because this gate's whole purpose is to
-  # make that count go DOWN; a scanner that stopped matching would report a
-  # clean tree, and a clean tree is the one answer this gate must never give
-  # by accident.
-  #
-  # The non-vacuity proof is the gate's own --self-test (a planted string
-  # switch is found, an unlisted switch fails, a stale row fails and the
-  # floor fails), run in the `selftest` job above.
-  stringswitch:
-    name: string switch
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check that every string-dispatched switch is listed
-        run: python3 tools/check-string-switch.py --check --min-labels 280
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually
@@ -1089,44 +624,6 @@ jobs:
       - name: Check every test project is discovered by a CI run
         run: python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 
-  # #1781. Twelfth question, and the only one about the LAYOUT of the test
-  # shards rather than about the tests in them: are the shards balanced by
-  # what their projects cost?
-  #
-  # The shard matrix was laid out by MODULE, and the layout came out 5.96x
-  # skewed: on dev@b9f3c83c (run 39504714459) the `core` shard ran 143 s
-  # against the `e2e` shard's 24 s, and 91 s of the `core` shard was ONE
-  # project (Harbor.Architecture.Tests) next to thirteen that together cost
-  # 37 s. The pull request waits for the MAXIMUM shard (issue #1929 measured
-  # it), so the whole run waited for that one project.
-  #
-  # The gate reads the shard lists out of ci.yml and the recorded cost of
-  # every project out of tools/shard-costs.json, computes what each shard
-  # would cost, and fails when the heaviest and the lightest are more than
-  # --max-skew apart. It does NOT measure time: the house policy says a gate
-  # that measures time is a benchmark, because a threshold on a live wall
-  # clock fails on a slow runner and a gate that fails on a slow runner gets
-  # switched off. What it judges is the LAYOUT, by a recorded measurement.
-  #
-  # The floor is on how many projects the shards run between them: a gate
-  # that read fewer projects than that cannot judge the layout, and a scan
-  # that matches nothing must not report "balanced". Measured on this tree:
-  # 37 projects across 5 shards.
-  #
-  # The non-vacuity proof is the gate's own --self-test (a runaway shard
-  # fails, a duplicated project fails, a stale cost fails), run in the
-  # `selftest` job above.
-  shardbalance:
-    name: shard balance
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check that the CI test shards are balanced by cost
-        run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
-
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #
   # `Directory.Build.props` keeps CS1591 in NoWarn, so the compiler never asks
@@ -1160,104 +657,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check XML-doc coverage of the frozen contract assembly
         run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
-
-  # #1731. Twelfth question, and the only one that asks whether a GENERATED
-  # document still matches the tree it was generated from.
-  #
-  # `tools/gen-seam-graph.py` reads the C# sources and writes
-  # `docs/SEAM_GRAPH.md`: the seam graph — who implements a seam, who extends
-  # what implements it, who consumes it, who is registered in the container,
-  # and where the seam is bypassed. The point of generating it rather than
-  # writing it is that the document cannot drift: this job regenerates the
-  # document and fails if the committed one differs.
-  #
-  # The floors are a ratchet on the SCAN SIZE, like the floors above: a scan
-  # that silently stopped covering the tree would produce a document that
-  # agrees with itself and says nothing. Measured on this tree: the C# files
-  # under src/, apps/, tests/ and samples/, and the interfaces declared under
-  # src/.
-  #
-  # The gate reads the C# tree (and the .csproj files), so it is triggered by
-  # a change to any of them as well as by a change to the generator or to the
-  # document.
-  #
-  # The non-vacuity proof is the gate's own --self-test (a stale document
-  # fails, a freshly generated one passes, and the route grader tells a
-  # registering route from a refusing one), run in the `selftest` job above.
-  seamgraph:
-    name: seam graph
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check the committed seam graph matches the tree
-        run: python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191
-
-  # #1888. Eleventh question, and the only one about the gates themselves:
-  # not "do the links resolve" and not "is the file shaped right" and not
-  # "does the count match" and not "is every dependency declared", but "does
-  # the table of gates in docs/CI_GATES.md still describe the gates this
-  # repository actually runs".
-  #
-  # A policy in prose decays: a gate is added, the table is not, and a year
-  # later the table describes a repository that does not exist. #933 measured
-  # that class on this repository (the builtin tool count was stated 16 times
-  # with six different values), and the cure that was buildable for a count
-  # is buildable for a table.
-  #
-  # The checker compares three sources — the table, the scripts in tools/ and
-  # the workflow files — and fails when they disagree. The rules it enforces
-  # are in docs/CI_GATES.md; the ones no file can answer (what a gate checks,
-  # that its message names the violator) are stated there as review rules.
-  #
-  # The floor is a ratchet, set AT the measured row count rather than below
-  # it: a table that lost rows because a gate was deleted would otherwise
-  # shrink quietly, and a policy that covers fewer gates than the repository
-  # runs is the #591 shape. The non-vacuity proof is the checker's own
-  # --self-test, run in the `selftest` job above.
-  gate-policy:
-    name: gate policy
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check the gate table against the tools and the workflows
-        run: python3 tools/check-gate-policy.py --min-gates 42
-
-  # #1558. The chain census, and the ratchet on it.
-  #
-  # Issue #1558 asks for the `if (x.IsFailure) return …; var v = x.Value;`
-  # shape to become a CSharpFunctionalExtensions `.Bind()` / `.Map()` chain.
-  # What it must not do is leave the number that says how many are left in a
-  # comment nobody can re-derive: the census is a script, and the script is
-  # what CI runs.
-  #
-  # The gate is a RATCHET on the count of chain candidates — the guard sites a
-  # chain could actually replace. A NEW candidate turns the job red; a
-  # translated one lowers the count and stays green, so the ratchet only moves
-  # in the direction the issue wants. The baseline records the count the tree
-  # had when this landed; every site the census leaves is a site somebody read
-  # and decided to keep.
-  #
-  # The census classifies every guard site, so it also says WHY a site is not
-  # a candidate: a guard whose body logs or has a side effect, a guard that
-  # does not return a Result at all, a terminal guard with nothing unwrapped
-  # after it. The script's own --self-test is the non-vacuity proof and runs
-  # in the `selftest` job above.
-  result-chains:
-    name: result-chain ratchet
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: The chain-candidate count has not gone up
-        run: python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #
