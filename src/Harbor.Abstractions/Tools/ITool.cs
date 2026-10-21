@@ -117,6 +117,13 @@ public interface ITool
     ///         would cancel the call before it started, and a negative one is
     ///         a typo that would otherwise read as "no deadline".
     ///     </para>
+    ///     <para>
+    ///         The budget covers the WHOLE call, the permission gate included
+    ///         — the same span the agent's common default has always covered.
+    ///         A tool that has to wait for a permission answer therefore spends
+    ///         its budget on that wait, which is worth knowing before a budget
+    ///         is picked for a tool whose permission is an ASK.
+    ///     </para>
     /// </remarks>
     public int? TimeoutMs => null;
 

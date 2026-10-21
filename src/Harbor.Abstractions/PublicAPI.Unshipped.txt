@@ -98,12 +98,6 @@ Harbor.Abstractions.Sessions.ICompactionEventStore
 Harbor.Abstractions.Sessions.ICompactionEventStore.AppendCompactionEventAsync(string! sessionId, Harbor.Abstractions.Sessions.SessionCompactionEvent! compactionEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
 Harbor.Abstractions.Sessions.ICompactionEventStore.GetCompactionEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>!>>!
 Harbor.Abstractions.Sessions.ISessionContext.CompactionEvents.get -> Harbor.Abstractions.Sessions.ICompactionEventStore?
-<<<<<<< HEAD
-Harbor.Abstractions.Tools.ITool.TimeoutMs.get -> int?
-Harbor.Abstractions.Tools.ToolTimeouts
-static Harbor.Abstractions.Tools.ToolTimeouts.IsValid(int? toolTimeoutMs) -> bool
-static Harbor.Abstractions.Tools.ToolTimeouts.Resolve(int? toolTimeoutMs, System.TimeSpan? commonDefault) -> System.TimeSpan?
-=======
 
 Harbor.Abstractions.Plugins.PluginScope
 Harbor.Abstractions.Plugins.PluginScope.Global = 0 -> Harbor.Abstractions.Plugins.PluginScope
@@ -181,4 +175,7 @@ Harbor.Abstractions.Plugins.IInstalledPluginInventory
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.ApplyAsync(Harbor.Abstractions.Plugins.PluginInventoryChange! change, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.PluginInventoryChangeResult!>>!
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.DescribeSource(string! sourcePath, Harbor.Abstractions.Plugins.PluginScope scope) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.InstalledPluginEntry!>
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.List() -> CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Plugins.InstalledPluginEntry!>!>
->>>>>>> origin/dev
+Harbor.Abstractions.Tools.ITool.TimeoutMs.get -> int?
+Harbor.Abstractions.Tools.ToolTimeouts
+static Harbor.Abstractions.Tools.ToolTimeouts.IsValid(int? toolTimeoutMs) -> bool
+static Harbor.Abstractions.Tools.ToolTimeouts.Resolve(int? toolTimeoutMs, System.TimeSpan? commonDefault) -> System.TimeSpan?
