@@ -116,23 +116,19 @@ public sealed class SessionArchiveReader
     /// <summary>
     ///     Read the three parts of an archive.
     /// </summary>
+    /// <remarks>
+    ///     Three links, so a chain and not a ladder: docs/ROP-API-INVENTORY.md
+    ///     §3.1 puts the ladder at one or two links and the chain at three up.
+    ///     The manifest, the session and the log each travel through the rail
+    ///     instead of being unwrapped beside a guard.
+    /// </remarks>
     private static async Task<Result<SessionArchive>> ReadArchiveAsync(ZipArchive archive, CancellationToken ct)
     {
-        var manifest = ReadManifest(archive);
-        if (manifest.IsFailure)
-            return manifest.ConvertFailure<SessionArchive>();
-        SessionArchiveManifest decoded = manifest.Value; // guarded: returned above on failure.
-
-        var sessionLine = await ReadSessionLineAsync(archive, ct).ConfigureAwait(false);
-        if (sessionLine.IsFailure)
-            return sessionLine.ConvertFailure<SessionArchive>();
-        Session session = sessionLine.Value; // guarded: returned above on failure.
-
-        var log = await ReadLogAsync(archive, session.Id, ct).ConfigureAwait(false);
-        if (log.IsFailure)
-            return log.ConvertFailure<SessionArchive>();
-
-        return Result.Success(new SessionArchive(decoded, session, log.Value));
+        return await ReadManifest(archive)
+            .Bind(manifest => ReadSessionLineAsync(archive, ct).ConfigureAwait(false)
+                .Bind(session => ReadLogAsync(archive, session.Id, ct).ConfigureAwait(false)
+                    .Map(log => new SessionArchive(manifest, session, log))))
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -239,10 +235,17 @@ public sealed class SessionArchiveReader
                 continue;
             }
 
-            var record = ReadRecord(sessionId, line, archive);
-            if (record.IsFailure)
-                return record.ConvertFailure<IReadOnlyList<SessionLogEntry>>();
-            records.Add(record.Value); // guarded: returned above on failure.
+            // The decode of one line is a Result, and the first failure
+            // stops the fold. The decode rides the chain the reader's path
+            // is built on (three links), so it does not unwrap beside a
+            // guard.
+            var decoded = ReadRecord(sessionId, line, archive).Map(entry =>
+            {
+                records.Add(entry);
+                return entry;
+            });
+            if (decoded.IsFailure)
+                return decoded.ConvertFailure<IReadOnlyList<SessionLogEntry>>();
         }
 
         return Result.Success<IReadOnlyList<SessionLogEntry>>(records);

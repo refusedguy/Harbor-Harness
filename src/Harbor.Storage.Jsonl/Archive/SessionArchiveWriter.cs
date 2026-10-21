@@ -122,14 +122,29 @@ public sealed class SessionArchiveWriter
         if (sessionResult.IsFailure) // §4.6-ok: propagate the store diagnostic verbatim.
             return sessionResult.ConvertFailure<SessionArchiveManifest>()
                 .MapError(e => $"Cannot export session '{sessionId}': {e}");
-        Session session = sessionResult.Value; // guarded: returned above on failure.
 
-        var logResult = await ReadLogAsync(store, sessionId, ct).ConfigureAwait(false);
-        if (logResult.IsFailure)
-            return logResult.ConvertFailure<SessionArchiveManifest>();
-        ArchiveLog log = logResult.Value; // guarded: returned above on failure.
+        // The session, the log and the archive itself travel through one rail:
+        // the archive is a pipeline of three reads, and a ladder of three
+        // guards beside a hundred lines of assembly reads worse than the
+        // chain (docs/ROP-API-INVENTORY.md §3.1).
+        return await sessionResult
+            .Bind(session => ReadLogAsync(store, session.Id, ct).ConfigureAwait(false)
+                .Bind(log => WriteArchiveAsync(store, session, log, output, ct)))
+            .ConfigureAwait(false);
+    }
 
-        SessionArchiveIntegrity? integrity = await ReadIntegrityAsync(store, sessionId, ct).ConfigureAwait(false);
+    /// <summary>
+    ///     Build the manifest and write the archive: the fold, the scrub, the
+    ///     attachments and the three entries of the ZIP.
+    /// </summary>
+    private async Task<Result<SessionArchiveManifest>> WriteArchiveAsync(
+        ISessionStore store,
+        Session session,
+        ArchiveLog log,
+        Stream output,
+        CancellationToken ct)
+    {
+        SessionArchiveIntegrity? integrity = await ReadIntegrityAsync(store, session.Id, ct).ConfigureAwait(false);
 
         // The fold decides what is current and what is shadowed. It is a
         // property of the log as a whole, so it is done once, here, and the
@@ -168,7 +183,7 @@ public sealed class SessionArchiveWriter
 
         try
         {
-            await WriteArchiveAsync(manifest, scrubbedSession, scrubbed, refsByPosition, attachments, attachmentBytes, output, ct)
+            await WriteZipAsync(manifest, scrubbedSession, scrubbed, refsByPosition, attachments, attachmentBytes, output, ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -176,17 +191,17 @@ public sealed class SessionArchiveWriter
             // Cancellation is NOT one of these, so it propagates as itself
             // rather than as a failed export.
             return Result.Failure<SessionArchiveManifest>(
-                $"Cannot write the archive of session '{sessionId}': {ex.Message}");
+                $"Cannot write the archive of session '{session.Id}': {ex.Message}");
         }
 
-        SessionArchiveWriterLog.ArchiveWritten(_logger, sessionId, manifest.LogEntries, attachments.Count);
+        SessionArchiveWriterLog.ArchiveWritten(_logger, session.Id, manifest.LogEntries, attachments.Count);
         return Result.Success(manifest);
     }
 
     /// <summary>
     ///     Write the three parts of the archive into the ZIP.
     /// </summary>
-    private static async Task WriteArchiveAsync(
+    private static async Task WriteZipAsync(
         SessionArchiveManifest manifest,
         Session session,
         IReadOnlyList<SessionLogEntry> entries,
