@@ -61,6 +61,42 @@ tools/bin/
 The gate's name is the name of its directory, and the name of the subcommand
 that runs it: one directory, one gate, one workflow line.
 
+## Where the gates run: linux, and only linux
+
+**There are TWO binaries, and they are LINUX binaries**: one for x64 and one
+for arm64. There is no windows build and no darwin build, and there is not
+going to be one. The reason is the reason the binary is committed at all: a
+gate has to fire where there is no SDK, no build of Harbor and no python,
+and a binary that has to be BUILT on the runner breaks that rule. A windows
+and a darwin build would be ~9 MB more of committed binaries, kept in step
+with every source change, for the two report-only panels of the OS lane.
+
+So the gates run in the linux lanes — the `build` job and the `test` shards
+of `ci.yml` — and the OS lane (`.github/workflows/test-os.yml`, on
+`windows-latest` and `macos-latest`) runs the TESTS on the
+platform-sensitive natives and NOT the gates. The numbers
+`docs/BENCHMARKS.md` quotes are the linux ones: they come from the linux
+shard matrix, not from the OS lane.
+
+Two rules follow, and both are machine-checked by
+`tools/check-gate-policy.py`:
+
+1. **The binary has to match the runner.** The x64 one on an x64 runner,
+   the arm64 one on an arm64 one, or the shell says "cannot execute binary
+   file: Exec format error" and the step is red for a reason that has
+   nothing to do with the tests. A job that can land on both pools needs
+   both binaries, each behind its own `runner.arch` guard — and the twins
+   are two STEPS, not one step with two `run:` blocks: a YAML mapping may
+   not carry a key twice, and GitHub's workflow parser refuses the FILE
+   when one does (the run fails in 0 s and the whole lane is down).
+2. **A job whose runner is not linux does not call the binary at all.**
+
+The rules are `POLICY-BINARY-NON-LINUX-RUNNER`,
+`POLICY-BINARY-ARCH-TWIN-MISSING` and `POLICY-STEP-DUPLICATE-KEY`; the
+policy they enforce is in
+[docs/CI_GATES.md](../../docs/CI_GATES.md) §"The compiled gates run on
+linux, and only on linux".
+
 ## The build
 
 ```bash

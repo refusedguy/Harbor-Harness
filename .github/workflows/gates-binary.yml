@@ -67,6 +67,25 @@ jobs:
           cache: false
       - name: Build the binary for both architectures
         run: tools/build-gates.sh
+      - name: Each binary must be the architecture its name says
+        run: |
+          set -uo pipefail
+          # The two committed files are TWO binaries, not one file twice: a
+          # build that ignored GOARCH would write the same bytes twice, and
+          # the manifest would happily record the same hash twice. The ELF
+          # header says which architecture the file is: bytes 18-19 are
+          # e_machine, little endian (62 = x86-64, 183 = aarch64).
+          x64_machine=$(od -An -tu2 -j18 -N2 tools/bin/harbor-gates-linux-x64 | tr -d ' ')
+          arm64_machine=$(od -An -tu2 -j18 -N2 tools/bin/harbor-gates-linux-arm64 | tr -d ' ')
+          if [ "$x64_machine" != "62" ]; then
+            echo "::error::the x64 binary declares e_machine=$x64_machine, expected 62 (x86-64)"
+            exit 1
+          fi
+          if [ "$arm64_machine" != "183" ]; then
+            echo "::error::the arm64 binary declares e_machine=$arm64_machine, expected 183 (aarch64)"
+            exit 1
+          fi
+          echo "OK: the x64 binary is an x86-64 ELF, the arm64 binary is an aarch64 ELF"
       - name: Compare the bytes with the committed ones
         run: |
           if git diff --quiet -- tools/bin; then
@@ -98,6 +117,40 @@ jobs:
           cache: false
       - name: The committed binary must match a rebuild from the sources
         run: tools/build-gates.sh --check
+      - name: The manifest must name both binaries, and its hashes must be theirs
+        run: |
+          set -uo pipefail
+          cd tools/bin
+          # The manifest is the second half of the promise: the bytes in the
+          # tree are the bytes the sources say, and the manifest says which
+          # bytes those are. A manifest that names one binary, or that names
+          # a hash the file does not have, is a manifest nobody reads.
+          listed=$(awk '{print $2}' SHA256SUMS | sort | tr '\n' ' ')
+          present=$(ls harbor-gates-linux-* | sort | tr '\n' ' ')
+          if [ "$listed" != "$present" ]; then
+            echo "::error::SHA256SUMS names [$listed] and the tree holds [$present]"
+            exit 1
+          fi
+          sha256sum -c SHA256SUMS
+      - name: Each binary must be the architecture its name says
+        run: |
+          set -uo pipefail
+          # The two committed files are TWO binaries, not one file twice: a
+          # build that ignored GOARCH would write the same bytes twice, and
+          # the manifest would happily record the same hash twice. The ELF
+          # header says which architecture the file is: bytes 18-19 are
+          # e_machine, little endian (62 = x86-64, 183 = aarch64).
+          x64_machine=$(od -An -tu2 -j18 -N2 tools/bin/harbor-gates-linux-x64 | tr -d ' ')
+          arm64_machine=$(od -An -tu2 -j18 -N2 tools/bin/harbor-gates-linux-arm64 | tr -d ' ')
+          if [ "$x64_machine" != "62" ]; then
+            echo "::error::the x64 binary declares e_machine=$x64_machine, expected 62 (x86-64)"
+            exit 1
+          fi
+          if [ "$arm64_machine" != "183" ]; then
+            echo "::error::the arm64 binary declares e_machine=$arm64_machine, expected 183 (aarch64)"
+            exit 1
+          fi
+          echo "OK: the x64 binary is an x86-64 ELF, the arm64 binary is an aarch64 ELF"
       - name: Prove the build is byte-reproducible
         run: tools/build-gates.sh --verify
       - name: The binary must run

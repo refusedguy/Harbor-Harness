@@ -15,13 +15,13 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `ec2d38e9` plus this branch's commits),
+Measured on this branch (`dev` at `73c0b485` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 30 553 lines |
-| of them, the `check-*.py` family | 17 files, 19 055 lines |
+| python tools in `tools/` | 31 files, 29 612 lines |
+| of them, the `check-*.py` family | 16 files, 18 858 lines |
 | workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
@@ -116,6 +116,72 @@ Three reasons, and only three, put a check in `tools/` at all:
 
 If none of the three holds, the check is a C# tool or a Roslyn analyzer, and
 it belongs in the build, not in `tools/`.
+
+## The compiled gates run on linux, and only on linux
+
+**This is a decision, and it is the owner's. Read it before you add a step
+that calls the binary: a step that calls the binary outside a linux job is a
+red lane, and the fix is not to change the step.**
+
+The committed gate binaries are LINUX binaries, and there are exactly two of
+them:
+
+| file | for |
+|---|---|
+| `tools/bin/harbor-gates-linux-x64` | the x64 linux runners |
+| `tools/bin/harbor-gates-linux-arm64` | the arm64 linux runners |
+
+There is no windows build and there is no darwin build, and there is not
+going to be one. The reason is the reason the binary is committed at all: a
+gate has to fire where there is no SDK, no build of Harbor and no python,
+and a binary that has to be BUILT on the runner breaks that rule. A windows
+and a darwin build would be ~9 MB more of committed binaries, kept in step
+with every source change, for the two report-only panels of the OS lane.
+
+**Where the gates run.** The `build` job of `ci.yml` and the `test` shards
+of `ci.yml` are linux, and that is where the gates run. The shards run on
+`ubuntu-24.04-arm` (the arm64 pool, #1919); the other jobs run on
+`ubuntu-24.04` and `ubuntu-latest` (x64).
+
+**Where the gates do not run.** The OS lane, `.github/workflows/test-os.yml`,
+runs on `windows-latest` and `macos-latest`, and it owns the TESTS on the
+platform-sensitive natives. It does not run the gates. It used to: two
+report-only steps (`test-measurements` and `test-skips`) read the TRX files
+of the run and printed a panel. They are gone (#2083), because a linux
+binary cannot run there at all, and because the numbers they carried are
+the LINUX ones: the measurement lane the benchmarks quote is the linux
+shard matrix in `ci.yml`, and the gate itself is the same on every OS. What
+the OS lane lost is a summary of a run that is published there anyway.
+
+**The numbers `docs/BENCHMARKS.md` quotes are the linux ones.** They come
+from the linux shard matrix, not from the OS lane. A number taken from the
+OS lane would be about a different run of a different lane.
+
+**The two architectures, and the twins.** The binary has to match the
+runner: the x64 one on an x64 runner, the arm64 one on an arm64 one, or the
+shell says "cannot execute binary file: Exec format error" and the step is
+red for a reason that has nothing to do with the tests. So a job that can
+land on a pool needs the binary of that pool, and a job that can land on
+both needs both. The twins are two STEPS, one behind `runner.arch == 'X64'`
+and one behind `runner.arch == 'ARM64'`, and not one step with two `run:`
+blocks: a YAML mapping may not carry a key twice, and GitHub's workflow
+parser REFUSES the file when one does — the run fails in 0 s and the whole
+lane is down, not the step. (A parser that keeps the last value silently,
+PyYAML does, is how that shape ships: the file parses, and the workflow does
+not run.)
+
+**The machine check.** The gate-policy checker fails on all three shapes:
+
+| rule | what it catches |
+|---|---|
+| `POLICY-BINARY-NON-LINUX-RUNNER` | a job whose runner is not linux calls the binary |
+| `POLICY-BINARY-ARCH-TWIN-MISSING` | a job that can run on an architecture calls no binary of that architecture |
+| `POLICY-STEP-DUPLICATE-KEY` | a step that carries the same key twice, which GitHub's workflow parser refuses |
+
+A porter who wants a gate to run on windows or macOS has to change the
+DECISION, not the workflow: the answer is a build of the binary for that
+platform, committed next to the other two, with its row in
+`tools/bin/SHA256SUMS` and its check in the `gates-binary` job.
 
 ## What is not done in python
 
@@ -366,6 +432,9 @@ and the workflow files - and fails when they disagree:
 | `POLICY-SCRIPT-MISSING` | a row naming a script that is not in the tree |
 | `POLICY-DUPLICATE-SCRIPT` | two rows for one script |
 | `POLICY-TABLE-EMPTY` | a table that lost rows |
+| `POLICY-BINARY-NON-LINUX-RUNNER` | a job whose runner is not linux calls the compiled gate binary |
+| `POLICY-BINARY-ARCH-TWIN-MISSING` | a job that can run on an architecture calls no binary of that architecture |
+| `POLICY-STEP-DUPLICATE-KEY` | a step that carries the same key twice, which GitHub's workflow parser refuses |
 
 The rules it does not enforce are the ones no file can answer: what a gate
 checks, that its message names the violator, that it has no allow-list, and

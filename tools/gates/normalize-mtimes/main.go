@@ -5,6 +5,12 @@
 // outputs were built from gets the current time, and a file whose content is
 // identical gets that commit's time.
 //
+// The rule that keeps the cache honest (issue #2100): the outputs are
+// stamped ONLY for the projects whose files did not change. A project whose
+// files changed is put BEHIND the tree, so MSBuild rebuilds it: a cache
+// that decides what does not need compiling must not be able to make a
+// compile error invisible.
+//
 // The text this prints is the text the python original printed. The exit
 // codes are the python original's, because the workflow reads them:
 //
@@ -172,16 +178,31 @@ func cut(text, sep string) (before, after string, found bool) {
 	return text[:index], text[index+len(sep):], true
 }
 
-// stampOutputs stamps every file under an obj/ or bin/ directory.
+// stampOutputs stamps the output trees of the whole repository.
 //
-// The restored outputs carry the timestamps they had when the cache was
-// built, and a restored NuGet folder is extracted at the start of the run,
-// so the analyzer assemblies are NEWER than the outputs the cache carries.
-// Stamping the outputs with the current time puts them back on top of those
-// inputs.
-func stampOutputs(repo string, when float64) int {
-	stamped := 0
-	stamp := time.Unix(int64(when), int64((when-float64(int64(when)))*1e9))
+// The rule (issue #2100): the outputs of a project whose files CHANGED are
+// not blessed. They are put BEHIND the tree - one second before the base
+// commit - so that MSBuild rebuilds the project. A cache of COMPILED OUTPUTS
+// decides what does not need compiling, and a decision that is wrong hides
+// a compile error: the file that broke is not read by the compiler, and the
+// green build ships the old assembly.
+//
+// The outputs of a project whose files did NOT change are stamped with the
+// current time: the restored outputs carry the timestamps they had when the
+// cache was built, and a restored NuGet folder is extracted at the start of
+// the run, so the analyzer assemblies are NEWER than the outputs the cache
+// carries. Stamping them with the current time puts them back on top of
+// those inputs, and the unchanged projects are skipped.
+//
+// Returns the number of files stamped with the current time, and the number
+// put behind the tree.
+func stampOutputs(repo string, when float64, baseTime int64, changed map[string]bool) (int, int) {
+	blessed := 0
+	stale := 0
+	now := time.Unix(int64(when), int64((when-float64(int64(when)))*1e9))
+	// One second before the base commit: older than every source of the
+	// tree, so the project that owns these outputs is rebuilt.
+	behind := time.Unix(baseTime-1, 0)
 	_ = filepath.Walk(repo, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -196,19 +217,55 @@ func stampOutputs(repo string, when float64) int {
 		if base != "obj" && base != "bin" {
 			return nil
 		}
+		// The project that owns this output tree is the directory above it.
+		project, relErr := filepath.Rel(repo, filepath.Dir(path))
+		if relErr != nil {
+			project = "."
+		}
+		project = filepath.ToSlash(project)
+		changedProject := projectChanged(changed, project)
+		stamp := now
+		if changedProject {
+			stamp = behind
+		}
 		// Stamp the whole output tree, then do not walk it again.
 		_ = filepath.Walk(path, func(inner string, innerInfo os.FileInfo, innerErr error) error {
 			if innerErr != nil || innerInfo.IsDir() {
 				return nil
 			}
 			if os.Chtimes(inner, stamp, stamp) == nil {
-				stamped++
+				if changedProject {
+					stale++
+				} else {
+					blessed++
+				}
 			}
 			return nil
 		})
 		return filepath.SkipDir
 	})
-	return stamped
+	return blessed, stale
+}
+
+// projectChanged reports whether any changed path lives under the project
+// directory.
+//
+// The unit is the project DIRECTORY, not the project file: the outputs of a
+// project live under it (obj/ and bin/), and a change to any file of that
+// directory can change what the project compiles. The test is deliberately
+// coarse: a project that did not really change is rebuilt (a cost in
+// seconds), and a project that did change is never skipped (correctness).
+func projectChanged(changed map[string]bool, project string) bool {
+	prefix := ""
+	if project != "" && project != "." {
+		prefix = project + "/"
+	}
+	for path := range changed {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // normalise sets every tracked file's mtime and returns (exit code, report).
@@ -266,15 +323,24 @@ func normalise(repo, base string, now float64, dryRun bool) (int, string, error)
 
 	// The outputs first, and the changed sources a second later than them:
 	//
-	//   * the outputs are stamped NOW, so they are newer than every other
-	//     input MSBuild compares them against;
-	//   * a CHANGED source is stamped one second after the outputs, so it
-	//     is newer than the output that was built from the old version;
+	//   * the outputs of a project that did NOT change are stamped NOW, so
+	//     they are newer than every other input MSBuild compares them
+	//     against (the analyzer assemblies in the NuGet folder above all)
+	//     and the unchanged projects are skipped;
+	//   * the outputs of a project that DID change are put BEHIND the tree
+	//     (one second before the base commit), so the project is rebuilt:
+	//     a file that changed must be compiled again, and a compile error
+	//     in it must be seen (issue #2100);
+	//   * a CHANGED source is stamped one second after the current time, so
+	//     it is newer than the output that was built from the old version
+	//     of it — otherwise MSBuild would skip it and the build would be
+	//     stale;
 	//   * an UNCHANGED source is stamped with the base commit's time, which
 	//     is older than the outputs, so MSBuild skips it.
 	outputsStamped := 0
+	outputsStale := 0
 	if !dryRun {
-		outputsStamped = stampOutputs(repo, now)
+		outputsStamped, outputsStale = stampOutputs(repo, now, baseTime, changed)
 	}
 
 	tracked, err := trackedFiles(repo)
@@ -303,7 +369,9 @@ func normalise(repo, base string, now float64, dryRun bool) (int, string, error)
 	}
 
 	report := fmt.Sprintf(
-		"base=%s base_time=%d changed=%d rebuilt=%d skipped=%d missing=%d outputs_stamped=%d now=%d",
-		base, baseTime, len(changed), touchedNow, touchedBase, missing, outputsStamped, int64(now))
+		"base=%s base_time=%d changed=%d rebuilt=%d skipped=%d missing=%d "+
+			"outputs_stamped=%d outputs_stale=%d now=%d",
+		base, baseTime, len(changed), touchedNow, touchedBase, missing,
+		outputsStamped, outputsStale, int64(now))
 	return exitOK, report, nil
 }

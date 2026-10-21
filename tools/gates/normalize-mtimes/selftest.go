@@ -1,16 +1,31 @@
 package normalizemtimes
 
 // selftest.go -- the gate's own proof that it tells a changed file from an
-// unchanged one.
+// unchanged one, and a changed PROJECT from an unchanged one.
 //
-// The fixture is a throwaway git repository with three files that must end
-// up with three different mtimes:
+// The fixture is a throwaway git repository with TWO projects, because the
+// rule the cache depends on is about the project and not only about the
+// file:
+//
+//   changed/  a project with a CHANGED source, and the restored output the
+//             cache carries for it. The output must NOT be blessed: it has
+//             to end up BEHIND the tree, or MSBuild skips the project and
+//             the compile error in it is never seen (issue #2100).
+//   same/     a project with an UNCHANGED source, and the restored output
+//             the cache carries for it. The output must be stamped with the
+//             current time, or MSBuild rebuilds the whole solution and the
+//             cache buys nothing.
+//
+// The mtimes the fixture ends up with:
 //
 //   - the CHANGED source, one second after the outputs, so MSBuild rebuilds
 //     it and nothing else;
 //   - the UNCHANGED source, at the base commit's time, so MSBuild skips it;
-//   - the restored OUTPUT, at the current time, so it is newer than every
-//     input MSBuild compares it against.
+//   - the output of the UNCHANGED project, at the current time, so it is
+//     newer than every input MSBuild compares it against;
+//   - the output of the CHANGED project, one second BEFORE the base
+//     commit's time, so it is older than every input of that project and
+//     the project is rebuilt.
 //
 // The second fixture is the unknown base: a base that is not in the clone
 // must NOT be silently accepted, because a cache whose base is unknown
@@ -58,8 +73,17 @@ func selfTestRun() int {
 	gitIn(root, "-C", root, "config", "user.email", "t@example.com")
 	gitIn(root, "-C", root, "config", "user.name", "T")
 
-	unchanged := filepath.Join(root, "unchanged.cs")
-	changed := filepath.Join(root, "changed.cs")
+	// Two projects: one whose file changes, one whose file does not.
+	changedDir := filepath.Join(root, "changed")
+	sameDir := filepath.Join(root, "same")
+	for _, dir := range []string{changedDir, sameDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
+			return gate.Red
+		}
+	}
+	unchanged := filepath.Join(sameDir, "Same.cs")
+	changed := filepath.Join(changedDir, "Changed.cs")
 	if err := os.WriteFile(unchanged, []byte("// unchanged\n"), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
 		return gate.Red
@@ -78,16 +102,18 @@ func selfTestRun() int {
 	}
 	gitIn(root, "-C", root, "commit", "-qam", "change")
 
-	// A restored output: a file under an obj/ directory.
-	outputDir := filepath.Join(root, "obj", "Release", "net10.0")
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
-		return gate.Red
-	}
-	output := filepath.Join(outputDir, "Thing.dll")
-	if err := os.WriteFile(output, []byte("binary"), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
-		return gate.Red
+	// The restored outputs the cache carries: one per project.
+	changedOutput := filepath.Join(changedDir, "obj", "Release", "net10.0", "Changed.dll")
+	unchangedOutput := filepath.Join(sameDir, "obj", "Release", "net10.0", "Same.dll")
+	for _, output := range []string{changedOutput, unchangedOutput} {
+		if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
+			return gate.Red
+		}
+		if err := os.WriteFile(output, []byte("binary"), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "self-test: %v\n", err)
+			return gate.Red
+		}
 	}
 
 	baseTime, err := strconv.ParseInt(gitIn(root, "-C", root, "log", "-1", "--format=%ct", base), 10, 64)
@@ -110,7 +136,8 @@ func selfTestRun() int {
 
 	gotChanged := mtimeOf(changed)
 	gotUnchanged := mtimeOf(unchanged)
-	gotOutput := mtimeOf(output)
+	gotChangedOutput := mtimeOf(changedOutput)
+	gotUnchangedOutput := mtimeOf(unchangedOutput)
 	if int64(gotChanged) != int64(now)+1 {
 		fmt.Fprintf(os.Stderr,
 			"self-test: the changed file has mtime %d, expected %d (one second after the outputs)\n",
@@ -123,18 +150,40 @@ func selfTestRun() int {
 			int64(gotUnchanged), baseTime)
 		return gate.Red
 	}
-	if int64(gotOutput) != int64(now) {
+	if int64(gotUnchangedOutput) != int64(now) {
 		fmt.Fprintf(os.Stderr,
-			"self-test: the restored output has mtime %d, expected %d\n",
-			int64(gotOutput), int64(now))
+			"self-test: the output of the UNCHANGED project has mtime %d, expected %d\n",
+			int64(gotUnchangedOutput), int64(now))
 		return gate.Red
 	}
-	if gotUnchanged >= gotOutput {
-		fmt.Fprintln(os.Stderr, "self-test: the unchanged source is not older than the output")
+	// The heart of the rule: the output of a project that CHANGED is not
+	// blessed. It ends up behind the tree, so MSBuild rebuilds the project
+	// and a compile error in it cannot hide behind the cache.
+	if int64(gotChangedOutput) != baseTime-1 {
+		fmt.Fprintf(os.Stderr,
+			"self-test: the output of the CHANGED project has mtime %d, expected %d "+
+				"(one second before the base commit, so the project is rebuilt)\n",
+			int64(gotChangedOutput), baseTime-1)
 		return gate.Red
 	}
-	if gotOutput >= gotChanged {
-		fmt.Fprintln(os.Stderr, "self-test: the output is not older than the changed source")
+	if gotUnchangedOutput <= gotUnchanged {
+		fmt.Fprintln(os.Stderr,
+			"self-test: the output of the unchanged project is not newer than its source")
+		return gate.Red
+	}
+	if gotChangedOutput >= gotChanged {
+		fmt.Fprintln(os.Stderr,
+			"self-test: the output of the changed project is not older than its changed source")
+		return gate.Red
+	}
+	if gotChangedOutput >= gotUnchanged {
+		fmt.Fprintln(os.Stderr,
+			"self-test: the output of the changed project is not older than its unchanged source")
+		return gate.Red
+	}
+	if !strings.Contains(report, "outputs_stale=1") {
+		fmt.Fprintf(os.Stderr,
+			"self-test: the report does not count the output of the changed project: %s\n", report)
 		return gate.Red
 	}
 

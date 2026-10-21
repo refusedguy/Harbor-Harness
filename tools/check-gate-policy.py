@@ -80,11 +80,53 @@ WHY THIS FILE EXISTS (issue #1888)
                                 in docs/BENCHMARKS.md with a methodology; a
                                 gate that fails on a slow runner is a gate
                                 that gets switched off.
+    POLICY-BINARY-NON-LINUX-RUNNER
+                                a workflow calls the compiled gate binary in
+                                a job whose runner is not linux. The
+                                committed binaries are LINUX binaries
+                                (tools/bin/harbor-gates-linux-x64 and
+                                -arm64), so the OS lane cannot run them: the
+                                shell says "cannot execute binary file: Exec
+                                format error" and the step is red, or the
+                                report is silently missing. The OS lane
+                                (test-os.yml) owns the TESTS on windows and
+                                macOS; the gates live in the linux lanes,
+                                and the numbers docs/BENCHMARKS.md quotes
+                                are the linux ones. See docs/CI_GATES.md,
+                                "The compiled gates run on linux, and only
+                                on linux".
+    POLICY-BINARY-ARCH-TWIN-MISSING
+                                a job that can run on an architecture calls
+                                no binary of that architecture. The binary
+                                has to match the runner: the x64 one on an
+                                x64 runner, the arm64 one on an arm64 one.
+                                A job that can land on both pools needs both
+                                binaries, each behind its own `runner.arch`
+                                guard.
+    POLICY-STEP-DUPLICATE-KEY     a step carries the same key twice. A YAML
+                                mapping may not, and GitHub's workflow
+                                parser refuses the FILE: the run fails in
+                                0 s and the whole lane is down. A parser
+                                that keeps the last value silently (PyYAML
+                                does) is how that ships.
 
   The rules that are NOT mechanical are stated in the document itself and
   reviewed by a human: what a gate checks, that its message names the
   violator, that it has no allow-list, and that it does not duplicate
   another gate. This file does not pretend to check prose.
+
+  TODO(gates-go): the Go port of this gate (tools/gates/check-gate-policy/)
+  is not in dev yet, so the three rules above live in this python original.
+  They MUST come with the port, with the same codes, the same texts and the
+  same three self-test cases:
+    - POLICY-BINARY-NON-LINUX-RUNNER
+    - POLICY-BINARY-ARCH-TWIN-MISSING
+    - POLICY-STEP-DUPLICATE-KEY
+  The functions that implement them are runner_platform(), job_runners(),
+  matrix_values(), step_commands(), platform_findings() and
+  duplicate_run_findings(): they are pure functions over a workflow's text,
+  and the port is a translation of them. The policy they enforce is stated
+  in docs/CI_GATES.md, "The compiled gates run on linux, and only on linux".
 
 NON-VACUITY
 
@@ -162,6 +204,22 @@ COMPILED_BINARY_RE = re.compile(
 COMPILED_INVOKE_RE = re.compile(
     r"tools/bin/harbor-gates-linux-(x64|arm64)\s+([A-Za-z0-9_.\-]+)"
 )
+
+# The architecture a committed binary is built for. The name of the file
+# says it, and the file is the only thing that knows: a workflow that calls
+# the wrong one dies with "cannot execute binary file: Exec format error".
+COMPILED_BINARY_ARCH = {
+    "harbor-gates-linux-x64": "x64",
+    "harbor-gates-linux-arm64": "arm64",
+}
+
+# The runner of a job: the label it runs on, or the matrix key it takes
+# the label from.
+RUNS_ON_RE = re.compile(r"^(\s*)runs-on:\s*(.+?)\s*$")
+MATRIX_KEY_RE = re.compile(r"matrix\.([A-Za-z0-9_.\-]+)")
+
+# The name of a workflow step, for a message that names the violator.
+STEP_NAME_RE = re.compile(r"^(\s*)- name:\s*(.+?)\s*$")
 
 # A workflow job id: two spaces, an id, a colon.
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_.\-]+):\s*$")
@@ -326,60 +384,142 @@ class Invocation:
         return sorted(floor_pairs(self.args.split()))
 
 
-def step_command(step: str) -> str:
-    """The shell command of a workflow step, with continuations joined."""
+def step_keys(step: str) -> list[str]:
+    """The keys of a workflow step, in order.
+
+    A step is a YAML mapping, and a mapping may not carry the same key
+    twice. GitHub's workflow parser REFUSES the file when it does, and
+    the run fails in 0 s with "This run likely failed because of a
+    workflow file issue" — the whole lane, not the step. A parser that
+    keeps the last value silently (PyYAML does) is how that ships.
+    """
     lines = step.splitlines()
-    command: list[str] = []
-    started = False
-    run_indent = 0
+    if not lines:
+        return []
+    first = lines[0]
+    if not first.strip().startswith("- "):
+        return []
+    key_indent = len(first) - len(first.lstrip()) + 2
+    lines = [" " * key_indent + first.strip()[2:]] + lines[1:]
+
+    keys: list[str] = []
     for line in lines:
         stripped = line.strip()
         indent = len(line) - len(line.lstrip())
-        if not started:
-            if stripped.startswith("run:"):
-                started = True
-                run_indent = indent
-                rest = stripped[4:].strip()
-                if rest not in ("|", ">", "|-", ">-", "|+", ">+"):
-                    command.append(rest)
+        if indent != key_indent or not stripped or stripped.startswith("#"):
             continue
-        if indent <= run_indent:
-            break
-        command.append(stripped)
-    joined = " ".join(command)
-    return joined.replace("\\ ", " ").replace("\\\n", " ").strip()
+        name = stripped.split(":", 1)[0].strip()
+        if name:
+            keys.append(name)
+    return keys
 
 
-def parse_workflow(text: str) -> tuple[list[str], list[Invocation]]:
-    """Return the job ids of a workflow and the invocations it makes."""
+def step_commands(step: str) -> list[str]:
+    """The shell commands of a workflow step, one per `run:` key.
+
+    A step normally has ONE `run:` key, and then there is one command. A
+    step can carry more than one, and then it is a YAML mapping with a
+    DUPLICATED key: the parser keeps the last value, and the earlier
+    block is dead code. Both blocks are returned, so the checker sees
+    what the tree says, and the duplication is reported on its own
+    (POLICY-STEP-DUPLICATE-KEY).
+    """
+    lines = step.splitlines()
+    if not lines:
+        return []
+    first = lines[0]
+    if not first.strip().startswith("- "):
+        return []
+    # The keys of the step sit two columns right of the dash.
+    key_indent = len(first) - len(first.lstrip()) + 2
+    lines = [" " * key_indent + first.strip()[2:]] + lines[1:]
+
+    commands: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if indent != key_indent or not stripped.startswith("run:"):
+            index += 1
+            continue
+        rest = stripped[4:].strip()
+        index += 1
+        if rest in ("|", ">", "|-", ">-", "|+", ">+", ""):
+            body: list[str] = []
+            while index < len(lines):
+                nxt = lines[index]
+                if not nxt.strip():
+                    body.append("")
+                    index += 1
+                    continue
+                nxt_indent = len(nxt) - len(nxt.lstrip())
+                if nxt_indent <= key_indent:
+                    break
+                body.append(nxt.strip())
+                index += 1
+            command = " ".join(body)
+        else:
+            command = rest
+        commands.append(command.replace("\\ ", " ").replace("\\\n", " ").strip())
+    return commands
+
+
+def step_name(step: str) -> str:
+    """The name of a workflow step, for a message that names the violator."""
+    for line in step.splitlines():
+        match = STEP_NAME_RE.match(line)
+        if match:
+            return match.group(2)
+    return "<unnamed step>"
+
+
+def parse_workflow(text: str) -> tuple[list[str], list[Invocation], dict[str, list[str]], list[tuple[str, str]]]:
+    """Return the job ids of a workflow, its invocations, its runners and its
+    steps that carry a duplicated `run:` key.
+
+    The runners are the labels a job can run on: the `runs-on:` of the job,
+    or the values of the matrix key it names. The duplicated steps are
+    (job, step name) pairs: a step with two `run:` keys, where YAML keeps
+    the last one and the first is dead code.
+    """
     jobs: list[str] = []
     invocations: list[Invocation] = []
+    runners: dict[str, list[str]] = {}
+    duplicated: list[tuple[str, str]] = []
     in_jobs = False
     job: str | None = None
     step: list[str] = []
+    job_bodies: dict[str, list[str]] = {}
 
     def flush_step() -> None:
         nonlocal step
         if job is None or not step:
             step = []
             return
-        command = step_command("\n".join(step))
-        matches = list(INVOKE_RE.finditer(command))
-        for index, match in enumerate(matches):
-            end = matches[index + 1].start() if index + 1 < len(matches) else len(command)
-            invocations.append(
-                Invocation(
-                    workflow="",
-                    job=job,
-                    script=match.group(1),
-                    args=command[match.end():end].strip(),
+        text = "\n".join(step)
+        commands = step_commands(text)
+        keys = step_keys(text)
+        for key in sorted(set(keys)):
+            if keys.count(key) > 1:
+                duplicated.append((job, step_name(text), key))
+        for command in commands:
+            matches = list(INVOKE_RE.finditer(command))
+            for index, match in enumerate(matches):
+                end = matches[index + 1].start() if index + 1 < len(matches) else len(command)
+                invocations.append(
+                    Invocation(
+                        workflow="",
+                        job=job,
+                        script=match.group(1),
+                        args=command[match.end():end].strip(),
+                    )
                 )
-            )
-        # A compiled gate: the binary, then the gate's name.
-        compiled = list(COMPILED_INVOKE_RE.finditer(command))
-        for index, match in enumerate(compiled):
-            end = compiled[index + 1].start() if index + 1 < len(compiled) else len(command)
-            invocations.append(
+            # A compiled gate: the binary, then the gate's name.
+            compiled = list(COMPILED_INVOKE_RE.finditer(command))
+            for index, match in enumerate(compiled):
+                end = compiled[index + 1].start() if index + 1 < len(compiled) else len(command)
+                invocations.append(
                 Invocation(
                     workflow="",
                     job=job,
@@ -403,7 +543,11 @@ def parse_workflow(text: str) -> tuple[list[str], list[Invocation]]:
             flush_step()
             job = job_match.group(1)
             jobs.append(job)
+            job_bodies[job] = []
             continue
+        if job is None:
+            continue
+        job_bodies[job].append(line)
         if STEP_RE.match(line):
             flush_step()
             step = [line]
@@ -411,16 +555,28 @@ def parse_workflow(text: str) -> tuple[list[str], list[Invocation]]:
         if step:
             step.append(line)
     flush_step()
-    return jobs, invocations
+    for name, body in job_bodies.items():
+        runners[name] = job_runners(body)
+    return jobs, invocations, runners, duplicated
 
 
-def read_workflows(repo: str) -> tuple[dict[str, list[str]], list[Invocation]]:
-    """Read every workflow file: job ids per file, and every invocation."""
+def read_workflows(repo: str) -> tuple[dict[str, list[str]], list[Invocation], dict[tuple[str, str], list[str]], list[tuple[str, str, str]]]:
+    """Read every workflow file: job ids per file, every invocation, the
+    runners of every job, and the steps that carry a duplicated `run:` key.
+    """
     directory = os.path.join(repo, ".github", "workflows")
     job_ids: dict[str, list[str]] = {}
     invocations: list[Invocation] = []
+    runners: dict[tuple[str, str], list[str]] = {}
+    duplicated: list[tuple[str, str, str]] = []
     if not os.path.isdir(directory):
-        return job_ids, invocations
+        return job_ids, invocations, runners, duplicated
+    # The gates that exist: a mention of the binary's path is not a call of
+    # a gate, and a path in a shell expression would otherwise look like a
+    # call of a gate that does not exist. `--list` is the binary's own
+    # command, not a gate.
+    known = compiled_gate_names(repo)
+    known.add("--list")
     for name in sorted(os.listdir(directory)):
         if not name.endswith((".yml", ".yaml")):
             continue
@@ -430,15 +586,189 @@ def read_workflows(repo: str) -> tuple[dict[str, list[str]], list[Invocation]]:
                 text = handle.read()
         except OSError:
             continue
-        ids, found = parse_workflow(text)
+        ids, found, job_runners_by_job, dupes = parse_workflow(text)
         job_ids[name] = ids
         for invocation in found:
             invocation.workflow = name
+            if invocation.gate and invocation.gate not in known:
+                continue
             invocations.append(invocation)
-    return job_ids, invocations
+        for job_id, labels in job_runners_by_job.items():
+            runners[(name, job_id)] = labels
+        for job_id, step, key in dupes:
+            duplicated.append((name, job_id, key))
+    return job_ids, invocations, runners, duplicated
 
 
 # ------------------------------------------------------------------- checks
+
+
+def runner_platform(label: str) -> tuple[str, str]:
+    """The (operating system, architecture) a runner label names.
+
+    The label says both: the OS is in the name (`windows-latest`,
+    `macos-latest`, `ubuntu-24.04`) and the architecture is in the suffix
+    (`ubuntu-24.04-arm`). A label that says neither is `unknown`, and a
+    job on an unknown runner proves nothing: the rules below stay quiet
+    rather than guess.
+    """
+    text = label.lower()
+    if "windows" in text:
+        operating_system = "windows"
+    elif "macos" in text:
+        operating_system = "macos"
+    elif "ubuntu" in text or "linux" in text:
+        operating_system = "linux"
+    else:
+        operating_system = "unknown"
+    architecture = "arm64" if ("arm" in text or "aarch64" in text) else "x64"
+    return operating_system, architecture
+
+
+def scalar_list(value: str) -> list[str]:
+    """The values of a YAML scalar or of an inline list."""
+    text = value.strip().strip("'\"")
+    if text.startswith("[") and text.endswith("]"):
+        return [item.strip().strip("'\"") for item in text[1:-1].split(",")
+                if item.strip()]
+    return [text] if text else []
+
+
+def matrix_values(lines: list[str], key: str) -> list[str]:
+    """The values a matrix key can take in a job's strategy block.
+
+    The block is a `matrix:` with either the key directly
+    (`os: [windows-latest, macos-latest]`) or inside an `include:` entry
+    (`- shard: core` / `  runner: ubuntu-24.04-arm`).
+    """
+    values: list[str] = []
+    matrix_indent: int | None = None
+    for line in lines:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if matrix_indent is None:
+            if stripped == "matrix:":
+                matrix_indent = indent
+            continue
+        if indent <= matrix_indent:
+            break
+        # A list item carries its key behind the dash: `- runner: ubuntu-24.04`.
+        candidate = stripped[2:].strip() if stripped.startswith("- ") else stripped
+        if indent == matrix_indent + 2 and not candidate.startswith("include:"):
+            if candidate.startswith(f"{key}:"):
+                values += scalar_list(candidate[len(key) + 1:])
+            continue
+        if candidate.startswith(f"{key}:"):
+            values += scalar_list(candidate[len(key) + 1:])
+    return values
+
+
+def job_runners(lines: list[str]) -> list[str]:
+    """The runner labels a job can run on.
+
+    A job names its runner (`runs-on: ubuntu-latest`) or takes it from a
+    matrix (`runs-on: ${{ matrix.runner }}`), and then the labels are the
+    values the matrix gives that key.
+    """
+    labels: list[str] = []
+    key = ""
+    for line in lines:
+        match = RUNS_ON_RE.match(line)
+        if not match:
+            continue
+        value = match.group(2).strip()
+        matrix = MATRIX_KEY_RE.search(value)
+        if matrix:
+            key = matrix.group(1)
+            labels = []
+        else:
+            key = ""
+            labels = scalar_list(value)
+    if key:
+        labels = matrix_values(lines, key)
+    return labels
+
+
+def platform_findings(invocations: list[Invocation],
+                      runners: dict[tuple[str, str], list[str]]) -> list[Finding]:
+    """The rules about WHERE the compiled gates may run.
+
+    The committed gate binaries are LINUX binaries, one per architecture
+    (tools/bin/harbor-gates-linux-x64 and -arm64). Two things follow, and
+    both are errors:
+
+      * a job whose runner is not linux cannot run them at all. The OS
+        lane (test-os.yml) owns the TESTS on windows and macOS; the
+        gates live in the linux lanes, and the numbers
+        docs/BENCHMARKS.md quotes are the linux ones.
+      * a job that can run on an architecture needs the binary of that
+        architecture. The binary has to match the runner, or the shell
+        says "cannot execute binary file: Exec format error".
+    """
+    findings: list[Finding] = []
+    by_job: dict[tuple[str, str], list[Invocation]] = {}
+    for invocation in invocations:
+        if not invocation.gate:
+            continue
+        by_job.setdefault((invocation.workflow, invocation.job), []).append(invocation)
+
+    for (workflow, job), here in sorted(by_job.items()):
+        labels = runners.get((workflow, job), [])
+        platforms = {runner_platform(label) for label in labels}
+        foreign = sorted({os_ for os_, _ in platforms if os_ not in ("linux", "unknown")})
+        if foreign:
+            findings.append(Finding(
+                "POLICY-BINARY-NON-LINUX-RUNNER",
+                f"the job runs on {', '.join(foreign)} and calls "
+                f"{here[0].script}, and the committed gate binaries are linux "
+                f"only - the OS lane runs the tests, not the gates",
+                f"{workflow} · {job}",
+            ))
+            continue
+        needed = {arch for os_, arch in platforms if os_ == "linux"}
+        # Per GATE, not per job: the decision is that every call of the
+        # binary has a twin for the other architecture, and a job that
+        # calls three gates has three twins to keep.
+        by_gate: dict[str, set[str]] = {}
+        for invocation in here:
+            arch = COMPILED_BINARY_ARCH.get(invocation.script)
+            if arch:
+                by_gate.setdefault(invocation.gate, set()).add(arch)
+        for gate, called in sorted(by_gate.items()):
+            missing = needed - called
+            if missing:
+                findings.append(Finding(
+                    "POLICY-BINARY-ARCH-TWIN-MISSING",
+                    f"the job can run on {', '.join(sorted(needed))} and calls "
+                    f"the gate {gate} with "
+                    f"{', '.join(sorted(called)) or 'no binary'}, so the "
+                    f"{', '.join(sorted(missing))} twin is missing - the step "
+                    f"would die with 'Exec format error' on that runner",
+                    f"{workflow} · {job}",
+                ))
+    return findings
+
+
+def duplicate_run_findings(duplicated: list[tuple[str, str, str]]) -> list[Finding]:
+    """The rule about a step that carries the same key twice.
+
+    A YAML mapping may not carry a key twice. GitHub's workflow parser
+    refuses the FILE when one does, so the run fails in 0 s with "This
+    run likely failed because of a workflow file issue" and the whole
+    lane is down, not the step. And a parser that keeps the last value
+    silently (PyYAML does) is how that ships: the file parses, and the
+    workflow does not run.
+    """
+    findings: list[Finding] = []
+    for workflow, job, key in duplicated:
+        findings.append(Finding(
+            "POLICY-STEP-DUPLICATE-KEY",
+            f"the step carries two `{key}` keys; a YAML mapping may not "
+            f"carry a key twice, and GitHub's workflow parser refuses the "
+            f"file - write the two halves as two steps",
+            f"{workflow} · {job}",
+        ))
+    return findings
 
 
 def source_of(repo: str, script: str) -> str:
@@ -488,7 +818,11 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
     if rows is None:
         return [Finding("POLICY-TABLE-MISSING", reason, TABLE_DOC)], 0
 
-    job_ids, invocations = read_workflows(repo)
+    job_ids, invocations, runners, duplicated = read_workflows(repo)
+
+    # Where the compiled gates may run, and how a step is written.
+    findings.extend(platform_findings(invocations, runners))
+    findings.extend(duplicate_run_findings(duplicated))
 
     # The scripts CI runs, and the scripts it runs that are not in the tree.
     invoked: dict[str, list[Invocation]] = {}
@@ -1270,6 +1604,74 @@ def self_test() -> int:
                 lambda r: _write(
                     os.path.join(r, "tools", "gamma.py"),
                     '#!/usr/bin/env python3\n"""Gamma.\n\nStdlib only."""\n'),
+            ),
+            (
+                "POLICY-BINARY-NON-LINUX-RUNNER",
+                "a job on a runner that is not linux calling the linux binary",
+                lambda r: _write(
+                    os.path.join(r, ".github", "workflows", "wf-os.yml"),
+                    """name: wfos
+on:
+  push:
+    paths:
+      - 'tools/gates/**'
+jobs:
+  oslane:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check
+        run: tools/bin/harbor-gates-linux-x64 gamma --min-files 10
+"""),
+            ),
+            (
+                "POLICY-BINARY-ARCH-TWIN-MISSING",
+                "a job that can run on arm64 and calls no arm64 binary",
+                lambda r: _write(
+                    os.path.join(r, ".github", "workflows", "wf-arch.yml"),
+                    """name: wfarch
+on:
+  push:
+    paths:
+      - 'tools/gates/**'
+jobs:
+  both:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check
+        run: tools/bin/harbor-gates-linux-x64 gamma --min-files 10
+"""),
+            ),
+            (
+                "POLICY-STEP-DUPLICATE-KEY",
+                "a step with two `run:` keys, where the first block is dead code",
+                lambda r: _write(
+                    os.path.join(r, ".github", "workflows", "wf-dup.yml"),
+                    """name: wfdup
+on:
+  push:
+    paths:
+      - 'tools/gates/**'
+jobs:
+  dup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check
+        if: always() && runner.arch == 'X64'
+        run: |
+          tools/bin/harbor-gates-linux-x64 gamma --min-files 10
+
+        if: always() && runner.arch == 'ARM64'
+        run: |
+          tools/bin/harbor-gates-linux-arm64 gamma --min-files 10
+"""),
             ),
         ]
         # --- end fixture data ---
