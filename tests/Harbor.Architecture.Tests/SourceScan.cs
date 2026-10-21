@@ -46,12 +46,6 @@ internal static class SourceScan
     /// <summary>Product trees the gates scan for real violations.</summary>
     internal static readonly string[] ProductTrees = ["src", "apps"];
 
-    /// <summary>Matches one or more consecutive single-line comments.</summary>
-    private static readonly Regex LineComment = new("//[^\n]*", RegexOptions.Compiled);
-
-    /// <summary>Matches a C-style block comment, including the newlines it spans.</summary>
-    private static readonly Regex BlockComment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.Compiled);
-
     /// <summary>
     ///     Whether a path is build output, a test fixture, unmaintained
     ///     <c>contrib/</c> code, or a sibling worktree — in short, anything that
@@ -179,32 +173,50 @@ internal static class SourceScan
         Path.GetRelativePath(RepoPaths.RepoRoot ?? ".", path).Replace('\\', '/');
 
     /// <summary>
-    ///     Blanks out one block-comment match, preserving every newline so a line
-    ///     number computed downstream still points at the real source line.
+    ///     Strips comments, preserving line count, so prose about a rule cannot
+    ///     trip it.
     /// </summary>
+    /// <remarks>
+    ///     The implementation moved to <see cref="SourceCommentBlanker" /> when
+    ///     the quadratic read in the blanking loop was found; the bytes are the
+    ///     same, and <c>CommentStripperEquivalenceTests</c> is what proves it.
+    ///     String literals are NOT stripped: the risk of a false positive
+    ///     there is smaller than the risk of writing a string-literal state
+    ///     machine, and every gate here matches a quoted literal.
+    /// </remarks>
+    /// <param name="source">The text to strip.</param>
+    /// <returns>The text with its comments blanked out.</returns>
+    internal static string StripComments(string source)
+    {
+        StripCommentsMeter.Count(source.Length);
+        return SourceCommentBlanker.Blank(source);
+    }
+
+    /// <summary>Matches an XML/markup comment, including the ones that span lines.</summary>
+    private static readonly Regex MarkupComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>
+    ///     Blanks out one markup-comment match, preserving every newline so a line
+    ///     number computed downstream still points at the real markup line.
+    /// </summary>
+    /// <remarks>
+    ///     The match's text is read ONCE, through <c>Match.ValueSpan</c>. The
+    ///     old form read <c>Match.Value</c> — a property that allocates a fresh
+    ///     string on every read — once per character of the match, which made
+    ///     the blanking quadratic in the length of the comment.
+    /// </remarks>
+    /// <param name="match">The markup comment match.</param>
     private static string BlankOutComment(Match match)
     {
         var blank = new char[match.Length];
-        for (int i = 0; i < match.Length; i++)
+        ReadOnlySpan<char> value = match.ValueSpan;
+        for (int i = 0; i < blank.Length; i++)
         {
-            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
+            blank[i] = value[i] == '\n' ? '\n' : ' ';
         }
 
         return new string(blank);
     }
-
-    /// <summary>
-    ///     Strips comments, preserving line count, so prose about a rule cannot
-    ///     trip it. <see cref="LineComment" /> runs last because it cannot span a
-    ///     line. String literals are NOT stripped: the risk of a false positive
-    ///     there is smaller than the risk of writing a string-literal state
-    ///     machine, and every gate here matches a quoted literal.
-    /// </summary>
-    internal static string StripComments(string source) =>
-        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
-
-    /// <summary>Matches an XML/markup comment, including the ones that span lines.</summary>
-    private static readonly Regex MarkupComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
 
     /// <summary>
     ///     Strips <c>&lt;!-- --&gt;</c> comments, preserving line count so a line

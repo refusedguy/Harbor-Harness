@@ -49,6 +49,14 @@
 #                   the before/after arm.
 #   no-<family>     the baseline with exactly one family switched off
 #                   everywhere: the marginal cost of that family.
+#   no-illink      the baseline with the SDK's own ILLink analyzer switched
+#                   off (`-p:PublishSingleFile=false`). That analyzer is not a
+#                   package this repository references: the SDK pulls
+#                   Microsoft.NET.ILLink.Tasks in whenever the single-file
+#                   analyzer is enabled, and the package's `analyzers/` folder
+#                   reaches EVERY compilation that references it. So it has
+#                   no `HarborAnalyzer*` switch of its own, and the only
+#                   lever the SDK offers is PublishSingleFile.
 #   narrowed-report the branch's own tree with the compiler's own
 #                   `-p:ReportAnalyzer=true`, which reports the elapsed time
 #                   per analyzer assembly. That is the per-package cost
@@ -102,7 +110,14 @@ on:
         required: false
         default: ""
   push:
-    branches: [ci/1801-trim-analyzers]
+    branches:
+      - 'ci/1801-trim-analyzers'
+      # #2109: the ILLink-analyzer profile is measured on the same harness,
+      # on two branches — `ci/2109-baseline` carries the tree as it was and
+      # `ci/2109-profile` the tree as it is after the change. The two runs
+      # are the before/after pair of the profile, and they run concurrently.
+      - 'ci/2109-baseline'
+      - 'ci/2109-profile'
     # Only the harness itself and the files that decide what runs re-run the
     # matrix. A docs commit must not spend thirty-four build slots.
     paths:
@@ -153,6 +168,10 @@ jobs:
           - no-vs-threading
           - no-excubo
           - no-publicapi
+          # #2109: the SDK's own ILLink analyzer. It is not one of the
+          # packages the table above lists, and it is the largest single
+          # analyzer cost in the tree.
+          - no-illink
 
     env:
       # The architecture gate is a single process and 29..39 % of the wall.
@@ -174,6 +193,12 @@ jobs:
         -p:HarborAnalyzerVsThreading=on
         -p:HarborAnalyzerExcubo=on
         -p:HarborAnalyzerPublicApi=on
+        # #2109: the ILLink analyzer is switched on by the SDK whenever
+        # PublishSingleFile is true, and the pack it comes from puts
+        # ILLink.RoslynAnalyzer.dll in EVERY compilation that references it.
+        # The baseline has to carry it, or the `no-illink` arm would measure
+        # nothing: the arm's whole difference is this one property.
+        -p:PublishSingleFile=true
 
     steps:
       - uses: actions/checkout@v7
@@ -253,6 +278,7 @@ jobs:
                 no-cfe)           arm_props="$arm_props -p:HarborAnalyzerCfe=off" ;;
                 no-projectfile)   arm_props="$arm_props -p:HarborAnalyzerProjectFile=off" ;;
                 no-vs-threading)  arm_props="$arm_props -p:HarborAnalyzerVsThreading=off" ;;
+                no-illink)        arm_props="$arm_props -p:PublishSingleFile=false" ;;
                 no-excubo)        arm_props="$arm_props -p:HarborAnalyzerExcubo=off" ;;
                 no-publicapi)     arm_props="$arm_props -p:HarborAnalyzerPublicApi=off" ;;
                 *) echo "unknown arm: $LABEL"; exit 2 ;;

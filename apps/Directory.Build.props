@@ -59,29 +59,31 @@
     </PackageReference>
     <!--
       Microsoft.VisualStudio.Threading.Analyzers ("vs-threading", 18.12.1) —
-      the threading/async analyzer family from the Visual Studio SDK.
+      REMOVED (#2109). The family cost 103.7 analyzer-seconds on the whole
+      build (run 39527271843, `-p:ReportAnalyzer=true`), 16 % of every
+      analyzer-second in the tree, and 85.8 of those seconds — 83 % —
+      were ONE rule, VSTHRD010, which this repository sets to
+      `severity = none`: a silenced rule still runs.
 
-      It is wired to src/ and apps/ and NOT to tests/: the test tree has its
-      own async culture (fixtures that block on purpose, 174 catch-all
-      handlers) and already lifts TreatWarningsAsErrors, so the package would
-      be noise there rather than signal.
-
-      EXACTLY ONE of its 29 rules is on — VSTHRD110, "observe the result of
-      async calls", at `suggestion`. The rest are `none` with a written reason
-      in .editorconfig: four of them are Error by default (VSTHRD004,
-      VSTHRD011, VSTHRD107, VSTHRD109) and a large part of the family is
-      written against JoinableTaskFactory, which this repository does not
-      reference.
+      Of the rest, the only rule this repository ever asked for is
+      VSTHRD110 ("observe the result of async calls"), at `suggestion`,
+      which `TreatWarningsAsErrors` does NOT promote — so no rule of this
+      package could fail a build. The four rules it ships as Error
+      (VSTHRD004, VSTHRD011, VSTHRD107, VSTHRD109) are all `none` here,
+      and a large part of the family is written against
+      JoinableTaskFactory, which this repository does not reference.
 
       The gate that actually decides "is this an unobserved Task?" is
-      HARCH003 in tests/Harbor.Architecture.Tests/Roslyn/ — a type-resolving
-      analyzer rather than a spelling match (#1852).
+      HARCH003 in tests/Harbor.Architecture.Tests/Roslyn/ — a
+      type-resolving analyzer rather than a spelling match (#1852), and a
+      Warning, so under TreatWarningsAsErrors=true it fails the build.
+      The arch suite runs inside the Release build through the
+      HarborArchitectureGate target, and again in the `test (arch)` job.
+
+      The 29 VSTHRD rows stay in .editorconfig even though the package is
+      no longer referenced: they are inert today and they are the table
+      that would apply if the package came back.
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerVsThreading)' != 'off'">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <!-- Proj0037 (#1857): an analyzer package ships no runtime assembly. -->
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
   </ItemGroup>
 
   <!--

@@ -61,7 +61,7 @@ public class JsonlToolErrorRoundTripTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var results = ((ToolResultMessage)back.Value).Results;
         await Assert.That(results.Count).IsEqualTo(1);
         ToolErrorInfo error = results[0].ErrorInfo!;
@@ -96,7 +96,7 @@ public class JsonlToolErrorRoundTripTests
 
         var parsed = JsonlLineParser.Parse(line, "sess-1");
 
-        await Assert.That(parsed.IsSuccess).IsTrue();
+        await Assert.That(parsed).IsSuccessful();
         var results = ((ToolResultMessage)parsed.Value).Results;
         ToolErrorInfo error = results[0].ErrorInfo!;
         await Assert.That(error.Code).IsEqualTo(ToolErrorCodes.Timeout);
@@ -122,7 +122,7 @@ public class JsonlToolErrorRoundTripTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var entry = ((ToolResultMessage)back.Value).Results[0];
         ToolErrorInfo error = entry.ErrorInfo!;
         await Assert.That(error.Code).IsEqualTo(unknown);
@@ -160,7 +160,7 @@ public class JsonlToolErrorRoundTripTests
 
         var parsed = JsonlLineParser.Parse(line, "sess-1");
 
-        await Assert.That(parsed.IsSuccess).IsTrue();
+        await Assert.That(parsed).IsSuccessful();
         var entry = ((ToolResultMessage)parsed.Value).Results[0];
         await Assert.That(entry.Output).IsEqualTo("file contents");
         await Assert.That(entry.ErrorInfo).IsNull();
