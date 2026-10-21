@@ -2925,6 +2925,127 @@ into the table, the compiled `measure-project-graph` gate parses the graph), and
 nightly lane's analysis step can read the same measurements instead of
 growing a second parser.
 
+### 6.7.1 The analyzer profile: what each family costs the compile
+
+**The instrument.** The analyzer-cost harness
+(`.github/workflows/meas-analyzer-cost.yml`) builds the Release compile of
+`Harbor.slnx` twice in one job — the baseline and its own arm — and the
+compiler's own `-p:ReportAnalyzer=true` report says, for every
+compilation, the elapsed time per analyzer assembly. The numbers below are
+that report, summed over the 117 compilations of the build; the reader is
+the compiled `aggregate-analyzer-cost` gate, and its table is the artifact
+`analyzer-cost-table`.
+
+**The two runs.** The before/after pair of issue #2109, on the same day,
+on the same runner image (`ubuntu-24.04`, 4 vCPU, .NET SDK 10.0.402):
+
+| run | branch | tree | `narrowed-report` arm |
+|-----|--------|------|----------------------|
+| [39633281684](https://github.com/refusedguy/Harbor-Harness/actions/runs/39633281684) | `ci/2109-baseline` | `dev` as it was | 117 compilations, 841.6 analyzer-seconds |
+| [39633295157](https://github.com/refusedguy/Harbor-Harness/actions/runs/39633295157) | `ci/2109-profile` | with the ILLink analyzer and the vs-threading family removed | 117 compilations, 518.3 analyzer-seconds |
+
+#### The profile, family by family
+
+| family | analyzer seconds | share | on by default? | decision |
+|--------|------------------|-------|----------------|----------|
+| `SonarAnalyzer.CSharp` | 249.5 | 48.1 % | `tests/` only | KEPT — the only family whose 324 findings the repository reads, and all of them are in the test tree |
+| `DependencyInjection.Lifetime.Analyzers` | 67.8 | 13.1 % | `src/` + `apps/` | KEPT — DI003/DI015/DI017/DI019 are errors on the composition root's registrations |
+| `ILLink.RoslynAnalyzer` (the SDK's own) | 48.2 | 9.3 % | 7 projects | NARROWED — 302.2 s in 105 projects before |
+| `Meziantou.Analyzer` | 48.0 | 9.3 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 17.0 | 3.3 % | solution-wide | KEPT — the base layer |
+| `Roslynator.Analyzers` | 13.0 | 2.5 % | solution-wide | KEPT |
+| `AsyncFixer` | 11.7 | 2.3 % | `src/` + `apps/` | KEPT — all five rules are `suggestion`, so it cannot fail a build |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 10.7 | 2.1 % | solution-wide | KEPT — RS0030 is a build error over `BannedSymbols.txt` |
+| `Harbor.Arch.Analyzers` (the repository's own) | 8.8 | 1.7 % | `src/` + `apps/` | KEPT — HARCH001/HARCH002, in the build, over every product project |
+| `ReflectionAnalyzers` | 5.9 | 1.1 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 2.7 | 0.5 % | two frozen assemblies | KEPT |
+| `DotNetProjectFile.Analyzers` | 2.1 | 0.4 % | solution-wide | KEPT |
+| `Microsoft.VisualStudio.Threading.Analyzers` | **0** | **0 %** | **REMOVED** | REMOVED — 114.4 s, of which 93.6 s was VSTHRD010, a rule at `severity = none` |
+| **everything together** | **518.3** | | | **−323.3 s against 841.6 s** |
+
+The source generators and the SDK's own analyzer assemblies make up the
+rest of the 518.3 s (`TUnit.Core.SourceGenerator` 6.3,
+`CommunityToolkit.Mvvm.SourceGenerators` 4.1, `Harbor.CodeGen` 1.4, and
+the `Microsoft.Interop.*` generators 3.3 among them).
+
+#### The before/after, and the two things that make it hard to read
+
+**The runner is not the same machine twice.** The analyzer report is CPU
+time, and the second run's runner was the slower one: the 22 families
+this change did not touch came out **6.3 % slower** there (the median of
+their per-family ratios; the spread is 0.59x..1.30x). Normalized by that
+factor:
+
+| | before | after | delta |
+|---|---:|---:|---:|
+| `ILLink.RoslynAnalyzer` | 302.2 s (105 projects) | 45.3 s (7 projects) | **−85 %** |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 114.4 s (60 projects) | 0 s | **−100 %** |
+| everything together | 841.6 s | 487.4 s | **−354.2 s (−42.1 %)** |
+
+**The wall cannot resolve an effect of this size, and the harness says so
+in its own table.** Every paired arm — the same tree, twice, in one job,
+on the same runner — came out inside the noise floor, which the control
+arms (the baseline against itself) put at **28.0 s** in the first run and
+**28.4 s** in the second:
+
+| arm | before run: difference (s) | after run: difference (s) | the family it switches off |
+|------|--------------------------:|-------------------------:|----------------------------|
+| `no-illink` | **+1.4** | −14.0 | the SDK's ILLink analyzer — 302.2 s of analyzer time |
+| `no-vs-threading` | **+8.7** | −2.6 | 114.4 s of analyzer time, 93.6 s of it in one silenced rule |
+| `no-roslynator` | −6.7 | **+46.1** | 12.3 s of analyzer time |
+| `no-publicapi` | +19.2 | +25.2 | 3.3 s of analyzer time |
+| `no-sonar` | +9.6 | +4.6 | 232.4 s of analyzer time |
+
+A 3-second family reads +19.2 s and +25.2 s, a 232-second family reads
++9.6 s, and the largest arm in either run is a 12-second family at
++46.1 s. **The wall-time arms measure the runner, not the analyzer.** The
+controlled number is the compiler's own report, and it is what the table
+above is read from.
+
+#### What the two removed families were
+
+**`ILLink.RoslynAnalyzer` (302.2 s → 48.2 s).** The SDK's own AOT/trim
+analyzer, in 105 of the tree's 117 compilations, because the
+repository-root `Directory.Build.props` set `PublishSingleFile=true`
+repo-wide and the SDK pulls the ILLink pack into every project that
+enables the single-file analyzer. The property now lives in
+`apps/Harbor.App.Cli`, and the analyzer runs where it has something to
+say: the CLI's own compilation, the six `IsAotCompatible=true` projects,
+and the `aot-publish` job (`-p:EnableSingleFileAnalyzer=true`), which is
+where the product tree's `IL3000` coverage went. The mechanism and the
+proof are in [docs/ANALYZERS.md §The ILLink analyzer](./ANALYZERS.md#the-illink-analyzer).
+
+**`Microsoft.VisualStudio.Threading.Analyzers` (114.4 s → 0 s).** 93.6 s
+of the 114.4 s — 82 % — is `VSTHRD010MainThreadUsageAnalyzer`, the rule
+`.editorconfig` sets to `severity = none`. A silenced rule still runs: the
+analyzer is invoked, the diagnostic is dropped, and the time is paid. The
+only rule the repository asked for is VSTHRD110, at `suggestion`, which
+`TreatWarningsAsErrors` does not promote — so no rule of the family could
+fail a build. The gate that decides "is this an unobserved Task?" is
+HARCH003, a house analyzer that resolves the TYPE rather than matching a
+call's spelling, and it is a Warning, so it fails the build where
+VSTHRD110 only suggested.
+
+#### The zero-warning gate did not get weaker
+
+The ILLink analyzer's only findings in the ordinary build were four
+`IL3000` warnings — `Assembly.Location` in
+`tests/Harbor.CodeGen.Tests/ObservedGeneratorDriverTests.cs:233`,
+`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests.cs:364`,
+`tests/Harbor.Plugins.Runtime.Tests/Security/SandboxAlcTests.cs:92` and
+`tests/Harbor.TestKit.Generators.Tests/FakeGeneratorDriverTests.cs:164` —
+all under `tests/`, where `TreatWarningsAsErrors` is off, so none of them
+could fail a build. The product tree's own `IL3000`
+site is a `#pragma warning disable IL3000` in
+`src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs`, and the
+proof that the gate moved rather than disappeared is a run with that
+pragma removed:
+
+| run | tree | the band |
+|-----|------|----------|
+| [39637090212](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637090212) | before | the **build** job is red — the IL3000 warning is an error under `TreatWarningsAsErrors=true` |
+| [39637286644](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637286644) | after | the **build** job is green and the **aot-publish** job is red — the check is in the job that owns it |
+
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 
 Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-Harness/actions/runs/39528039639), branch `ci/1753-per-file-coverage` at `c480a98f`, 2026-10-21. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/gates/coverage-report/`](../tools/gates/coverage-report/), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/gates/check-coverage-registry/`](../tools/gates/check-coverage-registry/).
