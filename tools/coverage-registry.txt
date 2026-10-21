@@ -67,8 +67,8 @@
 #
 # ── PROVENANCE ───────────────────────────────────────────────────────────
 #
-# Measured on run 39521931938 of the nightly workflow, on the branch
-# ci/1753-per-file-coverage at 6f2b4987: 1250 product files, 497 of them
+# Measured on run 39528039639 of the nightly workflow, on the branch
+# ci/1753-per-file-coverage at c480a98f: 1250 product files, 497 of them
 # covered, 581 holes — 373 the measurement saw and never ran, 208 in the
 # two projects the lane does not load.
 #
