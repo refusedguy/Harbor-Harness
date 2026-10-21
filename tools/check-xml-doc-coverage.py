@@ -2,12 +2,12 @@
 """XML-doc coverage gate for the frozen contract assembly (#431, slice D3).
 
 Stdlib only — no pip, no network, no dotnet. Wired into
-.github/workflows/docs.yml alongside check-md-links.py, md-lint.py,
+.github/workflows/docs.yml alongside the check-md-links and md-lint gates,
 check-doc-cites.py, check-doc-facts and check-abstractions-contract.py,
 and it must not overlap any of them:
 
-  check-md-links.py               does the link resolve?
-  md-lint.py                      is the file shaped the way the repo says it is?
+  check-md-links                   does the link resolve?
+  md-lint                          is the file shaped the way the repo says it is?
   check-doc-cites.py              does a `file:line` still point at a line?
   check-doc-facts                does a COUNT a document states still equal the
                                   count of tracked files it is counting?

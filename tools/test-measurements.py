@@ -30,8 +30,9 @@ table. Rationale (why summary and not log):
     this script refuses to emit one.
   * No re-run, no extra test execution, no new job, no new matrix axis.
 
-Stdlib only — no pip install, no network, no dotnet. Sibling of check-md-links.py
-and md-lint.py, and shares their "reporting is not a gate" contract: a missing,
+Stdlib only — no pip install, no network, no dotnet. Sibling of the
+check-md-links and md-lint gates, and shares their "reporting is not a gate"
+contract: a missing,
 empty or corrupt TRX set exits 0 with a one-line note. This script must never be
 able to fail a build.
 

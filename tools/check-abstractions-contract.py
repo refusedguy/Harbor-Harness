@@ -2,11 +2,11 @@
 """Check the NuGet dependency surface of the projects #428 guards.
 
 Stdlib only — no pip, no network, no dotnet. Wired into .github/workflows/docs.yml
-alongside check-md-links.py, md-lint.py, check-doc-cites.py and the check-doc-facts gate,
+alongside the check-md-links and md-lint gates, check-doc-cites.py and the check-doc-facts gate,
 and it must not overlap any of them:
 
-  check-md-links.py   does the link resolve?
-  md-lint.py          is the file shaped the way the repo says it is?
+  check-md-links       does the link resolve?
+  md-lint             is the file shaped the way the repo says it is?
   check-doc-cites.py  does a `file:line` still point at a line, and a named type
                       still exist?
   check-doc-facts    does a COUNT a document states still equal the count of

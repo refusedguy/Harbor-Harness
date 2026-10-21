@@ -2,7 +2,7 @@
 """Reflection-JSON gate for the tests/ tree (#1822).
 
 Stdlib only — no pip, no network, no dotnet. It lives in `tools/` next to
-check-test-dup.py / check-md-links.py / md-lint.py and asks the question the
+check-test-dup.py / the check-md-links and md-lint gates and asks the question the
 other gates do not:
 
   check-test-dup.py             is a test body a copy of another test body?

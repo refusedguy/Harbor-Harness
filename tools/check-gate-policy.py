@@ -5,8 +5,8 @@ Stdlib only — no pip, no network, no dotnet. Wired into
 .github/workflows/docs.yml as its own job, and it must not overlap any of the
 other gates in that workflow:
 
-  check-md-links.py   does the link resolve?
-  md-lint.py          is the file shaped the way the repo says it is?
+  check-md-links       does the link resolve?
+  md-lint             is the file shaped the way the repo says it is?
   check-doc-cites.py  does a `file:line` still point at a line, and a named type
                       still exist?
   check-doc-facts.py  does a COUNT a document states still equal the count of

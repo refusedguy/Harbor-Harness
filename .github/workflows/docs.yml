@@ -140,7 +140,6 @@ on:
       # the tree it measures. The rewrites file is the reviewed record of what
       # the gate's own `--apply` mode replays, so it is a trigger too.
       - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. The two reporters (the measurement table and the wall census)
       # and their self-tests: a PR that edits either must run them, for the
       # same reason the gates above are triggered by their own sources.
@@ -264,7 +263,6 @@ on:
       # `apps/` and compares the result against its committed exceptions
       # file, so a PR that edits the gate or the exceptions must run it.
       - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
