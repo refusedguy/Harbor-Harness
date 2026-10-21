@@ -45,6 +45,14 @@ namespace Harbor.Tools.Builtin;
         "batch related questions into one call instead of asking one at a time",
         "the wait is bounded: a timeout comes back as ASK_PENDING, never as silence"
     })]
+[ToolSchema]
+[ToolParam("questions", "array", Description = "The questions to ask, in the order the user should see them. One to five of them.", Required = true)]
+[ToolParam("id", "string", Description = "Stable id of the question; echoed back in the answer.", ItemsOf = "questions", Required = true)]
+[ToolParam("question", "string", Description = "The question to ask, in your own words.", ItemsOf = "questions", Required = true)]
+[ToolParam("header", "string", Description = "Short label for the question.", ItemsOf = "questions")]
+[ToolParam("options", "array", Description = "The choices the user may pick. Each entry is an object with a \"label\" and an optional \"description\"; a bare string is read as the label. Omit for a free-text answer.", ItemsOf = "questions")]
+[ToolParam("multi_select", "boolean", Description = "Whether the user may pick more than one option (default false).", ItemsOf = "questions")]
+[ToolParam("timeout_ms", "integer", Description = "How long to wait for the answer, in milliseconds (default 120000, max 600000).")]
 public sealed partial class AskUserQuestionTool : ITool
 {
     /// <summary>How many questions one call may carry.</summary>
@@ -72,74 +80,6 @@ public sealed partial class AskUserQuestionTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574): the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "questions": {
-                                                                            "type": "array",
-                                                                            "description": "The questions to ask, in the order the user should see them.",
-                                                                            "minItems": 1,
-                                                                            "maxItems": 5,
-                                                                            "items": {
-                                                                              "type": "object",
-                                                                              "properties": {
-                                                                                "id": {
-                                                                                  "type": "string",
-                                                                                  "description": "Stable id of the question; echoed back in the answer."
-                                                                                },
-                                                                                "question": {
-                                                                                  "type": "string",
-                                                                                  "description": "The question to ask, in your own words."
-                                                                                },
-                                                                                "header": {
-                                                                                  "type": "string",
-                                                                                  "description": "Short label for the question."
-                                                                                },
-                                                                                "options": {
-                                                                                  "type": "array",
-                                                                                  "description": "The choices the user may pick. Omit for a free-text answer.",
-                                                                                  "maxItems": 10,
-                                                                                  "items": {
-                                                                                    "type": "object",
-                                                                                    "properties": {
-                                                                                      "label": {
-                                                                                        "type": "string",
-                                                                                        "description": "The option text; echoed back when picked."
-                                                                                      },
-                                                                                      "description": {
-                                                                                        "type": "string",
-                                                                                        "description": "What picking this option means."
-                                                                                      }
-                                                                                    },
-                                                                                    "required": ["label"]
-                                                                                  }
-                                                                                },
-                                                                                "multi_select": {
-                                                                                  "type": "boolean",
-                                                                                  "description": "Whether the user may pick more than one option (default false)."
-                                                                                }
-                                                                              },
-                                                                              "required": ["id", "question"]
-                                                                            }
-                                                                          },
-                                                                          "timeout_ms": {
-                                                                            "type": "integer",
-                                                                            "description": "How long to wait for the answer, in milliseconds (default 120000, max 600000)."
-                                                                          }
-                                                                        },
-                                                                        "required": ["questions"]
-                                                                      }
-                                                                      """);
-
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
@@ -358,32 +298,49 @@ public sealed partial class AskUserQuestionTool : ITool
                 var labels = new HashSet<string>(StringComparer.Ordinal);
                 foreach (JsonElement option in optionsEl.EnumerateArray())
                 {
-                    if (option.ValueKind != JsonValueKind.Object)
+                    // An option is an object with a label, or the label itself:
+                    // the schema says both, and the plain form is what a model
+                    // writes when it has no description to give.
+                    string label;
+                    string? description = null;
+
+                    if (option.ValueKind == JsonValueKind.String)
+                    {
+                        label = option.GetString() ?? string.Empty;
+                    }
+                    else if (option.ValueKind == JsonValueKind.Object)
+                    {
+                        if (!option.TryGetProperty("label", out var labelEl)
+                            || labelEl.ValueKind != JsonValueKind.String)
+                        {
+                            return Result.Failure<IReadOnlyList<UserQuestion>>(
+                                $"Every option of question '{id}' needs a non-empty string 'label'.");
+                        }
+
+                        label = labelEl.GetString() ?? string.Empty;
+
+                        if (option.TryGetProperty("description", out var descriptionEl)
+                            && descriptionEl.ValueKind == JsonValueKind.String)
+                        {
+                            description = descriptionEl.GetString();
+                        }
+                    }
+                    else
                     {
                         return Result.Failure<IReadOnlyList<UserQuestion>>(
-                            $"Every option of question '{id}' must be an object with a 'label'.");
+                            $"Every option of question '{id}' must be an object with a 'label' or a plain string.");
                     }
 
-                    if (!option.TryGetProperty("label", out var labelEl)
-                        || labelEl.ValueKind != JsonValueKind.String
-                        || string.IsNullOrWhiteSpace(labelEl.GetString()))
+                    if (string.IsNullOrWhiteSpace(label))
                     {
                         return Result.Failure<IReadOnlyList<UserQuestion>>(
                             $"Every option of question '{id}' needs a non-empty string 'label'.");
                     }
 
-                    string label = labelEl.GetString()!;
                     if (!labels.Add(label))
                     {
                         return Result.Failure<IReadOnlyList<UserQuestion>>(
                             $"Question '{id}' has two options labelled '{label}': labels must be unique.");
-                    }
-
-                    string? description = null;
-                    if (option.TryGetProperty("description", out var descriptionEl)
-                        && descriptionEl.ValueKind == JsonValueKind.String)
-                    {
-                        description = descriptionEl.GetString();
                     }
 
                     options.Add(new UserQuestionOption(label, description));

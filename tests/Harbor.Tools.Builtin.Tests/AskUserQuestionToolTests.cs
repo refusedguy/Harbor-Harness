@@ -211,6 +211,26 @@ public class AskUserQuestionToolTests
     }
 
     [Test]
+    public async Task An_Option_May_Be_A_Bare_Label()
+    {
+        var channel = new ScriptedChannel(UserQuestionOutcome.Answered(
+        [
+            new UserQuestionAnswer("areas", ["storage"], null),
+        ]));
+        var tool = Tool(channel);
+
+        ToolResult result = await tool.ExecuteAsync(
+            Args("""
+                 { "questions": [ { "id": "areas", "question": "Which areas?", "options": ["storage", "tui"] } ] }
+                 """),
+            Context());
+
+        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(channel.Requests[0].Questions[0].Options).IsNotNull();
+        await Assert.That(channel.Requests[0].Questions[0].Options![0].Label).IsEqualTo("storage");
+    }
+
+    [Test]
     public async Task Validate_Rejects_Unusable_Arguments()
     {
         var tool = Tool(new ScriptedChannel(UserQuestionOutcome.Answered([])));

@@ -1103,26 +1103,14 @@ answers and either the chosen labels or the free text the user typed.
   "properties": {
     "questions": {
       "type": "array",
-      "minItems": 1,
-      "maxItems": 5,
+      "description": "The questions to ask, in the order the user should see them. One to five of them.",
       "items": {
         "type": "object",
         "properties": {
           "id":          { "type": "string",  "description": "Stable id of the question; echoed back in the answer." },
           "question":    { "type": "string",  "description": "The question to ask, in your own words." },
           "header":      { "type": "string",  "description": "Short label for the question." },
-          "options": {
-            "type": "array",
-            "maxItems": 10,
-            "items": {
-              "type": "object",
-              "properties": {
-                "label":       { "type": "string", "description": "The option text; echoed back when picked." },
-                "description": { "type": "string", "description": "What picking this option means." }
-              },
-              "required": ["label"]
-            }
-          },
+          "options":     { "type": "array",   "description": "The choices the user may pick. Each entry is an object with a \"label\" and an optional \"description\"; a bare string is read as the label. Omit for a free-text answer." },
           "multi_select": { "type": "boolean", "description": "Whether the user may pick more than one option (default false)." }
         },
         "required": ["id", "question"]
@@ -1149,9 +1137,9 @@ answers and either the chosen labels or the free text the user typed.
 // 3. A free-text question with a short window
 {"questions": [{"id": "target", "question": "Which service should I look at first?"}], "timeout_ms": 30000}
 
-// 4. A question that may take several answers
+// 4. A question that may take several answers; the plain label form is enough
 {"questions": [{"id": "areas", "question": "Which areas should I touch?", "multi_select": true,
-  "options": [{"label": "storage"}, {"label": "transport"}, {"label": "tui"}]}]}
+  "options": ["storage", "transport", "tui"]}]}
 ```
 
 **Result.** An answer comes back as JSON:
