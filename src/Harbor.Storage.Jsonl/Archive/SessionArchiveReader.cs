@@ -38,19 +38,15 @@ namespace Harbor.Storage.Jsonl;
 ///     A session archive, read back: the manifest, the session record and the
 ///     whole log (#1750).
 /// </summary>
+/// <param name="Manifest">The manifest the archive carries.</param>
+/// <param name="Session">The session record the log belongs to.</param>
+/// <param name="Log">
+///     The log, in write order, every record the archive holds — including the
+///     ones the fold calls shadowed.
+/// </param>
 public sealed record SessionArchive(
-    /// <summary>
-    ///     The manifest the archive carries.
-    /// </summary>
     SessionArchiveManifest Manifest,
-    /// <summary>
-    ///     The session record the log belongs to.
-    /// </summary>
     Session Session,
-    /// <summary>
-    ///     The log, in write order, every record the archive holds —
-    ///     including the ones the fold calls shadowed.
-    /// </summary>
     IReadOnlyList<SessionLogEntry> Log);
 
 /// <summary>
