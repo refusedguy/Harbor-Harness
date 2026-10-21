@@ -40,7 +40,6 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyTwoBuiltinTools()
     public async Task AddHarbor_Full14_RegistersExactlyTheBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
@@ -51,10 +50,9 @@ public class RegistrationCompositionTests
         // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
         // + session_read/session_steer (registered when a session store is composed)
         // + plugin_manager (registered when the plugin runtime is compiled in — #1738)
-        // = 22.
         // + goal (#1761, the goal axis — registered whatever the store is, so the
         //   round prompt never names a tool the turn was not offered)
-        // = 22.
+        // = 23.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -68,9 +66,7 @@ public class RegistrationCompositionTests
             "task", "webfetch", "session_read", "session_steer",
             "patch", "notebook", "ripgrep", "tree", "lsp",
             "mcp", "read_mcp_resource", "mcp_prompt",
-            "harbor_inspect",
-            "plugin_manager",
-            "harbor_inspect", "goal",
+            "harbor_inspect", "plugin_manager", "goal",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)

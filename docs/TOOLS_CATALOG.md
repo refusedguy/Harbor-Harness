@@ -51,29 +51,23 @@
 
 ## 1. Inventory
 
-Harbor ships **22 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **23 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 22 tools
+> (the CLI default — the enum name predates the tool count) registers all 23 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer` + `harbor_inspect` + `plugin_manager`); `Standard10` (name
-> likewise predates the count — 13 members today) omits the eight heavier ones
+> `session_steer` + `harbor_inspect` + `plugin_manager` + `goal`); `Standard10` (name
+> likewise predates the count — 14 members today) omits the eight heavier ones
 > (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`,
 > `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 19. `plugin_manager` requires the plugin runtime to be compiled in
-> (`HarborWithPlugins=true`, the default).
-> `session_steer` + `harbor_inspect` + `goal`); `Standard10` (name likewise predates the
-> count — 14 members today) omits the eight heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
-> The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
-> `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 20. `goal` registers either way — it is the one tool whose store
-> dependency is optional, and it says so when it is called.
+> catalog registers 21. `plugin_manager` requires the plugin runtime to be compiled in
+> (`HarborWithPlugins=true`, the default). `goal` registers either way — it is the one
+> tool whose store dependency is optional, and it says so when it is called.
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -99,7 +93,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
 | 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
 | 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
-| 22 | `goal` | Sequential | Allow | Report the goal as complete, or as blocked with a reason |
+| 23 | `goal` | Sequential | Allow | Report the goal as complete, or as blocked with a reason |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
