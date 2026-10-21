@@ -2795,12 +2795,36 @@ jobs:
           # not silently depend on that file: Directory.Build.props sets
           # SelfContained=false repo-wide and NETSDK1102 is the first thing a
           # reshaped AOT block would hit.
+          #
+          # `-p:EnableSingleFileAnalyzer=true` is the SWITCH THAT KEEPS THE
+          # ILLink ANALYZER IN THIS PUBLISH (#2109). The repository-root
+          # Directory.Build.props used to set PublishSingleFile=true, which
+          # made the SDK pull the ILLink pack into every project of the tree
+          # and put the SDK's own AOT/trim analyzer into all 113
+          # compilations of the ordinary build — 212.2 analyzer-seconds, 32 %
+          # of the build's analyzer time, for three IL3000 warnings that are
+          # all under tests/ and cannot fail a build. The property moved to
+          # apps/Harbor.App.Cli (the app that ships single-file), so the
+          # LIBRARIES no longer carry the analyzer in an ordinary build.
+          #
+          # THIS JOB IS WHERE THAT COVERAGE WENT. The global property reaches
+          # every project of the publish graph, so the ILLink analyzer runs
+          # over the whole product tree here — which is what makes the three
+          # `#pragma warning disable IL3000` in
+          # src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs
+          # load-bearing, and what makes a NEW Assembly.Location in the
+          # product tree a red publish instead of a silent one.
+          #
+          # EnableSingleFileAnalyzer is the switch, NOT PublishSingleFile:
+          # the first turns the ANALYZER on, the second turns the BUNDLER on,
+          # and an AOT publish must not ask for the bundler.
           # The log is the gate's evidence, so it is captured in full rather
           # than relying on the step's own console scrollback.
           dotnet publish apps/Harbor.App.Cli \
             -c Release -r "$RID" \
             --self-contained true \
             -p:HarborWithAot=true \
+            -p:EnableSingleFileAnalyzer=true \
             -p:ContinuousIntegrationBuild=true \
             -o publish/aot 2>&1 | tee publish/aot-publish.log
           status=${PIPESTATUS[0]}

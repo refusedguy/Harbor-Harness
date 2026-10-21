@@ -138,6 +138,32 @@
     <DefineConstants Condition="'$(HarborWithPlugins)' != 'true' AND '$(HarborWithSpectreTui)' != 'true' AND '$(HarborWithAllProviders)' != 'true' AND '$(HarborWithAllTools)' != 'true'">$(DefineConstants);HARBOR_MINIMAL</DefineConstants>
 
     <!--
+      PublishSingleFile — this app is the one that ships single-file, so
+      this is where the property belongs (#2109).
+
+      It used to be `true` in the repository-root Directory.Build.props,
+      which is the same value for every project of the tree. The SDK
+      infers `EnableSingleFileAnalyzer` from it, and that inference is one
+      of the six ways the SDK decides the ILLink PACK is required
+      (`_RequiresILLinkPack`); the pack's `analyzers/` folder reaches
+      every compilation that references it. So a repository-wide `true`
+      put the SDK's own AOT/trim analyzer into all 113 compilations of
+      the build, for 212.2 analyzer-seconds — 32 % of every analyzer-
+      second in the tree — and for three IL3000 warnings that are all
+      under tests/ and cannot fail a build.
+
+      Here it does what it is for: the single-file analyzer runs over the
+      CLI's own compilation, so an `Assembly.Location` in the app is still
+      a build error here. The rest of the coverage moved to the
+      `aot-publish` job, which publishes this app with the analyzer ON.
+      See docs/ANALYZERS.md §The ILLink analyzer.
+
+      The two CI publish recipes pass `-p:PublishSingleFile=true` on the
+      command line as well, so what CI publishes did not change.
+    -->
+    <PublishSingleFile>true</PublishSingleFile>
+
+    <!--
       NativeAOT switch. TWO ways to turn it on and they are NOT equivalent (#747):
 
         1. HARBOR_MINIMAL=true dotnet publish -c Release -r linux-x64
