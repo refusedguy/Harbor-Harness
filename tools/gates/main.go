@@ -38,20 +38,33 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"sort"
-	"strings"
-
+	"harbor.local/gates/aggregate-analyzer-cost"
+	"harbor.local/gates/aggregate-build-vcpu"
+	"harbor.local/gates/check-abstractions-contract"
+	"harbor.local/gates/check-analyzer-scope"
 	archanchors "harbor.local/gates/check-arch-anchors"
 	archsuiteonce "harbor.local/gates/check-arch-suite-once"
 	docfacts "harbor.local/gates/check-doc-facts"
 	mdlinks "harbor.local/gates/check-md-links"
+	"harbor.local/gates/check-no-test-sdk"
+	"harbor.local/gates/check-public-api-resign"
+	"harbor.local/gates/check-reference-trimmer"
 	resultchains "harbor.local/gates/check-result-chains"
 	stringswitch "harbor.local/gates/check-string-switch"
+	"harbor.local/gates/check-xml-doc-coverage"
 	"harbor.local/gates/gen-seam-graph"
 	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
 	mdlint "harbor.local/gates/md-lint"
+	"harbor.local/gates/measure-build-cpu"
+	"harbor.local/gates/measure-project-graph"
+	"harbor.local/gates/msbuild-evaluation-cost"
+	"harbor.local/gates/test-census"
+	"harbor.local/gates/test-measurements"
+	"harbor.local/gates/test-skips"
+	"os"
+	"sort"
+	"strings"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -68,6 +81,86 @@ type registered struct {
 
 var registry = []registered{
 	{
+		name:    "check-abstractions-contract",
+		summary: "every dependency the five guarded src/ projects declare is load-bearing",
+		run:     checkabstractionscontract.Run,
+	},
+	{
+		name:    "check-analyzer-scope",
+		summary: "where each analyzer package is allowed to run",
+		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
+		name:    "check-no-test-sdk",
+		summary: "no project file declares the VSTest host that stops TUnit's discovery",
+		run:     checknotestsdk.Run,
+	},
+	{
+		name:    "check-xml-doc-coverage",
+		summary: "every public member of the frozen contract assembly carries an XML doc",
+		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "check-public-api-resign",
+		summary: "a change to the frozen surface is re-signed in the same commit",
+		run:     checkpublicapiresign.Run,
+	},
+	{
+		name:    "check-reference-trimmer",
+		summary: "does any project in the tree reference a package the compiler never uses",
+		run:     checkreferencetrimmer.Run,
+	},
+	{
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
+	},
+	{
+		name:    "aggregate-build-vcpu",
+		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
+		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "aggregate-analyzer-cost",
+		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
+		run:     aggregateanalyzercost.Run,
+	},
+	{
+		name:    "measure-build-cpu",
+		summary: "what a build command costs: the wall time and the CPU utilisation",
+		run:     measurebuildcpu.Run,
+	},
+	{
+		name:    "measure-project-graph",
+		summary: "the shape of the project dependency graph",
+		run:     measureprojectgraph.Run,
+	},
+	{
+		name:    "msbuild-evaluation-cost",
+		summary: "what a Release compile spends on MSBuild project evaluation",
+		run:     msbuildevaluationcost.Run,
+	},
+	{
+		name:    "test-census",
+		summary: "the per-test and per-project wall census of a CI run",
+		run:     testcensus.Run,
+	},
+	{
+		name:    "test-measurements",
+		summary: "the per-test measurements a CI run printed",
+		run:     testmeasurements.Run,
+	},
+	{
+		name:    "test-skips",
+		summary: "the tests a run skipped, and the reason each declared",
+		run:     testskips.Run,
+	},
+	{
 		name:    "check-arch-anchors",
 		summary: "may an architecture rule anchor on a line number",
 		run:     archanchors.Run,
@@ -81,11 +174,6 @@ var registry = []registered{
 		name:    "check-md-links",
 		summary: "every internal link, anchor and file:line reference resolves",
 		run:     mdlinks.Run,
-	},
-	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
 	},
 	{
 		name:    "guard-triage",
@@ -106,11 +194,6 @@ var registry = []registered{
 		name:    "check-result-chains",
 		summary: "the chain candidates among the if (x.IsFailure) guard sites",
 		run:     resultchains.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
 	},
 }
 

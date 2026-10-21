@@ -16,7 +16,7 @@ occurrences pre-dedupe, plus a 10-entry non-UI `.resx` precedent
 
 Constraints from the repo:
 
-- `Harbor.Abstractions` is frozen by `tools/check-abstractions-contract.py` —
+- `Harbor.Abstractions` is frozen by the compiled `check-abstractions-contract` gate —
   UI vocabulary must not grow there.
 - `docs/ARCHITECTURE_LAYERS.md` §2: the Application layer must not know UI
   vocabulary; Presentation renderers reach Domain.
