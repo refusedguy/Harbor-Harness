@@ -66,7 +66,7 @@ public class SessionLogTierTests
             "msg-assistant",
             sessionId,
             DateTimeOffset.UtcNow,
-            [new TextPart($"using {OpaqueKey} now"), new ToolCallPart.Create("call-1", "bash", args.RootElement)],
+            [new TextPart($"using {OpaqueKey} now"), ToolCallPart.Create("call-1", "bash", args.RootElement)],
             StopReason.ToolUse,
             new Usage(10, 5),
             "claude-opus-4");
