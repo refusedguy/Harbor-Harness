@@ -207,7 +207,7 @@ jobs:
               # file, so an edit to the workflow must run it — and an edit to
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
-              - 'tools/check-arch-suite-once.py'
+              - 'tools/gates/check-arch-suite-once/**'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -840,7 +840,7 @@ jobs:
       # `coverage` job back into this file, and the lane paid the second
       # execution for a report-only number until #1783 took it out again.
       #
-      # The count is not a convention: tools/check-arch-suite-once.py reads
+      # The count is not a convention: the check-arch-suite-once gate reads
       # this file and fails the build when the PR lane runs the suite more
       # than once, or not at all, or when this variable stops switching the
       # gate off for pull_request events.
@@ -1391,9 +1391,9 @@ jobs:
       # here has one: a checker edited until it matches nothing is
       # indistinguishable from a checker that found nothing.
       - name: The architecture-once gate still fails on a planted duplicate
-        run: python3 tools/check-arch-suite-once.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --self-test
       - name: The architecture suite runs once on the pull-request lane (#1920)
-        run: python3 tools/check-arch-suite-once.py --min-shards 4
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
 
       # The evaluation-cost instrument's own failure path (issue #1919).
       # Same argument as the aot gate's self-test below and docs.yml's

@@ -143,6 +143,28 @@ func ReadLines(path string) ([]string, error) {
 	return lines, nil
 }
 
+// ReadText reads a file as TEXT, the way the python originals read it with
+// `open(path, encoding="utf-8", errors="replace")`.
+//
+// Three things happen that ReadLines does not do, and the gates that read
+// documents rather than source code depend on all three:
+//
+//   - invalid UTF-8 becomes U+FFFD instead of an error;
+//   - CRLF and a lone CR become LF, because python's text mode translates
+//     them (universal newlines) and the line numbers a gate reports are
+//     counted on the translated text;
+//   - the file is read as one string, so a caller can match across lines.
+func ReadText(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	text := strings.ToValidUTF8(string(data), "�")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return text, nil
+}
+
 // ScanLines calls fn for every line of a file, with the line number.
 //
 // The line number is 1-based, the way a file:line citation counts.

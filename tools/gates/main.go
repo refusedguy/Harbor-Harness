@@ -43,6 +43,7 @@ import (
 	"strings"
 
 	archanchors "harbor.local/gates/check-arch-anchors"
+	archsuiteonce "harbor.local/gates/check-arch-suite-once"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -65,6 +66,11 @@ var registry = []registered{
 		name:    "check-arch-anchors",
 		summary: "may an architecture rule anchor on a line number",
 		run:     archanchors.Run,
+	},
+	{
+		name:    "check-arch-suite-once",
+		summary: "the architecture suite runs exactly once on the pull-request lane",
+		run:     archsuiteonce.Run,
 	},
 	{
 		name:    "check-doc-facts",
