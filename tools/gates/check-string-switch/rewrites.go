@@ -1,42 +1,34 @@
-"""The reviewed string-switch rewrites (#1575).
+package stringswitch
 
-This file is DATA for tools/check-string-switch.py --apply. Each rewrite is
-a list of (old, new) text pairs for one file: the old text must occur
-EXACTLY once in the file, and the new text replaces it. A rewrite that no
-longer matches the tree is a hard error, not a silent no-op, so a tree that
-moved under the rewrite says so instead of half-applying.
+// rewrites.go -- the REVIEWED rewrites the `--apply` mode replays.
+//
+// This is the data of tools/string-switch-rewrites.py, ported as it
+// stands: the same four rewrites, the same pairs, byte for byte. The
+// python original kept the C# in a readable python module instead of
+// inside a string literal, and the C# is still readable here -- it is
+// the same text, in a Go raw string literal.
+//
+// A rewrite is a list of (old, new) text pairs for one file: the old
+// text must occur EXACTLY once in the file, and the new text replaces
+// it. A rewrite that no longer matches the tree is a hard error, not
+// a silent no-op.
 
-The rewrites were written BY HAND after reading every site, which is the
-point of the issue's instruction. The tool's job is to make them
-re-runnable and to prove what they removed: --apply reports the census
-before and after, and a rewrite that does not remove the number of
-string-dispatched switches it claims fails.
+// rewrite is one reviewed rewrite.
+type rewrite struct {
+	path          string
+	note          string
+	expectRemoved int
+	pairs         [][2]string
+}
 
-The pairs are the diff hunks, bottom first, so the context lines around
-a hunk are the anchor: each old text is a whole run of source lines,
-not a fragment that could match somewhere else.
-"""
-
-
-def _t(text):
-    """A block of C# as a Python string, without the layout newlines."""
-    if text.startswith("\n"):
-        text = text[1:]
-    if text.endswith("\n"):
-        text = text[:-1]
-    return text
-
-
-REWRITES = [
-    {
-        "path": "src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs",
-        "note": "KeySpec: the modifier and named-key vocabularies become two tables",
-        "expect_removed": 2,
-        "pairs": [
-            (
-                _t(
-r"""
-            return true;
+// rewrites is the reviewed rewrite set.
+var rewrites = []rewrite{
+	{
+		path:          `src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs`,
+		note:          `KeySpec: the modifier and named-key vocabularies become two tables`,
+		expectRemoved: 2,
+		pairs: [][2]string{
+			{`            return true;
         }
 
         switch (key.ToLowerInvariant())
@@ -120,12 +112,7 @@ r"""
         }
     }
 
-    /// <summary>Canonical display for a gesture ("ctrl+j", "space", "enter").</summary>
-"""
-                ),
-                _t(
-r"""
-            return true;
+    /// <summary>Canonical display for a gesture ("ctrl+j", "space", "enter").</summary>`, `            return true;
         }
 
         string named = key.ToLowerInvariant();
@@ -144,14 +131,8 @@ r"""
         return false;
     }
 
-    /// <summary>Canonical display for a gesture ("ctrl+j", "space", "enter").</summary>
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-        var mods = KeyModifiers.None;
+    /// <summary>Canonical display for a gesture ("ctrl+j", "space", "enter").</summary>`},
+			{`        var mods = KeyModifiers.None;
         for (int i = 0; i < parts.Length - 1; i++)
         {
             switch (parts[i].ToLowerInvariant())
@@ -179,12 +160,7 @@ r"""
             }
         }
 
-        string key = parts[^1];
-"""
-                ),
-                _t(
-r"""
-        var mods = KeyModifiers.None;
+        string key = parts[^1];`, `        var mods = KeyModifiers.None;
         for (int i = 0; i < parts.Length - 1; i++)
         {
             if (!ModifierBits.TryGetValue(parts[i].ToLowerInvariant(), out KeyModifiers bit))
@@ -195,24 +171,13 @@ r"""
             mods |= bit;
         }
 
-        string key = parts[^1];
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-/// </summary>
+        string key = parts[^1];`},
+			{`/// </summary>
 public static class KeySpec
 {
     /// <summary>Parses <paramref name="spec"/> into <paramref name="gesture"/>.</summary>
     /// <returns>False when the spec is empty, has no key, or names an unknown key.</returns>
-    public static bool TryParse(string? spec, out KeyGesture gesture)
-"""
-                ),
-                _t(
-r"""
-/// </summary>
+    public static bool TryParse(string? spec, out KeyGesture gesture)`, `/// </summary>
 public static class KeySpec
 {
     /// <summary>
@@ -289,44 +254,27 @@ public static class KeySpec
 
     /// <summary>Parses <paramref name="spec"/> into <paramref name="gesture"/>.</summary>
     /// <returns>False when the spec is empty, has no key, or names an unknown key.</returns>
-    public static bool TryParse(string? spec, out KeyGesture gesture)
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-// Same leaf rule as KeyBindings.cs: BCL-only, AOT-compatible, zero Harbor
+    public static bool TryParse(string? spec, out KeyGesture gesture)`},
+			{`// Same leaf rule as KeyBindings.cs: BCL-only, AOT-compatible, zero Harbor
 // references, render-thread owned, chat untouched.
 
 using System.Text;
 
-namespace Harbor.Tui.CellForge.Input;
-"""
-                ),
-                _t(
-r"""
-// Same leaf rule as KeyBindings.cs: BCL-only, AOT-compatible, zero Harbor
+namespace Harbor.Tui.CellForge.Input;`, `// Same leaf rule as KeyBindings.cs: BCL-only, AOT-compatible, zero Harbor
 // references, render-thread owned, chat untouched.
 
 using System.Collections.Frozen;
 using System.Text;
 
-namespace Harbor.Tui.CellForge.Input;
-"""
-                ),
-            ),
-        ],
-    },
-    {
-        "path": "src/Harbor.Tui.CellForge.Engine/Capabilities/InlineImageProbe.cs",
-        "note": "the HARBOR_INLINE_IMAGE override vocabulary becomes one table",
-        "expect_removed": 1,
-        "pairs": [
-            (
-                _t(
-r"""
-{
+namespace Harbor.Tui.CellForge.Input;`},
+		},
+	},
+	{
+		path:          `src/Harbor.Tui.CellForge.Engine/Capabilities/InlineImageProbe.cs`,
+		note:          `the HARBOR_INLINE_IMAGE override vocabulary becomes one table`,
+		expectRemoved: 1,
+		pairs: [][2]string{
+			{`{
     private const string OverrideVar = "HARBOR_INLINE_IMAGE";
 
     /// <summary>Detects the inline-image protocol for the current session.</summary>
@@ -340,12 +288,7 @@ r"""
             case "kitty": return InlineImageKind.KittyApc;
         }
 
-        if (IsInsideMultiplexer(lookup))
-"""
-                ),
-                _t(
-r"""
-{
+        if (IsInsideMultiplexer(lookup))`, `{
     private const string OverrideVar = "HARBOR_INLINE_IMAGE";
 
     /// <summary>
@@ -374,39 +317,22 @@ r"""
             return overridden;
         }
 
-        if (IsInsideMultiplexer(lookup))
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-namespace Harbor.Tui.CellForge.Capabilities;
+        if (IsInsideMultiplexer(lookup))`},
+			{`namespace Harbor.Tui.CellForge.Capabilities;
 
-/// <summary>Inline-image protocols the runtime can speak.</summary>
-"""
-                ),
-                _t(
-r"""
-using System.Collections.Frozen;
+/// <summary>Inline-image protocols the runtime can speak.</summary>`, `using System.Collections.Frozen;
 
 namespace Harbor.Tui.CellForge.Capabilities;
 
-/// <summary>Inline-image protocols the runtime can speak.</summary>
-"""
-                ),
-            ),
-        ],
-    },
-    {
-        "path": "src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs",
-        "note": "the todo marker vocabulary becomes one table, and the two parallel switches become one lookup",
-        "expect_removed": 2,
-        "pairs": [
-            (
-                _t(
-r"""
-            int contentBudget = Math.Max(1, width - 6);
+/// <summary>Inline-image protocols the runtime can speak.</summary>`},
+		},
+	},
+	{
+		path:          `src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs`,
+		note:          `the todo marker vocabulary becomes one table, and the two parallel switches become one lookup`,
+		expectRemoved: 2,
+		pairs: [][2]string{
+			{`            int contentBudget = Math.Max(1, width - 6);
             for (int i = 0; i < todos.Count; i++)
             {
                 string icon = todos[i].Marker switch
@@ -430,12 +356,7 @@ r"""
                         break;
                 }
 
-                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");
-"""
-                ),
-                _t(
-r"""
-            int contentBudget = Math.Max(1, width - 6);
+                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");`, `            int contentBudget = Math.Max(1, width - 6);
             for (int i = 0; i < todos.Count; i++)
             {
                 // A marker the table does not know renders the "?" fallback and
@@ -458,24 +379,13 @@ r"""
                     }
                 }
 
-                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-/// </summary>
+                rows.Add($"  {icon}  {PanelText.Truncate(todos[i].Content, contentBudget)}");`},
+			{`/// </summary>
 public static class PanelRows
 {
     /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
     public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
-    {
-"""
-                ),
-                _t(
-r"""
-/// </summary>
+    {`, `/// </summary>
 public static class PanelRows
 {
     /// <summary>
@@ -519,38 +429,21 @@ public static class PanelRows
 
     /// <summary>Todo-list rows: header, Spectre-parity icons, done/active/pending summary.</summary>
     public static List<string> TodoRows(IReadOnlyList<TodoItem> todos, int width)
-    {
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
+    {`},
+			{`using System.Globalization;
+using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Models.Identifiers;`, `using System.Collections.Frozen;
 using System.Globalization;
 using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models.Identifiers;
-"""
-                ),
-                _t(
-r"""
-using System.Collections.Frozen;
-using System.Globalization;
-using Harbor.Abstractions.Extensions;
-using Harbor.Abstractions.Models.Identifiers;
-"""
-                ),
-            ),
-        ],
-    },
-    {
-        "path": "src/Harbor.Hosting/Modules/TelemetryModule.cs",
-        "note": "the HARBOR_TELEMETRY_EXPORT vocabulary becomes one table",
-        "expect_removed": 1,
-        "pairs": [
-            (
-                _t(
-r"""
-        string? rawTarget = read(HarborEnv.TelemetryExport);
+using Harbor.Abstractions.Models.Identifiers;`},
+		},
+	},
+	{
+		path:          `src/Harbor.Hosting/Modules/TelemetryModule.cs`,
+		note:          `the HARBOR_TELEMETRY_EXPORT vocabulary becomes one table`,
+		expectRemoved: 1,
+		pairs: [][2]string{
+			{`        string? rawTarget = read(HarborEnv.TelemetryExport);
         if (!string.IsNullOrWhiteSpace(rawTarget))
         {
             switch (rawTarget.Trim().ToLowerInvariant())
@@ -571,12 +464,7 @@ r"""
             }
         }
 
-        if (target == TelemetryExportTarget.None)
-"""
-                ),
-                _t(
-r"""
-        string? rawTarget = read(HarborEnv.TelemetryExport);
+        if (target == TelemetryExportTarget.None)`, `        string? rawTarget = read(HarborEnv.TelemetryExport);
         if (!string.IsNullOrWhiteSpace(rawTarget))
         {
             if (!ExportTargets.TryGetValue(rawTarget.Trim().ToLowerInvariant(), out TelemetryExportTarget resolved))
@@ -588,24 +476,13 @@ r"""
             target = resolved;
         }
 
-        if (target == TelemetryExportTarget.None)
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
-/// </summary>
+        if (target == TelemetryExportTarget.None)`},
+			{`/// </summary>
 internal static class TelemetryModule
 {
     /// <summary>
     ///     Register the tracer/metrics singletons plus the event-bus queue-age
-    ///     reporter (#47/S2).
-"""
-                ),
-                _t(
-r"""
-/// </summary>
+    ///     reporter (#47/S2).`, `/// </summary>
 internal static class TelemetryModule
 {
     /// <summary>
@@ -628,27 +505,13 @@ internal static class TelemetryModule
 
     /// <summary>
     ///     Register the tracer/metrics singletons plus the event-bus queue-age
-    ///     reporter (#47/S2).
-"""
-                ),
-            ),
-            (
-                _t(
-r"""
+    ///     reporter (#47/S2).`},
+			{`using System.Globalization;
+using Harbor.Abstractions.Env;
+using Harbor.Abstractions.Events;`, `using System.Collections.Frozen;
 using System.Globalization;
 using Harbor.Abstractions.Env;
-using Harbor.Abstractions.Events;
-"""
-                ),
-                _t(
-r"""
-using System.Collections.Frozen;
-using System.Globalization;
-using Harbor.Abstractions.Env;
-using Harbor.Abstractions.Events;
-"""
-                ),
-            ),
-        ],
-    },
-]
+using Harbor.Abstractions.Events;`},
+		},
+	},
+}

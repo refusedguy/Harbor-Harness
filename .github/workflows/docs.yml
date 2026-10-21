@@ -139,7 +139,6 @@ on:
       # the gate or the exceptions must run it, and so must a PR that edits
       # the tree it measures. The rewrites file is the reviewed record of what
       # the gate's own `--apply` mode replays, so it is a trigger too.
-      - 'tools/check-string-switch.py'
       - 'tools/string-switch-exceptions.txt'
       - 'tools/string-switch-rewrites.py'
       # #1884. The two reporters (the measurement table and the wall census)
@@ -264,7 +263,6 @@ on:
       # #1575. Same trigger as above: the string-switch gate reads `src/` and
       # `apps/` and compares the result against its committed exceptions
       # file, so a PR that edits the gate or the exceptions must run it.
-      - 'tools/check-string-switch.py'
       - 'tools/string-switch-exceptions.txt'
       - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
@@ -520,7 +518,7 @@ jobs:
       # found nothing, and the load-bearing fixtures are the planted string
       # switch, the unlisted switch, the stale row and the floor.
       - name: String-switch gate fails on an unlisted string switch
-        run: python3 tools/check-string-switch.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-string-switch --self-test
       # #1731. The seam-graph gate is the only one that GENERATES a document
       # and then compares it with the committed one. Its failure path is the
       # whole point: a generator whose output drifts from the tree is a
@@ -1072,7 +1070,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that every string-dispatched switch is listed
-        run: python3 tools/check-string-switch.py --check --min-labels 280
+        run: tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually

@@ -47,6 +47,7 @@ import (
 	docfacts "harbor.local/gates/check-doc-facts"
 	mdlinks "harbor.local/gates/check-md-links"
 	resultchains "harbor.local/gates/check-result-chains"
+	stringswitch "harbor.local/gates/check-string-switch"
 	"harbor.local/gates/gen-seam-graph"
 	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
@@ -95,6 +96,11 @@ var registry = []registered{
 		name:    "md-lint",
 		summary: "the tracked markdown obeys the invariants the repository claims",
 		run:     mdlint.Run,
+	},
+	{
+		name:    "check-string-switch",
+		summary: "does a switch compare a string literal, and is every ladder listed",
+		run:     stringswitch.Run,
 	},
 	{
 		name:    "check-result-chains",

@@ -482,16 +482,16 @@ shrink.
 
 ## String-switch gate, issue 1575
 
-`tools/check-string-switch.py` answers one question about every `switch` in
+The `check-string-switch` gate answers one question about every `switch` in
 `src/` and `apps/`: **does it compare a string literal, and is every ladder
 that is still there named in the exceptions file with a reason?**
 
 ```bash
-./tools/check-string-switch.py --report                    # the census, exit 0
-./tools/check-string-switch.py --propose PATH:LINE         # the table a switch would become
-./tools/check-string-switch.py --apply                     # replay the reviewed rewrites
-./tools/check-string-switch.py --self-test                 # prove the gate still fails on a planted switch
-./tools/check-string-switch.py --check --min-labels 280    # the gate itself, exit 1 on a violation
+./tools/bin/harbor-gates-linux-x64 check-string-switch --report                    # the census, exit 0
+./tools/bin/harbor-gates-linux-x64 check-string-switch --propose PATH:LINE         # the table a switch would become
+./tools/bin/harbor-gates-linux-x64 check-string-switch --apply                     # replay the reviewed rewrites
+./tools/bin/harbor-gates-linux-x64 check-string-switch --self-test                 # prove the gate still fails on a planted switch
+./tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280    # the gate itself, exit 1 on a violation
 ```
 
 **Why it exists.** Issue #1575 filed the shape as boilerplate: 152 `case "…"`
@@ -526,7 +526,7 @@ the same defect.
 **`--propose` names the table a switch would become**, when every arm of it
 reduces to one value expression, and says why it cannot when it does not (an
 arm with a `when` guard, an arm that assigns two locals). `--apply` replays
-the reviewed rewrites in `tools/string-switch-rewrites.py` and reports the
+the reviewed rewrites in `tools/gates/check-string-switch/rewrites.go` and reports the
 census before and after, so the rewrite is reproducible and its effect is
 measured rather than asserted.
 
