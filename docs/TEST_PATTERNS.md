@@ -8,6 +8,9 @@
 > wrong — see [CONTRIBUTING.md §Why not `dotnet test`](../CONTRIBUTING.md#why-not-dotnet-test).)
 > **Shared helpers** live in `tests/Harbor.TestKit/` and are referenced by test projects
 > via `<ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj" />`.
+> The helpers that need no product assembly beyond the two contract assemblies
+> live in `tests/Harbor.TestKit.Support/` instead — the same `Harbor.TestKit`
+> namespace, so a `using Harbor.TestKit;` finds them either way.
 
 ---
 
@@ -90,6 +93,9 @@ public class MyToolTests
 `ToolContext` has ONE factory: `Harbor.TestKit.TestToolContext.Create()`. Do
 not copy the 8-argument literal into a test file — a copy is a hand-written
 contract that drifts from the record the moment the record changes (#1775).
+The factory lives in `tests/Harbor.TestKit.Support/`, the part whose closure
+is the two contract assemblies, so a test project that does not reference the
+whole kit still reaches it without gaining a product assembly.
 
 ```csharp
 using Harbor.TestKit;

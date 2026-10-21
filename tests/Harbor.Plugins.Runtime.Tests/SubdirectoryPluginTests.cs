@@ -5,6 +5,7 @@ using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.Plugins.Storage;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests;
@@ -199,13 +200,9 @@ public sealed class SubdirectoryPluginTests
         return result;
     }
 
-    private static ToolContext MakeContext() => new(
-        "sess-subdir",
-        Guid.NewGuid().ToString("N"),
-        Guid.NewGuid().ToString("N"),
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
+    private static ToolContext MakeContext() => TestToolContext.Create(
+        sessionId: "sess-subdir",
+        messageId: Guid.NewGuid().ToString("N"),
+        callId: Guid.NewGuid().ToString("N"),
+        ask: (_, _) => Task.FromResult(TestToolContext.DenyWithoutPersist()));
 }

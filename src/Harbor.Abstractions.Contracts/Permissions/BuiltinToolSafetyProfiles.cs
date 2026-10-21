@@ -101,6 +101,22 @@ public static class BuiltinToolSafetyProfiles
         // so a role here would name a capability the recipe cannot describe.
         new("session_broadcast", ToolSafetyProfile.Opaque),
         new("session_inbox", ToolSafetyProfile.Opaque),
+
+        // #1738: the agent-facing plugin management tool. Opaque, and the
+        // reason is in the tool's own documentation: its arguments are an
+        // action name, a plugin FILE NAME and — for an install — the path of
+        // a reviewed source that is READ. Permission rules match it against
+        // "*", so no glob pattern can match a path and none can be tricked
+        // into authorising one; the traversal the path guard protects
+        // against is closed by the inventory, which resolves a plugin only by
+        // its plain file name inside the two plugin roots and never writes
+        // outside them.
+        //
+        // It carries NO category on purpose, like the two session-IPC tools
+        // above: a category would make a class rule ("write" * Ask) fire
+        // against it and change the verdict for a tool whose own gate already
+        // asks about every change.
+        new("plugin_manager", ToolSafetyProfile.Opaque),
     ];
 
     /// <summary>

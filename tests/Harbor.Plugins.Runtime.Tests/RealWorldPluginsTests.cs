@@ -1,7 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
 using Harbor.TestKit;
@@ -167,13 +166,9 @@ public sealed class RealWorldPluginsTests
     ///     Build a <see cref="ToolContext" /> mirroring production: the agent loop passes
     ///     no service provider, so the tools under test must never need one.
     /// </summary>
-    private static ToolContext MakeContext() => new(
-        "sess-rw",
-        Guid.NewGuid().ToString("N"),
-        Guid.NewGuid().ToString("N"),
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
+    private static ToolContext MakeContext() => TestToolContext.Create(
+        sessionId: "sess-rw",
+        messageId: Guid.NewGuid().ToString("N"),
+        callId: Guid.NewGuid().ToString("N"),
+        ask: (_, _) => Task.FromResult(TestToolContext.DenyWithoutPersist()));
 }
