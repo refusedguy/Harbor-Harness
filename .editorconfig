@@ -457,17 +457,88 @@ dotnet_diagnostic.AsyncFixer03.severity = suggestion # Not used Async method
 dotnet_diagnostic.AsyncFixer04.severity = suggestion # Fire-and-forget async void
 dotnet_diagnostic.AsyncFixer05.severity = suggestion # Not used CancellationToken
 
-# --- Reflection ---
-# ReflectionAnalyzers 0.3.1 ships 46 rules, REFL001-REFL046. The two
-# lines that used to sit here configured REL0001 and REL0002 — ids that
-# do not exist in the package (measured against the shipped
-# analyzers/dotnet/cs/ReflectionAnalyzers.dll), so they configured
-# nothing at all. The real rules run at their default severity.
+# --- Reflection (ReflectionAnalyzers 0.3.1) ---
+# 46 rules, REFL001-REFL046. The two lines that used to sit here configured
+# REL0001 and REL0002 — ids that do not exist in the package (read out of
+# analyzers/dotnet/cs/ReflectionAnalyzers.dll in the 0.3.1 nupkg), so they
+# configured nothing at all. All 46 real rules ship enabled by default: 45 as
+# `warning`, REFL007 as `hidden`. Until this block they ran at those
+# defaults, unconfigured and unrecorded.
 #
-# Measured on this tree (CI build log of a green run, #1905): nine rules
-# fire, 216 instances, and every one of them is in tests/ — src/ and
-# apps/ are silent, because the zero-warning bar would have turned a hit
-# there into a build error.
+# WHAT THE PACKAGE IS: 46 member-by-member rules for System.Reflection —
+# binding flags, overloads, `nameof`, generic type arguments, `InvokeMember`
+# targets. It is NOT a dynamic-code rule: the shipped analyzer carries no rule
+# for `Assembly.Load`, `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder`
+# or `DynamicMethod` (the DLL's user-string heap holds no such string; the one
+# `Reflection.Emit` name in it, `System.Reflection.Emit.AssemblyBuilder`, is
+# an entry of REFL037's type-existence table). The dynamic-code ban in src/ +
+# apps/ is the compiler's: RS0030 over BannedSymbols.DynamicCode.txt.
+#
+# TWO SEVERITIES, AND THE LINE BETWEEN THEM:
+#   * `warning` — the rule reports a reflective call that cannot work as
+#     written: the member does not exist, the types do not match, the
+#     delegate has the wrong signature. In src/ and apps/ `warning` is
+#     promoted to an error by TreatWarningsAsErrors=true, which is where a
+#     broken reflective call is a real defect. Measured on a green CI build of
+#     dev (86b52adc, #1905): 41 findings, every one of them under tests/,
+#     none under src/ or apps/.
+#   * `suggestion` — the rule asks for a different spelling, not a different
+#     behaviour (use `nameof`, name the binding flags, use `typeof`). Visible
+#     in the IDE, never promoted, and 33 of the 41 findings.
+#
+# The four `warning` rules that DO have findings in tests/ are demoted there
+# by the path-scoped block at the end of this file, one row each with its own
+# reason; they are not defects, and a defect deserves a `warning`.
+#
+# --- Reflection: correctness (warning) ---
+dotnet_diagnostic.REFL001.severity = warning # the cast target is not the member's return type, so the cast throws at run time
+dotnet_diagnostic.REFL002.severity = warning # the invoked method returns void, so the captured result is always null
+dotnet_diagnostic.REFL003.severity = warning # the member does not exist on a sealed, static or interface type, so the lookup can never succeed
+dotnet_diagnostic.REFL004.severity = warning # more than one member matches the filter, so the lookup is ambiguous
+dotnet_diagnostic.REFL005.severity = warning # the binding flags match no member at all, so the lookup returns null
+dotnet_diagnostic.REFL009.severity = warning # the referenced member is not known to exist, and the result is not null-checked
+dotnet_diagnostic.REFL011.severity = warning # a duplicated BindingFlag is a copy-paste slip in the flag expression
+dotnet_diagnostic.REFL013.severity = warning # the member exists but is of another kind, so the cast below it throws
+dotnet_diagnostic.REFL015.severity = warning # the member lives on the containing type, so the lookup on this type misses it
+dotnet_diagnostic.REFL017.severity = warning # nameof names a different member than the one the lookup asks for
+dotnet_diagnostic.REFL018.severity = warning # an explicitly implemented member is not found by name, so the lookup misses it
+dotnet_diagnostic.REFL019.severity = warning # no member matches the given types, so the lookup returns null
+dotnet_diagnostic.REFL020.severity = warning # more than one interface matches the name, so the lookup is ambiguous
+dotnet_diagnostic.REFL021.severity = warning # the named type does not exist, so the lookup returns null (the package ships no documentation page for this id)
+dotnet_diagnostic.REFL023.severity = warning # the type does not implement the interface, so the cast below it throws
+dotnet_diagnostic.REFL025.severity = warning # the arguments do not match the member's parameters, so the call throws
+dotnet_diagnostic.REFL026.severity = warning # the object has no parameterless constructor, so Activator.CreateInstance throws
+dotnet_diagnostic.REFL028.severity = warning # the cast target is not the member's return type, so the cast throws at run time
+dotnet_diagnostic.REFL030.severity = warning # the obj argument is not of the type the member expects, so the call throws
+dotnet_diagnostic.REFL031.severity = warning # the generic arguments do not satisfy the type parameters, so the call throws
+dotnet_diagnostic.REFL032.severity = warning # the named dependency does not exist, so the attribute's target is missing
+dotnet_diagnostic.REFL033.severity = warning # the argument type differs from the parameter type, so no member matches
+dotnet_diagnostic.REFL034.severity = warning # MakeGeneric on a type that is not a generic definition throws at run time
+dotnet_diagnostic.REFL035.severity = warning # Invoke on a generic definition throws at run time
+dotnet_diagnostic.REFL036.severity = warning # CreateInstance returns null when it cannot construct, and the result is not checked
+dotnet_diagnostic.REFL037.severity = warning # the named type does not exist, so the lookup returns null
+dotnet_diagnostic.REFL041.severity = warning # the delegate's signature does not match the target, so CreateDelegate throws
+dotnet_diagnostic.REFL042.severity = warning # the first argument must be a reference type, so the call throws
+dotnet_diagnostic.REFL043.severity = warning # the first argument's type does not match the member's, so the call throws
+dotnet_diagnostic.REFL044.severity = warning # the attribute is read with the wrong attribute type, so the check reads nothing
+dotnet_diagnostic.REFL045.severity = warning # the flags match no member, so the lookup returns null
+dotnet_diagnostic.REFL046.severity = warning # the default member does not exist, so InvokeMember throws
+
+# --- Reflection: spelling (suggestion) ---
+dotnet_diagnostic.REFL006.severity = suggestion # the binding flags are wider than they need to be; the same members match
+dotnet_diagnostic.REFL007.severity = suggestion # the flags are written in an unusual order; the same set is produced (ships hidden)
+dotnet_diagnostic.REFL008.severity = suggestion # name the binding flags explicitly; the loose overload is slower and more fragile
+dotnet_diagnostic.REFL010.severity = suggestion # the generic GetCustomAttribute<T> states the attribute type in the source
+dotnet_diagnostic.REFL012.severity = suggestion # Attribute.IsDefined() answers the same question in one call
+dotnet_diagnostic.REFL014.severity = suggestion # GetMember().AccessorMethod reads the accessor without a second lookup
+dotnet_diagnostic.REFL016.severity = suggestion # nameof keeps the member name in step with a rename
+dotnet_diagnostic.REFL022.severity = suggestion # the fully qualified name survives a using-directive change
+dotnet_diagnostic.REFL024.severity = suggestion # null says "no types" without allocating an empty array
+dotnet_diagnostic.REFL027.severity = suggestion # Type.EmptyTypes is the shared empty array
+dotnet_diagnostic.REFL029.severity = suggestion # naming the types keeps the lookup stable when an overload is added
+dotnet_diagnostic.REFL038.severity = suggestion # RunClassConstructor runs the static constructor exactly once
+dotnet_diagnostic.REFL039.severity = suggestion # typeof(T) is the type, without the instance lookup
+dotnet_diagnostic.REFL040.severity = suggestion # IsInstanceOfType answers the same question without a cast
 
 # --- vs-threading (Microsoft.VisualStudio.Threading.Analyzers 18.12.1) ---
 # The package ships 29 rules: VSTHRD001-004, VSTHRD010-013, VSTHRD100-117,
@@ -776,7 +847,7 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 dotnet_diagnostic.HARCH001.severity = warning # the tree is clean against this rule: the text rule that stays as the oracle reads the whole source text, and the analyzer's differential over the live tree agrees with it
 dotnet_diagnostic.HARCH002.severity = warning # the tree is clean against this rule: the ownership table is the only input, and no project outside the owners declares an owned root
 # ============================================================================
-# PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865)
+# PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865; #1905 adds tests/)
 # ============================================================================
 # Everything above this line is tree-wide. This block is the ONE place where a
 # diagnostic's severity is a function of (rule x path) rather than of the rule
@@ -849,8 +920,8 @@ dotnet_diagnostic.DI014.severity = suggestion
 # assumed: on dev@086ef777 (CI run 39472959027, the Release build of
 # Harbor.slnx) SonarAnalyzer.CSharp reported 476 sites in 40 rules, and every
 # one of them is under tests/. There are 0 under src/ and 0 under apps/, so
-# each rule below is worth something in a product tree and is noise in a test
-# tree. Off here, on everywhere else.
+# each Sonar rule below is worth something in a product tree and is noise in a
+# test tree. Off here, on everywhere else.
 [tests/**.cs]
 # S5443: a hardcoded "/tmp/..." literal is the fixture a hermetic test pins.
 dotnet_diagnostic.S5443.severity = none # hardcoded temp path is the test's own fixture data
@@ -864,3 +935,43 @@ dotnet_diagnostic.S5332.severity = none # http is the fixture: an .invalid host 
 dotnet_diagnostic.S3878.severity = none # explicit array for a params overload, by convention
 # S3220: the overload shape is a call-style question, not a defect.
 dotnet_diagnostic.S3220.severity = none # overload shape, not a defect
+
+
+#
+# THE tests/ BLOCK (#1905). Reflection is allowed in tests by convention
+# (docs/ARCHITECTURE_LAYERS.md §5.8), and the ReflectionAnalyzers findings
+# are all under tests/: measured on a green CI build of dev (86b52adc), 41
+# findings, 41 of them under tests/, none under src/ or apps/. The four rules
+# below are the correctness rules among them, and every one of the 8 findings
+# they account for is deliberate or unresolvable, not a defect:
+#
+#   * a test that asserts a member is ABSENT (a property without a setter, a
+#     method that must not be public, a type that must not exist) is asking
+#     the analyzer to report exactly what it reports;
+#   * a test that reads a member off an `object`-typed value, or off a plugin
+#     type that is compiled at run time, asks about a member the analyzer
+#     cannot resolve.
+#
+# They are demoted to `suggestion` HERE ONLY. Outside tests/ the same four
+# rules stay `warning`, and `warning` is promoted to an error in src/ and
+# apps/, which is where a reflective call that cannot work is a real defect.
+# The rows are demoted, not deleted: the rules still run, they are still
+# visible in the IDE, and the finding count is recorded in
+# docs/ANALYZERS.md so the debt is a number rather than a memory.
+#
+# REFL003 — 4 findings, all deliberate: two tests assert that a property has
+# NO setter (OwnerReportTests), and two read a field of a plugin type that is
+# compiled at run time and cannot be resolved by the analyzer
+# (RealWorldPluginsTests, DllRealWorldPluginsTests).
+dotnet_diagnostic.REFL003.severity = suggestion
+# REFL005 — 1 finding, deliberate: the test asserts that the lookup finds
+# nothing (FrameDiffVisibilityTests asserts the method is not public).
+dotnet_diagnostic.REFL005.severity = suggestion
+# REFL009 — 2 findings, both unresolvable: the member is read off an
+# `object`-typed value through instance.GetType(), so the analyzer resolves it
+# against `object` (StreamingCoalescerNoStoreTests, McpHttpClientFactoryTests).
+dotnet_diagnostic.REFL009.severity = suggestion
+# REFL037 — 1 finding, deliberate: the test asks an assembly for a type by
+# name precisely to prove that the type is NOT there
+# (NoMainViewModelRefsTests).
+dotnet_diagnostic.REFL037.severity = suggestion

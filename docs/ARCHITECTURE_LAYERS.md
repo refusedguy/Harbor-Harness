@@ -974,12 +974,15 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 
 Until [#626](https://github.com/refusedguy/Harbor-Harness/issues/626) this existed only as
 an emergent property of the zero-warning bar. The `ReflectionAnalyzers` (`REFL*`) diagnostics
-did not contribute to it: all 46 rules are member-by-member correctness rules (binding flags,
-overloads, `nameof`), and the shipped analyzer contains no rule for `Assembly.Load`,
+did not contribute to it: all 46 rules are about member-by-member reflection — 32 report a
+reflective call that cannot work as written, 14 ask for a different spelling (binding flags,
+overloads, `nameof`) — and the shipped analyzer contains no rule for `Assembly.Load`,
 `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder` or `DynamicMethod` — measured in
-issue #1905. The dynamic-code ban was held by `ReflectionConventionRule` and by nothing
-else. Nothing in the repo said it was a rule, so a contributor adding `Assembly.Load`
-somewhere new had no way to know it was the thing the codebase is built to avoid. Since
+issue #1905, by reading the ids, titles, severities and strings out of the shipped
+`analyzers/dotnet/cs/ReflectionAnalyzers.dll`. The dynamic-code ban was held by
+`ReflectionConventionRule` and by nothing else. Nothing in the repo said it was a rule, so a
+contributor adding `Assembly.Load` somewhere new had no way to know it was the thing the
+codebase is built to avoid. Since
 [#1844](https://github.com/refusedguy/Harbor-Harness/issues/1844) it is **the compiler's
 rule**: the ban file [`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) is
 listed in every product project's `<AdditionalFiles>` and enforced by the `RS0030`

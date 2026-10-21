@@ -470,7 +470,10 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- Reflection detection (AOT-friendliness) -->
+    <!-- Reflection correctness (member-by-member), NOT a dynamic-code rule: the
+         package ships 46 member-lookup rules (REFL001-REFL046) and none of them
+         is about Assembly.Load / AssemblyLoadContext / Reflection.Emit. The
+         dynamic-code ban is RS0030 over BannedSymbols.DynamicCode.txt, below. -->
     <PackageReference Include="ReflectionAnalyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerReflection)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
