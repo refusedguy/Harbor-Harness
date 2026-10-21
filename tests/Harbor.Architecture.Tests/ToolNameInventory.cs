@@ -24,7 +24,7 @@
 //
 // WHAT IS DELIBERATELY NOT HERE
 // -----------------------------
-// No enumeration of the 20 builtin names, and no "known tools" list. A test
+// No enumeration of the 22 builtin names, and no "known tools" list. A test
 // that needs a specific name should say so in its own failure message; the
 // vocabulary itself is read, never written.
 

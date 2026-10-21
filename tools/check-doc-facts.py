@@ -49,6 +49,30 @@ WHY THIS FILE EXISTS (issue #933)
   dated record to fake a pass — a record that quotes an old count is either
   flagged as a record or is not, and it cannot make the number agree.
 
+  AND THE BUILTIN TOOL COUNT, WHICH IS A FACT ABOUT THE TREE
+
+  The bullet above is about a gate over the COPIES of a number, and the
+  builtin tool count was the instance it quoted. It is also the one count of
+  the class that the TREE can answer on its own: every builtin is one
+  `*Tool.cs` under `src/Harbor.Tools.Builtin/Tools/`, so the tree holds the
+  number and a document can be compared with it. Inside the perimeter that
+  is prose-against-filesystem, exactly like the other four measures, and the
+  dated records that made the prose gate a trap stay outside the perimeter
+  and stay untouched.
+
+  What the population is, and why it is not the directory count: the
+  `Tools/` directory holds 20 subdirectories, and they do not map one to one
+  onto tools (`Mcp/` holds three, `Session/` holds two, `OutputLimit/` holds
+  a decorator and no tool). The `*Tool.cs` files are the tools, one file
+  each: 22 of them on this tree, which is what the two onboarding documents
+  now say. A decorator (`OutputLimitToolDecorator.cs`) and the MCP server
+  adapter (`McpToolAdapter.cs`) are not builtins and do not match.
+
+  Measured: the four documents that state the count said 21 each, and the
+  tree said 22, before #2068 merged dev's `harbor_inspect` and this
+  branch's `spill_read` into the same tree. Four hand-kept copies of one
+  number, which is the class above, and exactly what this measure is for.
+
 WHAT THIS DOES NOT DO, STATED RATHER THAN IMPLIED
 
   * It does not compare prose to prose. That is the part of #933 that is not
@@ -92,7 +116,7 @@ NON-VACUITY
 
   --min-facts N is a floor on how many repo-map counts were COMPARED, and it
   is wired into docs.yml the way the other three gates' floors are. Measured
-  today: 7 comparisons. The floor is 5, ~30% below, so a PR that legitimately
+  today: 8 comparisons. The floor is 5, ~30% below, so a PR that legitimately
   removes a count lowers it in the same diff where a reviewer can see it.
   A rule that silently stops matching drives that number to zero and the floor
   goes red — which is the whole point, and is why the floor is not optional.
@@ -200,6 +224,13 @@ MEASURES = [
             and p.count("/") == 2 and p.endswith("something-never-matches")
         )),
         r"(see below — directories are counted from the tree, not tracked files)",
+    ),
+    Measure(
+        "DOC-COUNT-DRIFT",
+        "builtin tools",
+        r"(\d+) builtin tools under Tools/",
+        _count(r"^src/Harbor\.Tools\.Builtin/Tools/[^/]+/[^/]+Tool\.cs$"),
+        r"^src/Harbor\.Tools\.Builtin/Tools/[^/]+/[^/]+Tool\.cs$",
     ),
 ]
 

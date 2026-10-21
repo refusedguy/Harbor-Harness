@@ -40,16 +40,17 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyOneBuiltinTools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyTwoBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
         // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree)
-        // + skill + lsp + 6 full-only (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
+        // + skill + lsp + harbor_inspect (the read-only runtime catalog) + 6 full-only
+        // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
         // + session_read/session_steer (registered when a session store is composed)
         // + spill_read (#1748 — the way back to a spilled tool output)
-        // = 21.
+        // = 22.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -63,6 +64,7 @@ public class RegistrationCompositionTests
             "task", "webfetch", "session_read", "session_steer",
             "patch", "notebook", "ripgrep", "tree", "lsp",
             "mcp", "read_mcp_resource", "mcp_prompt", "spill_read",
+            "harbor_inspect",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
@@ -86,11 +88,11 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        // 10 classic tools + lsp + skill + spill_read (#1748 — the spill read
-        // is not a full-only tool: a pointer without a way to read it back
-        // would be a lie).
-        await Assert.That(names.Count).IsEqualTo(13);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "spill_read" })
+        // 10 classic tools + lsp + skill + harbor_inspect + spill_read.
+        // spill_read is not a full-only tool: a pointer without a way to read it
+        // back would be a lie.
+        await Assert.That(names.Count).IsEqualTo(14);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect", "spill_read" })
         {
             await Assert.That(names).Contains(safe);
         }

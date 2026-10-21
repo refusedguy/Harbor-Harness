@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Harbor.Application.Sessions;
 /// <summary>
 ///     Converts domain <see cref="AgentMessage" /> instances to LLM-specific <see cref="LlmMessage" /> format.
@@ -237,6 +239,15 @@ public sealed class MessageConverter
                     r.IsError));
             }
 
+            // #1763: the deferred contexts of this batch, in call order, AFTER
+            // every result of the batch. The order is the contract: a context
+            // describes what a tool saw, and the model must read it after the
+            // result it belongs to — never before, and never between two
+            // results (a provider pairs a tool_result with the tool_call that
+            // opened it, and a context wedged between two results would break
+            // that pairing).
+            AppendDeferredContexts(results);
+
             return this;
         }
 
@@ -251,6 +262,78 @@ public sealed class MessageConverter
             spillStore is null
                 ? null
                 : new ToolOutputSpillRequest(spillStore, sessionId, entry.ToolCallId);
+
+        /// <summary>
+        ///     Append the deferred contexts of one tool-result batch as a
+        ///     single user-role message (#1763).
+        /// </summary>
+        /// <remarks>
+        ///     <para>
+        ///         The message is user-role because that is the only role a
+        ///         provider gives a non-assistant turn, and the framing is what
+        ///         keeps it from reading as the user's words: every context
+        ///         opens with <see cref="DeferredToolContext.Marker" /> and
+        ///         names its source.
+        ///     </para>
+        ///     <para>
+        ///         One message for the whole batch, not one per context: the
+        ///         contexts are one observation each, and a single turn keeps
+        ///         the provider's message sequence as short as it was before
+        ///         the feature existed.
+        ///     </para>
+        /// </remarks>
+        /// <param name="results">The batch's result entries, in call order.</param>
+        private void AppendDeferredContexts(IReadOnlyList<ToolResultEntry> results)
+        {
+            var text = new StringBuilder();
+            for (int i = 0; i < results.Count; i++)
+            {
+                IReadOnlyList<DeferredToolContext>? contexts = results[i].DeferredContexts;
+                if (contexts is null)
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < contexts.Count; j++)
+                {
+                    AppendDeferredContext(text, contexts[j]);
+                }
+            }
+
+            // Nothing to say: the batch carried no context, so the request
+            // keeps exactly the messages it had before the feature existed.
+            if (text.Length == 0)
+            {
+                return;
+            }
+
+            sink.Add(LlmUserMessage.Text(text.ToString()));
+        }
+
+        /// <summary>
+        ///     Append one deferred context to the batch's message (#1763).
+        /// </summary>
+        /// <param name="text">The message being built.</param>
+        /// <param name="context">The context to render.</param>
+        private static void AppendDeferredContext(StringBuilder text, DeferredToolContext context)
+        {
+            text.Append(DeferredToolContext.Marker)
+                .Append(" source=")
+                .Append(context.Source);
+
+            if (context.Metadata is { Count: > 0 } metadata)
+            {
+                for (int i = 0; i < metadata.Count; i++)
+                {
+                    text.Append(' ')
+                        .Append(metadata[i].Key)
+                        .Append('=')
+                        .Append(metadata[i].Value);
+                }
+            }
+
+            text.Append('\n').Append(context.Content).Append('\n');
+        }
 
         /// <summary>
         ///     Convert a user turn, carrying any attached images (#386) as

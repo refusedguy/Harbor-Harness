@@ -561,6 +561,16 @@ jobs:
       # that matches.
       - name: Plugin-inventory gate fails on a stale snapshot
         run: python3 tools/gen-plugin-inventory.py --self-test
+      # The changelog assembler. The `[Unreleased]` section of `CHANGELOG.md`
+      # is assembled from the fragments in `changelog/fragments/`, so a pull
+      # request writes its own file and never edits the shared section. Its
+      # failure path is tested here for the same reason as the others: an
+      # assembler that stops noticing a diverged file is a file nobody
+      # assembles. The load-bearing fixtures are the two it carries — the
+      # fragment must land in the section, and a tampered `CHANGELOG.md` must
+      # be caught.
+      - name: Changelog assembler glues a fragment and catches a diverged CHANGELOG.md
+        run: python3 tools/changelog-assemble.py --self-test
 
   links:
     name: internal links
@@ -684,7 +694,7 @@ jobs:
   # equals the tree or it does not, and a record quoting an old count cannot
   # make the number agree.
   #
-  # --min-facts is the floor. Measured today: 6 counts compared. The floor is
+  # --min-facts is the floor. Measured today: 8 counts compared. The floor is
   # 5, so a rule that silently stops matching drives the number down and this
   # job goes red instead of reporting a clean tree — the #591 shape, which the
   # --self-test also pins from the other side.
