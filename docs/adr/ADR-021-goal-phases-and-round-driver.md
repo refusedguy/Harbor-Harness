@@ -148,6 +148,16 @@ This is a vertical slice, not a subsystem. What is here:
 | The round driver | `src/Harbor.AgentRuntime/Agents/GoalRoundDriver.cs` |
 | The model's channel | `src/Harbor.Tools.Builtin/Tools/Goal/GoalTool.cs` |
 
+**The round driver is a public type, and that is load bearing.** It is a
+collaborator of the loop, in the same family as `ToolDispatcher` and
+`RunBudgetTracker`. It is public because the test that pins its decisions
+has to reach it — and the alternative, opening this assembly's internals to
+that test project, LEAKS: the ZLinq drop-in extensions this assembly
+generates live in the global namespace, and a friend assembly sees them.
+In the test compilation they then shadow `System.Linq`, and every LINQ call
+site in the project stops compiling — 134 errors that have nothing to do
+with the goal. The public type is the smaller door.
+
 The rest, in the order it should be built:
 
 1. **The user-facing way to set a goal.** A CLI verb (`harbor goal set

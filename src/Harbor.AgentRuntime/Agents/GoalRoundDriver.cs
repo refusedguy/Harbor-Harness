@@ -57,13 +57,24 @@ namespace Harbor.Application.Agents;
 ///         optional dependency in this codebase — absent means "the old
 ///         behaviour", never "a broken one".
 ///     </para>
+///     <para>
+///         <b>Why it is public.</b> It is a collaborator of the loop, in the
+///         same family as <see cref="ToolDispatcher" /> and
+///         <see cref="RunBudgetTracker" />: the type a host composes the
+///         agent's behaviour out of. It is public because the test that pins
+///         its decisions has to reach it — and opening this assembly's
+///         internals to that test project would leak the ZLinq drop-in
+///         extensions (a global-namespace type in this assembly) into the
+///         test compilation, where they shadow <c>System.Linq</c> and break
+///         every LINQ call site in it.
+///     </para>
 /// </remarks>
-internal sealed class GoalRoundDriver
+public sealed class GoalRoundDriver
 {
     /// <summary>
     ///     What the driver decided at a quiescence point.
     /// </summary>
-    internal enum RoundOutcome
+    public enum RoundOutcome
     {
         /// <summary>
         ///     No round was reserved: the session has no goal, the goal is not
@@ -109,7 +120,7 @@ internal sealed class GoalRoundDriver
     /// </summary>
     /// <param name="goals">The goal store, or null when the host has none.</param>
     /// <param name="logger">Logger of the owning loop.</param>
-    internal GoalRoundDriver(ISessionGoalStore? goals, ILogger logger)
+    public GoalRoundDriver(ISessionGoalStore? goals, ILogger logger)
     {
         _goals = goals;
         _logger = logger;
@@ -123,7 +134,7 @@ internal sealed class GoalRoundDriver
     /// <param name="agent">The agent definition driving the run.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>What the driver decided.</returns>
-    internal async Task<RoundOutcome> TryReserveRoundAsync(
+    public async Task<RoundOutcome> TryReserveRoundAsync(
         ISessionContext session,
         AgentDefinition agent,
         CancellationToken ct)
