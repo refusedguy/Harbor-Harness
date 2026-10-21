@@ -184,11 +184,10 @@ on:
       - 'tools/pack-validate.py'
       - 'tools/test-skips.py'
       - 'tools/normalize-mtimes.py'
-      # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
+      # #1558. The result-chain census scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
       # and so must a PR that edits the tree it measures (the .cs paths above).
-      - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
       # #1781. The shard-balance gate reads the shard lists in ci.yml and the
       # recorded cost of every project, so a PR that edits the gate, the
@@ -302,7 +301,6 @@ on:
       # #1558. Same trigger as above: the chain census measures `src/` and
       # `apps/` (the .cs paths above), so a PR that edits the gate or the
       # baseline must run it.
-      - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
       # #1781. Same trigger as above: the shard-balance gate reads the shard
       # lists in ci.yml and the recorded cost of every project, so a PR that
@@ -516,7 +514,7 @@ jobs:
       # the rewrite itself — the census MUST produce the Bind call it says
       # it produces.
       - name: Chain census finds every planted guard shape and rewrites the one it promises
-        run: python3 tools/check-result-chains.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-result-chains --self-test
       # #1575. The string-switch gate is the only one that asks whether the
       # product dispatches on a string literal with a `case` ladder. Its
       # failure path is tested here for the same reason as the others: a rule
@@ -1345,7 +1343,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The chain-candidate count has not gone up
-        run: python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
+        run: tools/bin/harbor-gates-linux-x64 check-result-chains --check --baseline tools/result-chains-baseline.json
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #

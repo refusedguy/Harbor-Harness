@@ -44,11 +44,12 @@ import (
 
 	archanchors "harbor.local/gates/check-arch-anchors"
 	archsuiteonce "harbor.local/gates/check-arch-suite-once"
-	mdlinks "harbor.local/gates/check-md-links"
-	mdlint "harbor.local/gates/md-lint"
 	docfacts "harbor.local/gates/check-doc-facts"
+	mdlinks "harbor.local/gates/check-md-links"
+	resultchains "harbor.local/gates/check-result-chains"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
+	mdlint "harbor.local/gates/md-lint"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -88,6 +89,11 @@ var registry = []registered{
 		name:    "md-lint",
 		summary: "the tracked markdown obeys the invariants the repository claims",
 		run:     mdlint.Run,
+	},
+	{
+		name:    "check-result-chains",
+		summary: "the chain candidates among the if (x.IsFailure) guard sites",
+		run:     resultchains.Run,
 	},
 	{
 		name:    "gen-seam-graph",
