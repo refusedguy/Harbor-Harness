@@ -476,6 +476,12 @@ jobs:
       # shape every other gate in this job is tested against.
       - name: Gate-policy checker fails on a planted divergence
         run: python3 tools/check-gate-policy.py --self-test
+      # The changelog assembler owns CHANGELOG.md, and every pull request owns
+      # a fragment instead. Its self-test proves it still notices a diverged
+      # file and still glues a fragment: a PR that edits the assembler must
+      # run it, or the edit lands unvalidated.
+      - name: Changelog assembler glues a fragment and notices a diverged file
+        run: python3 tools/changelog-assemble.py --self-test
       # #1888. The three tools whose self-test no workflow ran. The policy
       # says every gate and every reporter proves its own failure path in
       # CI, and these three had a self-test that nothing called — a
@@ -561,14 +567,6 @@ jobs:
       # that matches.
       - name: Plugin-inventory gate fails on a stale snapshot
         run: python3 tools/gen-plugin-inventory.py --self-test
-      # The changelog assembler is a tool a human runs at release time, not a
-      # gate: it glues the per-pull-request fragments into the [Unreleased]
-      # section of CHANGELOG.md, and `--check` would be red on every pull
-      # request until the release runs it. What CI runs is its failure path, so
-      # the assembler is known to notice a CHANGELOG.md that diverged from the
-      # fragments instead of silently gluing nothing.
-      - name: Changelog assembler fails on a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
 
   links:
     name: internal links

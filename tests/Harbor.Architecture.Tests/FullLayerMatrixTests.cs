@@ -734,12 +734,20 @@ public class FullLayerMatrixTests
         // every plugin context, and the manifest schema version the contract
         // layer declares), so the assembly now binds the type and the IL gate
         // sees the reference. It is the same edge Registration already carries.
+        //
+        // #1738: the plugin INVENTORY (FileSystemPluginInventory) lives here —
+        // the plugin runtime's composition root — and it names the manifest
+        // reader in Harbor.Plugins.Storage. It is here and not in
+        // Harbor.Plugins.Storage because the CLI composition root may not
+        // reference the storage layer (slice 3), and the tool that reads the
+        // inventory may not bind the plugin layers at all.
         ["Harbor.Plugins.Hosting"] = new(Layer.Infrastructure,
         [
             "Harbor.Abstractions",
             "Harbor.Plugins.Abstractions",
             "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration",
+            "Harbor.Plugins.Storage",
         ]),
         // ---- CompositionRoot -----------------------------------------------
         ["Harbor.Hosting"] = new(Layer.CompositionRoot,
@@ -785,6 +793,12 @@ public class FullLayerMatrixTests
             // in-process compile pipeline; the composition root binds none of
             // them any more, so only the Hosting edge below stays.
             "Harbor.Plugins.Hosting",
+            // #1738: the plugin INVENTORY. The composition root builds the one
+            // FileSystemPluginInventory the agent-facing plugin_manager tool
+            // and the /plugins panel both read — and the implementation lives
+            // in Harbor.Plugins.Hosting, because the composition root may not
+            // reference Harbor.Plugins.Storage (slice 3: the CLI assembly must
+            // not bind the in-process compile pipeline).
             // LoadedPlugin handle (StartupPluginLoad/PluginReloadService):
             "Harbor.Plugins.Abstractions",
         ]),

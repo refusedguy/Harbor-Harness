@@ -60,11 +60,22 @@ public class ToolCategoryApprovalTests
     ///     <c>session_broadcast</c> was briefly Mcp and an earlier Ask rule then
     ///     beat its explicit Allow. The exemption is asserted here so that adding a
     ///     third unclassified tool is a deliberate edit to this list.
+    ///     <para>
+    ///         #1738 adds the fourth: <c>plugin_manager</c>, which DOES register
+    ///         in the builtin host. It is unclassified for the same reason the
+    ///         other three are: a category match makes a rule about the class fire
+    ///         against the tool, and the write-category Ask in the default ruleset
+    ///         would then ask the user about every plugin_manager call — including
+    ///         the read-only listing — on top of the tool's own per-change
+    ///         question. Two questions about one call is not a policy, it is a
+    ///         duplicate, and the tool's own question is the one that names the
+    ///         file, the scope and the effect.
+    ///     </para>
     /// </remarks>
     [Test]
     public async Task Every_Builtin_Tool_That_Registers_Declares_A_Category()
     {
-        string[] declaredWithoutCategory = ["session_broadcast", "session_inbox"];
+        string[] declaredWithoutCategory = ["session_broadcast", "session_inbox", "plugin_manager"];
 
         var unclassified = BuiltinToolSafetyProfiles.All
             .Where(d => d.Category is null && !declaredWithoutCategory.Contains(d.ToolName))

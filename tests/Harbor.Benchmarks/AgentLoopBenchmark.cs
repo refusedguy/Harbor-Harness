@@ -380,11 +380,11 @@ internal sealed class BenchPermissionService : IPermissionService
     public Task<Result<PermissionResponse>> CheckAsync(
         string agentName, string toolName, JsonElement args, CancellationToken ct = default,
         string? invocationId = null, int generation = 1)
-        => Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
+        => Task.FromResult(Result.Success(TestToolContext.AllowWithoutPersist()));
 
     public Task<Result<PermissionResponse>> AskUserAsync(
         PermissionRequest request, CancellationToken ct = default)
-        => Task.FromResult(Result.Success(new PermissionResponse(PermissionAction.Allow, false)));
+        => Task.FromResult(Result.Success(TestToolContext.AllowWithoutPersist()));
 
     public PermissionRuleset GetRuleset(string agentName) => PermissionRuleset.Empty;
 
