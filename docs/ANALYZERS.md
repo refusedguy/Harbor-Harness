@@ -251,7 +251,7 @@ reason the package is worth its cost in the first place.
 
 #### The gate
 
-[`tools/check-analyzer-scope.py`](../tools/check-analyzer-scope.py) reads
+[the compiled `check-analyzer-scope` gate](../tools/gates/check-analyzer-scope/main.go) reads
 [`tools/analyzer-scope.json`](../tools/analyzer-scope.json) — the one
 source of truth for where every family runs — and fails when the tree says
 anything else:
@@ -311,7 +311,7 @@ API.
 | `IDisposableAnalyzers` | 4.0.8 | MIT | REJECT the package, ADOPT the findings (#1854) | The package is dead (last push 2024-06-19), but IDISP014 (one `HttpClient` per call) is not covered by CA1001 or CA1063. The two sites it named were fixed by hand and a house rule now guards them (`HttpClientReuseRules.cs`). |
 | `SmartAnalyzers.MultithreadingAnalyzer` | 1.1.31 | MIT | REJECT | Last release 2019-09-17. `lock`, `Monitor` and `Interlocked` are covered by Sonar and AsyncFixer already. |
 | `SmartAnalyzers.ExceptionAnalyzer` | 1.0.10 | MIT | REJECT | Last release 2019-05-21, and it overlaps Meziantou, Sonar and CA. |
-| `DotNetAnalyzers.DocumentationAnalyzers` | 1.0.0-beta.59 | MIT | REJECT | Last push 2022-12-08 and still beta. `tools/check-xml-doc-coverage.py` covers the same ground and can state a suppression reason, which the analyzer cannot. |
+| `DotNetAnalyzers.DocumentationAnalyzers` | 1.0.0-beta.59 | MIT | REJECT | Last push 2022-12-08 and still beta. The compiled `check-xml-doc-coverage` gate covers the same ground and can state a suppression reason, which the analyzer cannot. |
 | `ClosedTypeHierarchyDiagnosticSuppressor` | 1.3.0 (a GitHub release; there is no nuget package) | MIT | REJECT | A suppressor of another diagnostic, not a check, and #1810 (the enum completeness gap) needs a check. A nuget search for the id returns 0 hits. |
 | `OneOfDiagnosticSuppressor` | no release, no nuget package | MIT | REJECT | The same reason, and there is nothing to install: a nuget search for the id returns 0 hits. |
 | `ClrHeapAllocationAnalyzer` | 3.0.0 | Apache-2.0 (a `licenseUrl` to the repository's LICENSE) | REJECT | The repository (Microsoft/RoslynClrHeapAllocationAnalyzer) is archived, last push 2022-05-26. The display-class finding it would have caught (#1529) needs a house analyzer, not this one. |
@@ -889,7 +889,7 @@ violation fails as `error RS0016`.
 about a diff — "commit the regenerated baseline in the SAME PR as the API
 change" — and the reviewer's half of it was about a *commit*. That half
 survived the migration as
-[`tools/check-public-api-resign.py`](../tools/check-public-api-resign.py):
+[the compiled `check-public-api-resign` gate](../tools/gates/check-public-api-resign/main.go):
 a commit that edits the frozen baseline must edit the assembly's sources
 with it, and a commit that changes a public declaration must re-sign the
 baseline with it. Its `--self-test` runs in the `docs.yml` `selftest` job;
@@ -928,8 +928,8 @@ what the python gate did and what covers it now.
 | — (nothing checked this) | a constructor that exposes the `protected` members of a non-inheritable base (RS0022) |
 | — (nothing checked this) | overloads with optional parameters (RS0026, RS0027) |
 | — (nothing checked this) | a `*REMOVED*` marker that disagrees with the code (RS0050) |
-| — (not a python rule) | the re-signing pairing per COMMIT (`tools/check-public-api-resign.py`) |
-| XML-doc coverage | unchanged: `tools/check-xml-doc-coverage.py`, which the analyzer has no rule for |
+| — (not a python rule) | the re-signing pairing per COMMIT (the compiled `check-public-api-resign` gate) |
+| XML-doc coverage | unchanged: the compiled `check-xml-doc-coverage` gate, which the analyzer has no rule for |
 
 The floor's MEANING changed, and the change is the point of stating it.
 Before: "the python scanner saw at least N members in the tree" — a ratchet
@@ -1060,7 +1060,7 @@ violation fails as `error RS0016`.
 about a diff — "commit the regenerated baseline in the SAME PR as the API
 change" — and the reviewer's half of it was about a *commit*. That half
 survived the migration as
-[`tools/check-public-api-resign.py`](../tools/check-public-api-resign.py):
+[the compiled `check-public-api-resign` gate](../tools/gates/check-public-api-resign/main.go):
 a commit that edits the frozen baseline must edit the assembly's sources
 with it, and a commit that changes a public declaration must re-sign the
 baseline with it. Its `--self-test` runs in the `docs.yml` `selftest` job;
@@ -1099,8 +1099,8 @@ what the python gate did and what covers it now.
 | — (nothing checked this) | a constructor that exposes the `protected` members of a non-inheritable base (RS0022) |
 | — (nothing checked this) | overloads with optional parameters (RS0026, RS0027) |
 | — (nothing checked this) | a `*REMOVED*` marker that disagrees with the code (RS0050) |
-| — (not a python rule) | the re-signing pairing per COMMIT (`tools/check-public-api-resign.py`) |
-| XML-doc coverage | unchanged: `tools/check-xml-doc-coverage.py`, which the analyzer has no rule for |
+| — (not a python rule) | the re-signing pairing per COMMIT (the compiled `check-public-api-resign` gate) |
+| XML-doc coverage | unchanged: the compiled `check-xml-doc-coverage` gate, which the analyzer has no rule for |
 
 The floor's MEANING changed, and the change is the point of stating it.
 Before: "the python scanner saw at least N members in the tree" — a ratchet
@@ -1495,7 +1495,7 @@ this repository sets `TreatWarningsAsErrors=true`, so the package would break
 the build the day it was added; and the tool sees source only, so it cannot
 see reflection, DI registration by convention or a plugin loaded by name.
 
-The gate is [`tools/check-reference-trimmer.py`](../tools/check-reference-trimmer.py)
+The gate is [the compiled `check-reference-trimmer` gate](../tools/gates/check-reference-trimmer/main.go)
 and its ratchet is
 [`tools/reference-trimmer-baseline.txt`](../tools/reference-trimmer-baseline.txt):
 a finding the baseline does not carry is red, and a row the tree no longer
