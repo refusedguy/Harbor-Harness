@@ -41,4 +41,18 @@
     <PackageReference Include="MemoryPack"/>
   </ItemGroup>
 
+  <!--
+    THE VIOLATION UNDER TEST (issue #2114's acceptance: a red architecture
+    suite must still drop the lane). Harbor.Extensions is the pure BCL
+    helper layer: the matrix in FullLayerMatrixTests gives it an EMPTY
+    reference set, and AbstractionsSplitLayerRules asserts exactly that
+    ("Extensions_HasZeroHarborProjectReferences"). The reference below, and
+    the type it carries, are the layering violation - and they are a REAL
+    edge, not a declared-but-unbound one: the IL gate reads the assembly's
+    references, so a ProjectReference nothing binds would not be seen.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+  </ItemGroup>
+
 </Project>
