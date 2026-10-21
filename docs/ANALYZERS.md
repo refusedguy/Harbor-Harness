@@ -189,23 +189,26 @@ was between 1.3x and 1.4x slower):
 | the three together | 313.9 s | 160–171 s | **−143…−154 s** |
 | **every analyzer in the build** | **594.4 s** | **459–491 s** | **−103…−135 s (−17…−23 %)** |
 
-**The wall time.** The `build` job's `Compile` step. The first pair is the
-controlled one: the SAME base tree, the same job, the same image, the same
-day, and the two runs differ by this change and nothing else.
+**The wall time.** The `build` job's `Compile` step. The first three rows
+are the same base tree, the same job, the same image and the same day, and
+the runs differ by this change and nothing else.
 
 | tree | base | run | compile |
 |------|------|-----|---------|
+| **narrowed (this change)** | 766b397f | 39529367881 | **262 877 ms** |
 | **narrowed (this change)** | 766b397f | 39527276212 | **253 662 ms** |
 | all-on | 766b397f | 39526886179 (dev) | 420 920 ms |
 | **narrowed (this change)** | 9b0eebd4 | 39520876419 | **199 693 ms** |
 | **narrowed (this change)** | 9b0eebd4 | 39518815858 | **210 525 ms** |
 | all-on | 9b0eebd4 | 39515287115 (dev) | 415 007 ms |
 
-On the current base that is **−167 258 ms (−39.7 %)**; on the base this
-branch started on, −204…−215 s (−49…−52 %). The all-on compile of the SAME
-job ranges over **262–417 s** across six dev runs — a 1.6x spread for one
-job on one image, which is why the wall figure is a measurement and not a
-controlled A/B, and why the claim above rests on the analyzer report.
+Across every sample taken on this runner, the narrowed tree compiled in
+**200…263 s** (four runs) and the all-on tree in **262…421 s** (seven dev
+runs); the medians are 232 s and 409 s. **The wall figure is indicative, not
+controlled**: the same tree compiled in 145…249 s across the measurement
+arms' baselines, so the runner's speed alone is a 1.6x factor, and the two
+distributions touch at 262 s. The controlled number is the analyzer report
+above, which is read from the compiler itself.
 
 **What the paired arms could and could not resolve, said plainly.** The
 harness builds the same tree twice in one job — the baseline and its own arm
