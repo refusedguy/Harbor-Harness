@@ -550,7 +550,7 @@ Concrete implementations of:
   `Microsoft.Extensions.Configuration.Abstractions`,
   `Microsoft.Extensions.DependencyInjection.Abstractions`,
   `Microsoft.Extensions.Logging.Abstractions`, `ZLinq` (+ `ZLinq.DropInGenerator`
-  source generator). Gated by `tools/check-abstractions-contract.py` — the
+  source generator). Gated by the compiled `check-abstractions-contract` gate — the
   previously listed `CommunityToolkit.HighPerformance` was a phantom edge
   (declared, used by nothing — the `Frozen*`/`Span<T>` usage it looked like it
   justified is BCL) and has been removed.

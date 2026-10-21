@@ -43,7 +43,7 @@ Referenced transitively by `tests/Harbor.Abstractions.Tests/` and `tests/Harbor.
 
 Both projects' declared NuGet dependencies — this one's and the facade's — are
 checked against their sources by
-[`tools/check-abstractions-contract.py`](../../tools/check-abstractions-contract.py),
+[the compiled `check-abstractions-contract` gate](../../tools/gates/check-abstractions-contract/main.go),
 which fails on a `<PackageReference>` nothing has a `using` under and on a non-BCL
 `using` no `<PackageReference>` covers. `--report` prints the derived census.
 

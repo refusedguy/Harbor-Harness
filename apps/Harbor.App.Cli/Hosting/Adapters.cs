@@ -50,4 +50,10 @@ internal sealed class DummySessionContext : ISessionContext
     // #653: the pricing rides along because the model is only known to the
     // caller; this stand-in records nothing, so it has nothing to price with.
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
+
+    // #1765: the durability checkpoint. This stand-in records nothing at all,
+    // so there is no state that could fail to survive a restart. The answer
+    // is the honest one, and it is an override rather than the interface's
+    // failing default because a stand-in is not a store.
+    public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) => Task.FromResult(Result.Success());
 }

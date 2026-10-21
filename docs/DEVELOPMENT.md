@@ -591,7 +591,7 @@ It exists because nothing else answered it (issue #1882). `BannedSymbols.txt`
 bans `N:Newtonsoft.Json`, but that file is an RS0030 analyzer input: it covers
 source code only, and RS0030 is switched off for `tests/` and `samples/` in
 `Directory.Build.props`, so a *transitive* dependency could put Newtonsoft into
-a test project's `bin/` with no rule noticing. `tools/check-abstractions-contract.py`
+a test project's `bin/` with no rule noticing. The compiled `check-abstractions-contract` gate
 covers four `src/` projects, `tools/aot-publish-gate.py` covers `src/` and
 `apps/`, and the rule in `AGENTS.md` is prose.
 
@@ -1364,7 +1364,8 @@ Console.Error.WriteLine($"Debug: {value}");
 (Planned — not yet implemented)
 
 1. Update version in `Directory.Build.props`.
-2. Assemble the changelog: `python3 tools/changelog-assemble.py`. Every pull
+2. Assemble the changelog: `tools/bin/harbor-gates-linux-x64 changelog-assemble`.
+   Every pull
    request put its entry in `changelog/fragments/<pr-number>.md`; the
    assembler glues them into the `[Unreleased]` section of `CHANGELOG.md`.
    A pull request does NOT edit `CHANGELOG.md` itself: one file edited by
