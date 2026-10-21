@@ -28,9 +28,9 @@ public sealed class DialogToastSeatingTests
 
     private static string PaintAll(ChatScreen screen)
     {
-        var buffer = new ScreenBuffer(Cols, Rows);
+        var buffer = TestRender.Buffer(Cols, Rows);
         screen.Tree.PaintAll(buffer);
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
@@ -58,14 +58,14 @@ public sealed class DialogToastSeatingTests
 
         string stacked = PaintAll(screen);
 
-        var manual = new ScreenBuffer(Cols, Rows);
+        var manual = TestRender.Buffer(Cols, Rows);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(manual);
         }
         screen.Dialog.Paint(manual, Viewport);
 
-        await Assert.That(stacked).IsEqualTo(GridDump.Art(manual));
+        await Assert.That(stacked).IsEqualTo(TestRender.Art(manual));
         await Assert.That(stacked.Contains("helloworld")).IsTrue();
     }
 
@@ -85,7 +85,7 @@ public sealed class DialogToastSeatingTests
         string stacked = PaintAll(screen);
 
         var strip = screen.Toasts.ComputeBounds(Viewport);
-        var manual = new ScreenBuffer(Cols, Rows);
+        var manual = TestRender.Buffer(Cols, Rows);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(manual);
@@ -94,7 +94,7 @@ public sealed class DialogToastSeatingTests
         screen.Toasts.Paint(manual, strip);
 
         await Assert.That(strip.Width).IsEqualTo(31);
-        await Assert.That(stacked).IsEqualTo(GridDump.Art(manual));
+        await Assert.That(stacked).IsEqualTo(TestRender.Art(manual));
         await Assert.That(stacked.Contains("first toast")).IsTrue();
         await Assert.That(stacked.Contains("second toast")).IsTrue();
     }

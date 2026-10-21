@@ -253,7 +253,7 @@ public class PostFxTests
             // this must be derived from the same catalog, not a later one.
             EngineCells.PackedColor expectedAccent = EngineCells.PackedColor.FromRaw(PanelFx.WarnTone(100, peakTick).Fg.Value);
 
-            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
             int count = timeline.ConsumeGlowRegions(regions);
             await Assert.That(count).IsEqualTo(1);
             await Assert.That(regions[0].Intensity).IsGreaterThan(0.0);
@@ -263,7 +263,7 @@ public class PostFxTests
             // Pulse trough (¾ cycle — sine negative → clamped 0): the region is
             // STILL published at zero so the glow can be cleared on the terminal.
             timeline.CurrentTick = 100 + PanelFx.PulseFrames + ((PanelFx.PulseFrames * 3) / 4);
-            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
             count = timeline.ConsumeGlowRegions(regions);
             await Assert.That(count).IsEqualTo(1);
             await Assert.That(regions[0].Intensity).IsEqualTo(0.0);
@@ -271,7 +271,7 @@ public class PostFxTests
             // Decision kills the glow feed.
             _ = gate.TryDecide(ApprovalChoice.Deny);
             timeline.CurrentTick++;
-            timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+            timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
             count = timeline.ConsumeGlowRegions(regions);
             await Assert.That(count).IsEqualTo(0);
         }
@@ -291,7 +291,7 @@ public class PostFxTests
         gate.BeginWarnPulse(50);
 
         timeline.CurrentTick = 50 + (PanelFx.PulseFrames / 4);
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+        timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
 
         var regions = new GlowRegion[1];
         await Assert.That(timeline.ConsumeGlowRegions(regions)).IsEqualTo(0);
@@ -309,14 +309,14 @@ public class PostFxTests
         // Flush the append/first-frame broad damage.
         var fx = new Rect[VirtualizedChatTimeline.MaxFxDamage];
         timeline.CurrentTick = 1;
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+        timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
         _ = timeline.ConsumeFrameDamage(fx, out _);
         _ = timeline.ConsumeGlowRegions([]);
 
         // Trough frame — pulse == 0 — must STILL damage the gate rows so the
         // effect pipeline can repaint it at zero strength (glow convergence).
         timeline.CurrentTick = PanelFx.PulseFrames * 3 / 4;
-        timeline.Paint(new ScreenBuffer(60, 10), new Rect(0, 0, 60, 10));
+        timeline.Paint(TestRender.Buffer(60, 10), new Rect(0, 0, 60, 10));
         bool broad = timeline.ConsumeFrameDamage(fx, out int fxCount);
 
         await Assert.That(broad).IsFalse();

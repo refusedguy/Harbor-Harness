@@ -61,11 +61,11 @@ public class DiffBlockTests
     [Test]
     public async Task Paint_GutterSignsAndColors()
     {
-        var buffer = new ScreenBuffer(50, UnifiedDiffParser.Parse(Sample).Count);
+        var buffer = TestRender.Buffer(50, UnifiedDiffParser.Parse(Sample).Count);
         var block = new DiffBlock(Sample);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 50, buffer.Rows), 0));
+        block.Paint(TestRender.Ctx(buffer, 50, buffer.Rows));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("-removed line one");
         await Assert.That(art).Contains("+added line");
         await Assert.That(art).Contains(" context line");
@@ -166,9 +166,9 @@ public class DiffBlockTests
     {
         const int hunkStart = 10005;
         var lines = UnifiedDiffParser.Parse(DiffAt(hunkStart));
-        var buffer = new ScreenBuffer(48, lines.Count);
+        var buffer = TestRender.Buffer(48, lines.Count);
         new DiffBlock(DiffAt(hunkStart))
-            .Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, lines.Count), 0));
+            .Paint(TestRender.Ctx(buffer));
 
         for (int y = 0; y < lines.Count; y++)
         {
@@ -211,8 +211,8 @@ public class DiffBlockTests
             """;
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(40, 4);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 4), 0));
+        var buffer = TestRender.Buffer(40, 4);
+        block.Paint(TestRender.Ctx(buffer));
 
         int signCol = DiffBlock.GutterWidth;
         // Row layout: 0 hunk header, 1 delete, 2 add, 3 context.
@@ -241,8 +241,8 @@ public class DiffBlockTests
             """;
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(48, 3);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, 3), 0));
+        var buffer = TestRender.Buffer(48, 3);
+        block.Paint(TestRender.Ctx(buffer));
 
         int signCol = DiffBlock.GutterWidth;
         // Delete row carries no deletions: every body cell stays dim context.
@@ -276,8 +276,8 @@ public class DiffBlockTests
             """;
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(48, UnifiedDiffParser.Parse(sample).Count);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, buffer.Rows), 0));
+        var buffer = TestRender.Buffer(48, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(TestRender.Ctx(buffer, 48, buffer.Rows));
 
         // Rows: 0 header, 1-2 deletes, 3-5 adds, 6 context. Body starts at
         // signCol+1; "var port =" is 10 cells plus one blank separator, so the
@@ -296,7 +296,7 @@ public class DiffBlockTests
         // The unpaired add row paints line-level: a segmented row always has
         // at least one dim context run, so "no dim cell" means unpaired.
         await Assert.That(HasFg(buffer, 4, body, 48, ChatPalette.ToolBody)).IsFalse();
-        await Assert.That(GridDump.Art(buffer)).Contains("var bind = host");
+        await Assert.That(TestRender.Art(buffer)).Contains("var bind = host");
     }
 
     [Test]
@@ -314,8 +314,8 @@ public class DiffBlockTests
             """;
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(40, UnifiedDiffParser.Parse(sample).Count);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, buffer.Rows), 0));
+        var buffer = TestRender.Buffer(40, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(TestRender.Ctx(buffer, 40, buffer.Rows));
 
         int body = DiffBlock.GutterWidth + 1;
         for (int row = 1; row <= 5; row++)
@@ -326,7 +326,7 @@ public class DiffBlockTests
         // Whole rows keep their line-level kind colour.
         await Assert.That(buffer.Get(body, 1).Style.Fg).IsEqualTo(ChatPalette.ToolError.Fg);
         await Assert.That(buffer.Get(body, 3).Style.Fg).IsEqualTo(ChatPalette.ToolOk.Fg);
-        await Assert.That(GridDump.Art(buffer)).Contains("zzz qqq xxx");
+        await Assert.That(TestRender.Art(buffer)).Contains("zzz qqq xxx");
     }
 
     [Test]
@@ -338,8 +338,8 @@ public class DiffBlockTests
         string sample = $"@@ -1,1 +1,2 @@\n-{huge}\n+totally different text\n+one more line\n";
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(60, UnifiedDiffParser.Parse(sample).Count);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
+        var buffer = TestRender.Buffer(60, UnifiedDiffParser.Parse(sample).Count);
+        block.Paint(TestRender.Ctx(buffer, 60, buffer.Rows));
 
         int body = DiffBlock.GutterWidth + 1;
         for (int row = 1; row <= 3; row++)
@@ -347,7 +347,7 @@ public class DiffBlockTests
             await Assert.That(HasFg(buffer, row, body, 60, ChatPalette.ToolBody)).IsFalse();
         }
 
-        await Assert.That(GridDump.Art(buffer)).Contains("totally different text");
+        await Assert.That(TestRender.Art(buffer)).Contains("totally different text");
     }
 
     [Test]
@@ -360,8 +360,8 @@ public class DiffBlockTests
             """;
 
         var block = new DiffBlock(sample);
-        var buffer = new ScreenBuffer(48, 3);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 48, 3), 0));
+        var buffer = TestRender.Buffer(48, 3);
+        block.Paint(TestRender.Ctx(buffer));
 
         int signCol = DiffBlock.GutterWidth;
         // Delete row: "git commit" dim, " --amend" takes the delete accent.
@@ -390,7 +390,7 @@ public class GoldenDiffBlockTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(56, 9);
-        var back = new ScreenBuffer(56, 9);
+        var back = TestRender.Buffer(56, 9);
 
         const string sample = """
             --- a/src/app.cs
@@ -405,7 +405,7 @@ public class GoldenDiffBlockTests
 
         var block = new DiffBlock(sample, path: "src/app.cs");
         var m = block.Measure(56);
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 56, m.MinLines), 0));
+        block.Paint(TestRender.Ctx(back, 56, m.MinLines));
 
         writer.BeginFrame();
         var eng = GridDump.ToEngine(back);

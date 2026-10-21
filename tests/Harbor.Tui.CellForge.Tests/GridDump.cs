@@ -43,7 +43,7 @@ internal static class GridDump
     /// </summary>
     internal static ScreenBuffer ToUi(EngineCells.ScreenBuffer front)
     {
-        var ui = new ScreenBuffer(front.Cols, front.Rows);
+        var ui = TestRender.Buffer(front.Cols, front.Rows);
         for (int y = 0; y < front.Rows; y++)
         {
             for (int x = 0; x < front.Cols; x++)
@@ -56,35 +56,6 @@ internal static class GridDump
         ui.InvalidateAll();
         return ui;
     }
-
-    /// <summary>Cosmetic rendering: one line per row; wide tails collapse.</summary>
-    public static string Art(ScreenBuffer buffer)
-    {
-        var sb = new StringBuilder();
-        for (int y = 0; y < buffer.Rows; y++)
-        {
-            for (int x = 0; x < buffer.Cols; x++)
-            {
-                var cell = buffer.Get(x, y);
-                if (cell.Width == Cell.WSkip)
-                {
-                    continue; // tail half — glyph already drawn by its lead
-                }
-
-                sb.Append(ArtChar(cell.Rune));
-            }
-
-            sb.Append('\n');
-        }
-
-        return sb.ToString();
-    }
-
-    private static string ArtChar(int rune) => rune switch
-    {
-        >= 0x20 and <= 0x7E or >= 0xA0 and <= 0xFFFD when !char.IsSurrogate((char)rune) => ((char)rune).ToString(),
-        _ => "?",
-    };
 
     /// <summary>Exact map: one <c>x,y: rune style width</c> line per non-blank cell.</summary>
     public static string Cells(ScreenBuffer buffer)

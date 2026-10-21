@@ -23,7 +23,7 @@ public class GoldenGridDumpTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(20, 6);
-        var back = new ScreenBuffer(20, 6);
+        var back = TestRender.Buffer(20, 6);
 
         writer.BeginFrame();
         var eng = GridDump.ToEngine(back);
@@ -72,7 +72,7 @@ public class GoldenGridDumpTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(10, 3);
-        var back = new ScreenBuffer(10, 3);
+        var back = TestRender.Buffer(10, 3);
 
         // Frame 1: CJK lead+tail pair, emoji past the BMP, wide rune at the
         // last fitting column, a wide rune that does not fit before the right
@@ -158,7 +158,7 @@ public class GoldenGridDumpTests
     {
         var writer = new AnsiWriter(backend, syncUpdates);
         var engine = new DiffEngine(6, 1);
-        var back = new ScreenBuffer(6, 1);
+        var back = TestRender.Buffer(6, 1);
         back.SetRune(1, 0, new Rune('X'), new CellStyle(PackedColor.Indexed(4)));
         writer.BeginFrame();
         engine.Flush(GridDump.ToEngine(back), writer);
@@ -171,7 +171,7 @@ public class GoldenGridDumpTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(20, 2);
-        var back = new ScreenBuffer(20, 2);
+        var back = TestRender.Buffer(20, 2);
 
         back.SetText(0, 1, "ERR ", new CellStyle(PackedColor.Rgb(220, 60, 60)));
         back.SetText(4, 1, "WARN", new CellStyle(attrs: StyleAttr.Bold));

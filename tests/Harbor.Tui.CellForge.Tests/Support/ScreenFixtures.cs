@@ -17,7 +17,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// </remarks>
 internal static class ScreenFixtures
 {
-    internal static string Art(ScreenBuffer buffer) => GridDump.Art(buffer).TrimEnd('\n');
+    internal static string Art(ScreenBuffer buffer) => TestRender.Art(buffer).TrimEnd('\n');
 
     internal static void PaintAll(ChatScreen screen, ScreenBuffer buffer)
     {
@@ -43,7 +43,7 @@ internal static class ScreenFixtures
             panel.Paint(buffer);
         }
 
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     internal static string Row(ScreenBuffer buffer, int y, int width)
@@ -60,8 +60,8 @@ internal static class ScreenFixtures
 
     internal static ScreenBuffer PaintToBuffer(TableBlock block, int width = 40)
     {
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
+        var buffer = TestRender.Buffer(width, block.Measure(width).MinLines);
+        block.Paint(TestRender.Ctx(buffer));
         return buffer;
     }
 

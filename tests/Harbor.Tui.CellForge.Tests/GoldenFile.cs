@@ -79,7 +79,7 @@ internal static class GoldenDoc
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"# golden: {title}\n");
         sb.Append($"## grid art ({finalGrid.Cols}x{finalGrid.Rows})\n");
-        sb.Append(GridDump.Art(finalGrid));
+        sb.Append(TestRender.Art(finalGrid));
         sb.Append("## cells (x,y: rune fg/bg/attrs width)\n");
         sb.Append(GridDump.Cells(finalGrid));
         sb.Append("## frames\n");

@@ -63,7 +63,7 @@ internal static class TestScreen
     public static string[] Lines(ScreenBuffer buffer)
     {
         ArgumentNullException.ThrowIfNull(buffer);
-        string[] split = GridDump.Art(buffer).Split('\n');
+        string[] split = TestRender.Art(buffer).Split('\n');
         var lines = new string[buffer.Rows];
         for (int i = 0; i < lines.Length; i++)
         {

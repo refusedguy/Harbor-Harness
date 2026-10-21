@@ -20,9 +20,9 @@ public class DialogFormTests
     private static string PaintArt(DialogOverlay dialog, int cols = 48, int rows = 14)
     {
         var viewport = new Rect(0, 0, cols, rows);
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         dialog.Paint(buffer, viewport);
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]

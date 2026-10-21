@@ -152,13 +152,13 @@ public class SkillFreshnessStatusPillTests
     /// <summary>Fresh buffer per paint — the footer does not clear its own row.</summary>
     private static string Paint(ChatScreen screen)
     {
-        var buffer = new ScreenBuffer(80, 8);
+        var buffer = TestRender.Buffer(80, 8);
         screen.Tree.Solve(80, 8);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(buffer);
         }
 
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 }

@@ -26,14 +26,14 @@ public class StatusPanelClockTests
             panel.Paint(buffer);
         }
 
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
     public async Task AttachedClock_Mirrors_Tick_Instead_Of_Paint_Count()
     {
         var screen = BuildScreen();
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
         using var clock = new AnimationClock();
         screen.Status.AnimationClock = clock;
@@ -51,7 +51,7 @@ public class StatusPanelClockTests
     public async Task AdvancedClock_Paint_Shows_Frame_For_Clock_Tick()
     {
         var screen = BuildScreen();
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
         using var clock = new AnimationClock();
         screen.Status.AnimationClock = clock;
@@ -69,7 +69,7 @@ public class StatusPanelClockTests
     public async Task Detached_Panel_Keeps_Legacy_Per_Paint_Ticks()
     {
         var screen = BuildScreen();
-        var buffer = new ScreenBuffer(120, 8);
+        var buffer = TestRender.Buffer(120, 8);
         screen.Tree.Solve(120, 8);
 
         await Assert.That(screen.Status.AnimationClock).IsNull();

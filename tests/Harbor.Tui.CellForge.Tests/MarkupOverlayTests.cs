@@ -26,19 +26,19 @@ public class MarkupOverlayTests
 
     private static string PaintArt(MarkupOverlay overlay, int cols = 80, int rows = 24)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         overlay.Paint(buffer, new Rect(0, 0, cols, rows));
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
     public async Task Hidden_Paint_LeavesBufferUntouched()
     {
         var overlay = new MarkupOverlay();
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
-        await Assert.That(GridDump.Art(buffer)).DoesNotContain("broken.png");
+        await Assert.That(TestRender.Art(buffer)).DoesNotContain("broken.png");
         await Assert.That(overlay.Visible).IsFalse();
         await Assert.That(overlay.HandleKey(KeyEvent.Simple(KeyCode.Escape)) is null).IsTrue();
     }
@@ -70,11 +70,11 @@ public class MarkupOverlayTests
                 MarkupKind.Rectangle, NormalizedPoint.Create(0.2, 0.2), NormalizedPoint.Create(0.4, 0.4)),
         };
         var overlay = Shown(state);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
         await Assert.That(buffer.Get(24, 6).Rune).IsEqualTo((int)'┌');
-        await Assert.That(GridDump.Art(buffer)).Contains("1 ann");
+        await Assert.That(TestRender.Art(buffer)).Contains("1 ann");
     }
 
     [Test]
@@ -86,7 +86,7 @@ public class MarkupOverlayTests
                 MarkupKind.Arrow, NormalizedPoint.Create(0.1, 0.5), NormalizedPoint.Create(0.5, 0.5)),
         };
         var overlay = Shown(state);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         overlay.Paint(buffer, new Rect(0, 0, 80, 24));
 
         // Head at (39,11), horizontal shaft '─' just before it.
@@ -241,17 +241,17 @@ public class MarkupOverlayTests
         await Assert.That(layer.Opaque).IsTrue();
         await Assert.That(layer.IsModal).IsTrue();
 
-        var hidden = new ScreenBuffer(80, 24);
+        var hidden = TestRender.Buffer(80, 24);
         layer.Paint(hidden, new Rect(0, 0, 80, 24));
-        await Assert.That(GridDump.Art(hidden)).DoesNotContain("broken.png");
+        await Assert.That(TestRender.Art(hidden)).DoesNotContain("broken.png");
 
         overlay.Sync(OpenState());
         layer.Sync(new Rect(0, 0, 80, 24));
         await Assert.That(layer.Visible).IsTrue();
         await Assert.That(layer.Bounds).IsEqualTo(new Rect(0, 0, 80, 24));
 
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
         layer.Paint(buffer, new Rect(0, 0, 80, 24));
-        await Assert.That(GridDump.Art(buffer)).Contains("broken.png");
+        await Assert.That(TestRender.Art(buffer)).Contains("broken.png");
     }
 }

@@ -90,7 +90,7 @@ public class ScreenshotHashTests
 
     internal static string HashOf(ScreenBuffer buffer)
     {
-        string payload = GridDump.Art(buffer) + "\n" + GridDump.Cells(buffer);
+        string payload = TestRender.Art(buffer) + "\n" + GridDump.Cells(buffer);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
     }
 
@@ -123,7 +123,7 @@ public class ScreenshotHashTests
         screen.Tree.Solve(72, 18);
         _ = tl.PrepareFrame(72, screen.Timeline.Rect.Height);
 
-        var back = new ScreenBuffer(72, 18);
+        var back = TestRender.Buffer(72, 18);
         foreach (var panel in screen.Tree.Panels)
         {
             panel.Paint(back);
@@ -134,7 +134,7 @@ public class ScreenshotHashTests
 
     private static ScreenBuffer StatusCapture(StatusBarMode mode)
     {
-        var back = new ScreenBuffer(64, 1);
+        var back = TestRender.Buffer(64, 1);
         var vm = new StatusViewModel { Model = "kilocode/tencent/hy3:free", Mode = mode };
         vm.SetContext(7200, 10_000);
         vm.SetUsage(120_000, 45_500, 0.0042m);
@@ -148,18 +148,18 @@ public class ScreenshotHashTests
 
     private static ScreenBuffer ToolCardCapture()
     {
-        var back = new ScreenBuffer(48, 4);
+        var back = TestRender.Buffer(48, 4);
         var block = new ToolCallBlock(new ToolCallInfo("tc2", "edit", "{\"path\":\"src/app.cs\"}"));
         block.Measure(48);
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 48, 4), tick: 0));
+        block.Paint(TestRender.Ctx(back));
         return back;
     }
 
     private static ScreenBuffer UserBlockCapture()
     {
-        var back = new ScreenBuffer(40, 2);
+        var back = TestRender.Buffer(40, 2);
         var block = new UserBlock("refactor the renderer loop");
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 40, 2), tick: 0));
+        block.Paint(TestRender.Ctx(back));
         return back;
     }
 }

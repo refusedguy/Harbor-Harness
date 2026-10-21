@@ -9,9 +9,9 @@ public class CalendarViewTests
 {
     private static string Art(CalendarView cal, int width = 24)
     {
-        var buffer = new ScreenBuffer(width, cal.RowCount);
+        var buffer = TestRender.Buffer(width, cal.RowCount);
         cal.Paint(buffer, new Rect(0, 0, width, cal.RowCount));
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     [Test]
@@ -81,8 +81,8 @@ public class CalendarViewTests
     [Test]
     public async Task Paint_Degenerate_NoThrow()
     {
-        var buffer = new ScreenBuffer(8, 2);
+        var buffer = TestRender.Buffer(8, 2);
         new CalendarView(2026, 10).Paint(buffer, new Rect(0, 0, 0, 0));
-        await Assert.That(GridDump.Art(buffer).Length).IsGreaterThan(0);
+        await Assert.That(TestRender.Art(buffer).Length).IsGreaterThan(0);
     }
 }

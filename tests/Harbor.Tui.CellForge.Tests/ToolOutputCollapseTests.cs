@@ -83,9 +83,9 @@ public class ToolOutputCollapseTests
         await Assert.That(block.UsesShellTailAtWidth(60)).IsTrue();
         await Assert.That(block.HasOverflowAtWidth(60)).IsTrue();
 
-        var buffer = new ScreenBuffer(60, block.Measure(60).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(60, block.Measure(60).MinLines);
+        block.Paint(TestRender.Ctx(buffer, 60, buffer.Rows));
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("earlier lines");
         await Assert.That(art).Contains("line-10");
         await Assert.That(art).DoesNotContain("line-01");
@@ -100,9 +100,9 @@ public class ToolOutputCollapseTests
 
         await Assert.That(block.UsesShellTailAtWidth(60)).IsFalse();
 
-        var buffer = new ScreenBuffer(60, block.Measure(60).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(60, block.Measure(60).MinLines);
+        block.Paint(TestRender.Ctx(buffer, 60, buffer.Rows));
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("line-01");
         await Assert.That(art).Contains("…");
         await Assert.That(art).DoesNotContain("line-10");
@@ -129,9 +129,9 @@ public class ToolOutputCollapseTests
         block.Complete(new ToolResultBody(output, isError: false, TimeSpan.FromMilliseconds(3)));
         block.SetExpanded(true);
 
-        var buffer = new ScreenBuffer(60, block.Measure(60).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 60, buffer.Rows), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(60, block.Measure(60).MinLines);
+        block.Paint(TestRender.Ctx(buffer, 60, buffer.Rows));
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("line-01");
         await Assert.That(art).Contains("line-10");
         await Assert.That(art).DoesNotContain("earlier lines");

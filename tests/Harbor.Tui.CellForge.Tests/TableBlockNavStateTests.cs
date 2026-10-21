@@ -29,8 +29,8 @@ public class TableBlockNavStateTests
 
     private static ScreenBuffer PaintWith(TableBlock block, GenericNavState state, int width = 40)
     {
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0), state);
+        var buffer = TestRender.Buffer(width, block.Measure(width).MinLines);
+        block.Paint(TestRender.Ctx(buffer), state);
         return buffer;
     }
 

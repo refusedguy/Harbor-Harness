@@ -10,7 +10,7 @@ public class GenericWidgetsTests
 {
     private static string PaintField(GenericTextField field, int width = 20)
     {
-        var buffer = new ScreenBuffer(width, 1);
+        var buffer = TestRender.Buffer(width, 1);
         field.Paint(buffer, new Rect(0, 0, width, 1));
         return ScreenFixtures.Art(buffer);
     }
@@ -119,7 +119,7 @@ public class GenericWidgetsTests
         var list = new GenericSelectionList { MaxVisibleRows = 4 };
         list.SetItems(["apple", "banana"]);
         list.MoveTo(1);
-        var buffer = new ScreenBuffer(20, 4);
+        var buffer = TestRender.Buffer(20, 4);
         list.Paint(buffer, new Rect(0, 0, 20, 4));
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("apple")).IsTrue();
@@ -133,7 +133,7 @@ public class GenericWidgetsTests
         list.SetItems(["one", "two", "three", "four"]);
         list.MoveTo(3);
         await Assert.That(list.Offset).IsGreaterThan(0);
-        var buffer = new ScreenBuffer(20, 2);
+        var buffer = TestRender.Buffer(20, 2);
         list.Paint(buffer, new Rect(0, 0, 20, 2));
         await Assert.That(ScreenFixtures.Art(buffer).Contains("four")).IsTrue();
     }
@@ -141,7 +141,7 @@ public class GenericWidgetsTests
     [Test]
     public async Task ProgressBar_Half_SplitsFillAndTrack()
     {
-        var buffer = new ScreenBuffer(10, 1);
+        var buffer = TestRender.Buffer(10, 1);
         GenericProgressBar.Paint(buffer, new Rect(0, 0, 10, 1), new GenericProgressState(0.5, ShowLabel: false));
         await Assert.That(ScreenFixtures.Art(buffer)).IsEqualTo(
             new string(GenericProgressBar.Filled, 5) + new string(GenericProgressBar.Track, 5));
@@ -166,7 +166,7 @@ public class GenericWidgetsTests
         }
 
         await Assert.That(spinner.Frame).IsEqualTo(0);
-        var buffer = new ScreenBuffer(4, 1);
+        var buffer = TestRender.Buffer(4, 1);
         spinner.Paint(buffer, new Rect(0, 0, 4, 1));
         await Assert.That(ScreenFixtures.Art(buffer).Trim()).IsNotEqualTo(string.Empty);
     }
@@ -177,7 +177,7 @@ public class GenericWidgetsTests
         var table = new GenericTable();
         table.SetHeaders(["name", "ok"]);
         table.AddRow(["alpha", "yes"]);
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         table.Paint(buffer, new Rect(0, 0, 30, 8));
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("name")).IsTrue();
@@ -192,7 +192,7 @@ public class GenericWidgetsTests
         var table = new GenericTable();
         table.SetHeaders(["h"]);
         table.AddRow(["0123456789abcdef"]);
-        var buffer = new ScreenBuffer(12, 8);
+        var buffer = TestRender.Buffer(12, 8);
         table.Paint(buffer, new Rect(0, 0, 12, 8));
         await Assert.That(ScreenFixtures.Art(buffer).Contains("…")).IsTrue();
     }
@@ -231,7 +231,7 @@ public class GenericWidgetsTests
         await Assert.That(errors.Length).IsEqualTo(1);
         await Assert.That(errors[0]).IsEqualTo("Required.");
 
-        var buffer = new ScreenBuffer(30, 4);
+        var buffer = TestRender.Buffer(30, 4);
         form.Paint(buffer, new Rect(0, 0, 30, 4));
         await Assert.That(ScreenFixtures.Art(buffer).Contains("Required.")).IsTrue();
     }

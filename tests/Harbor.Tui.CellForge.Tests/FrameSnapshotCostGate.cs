@@ -177,7 +177,7 @@ public sealed class FrameSnapshotCostGate
         // the layout and the JIT, and neither is what the quiet-frame budget
         // is about.
         SessionTabStripPanel panel = BuildStripPanel(out LayoutTree tree);
-        var buffer = new ScreenBuffer(StripWidth, StripRows);
+        var buffer = TestRender.Buffer(StripWidth, StripRows);
         panel.Paint(buffer);
 
         PerfGateResult result = await PerfGate.MeasureAsync(
@@ -215,7 +215,7 @@ public sealed class FrameSnapshotCostGate
         }
 
         SessionTabStripPanel panel = BuildStripPanel(out _);
-        var buffer = new ScreenBuffer(StripWidth, StripRows);
+        var buffer = TestRender.Buffer(StripWidth, StripRows);
         panel.Paint(buffer);
 
         // A fresh snapshot per frame — the shape the reducer produces when a
@@ -256,7 +256,7 @@ public sealed class FrameSnapshotCostGate
         }
 
         OverlayStack stack = BuildToastStack(out ToastNotification toast);
-        var buffer = new ScreenBuffer(80, 24);
+        var buffer = TestRender.Buffer(80, 24);
 
         // Warm: the first paint pays the JIT and any one-off setup.
         stack.PaintOver(buffer);

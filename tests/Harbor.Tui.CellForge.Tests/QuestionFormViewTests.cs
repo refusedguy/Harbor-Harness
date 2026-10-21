@@ -43,9 +43,9 @@ public class QuestionFormViewTests
     private static string PaintArt(QuestionFormView form, int cols = 60)
     {
         int rows = form.Measure(cols).BestGuess;
-        var buffer = new ScreenBuffer(cols, rows);
-        form.Paint(new BlockPaintContext(buffer, new Rect(0, 0, cols, rows), 0));
-        return GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(cols, rows);
+        form.Paint(TestRender.Ctx(buffer));
+        return TestRender.Art(buffer);
     }
 
     [Test]

@@ -10,9 +10,9 @@ public class ColumnsBlockTests
     private static string Art(ColumnsBlock block, int width)
     {
         var measure = block.Measure(width);
-        var buffer = new ScreenBuffer(width, Math.Max(1, measure.MinLines));
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, Math.Max(1, measure.MinLines)), 0));
-        return GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(width, Math.Max(1, measure.MinLines));
+        block.Paint(TestRender.Ctx(buffer));
+        return TestRender.Art(buffer);
     }
 
     private static string[] ArtLines(ColumnsBlock block, int width) =>

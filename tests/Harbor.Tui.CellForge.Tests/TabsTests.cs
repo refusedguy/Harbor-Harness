@@ -146,12 +146,12 @@ public class TabsTests
     [Test]
     public async Task Paint_TitlesRow_ListsTitles()
     {
-        var buffer = new ScreenBuffer(40, 2);
+        var buffer = TestRender.Buffer(40, 2);
         var tabs = Sample();
         _ = tabs.Select(1);
-        tabs.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
+        tabs.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Chat");
         await Assert.That(art).Contains("Files");
         await Assert.That(art).Contains("Logs");
@@ -161,10 +161,10 @@ public class TabsTests
     [Test]
     public async Task Paint_Underline_SitsUnderSelectedTitle()
     {
-        var buffer = new ScreenBuffer(40, 2);
+        var buffer = TestRender.Buffer(40, 2);
         var tabs = Sample();
         _ = tabs.Select(1);
-        tabs.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
+        tabs.Paint(TestRender.Ctx(buffer));
 
         // " Chat │ Files │ Logs": selected "Files" starts past " Chat │ " (8 cells).
         for (int x = 8; x < 13; x++)
@@ -178,13 +178,13 @@ public class TabsTests
     [Test]
     public async Task Paint_Focus_BrightensUnderline()
     {
-        var dim = new ScreenBuffer(40, 2);
-        Sample().Paint(new BlockPaintContext(dim, new Rect(0, 0, 40, 2), 0));
+        var dim = TestRender.Buffer(40, 2);
+        Sample().Paint(TestRender.Ctx(dim));
 
-        var focused = new ScreenBuffer(40, 2);
+        var focused = TestRender.Buffer(40, 2);
         var tabs = Sample();
         tabs.OnFocusChanged(true);
-        tabs.Paint(new BlockPaintContext(focused, new Rect(0, 0, 40, 2), 0));
+        tabs.Paint(TestRender.Ctx(focused));
 
         // Compared against ChatPalette semantics, not raw palette indices.
         await Assert.That(dim.Get(1, 1).Style.Fg).IsEqualTo(ChatPalette.Dim.Fg);
@@ -194,9 +194,9 @@ public class TabsTests
     [Test]
     public async Task Paint_Empty_ShowsPlaceholder()
     {
-        var buffer = new ScreenBuffer(40, 2);
-        new Tabs().Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 2), 0));
-        await Assert.That(GridDump.Art(buffer)).Contains("(empty)");
+        var buffer = TestRender.Buffer(40, 2);
+        new Tabs().Paint(TestRender.Ctx(buffer));
+        await Assert.That(TestRender.Art(buffer)).Contains("(empty)");
     }
 
     [Test]
@@ -204,10 +204,10 @@ public class TabsTests
     {
         var tabs = new Tabs(["Alpha", "Beta", "Gamma", "Delta"]);
         _ = tabs.Select(3);
-        var buffer = new ScreenBuffer(12, 2);
-        tabs.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 12, 2), 0));
+        var buffer = TestRender.Buffer(12, 2);
+        tabs.Paint(TestRender.Ctx(buffer));
 
         await Assert.That(tabs.FirstVisible).IsGreaterThan(0);
-        await Assert.That(GridDump.Art(buffer)).Contains("Delta");
+        await Assert.That(TestRender.Art(buffer)).Contains("Delta");
     }
 }

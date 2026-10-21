@@ -1230,6 +1230,44 @@ public class ToolCallTests
 
 ---
 
+## Painting a widget under test
+
+A test that paints a widget builds the same three things: a `ScreenBuffer` of a
+given size, a `BlockPaintContext` over it, and the art that comes back out.
+`Harbor.TestKit.TestRender` in `tests/Harbor.TestKit.Tui/` owns that sequence:
+
+| Helper | What it provides |
+|---|---|
+| `TestRender.Buffer(width, height)` | The grid a widget paints into. |
+| `TestRender.Ctx(buffer)` | The paint context over the whole grid. |
+| `TestRender.Ctx(buffer, width, height)` | The paint context over a window of the grid. |
+| `TestRender.Ctx(buffer, x, y, width, height)` | The paint context over an arbitrary clip. |
+| `TestRender.Ctx(buffer, tick)` | The paint context over the whole grid, with a frame tick. |
+| `TestRender.Ctx(buffer, inlineImages)` | The paint context over the whole grid, with an inline-image sink. |
+| `TestRender.Ctx(buffer, tick, inlineImages)` | The frame tick and the inline-image sink together. |
+| `TestRender.Art(buffer)` | The grid as text, one line per row. |
+| `TestRender.Art(block, width, height)` | Paints the block into a fresh grid and returns the art. |
+
+```csharp
+var buffer = TestRender.Buffer(40, 4);
+block.Paint(TestRender.Ctx(buffer));
+string art = TestRender.Art(buffer);
+```
+
+`Harbor.TestKit.Tui` is the UI-scoped sibling of the test kit, so a project that
+uses these helpers needs a `<ProjectReference>` to it. The helper speaks
+`Harbor.Ui.Framework.Rendering` vocabulary, which is why it does not live in the
+core kit: the core kit reaches no UI assembly, and the core kit is what the
+fourteen projects that only need contracts and doubles reference.
+
+A project that must not widen its closure keeps its own grid factory instead.
+`tests/Harbor.Ui.Framework.Tests/TestGrid.cs` is the example: that project
+drives the cell-diff encoder with grids it builds itself, so it needs the grid
+but not the render skeleton, and referencing the UI-scoped sibling would put
+`Harbor.Tui.CellForge.Engine` into its closure.
+
+---
+
 ## Project reference cheat sheet
 
 | Test project | Key source references |

@@ -36,7 +36,7 @@ internal sealed class TestBackend
 
     public TestBackend(int cols, int rows)
     {
-        Buffer = new ScreenBuffer(cols, rows);
+        Buffer = TestRender.Buffer(cols, rows);
     }
 
     /// <summary>Visible viewport grid. Widgets under integration test paint here.</summary>
@@ -227,7 +227,7 @@ internal sealed class TestBackend
     private static string[] ArtLines(ScreenBuffer buffer)
     {
         // GridDump.Art emits exactly one '\n'-terminated line per row.
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         string[] split = art.Split('\n');
         var lines = new string[buffer.Rows];
         Array.Copy(split, lines, Math.Min(split.Length, lines.Length));
@@ -241,7 +241,7 @@ internal sealed class TestBackend
 
     private static ScreenBuffer RenderLines(IReadOnlyList<string> lines, int cols, int rows)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         for (int y = 0; y < Math.Min(lines.Count, rows); y++)
         {
             buffer.SetText(0, y, lines[y], CellStyle.Plain);

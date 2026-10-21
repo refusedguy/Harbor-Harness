@@ -87,9 +87,7 @@ public class TaskCardTests
             await Assert.That(card.Measure(80).MinLines).IsEqualTo(1);
 
             // Duration still painted on the finished header.
-            var buffer = new ScreenBuffer(80, 2);
-            card.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 80, 2), 0));
-            string art = GridDump.Art(buffer);
+            string art = TestRender.Art(card, 80, 2);
             await Assert.That(art.Contains("✔ task")).IsTrue();
             await Assert.That(art.Contains("2 toolcalls")).IsTrue();
 

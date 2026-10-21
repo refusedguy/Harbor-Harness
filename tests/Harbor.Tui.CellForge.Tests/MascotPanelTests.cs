@@ -16,7 +16,7 @@ public class MascotPanelTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Running };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: mode);
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         screen.Tree.Solve(cols, rows);
         return (screen, buffer);
     }
@@ -31,7 +31,7 @@ public class MascotPanelTests
                 panel.Paint(buffer);
             }
 
-            sb.Append(GridDump.Art(buffer));
+            sb.Append(TestRender.Art(buffer));
             sb.Append('\n');
         }
 
@@ -77,7 +77,7 @@ public class MascotPanelTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Running, Phase = AgentPhase.ToolCall };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
 
         string art = Paint(screen, buffer, 2);
@@ -146,7 +146,7 @@ public class MascotPanelTests
         var composer = new ComposerController();
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Running };
         var screen = ChatScreen.Build(composer, status, includeSidebar: false, mascotMode: MascotMode.Panel);
-        var buffer = new ScreenBuffer(120, 24);
+        var buffer = TestRender.Buffer(120, 24);
         screen.Tree.Solve(120, 24);
         var mascot = screen.Mascot!;
 

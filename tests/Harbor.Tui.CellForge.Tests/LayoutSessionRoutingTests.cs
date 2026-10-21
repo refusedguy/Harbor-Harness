@@ -178,7 +178,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_DrawsFrameAndTitle()
     {
-        var buf = new ScreenBuffer(20, 6);
+        var buf = TestRender.Buffer(20, 6);
         var panel = new BorderPanel("p", 4, 2, title: "Chat") { Rect = new Rect(0, 0, 20, 6) };
         panel.Paint(buf);
 
@@ -193,7 +193,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_RoundedCorners()
     {
-        var buf = new ScreenBuffer(6, 4);
+        var buf = TestRender.Buffer(6, 4);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Rounded };
         panel.Paint(buf);
 
@@ -208,7 +208,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_DoubleFrame()
     {
-        var buf = new ScreenBuffer(6, 4);
+        var buf = TestRender.Buffer(6, 4);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Double };
         panel.Paint(buf);
 
@@ -223,7 +223,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_ThickFrame()
     {
-        var buf = new ScreenBuffer(6, 4);
+        var buf = TestRender.Buffer(6, 4);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), BorderKind = BorderKind.Thick };
         panel.Paint(buf);
 
@@ -238,7 +238,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_Shadow_PaintsRightAndBottomStrips()
     {
-        var buf = new ScreenBuffer(8, 6);
+        var buf = TestRender.Buffer(8, 6);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(1, 1, 4, 3), Shadow = true };
         panel.Paint(buf);
 
@@ -254,7 +254,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_NoShadow_ByDefault()
     {
-        var buf = new ScreenBuffer(8, 6);
+        var buf = TestRender.Buffer(8, 6);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(1, 1, 4, 3) };
         panel.Paint(buf);
 
@@ -265,7 +265,7 @@ public class BorderPanelTests
     [Test]
     public async Task Paint_Shadow_AtBufferEdge_DoesNotThrow()
     {
-        var buf = new ScreenBuffer(6, 4);
+        var buf = TestRender.Buffer(6, 4);
         var panel = new BorderPanel("p", 4, 2) { Rect = new Rect(0, 0, 6, 4), Shadow = true };
         panel.Paint(buf);
 

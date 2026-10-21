@@ -35,9 +35,9 @@ public class CommandPaletteDetailTests
     public async Task Paint_RendersDetail_DimmedAfterTitle()
     {
         var palette = Open();
-        var buffer = new ScreenBuffer(60, 10);
+        var buffer = TestRender.Buffer(60, 10);
         palette.Paint(buffer, new Rect(2, 1, 56, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("Fix login bug");
         await Assert.That(art).Contains("abc12345");
@@ -53,9 +53,9 @@ public class CommandPaletteDetailTests
     public async Task Paint_EmptyDetail_UnchangedRow()
     {
         var palette = Open();
-        var buffer = new ScreenBuffer(60, 10);
+        var buffer = TestRender.Buffer(60, 10);
         palette.Paint(buffer, new Rect(2, 1, 56, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("Write docs");
 
@@ -71,9 +71,9 @@ public class CommandPaletteDetailTests
     {
         var palette = new CommandPaletteView();
         palette.Show([]);
-        var buffer = new ScreenBuffer(60, 10);
+        var buffer = TestRender.Buffer(60, 10);
         palette.Paint(buffer, new Rect(2, 1, 56, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("(no matches)");
     }

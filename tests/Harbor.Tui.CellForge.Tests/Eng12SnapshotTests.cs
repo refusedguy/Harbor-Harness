@@ -32,7 +32,7 @@ public class Eng12SnapshotTests
     [Test]
     public async Task TimelinePaint_PaintsSnapshotWindow_UnchangedOutput()
     {
-        var buffer = new ScreenBuffer(40, 12);
+        var buffer = TestRender.Buffer(40, 12);
         var tl = new VirtualizedChatTimeline();
         tl.Append(new FixedBlock("alpha"));
         tl.Append(new FixedBlock("beta"));
@@ -41,7 +41,7 @@ public class Eng12SnapshotTests
 
         tl.Paint(buffer, new Rect(0, 0, 40, 4));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("alpha")).IsTrue();
         await Assert.That(art.Contains("beta")).IsTrue();
         await Assert.That(art.Contains("gamma")).IsTrue();
@@ -50,7 +50,7 @@ public class Eng12SnapshotTests
     [Test]
     public async Task ToastPaint_AfterDismiss_PaintsSurvivor()
     {
-        var buffer = new ScreenBuffer(40, 12);
+        var buffer = TestRender.Buffer(40, 12);
         var overlay = new ToastOverlay();
         overlay.Show("first toast");
         overlay.Show("second toast");
@@ -59,14 +59,14 @@ public class Eng12SnapshotTests
         overlay.Paint(buffer, new Rect(0, 0, 40, 6));
         overlay.Paint(buffer, new Rect(0, 0, 40, 6));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains("first toast")).IsTrue();
         await Assert.That(art.Contains("second toast")).IsTrue();
 
         _ = overlay.Dismiss(overlay.Active[0].Id);
         overlay.Paint(buffer, new Rect(0, 0, 40, 6));
 
-        string after = GridDump.Art(buffer);
+        string after = TestRender.Art(buffer);
         await Assert.That(after.Contains("second toast")).IsTrue();
         await Assert.That(overlay.Active.Count).IsEqualTo(1);
     }

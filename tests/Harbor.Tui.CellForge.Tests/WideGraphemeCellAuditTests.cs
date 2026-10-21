@@ -134,7 +134,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task Fill_WideCell_AtRectRightEdge_SkipsPair()
     {
-        var buf = new ScreenBuffer(4, 1);
+        var buf = TestRender.Buffer(4, 1);
         buf.Fill(new Rect(3, 0, 2, 1), Cell.From(Cjk, CellStyle.Plain));
 
         // Pair would cross the rect edge — ratatui skip policy, cell stays blank.
@@ -144,7 +144,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task Fill_WideCell_ClearsOrphanNeighborTail()
     {
-        var buf = new ScreenBuffer(6, 1);
+        var buf = TestRender.Buffer(6, 1);
         _ = buf.SetRune(2, 0, Cjk, CellStyle.Plain); // pair (2,3)
         buf.Fill(new Rect(1, 0, 2, 1), Cell.From(Cjk, CellStyle.Plain)); // pair (1,2)
 
@@ -157,7 +157,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task SetStyleAt_Tail_RoutesToLead_RestylesWholePair()
     {
-        var buf = new ScreenBuffer(6, 1);
+        var buf = TestRender.Buffer(6, 1);
         _ = buf.SetRune(2, 0, Cjk, CellStyle.Plain);
         bool ok = buf.SetStyleAt(3, 0, Red);
 
@@ -171,7 +171,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task SetText_WideRejectedAtEdge_LeavesBlank()
     {
-        var buf = new ScreenBuffer(3, 1);
+        var buf = TestRender.Buffer(3, 1);
         buf.SetText(0, 0, "ab" + Cjk, CellStyle.Plain);
 
         await Assert.That(buf.Get(0, 0).Rune).IsEqualTo('a');
@@ -182,7 +182,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task SetText_WideAtPenultimateColumn_ExactFit()
     {
-        var buf = new ScreenBuffer(4, 1);
+        var buf = TestRender.Buffer(4, 1);
         buf.SetText(0, 0, "ab" + Cjk + "c", CellStyle.Plain);
 
         await Assert.That(buf.Get(2, 0).Width).IsEqualTo(Cell.Wide);
@@ -192,7 +192,7 @@ public class Eng9TailInvariantTests
     [Test]
     public async Task OverwriteWideWithWide_KeepsPairStructure()
     {
-        var buf = new ScreenBuffer(6, 1);
+        var buf = TestRender.Buffer(6, 1);
         _ = buf.SetRune(0, 0, Cjk, CellStyle.Plain);
         _ = buf.SetRune(2, 0, Cjk, CellStyle.Plain);
         bool placed = buf.SetRune(0, 0, new Rune(0x1F600), CellStyle.Plain);
@@ -211,7 +211,7 @@ public class Eng9SequencePinTests
     [Test]
     public async Task SetText_Vs16Cluster_MeasuresPerRune()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         buf.SetText(0, 0, "\u2764\uFE0F", CellStyle.Plain); // U+2764 U+FE0F, text presentation
 
         await Assert.That(UnicodeWidth.Width("\u2764\uFE0F")).IsEqualTo(1);
@@ -222,7 +222,7 @@ public class Eng9SequencePinTests
     [Test]
     public async Task SetText_CombiningMark_DoesNotAdvance()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         buf.SetText(0, 0, "e\u0301", CellStyle.Plain); // e + U+0301, NFD on purpose
 
         await Assert.That(UnicodeWidth.Width("e\u0301")).IsEqualTo(1);
@@ -233,7 +233,7 @@ public class Eng9SequencePinTests
     [Test]
     public async Task SetRune_ControlAndC1_PaintNothing()
     {
-        var buf = new ScreenBuffer(10, 1);
+        var buf = TestRender.Buffer(10, 1);
         bool nul = buf.SetRune(0, 0, new Rune(0), CellStyle.Plain);
         bool csi = buf.SetRune(1, 0, new Rune(0x9B), CellStyle.Plain);
 
@@ -246,7 +246,7 @@ public class Eng9SequencePinTests
     [Test]
     public async Task SetText_ZeroWidthOnly_PaintsNothing()
     {
-        var buf = new ScreenBuffer(4, 1);
+        var buf = TestRender.Buffer(4, 1);
         buf.SetText(0, 0, "\u0301\uFE0F", CellStyle.Plain); // U+0301 U+FE0F
 
         for (int x = 0; x < 4; x++)

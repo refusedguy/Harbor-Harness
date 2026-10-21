@@ -44,9 +44,9 @@ public class GenericLiveRegionTests
 
     private static string Art(GenericLiveRegion region, int width = 20)
     {
-        var buffer = new ScreenBuffer(width, Math.Max(1, region.DesiredHeight));
+        var buffer = TestRender.Buffer(width, Math.Max(1, region.DesiredHeight));
         region.Paint(buffer, new Rect(0, 0, width, buffer.Rows));
-        return GridDump.Art(buffer).TrimEnd('\n');
+        return TestRender.Art(buffer).TrimEnd('\n');
     }
 
     [Test]
@@ -202,7 +202,7 @@ public class GenericLiveRegionTests
         // warm up tiered-JIT paths, then count thread bytes over 200 paints).
         var region = new GenericLiveRegion { MaxHeight = 8, Overflow = LiveRegionOverflow.ClipHead };
         region.Update(["alpha", "bravo", "charlie", "delta"]);
-        var buffer = new ScreenBuffer(80, 8);
+        var buffer = TestRender.Buffer(80, 8);
         var rect = new Rect(0, 0, 80, 8);
 
         for (int i = 0; i < 20; i++)
@@ -267,7 +267,7 @@ public class GenericLiveRegionTests
         }
 
         var region = BuildRegion(lineCount);
-        var buffer = new ScreenBuffer(80, 500);
+        var buffer = TestRender.Buffer(80, 500);
         var rect = new Rect(0, 0, 80, 500);
 
         PerfGateResult result = await PerfGate.MeasureAsync(

@@ -166,9 +166,9 @@ public class FilePickerViewTests
     {
         var picker = Open();
 
-        var buffer = new ScreenBuffer(70, 10);
+        var buffer = TestRender.Buffer(70, 10);
         picker.Paint(buffer, new Rect(2, 1, 66, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("AgentLoop");
         await Assert.That(art).Contains("README.md");
@@ -180,7 +180,7 @@ public class FilePickerViewTests
     public async Task Paint_SelectedRow_IsHighlighted()
     {
         var picker = Open();
-        var buffer = new ScreenBuffer(70, 10);
+        var buffer = TestRender.Buffer(70, 10);
         picker.Paint(buffer, new Rect(2, 1, 66, 8));
 
         // Row 0 selected → accent bold title style.
@@ -192,9 +192,9 @@ public class FilePickerViewTests
     public async Task Paint_Invisible_NothingDrawn()
     {
         var picker = new FilePickerView();
-        var buffer = new ScreenBuffer(20, 6);
+        var buffer = TestRender.Buffer(20, 6);
         picker.Paint(buffer, new Rect(0, 0, 20, 6));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art.Trim()).IsEqualTo(string.Empty);
     }
@@ -213,9 +213,9 @@ public class FilePickerViewTests
         var picker = new FilePickerView();
         picker.Show([new FilePickerItem("srcd/abcdefghijklm", "deep", PreviewLines: ["class AgentLoop"])]);
 
-        var buffer = new ScreenBuffer(50, 10);
+        var buffer = TestRender.Buffer(50, 10);
         picker.Paint(buffer, new Rect(0, 0, 42, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(art).Contains("…/abcdefghijklm");
     }

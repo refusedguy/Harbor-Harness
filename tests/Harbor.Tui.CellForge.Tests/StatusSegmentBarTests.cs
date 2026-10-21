@@ -179,7 +179,7 @@ public class StatusSegmentBarTests
     [Test]
     public async Task Paint_WritesAccentsIntoCells()
     {
-        var buffer = new ScreenBuffer(30, 1);
+        var buffer = TestRender.Buffer(30, 1);
         var segs = new StatusSeg[]
         {
             new("mdl", StatusAccent.Accent, true),

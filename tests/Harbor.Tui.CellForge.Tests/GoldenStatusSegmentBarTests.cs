@@ -20,7 +20,7 @@ public class GoldenStatusSegmentBarTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(80, 2);
-        var back = new ScreenBuffer(80, 2);
+        var back = TestRender.Buffer(80, 2);
 
         var vm = new StatusViewModel
         {

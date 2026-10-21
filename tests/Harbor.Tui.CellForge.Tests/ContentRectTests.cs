@@ -91,10 +91,10 @@ public class ContentRectTests
         var panel = new ComposerPanel("c", composer, 10, 4) { ShowChrome = true };
         panel.Rect = new Rect(0, 0, 10, 4);
 
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
         panel.Paint(buffer);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         var rows = art.Split('\n');
         await Assert.That(rows[0]).Contains("INPUT");
         await Assert.That(rows[1]).Contains("hello");

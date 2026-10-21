@@ -9,7 +9,7 @@ public class SelectionEngineTests
     private static ScreenBuffer Buffer(string[] lines)
     {
         int cols = lines.Max(l => l.Length);
-        var buffer = new ScreenBuffer(cols, lines.Length);
+        var buffer = TestRender.Buffer(cols, lines.Length);
         for (int y = 0; y < lines.Length; y++)
         {
             buffer.SetText(0, y, lines[y], CellStyle.Plain);
@@ -91,7 +91,7 @@ public class SelectionEngineTests
     public async Task WideRune_Selection_SkipsTailCells()
     {
         // "あ" is wide: lead + WSkip tail. Build via SetText like the renderer does.
-        var buffer = new ScreenBuffer(4, 1);
+        var buffer = TestRender.Buffer(4, 1);
         buffer.SetText(0, 0, "あb", CellStyle.Plain);
         var engine = new SelectionEngine();
         engine.OnPress(0, 0, MouseButton.Left);

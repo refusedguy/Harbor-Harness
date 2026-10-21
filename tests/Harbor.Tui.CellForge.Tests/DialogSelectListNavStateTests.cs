@@ -60,7 +60,7 @@ public class DialogSelectListNavStateTests
         var list = Open();
         list.State.MoveTo(2);
 
-        var buffer = new ScreenBuffer(40, 8);
+        var buffer = TestRender.Buffer(40, 8);
         list.Paint(buffer, new Rect(0, 0, 40, 8), list.State);
 
         await Assert.That(IsPicked(buffer, 0)).IsFalse();
@@ -79,7 +79,7 @@ public class DialogSelectListNavStateTests
         var right = Open();
         left.State.MoveTo(3);
 
-        var buffer = new ScreenBuffer(40, 8);
+        var buffer = TestRender.Buffer(40, 8);
         right.Paint(buffer, new Rect(0, 0, 40, 8), left.State);
         await Assert.That(IsPicked(buffer, 3)).IsTrue();
         await Assert.That(IsPicked(buffer, 0)).IsFalse();
@@ -92,7 +92,7 @@ public class DialogSelectListNavStateTests
         list.State.SelectLast();
 
         // Height 2 → 2 list rows; selection drags the viewport down.
-        var buffer = new ScreenBuffer(40, 2);
+        var buffer = TestRender.Buffer(40, 2);
         list.Paint(buffer, new Rect(0, 0, 40, 2), list.State);
         string art = ScreenFixtures.Art(buffer);
         await Assert.That(art.Contains("Option 19")).IsTrue();
@@ -108,7 +108,7 @@ public class DialogSelectListNavStateTests
         foreign.SetContent(99);
         foreign.MoveTo(50);
 
-        var buffer = new ScreenBuffer(40, 8);
+        var buffer = TestRender.Buffer(40, 8);
         list.Paint(buffer, new Rect(0, 0, 40, 8), foreign);
         await Assert.That(IsPicked(buffer, 1)).IsTrue();
         await Assert.That(IsPicked(buffer, 0)).IsFalse();
@@ -122,11 +122,11 @@ public class DialogSelectListNavStateTests
 
         // Stateful paint leaves the legacy selection alone: the legacy path
         // still highlights the first entry.
-        var stateful = new ScreenBuffer(40, 8);
+        var stateful = TestRender.Buffer(40, 8);
         list.Paint(stateful, new Rect(0, 0, 40, 8), list.State);
         await Assert.That(IsPicked(stateful, 4)).IsTrue();
 
-        var buffer = new ScreenBuffer(40, 8);
+        var buffer = TestRender.Buffer(40, 8);
         list.Paint(buffer, new Rect(0, 0, 40, 8));
         await Assert.That(IsPicked(buffer, 0)).IsTrue();
         await Assert.That(IsPicked(buffer, 1)).IsFalse();

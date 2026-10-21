@@ -34,10 +34,10 @@ public class PanelChromeTests
     [Test]
     public async Task PaintTopRule_DrawsBorderGlyphsInBorderColor()
     {
-        var buffer = new ScreenBuffer(10, 3);
+        var buffer = TestRender.Buffer(10, 3);
         PanelChrome.PaintTopRule(buffer, new Rect(0, 0, 10, 3));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Split('\n')[0]).IsEqualTo(new string('─', 10));
 
         for (int x = 0; x < 10; x++)
@@ -49,10 +49,10 @@ public class PanelChromeTests
     [Test]
     public async Task PaintBottomRule_DrawsOnLastRowOnly()
     {
-        var buffer = new ScreenBuffer(8, 3);
+        var buffer = TestRender.Buffer(8, 3);
         PanelChrome.PaintBottomRule(buffer, new Rect(0, 0, 8, 3));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         var rows = art.Split('\n');
         await Assert.That(rows[2]).IsEqualTo(new string('─', 8));
         await Assert.That(rows[0].Trim()).IsEqualTo(string.Empty);
@@ -61,10 +61,10 @@ public class PanelChromeTests
     [Test]
     public async Task PaintLeftRule_DrawsSideGlyphs()
     {
-        var buffer = new ScreenBuffer(6, 4);
+        var buffer = TestRender.Buffer(6, 4);
         PanelChrome.PaintLeftRule(buffer, new Rect(0, 0, 6, 4));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         foreach (var row in art.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             await Assert.That(row[0]).IsEqualTo('│');
@@ -76,10 +76,10 @@ public class PanelChromeTests
     [Test]
     public async Task PaintTitleRow_ShowsTitleWithRules()
     {
-        var buffer = new ScreenBuffer(20, 1);
+        var buffer = TestRender.Buffer(20, 1);
         PanelChrome.PaintTitleRow(buffer, 0, 0, 20, "INPUT");
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("INPUT");
         await Assert.That(art).Contains("─");
 
@@ -91,7 +91,7 @@ public class PanelChromeTests
     [Test]
     public async Task PaintTitleRow_TinyRects_NoThrow()
     {
-        var buffer = new ScreenBuffer(4, 2);
+        var buffer = TestRender.Buffer(4, 2);
         // "NoThrow" is the claim, so the assertion is that the degenerate-rect
         // sweep does not throw. The trailing `Assert.That(true).IsTrue()`
         // asserted nothing (TUnit's TUnitAssertions0005 says so) — it could
@@ -121,11 +121,11 @@ public class PanelChromeTests
         composer.Buffer.InsertText("hello");
         var panel = new ComposerPanel("c", composer, 10, 3);
 
-        var buffer = new ScreenBuffer(10, 3);
+        var buffer = TestRender.Buffer(10, 3);
         panel.Rect = new Rect(0, 0, 10, 3);
         panel.Paint(buffer);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Split('\n')[0]).Contains("hello");
     }
 
@@ -136,11 +136,11 @@ public class PanelChromeTests
         composer.Buffer.InsertText("hello");
         var panel = new ComposerPanel("c", composer, 10, 4) { ShowChrome = true };
 
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
         panel.Rect = new Rect(0, 0, 10, 4);
         panel.Paint(buffer);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         var rows = art.Split('\n');
         await Assert.That(rows[0]).Contains("INPUT");
         await Assert.That(rows[0]).Contains("─");
@@ -159,7 +159,7 @@ public class PanelChromeTests
         var status = new StatusViewModel { Model = "m", Mode = StatusBarMode.Idle };
         var panel = new StatusPanel("s", status, 10, 1) { ShowChrome = true };
 
-        var buffer = new ScreenBuffer(30, 1);
+        var buffer = TestRender.Buffer(30, 1);
         panel.Rect = new Rect(0, 0, 30, 1);
         panel.Paint(buffer);
 
@@ -173,11 +173,11 @@ public class PanelChromeTests
     [Test]
     public async Task SideBarView_PaintsContextTitleRow()
     {
-        var buffer = new ScreenBuffer(60, 24);
+        var buffer = TestRender.Buffer(60, 24);
         var rect = new Rect(60 - SideBarLayout.DefaultWidth, 0, SideBarLayout.DefaultWidth, 23);
         SideBarView.Paint(buffer, rect, SideBarState.Empty);
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("CONTEXT");
         await Assert.That(art).Contains("SESSION");
         await Assert.That(art).Contains("MODEL");
@@ -189,32 +189,32 @@ public class PanelChromeTests
     [Test]
     public async Task Timeline_SeparatorsOff_GapRowsStayBlank()
     {
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         var tl = new VirtualizedChatTimeline();
         tl.Append(new UserBlock("first"));
         tl.Append(new AssistantMarkdownBlock("second"));
         _ = tl.PrepareFrame(30, 8);
         tl.Paint(buffer, new Rect(0, 0, 30, 8));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains('─')).IsFalse();
     }
 
     [Test]
     public async Task Timeline_SeparatorsOn_DrawsDimDividers()
     {
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         var tl = new VirtualizedChatTimeline { ShowSeparators = true };
         tl.Append(new UserBlock("first"));
         tl.Append(new AssistantMarkdownBlock("second"));
         _ = tl.PrepareFrame(30, 8);
         tl.Paint(buffer, new Rect(0, 0, 30, 8));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art.Contains('─')).IsTrue();
 
         // Separator cells use the palette Dim tone — never a hardcoded color.
-        string[] artRows = GridDump.Art(buffer).Split('\n');
+        string[] artRows = TestRender.Art(buffer).Split('\n');
         bool anyDimRule = false;
         for (int y = 0; y < 8 && !anyDimRule; y++)
         {
@@ -270,7 +270,7 @@ public class PanelChromeTests
         var buffer = SentinelBuffer(8, 6);
         PanelChrome.PaintBorderBox(buffer, new Rect(1, 1, 6, 4));
 
-        string[] rows = GridDump.Art(buffer).Split('\n');
+        string[] rows = TestRender.Art(buffer).Split('\n');
         await Assert.That(rows[0]).IsEqualTo("########");
         await Assert.That(rows[1]).IsEqualTo("#╭────╮#");
         await Assert.That(rows[2]).IsEqualTo("#│    │#");
@@ -294,7 +294,7 @@ public class PanelChromeTests
         var buffer = SentinelBuffer(8, 6);
         PanelChrome.PaintBorderBox(buffer, new Rect(1, 1, 6, 4), BoxStyle.SquareFrame);
 
-        string[] rows = GridDump.Art(buffer).Split('\n');
+        string[] rows = TestRender.Art(buffer).Split('\n');
         await Assert.That(rows[0]).IsEqualTo("########");
         await Assert.That(rows[1]).IsEqualTo("#┌────┐#");
         await Assert.That(rows[2]).IsEqualTo("#│####│#");
@@ -427,17 +427,17 @@ public class PanelChromeTests
         {
             foreach (string text in new[] { string.Empty, " ", "привет 🌍\n日本語\t• tab", new string('x', 200) })
             {
-                var ubuffer = new ScreenBuffer(24, 6);
+                var ubuffer = TestRender.Buffer(24, 6);
                 var user = new UserBlock(text);
                 int uh = user.Measure(24).MinLines;
                 user.Paint(new BlockPaintContext(ubuffer, new Rect(0, 0, 24, Math.Min(6, uh)), 0, showSeparators: true));
 
-                var abuffer = new ScreenBuffer(24, 8);
+                var abuffer = TestRender.Buffer(24, 8);
                 var assistant = new AssistantMarkdownBlock(text);
                 int ah = assistant.Measure(24).MinLines;
                 assistant.Paint(new BlockPaintContext(abuffer, new Rect(0, 0, 24, Math.Min(8, ah)), 0, showSeparators: true));
 
-                var sbuffer = new ScreenBuffer(24, 3);
+                var sbuffer = TestRender.Buffer(24, 3);
                 var system = new SystemBlock(text);
                 int sh = system.Measure(24).MinLines;
                 system.Paint(new BlockPaintContext(sbuffer, new Rect(0, 0, 24, Math.Min(3, sh)), 0, showSeparators: true));
@@ -456,7 +456,7 @@ public class PanelChromeTests
 
     private static ScreenBuffer SentinelBuffer(int cols, int rows)
     {
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         var cell = Cell.From(new Rune(Sentinel), new CellStyle(ChatPalette.Text));
         buffer.FillAll(in cell);
         return buffer;

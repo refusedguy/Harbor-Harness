@@ -9,9 +9,9 @@ public class RuleViewTests
 {
     private static string Art(int width, string? title, RuleJustify justify = RuleJustify.Center)
     {
-        var buffer = new ScreenBuffer(width, 1);
+        var buffer = TestRender.Buffer(width, 1);
         RuleView.Paint(buffer, 0, 0, width, title, justify);
-        return GridDump.Art(buffer).TrimEnd('\n');
+        return TestRender.Art(buffer).TrimEnd('\n');
     }
 
     [Test]
@@ -64,8 +64,8 @@ public class RuleViewTests
     [Test]
     public async Task Paint_Degenerate_NoThrow()
     {
-        var buffer = new ScreenBuffer(4, 1);
+        var buffer = TestRender.Buffer(4, 1);
         RuleView.Paint(buffer, 0, 0, 0, "HI");
-        await Assert.That(GridDump.Art(buffer).Length).IsGreaterThan(0);
+        await Assert.That(TestRender.Art(buffer).Length).IsGreaterThan(0);
     }
 }

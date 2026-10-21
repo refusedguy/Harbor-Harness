@@ -30,12 +30,12 @@ public class CommandPaletteViewportTests
     {
         var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8); // 4 list rows
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         palette.Paint(buffer, rect);
 
         Down(palette, 10);
         palette.Paint(buffer, rect);
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(palette.SelectedIndex).IsEqualTo(10);
         await Assert.That(art).Contains("Command 10");
@@ -47,9 +47,9 @@ public class CommandPaletteViewportTests
     public async Task Scrollbar_Hidden_WhenContentFits()
     {
         var palette = PaletteFixtures.OpenMany(3);
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         palette.Paint(buffer, new Rect(0, 0, 30, 8));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
 
         await Assert.That(palette.Viewport.MaxOffset == 0).IsTrue();
         await Assert.That(art.Contains("█")).IsFalse();
@@ -60,7 +60,7 @@ public class CommandPaletteViewportTests
     {
         var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8);
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         palette.Paint(buffer, rect);
         Down(palette, 12);
         palette.Paint(buffer, rect);
@@ -71,7 +71,7 @@ public class CommandPaletteViewportTests
 
         await Assert.That(palette.SelectedIndex).IsEqualTo(0);
         await Assert.That(palette.Viewport.Offset == 0).IsTrue();
-        await Assert.That(GridDump.Art(buffer)).Contains("Command 09");
+        await Assert.That(TestRender.Art(buffer)).Contains("Command 09");
     }
 
     [Test]
@@ -79,13 +79,13 @@ public class CommandPaletteViewportTests
     {
         var palette = PaletteFixtures.OpenMany(20);
         var rect = new Rect(0, 0, 30, 8); // 4 list rows
-        var buffer = new ScreenBuffer(30, 8);
+        var buffer = TestRender.Buffer(30, 8);
         palette.Paint(buffer, rect);
 
         _ = palette.HandleKey(Key(KeyCode.PageDown));
         palette.Paint(buffer, rect);
 
         await Assert.That(palette.SelectedIndex).IsEqualTo(5);
-        await Assert.That(GridDump.Art(buffer)).Contains("Command 05");
+        await Assert.That(TestRender.Art(buffer)).Contains("Command 05");
     }
 }

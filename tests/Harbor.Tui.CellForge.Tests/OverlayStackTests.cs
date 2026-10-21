@@ -61,7 +61,7 @@ public sealed class OverlayStackTests
     public async Task EmptyStack_PaintOver_LeavesBufferUntouched()
     {
         var stack = new OverlayStack();
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -78,7 +78,7 @@ public sealed class OverlayStackTests
 
         await Assert.That(tree.Overlays.IsEmpty).IsTrue();
 
-        var buffer = new ScreenBuffer(20, 8);
+        var buffer = TestRender.Buffer(20, 8);
         tree.PaintAll(buffer);
 
         await Assert.That(buffer.Get(0, 0).Rune).IsEqualTo((int)'┌');
@@ -90,7 +90,7 @@ public sealed class OverlayStackTests
         var stack = new OverlayStack();
         stack.Push(new StubLayer("lower", new Rect(0, 0, 10, 4), 'a'));
         stack.Push(new StubLayer("upper", new Rect(4, 1, 6, 2), 'b'));
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -106,7 +106,7 @@ public sealed class OverlayStackTests
         var stack = new OverlayStack();
         stack.Push(lower);
         stack.Push(upper);
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -139,7 +139,7 @@ public sealed class OverlayStackTests
         var stack = new OverlayStack();
         stack.Push(lower);
         stack.Push(upper);
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -161,7 +161,7 @@ public sealed class OverlayStackTests
         stack.Push(lower);
         stack.Push(left);
         stack.Push(right);
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -180,7 +180,7 @@ public sealed class OverlayStackTests
         var stack = new OverlayStack();
         stack.Push(lower);
         stack.Push(veil);
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -196,7 +196,7 @@ public sealed class OverlayStackTests
         var stack = new OverlayStack();
         stack.Push(lower);
         stack.Push(veil);
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
 
         stack.PaintOver(buffer);
 
@@ -256,7 +256,7 @@ public sealed class OverlayStackTests
         // Production order: LayoutTree panels already painted into the
         // buffer, then PaintOver floats over it. Pre-fill with 'a' so a
         // missing Clear leaks visibly.
-        var buffer = new ScreenBuffer(10, 4);
+        var buffer = TestRender.Buffer(10, 4);
         for (int y = 0; y < 4; y++)
         {
             for (int x = 0; x < 10; x++)

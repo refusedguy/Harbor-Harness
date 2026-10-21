@@ -94,8 +94,8 @@ public class ApprovalGateViewTests
         // reported the WIDE width's line count and the cached slot height
         // disagreed with the painted body (overlapping rows).
         var block = new ApprovalGateView("bash", "cargo build --release");
-        var wide = new ScreenBuffer(60, 4);
-        block.Paint(new BlockPaintContext(wide, new Rect(0, 0, 60, 4), 0));
+        var wide = TestRender.Buffer(60, 4);
+        block.Paint(TestRender.Ctx(wide));
 
         int wideRows = block.WrappedDetail(60).Count;
         await Assert.That(wideRows).IsEqualTo(1);
@@ -112,8 +112,8 @@ public class ApprovalGateViewTests
         // Same invariant in the widening direction: an estimate issued after a
         // narrow paint must not keep the narrow (taller) line count.
         var block = new ApprovalGateView("bash", "cargo build --release");
-        var narrow = new ScreenBuffer(20, 6);
-        block.Paint(new BlockPaintContext(narrow, new Rect(0, 0, 20, 6), 0));
+        var narrow = TestRender.Buffer(20, 6);
+        block.Paint(TestRender.Ctx(narrow));
 
         int wideEstimate = block.CheapEstimate(60);
         await Assert.That(wideEstimate).IsEqualTo(block.Measure(60).MinLines);
@@ -135,11 +135,11 @@ public class ApprovalGateViewTests
     [Test]
     public async Task Paint_ShowsHeader_Detail_AndHint()
     {
-        var buffer = new ScreenBuffer(50, 3);
+        var buffer = TestRender.Buffer(50, 3);
         var block = new ApprovalGateView("bash", "cargo build --release");
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 50, 3), 0));
+        block.Paint(TestRender.Ctx(buffer));
 
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("permission required · bash");
         await Assert.That(art).Contains("cargo build --release");
         await Assert.That(art).Contains("[y] approve   [n] deny   [a] always allow");
@@ -150,15 +150,15 @@ public class ApprovalGateViewTests
     {
         var ok = new ApprovalGateView("edit", "f.cs");
         _ = ok.HandleKey(A);
-        var bufOk = new ScreenBuffer(30, 3);
-        ok.Paint(new BlockPaintContext(bufOk, new Rect(0, 0, 30, 3), 0));
-        await Assert.That(GridDump.Art(bufOk)).Contains("approved (always)");
+        var bufOk = TestRender.Buffer(30, 3);
+        ok.Paint(TestRender.Ctx(bufOk));
+        await Assert.That(TestRender.Art(bufOk)).Contains("approved (always)");
 
         var denied = new ApprovalGateView("edit", "f.cs");
         _ = denied.HandleKey(N);
-        var bufNo = new ScreenBuffer(30, 3);
-        denied.Paint(new BlockPaintContext(bufNo, new Rect(0, 0, 30, 3), 0));
-        await Assert.That(GridDump.Art(bufNo)).Contains("denied");
+        var bufNo = TestRender.Buffer(30, 3);
+        denied.Paint(TestRender.Ctx(bufNo));
+        await Assert.That(TestRender.Art(bufNo)).Contains("denied");
     }
 
     [Test]
@@ -180,8 +180,8 @@ public class ApprovalGateViewTests
     private static (ApprovalGateView Gate, int HintRow) PaintedGate(int width)
     {
         var gate = new ApprovalGateView("bash", "cargo build --release");
-        var buf = new ScreenBuffer(width, 8);
-        gate.Paint(new BlockPaintContext(buf, new Rect(0, 0, width, 3), 0));
+        var buf = TestRender.Buffer(width, 8);
+        gate.Paint(TestRender.Ctx(buf, width, 3));
         // header row 0 + one detail row 1 + hint/stamp row 2
         return (gate, 2);
     }

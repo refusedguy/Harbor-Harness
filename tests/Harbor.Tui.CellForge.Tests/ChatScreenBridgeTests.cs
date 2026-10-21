@@ -420,7 +420,7 @@ public class ChatScreenBridgeTests
         _ = bridge.BeginApprovalGate("bash", "rm -rf build/");
         var tl = panel.Timeline;
         tl.PrepareFrame(40, 8);
-        tl.Paint(new ScreenBuffer(40, 8), new Rect(0, 0, 40, 8)); // registers LastPaintRect
+        tl.Paint(TestRender.Buffer(40, 8), new Rect(0, 0, 40, 8)); // registers LastPaintRect
 
         // Outside any hint zone → no consumption.
         await Assert.That(bridge.TryRouteApprovalClick(
@@ -706,14 +706,14 @@ public class ChatScreenBridgeTests
         };
         screen.Status.SetProjectedRetry(1, 3, 1);
 
-        var buffer = new ScreenBuffer(80, 8);
+        var buffer = TestRender.Buffer(80, 8);
         screen.Tree.Solve(80, 8);
         foreach (var p in screen.Tree.Panels)
         {
             p.Paint(buffer);
         }
 
-        await Assert.That(GridDump.Art(buffer)).Contains("retry 1/3 in 1s");
+        await Assert.That(TestRender.Art(buffer)).Contains("retry 1/3 in 1s");
 
         // Ordinary progress updates (no retry fields) must not touch the slot.
         await bus.PublishAsync(TestEvents.ToolExecutionUpdate(partialResult: "still working…"));

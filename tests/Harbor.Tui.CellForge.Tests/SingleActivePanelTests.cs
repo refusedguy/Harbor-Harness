@@ -145,9 +145,9 @@ public class SingleActivePanelTests
         await Assert.That(CountDocks(screen)).IsEqualTo(1);
         await Assert.That(HasDock(screen, CellForgeDockPanel.BottomId)).IsTrue();
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, buffer);
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Token Breakdown");
         await Assert.That(art).DoesNotContain("Todo List");
     }
@@ -170,9 +170,9 @@ public class SingleActivePanelTests
         await Assert.That(CountDocks(screen)).IsEqualTo(1);
         await Assert.That(HasDock(screen, CellForgeDockPanel.RightId)).IsTrue();
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         ScreenFixtures.PaintAll(screen, buffer);
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Todo List");
         await Assert.That(art).DoesNotContain("Token Breakdown");
     }
@@ -191,12 +191,12 @@ public class SingleActivePanelTests
         screen.Tree.Solve(100, 40);
         await Assert.That(ChatScreenPanelDock.HasDocks(screen)).IsFalse();
 
-        var buffer = new ScreenBuffer(100, 40);
+        var buffer = TestRender.Buffer(100, 40);
         int painted = ChatScreenPanelDock.PaintBottomStack(
             buffer, screen.Timeline.Rect, owner.Registry, store.State, services: null);
 
         await Assert.That(painted > 0).IsTrue();
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("Todo List");
         await Assert.That(art).DoesNotContain("Token Breakdown");
     }

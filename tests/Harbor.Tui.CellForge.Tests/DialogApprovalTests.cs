@@ -24,9 +24,9 @@ public class DialogApprovalTests
     private static string PaintArt(DialogOverlay dialog, int cols = 64, int rows = 22)
     {
         var viewport = new Rect(0, 0, cols, rows);
-        var buffer = new ScreenBuffer(cols, rows);
+        var buffer = TestRender.Buffer(cols, rows);
         dialog.Paint(buffer, viewport);
-        return GridDump.Art(buffer);
+        return TestRender.Art(buffer);
     }
 
     private static ApprovalGateRouter MakeRouter(out ChatTimelinePanel panel)

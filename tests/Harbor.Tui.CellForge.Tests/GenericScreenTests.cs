@@ -18,7 +18,7 @@ public class GenericScreenTests
             new GenericNodeSpec { Id = "a", Title = "hello generic" },
         ]);
         await Assert.That(screen.Count).IsEqualTo(1);
-        var buffer = new ScreenBuffer(30, 6);
+        var buffer = TestRender.Buffer(30, 6);
         screen.Solve(30, 6);
         screen.PaintAll(buffer);
         await Assert.That(ScreenFixtures.Art(buffer).Contains("hello generic")).IsTrue();
@@ -36,7 +36,7 @@ public class GenericScreenTests
                 new GenericSplitSpec { TargetId = "top", Direction = Harbor.Tui.CellForge.Rendering.SplitDir.Vertical, Ratio = 0.5f, NewPanelId = "bottom", Gap = 0 },
             ]);
         await Assert.That(screen.Count).IsEqualTo(2);
-        var buffer = new ScreenBuffer(30, 10);
+        var buffer = TestRender.Buffer(30, 10);
         screen.Solve(30, 10);
         screen.PaintAll(buffer);
         string art = ScreenFixtures.Art(buffer);

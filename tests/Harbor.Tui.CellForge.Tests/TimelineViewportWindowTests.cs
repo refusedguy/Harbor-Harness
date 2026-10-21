@@ -48,7 +48,7 @@ public class TimelineViewportWindowTests
     public async Task LongTimeline_PaintsOnlyVisibleSlice()
     {
         var (tl, blocks) = LongTimeline(300);
-        var buffer = new ScreenBuffer(40, 10);
+        var buffer = TestRender.Buffer(40, 10);
         _ = tl.PrepareFrame(40, 10); // follow-tail: rows 290..300
         tl.Paint(buffer, new Rect(0, 0, 40, 10));
 
@@ -67,7 +67,7 @@ public class TimelineViewportWindowTests
     public async Task Paint_ClipsToRectHeight()
     {
         var (tl, blocks) = LongTimeline(300);
-        var buffer = new ScreenBuffer(40, 10);
+        var buffer = TestRender.Buffer(40, 10);
         _ = tl.PrepareFrame(40, 10); // ScrollY = 290
         tl.Paint(buffer, new Rect(0, 0, 40, 4)); // narrower window: rows 290..294
 
@@ -91,7 +91,7 @@ public class TimelineViewportWindowTests
     public async Task ScrolledWindow_PaintsMiddleSliceOnly()
     {
         var (tl, blocks) = LongTimeline(300);
-        var buffer = new ScreenBuffer(40, 10);
+        var buffer = TestRender.Buffer(40, 10);
         _ = tl.PrepareFrame(40, 10);
 
         tl.ScrollUp(280); // 290 -> 10, unpins

@@ -21,9 +21,9 @@ public class CellDiffR1EncoderTests
     public async Task Encode_SkipCells_Omitted()
     {
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(3, 1);
+        var prev = TestGrid.Buffer(3, 1);
         prev.SetText(0, 0, "abc", CellStyle.Plain);
-        var next = new ScreenBuffer(3, 1);
+        var next = TestGrid.Buffer(3, 1);
         next.SetText(0, 0, "xyz", CellStyle.Plain);
         next.SetDiffOption(1, 0, CellDiffOption.Skip);
 
@@ -38,10 +38,10 @@ public class CellDiffR1EncoderTests
     public async Task Encode_AlwaysUpdate_EmittedWhenIdentical()
     {
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(3, 1);
+        var prev = TestGrid.Buffer(3, 1);
         prev.SetText(0, 0, "abc", CellStyle.Plain);
         prev.SetDiffOption(1, 0, CellDiffOption.AlwaysUpdate);
-        var next = new ScreenBuffer(3, 1);
+        var next = TestGrid.Buffer(3, 1);
         next.SetText(0, 0, "abc", CellStyle.Plain);
         next.SetDiffOption(1, 0, CellDiffOption.AlwaysUpdate);
 
@@ -56,9 +56,9 @@ public class CellDiffR1EncoderTests
     public async Task Encode_ForcedWidth_CoversReserved_KeepsLaterCells()
     {
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(6, 1);
+        var prev = TestGrid.Buffer(6, 1);
         prev.SetText(0, 0, "SSSSSS", CellStyle.Plain);
-        var next = new ScreenBuffer(6, 1);
+        var next = TestGrid.Buffer(6, 1);
         next.SetText(0, 0, "Lbcdef", CellStyle.Plain);
         next.SetDiffOption(0, 0, CellDiffOption.ForcedWidth, 3);
 
@@ -73,9 +73,9 @@ public class CellDiffR1EncoderTests
     public async Task Encode_WideStyleRemoved_TrailingBeforeLead()
     {
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(3, 1);
+        var prev = TestGrid.Buffer(3, 1);
         prev.SetRune(0, 0, Cjk, BlueBg);
-        var next = new ScreenBuffer(3, 1);
+        var next = TestGrid.Buffer(3, 1);
         next.SetRune(0, 0, Cjk, CellStyle.Plain);
 
         CellDiffBatch batch = encoder.Encode(prev, next, hints: null, sequence: 1);
@@ -91,9 +91,9 @@ public class CellDiffR1EncoderTests
         // Incremental shape via direct writes (tail kept identical): the only
         // thing refreshing it is the force arm.
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(4, 1);
+        var prev = TestGrid.Buffer(4, 1);
         prev.SetRune(0, 0, Cjk, BlueBg);
-        var next = new ScreenBuffer(4, 1);
+        var next = TestGrid.Buffer(4, 1);
         next.SetRune(0, 0, Cjk, BlueBg);
         next.At(0, 0) = Cell.From(new Rune('b'), CellStyle.Plain);
         next.InvalidateAll();
@@ -110,14 +110,14 @@ public class CellDiffR1EncoderTests
         // End-to-end portable contract: applying every message to a mirror of
         // prev converges it to next, trailing force-refresh included.
         var encoder = new RowHashDiffEncoder();
-        var prev = new ScreenBuffer(6, 1);
+        var prev = TestGrid.Buffer(6, 1);
         prev.SetText(0, 0, "a中b文c", CellStyle.Plain);
-        var next = new ScreenBuffer(6, 1);
+        var next = TestGrid.Buffer(6, 1);
         next.SetText(0, 0, "中文ab", BlueBg);
 
         CellDiffBatch batch = encoder.Encode(prev, next, hints: null, sequence: 1);
 
-        var mirror = new ScreenBuffer(6, 1);
+        var mirror = TestGrid.Buffer(6, 1);
         mirror.SetText(0, 0, "a中b文c", CellStyle.Plain);
         foreach (var change in batch.Changes)
         {

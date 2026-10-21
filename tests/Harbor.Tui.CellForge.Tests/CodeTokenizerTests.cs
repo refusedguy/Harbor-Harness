@@ -233,9 +233,9 @@ public class CodeTokenizerTests
         const string doc = "```csharp\nclass A {}\n```\n";
         var block = new AssistantMarkdownBlock(doc);
         var measure = block.Measure(40);
-        var buffer = new ScreenBuffer(40, measure.MinLines);
+        var buffer = TestRender.Buffer(40, measure.MinLines);
         buffer.Fill(new Rect(0, 0, 40, measure.MinLines), Cell.Blank);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, measure.MinLines), tick: 0));
+        block.Paint(TestRender.Ctx(buffer));
 
         bool sawKeyword = false;
         for (int y = 0; y < buffer.Rows && !sawKeyword; y++)

@@ -19,7 +19,7 @@ public class GoldenMarkdownBlockTests
         var backend = new RecordingBackend();
         var writer = new AnsiWriter(backend, syncUpdates: true);
         var engine = new DiffEngine(64, 10);
-        var back = new ScreenBuffer(64, 10);
+        var back = TestRender.Buffer(64, 10);
 
         const string doc = """
             # Release notes
@@ -36,7 +36,7 @@ public class GoldenMarkdownBlockTests
         var block = new AssistantMarkdownBlock(doc);
         var measure = block.Measure(64);
         back.Fill(new Rect(0, 0, 64, measure.MinLines), Cell.Blank);
-        block.Paint(new BlockPaintContext(back, new Rect(0, 0, 64, measure.MinLines), tick: 0));
+        block.Paint(TestRender.Ctx(back, 64, measure.MinLines));
 
         writer.BeginFrame();
         var eng = GridDump.ToEngine(back);

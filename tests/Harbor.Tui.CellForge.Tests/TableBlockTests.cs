@@ -33,9 +33,9 @@ public class TableBlockTests
 
     private static string Art(TableBlock block, int width = 40)
     {
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
-        return GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(width, block.Measure(width).MinLines);
+        block.Paint(TestRender.Ctx(buffer));
+        return TestRender.Art(buffer);
     }
 
     private static string[] ArtLines(TableBlock block, int width = 40) =>
@@ -97,9 +97,9 @@ public class TableBlockTests
     {
         var block = ParseSample();
         int width = 40;
-        var buffer = new ScreenBuffer(width, block.Measure(width).MinLines);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, width, block.Measure(width).MinLines), 0));
-        string art = GridDump.Art(buffer);
+        var buffer = TestRender.Buffer(width, block.Measure(width).MinLines);
+        block.Paint(TestRender.Ctx(buffer));
+        string art = TestRender.Art(buffer);
         foreach (string line in art.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             await Assert.That(line.Length).IsLessThanOrEqualTo(width);
@@ -135,9 +135,9 @@ public class TableBlockTests
     {
         var block = ParseSample();
         int height = block.Measure(40).MinLines;
-        var buffer = new ScreenBuffer(40, height - 1);
+        var buffer = TestRender.Buffer(40, height - 1);
         block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, height - 1), 0, skipRows: 1));
-        string art = GridDump.Art(buffer);
+        string art = TestRender.Art(buffer);
         await Assert.That(art).Contains("name");
         await Assert.That(art.Contains("┌")).IsFalse();
     }
@@ -146,9 +146,9 @@ public class TableBlockTests
     public async Task Paint_DegenerateRect_NoThrow()
     {
         var block = ParseSample();
-        var buffer = new ScreenBuffer(40, 6);
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 0, 6), 0));
-        block.Paint(new BlockPaintContext(buffer, new Rect(0, 0, 40, 0), 0));
+        var buffer = TestRender.Buffer(40, 6);
+        block.Paint(TestRender.Ctx(buffer, 0, 6));
+        block.Paint(TestRender.Ctx(buffer, 40, 0));
         await Assert.That(block.RawText().Length).IsGreaterThan(0);
     }
 
