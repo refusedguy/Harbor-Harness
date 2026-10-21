@@ -119,7 +119,7 @@ public sealed class PluginRouteAxisCarriageTests
             "sha256-crossing-probe",
             LoadedFromCache: false);
 
-        Result registration = registrar.Register(loaded, host);
+        var registration = registrar.Register(loaded, host);
 
         await Assert.That(registration.IsSuccess).IsTrue()
             .Because(
