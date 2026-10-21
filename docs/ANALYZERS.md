@@ -214,10 +214,13 @@ job — the shared compiler keeps the analyzer assemblies loaded and
 JIT-warmed. Shutting it down (`dotnet build-server shutdown`) brought the
 null arms to −16.9 s, −7.9 s and +1.6 s, but the second build in a job is
 still systematically slower (the compiler's own CPU is 8–24 % higher in it),
-and the spread of the arm deltas is ±20 s. **A paired wall-clock
-measurement on this runner cannot resolve an effect of this size.** The
-compiler's own analyzer report can, and it is what the numbers above are
-read from.
+and the spread of the arm deltas is ±20 s. The arms' raw deltas do not
+follow the analyzer time at all — the largest raw delta is `no-projectfile`
+at −24.1 s (a 2.4 s family) and `no-roslynator` at +13.0 s (a 7.4 s
+family), while `no-sonar` (a 204 s family) reads −21.6 s. **A paired
+wall-clock measurement on this runner cannot resolve an effect of this
+size.** The compiler's own analyzer report can, and it is what the numbers
+above are read from.
 
 #### What the narrowing costs, stated plainly
 
