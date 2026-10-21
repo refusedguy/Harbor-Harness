@@ -4,7 +4,7 @@
 // ------------
 // The tree asserts results in two spellings, and the losing one is everywhere:
 //
-//     await Assert.That(result.IsSuccess).IsTrue();     ← 1914 sites (measured)
+//     await Assert.That(result.IsSuccess).IsTrue();     ← 1910 sites (measured)
 //     await Assert.That(result).IsSuccessful();          ← 78 sites
 //
 // The first spelling asserts a BOOL, so the failure says "found False" and
