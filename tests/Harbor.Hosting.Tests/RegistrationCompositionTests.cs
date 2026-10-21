@@ -54,7 +54,7 @@ public class RegistrationCompositionTests
         // = 22.
         // + goal (#1761, the goal axis — registered whatever the store is, so the
         //   round prompt never names a tool the turn was not offered)
-        // = 21.
+        // = 22.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
