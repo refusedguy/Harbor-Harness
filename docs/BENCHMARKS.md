@@ -3016,6 +3016,143 @@ Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-H
 
 **THE MEASUREMENT WAS EMPTY BEFORE THIS.** Run 39508517419 uploaded twenty cobertura files and every one of them was `<coverage line-rate="1"><packages /></coverage>`; every suite printed "Total - Line: N/A" and the summary printed "No cobertura files produced". The cause: Release sets `DebugType=none` (`Directory.Build.props`), so the build carries no PDB, and the coverage engine on Linux instruments the assemblies STATICALLY — the instrumentation maps IL back to source lines through the portable PDB next to each DLL. With no PDB there is nothing to instrument, and an empty report reads as "100 % covered" to anything that parses `line-rate`. The lane now builds with `-p:DebugType=portable -p:DebugSymbols=true`.
 
+### 6.9 The runner-queue wait of a pull request (#1782) ✅ measured in CI
+
+**What the issue measured, and what the tree measures now.** Issue #1782 measured
+the wait a pull request spends in the runner queue: **0.3 to 14.8 minutes**,
+against 1.1-3.4 minutes of actual test time. The wait was the FAN-OUT: one
+`build` job unblocked eight jobs at the same instant, and the last of them
+waited for the pool to work through the seven ahead of it. That graph is gone.
+The OS matrix left the pull-request lane (#1787), the coverage report moved to
+the nightly lane (#1923), the shards moved to the arm64 pool (#1952), and the
+`pack` job left the `build` job (#1788). The fan-out is now **eight jobs over
+three pools** — five shards on `ubuntu-24.04-arm`, `pack` and `perf-gate` on
+`ubuntu-24.04`, the AOT publish on `ubuntu-latest` — and the measured wait is
+**1-7 s (median 2 s)**.
+
+**How the number is obtained.** The Actions API reports each job's
+`started_at` and `completed_at`, which is the queued-vs-running split the UI
+hides; the wait is `started_at(job) − completed_at(build)`. The
+`queue-wait` action (`.github/actions/queue-wait`, issue #1782 step 4) reads
+that job list and prints the number into the job summary, so the figure is read
+where the rest of the job's numbers are read. Every row below is that number,
+read from the API.
+
+**WHERE THE WAIT WAS (the old graph, 154 runs, 2026-10-20/21).** The wait was
+never a property of one job: in a saturated run EVERY job of the burst waited,
+and the sum of the waits was measured in thousands of seconds.
+
+| run | fan-out | service time | worst wait | sum of the waits | who waited |
+|---|---:|---:|---:|---:|---|
+| [39483302243](https://github.com/refusedguy/Harbor-Harness/actions/runs/39483302243) | 6 | 865 s | **1194 s** (`test (ui)`) | 3493 s | ui 1194, coverage 785, aot 497, core 453, e2e 301, platform 263 |
+| [39483558468](https://github.com/refusedguy/Harbor-Harness/actions/runs/39483558468) | 6 | 783 s | 839 s (`test (platform)`) | **4218 s** | platform 839, core 827, coverage 803, aot 623, e2e 586, ui 540 |
+| [39483402840](https://github.com/refusedguy/Harbor-Harness/actions/runs/39483402840) | 7 | 822 s | 816 s (`test (ui)`) | **4183 s** | ui 816, aot 718, platform 696, e2e 589, coverage 524, core 453, perf 387 |
+
+The mechanism is the burst's **service time** — the sum of the jobs' own times.
+It was 783-882 s in those runs, and a pool that cannot absorb that much at
+once serves the burst in series, so the last job of the burst waits for the
+service time of the ones ahead of it. Two of the three numbers above are
+therefore the same fact seen twice: the `aot-publish` job alone contributed
+210-264 s of service time to every one of those bursts.
+
+**THE CHANGE: the AOT publish starts with the build instead of after it.** The
+job publishes the tree from source, restores the packages itself and downloads
+no artifact of the `build` job's — its only inputs are the checkout and the
+SDK. `needs: build` was a SEQUENCING choice ("start from a tree already known
+to compile"), and it cost every pull request its tail: 222 s of own time
+(median over 95 runs), the longest job in the post-build burst, spent AFTER
+the build for no data dependency. With `needs: [changes]` the job overlaps the
+build (336-436 s against 222 s) and is finished long before it.
+
+**Measured before/after, same tree, paired runs** (the `before` is `dev`
+dispatched on the same branch slot, the `after` is the same tree with the
+change; the wait column is `started_at − completed_at(build)`; three pairs,
+each dispatched 23 s apart so that both sides meet the same pool load).
+Pairs 1-2 ran on `dev` @ `2430a88f` in a QUIET pool; pair 3 on `dev` @
+`4299ce01` in a SATURATED one (34 runs queued in the repository):
+
+| | before — [39546719740](https://github.com/refusedguy/Harbor-Harness/actions/runs/39546719740) | before — [39548019441](https://github.com/refusedguy/Harbor-Harness/actions/runs/39548019441) | after — [39546754147](https://github.com/refusedguy/Harbor-Harness/actions/runs/39546754147) | after — [39547983790](https://github.com/refusedguy/Harbor-Harness/actions/runs/39547983790) |
+|---|---:|---:|---:|---:|
+| `build` own time | 427 s | 371 s | 500 s | 544 s |
+| fan-out jobs after the build | 8 | 8 | **7** | **7** |
+| burst service time | 735 s | 716 s | **529 s** | **496 s** |
+| worst wait in the burst | 56 s (`aot-publish`) | 5 s | 5 s | 12 s |
+| sum of the waits in the burst | 159 s | 32 s | 26 s | 43 s |
+| `aot-publish` own time | 211 s | 213 s | 208 s | 219 s |
+| where the AOT publish ran | AFTER the build | AFTER the build | **with** the build | **with** the build |
+| the post-build tail (last job to finish) | `aot-publish`, 56 + 211 = 267 s | `aot-publish`, 2 + 213 = 215 s | `pack`, 2 + 116 = **118 s** | `test (arch)`, 11 + 111 = **122 s** |
+| the post-build phase (build end → run end) | 267 s | 215 s | **118 s** | **122 s** |
+
+Medians over the two quiet pairs: the post-build phase **241 s → 120 s**
+(−50 %), the burst's service time **725 s → 512 s** (−29 %).
+
+The `build` job's own time differs by 73 s and 173 s between the pairs — that
+is the runner, not the lane (the same spread is in §6.4's compile column), and
+it is exactly why the row that carries the claim is the POST-BUILD phase: the
+part of the run the change can move, measured from the build's end. The total
+wall of the run moved 715 s → 644 s and 605 s → 686 s, and the second pair's
+total grew because its build ran 173 s slower.
+
+**The third pair, in a saturated pool** — the regime the issue measured. This
+one is on `dev` @ `4299ce01` (with the `gate` job back) and it ran while 34
+runs were queued in the repository, so the waits are the real thing: 5-488 s
+per job.
+
+| | before — [39552127159](https://github.com/refusedguy/Harbor-Harness/actions/runs/39552127159) | after — [39552162157](https://github.com/refusedguy/Harbor-Harness/actions/runs/39552162157) |
+|---|---:|---:|
+| `build` own time | 520 s | 547 s |
+| the build's own queue wait (run → build start) | 166 s | **320 s** |
+| fan-out jobs after the build | 9 | **8** |
+| burst service time | 740 s | **479 s** (−35 %) |
+| worst wait in the burst | 488 s (`gate`) | **407 s** (`gate`) (−17 %) |
+| sum of the waits in the burst | 2449 s | **1781 s** (−27 %) |
+| the post-build phase (build end → run end) | 492 s | **410 s** (−17 %) |
+| the run's total wall | 1370 s | 1477 s |
+
+**The honest reading of the third pair.** The WAIT numbers fell — the burst's
+service time by 35 %, the sum of the waits by 27 %, the worst single wait by
+17 % — and the post-build phase fell with them. The run's total wall did NOT
+fall, and the reason is in the table: the `after` run's `build` waited 320 s
+for a runner against the `before` run's 166 s. The build is in the
+`ubuntu-24.04` pool and the change adds its work to the `ubuntu-latest` pool,
+so that 154 s is the global queue at that moment, not the lane. The two runs
+of the pair did not meet the same pool load, and the row that does not depend
+on the load — the burst's service time, the waits inside the burst, the
+post-build phase — fell in all three pairs.
+
+**The tail in a saturated run is the `gate` job.** It is a 4-second job that
+can only start when every lane has finished, so it asks the pool for a runner
+at the busiest moment of the run: 488 s of waiting in the `before` run, 407 s
+in the `after` one. No lane change can move that — the `gate` job is the
+required check (#1804) and it has to be the last thing that runs. It is also
+the reason the saturated pair's improvement is 17 % and not 50 %: the tail is
+the queue there, not the AOT publish.
+
+**The same change on the runs that were already in the history** (the tail =
+the last job of the fan-out to finish, measured the same way):
+
+| run | branch | `build` | fan-out | service | worst wait | the tail | wall |
+|---|---|---:|---:|---:|---:|---|---:|
+| [39543869492](https://github.com/refusedguy/Harbor-Harness/actions/runs/39543869492) | dev push | 429 s | 8 | 734 s | 5 s | `aot-publish` 224 s | 677 s |
+| [39543921940](https://github.com/refusedguy/Harbor-Harness/actions/runs/39543921940) | PR | 336 s | 7 | 630 s | 5 s | `aot-publish` 172 s | 529 s |
+| [39545372020](https://github.com/refusedguy/Harbor-Harness/actions/runs/39545372020) | PR | 377 s | 6 | 474 s | 7 s | `test (arch)` 128 s (no AOT job) | 518 s |
+
+**THE TRADE-OFF, stated.** When the `build` is red, the AOT publish now runs
+and reports its own verdict instead of being skipped. That verdict is
+informative — the AOT publish compiles the product tree, not the tests, so a
+pull request that breaks only a test project still gets a green AOT signal —
+and the pull request was red either way. The price is 222 s of runner time on
+a red pull request.
+
+**WHAT THIS DOES NOT CLAIM.** The wait on the current graph is small (1-7 s),
+so no single job-graph edit can move it much: the 14.8-minute figure belonged
+to a graph that no longer exists. What the edit buys is the CRITICAL PATH
+(the AOT publish's 222 s tail) and the burst's service time, which is the
+quantity the wait is made of when the pool is saturated — the regime the three
+runs above are measured in. The arm64 pool is the one that fills first: it
+carries five shards with 347 s of service time, and it is the pool the
+`test (ui)` shard waited 1194 s in.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that

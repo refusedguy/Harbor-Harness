@@ -88,7 +88,7 @@ blocks, not on document size**. Frozen blocks are restored from
 canonical event stream, plus a strategy-parity contract: ANSI output with
 escape sequences stripped must equal the plain-mode output byte-for-byte.
 Regenerate after an intentional visual change with
-`HARBOR_UPDATE_GOLDEN=1 dotnet run --project tests/Harbor.Tui.RendererTests` and review
+`HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.Tui.RendererTests` and review
 the golden diff in the PR.
 
 ## Backend inventory (Phase 3/4 state)
