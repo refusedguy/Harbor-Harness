@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	archanchors "harbor.local/gates/check-arch-anchors"
@@ -50,6 +51,7 @@ import (
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	resultchains "harbor.local/gates/check-result-chains"
+	shardbalance "harbor.local/gates/check-shard-balance"
 	stringswitch "harbor.local/gates/check-string-switch"
 	"harbor.local/gates/check-xml-doc-coverage"
 	"harbor.local/gates/gen-seam-graph"
@@ -59,6 +61,8 @@ import (
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
 	"harbor.local/gates/msbuild-evaluation-cost"
+	normalizemtimes "harbor.local/gates/normalize-mtimes"
+	packvalidate "harbor.local/gates/pack-validate"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
 	"harbor.local/gates/test-skips"
@@ -81,6 +85,21 @@ type registered struct {
 
 var registry = []registered{
 	{
+		name:    "aggregate-analyzer-cost",
+		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
+		run:     aggregateanalyzercost.Run,
+	},
+	{
+		name:    "aggregate-build-vcpu",
+		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
+		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "changelog-assemble",
+		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
+		run:     changelog.Run,
+	},
+	{
 		name:    "check-abstractions-contract",
 		summary: "every dependency the five guarded src/ projects declare is load-bearing",
 		run:     checkabstractionscontract.Run,
@@ -96,14 +115,14 @@ var registry = []registered{
 		run:     docfacts.Run,
 	},
 	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
 		name:    "check-no-test-sdk",
 		summary: "no project file declares the VSTest host that stops TUnit's discovery",
 		run:     checknotestsdk.Run,
-	},
-	{
-		name:    "check-xml-doc-coverage",
-		summary: "every public member of the frozen contract assembly carries an XML doc",
-		run:     checkxmldoccoverage.Run,
 	},
 	{
 		name:    "check-public-api-resign",
@@ -116,19 +135,24 @@ var registry = []registered{
 		run:     checkreferencetrimmer.Run,
 	},
 	{
+		name:    "check-shard-balance",
+		summary: "are the CI test shards balanced by what their projects cost",
+		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-xml-doc-coverage",
+		summary: "every public member of the frozen contract assembly carries an XML doc",
+		run:     checkxmldoccoverage.Run,
+	},
+	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
 	},
 	{
-		name:    "aggregate-build-vcpu",
-		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
-		run:     aggregatebuildvcpu.Run,
-	},
-	{
-		name:    "aggregate-analyzer-cost",
-		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
-		run:     aggregateanalyzercost.Run,
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
 	},
 	{
 		name:    "measure-build-cpu",
@@ -144,6 +168,16 @@ var registry = []registered{
 		name:    "msbuild-evaluation-cost",
 		summary: "what a Release compile spends on MSBuild project evaluation",
 		run:     msbuildevaluationcost.Run,
+	},
+	{
+		name:    "normalize-mtimes",
+		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
+		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "pack-validate",
+		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
+		run:     packvalidate.Run,
 	},
 	{
 		name:    "test-census",
