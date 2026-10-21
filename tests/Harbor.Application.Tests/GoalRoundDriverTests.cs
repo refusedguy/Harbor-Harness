@@ -231,4 +231,29 @@ public class GoalRoundDriverTests
         await Assert.That(store.Peek(session.Id)!.Revision).IsEqualTo(2)
             .Because("a blocked goal is terminal; the driver leaves it alone");
     }
+
+    [Test]
+    public async Task TheRoundPrompt_NamesTheGoalTool_OnlyWhenTheAgentMayCallIt()
+    {
+        // #793's shape: a prompt that names a tool the turn was not offered
+        // tells the model to call something it cannot call.
+        var store = new FakeGoalStore();
+        Session session = NewSession();
+        store.Seed(session.Id, NewGoal());
+
+        var working = new TestSessionContext(session);
+        await NewDriver(store).TryReserveRoundAsync(
+            working, AgentDefinition.CodeDefault("claude-opus-4", "anthropic"), default);
+        var workingPrompt = working.Messages[0] as UserMessage;
+        await Assert.That(workingPrompt!.Content).Contains("`goal` tool")
+            .Because("the code agent may call the goal tool, so the prompt says how to report");
+
+        var readOnly = new TestSessionContext(session);
+        await NewDriver(store).TryReserveRoundAsync(
+            readOnly, AgentDefinition.PlanDefault("claude-opus-4", "anthropic"), default);
+        var readOnlyPrompt = readOnly.Messages[0] as UserMessage;
+        await Assert.That(readOnlyPrompt!.Content).DoesNotContain("`goal` tool")
+            .Because("the plan agent's ruleset does not allow the goal tool, so naming it "
+                   + "would point the model at a tool it was never given");
+    }
 }

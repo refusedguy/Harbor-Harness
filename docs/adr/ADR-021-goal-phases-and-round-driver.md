@@ -127,6 +127,15 @@ readable and auditable. The tool does NOT start a goal: the objective is the
 user's, and a model that could set its own objective would be marking its
 own homework.
 
+**The round prompt names the tool only when the turn may call it.** The
+predicate is the resolver's own — a tool is offered exactly when the
+agent's ruleset ALLOWS it — so the prompt asks the same question
+`ToolRegistry.ResolveTools` asks. A prompt that named a tool the turn was
+not offered is the #793 defect, and the goal axis would have shipped it: the
+read-only modes do not allow the `goal` tool, so their round prompt carries
+the WORK and not the verdict, and their goal ends the honest way — blocked
+by the round limit, with the code that says why.
+
 ## What this slice does NOT do, and the order of the rest
 
 This is a vertical slice, not a subsystem. What is here:

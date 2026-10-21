@@ -187,7 +187,7 @@ internal sealed class GoalRoundDriver
                 Guid.NewGuid().ToString("N"),
                 session.Session.Id,
                 DateTimeOffset.UtcNow,
-                RenderRoundPrompt(reserved, reserved.RoundsStarted),
+                RenderRoundPrompt(reserved, reserved.RoundsStarted, CanReport(agent)),
                 agent.Name.Value,
                 agent.Model);
             await session.AppendMessageAsync(prompt, ct).ConfigureAwait(false);
@@ -247,6 +247,37 @@ internal sealed class GoalRoundDriver
     }
 
     /// <summary>
+    ///     Whether the agent may call the <c>goal</c> tool — the channel
+    ///     through which it reports its verdict on the goal.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The predicate is the resolver's own: a tool is offered to a
+    ///         turn exactly when its ruleset ALLOWS it
+    ///         (<c>ToolRegistry.ResolveTools</c>). A round prompt that named
+    ///         a tool the turn was not offered is the #793 defect — the model
+    ///         is told to call something it cannot call — so the prompt asks
+    ///         the same question the resolver asks.
+    ///     </para>
+    ///     <para>
+    ///         An agent that cannot report keeps working: the round prompt
+    ///         then carries the WORK and not the verdict, and the goal ends
+    ///         the honest way — blocked by the round limit, with the code that
+    ///         says why.
+    ///     </para>
+    /// </remarks>
+    /// <param name="agent">The agent definition driving the run.</param>
+    /// <returns>True when the agent may call the goal tool.</returns>
+    private static bool CanReport(AgentDefinition agent) =>
+        agent.Permission.Evaluate(GoalToolName, "*") == PermissionAction.Allow;
+
+    /// <summary>
+    ///     The name of the model-facing tool that records the agent's verdict
+    ///     on the goal.
+    /// </summary>
+    private const string GoalToolName = "goal";
+
+    /// <summary>
     ///     Render the prompt that starts a round.
     /// </summary>
     /// <remarks>
@@ -275,16 +306,23 @@ internal sealed class GoalRoundDriver
     /// </remarks>
     /// <param name="goal">The goal, with the round already counted.</param>
     /// <param name="round">The 1-based number of the round that starts now.</param>
+    /// <param name="canReport">
+    ///     Whether the agent may call the goal tool. The prompt names the tool
+    ///     only then — a prompt that named a tool the turn was not offered is
+    ///     the #793 defect.
+    /// </param>
     /// <returns>The prompt text.</returns>
-    internal static string RenderRoundPrompt(Goal goal, int round) =>
+    internal static string RenderRoundPrompt(Goal goal, int round, bool canReport) =>
         $"Goal (round {round} of {goal.MaxRounds}): {goal.Objective}\n\n"
         + "Continue working toward the objective in this same session. Treat the current "
         + "workspace, tool results, and durable session state as authoritative; inspect them "
         + "instead of assuming earlier narration is still current. Make concrete progress and "
-        + "verify the result.\n\n"
-        + "When the objective is met, call the `goal` tool with operation \"complete\". If you "
-        + "cannot proceed and know what is missing, call it with operation \"block\" and a "
-        + "reason.";
+        + "verify the result."
+        + (canReport
+            ? "\n\nWhen the objective is met, call the `goal` tool with operation \"complete\". "
+              + "If you cannot proceed and know what is missing, call it with operation \"block\" "
+              + "and a reason."
+            : string.Empty);
 }
 
 /// <summary>
