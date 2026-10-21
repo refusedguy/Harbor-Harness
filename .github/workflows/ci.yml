@@ -294,7 +294,7 @@ jobs:
               - 'Directory.Build.props'
               - 'Directory.Packages.props'
               - 'BannedSymbols.txt'
-              - 'tools/check-test-packages.py'
+              - 'tools/gates/check-test-packages/**'
               - 'tools/test-package-exceptions.txt'
             ui:
               - 'src/Harbor.Tui*/**'
@@ -585,9 +585,9 @@ jobs:
           # job (the build job) builds it on purpose to prove the gate.
           dotnet restore tests/TUnitAnalyzerCanary/TUnitAnalyzerCanary.csproj
       - name: Package-set gate fails on an injected banned package
-        run: python3 tools/check-test-packages.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --self-test
       - name: Check the resolved package set of every test and sample project
-        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
 
   # #1893. The VSTest test host must not come back.
   #
@@ -1232,7 +1232,7 @@ jobs:
       # mechanisms: a file can reach an output directory without being a
       # package in the graph.
       - name: No banned assembly in any test/sample output directory
-        run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --output-only --min-projects 43 --min-output-dirs 40
 
       # #1836 — the TUnit analyzer gate, proved rather than assumed.
       #

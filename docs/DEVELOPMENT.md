@@ -583,7 +583,7 @@ tools/bin/harbor-gates-linux-x64 gen-seam-graph --write
 
 ## Package-set checks (test and sample projects)
 
-`tools/check-test-packages.py` answers one question about every project under
+`harbor-gates check-test-packages` answers one question about every project under
 `tests/` and `samples/`: **which packages may it reference, directly or
 transitively, and is any banned one among them?**
 
@@ -597,9 +597,9 @@ covers four `src/` projects, `tools/aot-publish-gate.py` covers `src/` and
 
 ```bash
 dotnet restore Harbor.slnx        # the gate reads what the restore resolves
-./tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
-./tools/check-test-packages.py --self-test   # prove the gate still fails on a banned package
-./tools/check-test-packages.py --report      # the census, per project
+tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 40 --min-packages 1400
+tools/bin/harbor-gates-linux-x64 check-test-packages --self-test   # prove the gate still fails on a banned package
+tools/bin/harbor-gates-linux-x64 check-test-packages --report      # the census, per project
 ```
 
 **How it reads the graph.** Two sources, and the difference matters. The
@@ -648,8 +648,8 @@ What must not happen is the package arriving quietly.
 
 | Job | What it asserts |
 |---|---|
-| `test/sample package set` (`ci.yml`) | the resolved package graph of every test and sample project — `check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400`, after `dotnet restore` |
-| `build` (`ci.yml`, one step after the solution build) | the output directories the build produced — `check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40` |
+| `test/sample package set` (`ci.yml`) | the resolved package graph of every test and sample project — `harbor-gates check-test-packages --min-projects 43 --min-declared 40 --min-packages 1400`, after `dotnet restore` |
+| `build` (`ci.yml`, one step after the solution build) | the output directories the build produced — `harbor-gates check-test-packages --output-only --min-projects 43 --min-output-dirs 40` |
 
 The first answers "which packages may this project pull in, directly or
 transitively" from the graph NuGet resolved. The second answers the issue's

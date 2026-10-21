@@ -45,6 +45,7 @@ import (
 	docfacts "harbor.local/gates/check-doc-facts"
 	dupjscpd "harbor.local/gates/check-dup-jscpd"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
+	testpackages "harbor.local/gates/check-test-packages"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
 	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
@@ -79,6 +80,11 @@ var registry = []registered{
 		name:    "check-test-json-reflection",
 		summary: "no test serializes through the reflection resolver",
 		run:     jsonreflection.Run,
+	},
+	{
+		name:    "check-test-packages",
+		summary: "which packages a test or sample project may reference, and whether a banned one is among them",
+		run:     testpackages.Run,
 	},
 	{
 		name:    "check-tool-schema-pin",

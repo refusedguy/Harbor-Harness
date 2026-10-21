@@ -1146,7 +1146,7 @@ Scope and enforcement:
   builds, so review is the only backstop there.
 - **Package set** — RS0030 reads source code, so it says nothing about a
   package that drags a banned assembly into a test project's `bin/`.
-  `tools/check-test-packages.py` is that gate: it reads the resolved package
+  `harbor-gates check-test-packages` is that gate: it reads the resolved package
   graph of every test and sample project and fails on a banned package, direct
   or transitive, and the named exceptions live in
   `tools/test-package-exceptions.txt`. `AGENTS.md` §"What NOT to do" #2 states
@@ -1327,10 +1327,10 @@ advisories this repository has had to act on inside the gate.
 | ID | Title | Severity | Why |
 |----|-------|----------|-----|
 | Proj0043 | Use lock files | suggestion | **Decided on 2026-10-20 (#1857): not adopted, and the tree stays all-or-nothing.** The measured reason is in `docs/CENTRAL_PACKAGE_MANAGEMENT.md` §14: the restore is already reproducible (196 packages in the graph, 0 of the 68 version ranges floating or open at the bottom), so a lock file would add a detector rather than a fix, at the cost of one file per project that every dependabot PR has to reconcile. The rule stays visible so the question is not forgotten. |
-| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. `RestoreLockedMode` without lock files is a restore that fails, which is why `tools/check-test-packages.py` reports that state (`RESTORE-LOCKED-WITHOUT-FILES`) rather than letting it reach CI. |
+| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. `RestoreLockedMode` without lock files is a restore that fails, which is why `harbor-gates check-test-packages` reports that state (`RESTORE-LOCKED-WITHOUT-FILES`) rather than letting it reach CI. |
 
 **The gate that keeps the lock-file decision honest** is
-`tools/check-test-packages.py` (the `test-packages` CI job). It reports four
+`harbor-gates check-test-packages` (the `test-packages` CI job). It reports four
 states the tree must never be in: a lock file nobody regenerates
 (`RESTORE-INPUTS-UNENFORCED`), the property set with no lock file
 (`RESTORE-INPUTS-UNWRITTEN`), locked mode without lock files
