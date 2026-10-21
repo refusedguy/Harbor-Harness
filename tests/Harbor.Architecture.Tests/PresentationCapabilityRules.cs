@@ -165,6 +165,15 @@ internal sealed class AssemblyScan
     /// <summary>Top-level type count in the main module.</summary>
     public required int TopLevelTypeCount { get; init; }
 
+    /// <summary>
+    ///     True when the binary the probe read is an INSTRUMENTED copy: the
+    ///     code-coverage engine's tracker is in it. The verdict is still the
+    ///     product's — the instrumenter's own types are skipped — but a reader
+    ///     of a failure deserves to know that the file on disk was not the
+    ///     product's own build.
+    /// </summary>
+    public required bool Instrumented { get; init; }
+
     /// <summary>The forbidden-capability hits the probe found.</summary>
     public required IReadOnlyList<CapabilityHit> Hits { get; init; }
 }
@@ -231,15 +240,52 @@ internal static class IlCapabilityProbe
 
         using AssemblyDefinition definition = AssemblyDefinition.ReadAssembly(path);
 
+        IReadOnlyList<TypeDefinition> types = definition.MainModule.Types;
+
+        return new AssemblyScan
+        {
+            AssemblyName = simpleName,
+            TopLevelTypeCount = types.Count,
+            Instrumented = IsInstrumentedCopy(types),
+            Hits = ScanTypes(types, simpleName, rules),
+        };
+    }
+
+    /// <summary>
+    ///     Walks the given types and returns the capability hits against
+    ///     <paramref name="rules" />.
+    /// </summary>
+    /// <param name="types">The types to walk, in the order the module holds them.</param>
+    /// <param name="assemblyName">The name the hits are attributed to.</param>
+    /// <param name="rules">The capability rules to match against.</param>
+    /// <param name="skipType">
+    ///     The types to leave out of the walk. The default is the coverage
+    ///     instrumenter's own types (see <see cref="IsInstrumentationInjected" />).
+    ///     It is a parameter so a test can run the walk with the skip OFF and
+    ///     see what the skip changes — the difference between the old verdict
+    ///     and the new one, on one fixture.
+    /// </param>
+    /// <remarks>
+    ///     The walk is over TYPES and not over a file, so a test can hand it a
+    ///     type it built itself. That is what makes the skip testable: the
+    ///     instrumenter's shape can be planted, and the verdict compared with
+    ///     and without the skip.
+    /// </remarks>
+    internal static IReadOnlyList<CapabilityHit> ScanTypes(
+        IEnumerable<TypeDefinition> types,
+        string assemblyName,
+        IReadOnlyList<CapabilityRule> rules,
+        Func<TypeDefinition, bool>? skipType = null)
+    {
+        Func<TypeDefinition, bool> skip = skipType ?? IsInstrumentationInjected;
+
         // One representative member per (rule, type): a 200-call
         // File.ReadAllText loop must not produce 200 identical report rows.
         var members = new Dictionary<(string RuleId, string DeclaringType), SortedSet<string>>();
 
-        int typeCount = 0;
-        foreach (TypeDefinition type in definition.MainModule.Types)
+        foreach (TypeDefinition type in types)
         {
-            WalkType(type, rules, members);
-            typeCount++;
+            WalkType(type, rules, members, skip);
         }
 
         var hits = new List<CapabilityHit>(members.Count);
@@ -247,16 +293,11 @@ internal static class IlCapabilityProbe
         {
             foreach (string member in entry.Value)
             {
-                hits.Add(new CapabilityHit(entry.Key.RuleId, simpleName, entry.Key.DeclaringType, member));
+                hits.Add(new CapabilityHit(entry.Key.RuleId, assemblyName, entry.Key.DeclaringType, member));
             }
         }
 
-        return new AssemblyScan
-        {
-            AssemblyName = simpleName,
-            TopLevelTypeCount = typeCount,
-            Hits = hits,
-        };
+        return hits;
     }
 
     /// <remarks>
@@ -279,7 +320,8 @@ internal static class IlCapabilityProbe
     private static void WalkType(
         TypeDefinition type,
         IReadOnlyList<CapabilityRule> rules,
-        Dictionary<(string, string), SortedSet<string>> members)
+        Dictionary<(string, string), SortedSet<string>> members,
+        Func<TypeDefinition, bool> skipType)
     {
         // The code-coverage instrumentation INJECTS a tracker into every assembly
         // it instruments: a generated `Microsoft.CodeCoverage.Instrumentation.Static.Tracker.*`
@@ -293,7 +335,7 @@ internal static class IlCapabilityProbe
         // System.IO type, so a call to it never matches a rule prefix. What is skipped
         // is the instrumenter's own body, which is absent from an uninstrumented build
         // and says nothing about the architecture.
-        if (IsInstrumentationInjected(type))
+        if (skipType(type))
         {
             return;
         }
@@ -354,7 +396,7 @@ internal static class IlCapabilityProbe
 
         foreach (TypeDefinition nested in type.NestedTypes)
         {
-            WalkType(nested, rules, members);
+            WalkType(nested, rules, members, skipType);
         }
     }
 
@@ -393,17 +435,70 @@ internal static class IlCapabilityProbe
     }
 
     /// <summary>
+    ///     The name the coverage engine stamps on the tracker it injects:
+    ///     <c>StaticManagedTrackerTemplate_&lt;guid&gt;</c>. Measured, not
+    ///     guessed — CI run 39550199613 (nightly, job <c>coverage</c>) printed
+    ///     the type it injected into every Presentation assembly:
+    ///     <c>Microsoft.CodeCoverage.Instrumentation.Static.Tracker.StaticManagedTrackerTemplate_3be3a47c-e6fc-4113-bd3f-ed61f5edac9f</c>.
+    /// </summary>
+    internal const string InstrumentationTrackerNamePrefix = "StaticManagedTrackerTemplate_";
+
+    /// <summary>
+    ///     The namespace the coverage engine injects its tracker into. The
+    ///     engine carries the name as a CONFIGURABLE value (the string
+    ///     <c>TrackerNamespace</c> is in
+    ///     <c>Microsoft.CodeCoverage.Instrumentation</c> 18.8.1), so the
+    ///     namespace is the less stable of the two markers and the stamped type
+    ///     NAME is the second net.
+    /// </summary>
+    internal const string InstrumentationNamespacePrefix = "Microsoft.CodeCoverage";
+
+    /// <summary>
     ///     True for the types the code-coverage instrumentation injects into an
     ///     instrumented assembly: the generated tracker that records which lines ran.
     ///     They belong to the instrumenter, they are absent from an uninstrumented
     ///     build, and they touch the filesystem to do their job — which is not the
     ///     product doing I/O.
     /// </summary>
+    /// <remarks>
+    ///     TWO markers, because the engine has two. The namespace is what the
+    ///     instrumenter in use today injects into; the stamped type name is
+    ///     what the engine writes into the binary whatever namespace it picks.
+    ///     A single marker is one version bump away from a probe that blames
+    ///     the product for the instrumenter's I/O — which is the defect #2089
+    ///     is about, and it would come back silently.
+    /// </remarks>
     internal static bool IsInstrumentationInjected(TypeDefinition type)
     {
         string? ns = type.Namespace;
-        return ns is not null
-               && ns.StartsWith("Microsoft.CodeCoverage", StringComparison.Ordinal);
+        if (ns is not null
+            && ns.StartsWith(InstrumentationNamespacePrefix, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return type.Name.StartsWith(InstrumentationTrackerNamePrefix, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     True when the module carries the coverage engine's marker, i.e. the
+    ///     binary on disk is an INSTRUMENTED copy and not the product's own
+    ///     build. The verdict the probe reports is still the product's — the
+    ///     instrumenter's types are skipped — but the probe says which file it
+    ///     read, so a failure is never read as a claim about a build nobody
+    ///     ships.
+    /// </summary>
+    internal static bool IsInstrumentedCopy(IEnumerable<TypeDefinition> types)
+    {
+        foreach (TypeDefinition type in types)
+        {
+            if (IsInstrumentationInjected(type))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1409,8 +1504,20 @@ public sealed class PresentationCapabilityRules
                           .Distinct(StringComparer.Ordinal)
                           .OrderBy(static member => member, StringComparer.Ordinal));
 
+                // The probe says WHICH FILE it read. A verdict read from an
+                // instrumented copy is still the product's verdict — the
+                // instrumenter's own types are skipped — but a reader who is
+                // told that is not the one who has to guess, and the guess is
+                // the expensive one: it sends a developer to fix the product
+                // for the instrumenter's I/O (that was #2089).
+                string measured = scan.Instrumented
+                    ? " The binary this verdict was read from is an INSTRUMENTED copy — the "
+                      + "coverage engine's tracker is in it — not the product's own build. "
+                    : string.Empty;
+
                 failures.Add(
                     $"[{rule.Id}] {assemblyName}: {byType.Key} uses {rule.Forbids} ({members}). "
+                    + measured
                     + rule.Why
                     + " Tracked by: NO TRACKING ISSUE — this is NEW I/O in the Presentation layer. "
                     + "Open an issue, then either move the I/O behind a Domain contract plus an "
