@@ -50,7 +50,7 @@
 // waved away. Three things make it a different move:
 //
 //   1. It is not a NINTH list. The safety table already carried a tool column
-//      with exactly the twenty builtin names and the two plugin-vocabulary
+//      with exactly the twenty-two builtin names and the two plugin-vocabulary
 //      names, and that column IS the catalog, moved out of the table and typed.
 //      The row set is unchanged, so the guard that already watched the table
 //      (`BuiltinToolSafetyDeclarationsTests`, which compares it against the
@@ -66,7 +66,7 @@
 //      points, not a name that silently matches nothing.
 //
 //   3. What the catalog replaced was not a list of NAMES but a list of
-//      SPELLINGS: `"bash"` written out at two hundred and fifty-nine sites.
+//      SPELLINGS: `"bash"` written out at two hundred and ninety-two sites.
 //      A list of spellings is not a list of facts, and it is the one thing
 //      this rule was never able to police — the rule polices SETS, and a
 //      single name in a permission rule is a lookup, not a set.

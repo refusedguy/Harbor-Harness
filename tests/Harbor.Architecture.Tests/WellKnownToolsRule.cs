@@ -2,7 +2,7 @@
 //
 // WHY THIS FILE EXISTS
 // --------------------
-// #1564 moved the builtin tool names out of two hundred and fifty-nine string
+// #1564 moved the builtin tool names out of two hundred and ninety-two string
 // literals and into one catalog, `WellKnownTools`. Two places still cannot read
 // the catalog and keep a literal, because C# requires a compile-time constant
 // there:

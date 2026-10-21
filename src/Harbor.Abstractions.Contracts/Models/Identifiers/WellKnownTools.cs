@@ -9,7 +9,8 @@ namespace Harbor.Abstractions.Models.Identifiers;
 ///         The names used to be written out again at every site that needed one:
 ///         a permission rule here, a safety declaration there, a comparison in a
 ///         renderer. A count over <c>src/</c> found <c>"bash"</c> seventy times and
-///         two hundred-plus tool-name literals in total, spread over fifty files.
+///         two hundred and ninety-two tool-name literals in total, spread over
+///         fifty-four files.
 ///         A name written out twice is two facts to keep in step, and the failure
 ///         mode is silent: a rule that names <c>"basn"</c> matches nothing and
 ///         reports nothing, because a permission rule that matches no rule falls
