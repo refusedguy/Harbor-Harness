@@ -90,13 +90,13 @@ internal sealed class ToolRetryPolicy(
             };
         }
 
-        string prefix = result.ErrorInfo.Code + ": ";
-        if (result.Output.StartsWith(prefix, StringComparison.Ordinal))
+        string codePrefix = result.ErrorInfo.Code + ": ";
+        if (result.Output.StartsWith(codePrefix, StringComparison.Ordinal))
         {
             return result;
         }
 
-        return new ToolResult(prefix + result.Output, true, result.Metadata, result.Attachments)
+        return new ToolResult(codePrefix + result.Output, true, result.Metadata, result.Attachments)
         {
             ErrorInfo = result.ErrorInfo,
         };

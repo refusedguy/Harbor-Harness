@@ -154,7 +154,7 @@ public class JsonlToolErrorRoundTripTests
         // come back with no code — an absent member is the honest reading of a
         // record that never carried one.
         byte[] line = Encoding.UTF8.GetBytes(
-            "{\"id\":\"m1\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"role\":\"tool_result\","
+            "{\"type\":\"message\",\"id\":\"m1\",\"createdAt\":\"2026-01-01T00:00:00Z\",\"role\":\"tool_result\","
             + "\"payload\":{\"results\":[{\"toolCallId\":\"tc1\",\"toolName\":\"read\","
             + "\"output\":\"file contents\",\"isError\":false}]}}");
 
