@@ -131,6 +131,15 @@
              and reach a consumer as an ordinary assembly reference. Its
              closure is three: itself and the two contract assemblies. -->
         <Project Path="tests/Harbor.TestKit.Generated/Harbor.TestKit.Generated.csproj"/>
+        <!-- #1797: the [Observed] generator runs over THIS project, so the
+             decorators it emits are compiled here and reach the guard
+             (Harbor.CodeGen.Tests) as ordinary types. It is a fixture, not a
+             test project: it declares no [Test] method. -->
+        <Project Path="tests/Harbor.Telemetry.Fixtures/Harbor.Telemetry.Fixtures.csproj"/>
+        <!-- #1797: the guard for the [Observed] generator — the in-process
+             driver and the behavioural half that runs the decorator the
+             generator really emitted. -->
+        <Project Path="tests/Harbor.CodeGen.Tests/Harbor.CodeGen.Tests.csproj"/>
         <!-- #1772/#1773: the TestKit family. `Support` and `Tui` are the two
              siblings that keep the shared helpers reachable from test projects
              whose product-assembly closure does not cover the whole TestKit
