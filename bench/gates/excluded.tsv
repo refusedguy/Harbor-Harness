@@ -31,6 +31,7 @@ contract-domains	CI runs only its own self-test: the census of who uses the two 
 go-quality	the gate runs `go vet` and `go build`, and the toolchain CI uses is fetched from the network; the measuring machine has none it may rely on
 measure-aot-workload.sh	the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK
 measure-build-cpu	the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
+measure-compile-cost	the instrument reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in tools/compile-cost-baseline.txt
 measure-jit-workload.sh	the workload builds the CLI and runs it, so it needs the .NET SDK
 measure-project-graph	CI runs only its own self-test: the project graph is read by a human, not by a build
 msbuild-evaluation-cost	the measurement reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
