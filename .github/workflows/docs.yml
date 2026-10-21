@@ -349,6 +349,12 @@ jobs:
         run: python3 tools/check-md-links.py --self-test
       - name: Markdown lint fails on a malformed document
         run: python3 tools/md-lint.py --self-test
+      # The changelog assembler glues the per-pull-request fragments into
+      # CHANGELOG.md. Its failure path is tested here for the same reason as
+      # the others: a script edited until it assembles nothing is
+      # indistinguishable from a script that assembles nothing.
+      - name: Changelog assembler fails on a diverged CHANGELOG.md
+        run: python3 tools/changelog-assemble.py --self-test
       # #664. The third gate is the only one that asks whether a `file:line`
       # in a normative document still points at a line, and whether a backticked
       # type is constructed by anything. Its failure path is tested here for
