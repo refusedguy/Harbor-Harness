@@ -2,14 +2,14 @@
 """Check the NuGet dependency surface of the projects #428 guards.
 
 Stdlib only — no pip, no network, no dotnet. Wired into .github/workflows/docs.yml
-alongside check-md-links.py, md-lint.py, check-doc-cites.py and check-doc-facts.py,
+alongside check-md-links.py, md-lint.py, check-doc-cites.py and the check-doc-facts gate,
 and it must not overlap any of them:
 
   check-md-links.py   does the link resolve?
   md-lint.py          is the file shaped the way the repo says it is?
   check-doc-cites.py  does a `file:line` still point at a line, and a named type
                       still exist?
-  check-doc-facts.py  does a COUNT a document states still equal the count of
+  check-doc-facts    does a COUNT a document states still equal the count of
                       tracked files it is counting?
   THIS ONE            is every <PackageReference> a guarded project declares
                       actually load-bearing, and is every non-BCL namespace its

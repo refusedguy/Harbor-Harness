@@ -3,13 +3,13 @@
 
 Stdlib only — no pip, no network, no dotnet. Wired into
 .github/workflows/docs.yml alongside check-md-links.py, md-lint.py,
-check-doc-cites.py, check-doc-facts.py and check-abstractions-contract.py,
+check-doc-cites.py, check-doc-facts and check-abstractions-contract.py,
 and it must not overlap any of them:
 
   check-md-links.py               does the link resolve?
   md-lint.py                      is the file shaped the way the repo says it is?
   check-doc-cites.py              does a `file:line` still point at a line?
-  check-doc-facts.py              does a COUNT a document states still equal the
+  check-doc-facts                does a COUNT a document states still equal the
                                   count of tracked files it is counting?
   check-abstractions-contract.py  is every <PackageReference> load-bearing?
   THIS ONE                        is every public member of the frozen contract
