@@ -1646,4 +1646,3 @@ Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage,
 **Зафиксированные решения.** Rewind это запись `"type":"rewind"`, а не флаг на сообщении и не sidecar-файл. Правка сообщения остаётся перезаписью на месте. Prune только явный, по решению владельца. `ISessionStore` расширяется default-членами, отдельный `ISessionLogStore` не заводится, потому что это была бы новая ось расширения. Лог это message-записи плюс rewind-события; записи фидбека и чекпоинтов остаются у своих контрактов.
 
 **Не проверено локально.** Сборка и тесты на этой машине запрещены (OOM), верификация только CI. Правка документационная, гейты документации (`tools/check-md-links.py`, `tools/md-lint.py`, `tools/check-doc-cites.py`, `tools/check-gate-policy.py`) прогоняются локально.
-
