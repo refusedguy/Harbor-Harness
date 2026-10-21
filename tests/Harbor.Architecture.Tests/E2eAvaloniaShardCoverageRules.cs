@@ -28,26 +28,31 @@
 // The check belongs HERE, where it can read the tree without adding a test to
 // it. The file the removed guard recommended is the arch-rule slot (#1724).
 //
-// THE UNIVERSE, AND WHY IT SPANS TWO PROJECTS
-// --------------------------------------------
-// The classes this assembly DISCOVERS are the union of two projects:
+// THE UNIVERSE, AND WHY IT IS ONE PROJECT
+// ---------------------------------------
+// The classes this assembly DISCOVERS are the classes of ONE project:
+// `tests/Harbor.E2E.App.Avalonia`, its own fifteen classes.
 //
-//   * `tests/Harbor.E2E.App.Avalonia` — its own fifteen classes;
-//   * `tests/Harbor.E2E.Framework` — a REFERENCED project. TUnit discovers
-//     and runs a referenced TEST project's classes inside every project that
-//     references it, so a test class added there is part of this assembly's
-//     run even though this project never names it.
+// It used to be two. `tests/Harbor.E2E.Framework` is a REFERENCED test
+// project, and TUnit discovers a referenced test project's classes inside
+// every project that references it: a `[Test]` added there would be part of
+// THIS assembly's run too, and a filter naming only this project's classes
+// would drop it from CI SILENTLY. The shard would still exit 0 and the suite
+// would still be green. The universe therefore spanned both.
 //
-// The second half is the dangerous one. A filter that named only the first
-// project's classes would drop the second project's tests from CI SILENTLY:
-// the shard would still exit 0 and the suite would still be green. The rule
-// therefore grades the union, and the generator
-// (`harbor-gates gen-e2e-shards`) derives the same union from the same source.
+// The second half is now unreachable BY CONSTRUCTION, not merely unused.
+// `TestProjectReferenceRules.ARereferencedTestProjectIsDiscoveredInExactlyOneModule`
+// forbids a referenced test project to declare test methods at all, and it is
+// a build gate: a `[Test]` in `Harbor.E2E.Framework` is a red build, not a
+// silent extra shard. The framework's own tests live in
+// `tests/Harbor.E2E.Framework.Tests`, a project nothing references (#1943
+// moved them there), so they run exactly once.
 //
-// (The union was 16 classes until #1943 moved `StateTestRunnerTests` into a
-// project of its own that nothing references — the trap is still live for
-// the next test class added to the referenced project, which is why the
-// universe is derived rather than written down.)
+// Grading the second half anyway would teach a reader that a trap is live
+// when it is not, and that trap was the reason the universe was derived
+// rather than written down. It is still derived, from ONE project, and the
+// generator (`harbor-gates gen-e2e-shards`) derives the same universe from
+// the same source.
 //
 // HOW THE UNIVERSE IS DERIVED
 // ---------------------------
@@ -96,13 +101,14 @@ public sealed class E2eAvaloniaShardCoverageRules
     private const string PlanRelativePath = "tests/Harbor.E2E.App.Avalonia/e2e-shards.json";
 
     /// <summary>
-    ///     The projects whose test classes the E2E assembly discovers: its own,
-    ///     and the referenced test project whose classes TUnit runs here too.
+    ///     The projects whose test classes the E2E assembly discovers: only its
+    ///     own. A REFERENCED test project cannot contribute one, because the
+    ///     arch rule <c>TestProjectReferenceRules</c> forbids a referenced test
+    ///     project to declare test methods at all.
     /// </summary>
     private static readonly string[] AssembledProjects =
     [
         "Harbor.E2E.App.Avalonia",
-        "Harbor.E2E.Framework",
     ];
 
     /// <summary>
@@ -159,8 +165,8 @@ public sealed class E2eAvaloniaShardCoverageRules
         IReadOnlyList<string> universe = DiscoverTestClasses();
 
         await Assert.That(universe.Count).IsGreaterThanOrEqualTo(15)
-            .Because("the E2E assembly discovers at least fifteen classes of its own plus the "
-                + "referenced `Harbor.E2E.Framework` ones. Found " + universe.Count + ": "
+            .Because("the E2E assembly discovers at least fifteen classes of its own. Found "
+                + universe.Count + ": "
                 + string.Join(", ", universe) + ". A near-empty set means the scan stopped "
                 + "matching the tree — a renamed folder, a moved file — and every rule below "
                 + "would then be satisfied by nothing.");
@@ -184,10 +190,9 @@ public sealed class E2eAvaloniaShardCoverageRules
                 + "had. Missing from " + PlanRelativePath + ": "
                 + (missing.Count == 0 ? "(none)" : string.Join(", ", missing))
                 + ". Regenerate the plan with harbor-gates gen-e2e-shards. NOTE: the universe "
-                + "includes the classes of the REFERENCED test project "
-                + "`Harbor.E2E.Framework` — TUnit runs a referenced test project's classes "
-                + "inside every project that references it, so a filter that did not name them "
-                + "would drop those tests from CI silently.");
+                + "is the classes of `Harbor.E2E.App.Avalonia` ALONE. A referenced test project "
+                + "cannot contribute one, because `TestProjectReferenceRules` forbids a "
+                + "referenced test project to declare test methods at all.");
     }
 
     /// <summary>
@@ -274,7 +279,7 @@ public sealed class E2eAvaloniaShardCoverageRules
     }
 
     /// <summary>
-    ///     The classes of the two projects this assembly discovers, as the
+    ///     The classes of the project this assembly discovers, as the
     ///     generator derives them.
     /// </summary>
     private static IReadOnlyList<string> DiscoverTestClasses()

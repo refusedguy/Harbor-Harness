@@ -13,9 +13,13 @@ package gene2eshards
 //      one is not, and a nested type is not a suite;
 //   2. the extent rule: a helper class after a suite does not inherit its
 //      neighbour's tests;
-//   3. the balance: the heaviest class lands in the lightest bin, and the
+//   3. the scope: a class with a `[Test]` in the REFERENCED test project is
+//      NOT part of the universe, because a referenced test project may not
+//      carry tests at all (`TestProjectReferenceRules`) and the framework's
+//      own tests live in a project nothing references;
+//   4. the balance: the heaviest class lands in the lightest bin, and the
 //      local search finds a split the seed does not;
-//   4. the plan: the file the generator writes is the file it says it wrote.
+//   5. the plan: the file the generator writes is the file it says it wrote.
 
 import (
 	"fmt"
@@ -62,7 +66,11 @@ internal class AlphaHelper
     public int Value => 1;
 }
 `)
-	// The referenced test project: its classes are discovered here too.
+	// The referenced test project: its classes are NOT discovered here, and
+	// they CANNOT be. A referenced test project may not declare test
+	// methods (`TestProjectReferenceRules.ARereferencedTestProjectIsDiscoveredInExactlyOneModule`
+	// is a build gate), and the framework's own tests live in
+	// `tests/Harbor.E2E.Framework.Tests`, a project nothing references.
 	framework := filepath.Join(root, "tests", "Harbor.E2E.Framework")
 	writeFile(filepath.Join(framework, "GammaTests.cs"), `public class GammaTests
 {
@@ -87,7 +95,7 @@ func selfTestRun() int {
 	fixtureTree(root)
 
 	universe := classUniverse(root)
-	for _, wanted := range []string{"AlphaTests", "BetaTests", "GammaTests"} {
+	for _, wanted := range []string{"AlphaTests", "BetaTests"} {
 		if _, ok := universe[wanted]; !ok {
 			fail("the class universe does not hold " + wanted)
 		}
@@ -96,6 +104,15 @@ func selfTestRun() int {
 		if _, ok := universe[unwanted]; ok {
 			fail("the class universe holds " + unwanted + ", which declares no [Test]")
 		}
+	}
+	// The scope: a class in the REFERENCED test project is not in this
+	// assembly's universe. If this fires, the generator reads a project whose
+	// classes the assembly never discovers, and a `[Test]` there is a red
+	// build anyway.
+	if _, ok := universe["GammaTests"]; ok {
+		fail("the class universe holds GammaTests, which lives in the referenced " +
+			"test project: a referenced test project may not carry tests, and the " +
+			"framework's own tests live in a project nothing references")
 	}
 	if file, ok := universe["AlphaTests"]; ok {
 		if file != "tests/Harbor.E2E.App.Avalonia/AlphaTests.cs" {
@@ -166,7 +183,7 @@ func selfTestRun() int {
 		return gate.Red
 	}
 	fmt.Println("self-test OK: the generator finds the classes of the tree, tells a " +
-		"suite from a helper, balances the shards and writes a plan that names " +
-		"every class the universe holds")
+		"suite from a helper, reads only the assembly's own project, balances the " +
+		"shards and writes a plan that names every class the universe holds")
 	return gate.Green
 }
