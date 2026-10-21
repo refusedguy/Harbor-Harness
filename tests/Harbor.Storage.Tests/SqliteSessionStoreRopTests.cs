@@ -38,7 +38,7 @@ public class SqliteSessionStoreRopTests
         {
             var result = await store.GetMessagesAsync("nonexistent-id");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).IsEqualTo("Session 'nonexistent-id' not found.");
         }
         finally
@@ -71,7 +71,7 @@ public class SqliteSessionStoreRopTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("kept");
         }
@@ -100,7 +100,7 @@ public class SqliteSessionStoreRopTests
 
             var stats = await store.GetStatsAsync(session.Id);
 
-            await Assert.That(stats.IsFailure).IsTrue();
+            await Assert.That(stats).IsFailed();
             await Assert.That(stats.Error).Contains(session.Id);
             await Assert.That(stats.Error).Contains("corrupt");
         }
@@ -121,7 +121,7 @@ public class SqliteSessionStoreRopTests
 
             var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).IsEqualTo(
                 $"Message 'no-such-message' not found in session '{session.Id}'.");
         }

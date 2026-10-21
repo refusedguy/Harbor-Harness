@@ -42,7 +42,7 @@
 // project's classes would drop the second project's tests from CI SILENTLY:
 // the shard would still exit 0 and the suite would still be green. The rule
 // therefore grades the union, and the generator
-// (`tools/gen-e2e-shards.py`) derives the same union from the same source.
+// (`harbor-gates gen-e2e-shards`) derives the same union from the same source.
 //
 // (The union was 16 classes until #1943 moved `StateTestRunnerTests` into a
 // project of its own that nothing references — the trap is still live for
@@ -183,7 +183,7 @@ public sealed class E2eAvaloniaShardCoverageRules
                 + "writes has one class fewer, and the suite is green with fewer tests than it "
                 + "had. Missing from " + PlanRelativePath + ": "
                 + (missing.Count == 0 ? "(none)" : string.Join(", ", missing))
-                + ". Regenerate the plan with tools/gen-e2e-shards.py. NOTE: the universe "
+                + ". Regenerate the plan with harbor-gates gen-e2e-shards. NOTE: the universe "
                 + "includes the classes of the REFERENCED test project "
                 + "`Harbor.E2E.Framework` — TUnit runs a referenced test project's classes "
                 + "inside every project that references it, so a filter that did not name them "
@@ -211,7 +211,7 @@ public sealed class E2eAvaloniaShardCoverageRules
                 + "nothing: the tests it claims to run are not run, and the shard is one class "
                 + "short without saying so. Stale entries in " + PlanRelativePath + ": "
                 + (stale.Count == 0 ? "(none)" : string.Join(", ", stale))
-                + ". Regenerate the plan with tools/gen-e2e-shards.py.");
+                + ". Regenerate the plan with harbor-gates gen-e2e-shards.");
     }
 
     /// <summary>
