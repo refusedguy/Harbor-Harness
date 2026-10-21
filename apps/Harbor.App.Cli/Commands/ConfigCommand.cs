@@ -48,6 +48,10 @@ public sealed class ConfigCommand : ISlashCommand
             _writer($"  CostLimit: ${config.CostLimit}");
             _writer($"  ApiKeys:   {config.ApiKeys.Count} configured");
             _writer($"  Plugins:   {config.EnabledPlugins.Count} enabled");
+            // #1734: the per-plugin configuration sections. The count is what
+            // the host knows about; `harbor plugin config <name>` shows what a
+            // section holds.
+            _writer($"  PluginCfg: {config.Plugins.Count} section(s)");
             return Result.Success();
         }
 
