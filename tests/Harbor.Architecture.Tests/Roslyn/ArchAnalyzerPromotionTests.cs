@@ -574,7 +574,7 @@ public sealed class ArchAnalyzerPromotionTests
         try
         {
             CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(
-                analyzers,
+                analyzers.ToImmutableArray(),
                 new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty));
 
             ImmutableArray<Diagnostic> diagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync().ConfigureAwait(false);

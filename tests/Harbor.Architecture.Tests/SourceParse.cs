@@ -915,7 +915,7 @@ internal static class SourceParse
 
         foreach (ValueMatch match in IdentifierPattern.EnumerateMatches(text))
         {
-            ReadOnlySpan<char> token = match.Value;
+            ReadOnlySpan<char> token = text.Slice(match.Index, match.Length);
             lookup[token] = lookup.TryGetValue(token, out int existing) ? existing + 1 : 1;
         }
     }
