@@ -17,6 +17,7 @@
 // one.
 
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Shared;
