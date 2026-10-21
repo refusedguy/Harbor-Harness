@@ -75,6 +75,9 @@ public static class WellKnownTools
     /// <summary>The <c>grep</c> tool — searches file contents by pattern.</summary>
     public static readonly ToolName Grep = ToolName.Create("grep");
 
+    /// <summary>The <c>goal</c> tool — reports the agent's verdict on the session's goal.</summary>
+    public static readonly ToolName Goal = ToolName.Create("goal");
+
     /// <summary>The <c>harbor_inspect</c> tool — reads the live runtime-API catalog.</summary>
     public static readonly ToolName HarborInspect = ToolName.Create("harbor_inspect");
 
@@ -98,13 +101,6 @@ public static class WellKnownTools
 
     /// <summary>The <c>plugin_manager</c> tool — lists the installed plugins and proposes a change to one.</summary>
     public static readonly ToolName PluginManager = ToolName.Create("plugin_manager");
-    /// <summary>
-    ///     The goal axis (#1761): the agent's own verdict on what the session is
-    ///     for. The name lives here for the same reason every other one does —
-    ///     the permission rule, the safety declaration and the tool's own
-    ///     attribute must not be able to disagree about it.
-    /// </summary>
-    public static readonly ToolName Goal = ToolName.Create("goal");
 
     /// <summary>The <c>read</c> tool — reads a file.</summary>
     public static readonly ToolName Read = ToolName.Create("read");
@@ -123,6 +119,9 @@ public static class WellKnownTools
 
     /// <summary>The <c>skill</c> tool — loads a skill.</summary>
     public static readonly ToolName Skill = ToolName.Create("skill");
+
+    /// <summary>The <c>spill_read</c> tool — reads back a tool output that was spilled to a file.</summary>
+    public static readonly ToolName SpillRead = ToolName.Create("spill_read");
 
     /// <summary>The <c>task</c> tool — delegates work to a sub-agent.</summary>
     public static readonly ToolName Task = ToolName.Create("task");

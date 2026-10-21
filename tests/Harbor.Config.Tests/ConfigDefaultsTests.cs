@@ -17,6 +17,7 @@ public class ConfigDefaultsTests
         await Assert.That(ReferenceEquals(CellForgeUiConfig.Default, CellForgeUiConfig.Default)).IsFalse();
         await Assert.That(ReferenceEquals(PresentationConfig.Default, PresentationConfig.Default)).IsFalse();
         await Assert.That(ReferenceEquals(RunLimitsConfig.Default, RunLimitsConfig.Default)).IsFalse();
+        await Assert.That(ReferenceEquals(ToolOutputConfig.Default, ToolOutputConfig.Default)).IsFalse();
         await Assert.That(ReferenceEquals(ProviderConfigEntry.Default, ProviderConfigEntry.Default)).IsFalse();
     }
 

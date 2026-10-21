@@ -197,7 +197,12 @@ public sealed record PermissionRuleset
         // the user "did you finish?" on every round would be noise. The
         // read-only modes do not carry this rule, so their goal tool is
         // asked about, not allowed.
-        new(WellKnownTools.Goal, "*", PermissionAction.Allow)
+        new(WellKnownTools.Goal, "*", PermissionAction.Allow),
+        // #1748: reading back a tool output that was spilled to a file. The
+        // tool is confined to the CURRENT session's spill directory by the
+        // store, so it needs no prompt: the file it can reach holds the output
+        // of a tool the agent itself ran.
+        new(WellKnownTools.SpillRead, "*", PermissionAction.Allow)
     });
 
     /// <summary>

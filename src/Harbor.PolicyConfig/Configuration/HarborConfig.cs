@@ -46,6 +46,12 @@ public sealed class HarborConfig
     /// <summary>Run limits (max steps per agent run).</summary>
     public RunLimitsConfig Run { get; set; } = RunLimitsConfig.Default;
 
+    /// <summary>
+    ///     Tool-output budget: the inline budget per tool result and how long a
+    ///     spilled output is kept (#1748).
+    /// </summary>
+    public ToolOutputConfig ToolOutput { get; set; } = ToolOutputConfig.Default;
+
     /// <summary>Persisted per-agent permission overrides (user decisions from Ask prompts).</summary>
     public Dictionary<string, List<PermissionRule>> Permissions { get; set; } = new();
 
@@ -303,6 +309,10 @@ public sealed class HarborConfig
         CostLimit = Cost.Limit,
         Compaction = Compaction,
         SecondaryModel = SecondaryModel,
+        // Persist the tool-output budget only when it diverges from the
+        // defaults — keeps config.json free of knob noise for users who never
+        // touched it.
+        ToolOutput = ToolOutput == ToolOutputConfig.Default ? null : ToolOutput,
         Permissions = Permissions.Count == 0 ? null : Permissions,
         // The per-plugin sections are kept as the user wrote them (#1734), so
         // they are written back unchanged. A section for a plugin this build
@@ -325,14 +335,15 @@ public sealed class HarborConfig
     /// </remarks>
     public Result<HarborConfig> Validate()
     {
-        var sections = new List<Result>(capacity: 6 + Providers.Count)
+        var sections = new List<Result>(capacity: 7 + Providers.Count)
         {
             Identity.EffectiveModel(),
             Tooling.Validate(),
             Cost.Validate(),
             Compaction.Validate(),
             Ui.Validate(),
-            Run.Validate()
+            Run.Validate(),
+            ToolOutput.Validate()
         };
 
         // Cold path (config load) — plain enumeration is fine here.

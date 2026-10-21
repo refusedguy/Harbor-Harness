@@ -162,6 +162,13 @@ public sealed class ModelRefSingleParserTests
             + "the path is matched whole — and the matcher's spelling ('StartsWith' on a "
             + "variable named 'prefix') is the same shape as the provider/ prefix strip this "
             + "rule is about. Listed because the matcher is textual, not semantic.",
+        ["src/Harbor.Application/Filesystem/ToolOutputSpillLayout.cs"] =
+            "NOT A REFERENCE. A filesystem path prefix: the spill area confines a read to the "
+            + "CURRENT session's directory, and the check is that the candidate path IS inside "
+            + "that directory. Nothing is cut apart — the path is matched whole — and the "
+            + "matcher's spelling ('StartsWith' on a variable named 'prefix') is the same shape "
+            + "as the provider/ prefix strip this rule is about. Listed because the matcher is "
+            + "textual, not semantic.",
     };
 
     /// <summary>

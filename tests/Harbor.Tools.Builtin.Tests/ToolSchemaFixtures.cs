@@ -68,6 +68,7 @@ internal static class ToolSchemaFixtures
         ("SessionReadTool", () => new SessionReadTool(new DeferredSessionStore(), NullLogger<SessionReadTool>.Instance)),
         ("SessionSteerTool", () => new SessionSteerTool(new DeferredSessionStore(), NullLogger<SessionSteerTool>.Instance)),
         ("SkillTool", () => new SkillTool(NullLogger<SkillTool>.Instance)),
+        ("SpillReadTool", () => new SpillReadTool(new FakeSpillStore(), NullLogger<SpillReadTool>.Instance)),
         ("TaskTool", () => new TaskTool(new Harbor.Registries.Agents.AgentRegistry(), NullLogger<TaskTool>.Instance)),
         ("TreeTool", () => new TreeTool(NullLogger<TreeTool>.Instance)),
         ("WebFetchTool", () => new WebFetchTool(NullLogger<WebFetchTool>.Instance)),
