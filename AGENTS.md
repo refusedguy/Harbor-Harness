@@ -684,6 +684,17 @@ Do not quote these on a hot-path PR without re-measuring — historical
 spot-checks from other machines live in BENCHMARKS.md §5 and are not
 comparable to the CI-short rows above.
 
+**What a pull request COSTS is measured too, and it is not in that table**
+(that table is microbenchmarks only). It is in
+[docs/BENCHMARKS.md](./docs/BENCHMARKS.md) §11, measured over twelve pull
+requests on 2026-10-21: **23.5 runner-minutes** and **814 s of wall**
+(median), of which the wall is **29 % queue wait**. The bill: 27 % test
+shards, 25 % the compile, 19 % the SECOND compile of the reference trimmer,
+16 % the docs gates. The instrument is `harbor-gates pr-cost`, and it reads
+the Actions API rather than a hand-written table — the wall is the maximum
+of the two parallel workflows, not their sum. Quote §11, not this paragraph,
+and re-measure before quoting either.
+
 ### Adding a benchmark
 
 1. Create `tests/<Project>.Benchmarks/` project (or add to existing).

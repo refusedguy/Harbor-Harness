@@ -325,6 +325,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 gen-e2e-shards` | compiled: `tools/gates/gen-e2e-shards` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
+| `tools/bin/harbor-gates-linux-x64 pr-cost` | compiled: `tools/gates/pr-cost` | what one pull request costs: the runner-minutes, the wall, the critical path, the peak width, and the bill split by article, read from the job list of a CI run. The wall is the MAXIMUM of the parallel workflows and not their sum, the busy time excludes the wait for a runner, and a timestamp that cannot be parsed is an error rather than a bill of zero. A measurement a human runs; only its self-test is called by CI | docs.yml | selftest | helper | `--self-test` | — | — |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a
