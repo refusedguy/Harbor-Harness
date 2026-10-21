@@ -1032,7 +1032,8 @@ a call the code makes. The compiler-side ban does not fire there (RS0030 sees sy
 a string is not one), and neither does the analyzer. A text scan cannot tell the two apart,
 so the text rule's baseline carries a row for that project with the reason in the row; the
 row lives in the rule that needs it, not in the plugin allowance the trim-safety rules
-read.
+read. The differential between the two rules names the same difference — a name in a
+string literal is data, not a call — and fails when a difference is not named.
 
 **What is deliberately NOT banned.** `GetMethod("Name")` / `GetProperty("Name")` /
 `GetField("Name")` looks like the same thing and is not. Over `src/` and `apps/` the

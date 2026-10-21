@@ -318,6 +318,33 @@ public sealed class ArchAnalyzerPromotionTests
     // =====================================================================
 
     /// <summary>
+    ///     The places where the text rule and the analyzer are allowed to
+    ///     answer differently, each with the reason.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The text rule matches a SPELLING; the analyzer resolves a SYMBOL.
+    ///         The two answers differ in exactly one shape: a banned name inside
+    ///         a string literal. A literal is data the matcher compares against,
+    ///         not a call the code makes — and the compiler-side ban says the
+    ///         same, because RS0030 sees symbols and a string is not one.
+    ///     </para>
+    ///     <para>
+    ///         The one entry: the analyzer that ENFORCES the ban has to hold the
+    ///         banned names to match them, so they live in that project as
+    ///         string constants. A prefix, not a file name, so that a file
+    ///         added to the project later is covered by the same reasoning.
+    ///     </para>
+    /// </remarks>
+    private static readonly (string Prefix, string Reason)[] NamesWithoutCalls =
+    [
+        (
+            "src/Harbor.Arch.Analyzers/",
+            "the analyzer that enforces the ban holds the banned names as string constants, and a name "
+            + "in a string literal is not a call: the compiler-side ban (RS0030) says the same"),
+    ];
+
+    /// <summary>
     ///     The differential. Every file the TEXT rule flags is a file the
     ///     ANALYZER flags too, and the analyzer flags nothing outside the
     ///     plugin family — the one documented exception.
@@ -336,11 +363,33 @@ public sealed class ArchAnalyzerPromotionTests
 
         var missed = textRuleFiles.Where(f => !analyzerFiles.Contains(f, StringComparer.Ordinal)).ToList();
 
-        await Assert.That(missed.Count).IsEqualTo(0)
+        // Every file the text rule flags and the analyzer does not must fall
+        // under a NAMED difference. The text rule matches a SPELLING; the
+        // analyzer resolves a SYMBOL, and the one place those two answers
+        // differ is a name inside a string literal — which is data, not a call.
+        var unnamed = missed
+            .Where(f => !NamesWithoutCalls.Any(e => f.StartsWith(e.Prefix, StringComparison.Ordinal)))
+            .ToList();
+
+        await Assert.That(unnamed.Count).IsEqualTo(0)
             .Because(
                 "the text rule strips comments before it matches and the analyzer never looks at trivia, "
-                + "so the analyzer must see a SUPERSET of the text rule's files. Files the text rule flags "
-                + "and the analyzer does not: " + string.Join(" | ", missed));
+                + "so the analyzer must see a SUPERSET of the text rule's files — except where the "
+                + "difference is NAMED, because the text rule matches a spelling and the analyzer "
+                + "resolves a symbol. Files the text rule flags and the analyzer does not, and no named "
+                + "difference covers them: " + string.Join(" | ", unnamed)
+                + " | named differences: "
+                + string.Join(" | ", NamesWithoutCalls.Select(static e => e.Prefix + " — " + e.Reason)));
+
+        foreach ((string prefix, string _) in NamesWithoutCalls)
+        {
+            await Assert.That(textRuleFiles.Count(f => f.StartsWith(prefix, StringComparison.Ordinal)))
+                .IsGreaterThan(0)
+                .Because(
+                    "a named difference that matches nothing is a permission with no violation behind "
+                    + "it: either the shape it names is gone (delete the row) or the row names a path "
+                    + "nothing lives under. Prefix: " + prefix);
+        }
 
         var outside = analyzerFiles
             .Where(f => !f.StartsWith("src/Harbor.Plugins.", StringComparison.Ordinal))
