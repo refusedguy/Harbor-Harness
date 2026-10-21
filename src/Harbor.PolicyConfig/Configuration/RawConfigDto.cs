@@ -42,6 +42,13 @@ public sealed class RawConfigDto
     [JsonPropertyName("disabledTools")] public List<string>? DisabledTools { get; set; }
     [JsonPropertyName("autoReloadPlugins")] public bool? AutoReloadPlugins { get; set; }
     [JsonPropertyName("maxSteps")] public int? MaxSteps { get; set; }
+
+    /// <summary>
+    ///     The repeat-guard threshold (#1756): the count of consecutive
+    ///     identical tool calls after which the model is told it is repeating
+    ///     itself. Zero turns the guard off. Absent = the built-in default.
+    /// </summary>
+    [JsonPropertyName("repeatToolThreshold")] public int? RepeatToolThreshold { get; set; }
     [JsonPropertyName("costLimit")] public decimal? CostLimit { get; set; }
     [JsonPropertyName("compaction")] public CompactionConfig? Compaction { get; set; }
     [JsonPropertyName("secondaryModel")] public string? SecondaryModel { get; set; }

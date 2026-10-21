@@ -236,9 +236,17 @@ public sealed record PresentationConfig(
 /// <summary>
 ///     Per-agent run limits.
 /// </summary>
+/// <param name="MaxSteps">The step budget of a run (the turn ceiling).</param>
+/// <param name="DefaultMaxSteps">The step budget a default install runs with.</param>
+/// <param name="RepeatToolThreshold">
+///     The count of CONSECUTIVE identical tool calls after which the repeat
+///     guard (#1756) tells the model that it is repeating itself. Zero turns
+///     the guard off.
+/// </param>
 public sealed record RunLimitsConfig(
     int MaxSteps,
-    int DefaultMaxSteps = 50)
+    int DefaultMaxSteps = 50,
+    int RepeatToolThreshold = AgentDefinition.DefaultRepeatToolThreshold)
 {
     // #195: fresh instance per access (see IdentityConfig.Default).
     public static RunLimitsConfig Default => new(50);
@@ -247,6 +255,9 @@ public sealed record RunLimitsConfig(
     {
         if (MaxSteps is < 1 or > 1000)
             return Result.Failure<RunLimitsConfig>("run.maxSteps must be in [1, 1000]");
+        if (RepeatToolThreshold < 0)
+            return Result.Failure<RunLimitsConfig>(
+                "run.repeatToolThreshold must be >= 0 (0 turns the repeat guard off)");
         return Result.Success(this);
     }
 }

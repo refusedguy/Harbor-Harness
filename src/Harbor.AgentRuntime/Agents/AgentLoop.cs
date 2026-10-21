@@ -325,6 +325,14 @@ public sealed class AgentLoop : IAgentLoop
             // Named runBudget: the wall-clock check below already binds the
             // name budget to its TimeSpan.
             RunBudgetTracker? runBudget = agent.Budget is { } caps ? new RunBudgetTracker(caps) : null;
+            // #1756: the repeat guard. One instance per RUN, exactly like the
+            // budget ledger above and for the same reason: the chain counts
+            // THIS run's repeated calls, and a shared instance would attribute
+            // one run's repeats to the next — or to the session running beside
+            // it. Null when the agent turns the guard off (threshold 0).
+            RepeatToolGuard? repeatGuard = agent.RepeatToolThreshold > 0
+                ? new RepeatToolGuard(agent.RepeatToolThreshold)
+                : null;
             while (!ct.IsCancellationRequested)
             {
                 // #1024: boundary enforcement for the wall-clock budget. This
@@ -344,7 +352,7 @@ public sealed class AgentLoop : IAgentLoop
                 // [G4]: the whole turn (compaction → prompt → stream → tools →
                 // drains → turn-end event → end-of-run decision) runs inside TurnRunner.
                 TurnStepResult step = await _turnRunner.RunTurnAsync(
-                    session, agent, client, model, turn, truncationFallback, ct, runBudget).ConfigureAwait(false);
+                    session, agent, client, model, turn, truncationFallback, ct, runBudget, repeatGuard).ConfigureAwait(false);
                 truncationFallback = step.TruncationFallback;
                 if (step.RunFailure is { } runFailure)
                 {

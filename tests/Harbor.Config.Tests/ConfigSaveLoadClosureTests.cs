@@ -229,6 +229,12 @@ public sealed class ConfigSaveLoadClosureTests
             ("maxSteps lower bound", c => c.MaxSteps = 1, c => c.MaxSteps),
             ("maxSteps upper bound", c => c.MaxSteps = 1000, c => c.MaxSteps),
             ("maxSteps default", c => c.MaxSteps = 50, c => c.MaxSteps),
+            // #1756: the repeat-guard threshold. Zero is inside the rules —
+            // it is how a user turns the guard off — so a guard written with
+            // `<` instead of `<=` would refuse the one value that means
+            // "off" and leave the knob with no off position.
+            ("repeatToolThreshold zero (guard off)", c => c.Run = c.Run with { RepeatToolThreshold = 0 }, c => c.Run.RepeatToolThreshold),
+            ("repeatToolThreshold set", c => c.Run = c.Run with { RepeatToolThreshold = 5 }, c => c.Run.RepeatToolThreshold),
             ("costLimit zero (no limit)", c => c.CostLimit = 0m, c => c.CostLimit),
             ("costLimit positive", c => c.CostLimit = 10.5m, c => c.CostLimit),
             ("tui set", c => c.Tui = "cellforge", c => c.Tui),

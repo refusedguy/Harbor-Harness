@@ -92,7 +92,7 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | Seam | Declared in | Implementations | Consumer files | Registered as | Bypasses |
 |---|---|---|---|---|---|
 | `ISessionStore` | [`src/Harbor.Abstractions/Sessions/ISessionStore.cs`](../src/Harbor.Abstractions/Sessions/ISessionStore.cs) | `JsonlSessionStore`, `MemorySessionStore`, `SqliteSessionStore`, `DeferredSessionStore` / `StoreDouble`, `TestSessionStore`, `ControllableStore` (+15 more) | 79 | a factory | 9 |
-| `ITool` | [`src/Harbor.Abstractions/Tools/ITool.cs`](../src/Harbor.Abstractions/Tools/ITool.cs) | `SandboxedPluginTool`, `TelemetryToolDecorator`, `BashTool`, `EditTool`, `GlobTool` (+19 more) / `HelloTool (plugins-cs)`, `SessionBroadcastTool`, `SessionInboxTool` (+39 more) | 52 | none | 28 |
+| `ITool` | [`src/Harbor.Abstractions/Tools/ITool.cs`](../src/Harbor.Abstractions/Tools/ITool.cs) | `SandboxedPluginTool`, `TelemetryToolDecorator`, `BashTool`, `EditTool`, `GlobTool` (+19 more) / `HelloTool (plugins-cs)`, `SessionBroadcastTool`, `SessionInboxTool` (+39 more) | 53 | none | 28 |
 | `IEventBus` | [`src/Harbor.Abstractions/Events/IEventBus.cs`](../src/Harbor.Abstractions/Events/IEventBus.cs) | `NullEventBus`, `InMemoryEventBus` / `CancelHonoringBus`, `CancelOnTurnStartBus`, `ThrowingUpdateBus` (+3 more) | 61 | none | 3 |
 | `IProviderRegistry` | [`src/Harbor.Abstractions/Providers/IProviderRegistry.cs`](../src/Harbor.Abstractions/Providers/IProviderRegistry.cs) | `ProviderRegistry (Harbor.Registries)`, `InstrumentedProviderRegistry` / `EmptyProviderRegistry`, `PricedModelRegistry`, `FakeRegistry (Harbor.App.Avalonia.Tests)` (+10 more) | 61 | a factory | 6 |
 | `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `AnthropicLlmClient`, `OllamaLlmClient`, `OpenAILlmClient` (+2 more) / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 52 | none | 7 |
@@ -154,10 +154,10 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 - **Registered in the container**: `IToolRegistry` → a factory (Singleton, [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs))
 - **Bypassed**: 2 direct construction(s) of the concrete type, 3 signature(s) naming the concrete type where the interface was the contract:
   - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):133
-  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):161
+  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):168
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):188
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):200
-  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):153
+  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):160
 
 ### `ILlmClient`
 
