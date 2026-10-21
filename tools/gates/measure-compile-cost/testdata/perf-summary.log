@@ -1,0 +1,42 @@
+214.851 | Build succeeded.
+214.851 |     0 Warning(s)
+214.851 |     0 Error(s)
+214.851 |
+214.851 | Time Elapsed 00:03:34.85
+214.851 |
+214.851 | Project Evaluation Performance Summary:
+214.851 |        17 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Core/Core.csproj   4 calls
+214.851 |        21 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Mid/Mid.csproj   4 calls
+214.851 |        19 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/App/App.csproj   4 calls
+214.851 |        23 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/tests/Core.Tests/Core.Tests.csproj   4 calls
+214.851 |
+214.851 | Project Performance Summary:
+214.851 |     12000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Core/Core.csproj   3 calls
+214.851 |                 2 ms  GetTargetFrameworks                       4 calls
+214.851 |                 1 ms  GetNativeManifest                         4 calls
+214.851 |     20000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/Mid/Mid.csproj   3 calls
+214.851 |                 2 ms  GetTargetFrameworks                       4 calls
+214.851 |                 1 ms  GetNativeManifest                         4 calls
+214.851 |     40000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/App/App.csproj   3 calls
+214.851 |                 2 ms  GetTargetFrameworks                       4 calls
+214.851 |                 1 ms  GetNativeManifest                         4 calls
+214.851 |     28000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/tests/Core.Tests/Core.Tests.csproj   3 calls
+214.851 |                 2 ms  GetTargetFrameworks                       4 calls
+214.851 |                 1 ms  GetNativeManifest                         4 calls
+214.851 |
+214.851 | Target Performance Summary:
+214.851 |     102000 ms  CoreCompile                              4 calls
+214.851 |      40000 ms  Build                                    4 calls
+214.851 |      40000 ms  GetTargetFrameworks                      4 calls
+214.851 |
+214.851 | Task Performance Summary:
+214.851 |    100000 ms  Csc                                      4 calls
+214.851 |      40000 ms  MSBuild                                  4 calls
+214.851 |      30000 ms  CopyFilesToOutputDirectory               4 calls
+214.851 |       2000 ms  GetTargetFrameworks                    4 calls
+214.851 |
+214.851 | Build succeeded.
+214.851 |     0 Warning(s)
+214.851 |     0 Error(s)
+214.851 |
+214.851 | Time Elapsed 00:03:34.85
