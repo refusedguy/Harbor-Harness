@@ -79,6 +79,15 @@ declaring it here is the only step — no renderer keeps a table of tool names, 
 adding this tool changed none of them (#680). `SafetyProfile` has no default and
 must be declared; see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md).
 
+Имя нового тула добавляется в каталог `WellKnownTools`
+(`src/Harbor.Abstractions.Contracts/Models/Identifiers/`). Это единственное
+место, где записано имя встроенного тула: оттуда его читают правила
+разрешения, декларации безопасности и сравнения в UI (#1564). Собственный
+аргумент `[ToolInfo("time", …)]` остаётся литералом — аргумент атрибута обязан
+быть константным выражением, — и `WellKnownToolsRule` сверяет его с каталогом,
+так что расхождение видно красным тестом, а не «правилом, которое никогда не
+срабатывает».
+
 ### 2. Validate args with `Result`
 
 Всегда проверяй аргументы до `ExecuteAsync`. Если валидация упала — LLM увидит ошибку и попробует снова.

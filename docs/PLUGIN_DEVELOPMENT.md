@@ -227,6 +227,7 @@ public sealed class PluginContext
 {
     public IServiceCollection Services { get; }       // register DI services
     public IConfiguration Configuration { get; }      // read app config
+    public IReadOnlyDictionary<string, PluginConfigValue> Config { get; } // the plugin's own settings
     public ILoggerFactory LoggerFactory { get; }      // create loggers
     public IEventBus EventBus { get; }                 // subscribe to events
     public string PluginDirectory { get; }             // plugin's on-disk dir (read-only)
@@ -236,6 +237,38 @@ public sealed class PluginContext
     public ILogger<T> CreateLogger<T>() => LoggerFactory.CreateLogger<T>();
 }
 ```
+
+### Your own settings (#1734)
+
+A plugin declares the settings it wants in its manifest, next to its source
+(`MyPlugin.harbor-plugin.json`):
+
+```json
+{
+  "name": "web-search",
+  "config": {
+    "endpoint": { "type": "string", "default": "https://api.example.com" },
+    "maxResults": { "type": "integer", "default": 5, "minimum": 1, "maximum": 50 }
+  }
+}
+```
+
+The user writes the values under `plugins.web-search` in
+`~/.harbor/config.json`, and the host checks them against the declaration
+BEFORE the plugin starts. A setting the user did not set carries the default
+you published, so the plugin always reads a value:
+
+```csharp
+public void Initialize(PluginContext context)
+{
+    string endpoint = context.Config["endpoint"].AsString();
+    int maxResults = (int)context.Config["maxResults"].AsInteger();
+}
+```
+
+A setting with no `default` is REQUIRED: the plugin does not start until the
+user gives it a value. `harbor plugin config web-search` shows the whole form,
+with the types, the defaults and the ranges.
 
 ### Available APIs (in `Harbor.Abstractions`)
 
@@ -249,7 +282,7 @@ public sealed class PluginContext
 | `Harbor.Abstractions.Sessions` | `ISessionStore`, `ISessionContext`, `ICompactionService` |
 | `Harbor.Abstractions.Permissions` | `PermissionRuleset`, `PermissionRule`, `PermissionAction`, `PermissionRequest`, `PermissionResponse` |
 | `Harbor.Abstractions.Agents` | `IAgent`, `AgentDefinition` |
-| `Harbor.Abstractions.Plugins` | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext` |
+| `Harbor.Abstractions.Plugins` | `IPlugin`, `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `PluginContext`, `PluginConfigValue` |
 | `Harbor.Terminal.Abstractions.Plugins` | `ITuiPlugin` — **closed seam (#564)**: collected, never rendered. Use `ITuiPanelPlugin`. |
 | `Harbor.Terminal.Abstractions` | `ViewRegistry`, `ViewModelRegistry`, `ITuiView`, `ITuiViewModel`, `ITuiRenderContext` (in-tree view work, not a plugin axis) |
 

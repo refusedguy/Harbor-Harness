@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework;
 using Harbor.Ui.Framework.State;
 using FrameworkStatusMappers = Harbor.Ui.Framework.Converters.StatusMappers;
@@ -178,7 +179,7 @@ public sealed class ToolCallBlock : ICollapsibleChatBlock
     /// tools keep the head preview.
     /// </summary>
     public static bool IsShellTool(string toolName) =>
-        string.Equals(toolName, "bash", StringComparison.Ordinal);
+        string.Equals(toolName, WellKnownTools.Bash, StringComparison.Ordinal);
 
     /// <summary>Command line budget inside the shell collapse (opencode: 2).</summary>
     public const int ShellCommandLines = 2;

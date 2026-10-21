@@ -15,18 +15,18 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `6f197b60`, plus the gate this
-branch adds), the tree the table was last reconciled against:
+Measured on this branch (`dev` at `1cea9397` plus this branch's seven commits),
+the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 50 files, 39 068 lines |
-| of them, the `check-*.py` family | 24 files, 23 377 lines |
+| python tools in `tools/` | 51 files, 39 667 lines |
+| of them, the `check-*.py` family | 24 files, 23 381 lines |
 | workflows that run a python tool | 7: `ci.yml`, `demo.yml`, `docs.yml`, `meas-analyzer-cost.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 9 reporters, 7 helpers, 3 libraries |
+| reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
 | tools with a self-test | 38 |
 | tools with a ratchet | 21 |
 | tools with a floor | 26 |
@@ -292,6 +292,7 @@ The modes are:
 | `tools/coverage_report.py` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
 | `tools/check-coverage-registry.py` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
 | `tools/gen-plugin-inventory.py` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
+| `tools/codemod-tool-names.py` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

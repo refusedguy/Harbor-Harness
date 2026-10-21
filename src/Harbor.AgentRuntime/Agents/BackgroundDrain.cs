@@ -44,7 +44,7 @@ internal sealed class BackgroundDrain(
             // model reads one and a policy can branch on it. The background
             // drain knows only that the sub-agent failed, so the generic code
             // is the honest label.
-            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError)
+            entries.Add(new ToolResultEntry(completion.Id, WellKnownTools.Task, output, isError)
             {
                 ErrorInfo = isError ? ToolErrorCodes.Create(ToolErrorCodes.Error) : null,
             });
