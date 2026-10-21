@@ -90,6 +90,51 @@ Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.init -> void
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField
+Harbor.Abstractions.Plugins.PluginConfigField.AllowedValues.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Plugins.PluginConfigField.AllowedValues.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Default.get -> Harbor.Abstractions.Plugins.PluginConfigValue?
+Harbor.Abstractions.Plugins.PluginConfigField.Default.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Description.get -> string?
+Harbor.Abstractions.Plugins.PluginConfigField.Description.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.IsSecret.get -> bool
+Harbor.Abstractions.Plugins.PluginConfigField.IsSecret.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Maximum.get -> double?
+Harbor.Abstractions.Plugins.PluginConfigField.Maximum.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Minimum.get -> double?
+Harbor.Abstractions.Plugins.PluginConfigField.Minimum.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Name.get -> string!
+Harbor.Abstractions.Plugins.PluginConfigField.Name.init -> void
+Harbor.Abstractions.Plugins.PluginConfigField.PluginConfigField() -> void
+Harbor.Abstractions.Plugins.PluginConfigField.Type.get -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigField.Type.init -> void
+Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigFieldType.Boolean = 3 -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigFieldType.Integer = 1 -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigFieldType.Number = 2 -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigFieldType.String = 0 -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigFieldType.StringList = 4 -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigSchema
+Harbor.Abstractions.Plugins.PluginConfigSchema.Fields.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Plugins.PluginConfigField!>!
+Harbor.Abstractions.Plugins.PluginConfigSchema.Fields.init -> void
+Harbor.Abstractions.Plugins.PluginConfigSchema.Find(string! name) -> Harbor.Abstractions.Plugins.PluginConfigField?
+Harbor.Abstractions.Plugins.PluginConfigSchema.PluginConfigSchema() -> void
+Harbor.Abstractions.Plugins.PluginConfigValue
+Harbor.Abstractions.Plugins.PluginConfigValue.AsBoolean() -> bool
+Harbor.Abstractions.Plugins.PluginConfigValue.AsInteger() -> long
+Harbor.Abstractions.Plugins.PluginConfigValue.AsNumber() -> double
+Harbor.Abstractions.Plugins.PluginConfigValue.AsString() -> string!
+Harbor.Abstractions.Plugins.PluginConfigValue.AsStringList() -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Plugins.PluginConfigValue.Items.get -> System.Collections.Generic.IReadOnlyList<string!>?
+Harbor.Abstractions.Plugins.PluginConfigValue.Items.init -> void
+Harbor.Abstractions.Plugins.PluginConfigValue.PluginConfigValue() -> void
+Harbor.Abstractions.Plugins.PluginConfigValue.Text.get -> string?
+Harbor.Abstractions.Plugins.PluginConfigValue.Text.init -> void
+Harbor.Abstractions.Plugins.PluginConfigValue.Type.get -> Harbor.Abstractions.Plugins.PluginConfigFieldType
+Harbor.Abstractions.Plugins.PluginConfigValue.Type.init -> void
+override Harbor.Abstractions.Plugins.PluginConfigValue.ToString() -> string!
+Harbor.Abstractions.Plugins.PluginContext.Config.get -> System.Collections.Generic.IReadOnlyDictionary<string!, Harbor.Abstractions.Plugins.PluginConfigValue!>!
+Harbor.Abstractions.Plugins.PluginContext.Config.init -> void
 Harbor.Abstractions.Providers.IScopedProviderResolver
 Harbor.Abstractions.Providers.IScopedProviderResolver.GetClient(Harbor.Abstractions.Models.ServiceScope! scope, Harbor.Abstractions.Models.Identifiers.ProviderId! providerId) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient!>
 Harbor.Abstractions.Providers.IScopedProviderResolver.GetModelsAsync(Harbor.Abstractions.Models.ServiceScope! scope, Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ModelInfo!>!>>!
