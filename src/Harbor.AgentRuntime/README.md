@@ -40,10 +40,16 @@ public sealed class RetryLlmClientDecorator : ILlmClient;  // Resilience/ — #1
 ```
 
 Also internal but pinned by tests: `TurnRunner`, `MessageSnapshot`,
-`MessageFlush`, `ToolTableBuilder`, `ListenerRegistry`, `BackgroundDrain`,
+`MessageFlush`, `ToolTableBuilder`, `BackgroundDrain`,
 `BackgroundTaskRegistry`, `AgentSteeringQueue`, `DefaultSessionContext`,
 `UserHookGates`, `ToolRetryPolicy`, `StreamingCoalescerJsonContext`,
 `UpdateCoalescer`.
+
+`ListenerRegistry` is gone (#1561): the agent used to keep a second, hand-rolled
+fan-out next to the event bus — its own list, lock, snapshot and dispatch loop.
+`IAgent.Subscribe` now returns an `IEventBus` subscription, so the bus is the
+only observer mechanism in the codebase and a fix to the ordering, the
+backpressure or the eviction reaches the agent's listeners too.
 
 `UpdateCoalescer` (#1527) owns the per-delta `MessageUpdateEvent` publishes:
 it buffers the deltas of a run and publishes them as one merged delta under

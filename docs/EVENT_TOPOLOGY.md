@@ -44,7 +44,7 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
-  DefaultAgent listener fan-out ............. src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:110
+  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303
   DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
@@ -210,6 +210,12 @@ is the subscriber's business, and the live branches are:
   handler marks it dead and removes it after the publish
   (`InMemoryEventBus.cs:927-939`), never halting the renderer or other
   subscribers. Pre-existing test: `EventBusTests.FailingSubscriber_DoesNotBlockOthers`.
+- **An agent listener that throws is logged and KEPT** — `IAgent.Subscribe` wraps
+  the caller's callback so the exception never reaches the bus
+  (`DefaultAgent.cs:316-334`); the bus would otherwise evict the subscriber, which
+  would silently unsubscribe a listener that had one bad day. The agent's
+  listeners are the one place where the bus's eviction rule does not apply.
+  Tested: `AgentListenerFanOutTests.ThrowingListener_IsLoggedAndSkipped_AndStaysSubscribed`.
 - **Middleware failure drops the event for everyone** — a `false` return or a
   throw anywhere in the pipeline returns before scrollback and fan-out
   (`InMemoryEventBus.cs:483-489,807-840`). Middleware is therefore a mandatory
@@ -231,13 +237,17 @@ is the subscriber's business, and the live branches are:
   `Subscription` record (`InMemoryEventBus.cs:533-542,568-583`). Disposal is
   idempotent (`_action = null` after first invoke,
   `InMemoryEventBus.cs:1164-1178`).
-- Holders responsible for disposal: `DefaultAgent` (`_eventBusSubscription`,
-  released in `Dispose`, `DefaultAgent.cs:492-498`),
-  `EventBroadcaster.DisposeAsync`, `InProcessHarborClient`, the CellForge REPL
-  pump (`using var busPump`, `ReplLifecycle.cs:98-104`), CellForge bridges
+- Holders responsible for disposal: `EventBroadcaster.DisposeAsync`,
+  `InProcessHarborClient`, the CellForge REPL pump (`using var busPump`,
+  `ReplLifecycle.cs:98-104`), CellForge bridges
   (`Subscription` property, `ChatScreenBridge.cs:105,108`),
   `DiagnosticsAggregator`, and the REPL runners / `DemoCommand`
   (process-lifetime, never disposed — acceptable, bus is process-lifetime too).
+- `DefaultAgent` holds no bus subscription of its own (#1561). `IAgent.Subscribe`
+  hands the caller a bus subscription, so the CALLER owns its disposal
+  (`DefaultAgent.cs:300-303`); disposing the agent stops delivery without
+  touching the bus — the listener wrapper checks the agent's disposed flag
+  before it calls the callback (`DefaultAgent.cs:631-640`).
 - Unsubscribing mid-publish does not affect the in-flight snapshot (the
   publisher iterates its own `ImmutableArray` copy). Tested:
   `EventTopologySemanticsTests.Unsubscribe_StopsFutureEvents_IdempotentDispose`.

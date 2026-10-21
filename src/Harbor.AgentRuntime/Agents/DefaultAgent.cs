@@ -10,9 +10,17 @@ public sealed class DefaultAgent : IAgent
 {
     private readonly IAgentLoop _agentLoop;
     private readonly IEventBus _eventBus;
-    private readonly IDisposable _eventBusSubscription;
-    private readonly ListenerRegistry _listeners = new();
     private readonly ILogger<DefaultAgent> _logger;
+
+    /// <summary>
+    ///     Whether this agent has been disposed. Every listener wrapper reads it
+    ///     before it calls the caller's callback, so a disposed agent stops
+    ///     delivering. The hand-rolled registry this replaced stopped for a
+    ///     different reason: the agent's own bus subscription was disposed with
+    ///     the agent, and the registry it fed stopped receiving that way.
+    /// </summary>
+    private volatile bool _disposed;
+
     /// <summary>
     ///     Mutual exclusion for <see cref="PromptAsync" /> entry. The previous
     ///     check-then-act <c>State?.IsRunning == true</c> guard was not
@@ -104,17 +112,6 @@ public sealed class DefaultAgent : IAgent
         _agentLoop = agentLoop;
         _eventBus = eventBus;
         _logger = logger;
-
-        // [G4]: listener fan-out lives in ListenerRegistry; snapshot + invoked
-        // outside the lock exactly as before, failures logged per listener.
-        _eventBusSubscription = _eventBus.Subscribe(async (evt, ct) =>
-        {
-            // #559: absence is Maybe, so the "which session is this event for"
-            // question travels as Maybe<string> instead of a null the listener
-            // registry has to interpret. An unbound agent dispatches with
-            // Maybe.None, which the registry logs as "unbound".
-            await _listeners.DispatchAsync(evt, ct, _logger, State.Map(static s => s.SessionId)).ConfigureAwait(false);
-        });
     }
 
     /// <summary>
@@ -284,8 +281,63 @@ public sealed class DefaultAgent : IAgent
     /// </summary>
     /// <param name="listener">Async callback.</param>
     /// <returns>A disposable that unsubscribes on dispose.</returns>
-    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener) =>
-        _listeners.Subscribe(listener);
+    /// <remarks>
+    ///     <para>
+    ///         #1561: the subscription IS an event-bus subscription. The agent used to keep a
+    ///         second fan-out of its own — a hand-rolled <c>ListenerRegistry</c> with its own
+    ///         list, lock, snapshot and dispatch loop, a copy of what
+    ///         <c>InMemoryEventBus</c> already does. Two observer mechanisms meant a fix to
+    ///         the ordering, the backpressure or the eviction in one of them never reached the
+    ///         other. There is now one fan-out in the codebase and the agent uses it.
+    ///     </para>
+    ///     <para>
+    ///         The wrapper keeps two promises the raw bus subscription does not make on its
+    ///         own, and both were the registry's: a listener that throws is LOGGED and
+    ///         skipped — and stays subscribed, where the bus would evict it — and no listener
+    ///         is called after the agent is disposed.
+    ///     </para>
+    /// </remarks>
+    public IDisposable Subscribe(Func<AgentEvent, CancellationToken, ValueTask> listener)
+    {
+        ArgumentNullException.ThrowIfNull(listener);
+        return _eventBus.Subscribe(WrapListener(listener));
+    }
+
+    /// <summary>
+    ///     Wrap a listener into a bus handler that never faults and never runs after the
+    ///     agent has been disposed.
+    /// </summary>
+    /// <remarks>
+    ///     The <c>catch</c> is the point of the wrapper: <c>InMemoryEventBus</c> evicts a
+    ///     subscriber whose handler throws, while the registry this replaced only logged the
+    ///     failure and kept the listener. Letting the exception reach the bus would silently
+    ///     unsubscribe a listener that had a bad day, so the bus never sees it.
+    /// </remarks>
+    private Func<AgentEvent, CancellationToken, ValueTask> WrapListener(Func<AgentEvent, CancellationToken, ValueTask> listener)
+        => async (evt, ct) =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
+            {
+                await listener(evt, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // #559: absence is Maybe — an unbound agent has no session id, so the log
+                // line says "unbound" rather than inventing one.
+                DefaultAgentLog.ListenerFailed(_logger, ex, CurrentSessionId());
+            }
+        };
+
+    /// <summary>
+    ///     The session this agent is bound to, or "unbound" when it has not been
+    ///     <see cref="Initialize" />d yet.
+    /// </summary>
+    private string CurrentSessionId() => State.Map(static s => s.SessionId).GetValueOrDefault("unbound");
 
     /// <summary>
     ///     Submit a plain-text prompt and run the agent loop to completion.
@@ -572,12 +624,16 @@ public sealed class DefaultAgent : IAgent
     }
 
     /// <summary>
-    ///     Release all resources held by this agent: event-bus subscription, abort source,
-    ///     run gate, steering channel.
+    ///     Release all resources held by this agent: abort source, run gate, steering
+    ///     channel. Listener delivery stops here too — the wrappers check the disposed
+    ///     flag before they call the caller's callback.
     /// </summary>
     public void Dispose()
     {
-        _eventBusSubscription?.Dispose();
+        // #1561: the agent no longer owns a bus subscription of its own, so the flag is
+        // what stops delivery. It replaces the disposed forwarding subscription the
+        // hand-rolled listener registry was fed by.
+        _disposed = true;
         _abortSource.Dispose();
         _runGate.Dispose();
         _steering.Complete();
@@ -644,5 +700,13 @@ internal static partial class DefaultAgentLog
     // attached the exception the bridge had just manufactured.
     [LoggerMessage(EventId = 5, Level = LogLevel.Error, Message = "Failed to load session context for session {SessionId}: {Error}")]
     public static partial void LoadSessionContextFailed(ILogger logger, string sessionId, string error);
+
+    // #1561: moved over from the deleted ListenerRegistryLog verbatim — same template,
+    // same level, same operands — so the log line a failing listener produces did not
+    // change shape when the fan-out moved to the bus. The event id changed because
+    // this class has its own numbering (the old one lived in its own class, where it
+    // was id 1).
+    [LoggerMessage(EventId = 6, Level = LogLevel.Error, Message = "Listener failed: session={SessionId}")]
+    public static partial void ListenerFailed(ILogger logger, Exception ex, string sessionId);
 
 }

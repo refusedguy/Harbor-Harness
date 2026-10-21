@@ -72,6 +72,7 @@
 .github/workflows/ci.yml | 1992 | \# coverage to the job summary \+ raw cobertura\.xml artifacts \(30\-day | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
 .github/workflows/ci.yml | 1992 | \# retention feeds the "month of green reports" baseline for a future | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
 .github/workflows/ci.yml | 1992 | \# diff\-threshold\)\. | the note now says coverage comes from TUnit transitively (see the neighbouring exception)
+tools/README.md | 1992 | \[`ci-shard-slices\.py`\] | PR #2035 rewrote the row for tools/ci-shard-slices.py when the CI project lists got one source (tools/ci-project-lists.json); the row in the file today is the same entry with the new wording, so the line the merge dropped is not in the tree in its old form
 .github/workflows/ci.yml | 1946 | renders the tests that PRINTED something | the same sentence with the counts of the current tree
 docs/BENCHMARKS.md | 1946 | > \* \*\*C — final\*\*, run \*\*39440361839\*\* \(this branch's head, after the | the pull request dropped these rows from its own final head: the measurement table it shipped is the one in docs/BENCHMARKS.md now, with the final run's numbers
 docs/BENCHMARKS.md | 1946 | Run C's shards measured 13\.4 s \(shard\-0, 41 tests\), 15\.5 s \(shard\-1, 61\) and | the pull request dropped these rows from its own final head (see the neighbouring exception)
