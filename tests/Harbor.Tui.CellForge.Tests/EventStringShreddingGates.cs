@@ -115,6 +115,35 @@ public sealed class EventStringShreddingGates
     /// </summary>
     private const double MinLegMs = 1.0;
 
+    // ── The yardstick's calibration band ─────────────────────────────────────
+    //
+    // The time branch is written in PROBE UNITS: the cost of one unit of
+    // work divided by the cost of one unit of the fixed calibration probe,
+    // measured on the same runner in the same run. The probe is a FIXED
+    // workload, so its cost is a property of the machine — and the machine
+    // has a price: 0.000343-0.000353 ms/unit across the sixteen measured
+    // `test (ui)` runs of the fleet (the oldest, run 39372950798, read
+    // 0.000380).
+    //
+    // Run 39609285153 read 0.000041 ms/unit — 8.5x below — while the workload
+    // it was supposed to normalize was UNCHANGED (0.0816 ms/unit against
+    // 0.0803-0.0827 across the same sixteen runs). The ratio was therefore
+    // 8.5x off, the numerator's spread was 1.01x, the gate called the
+    // measurement "trusted", and three gates failed the build on a number the
+    // runner never produced.
+    //
+    // So the yardstick has to stay inside a band before its ratio is
+    // believed. Outside the band the time branch reports and stands down,
+    // and the BYTE branch — the machine-independent one, the branch that can
+    // be a hard gate — still asserts.
+    //
+    // The band is wide on purpose: 2.3x below and 1.6x above what the fleet
+    // produces, so a slower or a faster machine still measures inside it. A
+    // fleet whose runner changes re-measures this band; the report line says
+    // which way it went.
+    private const double MinYardstickMsPerUnit = 0.00015;
+    private const double MaxYardstickMsPerUnit = 0.00060;
+
     // ── Gate 1: the per-tool-call args shaping ──────────────────────────────
 
     /// <summary>Cards opened before the measured window (the LLM's path).</summary>
@@ -267,8 +296,13 @@ public sealed class EventStringShreddingGates
     {
         string patch = BuildPatch(PatchLines);
 
-        // Warm past the tiered-JIT compilation of the measured path.
-        for (int i = 0; i < 3; i++)
+        // Warm past the tiered-JIT compilation of the measured path. The
+        // call-counting threshold is 30 calls, and the measured window drives
+        // only 8 splits per round, so a short warm-up leaves the first
+        // measured rounds running tier-0 code and the median of the rounds
+        // pays for it. 32 splits put the measured path on tier-1 before the
+        // first measured round.
+        for (int i = 0; i < 32; i++)
         {
             _ = HunkVirtualizer.SplitPatchHunks(patch);
         }
@@ -354,6 +388,40 @@ public sealed class EventStringShreddingGates
             work: u => Task.FromResult(work(u)),
             units: units,
             options: options);
+
+        // THE YARDSTICK'S CALIBRATION. The time branch is written in probe
+        // units: the cost of one unit of work divided by the cost of one unit
+        // of the fixed calibration probe, measured on the same runner in the
+        // same run. The probe is a FIXED workload, so its cost is a property
+        // of the machine — and a yardstick that costs something other than
+        // what it costs on a healthy runner is not measuring what it claims
+        // to measure.
+        //
+        // The receipts: run 39633684054 read 0.000041 ms/unit — 8.5x below
+        // the fleet's 0.000343-0.000353 — while the workload it was supposed
+        // to normalize was UNCHANGED (0.0815 ms/unit against 0.0803-0.0827
+        // across sixteen measured runs). The ratio was 8.5x off, the
+        // numerator's spread was 1.01x, the helper called the measurement
+        // "trusted", and three gates failed the build on a number the runner
+        // never produced. Runs 39609285153 and 39619582982 read the same
+        // 0.000041.
+        //
+        // Outside the band the ratio is not evidence about the code, so the
+        // time branch REPORTS and stands down. The byte branch — the
+        // machine-independent one, the branch that can be a hard gate — still
+        // asserts: it is the real limit (the memory a tool card costs), and
+        // it does not move with the runner's speed.
+        if (result.ProbeMsPerUnit < MinYardstickMsPerUnit || result.ProbeMsPerUnit > MaxYardstickMsPerUnit)
+        {
+            result = result with
+            {
+                Trusted = false,
+                TimeAsserted = false,
+                TimeStandDownReason =
+                    $"the yardstick was not calibrated on this runner (it cost {result.ProbeMsPerUnit:F6} ms/unit, "
+                    + $"outside the calibration band {MinYardstickMsPerUnit:F6}-{MaxYardstickMsPerUnit:F6} ms/unit)",
+            };
+        }
 
         await result.AssertWithinBudgetsAsync(topic);
     }

@@ -3075,13 +3075,26 @@ jobs:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+
+      # The SDK install stays; the NuGet cache does NOT. This job runs the
+      # binaries the build job already produced (the "Download build outputs"
+      # step below), so nothing here restores into the default global-packages
+      # folder and the cache it would save is always empty.
+      # actions/setup-dotnet's post step throws ("Cache folder path is
+      # retrieved for .NET CLI but doesn't exist on disk") when that folder
+      # was never created — and it throws AFTER the measurement, in the
+      # job's cleanup, so the band goes red on a step that measures nothing:
+      # the receipts are run 39638763894 and run 39599923626, where "Run
+      # renderer performance gate" succeeded and "Post Setup .NET 10" failed
+      # with that exact error. Same fix as the test shard job and the codeql
+      # job (#1244): keep the SDK install, drop the cache.
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          # The exact SDK global.json asks for — see the build job.
+          # The exact SDK global.json asks for — see the build job. The NuGet
+          # cache is deliberately NOT restored here (see the comment above):
+          # this job runs prebuilt binaries and never restores into it.
           dotnet-version: "10.0.402"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
       - name: Download build outputs (renderer perf only)
         uses: actions/download-artifact@v7
         with:
