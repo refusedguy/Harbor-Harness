@@ -3,6 +3,7 @@ using Harbor.Application.Configuration;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Ui.Framework.Panels;
@@ -152,6 +153,7 @@ internal static class ToolsCatalog
 
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
+        IProviderRegistry providerRegistry,
         Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
         Harbor.Abstractions.Agents.IBackgroundTaskRegistry? backgroundTasks = null,
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
@@ -192,6 +194,21 @@ internal static class ToolsCatalog
         // composes the tool catalog without one) keeps the tool's own
         // discovery and no policy gate.
         tb.AddTool(lf => new SkillTool(sessionStore, lf.CreateLogger<SkillTool>(), null, null, skillRegistry));
+        // #1732: the read-only runtime catalog. It holds the registry it
+        // describes — the same object, read at call time — so the tools it
+        // lists are the tools that are registered NOW, and a plugin that
+        // registered one a moment ago is already in the answer. The facts no
+        // registry owns (the plugin axes, the provider catalogue, the versions)
+        // are copied out of the product's own declarations by the composition
+        // root, so the catalog cannot describe a runtime that is not this one.
+        tb.AddTool(lf => new InspectTool(
+            registry,
+            agentRegistry,
+            providerRegistry,
+            skillRegistry,
+            mcpRegistry,
+            RuntimeApiFactsFactory.Create(),
+            lf.CreateLogger<InspectTool>()));
         if (full)
         {
             tb.AddTool(lf => new TaskTool(agentRegistry, lf.CreateLogger<TaskTool>(), subAgentRunner, backgroundTasks));
