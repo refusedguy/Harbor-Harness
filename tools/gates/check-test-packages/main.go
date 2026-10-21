@@ -161,7 +161,7 @@ func Run(args []string) int {
 	}
 
 	if len(findings) > 0 {
-		fmt.Println("Test/sample package-set gate — findings:\n")
+		fmt.Print("Test/sample package-set gate — findings:\n\n")
 		for _, item := range findings {
 			fmt.Printf("  %s\n", item.String())
 		}

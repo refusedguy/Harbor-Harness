@@ -167,14 +167,14 @@ func Run(args []string) int {
 	}
 
 	if len(blocking) > 0 {
-		fmt.Println("Test-project completeness gate — findings:\n")
+		fmt.Print("Test-project completeness gate — findings:\n\n")
 		for _, item := range blocking {
 			fmt.Printf("  %s\n", item.String())
 		}
 		fmt.Println()
 	}
 	if len(advisory) > 0 {
-		fmt.Println("carried by the baseline (known holes):\n")
+		fmt.Print("carried by the baseline (known holes):\n\n")
 		for _, item := range advisory {
 			fmt.Printf("  %s\n", item.String())
 		}
