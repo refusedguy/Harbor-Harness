@@ -152,6 +152,11 @@ jobs:
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
+      #
+      # MEASUREMENT RUN (#2100): this branch is the fix's branch plus one
+      # comment, so the changed set is ONE file that no project compiles and the
+      # compile phase can be measured on the pull-request lane (where the
+      # architecture gate is off).
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v3
         id: filter
