@@ -14,7 +14,7 @@
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
 > - [docs/PATTERNS.md](./docs/PATTERNS.md) — 8 pattern catalog with real code.
-> - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 38 antipatterns we forbid.
+> - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 39 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
@@ -264,7 +264,7 @@ I want to...
 │      Then docs/ARCHITECTURE.md (concrete code flow + sequence diagrams)
 │
 ├── ...understand what NOT to do
-│   └─→ docs/ANTIPATTERNS.md (38 antipatterns with before/after code)
+│   └─→ docs/ANTIPATTERNS.md (39 antipatterns with before/after code)
 │      Then docs/CODE_PRINCIPLES_AUDIT.md (45 known violations to not repeat)
 │
 ├── ...add / move / rename a document, or fix a broken doc link

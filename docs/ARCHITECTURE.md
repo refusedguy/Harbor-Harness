@@ -5,7 +5,7 @@
 > **Связанные документы:**
 > - [ARCHITECTURE_LAYERS.md](./ARCHITECTURE_LAYERS.md) — canonical Clean / Hexagonal / Onion layering rules + the allowed/forbidden ProjectReference matrix, enforced by `Harbor.Architecture.Tests`.
 > - [PATTERNS.md](./PATTERNS.md) — каталог из 18 паттернов с примерами кода.
-> - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 "не делайте так" с примерами.
+> - [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 39 "не делайте так" с примерами.
 > - [EXAMPLES.md](./EXAMPLES.md) — 40+ рецептов.
 > - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations + §ARCH-001..§ARCH-NNN layering audit.
 
@@ -897,5 +897,5 @@ See [docs/specs/14-architecture-revised.md](./specs/14-architecture-revised.md) 
 - [AGENTS.md](../AGENTS.md) — guide for AI agents.
 - [Development Guide](./DEVELOPMENT.md) — how to contribute.
 - [PATTERNS.md](./PATTERNS.md) — 8 patterns catalog with code.
-- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 antipatterns we forbid.
+- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 39 antipatterns we forbid.
 - [EXAMPLES.md](./EXAMPLES.md) — 40+ recipes.

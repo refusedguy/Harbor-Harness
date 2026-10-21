@@ -186,6 +186,38 @@ internal static class RepoPaths
     }
 
     /// <summary>
+    ///     The <c>Include</c> id of every <c>&lt;PackageReference&gt;</c> a csproj
+    ///     declares, version stripped (versions live in Directory.Packages.props
+    ///     under central package management).
+    /// </summary>
+    /// <remarks>
+    ///     A <c>&lt;PackageReference Update="..."/&gt;</c> carries no <c>Include</c>
+    ///     and is not a declaration of an edge, so it is not reported — only the
+    ///     <c>Include</c> form is.
+    /// </remarks>
+    internal static string[] ReadPackageReferences(string csprojPath)
+    {
+        XDocument document;
+        try
+        {
+            document = XDocument.Load(csprojPath, LoadOptions.None);
+        }
+        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
+        {
+            return [];
+        }
+
+        return
+        [
+            .. document.Descendants()
+                .Where(e => e.Name.LocalName == "PackageReference")
+                .Select(e => e.Attribute("Include")?.Value)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!.Trim())
+        ];
+    }
+
+    /// <summary>
     ///     Every <c>*.cs</c> file a project directory COMPILES: the files under it, plus the
     ///     shared-source files it pulls in with <c>&lt;Compile Include&gt;</c> link items.
     ///     Build output excluded.

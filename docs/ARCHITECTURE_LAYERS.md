@@ -1181,6 +1181,101 @@ asserting `RegexOptions.Compiled` is not an expression tree; a comment-stripping
 asserts the raw prose **does** match, so it proves the stripper and not a blind matcher; and a
 discovery control over the scoped trees.
 
+### 5.8b The telemetry export boundary — the OpenTelemetry SDK stays out of the product graph
+
+> **The OTLP exporter (`Harbor.Telemetry.Otlp`) may not enter the dependency graph of a
+> product binary, and no product project may declare an `OpenTelemetry*` package.**
+
+**The rule, in one line.** `Harbor.Telemetry.Otlp` carries the OpenTelemetry SDK plus the
+OTLP exporter. It is the **one** project allowed to declare an `OpenTelemetry*` package,
+and no product project may reference it — directly or transitively. Its legitimate
+consumer is an **embedding JIT host**: an application that references
+`Harbor.Telemetry.Otlp` itself and calls `HarborOtlpExporter.Attach(endpoint)`. The
+exporter subscribes to the canonical `Harbor.Telemetry` source and meter **by name**, so
+it observes exactly the same spans and measurements the visible sink does.
+
+**Why, measured rather than remembered.** The rule exists because the graph is
+published with NativeAOT and the SDK is not AOT-shaped. On the pinned versions
+(`OpenTelemetry` and `OpenTelemetry.Exporter.OpenTelemetryProtocol` 1.20.0, the
+`Microsoft.Extensions.*` family 10.0.0 or newer):
+
+* **What the SDK would add.** Four assemblies that the CLI does not carry today —
+  `OpenTelemetry` (338,944 bytes of net10.0 managed IL), `OpenTelemetry.Api` (83,968),
+  `OpenTelemetry.Api.ProviderBuilderExtensions` (24,576) and
+  `OpenTelemetry.Exporter.OpenTelemetryProtocol` (195,072) — 642,560 bytes of IL before
+  the trimmer has said anything about them.
+* **What the SDK would NOT add.** Every `Microsoft.Extensions.*` package the SDK pulls in
+  is **already in the CLI's resolved package graph**, because
+  `Microsoft.Extensions.Hosting` brings
+  `Microsoft.Extensions.Configuration.Binder`, `…Logging.Configuration`,
+  `…Options.ConfigurationExtensions` and `…Configuration.EnvironmentVariables` with it.
+  The delta is therefore *exactly* the four OpenTelemetry assemblies and nothing else —
+  a claim worth stating, because the obvious story ("the SDK drags in the reflection
+  binder") is not why this is a boundary: the binder is already there, and the four
+  assemblies are not.
+* **Why four assemblies are a problem.** `OpenTelemetry.dll` carries
+  `RequiresDynamicCodeAttribute`, `DynamicallyAccessedMembersAttribute` and
+  `UnconditionalSuppressMessageAttribute` — it is trim-aware, but it is annotated, so
+  the trim/AOT analyzer's output for the published graph changes when it becomes
+  reachable. `OpenTelemetry.Exporter.OpenTelemetryProtocol.dll` references
+  `Microsoft.Extensions.Configuration.Binder` **and**
+  `Microsoft.Extensions.Configuration.Binder.SourceGeneration` directly, and it
+  implements the OTLP protobuf/gRPC framing **itself** (`GrpcMessageHeaderSize`,
+  `GrpcStartWritePosition`, `GrpcStatusDeserializer`) rather than delegating it to
+  `Google.Protobuf` / `Grpc.Net.Client`, which the 1.20.0 packages no longer depend on.
+  The framing surface is still in the binary.
+* **What the gate would say.** The `aot-publish` job publishes `apps/Harbor.App.Cli`
+  with NativeAOT and its pass criterion is that the publish **SUCCEEDS** — not "zero
+  IL2026". Its inventory is a ratchet in **both** directions: a new diagnostic id, a
+  changed count, a new first-party site **or** a vanished row is red
+  ([`tools/aot-publish-gate.py`](../tools/aot-publish-gate.py)). So "just add the
+  package" cannot land unnoticed — but the gate reports *"the inventory moved"*, not
+  *"you broke the telemetry boundary"*, and a reader who does not know the boundary
+  cannot tell which of the two happened.
+* **The licence, for completeness.** All four packages are **Apache-2.0**; Harbor is
+  **MIT**. Permissive and compatible — the licence is not the reason for the
+  boundary, and it is stated here so that it is not mistaken for one.
+
+**What ships instead.** The visible sink in `Harbor.Telemetry.Core`: an
+`ActivityListener` / `MeterListener` over the canonical `ActivitySource` / `Meter`,
+writing one line per record to the console or a file, bounded and redacted
+(`TelemetryTextExporter`, `TelemetryRedaction`). Framework types only — no SDK, no
+reflection, no protobuf, no gRPC — and therefore AOT-safe by construction rather than
+by promise.
+
+**What protects the boundary.** Four layers, and they are not redundant:
+
+| layer | what it catches | what it cannot catch |
+|---|---|---|
+| the layer matrix (`FullLayerMatrixTests.Matrix`) | an `src/` project edge to the exporter — its row carries an **empty** allowed set, and `Harbor.Hosting`'s allowed set does not name it | `apps/` (the matrix is not defined for composition roots), and a **package** reference, which creates no project edge at all |
+| the declaration-level check (`TelemetryOtlpBoundaryRules`) | a `<ProjectReference>` to the exporter **or** a `<PackageReference>` to any `OpenTelemetry*` package, in every `src/**` and `apps/**` csproj, and in the central props files that would push the package into all of them | an edge that arrives **transitively**, with no csproj of ours declaring it |
+| the IL-level check (the same file) | an `AssemblyRef` from any product assembly to the exporter or to an `OpenTelemetry*` assembly — the transitive case | a package that is present in the graph but bound by no type |
+| the `aot-publish` ratchet | any change in the published graph's diagnostic inventory, in either direction | a violation that changes nothing the trimmer can see |
+
+**How to do it right.** Two answers, and they are the only two:
+
+* **In-process:** attach an `ActivityListener` / `MeterListener` to the canonical
+  `Harbor.Telemetry` source and meter. That is what `TelemetryTextExporter` does, and
+  it is what every host that ships today does.
+* **Out-of-process:** run the OTLP export in a host that is allowed to be a JIT
+  process — a daemon/server publish profile, or an external collector that scrapes
+  the visible sink's output. The exporter assembly travels with that host, not with
+  Harbor's binaries.
+
+**The allow-list has two sides.** A one-sided ban turns "forbidden" into "delete it and
+forget it". The allow-list is a ratchet in both directions: a project that declares
+the SDK and is not on the list is red, **and** an entry on the list whose project no
+longer declares the SDK is red too — because an exemption that grants nothing is a
+row nobody has to think about, and it is how the next OTel package arrives
+unremarked. If the boundary is ever relaxed on purpose, it is relaxed by **editing
+that list with a reason**, not by reaching around the guard.
+
+**Non-vacuity.** The guard plants a forbidden package in a **synthetic** product tree
+and requires the same probe the rule uses to report it — and requires the probe to
+stay silent on the same tree without the plant, and on the allowed side of the
+boundary. A guard that never fires is a guard that is not armed; a guard that always
+fires is a guard nobody reads.
+
 ### 5.9 An exemption row must state a reason
 
 Permission-granting tables in the architecture tests, and the count has grown. The five this

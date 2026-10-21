@@ -1097,11 +1097,49 @@ while (await reader.ReadAsync(ct))
 }
 ```
 
+### 35. The OTLP exporter inside a product binary
+
+**What.** Putting `Harbor.Telemetry.Otlp` — or any `OpenTelemetry*` package — into the
+dependency graph of `apps/Harbor.App.Cli`, `apps/Harbor.App.Avalonia` or any other
+product assembly.
+
+**What goes wrong.** The OpenTelemetry SDK brings four assemblies the CLI does not
+carry today — `OpenTelemetry`, `OpenTelemetry.Api`,
+`OpenTelemetry.Api.ProviderBuilderExtensions` and
+`OpenTelemetry.Exporter.OpenTelemetryProtocol`, 642,560 bytes of net10.0 managed IL
+between them — and the exporter implements the OTLP protobuf/gRPC framing itself
+rather than delegating it. `apps/Harbor.App.Cli` is published with NativeAOT, and
+that publish's pass criterion is that the publish **SUCCEEDS**. The damage is quiet:
+the `aot-publish` ratchet reports *"the inventory moved"*, not *"you broke the
+telemetry boundary"*, so a red job does not tell the next reader which of the two
+happened.
+
+**Right way.** Export telemetry from the visible sink, and run the OTLP exporter out of
+process — in a daemon/server publish profile, or in an external collector.
+
+```csharp
+// ❌ WRONG — the OTLP exporter inside the shipped CLI binary
+// apps/Harbor.App.Cli/Harbor.App.Cli.csproj
+//   <PackageReference Include="OpenTelemetry"/>
+//   <ProjectReference Include="..\..\src\Harbor.Telemetry.Otlp\Harbor.Telemetry.Otlp.csproj"/>
+
+// ✅ RIGHT — the visible sink, in process, AOT-safe (framework types only)
+// src/Harbor.Hosting/Modules/TelemetryModule.cs
+services.AddHarborTelemetry(options => options.Export = TelemetryExportTarget.File);
+
+// ✅ ALSO RIGHT — OTLP, but OUT of process: a daemon/server publish profile, or a
+// collector that reads the visible sink's output. The exporter assembly travels
+// with that host, never with Harbor's binaries.
+```
+
+The rule, the measurements and the guard are in
+[ARCHITECTURE_LAYERS.md §5.8b](./ARCHITECTURE_LAYERS.md#58b-the-telemetry-export-boundary--the-opentelemetry-sdk-stays-out-of-the-product-graph).
+
 ---
 
 ## Testing
 
-### 35. `Assert.That(() => method()).Throws<T>()`
+### 36. `Assert.That(() => method()).Throws<T>()`
 
 **What.** TUnit 0.50 `.Throws<T>()` doesn't compile for non-`Action` overloads.
 
@@ -1128,7 +1166,7 @@ await Assert.That(result.IsFailure).IsTrue();
 await Assert.That(result.Error).Contains("expected error");
 ```
 
-### 36. `DateTime.Now` in tests
+### 37. `DateTime.Now` in tests
 
 **What.** Tests that use `DateTime.Now` or `DateTime.UtcNow` directly.
 
@@ -1162,7 +1200,7 @@ public async Task CreatedAt_UsesClock()
 }
 ```
 
-### 37. Network calls in unit tests
+### 38. Network calls in unit tests
 
 **What.** Tests that call real HTTP endpoints (e.g. real LLM provider).
 
@@ -1197,7 +1235,7 @@ public sealed class StubLlmClient : ILlmClient
 }
 ```
 
-### 38. `void` test method
+### 39. `void` test method
 
 **What.** `[Test] public void Method_State_Expected()` — synchronous void test.
 

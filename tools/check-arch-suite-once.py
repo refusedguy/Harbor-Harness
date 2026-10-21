@@ -24,8 +24,9 @@ on the baseline run 39389070999:
 
 197.2 s of CPU for one answer. #1928 switched the build-time gate off on the
 pull-request lane and #1923 moved the coverage collection to the nightly
-lane, so the suite runs once now, in the `core` shard, and the pull-request
-lane pays 59.9 s for it (measured on run 39508977362: 1094 tests, 59.9 s).
+lane, so the suite runs once now, in the `arch` shard #1781 gave it a shard
+of its own, and the pull-request lane pays 59.9 s for it (measured on run
+39508977362: 1094 tests, 59.9 s).
 
 WHAT THIS FILE GUARDS, AND WHY SOMETHING ELSE WAS NOT ENOUGH
 --------------------------------------------------------------
@@ -39,9 +40,12 @@ be green.
 So this gate reads the workflow files and asks five questions.
 
   EXEC-ONCE      the suite is executed exactly once on the pull-request
-                 lane, by the `core` shard's project list, and by nothing
-                 else. Zero is a finding too: a lane that runs the suite
-                 nowhere has no architecture gate at all.
+                 lane, by the shard whose project list carries it, and by
+                 nothing else. Zero is a finding too: a lane that runs the
+                 suite nowhere has no architecture gate at all. A `run:`
+                 block that only NAMES the suite — the guard-triage reporter
+                 passes `--project Harbor.Architecture.Tests` to another tool
+                 — is not an execution; see `runs_the_suite`.
   GATE-OFF-PR    every job that compiles the solution switches the
                  build-time gate off for `pull_request` events, either with
                  `-p:HarborArchGate=false` on the command line or with a
@@ -254,6 +258,25 @@ def gate_value(expression: str, event: str) -> str | None:
 # ---------------------------------------------------------------------- checks
 
 
+def runs_the_suite(block: str) -> bool:
+    """Does this `run:` block RUN the architecture suite?
+
+    NAMING the suite is not running it. The guard-triage reporter (#1726)
+    passes the project's name to another tool — `--project
+    Harbor.Architecture.Tests` — so the name is in a `run:` block on a lane
+    where the suite runs exactly once. Counting that as an execution made
+    this gate red on a tree that was right: the block runs `python3`, and
+    the suite's name is its ARGUMENT.
+
+    So a block counts when it names the suite AND invokes dotnet — the two
+    shapes that really run it are `dotnet exec <suite>.dll` and `dotnet run
+    --project <suite>`, and both carry both words.
+    """
+    if SUITE not in block:
+        return False
+    return re.search(r"\bdotnet\b", block) is not None
+
+
 def check_once(workflow: str, shards: dict[str, list[str]]) -> list[str]:
     """EXEC-ONCE: the suite is executed exactly once on the pull-request lane."""
     executions: list[str] = []
@@ -262,7 +285,7 @@ def check_once(workflow: str, shards: dict[str, list[str]]) -> list[str]:
             executions.append(f"the `{shard}` shard's project list")
     for job, job_text in sorted(split_jobs(workflow).items()):
         for block in run_blocks(job_text):
-            if SUITE in block:
+            if runs_the_suite(block):
                 executions.append(f"the `{job}` job's command")
     if len(executions) == 1:
         return []
@@ -559,6 +582,24 @@ def self_test() -> int:
                 + ("; ".join(findings) if findings else "the checker found nothing")
             )
 
+    # A near miss: a `run:` block that only NAMES the suite is not an
+    # execution. The guard-triage reporter passes the project's name to
+    # another tool, and counting that made this gate red on a tree where the
+    # suite runs exactly once.
+    named_only = _edit(
+        FIXTURE_WORKFLOW,
+        "      - name: Run shard ${{ matrix.shard }}\n",
+        "      - name: Triage the guard firings\n"
+        "        run: |\n"
+        "          python3 tools/guard-triage.py \\\n"
+        "            --project Harbor.Architecture.Tests\n"
+        "      - name: Run shard ${{ matrix.shard }}\n")
+    findings = evaluate(named_only, FIXTURE_PROPS, 4)
+    if any(finding.startswith("EXEC-ONCE") for finding in findings):
+        failures.append(
+            "a block that only NAMES the suite was counted as an execution: "
+            + "; ".join(findings))
+
     # GATE-DEFAULT and GATE-CONDITION read the props, not the workflow.
     findings = evaluate(FIXTURE_WORKFLOW, FIXTURE_PROPS.replace("true</HarborArchGate>",
                                                                 "false</HarborArchGate>"), 4)
@@ -643,9 +684,10 @@ def main() -> int:
         return 1
 
     shards = shard_lists(workflow)
+    carriers = [name for name, projects in sorted(shards.items()) if SUITE in projects]
     print(
         f"ok: {len(shards)} shards, the architecture suite runs once - in the "
-        f"`{next(iter(shards))}` shard"
+        f"`{carriers[0] if carriers else '?'}` shard"
     )
     return 0
 

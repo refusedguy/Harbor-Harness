@@ -34,7 +34,7 @@
 > (`file:line`)**, and **the known trap**.
 
 Связанные документы:
-- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 38 вещей, которые мы НЕ делаем.
+- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 39 вещей, которые мы НЕ делаем.
 - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — известные нарушения.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — high-level дизайн.
 - [EVENT_BUS_SINKS.md](./EVENT_BUS_SINKS.md) — нормативная таблица sink-вердиктов.
@@ -669,7 +669,7 @@ the transition and the lifecycle are the same code path rather than two.*
 
 ## See also
 
-- [docs/ANTIPATTERNS.md](./ANTIPATTERNS.md) — the long form, 38 entries.
+- [docs/ANTIPATTERNS.md](./ANTIPATTERNS.md) — the long form, 39 entries.
 - [docs/CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known
   violations; §ARCH-001..§ARCH-NNN covers layering.
 - [docs/EVENT_BUS_SINKS.md](./EVENT_BUS_SINKS.md) — the normative sink-verdict

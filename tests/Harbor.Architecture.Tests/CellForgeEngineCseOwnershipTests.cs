@@ -65,7 +65,6 @@
 //      rule (see the vacuity-trap section in CfeValueBaselineTests.cs).
 
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace Harbor.Architecture.Tests;
 
@@ -351,24 +350,13 @@ public class CellForgeEngineCseOwnershipTests
     ///     The <c>Include</c> id of every <c>&lt;PackageReference&gt;</c> a csproj declares,
     ///     version stripped (versions live in Directory.Packages.props under CPM).
     /// </summary>
-    private static string[] ReadPackageReferences(string csprojPath)
-    {
-        XDocument document;
-        try
-        {
-            document = XDocument.Load(csprojPath, LoadOptions.None);
-        }
-        catch (Exception ex) when (ex is IOException or System.Xml.XmlException)
-        {
-            return [];
-        }
-
-        return [.. document.Descendants()
-            .Where(e => e.Name.LocalName == "PackageReference")
-            .Select(e => e.Attribute("Include")?.Value)
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .Select(v => v!)];
-    }
+    /// <remarks>
+    ///     #1799 moved this reader to <see cref="RepoPaths.ReadPackageReferences" />:
+    ///     the telemetry-boundary rule needs the same fact, and two copies of one
+    ///     question is how the two answers drift apart.
+    /// </remarks>
+    private static string[] ReadPackageReferences(string csprojPath) =>
+        RepoPaths.ReadPackageReferences(csprojPath);
 
     /// <summary>Repo-relative, forward-slashed path for stable failure messages.</summary>
     private static string Relative(string absolutePath) =>
