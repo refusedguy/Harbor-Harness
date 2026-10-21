@@ -553,6 +553,16 @@ internal static class SessionFileReader
         if (IsRewindLine(record))
         {
             return FoldRewindRecord(record, sessionId, inbox, errors);
+        // #1761: the goal lines are metadata too — what the HARNESS tracks
+        // about the work, never part of the work itself. They are dropped
+        // here, before the message parser sees them, so the history the model
+        // context is built from cannot carry a goal record.
+        //
+        // `true`, like the header, the checkpoint markers and the feedback
+        // lines: the record decoded fine and is deliberately not a message.
+        if (IsGoalLine(record))
+        {
+            return true;
         }
 
         // #1746: the feedback lines are metadata too — what the user said
@@ -576,14 +586,6 @@ internal static class SessionFileReader
         // lock marker. The records themselves stay in the file: they are read
         // by the compaction axis, which asks for them by name.
         if (IsCompactionLine(record))
-        // #1761: the goal lines are metadata too — what the HARNESS tracks
-        // about the work, never part of the work itself. They are dropped
-        // here, before the message parser sees them, so the history the model
-        // context is built from cannot carry a goal record.
-        //
-        // `true`, like the header, the checkpoint markers and the feedback
-        // lines: the record decoded fine and is deliberately not a message.
-        if (IsGoalLine(record))
         {
             return true;
         }
