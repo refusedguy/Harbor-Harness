@@ -18,11 +18,27 @@ using Harbor.Abstractions.Models;
 namespace Harbor.LoadTests;
 
 /// <summary>
-///     Minimal in-memory composition fakes for the multi-session load
-///     harness. Deliberately NOT shared with Harbor.Application.Tests fakes —
-///     the load suite composes only what the concurrency assertions need, and
-///     keeping the set tiny makes the harness contract explicit.
+///     The load harness's own composition facts: the mock model every
+///     load-test agent runs on, the provider config that points at the mock
+///     server, the canonical echo reply and the allow-all ruleset.
 /// </summary>
+/// <remarks>
+///     <para>
+///         The doubles this file used to carry — the single-provider registry,
+///         the never-compacting compaction service, and the rate-limited LLM
+///         client with its token bucket — moved to the shared kit in #1825.
+///         They were not load-specific: the registry is the kit's
+///         <c>FakeProviderRegistry</c>, the compaction service is the kit's
+///         <c>FakeCompactionService</c>, and the rate limiter is the kit's
+///         <c>RateLimitedLlmClient</c> / <c>TokenBucketRateLimiter</c>.
+///     </para>
+///     <para>
+///         The two doubles that REMAIN here are load-specific, and each says
+///         why below: the model catalogue serves the load suite's mock model,
+///         and the session context persists to the store so the corruption
+///         assertions can read the persisted transcript.
+///     </para>
+/// </remarks>
 public static class LoadTestFakes
 {
     /// <summary>The single mock model every load-test agent runs on.</summary>
@@ -65,49 +81,20 @@ public static class LoadTestFakes
         "mock",
         new PermissionRuleset(new PermissionRule[] { new("*", "*", PermissionAction.Allow) }));
 }
-/// <summary>Catalog serving exactly the mock model, no HTTP.</summary>
+/// <summary>
+///     Catalog serving exactly the mock model, no HTTP.
+/// </summary>
+/// <remarks>
+///     This one stays local: <c>IModelCatalog</c> is declared in
+///     <c>Harbor.Providers.OpenAiCompatible</c>, a product assembly. A shared
+///     double for it would have to reach that assembly, and the closure-neutral
+///     part of the shared kit may not — it is the one part every test project
+///     can take without gaining a product assembly (#1825).
+/// </remarks>
 public sealed class StaticModelCatalog : IModelCatalog
 {
     public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(ProviderConfig config, CancellationToken ct = default) =>
         Task.FromResult(Result.Success<IReadOnlyList<ModelInfo>>([LoadTestFakes.TestModel]));
-}
-
-/// <summary>
-///     Registry exposing a single pre-built client for every provider id
-///     (the load suite registers exactly one mock provider).
-/// </summary>
-public sealed class SingleProviderRegistry(ILlmClient client) : IProviderRegistry
-{
-    public IReadOnlyList<ProviderId> GetRegisteredProviderIds() => [client.ProviderId];
-
-    public Result<ILlmClient> GetClient(ProviderId providerId) => Result.Success(client);
-
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetAllModelsAsync(CancellationToken cancellationToken = default) =>
-        client.GetModelsAsync(cancellationToken);
-
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsCachedAsync(ProviderId providerId, CancellationToken cancellationToken = default) =>
-        client.GetModelsAsync(cancellationToken);
-
-    public void Register(ProviderId providerId, Func<ILlmClient> factory) { }
-
-    public Result Unregister(ProviderId providerId) => Result.Failure("SingleProviderRegistry does not support unregister.");
-}
-
-/// <summary>
-///     Compaction is out of scope for the load suite — the scripted
-///     transcripts are far below the context window. Returns the real
-///     service's "no compaction needed" answer without token estimation cost.
-/// </summary>
-public sealed class NoCompaction : ICompactionService
-{
-    public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => false;
-
-    public Task<Result<CompactionResult>> CompactAsync(
-        string sessionId,
-        IReadOnlyList<AgentMessage> messages,
-        ModelInfo model,
-        CancellationToken ct = default) =>
-        Task.FromResult(Result.Failure<CompactionResult>("NoCompaction never compacts."));
 }
 
 /// <summary>
@@ -118,6 +105,11 @@ public sealed class NoCompaction : ICompactionService
 ///     the message list is not safe for concurrent runs — load runs within a
 ///     session are strictly sequential).
 /// </summary>
+/// <remarks>
+///     This one stays local: the shared kit's session context is an in-memory
+///     list, and the load suite needs the DURABLE transcript — that is the
+///     thing its corruption assertions read (#1825).
+/// </remarks>
 public sealed class LoadSessionContext : ISessionContext
 {
     private readonly ISessionStore _store;
@@ -159,106 +151,6 @@ public sealed class LoadSessionContext : ISessionContext
             SteeringQueue.Writer.TryWrite(message);
         }
     }
-}
-
-/// <summary>
-///     Deterministic token-bucket admission control for LLM calls. The
-    ///     bucket starts full with <paramref name="capacity" /> tokens; each
-///     in-flight LLM stream holds one token and refunds it on completion.
-    ///     Refill is driven by ACTUAL COMPLETIONS, not wall-clock timers — so
-///     the shape of the load (who streams when) is a pure function of the
-///     system's own progress, with zero real-time sleeps in the harness.
-/// </summary>
-public sealed class TokenBucketRateLimiter : IDisposable
-{
-    private readonly SemaphoreSlim _tokens;
-    private int _inFlight;
-    private int _peakInFlight;
-
-    public TokenBucketRateLimiter(int capacity)
-    {
-        if (capacity < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(capacity));
-        }
-
-        Capacity = capacity;
-        _tokens = new SemaphoreSlim(capacity, capacity);
-    }
-
-    public int Capacity { get; }
-
-    /// <summary>Highest number of simultaneously in-flight streams observed.</summary>
-    public int PeakInFlight => Volatile.Read(ref _peakInFlight);
-
-    /// <summary>Total admissions granted so far.</summary>
-    public int TotalAdmissions => Volatile.Read(ref _totalAdmissions);
-    private int _totalAdmissions;
-
-    /// <summary>Blocks asynchronously until a token is available.</summary>
-    public async ValueTask AcquireAsync(CancellationToken ct = default)
-    {
-        await _tokens.WaitAsync(ct).ConfigureAwait(false);
-        int now = Interlocked.Increment(ref _inFlight);
-        Interlocked.Increment(ref _totalAdmissions);
-
-        int peak = Volatile.Read(ref _peakInFlight);
-        while (now > peak &&
-               Interlocked.CompareExchange(ref _peakInFlight, now, peak) != peak)
-        {
-            peak = Volatile.Read(ref _peakInFlight);
-        }
-    }
-
-    /// <summary>Refund the token held by a completed (or faulted) stream.</summary>
-    public void Refund()
-    {
-        Interlocked.Decrement(ref _inFlight);
-        _tokens.Release();
-    }
-
-    public void Dispose() => _tokens.Dispose();
-}
-
-/// <summary>
-///     <see cref="ILlmClient" /> decorator that gates every streaming call
-    ///     through a <see cref="TokenBucketRateLimiter" /> and records the
-///     concurrency the bucket actually admitted (proof the shaping worked).
-/// </summary>
-public sealed class RateLimitedLlmClient : ILlmClient
-{
-    private readonly ILlmClient _inner;
-    private readonly TokenBucketRateLimiter _limiter;
-
-    public RateLimitedLlmClient(ILlmClient inner, TokenBucketRateLimiter limiter)
-    {
-        _inner = inner;
-        _limiter = limiter;
-        ProviderId = inner.ProviderId;
-    }
-
-    public ProviderId ProviderId { get; }
-
-    public async IAsyncEnumerable<LlmEvent> StreamAsync(
-        LlmRequest request,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        await _limiter.AcquireAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await foreach (LlmEvent evt in _inner.StreamAsync(request, cancellationToken).ConfigureAwait(false))
-            {
-                yield return evt;
-            }
-        }
-        finally
-        {
-            _limiter.Refund();
-        }
-    }
-
-    public Task<Result<IReadOnlyList<ModelInfo>>> GetModelsAsync(CancellationToken cancellationToken = default) =>
-        _inner.GetModelsAsync(cancellationToken);
 }
 
 /// <summary>

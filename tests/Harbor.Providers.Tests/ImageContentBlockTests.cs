@@ -216,7 +216,7 @@ public class ImageContentBlockTests
             new HttpClient(handler),
             new CompatConfig { Id = "stub", BaseUrl = "http://stub" },
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<CompatClient>.Instance);
 
         var request = RequestWith(userContent ?? TextPlusImage(), "kilocode/kilo-auto/free");

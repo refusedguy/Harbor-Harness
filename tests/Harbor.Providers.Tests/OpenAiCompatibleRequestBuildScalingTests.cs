@@ -80,7 +80,7 @@ public class OpenAiCompatibleRequestBuildScalingTests
             new HttpClient(),
             new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
     private static LlmRequest AssistantRequest(int toolCalls) =>

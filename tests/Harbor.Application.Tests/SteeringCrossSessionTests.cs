@@ -8,7 +8,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;

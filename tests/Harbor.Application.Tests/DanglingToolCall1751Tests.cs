@@ -12,7 +12,7 @@ using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 

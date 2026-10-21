@@ -8,7 +8,7 @@ using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 

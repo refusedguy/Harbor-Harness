@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using FakePermissionServiceBase = Harbor.TestKit.Generated.FakePermissionService; // #1769: generated double
 
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 

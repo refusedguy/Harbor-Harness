@@ -542,7 +542,7 @@ public class ProviderPayloadWireTests
                 new HttpClient(handler),
                 new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
                 new TestAuthResolver(),
-                StubModelCatalog.Instance,
+                FakeModelCatalog.Instance,
                 NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
             int events = await client.StreamAsync(request).CountAsync();

@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.TestKit;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
