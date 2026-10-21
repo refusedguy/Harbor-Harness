@@ -1261,7 +1261,19 @@ jobs:
             -p:BuildProjectReferences=false 2>&1 \
             | grep -B 1 -A 4 'Building target' | head -60 || true
           echo "=== the stamping timestamp (the newest file under obj/) ==="
-          now=$(find . -path '*/obj/*' -type f -printf '%T@\n' 2>/dev/null | sort -rn | head -1 | cut -d. -f1)
+          # `sed -n '1p'` and NOT `head -1` here, and the reason is the shell.
+          #
+          # GitHub runs `shell: bash` as `bash -eo pipefail {0}`, and this
+          # script adds -u on top. `head` closes the pipe after its first
+          # line, so `sort` dies of SIGPIPE (status 141) on its next write,
+          # `pipefail` makes the whole pipeline 141, and the assignment
+          # `now=$(...)` carries that status -- so `-e` aborts the STEP. The
+          # step then reports the failure of a diagnostic, and the diagnostic
+          # itself never prints.
+          #
+          # `sed -n '1p'` reads the whole stream and prints the first line,
+          # so nothing is killed by a closed pipe and the status is 0.
+          now=$(find . -path '*/obj/*' -type f -printf '%T@\n' 2>/dev/null | sort -rn | sed -n '1p' | cut -d. -f1)
           echo "now=$now  ($(date -u -d "@$now" +%H:%M:%S))"
           echo "=== the files under obj/ and bin/ NEWER than the stamping ==="
           find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -newermt "@$now" 2>/dev/null | head -20 || true
