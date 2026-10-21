@@ -128,7 +128,7 @@ public sealed class SessionArchiveWriter
         // guards beside a hundred lines of assembly reads worse than the
         // chain (docs/ROP-API-INVENTORY.md §3.1).
         return await sessionResult
-            .Bind(session => ReadLogAsync(store, session.Id, ct).ConfigureAwait(false)
+            .Bind(async session => (await ReadLogAsync(store, session.Id, ct).ConfigureAwait(false))
                 .Bind(log => WriteArchiveAsync(store, session, log, output, ct)))
             .ConfigureAwait(false);
     }
