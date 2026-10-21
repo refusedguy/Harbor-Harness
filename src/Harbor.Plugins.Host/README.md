@@ -137,7 +137,7 @@ Latency (acceptance data for #1055): `ToolsCall_DispatchLatency_StaysInteractive
 measures loopback `tools/call` dispatch (60 calls, warmed up) and fails above
 a 100 ms mean. Each test's stdout — the measured mean — is filed under the
 test in TRX and rendered into the CI summary by
-`tools/test-measurements.py`, so the number is re-measured on every run
+the compiled `test-measurements` gate, so the number is re-measured on every run
 rather than quoted once here.
 
 ## Build

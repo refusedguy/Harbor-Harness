@@ -32,7 +32,7 @@
 >   (п. 4) осталось непроверенным, и теперь это неважно: `dotnet test` в
 >   этом репозитории не используется, ни в CI, ни в локальной сборке.
 >
-> **Возврат пакета теперь ловит гейт** `tools/check-no-test-sdk.py`
+> **Возврат пакета теперь ловит гейт** `check-no-test-sdk`
 > (issue #1893), подключённый в `.github/workflows/ci.yml` отдельным джобом
 > `test-sdk-absent`, который запускается **всегда**. Он читает все
 > отслеживаемые `*.csproj` / `*.props` / `*.targets` (кроме вендорённого
@@ -231,7 +231,7 @@ grep -r "coverlet" tests --include="*.csproj" --include="*.props"
 
 `scripts/verify-tunit-mtp.sh` из того worktree **в `dev` так и не попал** (он
 жил только там). Его роль занял гейт репозитория:
-[`tools/check-no-test-sdk.py`](./tools/check-no-test-sdk.py) — stdlib python,
+[`check-no-test-sdk`](./tools/gates/check-no-test-sdk/main.go) — скомпилированный гейт,
 без dotnet и без сети, читает все отслеживаемые `*.csproj` / `*.props` /
 `*.targets` и падает, если `Microsoft.NET.Test.Sdk` объявлен хоть в одном из
 них. Подключён в `.github/workflows/ci.yml` (джоб `test-sdk-absent`), у

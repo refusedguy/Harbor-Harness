@@ -113,7 +113,7 @@ on:
       - 'tests/Directory.Build.props'
       - 'contrib/apps/Directory.Build.props'
       - 'contrib/tests/Directory.Build.props'
-      - 'tools/aggregate-analyzer-cost.py'
+      - 'tools/gates/aggregate-analyzer-cost/**'
 
 permissions:
   contents: read
@@ -225,7 +225,7 @@ jobs:
           # tools/check-gate-policy.py reads a step's command up to the first
           # line that is not indented under its `run:`, and a blank line is
           # such a line. A blank line here would hide both invocations of
-          # tools/measure-build-cpu.py from the gate that checks which
+          # the compiled measure-build-cpu gate from the gate that checks which
           # workflows run which script, and the gate would fail on a file
           # that does run it.
           arm_props=""
@@ -267,7 +267,7 @@ jobs:
           arm="dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true $arm_props $extra -clp:PerformanceSummary"
           echo "baseline: $base"
           echo "arm:      $arm"
-          python3 tools/measure-build-cpu.py --label "$LABEL-base" --out-dir meas -- bash -c "$base"
+          tools/bin/harbor-gates-linux-x64 measure-build-cpu --label "$LABEL-base" --out-dir meas -- bash -c "$base"
           base_rc=$?
           # The tree is cleaned between the two builds, so the second one is a
           # from-scratch build like the first: an incremental build would
@@ -288,7 +288,7 @@ jobs:
           # no compiler server, nothing warm. The null arms are the control
           # that proves it.
           dotnet build-server shutdown >> clean.log 2>&1 || true
-          python3 tools/measure-build-cpu.py --label "$LABEL-arm" --out-dir meas -- bash -c "$arm"
+          tools/bin/harbor-gates-linux-x64 measure-build-cpu --label "$LABEL-arm" --out-dir meas -- bash -c "$arm"
           arm_rc=$?
           {
             echo "base_exit=$base_rc"
@@ -338,6 +338,12 @@ jobs:
                     f"avg_cores={cpu.get('avg_busy_cores')} max_cores={cpu.get('max_busy_cores')} "
                     f"csc={csc.get('calls')}calls/{csc.get('total_ms')}ms {restore}")
           PY
+
+      # The meter's own failure path: the meter reads the log it wrote, and
+      # a reader edited until it matches nothing is indistinguishable from a
+      # build with no timeline.
+      - name: The meter still reads the timeline it promises
+        run: tools/bin/harbor-gates-linux-x64 measure-build-cpu --self-test
 
       - name: Upload measurement
         if: always()
@@ -390,8 +396,14 @@ jobs:
             cp "$f" "meas/$(basename "$f")"
           done
           ls -la meas || true
-          python3 tools/aggregate-analyzer-cost.py meas \
+          tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost meas \
             --summary "$GITHUB_STEP_SUMMARY"
+
+      # The aggregator's own failure path: it reads the compiler's report and
+      # the arms' JSON, and a reader edited until it matches nothing is
+      # indistinguishable from a measurement of an empty run.
+      - name: The aggregator still reads the compiler's report
+        run: tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost --self-test
 
       - name: Upload the table
         if: always()

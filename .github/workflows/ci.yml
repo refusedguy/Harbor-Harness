@@ -105,7 +105,7 @@
 # per-assembly counts and nothing per-test, and Detailed would bury the one
 # `failed <TestName>` line under a line per green test. Instead the test job
 # keeps `--report-trx` (TUnit already files each test's stdout under that test)
-# and hands the TRX to `tools/test-measurements.py`, which renders a
+# and hands the TRX to the compiled `test-measurements` gate, which renders a
 # `Class.Method -> measurement` table into the job summary. Read-only, never a
 # gate: the script exits 0 on a missing or corrupt TRX set. The OS matrix in
 # `test-os.yml` does the same for the platform-sensitive numbers.
@@ -181,11 +181,11 @@ jobs:
               # Runs INSIDE the test job below. Without this line an
               # edit to the script alone would set dotnet=false, skip the very
               # job that executes it, and land unvalidated (issue #618).
-              - 'tools/test-measurements.py'
+              - 'tools/gates/test-measurements/**'
               # The skipped-test report (issue #1795) — same #618 argument:
               # an edit to the script alone must not skip the job that
               # executes it.
-              - 'tools/test-skips.py'
+              - 'tools/gates/test-skips/**'
               # The pack-validation gate's instrument (#429). Same #618
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
@@ -221,7 +221,7 @@ jobs:
               # its own self-test runs in the build job — but editing it
               # must still run the build job, so the tree it parses is
               # validated by the same commit.
-              - 'tools/msbuild-evaluation-cost.py'
+              - 'tools/gates/msbuild-evaluation-cost/**'
               - '.github/workflows/evaluation-cost.yml'
               # #1726. The guard triage reads the TRX of the `test` job and
               # writes the classified firings of that shard, and its
@@ -267,12 +267,12 @@ jobs:
             # silences the gate would also be the edit that stops the gate
             # from running — unvalidated. Editing the tool has the same
             # problem.
-              - 'tools/check-reference-trimmer.py'
+              - 'tools/gates/check-reference-trimmer/**'
               - 'tools/reference-trimmer-baseline.txt'
               # The skipped-test report (issue #1795) — same #618 argument:
               # an edit to the script alone must not skip the job that
               # executes it.
-              - 'tools/test-skips.py'
+              - 'tools/gates/test-skips/**'
             # #1882. The package set of the test and sample projects can only
             # change through one of these: a project's own .csproj, the props
             # that inject a PackageReference into every project, the version
@@ -434,7 +434,7 @@ jobs:
   # re-signing half of the freeze lives here: a commit that edits the
   # frozen baseline must edit the assembly's sources with it, and a commit
   # that changes a public declaration must re-sign the baseline with it.
-  # tools/check-public-api-resign.py reads the PR's commit range and says
+  # the compiled `check-public-api-resign` gate reads the PR's commit range and says
   # so. Its --self-test is the non-vacuity proof of the python half, and it
   # runs in the docs.yml `selftest` job.
   #
@@ -487,7 +487,7 @@ jobs:
             echo "::error::cannot resolve the base commit of this range" >&2
             exit 1
           fi
-          python3 tools/check-public-api-resign.py --base "$base" \
+          tools/bin/harbor-gates-linux-x64 check-public-api-resign --base "$base" \
             --min-rows src/Harbor.Abstractions.Contracts=1896 \
             --min-rows src/Harbor.Abstractions=1269
 
@@ -511,7 +511,7 @@ jobs:
   #                                           Directory.Build.props, so it
   #                                           does not reach the test tree
   #                                           as a diagnostic either.
-  #   tools/check-abstractions-contract.py     four src/ projects.
+  #   the compiled check-abstractions-contract gate   four src/ projects.
   #   tools/aot-publish-gate.py                src/ + apps/.
   #   AGENTS.md §"What NOT to do" #2           prose.
   #
@@ -631,9 +631,9 @@ jobs:
       # product (ADR-019), and the gate excludes contrib/external/ anyway.
       - uses: actions/checkout@v7
       - name: No-VSTest-SDK gate fails on an injected reference
-        run: python3 tools/check-no-test-sdk.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-no-test-sdk --self-test
       - name: Check that no project file declares Microsoft.NET.Test.Sdk
-        run: python3 tools/check-no-test-sdk.py --min-files 150
+        run: tools/bin/harbor-gates-linux-x64 check-no-test-sdk --min-files 150
 
       # The runner-wait measurement, in the job summary (#1782 step 4): how
       # long this job waited for a runner after `build` finished. It is the
@@ -673,9 +673,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The analyzer-scope gate fails on a drifted scope
-        run: python3 tools/check-analyzer-scope.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-analyzer-scope --self-test
       - name: Check that every analyzer package runs where the table says
-        run: python3 tools/check-analyzer-scope.py --min-files 150
+        run: tools/bin/harbor-gates-linux-x64 check-analyzer-scope --min-files 150
 
       - name: Queue-wait measurement (#1782 step 4)
         if: always()
@@ -781,10 +781,10 @@ jobs:
           retention-days: 7
       - name: The gate is red when the tool is not allowed to answer
         if: always()
-        run: python3 tools/check-reference-trimmer.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --self-test
       - name: Gate — no unused reference outside the baseline
         if: always()
-        run: python3 tools/check-reference-trimmer.py --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
+        run: tools/bin/harbor-gates-linux-x64 check-reference-trimmer --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
 
       # The runner-wait measurement, in the job summary (#1782 step 4): how
       # long this job waited for a runner after `build` finished. It is the
@@ -1072,25 +1072,42 @@ jobs:
           # payload, and the repository's 10 GB cache budget cannot hold them
           # — the first version of this cache (1,921 MiB per entry) was
           # evicted within minutes of being written, because the NuGet caches
-          # already fill the budget. The debug symbols go for the same
-          # reason: the artifacts do not carry them either.
-          # `tools/bin` is EXCLUDED, and the exclusion is in BOTH the restore
-          # and the save, because the path input IS the cache's version:
-          # the two blocks must stay byte-for-byte identical.
+          # already fill the budget.
           #
-          # WHY: `tools/bin/harbor-gates-linux-x64` is a COMMITTED artifact,
-          # not a build output, and `**/bin` matched it. The restore then
-          # put the base commit's binary over the one the pull request
-          # committed, and the gate the workflow ran was the base commit's:
-          # "unknown gate: normalize-mtimes" — the cache decided which code
-          # runs (the shape of issue #2107).
+          # THE DEBUG SYMBOLS STAY (issue #2100). They used to go with the
+          # runtime assets, for a reason that was about the ARTIFACTS and not
+          # about the cache: the uploaded slices do not carry a .pdb. But the
+          # cache is not the artifacts, and the exclusion broke MSBuild's
+          # up-to-date check for EVERY project:
+          #
+          #   obj/Release/net10.0/<Target>.pdb is
+          #   @(_DebugSymbolsIntermediatePath), and that item is one of the
+          #   OUTPUTS of the `CoreCompile` target (SDK:
+          #   Roslyn/Microsoft.CSharp.Core.targets, CoreCompile's Outputs
+          #   list; the item is created in
+          #   Microsoft.Common.CurrentVersion.targets, inside an ItemGroup
+          #   conditioned on '$(_DebugSymbolsProduced)' == 'true', which
+          #   Directory.Build.props makes true with <DebugType>portable</DebugType>).
+          #
+          #   MSBuild treats a MISSING OUTPUT as "must build" (dotnet/msbuild,
+          #   src/Build/BackEnd/Components/RequestBuilder/TargetUpToDateChecker.cs:
+          #   "First output is missing: we must build the target" / "An output
+          #   is missing: we must build the target"). So with the pdb absent
+          #   from the restored tree, CoreCompile was out of date for every
+          #   project on every run, whatever the mtimes said: the compile was
+          #   always the full 112-project rebuild. That is the measured reason
+          #   the wall did not fall after #2047.
+          #
+          # The cost of keeping them is one more file per project per
+          # configuration; the measured size is in the PR body. The path list
+          # below and the save step's list MUST stay byte-for-byte identical:
+          # the cache's VERSION is a hash of these lines, and two different
+          # lists are two different versions.
           path: |
             **/obj
             **/bin
-            !tools/bin
             !**/runtimes/**
             !**/*.resources.dll
-            !**/*.pdb
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
           # then the prefix.
@@ -1774,23 +1791,18 @@ jobs:
           || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
-          # `tools/bin` is EXCLUDED, and the exclusion is in BOTH the restore
-          # and the save, because the path input IS the cache's version:
-          # the two blocks must stay byte-for-byte identical.
-          #
-          # WHY: `tools/bin/harbor-gates-linux-x64` is a COMMITTED artifact,
-          # not a build output, and `**/bin` matched it. The restore then
-          # put the base commit's binary over the one the pull request
-          # committed, and the gate the workflow ran was the base commit's:
-          # "unknown gate: normalize-mtimes" — the cache decided which code
-          # runs (the shape of issue #2107).
+          # BYTE-FOR-BYTE the restore step's path list. The cache's VERSION is
+          # a hash of these lines, and the restore asks for the entry with this
+          # key AND this version: two different lists are two different
+          # versions, and then the restore can never find the entry the save
+          # wrote (that is how #2047's predecessor never fired at all).
+          # The debug symbols STAY in the list - see the restore step for why
+          # excluding them made every project look out of date (issue #2100).
           path: |
             **/obj
             **/bin
-            !tools/bin
             !**/runtimes/**
             !**/*.resources.dll
-            !**/*.pdb
           key: ${{ steps.cache-key.outputs.key }}
 
   # ── pack ───────────────────────────────────────────────────────────────────
@@ -1811,8 +1823,7 @@ jobs:
   # WHAT MOVED, AS ONE UNIT
   # ------------------------
   #   * `dotnet pack` (the NuGet packages),
-  #   * `tools/bin/harbor-gates-linux-x64 pack-validate` (the metadata/README/lib
-  #     gate, issue #429),
+  #   * `tools/bin/harbor-gates-linux-x64 pack-validate` (the metadata/README/lib gate, issue #429),
   #   * the DETERMINISM gate — the second pack and the entry-by-entry zip
   #     comparison. The two packs MUST stay together: the gate compares two
   #     packs of the SAME tree, so splitting them across jobs would compare
@@ -2260,10 +2271,9 @@ jobs:
             # from the same per-project costs), and the skew from 5.96x
             # (measured) to 3.46x (computed).
             #
-            # The gate that keeps it that way is
-            # tools/bin/harbor-gates-linux-x64 check-shard-balance, which reads
-            # these lists and the recorded costs and fails when the shards
-            # drift apart again.
+            # The gate that keeps it that way is tools/check-shard-balance.py,
+            # which reads these lists and the recorded costs and fails when the
+            # shards drift apart again.
             projects: >-
               Harbor.Architecture.Tests
     steps:
@@ -2336,7 +2346,7 @@ jobs:
           # assembly's own output folder, and the TRX landed in
           # tests/<project>/bin/Release/net10.0/TestResults/<shard>/, where
           # neither the artifact upload (TestResults/**, relative to the
-          # workspace) nor tools/test-measurements.py can see it. Both
+          # workspace) nor the compiled test-measurements gate can see it. Both
           # reported "no TRX" and the per-test measurements were unreachable.
           # An absolute path is unambiguous in both layouts.
           summary="$GITHUB_STEP_SUMMARY"
@@ -2407,10 +2417,16 @@ jobs:
       # this step on windows-latest, where the default shell is pwsh and a
       # trailing `\` is a ParserError, not a line continuation.
       - name: Report test measurements (issue #618)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
-          python3 tools/test-measurements.py "TestResults/${{ matrix.shard }}" \
+          tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       # #1884: the CENSUS, next to the measurements above. The step above
@@ -2427,10 +2443,16 @@ jobs:
       # Reporting only, never a gate: the script exits 0 on a missing or
       # corrupt TRX set, and it prints its own one-line summary to the log.
       - name: Report the test census (issue #1884)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
-          python3 tools/test-census.py "TestResults/${{ matrix.shard }}" \
+          tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --top 15
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
       # Issue #1795 — the SKIPPED tests, with their reasons, in the same
@@ -2440,10 +2462,16 @@ jobs:
       # (that is how the 20 skipped Avalonia golden tests were found).
       # Reporting only, never a gate: the script exits 0 on a missing TRX.
       - name: Report skipped tests (issue #1795)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
-          python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
+          tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       # Issue #1726 — the guard firings of this shard, CLASSIFIED.
@@ -2456,7 +2484,7 @@ jobs:
       # summary.
       #
       # REPORT-ONLY, never a gate: the tool exits 0 on a missing TRX set, the
-      # way tools/test-measurements.py does, so a shard that found nothing
+      # way the compiled test-measurements gate does, so a shard that found nothing
       # reads as "nothing fired" and not as a failure. The old output of the
       # guards is untouched: the step adds a table to the job summary and a
       # JSON file to the artifacts, and changes nothing a human reads in the

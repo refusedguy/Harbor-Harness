@@ -699,7 +699,7 @@ What landed in #1239:
   more than 1024 entries) is dropped.
 - **Both are hand-written pools, not `DefaultObjectPoolProvider`.** The issue named the
   Microsoft type as one option; `src/Harbor.Extensions` is one of the four projects
-  `tools/check-abstractions-contract.py` guards, and a `Microsoft.Extensions.ObjectPool`
+  the compiled `check-abstractions-contract` gate guards, and a `Microsoft.Extensions.ObjectPool`
   `<PackageReference>` there is a dependency every consumer inherits. The hand-written pool is
   AOT-safe, needs no package, and is the direction `PLAN.md` already specified.
 
@@ -1144,7 +1144,7 @@ line costs the object, its chunk buffer and the string it hands back). The
 expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
-> the `test (ui)` job log on every run, and `tools/test-measurements.py` lifts
+> the `test (ui)` job log on every run, and the compiled `test-measurements` gate lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
 > Measured column, never local absolute milliseconds.
 ### CellForge per-frame snapshot gate (#1140) — **PER-UNIT BUDGET**, CI merge gate
@@ -1321,7 +1321,7 @@ measurement; and the time branch stands down only when the rounds do not
 reproduce each other, reporting either way.
 
 > The `[perf-gate] …: measured …` report lines print into the shard job log on
-> every run, and `tools/test-measurements.py` lifts them into the job summary
+> every run, and the compiled `test-measurements` gate lifts them into the job summary
 > (#618) — cite THAT run's values when filling a Measured column, never local
 > absolute milliseconds.
 
@@ -1376,7 +1376,7 @@ measurement, not the claim, is what is wrong).
 **Bench CellStyle shared view**; and
 `tests/Harbor.Tui.CellForge.Tests/CellStyleSharedViewTests.cs`, in the
 `test (ui)` shard (its report lines land in the TRX and in the job summary via
-`tools/test-measurements.py`).
+the compiled `test-measurements` gate).
 
 Issue #1524 named its own gate: apply a shared (flyweight) style representation
 ONLY if the measurement shows a win relative to "distinct styles << cells in a
@@ -1435,7 +1435,7 @@ much does ONE UNIT OF WORK cost, and is that within a reviewed constant?".
 | **Budgets** | `MaxBytesPerUnit` — a byte count per unit of work. Machine-independent, so it is compared as measured, with no band. This is the branch that can be a hard gate on any runner. `MaxProbeUnitsPerUnit` — a time budget per unit of work, in PROBE UNITS |
 | **Probe units** | The cost of one unit of work divided by the cost of one unit of a fixed, deterministic, allocation-free CPU probe measured on the SAME runner in the SAME run. The runner's speed appears in both operands and cancels, so the budget is a constant in a machine-independent currency instead of a number of milliseconds that only means something on the box that produced it. **Only time is scaled this way; bytes never are** |
 | **Measure** | The workload runs `Rounds` times behind a GC fence; the MEDIAN of each series is the measurement, and the relative spread across rounds is kept |
-| **Report** | The report line is printed on every run, PASS OR FAIL, and says `measured` explicitly. `tools/test-measurements.py` lifts it into the job summary (the #618 mechanism), so a gate that measures and reports without failing is still evidence |
+| **Report** | The report line is printed on every run, PASS OR FAIL, and says `measured` explicitly. The compiled `test-measurements` gate lifts it into the job summary (the #618 mechanism), so a gate that measures and reports without failing is still evidence |
 | **Assert softly** | The allocation branch asserts hard. The time branch asserts ONLY when the measurement is TRUSTED — the spread across rounds is within `MaxTrustedSpread` and the leg was long enough to measure. A runner that cannot reproduce its own baseline is not evidence about the code, so the time branch reports and stands down instead of failing the build (the `StatusBarFitPerfTests` #487 precedent) |
 | **Non-vacuity** | A leg that measured nothing is a failure, not a pass: a zero millisecond reading is refused before any budget is read, and a zero byte reading is refused too — a byte count of zero satisfies every ceiling, so a mis-wired probe would make the gate pass on any tree (#591). A workload that legitimately allocates nothing per unit opts out with `RequirePositiveBytes = false` |
 
@@ -1793,7 +1793,7 @@ passed on run 39438762137, so the flake is one flake and not a broken suite.
 
 **How to reproduce the table.** The counts and the per-assembly durations are in
 the run's job log (the "Test run summary" block per project). They are also in
-the TRX files, and `tools/test-census.py` turns those into exactly this table,
+the TRX files, and the compiled `test-census` gate turns those into exactly this table,
 per project and per test:
 
 ```bash
@@ -1808,7 +1808,7 @@ suite has, and its `wall` column is the runner's per-assembly duration read
 from the TRX `<Times>` window. On run 39438762137 the census and the job log
 agree to the test: 8 342 discovered, 8 307 passed, 35 skipped, 0 failed, in the
 same 37 projects.
-`tools/test-measurements.py` cannot do this: it renders only the tests that
+the compiled `test-measurements` gate cannot do this: it renders only the tests that
 printed a measurement, which on a full run is 88 rows out of 8 342.
 
 > **The TRX artifacts came back in this PR.** They were gone from every run
@@ -1817,7 +1817,7 @@ printed a measurement, which on a full run is 88 rows out of 8 342.
 > files landed under the project's own output directory
 > (`tests/<project>/bin/Release/net10.0/TestResults/<shard>/`) instead of the
 > workspace root, so neither the artifact upload (`TestResults/**`, relative
-> to the workspace) nor `tools/test-measurements.py` could see them, and every
+> to the workspace) nor the compiled `test-measurements` gate could see them, and every
 > run after the upgrade produced no `test-results-*` artifact at all. The
 > results directory is now absolute, the four artifacts are uploaded again
 > (588 KiB core, 824 KiB ui, 256 KiB platform, 115 KiB e2e on run 39438762137),
@@ -1884,7 +1884,7 @@ the four `PanelKeyRouteReachabilityRule` tests fell from 112 s to 73 s. The
 suite grew by 36 tests and got faster.
 
 **What the architecture suite's wall is made of** (run 39438762137, read with
-`tools/test-census.py`): 1 032 tests, a sum of per-test durations of **1 888.72
+the compiled `test-census` gate): 1 032 tests, a sum of per-test durations of **1 888.72
 s** and a wall of **132.60 s**, a parallelism factor of **14.24**. So the suite
 is not one serial chain: it runs about fourteen lanes at once. The wall is set
 by the slowest single test, not by the total: the four
@@ -2321,7 +2321,7 @@ child-exited one).
 > no census: the TRX did not land in the upload path, because `ci.yml` on `dev`
 > passes `--results-directory "$GITHUB_WORKSPACE/$trx_dir"` with an
 > already-absolute `trx_dir`. The path comes out doubled, so neither the artifact
-> upload nor `tools/test-census.py` finds the file. That is a `dev` regression and
+> upload nor the compiled `test-census` gate finds the file. That is a `dev` regression and
 > not this branch's: the "before" row, one `dev` commit earlier, has its census. The
 > fix is one token, `--results-directory "$trx_dir"`.
 
@@ -2769,9 +2769,9 @@ image. Per run it measures: the wall time, the CPU utilisation sampled from
 `/proc/stat` once a second, the CPU accounted per process, MSBuild's own
 Performance Summary (`Csc` count and total duration, and the `Exec` task that
 runs the architecture gate), and the project dispatch timeline.
-`tools/measure-build-cpu.py` runs a command and measures it,
-`tools/aggregate-build-vcpu.py` turns the runs into the table below, and
-`tools/measure-project-graph.py` parses the dependency graph.
+the compiled `measure-build-cpu` gate runs a command and measures it,
+the compiled `aggregate-build-vcpu` gate turns the runs into the table below, and
+the compiled `measure-project-graph` gate parses the dependency graph.
 
 **Provenance.** The same matrix was run five times, on four trees (the branch
 before its rebase onto `dev`, after it, after the final rebase, and the
@@ -2843,7 +2843,7 @@ spends most of its time waiting for a CPU that is busy anyway.
 **The graph is not the limiter either.** Measured, not modelled: at least four
 projects were in flight for 60.7..99.2 % of the build (peak 75..83 in
 flight, average 25..33). The graph agrees
-(`tools/measure-project-graph.py`, on this branch's tree, re-measured on
+(the compiled `measure-project-graph` gate, on this branch's tree, re-measured on
 2026-10-21 after the rebase onto `dev`): 112 projects, 492 edges, depth 15,
 widest level 22 projects, and 9 of its 16 levels are wide enough for four
 compilers.
@@ -2919,9 +2919,9 @@ Two corrections that lane's probes need, both measured here:
    shape the NUKE `Compile` target runs, and subtracts it in the "ratio
    without the gate" column.
 
-The three tools are the reusable instrument (`tools/measure-build-cpu.py`
-runs a command and meters it, `tools/aggregate-build-vcpu.py` turns the runs
-into the table, `tools/measure-project-graph.py` parses the graph), and the
+The three tools are the reusable instrument (the compiled `measure-build-cpu` gate
+runs a command and meters it, the compiled `aggregate-build-vcpu` gate turns the runs
+into the table, the compiled `measure-project-graph` gate parses the graph), and the
 nightly lane's analysis step can read the same measurements instead of
 growing a second parser.
 
