@@ -25,6 +25,9 @@
 // require that the probe reads the real IL and still fires).
 
 using Mono.Cecil;
+// The project has a global `using System.Reflection;`, and both namespaces
+// carry a `TypeAttributes`. The alias names the one this file means.
+using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Harbor.Architecture.Tests;
 
