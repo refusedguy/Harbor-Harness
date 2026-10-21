@@ -19,6 +19,13 @@
 #                   builds the same bytes in any checkout directory.
 #   -buildid=       no build id, which is otherwise a hash of the build
 #                   environment and changes on every machine.
+#   -buildvcs=false no git revision in the binary. Go stamps the commit and
+#                   the timestamp by default, and then the bytes of the
+#                   binary depend on WHICH COMMIT the build ran at, not only
+#                   on the sources: two builds of one tree in two checkouts
+#                   of two commits differ, and the check "rebuilt ==
+#                   committed" then fails on a tree that is perfectly
+#                   consistent.
 #   -s -w           no symbol table, no DWARF: smaller, and fewer bytes that
 #                   could differ between toolchain patch versions.
 #
@@ -72,6 +79,14 @@ command -v go >/dev/null 2>&1 || {
     exit 2
 }
 
+# The EXACT toolchain, not "whatever go is on PATH". A different patch build
+# of the same version produces different bytes: the local go1.27.3 of one
+# machine and the official go1.27.3 of the runner do not agree, and the
+# "rebuilt == committed" check then fails on a tree that is perfectly
+# consistent. `GOTOOLCHAIN` names the toolchain to use, and Go fetches it
+# when the local one is not it.
+export GOTOOLCHAIN="go${GO_VERSION}"
+
 mkdir -p "$BIN"
 
 # build <arch> <output> -- one reproducible build.
@@ -79,7 +94,7 @@ build() {
     local arch="$1" out="$2"
     ( cd "$SRC" && \
       CGO_ENABLED=0 GOOS=linux GOARCH="$arch" GOFLAGS=-mod=mod \
-      go build -trimpath -ldflags="-buildid= -s -w" -o "$out" . )
+      go build -trimpath -buildvcs=false -ldflags="-buildid= -s -w" -o "$out" . )
 }
 
 # The name a platform's binary has in the repository.
@@ -108,7 +123,7 @@ for arch in $ARCHES; do
         mkdir -p "$second_dir"
         ( cd "$SRC" && \
           CGO_ENABLED=0 GOOS=linux GOARCH="$arch" GOFLAGS=-mod=mod \
-          go build -trimpath -ldflags="-buildid= -s -w" -o "$second_dir/$name" . )
+          go build -trimpath -buildvcs=false -ldflags="-buildid= -s -w" -o "$second_dir/$name" . )
         a="$(sha256sum "$built" | cut -d' ' -f1)"
         b="$(sha256sum "$second_dir/$name" | cut -d' ' -f1)"
         if [ "$a" != "$b" ]; then
