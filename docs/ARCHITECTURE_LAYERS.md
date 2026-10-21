@@ -1024,6 +1024,16 @@ rather than a baseline a scanner subtracts, which a reader has to believe. The p
 depend on how a checkout spells a path separator), and the prefix lives in one property,
 `HarborDynamicCodeBanExemptProjectNamePrefix`, in `Directory.Build.props`.
 
+**One more place the banned NAMES appear: the analyzer that enforces the ban.**
+`src/Harbor.Arch.Analyzers/` holds the rules the compiler now runs over the product tree
+(#1842), and one of them is this ban. A rule that matches a name has to hold the name, so
+the banned spellings live in that project as string constants — the matcher's operand, not
+a call the code makes. The compiler-side ban does not fire there (RS0030 sees symbols, and
+a string is not one), and neither does the analyzer. A text scan cannot tell the two apart,
+so the text rule's baseline carries a row for that project with the reason in the row; the
+row lives in the rule that needs it, not in the plugin allowance the trim-safety rules
+read.
+
 **What is deliberately NOT banned.** `GetMethod("Name")` / `GetProperty("Name")` /
 `GetField("Name")` looks like the same thing and is not. Over `src/` and `apps/` the
 overwhelming majority of that shape is `JsonElement.GetProperty` / `TryGetProperty` — a
