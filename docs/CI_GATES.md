@@ -15,19 +15,19 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `73c0b485` plus this branch's commits),
+Measured on this branch (`dev` at `2549ac77` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 31 files, 29 251 lines |
-| of them, the `check-*.py` family | 16 files, 18 497 lines |
+| python tools in `tools/` | 26 files, 25 985 lines |
+| of them, the `check-*.py` family | 14 files, 17 120 lines |
 | workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
 | gates that block a build | 30 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 43 |
+| tools with a self-test | 45 |
 | tools with a ratchet | 21 |
 | tools with a floor | 26 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
