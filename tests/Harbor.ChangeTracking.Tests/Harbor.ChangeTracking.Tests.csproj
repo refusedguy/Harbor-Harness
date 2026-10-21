@@ -9,7 +9,15 @@
     <ProjectReference Include="../../src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj"/>
     <!-- #1624: binds the moved session-context types directly. -->
     <ProjectReference Include="..\..\src\Harbor.SessionContext\Harbor.SessionContext.csproj"/>
-    <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!-- #1775: the SUPPORT part, not the core. The helpers this project
+         names — TestToolContext, TempDirScope, EnvScope, GitProbe, RepoPaths —
+         all live in Harbor.TestKit.Support, whose closure is the two contract
+         assemblies. The core kit is a superset of that part, so referencing
+         it bought nothing this project used and dragged the core's own
+         assembly in besides; tools/check-test-projects.py says so
+         (TEST-REFERENCE-UNUSED). The namespace is `Harbor.TestKit` in both
+         parts, so no `using` changed. -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
     <!-- WorkspaceMaterializerTests drives BashTool/WriteTool inside a
          materialized worktree; nothing else in this closure ships Tools.Builtin,
          so the edge is declared like Harbor.Application.Tests declares it. -->

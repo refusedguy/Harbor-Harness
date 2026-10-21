@@ -189,6 +189,50 @@ await pluginHost.LoadAllAsync(loadHost, ct);
 Both directories are scanned on every Harbor startup. Files in either directory are
 compiled into separate in-memory assemblies — they do NOT share types or namespaces.
 
+## Managing plugins from the agent (#1738)
+
+Harbor had no agent-facing plugin management until #1738: `harbor plugin
+list|install|uninstall` is a CLI verb, and the `/plugins` panel is a UI surface.
+The agent could neither see what was installed nor propose a change.
+
+The `plugin_manager` tool closes that gap, and it is the first Harbor tool whose
+safety is provided by POLICY rather than by trust:
+
+- **It reads the inventory.** `action: "list"` reports every installed plugin
+  in both scopes, with the facts the plugin declares in its manifest (version,
+  extension axes, the Harbor floor it needs) — read as DATA, without compiling
+  the plugin.
+- **It proposes a change.** `install`, `uninstall`, `enable` and `disable` build
+  a concrete proposal: which file, which scope, what will happen to it.
+- **The change happens only after the user approves it.** The tool asks through
+  the same approval channel the permission service uses (`ToolContext.Ask`),
+  and a denial, a cancellation or an unavailable approval channel ends the call
+  with nothing changed. The tool fails closed, exactly like the permission
+  service does.
+- **An approval covers that one call.** The answer is never written back to a
+  ruleset, so the session's permission mode is unchanged by it. A user who does
+  not want an agent touching plugins writes `new("plugin_manager", "*", Deny)`
+  in their config and the tool never starts; the read-only agents deny it
+  outright.
+- **Everything is logged.** The proposal, the answer and the outcome are three
+  separate log lines, so "the agent tried to install a plugin" is a fact in the
+  log and not a fact in the transcript.
+
+**One inventory, two consumers.** The tool and the `/plugins` panel read the
+SAME `IPluginInventory` — one implementation, so the panel and the agent cannot
+disagree about what is installed. The port lives in the Domain
+(`Harbor.Abstractions.Plugins.IPluginInventory`) because the tool
+(`Harbor.Tools.Builtin`) may not bind the plugin layers; the implementation
+lives in `Harbor.Plugins.Storage`, the layer that knows where plugin files come
+from.
+
+**What "install" means.** CS plugins are served by the separate
+`harbor-plugins-host` process, so installing a plugin means copying a reviewed
+`.cs` file (and the manifest it ships next to it) into a plugin scope. The host
+picks it up on its next start; nothing is compiled or registered in the CLI
+process. `enable` / `disable` rename the file to and from `<Name>.cs.disabled`,
+which is the switch the loader's `*.cs` glob reads.
+
 ## What APIs are available
 
 The compiled plugin can reference any type already loaded in the host's AppDomain at
@@ -837,6 +881,9 @@ strong naming, etc.).
 - [ ] v0.5 — Remove the `CsPluginLoader` facade; `PluginHostBuilder` becomes the only
       entry point.
 - [ ] v0.5 — `harbor plugins` slash-command: list loaded plugins, show source paths.
+- [x] Agent-facing plugin management with a per-change approval gate (#1738): the
+      `plugin_manager` tool reads the inventory and proposes a change; the change
+      happens only after the user approves that call.
 - [ ] v0.5 — `harbor plugins gc`: clean orphaned cache files.
 - [ ] v0.6 — `ShutdownAsync` lifecycle: call on Harbor exit in reverse-load order.
 - [ ] v0.6 — Hot-reload: watch `~/.harbor/plugins/` for changes and reload on the fly.
