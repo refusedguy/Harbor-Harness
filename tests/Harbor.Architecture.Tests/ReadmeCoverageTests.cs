@@ -69,7 +69,9 @@ public class ReadmeCoverageTests
         ("Harbor.Abstractions.Contracts", new[] { "wiring" }),
         ("Harbor.Application", new[] { "wiring", "usage", "limits" }),
         ("Harbor.DesignSystem", new[] { "public", "wiring", "deps", "limits" }),
-        ("Harbor.Desktop.Abstractions", new[] { "public", "wiring", "limits" }),
+        // #1899: Harbor.Desktop.Abstractions dropped its entry — the split
+        // rewrote its README to the full template (public API, wiring,
+        // dependencies, limitations). The list may only shrink.
         ("Harbor.Desktop.Animations", new[] { "public", "wiring", "limits" }),
         ("Harbor.Desktop.Shared", new[] { "public", "wiring", "limits" }),
         ("Harbor.Diagnostics.Abstractions", new[] { "wiring" }),

@@ -18,7 +18,7 @@
 // SCOPE — ONE METHOD, ON PURPOSE
 // -------------------------------
 // Only `Next` in
-// `src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs` is
+// `src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs` is
 // graded. The sibling sites from the same audit (the abandon-path sync
 // reads) are real remainders, but widening this rule to them without fixing
 // them would ship a red gate. They are left for the follow-ups that fix
@@ -55,7 +55,7 @@ public sealed class OnboardingFireAndForgetRule
             return string.Empty;
         }
 
-        string path = Path.Combine(root, "src", "Harbor.Desktop.Abstractions", "ViewModels", "OnboardingViewModel.cs");
+        string path = Path.Combine(root, "src", "Harbor.Desktop.ViewModels", "ViewModels", "OnboardingViewModel.cs");
         return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
     }
 

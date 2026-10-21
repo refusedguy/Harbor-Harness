@@ -189,7 +189,7 @@ Infrastructure    Harbor.Storage.{Jsonl,Memory,Sqlite}, Harbor.Providers.{Anthro
                                   Runtime,Storage}
 Presentation      Harbor.Ui.Framework (+ .State/.ViewModels/.Projection/.Rendering/
                   .Services/.Sessions — TEA-style state/reducers/projection),
-                  Harbor.Desktop.{Abstractions,Shared,Animations},
+                  Harbor.Desktop.{Abstractions,ViewModels,Shared,Animations},
                   Harbor.DesignSystem, Harbor.Terminal.Abstractions,
                   Harbor.Tui.{AnsiPlain,CellForge,CellForge.Syntax,CellForge.Prompts,Notifications},
                   apps/Harbor.App.Avalonia

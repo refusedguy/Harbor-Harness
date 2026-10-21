@@ -1,4 +1,4 @@
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     One provider row on step 2 of the onboarding wizard. Pure view-model —
@@ -24,7 +24,7 @@ public sealed partial class OnboardingProviderOption : ObservableObject
     ///     <c>ProviderPresetCatalog</c> (#560) — it used to come from an id→glyph
     ///     switch in the wizard, so adding a provider meant editing this layer.
     ///     The fallback glyph for a config that declares none is applied upstream by
-    ///     the catalog, so this layer stays free of a Harbor.Application reference
+    ///     the catalog, so this layer stays free of a Harbor.PolicyConfig reference
     ///     (the #188 Presentation→Application exception is scoped to two files by
     ///     <c>FullLayerMatrixTests.DocumentedExceptions</c>, and widening it here
     ///     would spread that debt).

@@ -403,8 +403,10 @@ public sealed class CommonConfigContractRules
             "and the split has to point somewhere: the writes live on " + StoreName + ". If BOTH "
             + "contracts were read-only the pair would be one contract wearing two names, which is "
             + "the duplicate, and the fix would be to merge them. The reason they are not merged is "
-            + "a cycle — Harbor.Desktop.Abstractions declares a direct ProjectReference to "
-            + "Harbor.Ui.Framework, so the reverse edge cannot be added.");
+            + "a cycle — Harbor.Ui.Framework.Abstractions cannot reference the config leaf, "
+            + "because the leaf is what the desktop layer binds (and, before #1899, the leaf "
+            + "itself carried a direct ProjectReference to Harbor.Ui.Framework, so the reverse "
+            + "edge could not be added either).");
     }
 
     // ── Rule 4: the producer does not re-derive it ───────────────────────────

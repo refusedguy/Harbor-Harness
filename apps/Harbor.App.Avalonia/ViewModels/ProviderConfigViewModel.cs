@@ -1,5 +1,5 @@
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 using Harbor.Abstractions.Providers;
@@ -10,7 +10,7 @@ namespace Harbor.App.Avalonia.ViewModels;
 ///     this subclass exists only to preserve the Avalonia namespace for XAML
 ///     DataTemplates.
 /// </summary>
-public sealed partial class ProviderConfigViewModel : Harbor.Desktop.Abstractions.ViewModels.ProviderConfigViewModel
+public sealed partial class ProviderConfigViewModel : Harbor.Desktop.ViewModels.ProviderConfigViewModel
 {
     public ProviderConfigViewModel(
         string id,

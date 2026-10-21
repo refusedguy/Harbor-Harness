@@ -3,7 +3,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Harbor.Desktop.Abstractions.Models;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Toast notification queue. Toasts slide in from the top-right, auto-

@@ -6,7 +6,7 @@ using Harbor.App.Avalonia.Hosting;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Abstractions.Tools;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.Views;

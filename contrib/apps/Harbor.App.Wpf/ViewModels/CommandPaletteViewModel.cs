@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Ctrl+P command palette. Fuzzy-matches a query against a list of
@@ -88,11 +88,11 @@ public sealed partial class CommandPaletteViewModel : ObservableObject
 
 /// <summary>
 ///     A command entry in the palette. Platform projection of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.CommandEntry" /> record (kept in
+///     <see cref="Harbor.Desktop.ViewModels.CommandEntry" /> record (kept in
 ///     this namespace so the WPF XAML <c>vm:</c> mappings resolve to it). The
 ///     canonical data lives on the shared record.
 /// </summary>
-public sealed class CommandEntry : Harbor.Desktop.Abstractions.ViewModels.CommandEntry
+public sealed class CommandEntry : Harbor.Desktop.ViewModels.CommandEntry
 {
     /// <summary>Construct a <see cref="CommandEntry" />.</summary>
     public CommandEntry(string id, string title, string description, string category)

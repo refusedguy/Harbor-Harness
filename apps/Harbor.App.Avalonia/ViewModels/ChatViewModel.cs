@@ -5,7 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.Views.Components;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Microsoft.Extensions.Logging;
 using System.ComponentModel;
 using Avalonia.Controls;

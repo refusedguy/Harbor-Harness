@@ -1,5 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 public partial class FocusSessionViewModel : ObservableObject
 {

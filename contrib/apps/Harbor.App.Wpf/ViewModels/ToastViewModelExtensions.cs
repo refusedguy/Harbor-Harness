@@ -1,16 +1,16 @@
 using System.Windows.Media;
 using Harbor.Desktop.Abstractions.Models;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Toast color extensions — partial on the WPF <see cref="ToastViewModel" />.
 ///     The WPF view-model derives from the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.ToastViewModel" /> record and
+///     <see cref="Harbor.Desktop.ViewModels.ToastViewModel" /> record and
 ///     adds the WPF <see cref="Brush" /> accent here so the XAML can bind to
 ///     <c>AccentBrush</c> without a converter. The canonical severity is the
 ///     shared record's <see cref="Harbor.Desktop.Abstractions.Models.ToastKind" />.
 /// </summary>
-public sealed partial class ToastViewModel : Harbor.Desktop.Abstractions.ViewModels.ToastViewModel
+public sealed partial class ToastViewModel : Harbor.Desktop.ViewModels.ToastViewModel
 {
     /// <summary>Construct an empty <see cref="ToastViewModel" /> (used by object initializers).</summary>
     public ToastViewModel()

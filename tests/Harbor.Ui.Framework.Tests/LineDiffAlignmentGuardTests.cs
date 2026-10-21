@@ -1,13 +1,13 @@
 using System.Collections.Immutable;
 using Harbor.Abstractions.Models;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.State;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using FrameworkDiffViewModel = Harbor.Ui.Framework.ViewModels.SideBySideDiffViewModel;
-using DesktopDiffViewModel = Harbor.Desktop.Abstractions.ViewModels.DiffViewModel;
+using DesktopDiffViewModel = Harbor.Desktop.ViewModels.DiffViewModel;
 
 namespace Harbor.Ui.Framework.Tests;
 

@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Models;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Wording of the per-1M rate label, shared by the model picker and the

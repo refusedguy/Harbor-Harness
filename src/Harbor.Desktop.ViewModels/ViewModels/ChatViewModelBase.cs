@@ -7,7 +7,7 @@ using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
 using ToolCallViewModel = Harbor.Ui.Framework.ViewModels.ToolCallViewModel;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Base for the streaming chat view-model shared by every desktop app.

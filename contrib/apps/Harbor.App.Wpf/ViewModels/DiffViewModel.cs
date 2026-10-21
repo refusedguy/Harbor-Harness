@@ -2,7 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Side-by-side diff view model. Renders a list of hunks; each hunk has
@@ -81,11 +81,11 @@ public sealed partial class DiffViewModel : ObservableObject
 
 /// <summary>
 ///     A single line in a diff hunk. Platform extension of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.DiffLineViewModel" /> record —
+///     <see cref="Harbor.Desktop.ViewModels.DiffLineViewModel" /> record —
 ///     adds the WPF <see cref="Brush" />es for the line (the canonical color key
 ///     lives on the shared record as <c>LineBrushKey</c>).
 /// </summary>
-public sealed partial class DiffLineViewModel : Harbor.Desktop.Abstractions.ViewModels.DiffLineViewModel
+public sealed partial class DiffLineViewModel : Harbor.Desktop.ViewModels.DiffLineViewModel
 {
     /// <summary>Construct a <see cref="DiffLineViewModel" />.</summary>
     public DiffLineViewModel(string text, DiffLineKind kind) : base(text, kind) { }
@@ -110,11 +110,11 @@ public sealed partial class DiffLineViewModel : Harbor.Desktop.Abstractions.View
 /// <summary>
 ///     A single diff hunk (a contiguous block of changed lines). Platform
 ///     projection of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.DiffHunkViewModel" /> record (kept
+///     <see cref="Harbor.Desktop.ViewModels.DiffHunkViewModel" /> record (kept
 ///     in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it). The
 ///     canonical data lives on the shared record.
 /// </summary>
-public sealed class DiffHunkViewModel : Harbor.Desktop.Abstractions.ViewModels.DiffHunkViewModel
+public sealed class DiffHunkViewModel : Harbor.Desktop.ViewModels.DiffHunkViewModel
 {
     /// <summary>Construct a <see cref="DiffHunkViewModel" />.</summary>
     public DiffHunkViewModel(string header, IReadOnlyList<DiffLineViewModel> lines)

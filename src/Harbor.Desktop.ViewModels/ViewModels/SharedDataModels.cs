@@ -1,6 +1,6 @@
 using Harbor.Desktop.Abstractions.Models;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 // Framework-neutral data-holder classes extracted from the isolated WPF
 // view-models in apps/Harbor.App.Wpf/ViewModels/*.

@@ -70,7 +70,7 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
 │                    Hosting,Runtime,Host,Storage}/  — layered plugin hosting (Roslyn CS loader in Runtime)
 ├── Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ + Harbor.Transport.Remote/ — daemon/remote IPC
-└── ...Logging, Telemetry.{Core,Otlp}, Desktop.{Abstractions,Shared,Animations}, CodeGen, ...
+└── ...Logging, Telemetry.{Core,Otlp}, Desktop.{Abstractions,ViewModels,Shared,Animations}, CodeGen, ...
 
 apps/Harbor.App.Cli/                   — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/              — cross-platform desktop GUI

@@ -2,7 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Shared, framework-agnostic view-model for a line-level diff viewer.

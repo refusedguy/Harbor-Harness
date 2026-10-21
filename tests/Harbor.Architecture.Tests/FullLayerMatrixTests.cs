@@ -157,6 +157,11 @@ public class FullLayerMatrixTests
         "Harbor.DesignSystem",
         "Harbor.Ui.Framework.Sessions",
         "Harbor.Desktop.Abstractions",
+        // #1899: the concrete desktop view-models split out of
+        // Harbor.Desktop.Abstractions, which had become a hub wearing a
+        // leaf's name. The leaf keeps the config schema, models and enums;
+        // this row is the view-model layer.
+        "Harbor.Desktop.ViewModels",
         "Harbor.Desktop.Shared",
         "Harbor.Desktop.Animations",
         "Harbor.Tui.Notifications",
@@ -236,7 +241,11 @@ public class FullLayerMatrixTests
         // same one, one assembly over. The fix named below is unchanged.
         // Future fix: move the preset catalog to Domain (Harbor.Abstractions.Providers)
         // — tracked per site, so the debt cannot spread past these two files.
-        ["Harbor.Desktop.Abstractions"] =
+        //
+        // #1899: the edge moved with the view-models that read it. The config leaf
+        // (Harbor.Desktop.Abstractions) no longer reaches Harbor.Application at
+        // all, which is what makes it a leaf.
+        ["Harbor.Desktop.ViewModels"] =
         [
             new DocumentedException(
                 "Harbor.PolicyConfig",
@@ -407,9 +416,31 @@ public class FullLayerMatrixTests
         // (no file names the ITuiRenderer/ITuiView vocabulary); Ui.Framework is an
         // empty assembly (see the Terminal.Abstractions row). The leaf
         // Ui.Framework.* modules below are what this project actually binds.
+        //
+        // #1899: this row is now a LEAF. The view-model bases and the concrete
+        // view-models moved to Harbor.Desktop.ViewModels, and with them the
+        // Ui.Framework.* edges, the Terminal.Abstractions edge and the
+        // Harbor.Application edge (#188). What is left is the config schema,
+        // the config-store ports, the cross-view-model messages and the shared
+        // models/enums — and one reference, to Harbor.Abstractions.Contracts.
         ["Harbor.Desktop.Abstractions"] = new(Layer.Presentation,
         [
+            // #1899: the contract assembly, not the facade. The leaf's only two
+            // Harbor types are SessionStatus and AgentName.Fallback, and both
+            // live in Harbor.Abstractions.Contracts. Permitting the facade
+            // instead would demand an IL edge to an assembly the leaf does not
+            // bind a single type of.
+            "Harbor.Abstractions.Contracts",
+        ]),
+        // #1899: the concrete desktop view-models. They need the Ui.Framework
+        // family (the VM bases, the TEA state, the dispatcher/theme services),
+        // the config leaf they bind (CommonConfig, ICommonConfigStore,
+        // SessionDotState), and — through the documented #188 exception above —
+        // Harbor.Application.Configuration.ProviderPresets.
+        ["Harbor.Desktop.ViewModels"] = new(Layer.Presentation,
+        [
             "Harbor.Abstractions",
+            "Harbor.Desktop.Abstractions",
             "Harbor.Ui.Framework.ViewModels",
             "Harbor.Ui.Framework.State", "Harbor.Ui.Framework.Services",
             "Harbor.Ui.Framework.Sessions",

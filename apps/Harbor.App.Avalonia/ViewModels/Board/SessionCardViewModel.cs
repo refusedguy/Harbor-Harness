@@ -5,7 +5,7 @@ using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 namespace Harbor.App.Avalonia.ViewModels.Board;
 
-public sealed class SessionCardViewModel : Harbor.Desktop.Abstractions.ViewModels.SessionCardViewModel
+public sealed class SessionCardViewModel : Harbor.Desktop.ViewModels.SessionCardViewModel
 {
     public SessionCardViewModel(
         string id,

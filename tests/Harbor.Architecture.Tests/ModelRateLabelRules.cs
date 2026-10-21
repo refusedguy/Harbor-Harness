@@ -127,7 +127,7 @@ public sealed class ModelRateLabelRules
     ///     globbed, because the rule is about this specific declaration.
     /// </summary>
     private const string LabelHomeRelativePath =
-        "src/Harbor.Desktop.Abstractions/ViewModels/ModelRateLabel.cs";
+        "src/Harbor.Desktop.ViewModels/ViewModels/ModelRateLabel.cs";
 
     /// <summary>
     ///     The file allowed to decide that a rate table is the
@@ -457,8 +457,8 @@ public sealed class ModelRateLabelRules
     /// </summary>
     private static readonly string[] OffenderFiles =
     [
-        "src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs",
-        "src/Harbor.Desktop.Abstractions/ViewModels/ProviderBrowserViewModel.cs",
+        "src/Harbor.Desktop.ViewModels/ViewModels/ProviderModelPickerViewModel.cs",
+        "src/Harbor.Desktop.ViewModels/ViewModels/ProviderBrowserViewModel.cs",
     ];
 
     // MECHANISM (#1086, step 2, conveyor h2)

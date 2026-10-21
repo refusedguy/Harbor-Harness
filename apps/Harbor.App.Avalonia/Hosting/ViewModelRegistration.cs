@@ -2,7 +2,7 @@ using Harbor.App.Avalonia.Navigation;
 using Harbor.App.Avalonia.ViewModels;
 using Harbor.App.Avalonia.ViewModels.Board;
 using Harbor.Desktop.Shared.Locators;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Animation;
 using Harbor.Ui.Framework.Navigation;
 using Harbor.Ui.Framework.Overlays;
@@ -107,7 +107,7 @@ internal static class ViewModelRegistration
         services.AddSingleton<CommandPaletteViewModel>();
         services.AddSingleton<BoardViewModel>();
 
-        services.AddSingleton<Harbor.Desktop.Abstractions.ViewModels.ProviderBrowserViewModel>();
+        services.AddSingleton<Harbor.Desktop.ViewModels.ProviderBrowserViewModel>();
         services.AddSingleton<Harbor.App.Avalonia.ViewModels.ProviderModelPickerViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<CodeEditorViewModel>();

@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.State;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
