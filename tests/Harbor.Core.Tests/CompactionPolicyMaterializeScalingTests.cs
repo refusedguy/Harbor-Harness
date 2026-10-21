@@ -6,6 +6,8 @@
 // plus the forward anchor walk, twice per turn — even when NOTHING was
 // compacted (#1533: TurnRunner.cs:232 for the reverse scan and
 // CompactionBehavior.cs:230 after a fresh compaction). Both files moved to
+// compacted (#1533: TurnRunner.cs:222 for the reverse scan and
+// CompactionBehavior.cs:149 after a fresh compaction). Both files moved to
 // Harbor.AgentRuntime by #1623. After #1533 the anchor is remembered per input list: an
 // unchanged history returns the remembered answer with zero rescans and zero
 // allocations (still the input instance itself when there is no summary, so
