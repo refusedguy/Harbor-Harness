@@ -555,9 +555,9 @@ jobs:
       # exists for: a file that stopped being covered, and a row that is no
       # longer needed.
       - name: Coverage reporter still tells the three states of a file apart
-        run: python3 tools/coverage_report.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 coverage-report --self-test
       - name: Coverage registry gate still fires on both sides of the ratchet
-        run: python3 tools/check-coverage-registry.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-coverage-registry --self-test
       # #1780. The eleventh gate is the only one that asks whether the
       # parameter schema of a tool still is the one that was pinned. Its
       # failure path is tested here for the same reason as the others, and

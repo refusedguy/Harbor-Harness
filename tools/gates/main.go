@@ -43,6 +43,8 @@ import (
 	"strings"
 
 	changelog "harbor.local/gates/changelog-assemble"
+	coveragereport "harbor.local/gates/coverage-report"
+	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	"harbor.local/gates/gen-seam-graph"
@@ -78,6 +80,16 @@ var registry = []registered{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
 	},
 	{
 		name:    "gen-seam-graph",

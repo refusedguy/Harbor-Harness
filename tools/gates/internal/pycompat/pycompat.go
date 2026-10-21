@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -213,4 +214,54 @@ func IsPrintable(r rune) bool {
 		return true
 	}
 	return unicode.IsPrint(r)
+}
+
+// Atoi parses an integer the way python's int(text) does.
+//
+// The difference from strconv.Atoi: python strips the surrounding
+// whitespace, accepts a single underscore between the digits, and accepts
+// the unicode digits and signs. A gate that reads a number out of a file
+// must read the number the file holds, and a report that writes "1_000"
+// or " 42 " is a report a python gate read and a Go gate must read too.
+func Atoi(text string) (int, bool) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return 0, false
+	}
+	sign := 1
+	switch trimmed[0] {
+	case '+':
+		trimmed = trimmed[1:]
+	case '-':
+		sign = -1
+		trimmed = trimmed[1:]
+	}
+	if trimmed == "" {
+		return 0, false
+	}
+	var digits strings.Builder
+	previousWasDigit := false
+	for _, r := range trimmed {
+		if r == '_' {
+			// python allows ONE underscore between two digits.
+			if !previousWasDigit {
+				return 0, false
+			}
+			previousWasDigit = false
+			continue
+		}
+		if !unicode.IsDigit(r) {
+			return 0, false
+		}
+		digits.WriteRune(r)
+		previousWasDigit = true
+	}
+	if !previousWasDigit {
+		return 0, false
+	}
+	value, err := strconv.Atoi(digits.String())
+	if err != nil {
+		return 0, false
+	}
+	return sign * value, true
 }

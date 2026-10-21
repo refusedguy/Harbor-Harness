@@ -444,7 +444,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python3 tools/coverage_report.py \
+          tools/bin/harbor-gates-linux-x64 coverage-report \
             --coverage-dir Coverage \
             --source-root . \
             --registry tools/coverage-registry.txt \
@@ -467,7 +467,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python3 tools/check-coverage-registry.py \
+          tools/bin/harbor-gates-linux-x64 check-coverage-registry \
             --coverage-dir Coverage \
             --source-root . \
             --registry tools/coverage-registry.txt \

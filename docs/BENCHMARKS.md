@@ -2927,7 +2927,7 @@ growing a second parser.
 
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 
-Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-Harness/actions/runs/39528039639), branch `ci/1753-per-file-coverage` at `c480a98f`, 2026-10-21. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/coverage_report.py`](../tools/coverage_report.py), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/check-coverage-registry.py`](../tools/check-coverage-registry.py).
+Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-Harness/actions/runs/39528039639), branch `ci/1753-per-file-coverage` at `c480a98f`, 2026-10-21. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/gates/coverage-report/`](../tools/gates/coverage-report/), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/gates/check-coverage-registry/`](../tools/gates/check-coverage-registry/).
 
 **WHAT THIS NUMBER IS NOT.** There is no global percentage here, on purpose. The number the lane used to publish was a sum over the per-suite columns, and those columns OVERLAP on the shared `src/` assemblies — the same line is counted once per suite that touched it — so the sum was never the coverage of anything, and the report said so in five words ("the TOTAL is indicative"). What is below is per project and per file, with the scope written down.
 
