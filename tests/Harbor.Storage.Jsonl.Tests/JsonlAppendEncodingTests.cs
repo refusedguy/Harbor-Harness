@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 /// <summary>
 ///     Byte-format tests for the #177 append path: lines must be source-gen
@@ -30,7 +31,7 @@ public class JsonlAppendEncodingTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "p", "p/m")).Value;
-            var message = new UserMessage("m1", session.Id, DateTimeOffset.UtcNow, "hi", "code", "p/m");
+            var message = TestMessages.User("hi", id: "m1", sessionId: session.Id, model: "p/m");
             await store.AppendMessageAsync(session.Id, message);
 
             byte[] raw = await File.ReadAllBytesAsync(SingleSessionFile(tempDir));
@@ -56,7 +57,7 @@ public class JsonlAppendEncodingTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "p", "p/m")).Value;
-            var message = new UserMessage("m1", session.Id, DateTimeOffset.UtcNow, "hi", "code", "p/m");
+            var message = TestMessages.User("hi", id: "m1", sessionId: session.Id, model: "p/m");
             await store.AppendMessageAsync(session.Id, message);
 
             byte[] raw = await File.ReadAllBytesAsync(SingleSessionFile(tempDir));
@@ -87,7 +88,7 @@ public class JsonlAppendEncodingTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "p", "p/m")).Value;
-            var message = new UserMessage("m1", session.Id, DateTimeOffset.UtcNow, "v1", "code", "p/m");
+            var message = TestMessages.User("v1", id: "m1", sessionId: session.Id, model: "p/m");
             await store.AppendMessageAsync(session.Id, message);
             await store.UpdateMessageAsync(session.Id, message with { Content = "v2" });
 

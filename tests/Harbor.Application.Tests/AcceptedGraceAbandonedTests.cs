@@ -202,23 +202,8 @@ public class AcceptedGraceAbandonedTests
     {
         const string sessionId = "s-401b";
         var t0 = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
-        AgentMessage assistant = new AssistantMessage(
-            "a1", sessionId, t0,
-            new ContentPart[]
-            {
-                new ToolCallPart("tc-ab", "write", EmptyArgs),
-                new ToolCallPart("tc-ok", "write", EmptyArgs),
-            },
-            StopReason.ToolUse, new Usage(10, 5), "m");
-        AgentMessage results = new ToolResultMessage(
-            "t1", sessionId, t0.AddSeconds(1),
-            new[]
-            {
-                new ToolResultEntry("tc-ab", "write",
-                    "Tool 'write' did not finish within 50ms of grace after the accepted stop "
-                    + "(accepted-stop); call abandoned after accepted-stop.", true),
-                new ToolResultEntry("tc-ok", "write", "file contents", false),
-            });
+        AgentMessage assistant = TestMessages.AssistantParts(new ContentPart[] {new ToolCallPart("tc-ab", "write", EmptyArgs), new ToolCallPart("tc-ok", "write", EmptyArgs),}, id: "a1", sessionId: sessionId, createdAt: t0, stopReason: StopReason.ToolUse, usage: new Usage(10, 5), model: "m");
+        AgentMessage results = TestMessages.ToolResult(new[] {new ToolResultEntry("tc-ab", "write", "Tool 'write' did not finish within 50ms of grace after the accepted stop " + "(accepted-stop); call abandoned after accepted-stop.", true), new ToolResultEntry("tc-ok", "write", "file contents", false),}, id: "t1", sessionId: sessionId, createdAt: t0.AddSeconds(1));
 
         var outcome = RunOutcome.Reconstruct(
             RunId.New(), sessionId, new[] { assistant, results }, cancelled: true);

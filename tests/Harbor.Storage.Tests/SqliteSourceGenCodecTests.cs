@@ -3,6 +3,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Storage.Tests;
 /// <summary>
 ///     Exhaustive source-gen codec tests for #177 (risky half): every
@@ -23,22 +24,7 @@ public class SqliteSourceGenCodecTests
     private static AssistantMessage NewAssistant(string id = "a1")
     {
         using var doc = JsonDocument.Parse("""{"path":"README.md","limit":10}""");
-        return new AssistantMessage(
-            id,
-            "sess-1",
-            T0.AddSeconds(1),
-            [
-                new TextPart("here you go"),
-                new ThinkingPart("hmm"),
-                ToolCallPart.Create("tc-1", "read", doc.RootElement),
-                new FilePart("img.png", "image/png", 42, [1, 2, 3]),
-            ],
-            StopReason.ToolUse,
-            new Usage(10, 20),
-            "p/m",
-            null,
-            IsSummary: true,
-            SummaryFirstKeptId: "u1");
+        return TestMessages.AssistantParts([new TextPart("here you go"), new ThinkingPart("hmm"), ToolCallPart.Create("tc-1", "read", doc.RootElement), new FilePart("img.png", "image/png", 42, [1, 2, 3]),], id: id, sessionId: "sess-1", createdAt: T0.AddSeconds(1), stopReason: StopReason.ToolUse, usage: new Usage(10, 20), model: "p/m", isSummary: true, summaryFirstKeptId: "u1");
     }
 
     private static ToolResultMessage NewToolResult(string id = "t1", object? metadata = null) =>

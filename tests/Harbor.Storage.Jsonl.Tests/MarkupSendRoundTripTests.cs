@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -43,14 +44,7 @@ public class MarkupSendRoundTripTests
             const string preamble =
                 "Annotated screenshot \"broken.png\" (1 annotation), saved at /shots/broken.annotated.png. Review the marked areas.";
 
-            var message = new UserMessage(
-                "msg-markup-send",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                preamble,
-                "code",
-                "kilo-auto/free",
-                Attachments: [new ImageAttachment("/shots/broken.annotated.png", "image/png", 1, 1, png)]);
+            var message = TestMessages.User(preamble, id: "msg-markup-send", sessionId: session.Id, model: "kilo-auto/free", attachments: [new ImageAttachment("/shots/broken.annotated.png", "image/png", 1, 1, png)]);
 
             var appended = await store.AppendMessageAsync(session.Id, message);
             await Assert.That(appended.IsSuccess).IsTrue();

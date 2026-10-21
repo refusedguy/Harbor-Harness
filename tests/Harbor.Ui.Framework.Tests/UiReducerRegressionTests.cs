@@ -60,10 +60,9 @@ public class UiReducerRegressionTests
         };
         var history = new AgentMessage[]
         {
-            new UserMessage("u1", "s", DateTimeOffset.UtcNow, "hi", "code", "m", null),
+            TestMessages.User("hi", id: "u1", sessionId: "s", model: "m"),
             assistant,
-            new ToolResultMessage("t1", "s", DateTimeOffset.UtcNow,
-                new[] { new ToolResultEntry("tc1", "read", "file contents", false) }, null),
+            TestMessages.ToolResult(new[] { new ToolResultEntry("tc1", "read", "file contents", false) }, id: "t1", sessionId: "s"),
         };
         var started = ChatAppReducer.Update(new UiState(), new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 
@@ -82,7 +81,7 @@ public class UiReducerRegressionTests
             new AppMsg.KeyInput(ChatAction.Submit, new UiKey(UiKeyCode.Enter)));
         var history = new AgentMessage[]
         {
-            new UserMessage("u1", "s", DateTimeOffset.UtcNow, "hi", "code", "m", null),
+            TestMessages.User("hi", id: "u1", sessionId: "s", model: "m"),
         };
         var started = ChatAppReducer.Update(submitted.State, new ChatAppMsg.Agent(TestEvents.AgentStart("s", history)));
 

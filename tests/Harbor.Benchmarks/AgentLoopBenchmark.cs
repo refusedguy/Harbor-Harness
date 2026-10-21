@@ -140,13 +140,7 @@ public class AgentLoopBenchmark
         var session = Session.Create(Path.GetTempPath(), "code", "stub", "stub-1");
         var messages = new List<AgentMessage>
         {
-            new UserMessage(
-                Guid.NewGuid().ToString("N"),
-                session.Id,
-                DateTimeOffset.UtcNow,
-                "Benchmark prompt.",
-                "code",
-                "stub-1")
+            TestMessages.User("Benchmark prompt.", sessionId: session.Id, model: "stub-1")
         };
         return new BenchSessionContext(session, messages);
     }

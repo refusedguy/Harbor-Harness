@@ -2,6 +2,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Sessions;
+using Harbor.TestKit;
 namespace Harbor.Core.Tests;
 /// <summary>
 ///     Tests for <see cref="MessageConverter.ToLlmMessages" /> — verifies that each
@@ -30,7 +31,7 @@ public class MessageConverterTests
     public async Task ToLlmMessages_UserMessage_ConvertsToLlmUserMessage()
     {
         var converter = new MessageConverter();
-        var user = new UserMessage("m1", SessionId, Ts, "Hello, agent!", "code", "test-model");
+        var user = TestMessages.User("Hello, agent!", id: "m1", sessionId: SessionId, createdAt: Ts);
 
         var result = converter.ToLlmMessages(new AgentMessage[] { user });
 
@@ -47,19 +48,7 @@ public class MessageConverterTests
     public async Task ToLlmMessages_AssistantMessage_ConvertsToLlmAssistantMessage()
     {
         var converter = new MessageConverter();
-        var assistant = new AssistantMessage(
-            "m2",
-            SessionId,
-            Ts,
-            new ContentPart[]
-            {
-                new TextPart("Hello back!"),
-                new ThinkingPart("Reasoning about the response"),
-                new ToolCallPart("call-1", "read", ParseJson("""{"path":"/tmp/x"}"""))
-            },
-            StopReason.ToolUse,
-            new Usage(10, 5),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(new ContentPart[] {new TextPart("Hello back!"), new ThinkingPart("Reasoning about the response"), new ToolCallPart("call-1", "read", ParseJson("""{"path":"/tmp/x"}"""))}, id: "m2", sessionId: SessionId, createdAt: Ts, stopReason: StopReason.ToolUse, usage: new Usage(10, 5));
 
         var result = converter.ToLlmMessages(new AgentMessage[] { assistant });
 
@@ -99,15 +88,7 @@ public class MessageConverterTests
     public async Task ToLlmMessages_ToolResultMessage_ConvertsToLlmToolResultMessage()
     {
         var converter = new MessageConverter();
-        var toolResult = new ToolResultMessage(
-            "m3",
-            SessionId,
-            Ts,
-            new[]
-            {
-                new ToolResultEntry("call-1", "read", "file contents here", false),
-                new ToolResultEntry("call-2", "bash", "command failed", true)
-            });
+        var toolResult = TestMessages.ToolResult(new[] {new ToolResultEntry("call-1", "read", "file contents here", false), new ToolResultEntry("call-2", "bash", "command failed", true)}, id: "m3", sessionId: SessionId, createdAt: Ts);
 
         var result = converter.ToLlmMessages(new AgentMessage[] { toolResult });
 
@@ -134,14 +115,9 @@ public class MessageConverterTests
         var converter = new MessageConverter();
         var messages = new AgentMessage[]
         {
-            new UserMessage("u1", SessionId, Ts, "first", "code", "test-model"),
-            new AssistantMessage(
-                "a1", SessionId, Ts,
-                new[] { new TextPart("second") },
-                StopReason.Stop,
-                new Usage(0, 0),
-                "test-model"),
-            new UserMessage("u2", SessionId, Ts, "third", "code", "test-model")
+            TestMessages.User("first", id: "u1", sessionId: SessionId, createdAt: Ts),
+            TestMessages.Assistant("second", id: "a1", sessionId: SessionId, createdAt: Ts),
+            TestMessages.User("third", id: "u2", sessionId: SessionId, createdAt: Ts)
         };
 
         var result = converter.ToLlmMessages(messages);
@@ -163,12 +139,7 @@ public class MessageConverterTests
     public async Task ToLlmMessages_AssistantMessage_EmptyParts_ConvertsToEmptyContent()
     {
         var converter = new MessageConverter();
-        var assistant = new AssistantMessage(
-            "a2", SessionId, Ts,
-            Array.Empty<ContentPart>(),
-            StopReason.Stop,
-            new Usage(0, 0),
-            "test-model");
+        var assistant = TestMessages.AssistantParts(Array.Empty<ContentPart>(), id: "a2", sessionId: SessionId, createdAt: Ts);
 
         var result = converter.ToLlmMessages(new AgentMessage[] { assistant });
 
@@ -183,7 +154,7 @@ public class MessageConverterTests
         // An empty ToolResultMessage contributes zero LlmToolResultMessages — the
         // foreach over an empty Results array simply doesn't add anything.
         var converter = new MessageConverter();
-        var empty = new ToolResultMessage("m4", SessionId, Ts, Array.Empty<ToolResultEntry>());
+        var empty = TestMessages.ToolResult(Array.Empty<ToolResultEntry>(), id: "m4", sessionId: SessionId, createdAt: Ts);
 
         var result = converter.ToLlmMessages(new AgentMessage[] { empty });
 
@@ -213,19 +184,9 @@ public class MessageConverterTests
         for (int t = 0; t < turns; t++)
         {
             string callId = $"call-{t}";
-            messages.Add(new UserMessage($"u{t}", SessionId, Ts, $"question number {t}", "code", "test-model"));
-            messages.Add(new AssistantMessage(
-                $"a{t}", SessionId, Ts,
-                [
-                    new TextPart($"answer number {t}"),
-                    new ToolCallPart(callId, "read", ParseJson($$"""{"path":"/tmp/file-{{t}}.cs"}"""))
-                ],
-                StopReason.ToolUse,
-                new Usage(10, 5),
-                "test-model"));
-            messages.Add(new ToolResultMessage(
-                $"r{t}", SessionId, Ts,
-                [new ToolResultEntry(callId, "read", $"contents of file {t}", false)]));
+            messages.Add(TestMessages.User($"question number {t}", id: $"u{t}", sessionId: SessionId, createdAt: Ts));
+            messages.Add(TestMessages.AssistantParts([new TextPart($"answer number {t}"), new ToolCallPart(callId, "read", ParseJson($$"""{"path":"/tmp/file-{{t}}.cs"}"""))], id: $"a{t}", sessionId: SessionId, createdAt: Ts, stopReason: StopReason.ToolUse, usage: new Usage(10, 5)));
+            messages.Add(TestMessages.ToolResult([new ToolResultEntry(callId, "read", $"contents of file {t}", false)], id: $"r{t}", sessionId: SessionId, createdAt: Ts));
         }
 
         return messages;

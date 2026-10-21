@@ -135,48 +135,13 @@ public class CompactionServiceBenchmark
         {
             // Interleave user / assistant(tool call) / tool result / assistant to mirror a
             // realistic coding session with tool-heavy turns.
-            list.Add(new UserMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                now.AddSeconds(i),
-                $"Read the file at path/to/module_{i % 50}.cs and refactor the ProcessAsync method to be async.",
-                "code",
-                "stub-1"));
+            list.Add(TestMessages.User($"Read the file at path/to/module_{i % 50}.cs and refactor the ProcessAsync method to be async.", sessionId: sessionId, createdAt: now.AddSeconds(i), model: "stub-1"));
 
-            list.Add(new AssistantMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                now.AddSeconds(i).AddMilliseconds(1),
-                new ContentPart[]
-                {
-                    new TextPart($"I'll read the file and inspect its contents before refactoring. (turn {i})"),
-                    new ToolCallPart($"tc_{i}", "read", emptyArgs)
-                },
-                StopReason.ToolUse,
-                new Usage(120, 35),
-                "stub-1"));
+            list.Add(TestMessages.AssistantParts(new ContentPart[] {new TextPart($"I'll read the file and inspect its contents before refactoring. (turn {i})"), new ToolCallPart($"tc_{i}", "read", emptyArgs)}, sessionId: sessionId, createdAt: now.AddSeconds(i).AddMilliseconds(1), stopReason: StopReason.ToolUse, usage: new Usage(120, 35), model: "stub-1"));
 
-            list.Add(new ToolResultMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                now.AddSeconds(i).AddMilliseconds(2),
-                new[]
-                {
-                    new ToolResultEntry(
-                        $"tc_{i}",
-                        "read",
-                        $"namespace Sample;\npublic class Module{i} {{\n  public void ProcessAsync() {{ /* body of module {i} */ }}\n}}",
-                        false)
-                }));
+            list.Add(TestMessages.ToolResult(new[] {new ToolResultEntry($"tc_{i}", "read", $"namespace Sample;\npublic class Module{i} {{\n  public void ProcessAsync() {{ /* body of module {i} */ }}\n}}", false)}, sessionId: sessionId, createdAt: now.AddSeconds(i).AddMilliseconds(2)));
 
-            list.Add(new AssistantMessage(
-                Guid.NewGuid().ToString("N"),
-                sessionId,
-                now.AddSeconds(i).AddMilliseconds(3),
-                new ContentPart[] { new TextPart($"Refactored Module{i}.ProcessAsync to return Task and await internally. (turn {i})") },
-                StopReason.Stop,
-                new Usage(200, 60),
-                "stub-1"));
+            list.Add(TestMessages.Assistant($"Refactored Module{i}.ProcessAsync to return Task and await internally. (turn {i})", sessionId: sessionId, createdAt: now.AddSeconds(i).AddMilliseconds(3), usage: new Usage(200, 60), model: "stub-1"));
         }
 
         return list;

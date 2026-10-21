@@ -12,9 +12,8 @@ project that needs a double for something Harbor owns; never shipped.
 | Path | What lives there |
 |------|------------------|
 | `Fakes/<IInterface>.cs` | One file per interface: the double that implements it. The file is named after the interface, so "where do I put my double" has exactly one answer. |
-| `Builders/` | Builders, not doubles — message factories and the like. |
 | `TestToolContext.cs` | The one place a `ToolContext` is built (#1775). |
-| `TestAgents.cs`, `TestMessages.cs`, `TestTempDirs.cs`, `TestScalingGate.cs`, `AllocationProbe.cs` | Named entry points other suites share. |
+| `TestAgents.cs`, `TestTempDirs.cs`, `TestScalingGate.cs`, `AllocationProbe.cs` | Named entry points other suites share. |
 
 The source-generated doubles are NOT here (#1875): the opt-in marker, the
 call-record type and the twelve emitted `Fake*` classes moved to
@@ -26,12 +25,17 @@ files that need the UI/Desktop stack. This core reaches no UI assembly at
 all, which is the whole point of the split: nineteen test projects reference
 it, and every product assembly it reached was paid for by all of them.
 
-The shared event builders are in neither part: they live in
-[`Harbor.TestKit.Support`](../Harbor.TestKit.Support/) as `TestEvents`, because
-the events themselves live in `Harbor.Abstractions.Contracts` and that part's
-closure is exactly the two contract assemblies. A test project that publishes
-an event therefore reaches the builders without gaining a product assembly it
-did not already have (#1821).
+The shared event and message builders are in neither part: they live in
+[`Harbor.TestKit.Support`](../Harbor.TestKit.Support/) as `TestEvents` and
+`TestMessages`, because the events and the messages themselves live in
+`Harbor.Abstractions.Contracts` and that part's closure is exactly the two
+contract assemblies. A test project that publishes an event or builds a
+message therefore reaches the builders without gaining a product assembly it
+did not already have (#1821, #1816). The message builders moved here from
+this core in #1816: the core reaches 20 test projects and this part reaches
+33, and the three message-heavy projects that reference only this part
+(`Harbor.Benchmarks`, `Harbor.Storage.Tests`, `Harbor.Tui.Tests`) reach the
+builders with no csproj edit at all.
 
 ## Naming
 

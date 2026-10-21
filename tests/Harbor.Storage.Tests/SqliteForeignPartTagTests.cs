@@ -120,10 +120,8 @@ public class SqliteForeignPartTagTests
         {
             var session = (await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto/free")).Value;
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("u1", session.Id, T0, "list the files", "code", "kilo-auto/free"));
-            await store.AppendMessageAsync(session.Id, new AssistantMessage(
-                "a1", session.Id, T0.AddSeconds(1), [new TextPart("here they are")],
-                StopReason.Stop, new Usage(3, 4), "kilo-auto/free"));
+                TestMessages.User("list the files", id: "u1", sessionId: session.Id, createdAt: T0, model: "kilo-auto/free"));
+            await store.AppendMessageAsync(session.Id, TestMessages.Assistant("here they are", id: "a1", sessionId: session.Id, createdAt: T0.AddSeconds(1), usage: new Usage(3, 4), model: "kilo-auto/free"));
 
             // The row a newer build would have written, planted directly.
             PlantRow(dbPath, session.Id, "a-foreign", "assistant", T0.AddSeconds(2),
@@ -163,8 +161,7 @@ public class SqliteForeignPartTagTests
         foreach (Type subtype in subtypes)
         {
             var sample = (ContentPart)Sample(subtype);
-            var message = new AssistantMessage(
-                "a1", "sess-1", T0, [sample], StopReason.Stop, new Usage(1, 2), "p/m");
+            var message = TestMessages.AssistantParts([sample], id: "a1", sessionId: "sess-1", createdAt: T0, usage: new Usage(1, 2), model: "p/m");
 
             string json = SqliteMappers.SerializeMessage(message);
             var decoded = SqliteMappers.TryDeserializeMessage("assistant", json);

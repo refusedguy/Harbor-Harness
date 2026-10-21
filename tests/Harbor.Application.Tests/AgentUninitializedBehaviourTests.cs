@@ -166,8 +166,7 @@ public sealed class AgentUninitializedBehaviourTests
         Session session = NewSession();
         using DefaultAgent subject = NewAgent(session, out FakeSessionStore store);
 
-        Result result = await subject.PromptAsync(new UserMessage(
-            Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, "hi", "user", "test-model"));
+        Result result = await subject.PromptAsync(TestMessages.User("hi", sessionId: session.Id, agent: "user"));
 
         await Assert.That(result.IsFailure).IsTrue()
             .Because("The UserMessage overload must refuse too — it is the overload the image path and the IPC path use.");
@@ -227,8 +226,7 @@ public sealed class AgentUninitializedBehaviourTests
 
         // The steering queue is created once per agent lifetime and outlives the
         // bind, so a message handed over before Initialize is not lost.
-        subject.Steer(new AssistantMessage(
-            Guid.NewGuid().ToString("N"), session.Id, DateTimeOffset.UtcNow, [], StopReason.Stop, new Usage(0, 0), "test-model"));
+        subject.Steer(TestMessages.AssistantParts([], sessionId: session.Id));
         subject.Initialize(session, TestAgents.AllowAll());
 
         await Assert.That(subject.State.HasValue).IsTrue()

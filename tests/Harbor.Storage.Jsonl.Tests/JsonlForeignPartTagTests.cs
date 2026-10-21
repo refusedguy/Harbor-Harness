@@ -99,10 +99,8 @@ public class JsonlForeignPartTagTests
         {
             var session = (await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto/free")).Value;
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("u1", session.Id, T0, "list the files", "code", "kilo-auto/free"));
-            await store.AppendMessageAsync(session.Id, new AssistantMessage(
-                "a1", session.Id, T0.AddSeconds(1), [new TextPart("here they are")],
-                StopReason.Stop, new Usage(3, 4), "kilo-auto/free"));
+                TestMessages.User("list the files", id: "u1", sessionId: session.Id, createdAt: T0, model: "kilo-auto/free"));
+            await store.AppendMessageAsync(session.Id, TestMessages.Assistant("here they are", id: "a1", sessionId: session.Id, createdAt: T0.AddSeconds(1), usage: new Usage(3, 4), model: "kilo-auto/free"));
 
             // The line a newer build would have written, dropped into the file.
             string path = Path.Combine(store.GetRootDirectory(), $"{session.Id}.jsonl");
@@ -165,7 +163,7 @@ public class JsonlForeignPartTagTests
             var store = new JsonlSessionStore(jsonlDir, new CapturingLogger<JsonlSessionStore>());
             var session = (await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto/free")).Value;
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("u1", session.Id, T0, "list the files", "code", "kilo-auto/free"));
+                TestMessages.User("list the files", id: "u1", sessionId: session.Id, createdAt: T0, model: "kilo-auto/free"));
 
             var porter = new JsonlSessionPorter(new CapturingLogger<JsonlSessionPorter>());
             var exported = new StringWriter();

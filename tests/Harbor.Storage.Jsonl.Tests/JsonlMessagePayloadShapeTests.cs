@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 /// <summary>
 ///     Byte-shape + round-trip tests for the <see cref="JsonlMessageCodec.SerializeMessagePayload" />
@@ -45,9 +46,7 @@ public class JsonlMessagePayloadShapeTests
     public async Task Serialize_AssistantStopReason_WritesLowercaseWireSpelling(
         StopReason reason, string expected)
     {
-        var message = new AssistantMessage(
-            "m1", "sess-1", CreatedAt,
-            [new TextPart("hi")], reason, new Usage(10, 5), "p/m");
+        var message = TestMessages.Assistant("hi", id: "m1", sessionId: "sess-1", createdAt: CreatedAt, stopReason: reason, usage: new Usage(10, 5), model: "p/m");
 
         string json = EntryJson(message);
 
@@ -58,9 +57,7 @@ public class JsonlMessagePayloadShapeTests
     [Test]
     public async Task Serialize_AssistantToolUse_NeverWritesToolUseAliasSpelling()
     {
-        var message = new AssistantMessage(
-            "m1", "sess-1", CreatedAt,
-            [new TextPart("hi")], StopReason.ToolUse, new Usage(1, 1), "p/m");
+        var message = TestMessages.Assistant("hi", id: "m1", sessionId: "sess-1", createdAt: CreatedAt, stopReason: StopReason.ToolUse, usage: new Usage(1, 1), model: "p/m");
 
         string json = EntryJson(message);
 
@@ -76,8 +73,7 @@ public class JsonlMessagePayloadShapeTests
     {
         // Zero parts must still round-trip: the payload's parts array serializes
         // as [] and the message decodes back to an assistant with no parts.
-        var message = new AssistantMessage(
-            "m1", "sess-1", CreatedAt, [], StopReason.Stop, new Usage(0, 0), "p/m");
+        var message = TestMessages.AssistantParts([], id: "m1", sessionId: "sess-1", createdAt: CreatedAt, model: "p/m");
 
         string json = EntryJson(message);
 
@@ -96,10 +92,7 @@ public class JsonlMessagePayloadShapeTests
     public async Task Serialize_AssistantParts_OrderAndKindsRoundTrip()
     {
         JsonElement args = JsonDocument.Parse("""{"path":"a.txt"}""").RootElement;
-        var message = new AssistantMessage(
-            "m1", "sess-1", CreatedAt,
-            [new TextPart("thinking-out"), new ThinkingPart("reason"), ToolCallPart.Create("tc_1", "read", args)],
-            StopReason.ToolUse, new Usage(10, 5), "p/m");
+        var message = TestMessages.AssistantParts([new TextPart("thinking-out"), new ThinkingPart("reason"), ToolCallPart.Create("tc_1", "read", args)], id: "m1", sessionId: "sess-1", createdAt: CreatedAt, stopReason: StopReason.ToolUse, usage: new Usage(10, 5), model: "p/m");
 
         string json = EntryJson(message);
 
@@ -124,12 +117,7 @@ public class JsonlMessagePayloadShapeTests
     [Test]
     public async Task Serialize_ToolResult_EntriesOrderPreserved_AndMetadataDropped()
     {
-        var message = new ToolResultMessage(
-            "m2", "sess-1", CreatedAt,
-            [
-                new ToolResultEntry("tc_1", "read", "first", IsError: false, Metadata: new object()),
-                new ToolResultEntry("tc_2", "bash", "second", IsError: true),
-            ]);
+        var message = TestMessages.ToolResult([new ToolResultEntry("tc_1", "read", "first", IsError: false, Metadata: new object()), new ToolResultEntry("tc_2", "bash", "second", IsError: true),], id: "m2", sessionId: "sess-1", createdAt: CreatedAt);
 
         string json = EntryJson(message);
 
@@ -177,7 +165,7 @@ public class JsonlMessagePayloadShapeTests
     [Test]
     public async Task Serialize_ToolResult_EmptyResults_RoundTrips()
     {
-        var message = new ToolResultMessage("m2", "sess-1", CreatedAt, []);
+        var message = TestMessages.ToolResult([], id: "m2", sessionId: "sess-1", createdAt: CreatedAt);
 
         string json = EntryJson(message);
 

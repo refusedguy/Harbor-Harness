@@ -101,66 +101,15 @@ public class MessageConverterBenchmark
         };
         string code = CodeSample(scale);
 
-        _userMessage = new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now,
-            "Implement a C# calculator with add, subtract, multiply and divide.",
-            "code",
-            "stub-1");
+        _userMessage = TestMessages.User("Implement a C# calculator with add, subtract, multiply and divide.", sessionId: _sessionId, createdAt: now, model: "stub-1");
 
-        _assistantSmall = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(1),
-            new ContentPart[]
-            {
-                new TextPart("Done. See the implementation below."),
-                new ToolCallPart("tc_1", "write", JsonElement.Parse("""{"path":"Calculator.cs","content":"x"}"""))
-            },
-            StopReason.Stop,
-            new Usage(120, 35),
-            "stub-1");
+        _assistantSmall = TestMessages.AssistantParts(new ContentPart[] {new TextPart("Done. See the implementation below."), new ToolCallPart("tc_1", "write", JsonElement.Parse("""{"path":"Calculator.cs","content":"x"}"""))}, sessionId: _sessionId, createdAt: now.AddSeconds(1), usage: new Usage(120, 35), model: "stub-1");
 
-        _assistantMedium = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(1),
-            new ContentPart[]
-            {
-                new TextPart("Here is a complete calculator implementation:\n\n```csharp\n" + code + "\n```"),
-                new ThinkingPart("I should ensure division guards against zero."),
-                new ToolCallPart("tc_1", "write", JsonElement.Parse("""{"path":"Calculator.cs"}"""))
-            },
-            StopReason.Stop,
-            new Usage(1_280, 320),
-            "stub-1");
+        _assistantMedium = TestMessages.AssistantParts(new ContentPart[] {new TextPart("Here is a complete calculator implementation:\n\n```csharp\n" + code + "\n```"), new ThinkingPart("I should ensure division guards against zero."), new ToolCallPart("tc_1", "write", JsonElement.Parse("""{"path":"Calculator.cs"}"""))}, sessionId: _sessionId, createdAt: now.AddSeconds(1), usage: new Usage(1_280, 320), model: "stub-1");
 
-        _assistantLarge = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(1),
-            new ContentPart[]
-            {
-                new TextPart(code),
-                new TextPart(code),
-                new ThinkingPart(code),
-                new ToolCallPart("tc_1", "write", JsonSerializer.SerializeToElement(
-                    new Dictionary<string, object?> { ["path"] = "Calculator.cs", ["content"] = code },
-                    TestJsonContext.Default.DictionaryStringObject))
-            },
-            StopReason.Stop,
-            new Usage(20_480, 5_120),
-            "stub-1");
+        _assistantLarge = TestMessages.AssistantParts(new ContentPart[] {new TextPart(code), new TextPart(code), new ThinkingPart(code), new ToolCallPart("tc_1", "write", JsonSerializer.SerializeToElement(new Dictionary<string, object?> {["path"] = "Calculator.cs", ["content"] = code}, TestJsonContext.Default.DictionaryStringObject))}, sessionId: _sessionId, createdAt: now.AddSeconds(1), usage: new Usage(20_480, 5_120), model: "stub-1");
 
-        _toolResultMessage = new ToolResultMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(2),
-            new[]
-            {
-                new ToolResultEntry("tc_1", "write", "Wrote 512 bytes to Calculator.cs", false)
-            });
+        _toolResultMessage = TestMessages.ToolResult(new[] {new ToolResultEntry("tc_1", "write", "Wrote 512 bytes to Calculator.cs", false)}, sessionId: _sessionId, createdAt: now.AddSeconds(2));
 
         // Pre-serialize a single assistant message to a JSONL line so the
         // standalone deserialize benchmark can re-read it from disk through a

@@ -94,7 +94,7 @@ public class SessionStoreBindingTests
     private static AgentStartEvent StartWithUser(string sessionId, string text) =>
         new(sessionId, new AgentMessage[]
         {
-            new UserMessage(Guid.NewGuid().ToString("N"), sessionId, DateTimeOffset.UtcNow, text, "code", "model"),
+            TestMessages.User(text, sessionId: sessionId, model: "model"),
         });
 
     private static CellForgeTuiRenderer Create(

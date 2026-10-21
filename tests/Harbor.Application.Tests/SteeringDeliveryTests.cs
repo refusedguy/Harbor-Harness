@@ -59,13 +59,7 @@ public class SteeringDeliveryTests
         {
             foreach (string text in steeredTexts)
             {
-                session.EnqueueSteering(new UserMessage(
-                    Guid.NewGuid().ToString("N"),
-                    session.Session.Id,
-                    DateTimeOffset.UtcNow,
-                    text,
-                    "user",
-                    "test-model"));
+                session.EnqueueSteering(TestMessages.User(text, sessionId: session.Session.Id, agent: "user"));
             }
 
             return Task.FromResult(ToolResult.Success("steered"));

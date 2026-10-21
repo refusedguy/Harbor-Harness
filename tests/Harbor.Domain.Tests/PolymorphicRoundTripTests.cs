@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
 using MemoryPack;
 using TUnit.Assertions;
+using Harbor.TestKit;
 
 namespace Harbor.Domain.Tests;
 
@@ -54,7 +55,7 @@ public class PolymorphicRoundTripTests
     [Test]
     public async Task UserMessage_StjRoundTrip_PreservesCase()
     {
-        var original = new UserMessage("m1", "s1", When, "hi", "code", "p/m");
+        var original = TestMessages.User("hi", id: "m1", sessionId: "s1", createdAt: When, model: "p/m");
 
         var back = (UserMessage)await StjRoundTripAsync(original);
 
@@ -70,18 +71,7 @@ public class PolymorphicRoundTripTests
     public async Task AssistantMessage_StjRoundTrip_PreservesAllPartKinds()
     {
         const string args = """{"path":"a.txt"}""";
-        var original = new AssistantMessage(
-            "a1", "s1", When,
-            new ContentPart[]
-            {
-                new TextPart("hello"),
-                new ThinkingPart("hmm"),
-                ToolCallPart.Create("tc1", "read", OwnedArgs(args)),
-                new FilePart("a.png", "image/png", 10),
-            },
-            StopReason.ToolUse,
-            new Usage(10, 20),
-            "p/m");
+        var original = TestMessages.AssistantParts(new ContentPart[] {new TextPart("hello"), new ThinkingPart("hmm"), ToolCallPart.Create("tc1", "read", OwnedArgs(args)), new FilePart("a.png", "image/png", 10),}, id: "a1", sessionId: "s1", createdAt: When, stopReason: StopReason.ToolUse, usage: new Usage(10, 20), model: "p/m");
 
         var back = (AssistantMessage)await StjRoundTripAsync(original);
 
@@ -104,9 +94,7 @@ public class PolymorphicRoundTripTests
     [Test]
     public async Task ToolResultMessage_StjRoundTrip_PreservesEntries()
     {
-        var original = new ToolResultMessage(
-            "t1", "s1", When,
-            new[] { new ToolResultEntry("tc1", "read", "ok", false) });
+        var original = TestMessages.ToolResult(new[] { new ToolResultEntry("tc1", "read", "ok", false) }, id: "t1", sessionId: "s1", createdAt: When);
 
         var back = (ToolResultMessage)await StjRoundTripAsync(original);
 
@@ -122,12 +110,7 @@ public class PolymorphicRoundTripTests
     public async Task AssistantMessage_MemoryPackRoundTrip_PreservesCaseAndArgs()
     {
         const string args = """{"path":"a.txt"}""";
-        AgentMessage original = new AssistantMessage(
-            "a1", "s1", When,
-            new ContentPart[] { ToolCallPart.Create("tc1", "read", OwnedArgs(args)) },
-            StopReason.ToolUse,
-            new Usage(10, 20),
-            "p/m");
+        AgentMessage original = TestMessages.AssistantParts(new ContentPart[] { ToolCallPart.Create("tc1", "read", OwnedArgs(args)) }, id: "a1", sessionId: "s1", createdAt: When, stopReason: StopReason.ToolUse, usage: new Usage(10, 20), model: "p/m");
 
         byte[] bytes = MemoryPackSerializer.Serialize(original);
         AgentMessage? back = MemoryPackSerializer.Deserialize<AgentMessage>(bytes);

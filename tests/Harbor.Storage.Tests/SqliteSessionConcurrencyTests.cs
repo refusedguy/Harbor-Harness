@@ -2,6 +2,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -49,13 +50,7 @@ public class SqliteSessionConcurrencyTests
                 {
                     for (int j = 0; j < messagesPerSession; j++)
                     {
-                        var msg = new UserMessage(
-                            $"msg-{index}-{j}",
-                            sessionIds[index],
-                            DateTimeOffset.UtcNow,
-                            $"message {j}",
-                            "code",
-                            "claude-opus-4");
+                        var msg = TestMessages.User($"message {j}", id: $"msg-{index}-{j}", sessionId: sessionIds[index], model: "claude-opus-4");
                         var appended = await store.AppendMessageAsync(sessionIds[index], msg);
                         await Assert.That(appended.IsSuccess).IsTrue();
                     }
@@ -95,13 +90,7 @@ public class SqliteSessionConcurrencyTests
                 {
                     for (int j = 0; j < messagesPerTask; j++)
                     {
-                        var msg = new UserMessage(
-                            $"msg-{index}-{j}",
-                            session.Id,
-                            DateTimeOffset.UtcNow,
-                            $"message {j} from task {index}",
-                            "code",
-                            "claude-opus-4");
+                        var msg = TestMessages.User($"message {j} from task {index}", id: $"msg-{index}-{j}", sessionId: session.Id, model: "claude-opus-4");
                         var appended = await store.AppendMessageAsync(session.Id, msg);
                         await Assert.That(appended.IsSuccess).IsTrue();
                     }

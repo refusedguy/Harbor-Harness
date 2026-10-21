@@ -26,6 +26,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Abstractions.Tests;
 
@@ -305,13 +306,7 @@ public class SessionLogGuardTests
                     Kind = SessionLogEntryKind.Message,
                     Id = messageIds[i],
                     Position = i,
-                    Message = new UserMessage(
-                        messageIds[i],
-                        "s1",
-                        DateTimeOffset.UnixEpoch,
-                        $"the text of {messageIds[i]}",
-                        "code",
-                        "test-model"),
+                    Message = TestMessages.User($"the text of {messageIds[i]}", id: messageIds[i], sessionId: "s1", createdAt: DateTimeOffset.UnixEpoch),
                 });
             }
         }

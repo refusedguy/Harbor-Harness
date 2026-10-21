@@ -16,6 +16,7 @@ using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -168,37 +169,11 @@ public class StorageBackendParityTests
 
     private static IEnumerable<AgentMessage> Corpus(JsonElement argsRoot) =>
     [
-        new UserMessage("u1", SessionId, T0, "list the files", "code", "p/m"),
-        new UserMessage(
-            "u2", SessionId, T0.AddSeconds(1), "read the picture", "code", "p/m",
-            ParentId: "u1",
-            Attachments: [new ImageAttachment("shot.png", "image/png", 3, 4, [9, 8, 7])]),
-        new AssistantMessage(
-            "a1", SessionId, T0.AddSeconds(2),
-            [
-                new TextPart("here they are"),
-                new ThinkingPart("list them silently"),
-                ToolCallPart.Create("tc-1", "read", argsRoot),
-            ],
-            StopReason.ToolUse,
-            TidyUsage,
-            "p/m"),
-        new AssistantMessage(
-            "a2", SessionId, T0.AddSeconds(3),
-            [new TextPart("done"), new FilePart("img.png", "image/png", 42, [1, 2])],
-            StopReason.Stop,
-            new Usage(1, 2),
-            "p/m",
-            ParentId: "u1",
-            IsSummary: true,
-            SummaryFirstKeptId: "u1"),
-        new ToolResultMessage(
-            "t1", SessionId, T0.AddSeconds(4),
-            [
-                new ToolResultEntry("tc-1", "read", "file contents", IsError: false),
-                new ToolResultEntry("tc-2", "bash", "boom", IsError: true),
-            ],
-            ParentId: "a1"),
+        TestMessages.User("list the files", id: "u1", sessionId: SessionId, createdAt: T0, model: "p/m"),
+        TestMessages.User("read the picture", id: "u2", sessionId: SessionId, createdAt: T0.AddSeconds(1), model: "p/m", parentId: "u1", attachments: [new ImageAttachment("shot.png", "image/png", 3, 4, [9, 8, 7])]),
+        TestMessages.AssistantParts([new TextPart("here they are"), new ThinkingPart("list them silently"), ToolCallPart.Create("tc-1", "read", argsRoot),], id: "a1", sessionId: SessionId, createdAt: T0.AddSeconds(2), stopReason: StopReason.ToolUse, usage: TidyUsage, model: "p/m"),
+        TestMessages.AssistantParts([new TextPart("done"), new FilePart("img.png", "image/png", 42, [1, 2])], id: "a2", sessionId: SessionId, createdAt: T0.AddSeconds(3), usage: new Usage(1, 2), model: "p/m", parentId: "u1", isSummary: true, summaryFirstKeptId: "u1"),
+        TestMessages.ToolResult([new ToolResultEntry("tc-1", "read", "file contents", IsError: false), new ToolResultEntry("tc-2", "bash", "boom", IsError: true),], id: "t1", sessionId: SessionId, createdAt: T0.AddSeconds(4), parentId: "a1"),
     ];
 
     // ── transport helpers ──────────────────────────────────────────────────

@@ -281,7 +281,7 @@ public class ChatHistoryViewModelTests
     public async Task AgentStartEvent_AddsUserEntries()
     {
         var vm = new ChatHistoryViewModel();
-        var userMsg = new UserMessage("u1", "s1", DateTimeOffset.UtcNow, "Hello agent", "code", "claude");
+        var userMsg = TestMessages.User("Hello agent", id: "u1", sessionId: "s1", model: "claude");
         await vm.UpdateFromEventAsync(TestEvents.AgentStart(messages: new AgentMessage[] { userMsg }));
 
         await Assert.That(vm.Entries.Count).IsEqualTo(1);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -50,11 +51,11 @@ public class JsonlSessionStoreAtomicityTests
                 await Assert.That(stats.IsFailure).IsTrue();
 
                 var append = await store.AppendMessageAsync(evil,
-                    new UserMessage("m1", evil, DateTimeOffset.UtcNow, "hi", "code", "claude"));
+                    TestMessages.User("hi", id: "m1", sessionId: evil, model: "claude"));
                 await Assert.That(append.IsFailure).IsTrue();
 
                 var updateMsg = await store.UpdateMessageAsync(evil,
-                    new UserMessage("m1", evil, DateTimeOffset.UtcNow, "hi", "code", "claude"));
+                    TestMessages.User("hi", id: "m1", sessionId: evil, model: "claude"));
                 await Assert.That(updateMsg.IsFailure).IsTrue();
 
                 var delete = await store.DeleteAsync(evil);
@@ -91,10 +92,8 @@ public class JsonlSessionStoreAtomicityTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "msg-1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-2), "first", "code", "claude"));
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "msg-2", session.Id, DateTimeOffset.UtcNow.AddSeconds(-1), "second", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("first", id: "msg-1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-2), model: "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("second", id: "msg-2", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-1), model: "claude"));
 
             // All three atomic-rewrite paths (#83.1). The edit comes FIRST:
             // an updated message keeps its position in the file (#1798), so a
@@ -102,8 +101,7 @@ public class JsonlSessionStoreAtomicityTests
             // it. Before #1798 the edit moved the record to the END of the
             // file, so the truncate had to come first — the "known hole" this
             // test used to document.
-            var edit = await store.UpdateMessageAsync(session.Id, new UserMessage(
-                "msg-1", session.Id, DateTimeOffset.UtcNow.AddSeconds(-2), "edited", "code", "claude"));
+            var edit = await store.UpdateMessageAsync(session.Id, TestMessages.User("edited", id: "msg-1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-2), model: "claude"));
             await Assert.That(edit.IsSuccess).IsTrue();
 
             var truncate = await store.DeleteMessagesAfterAsync(session.Id, "msg-1");
@@ -153,8 +151,7 @@ public class JsonlSessionStoreAtomicityTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "msg-1", session.Id, DateTimeOffset.UtcNow, "hello", "code", "claude"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("hello", id: "msg-1", sessionId: session.Id, model: "claude"));
 
             // Hammer the rewrite path from many tasks; every observable state
             // of the file must be either the old or a new complete version.

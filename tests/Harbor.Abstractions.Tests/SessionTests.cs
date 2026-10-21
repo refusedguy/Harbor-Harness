@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
+using Harbor.TestKit;
 namespace Harbor.Abstractions.Tests;
 public class SessionTests
 {
@@ -151,7 +152,7 @@ public class MessageTests
     [Test]
     public async Task UserMessage_Role_IsUser()
     {
-        var msg = new UserMessage("id", "session", DateTimeOffset.UtcNow, "hello", "code", "claude-opus-4");
+        var msg = TestMessages.User("hello", id: "id", sessionId: "session", model: "claude-opus-4");
         await Assert.That(msg.Role).IsEqualTo("user");
     }
 

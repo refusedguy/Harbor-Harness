@@ -2,6 +2,7 @@ using System.Text;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Core;
+using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
@@ -64,8 +65,7 @@ public class JsonlAllocationBudgetTests
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
             for (int i = 0; i < 100; i++)
             {
-                await store.AppendMessageAsync(session.Id, new UserMessage(
-                    $"m{i}", session.Id, DateTimeOffset.UtcNow, $"message {i}", "code", "claude-opus-4"));
+                await store.AppendMessageAsync(session.Id, TestMessages.User($"message {i}", id: $"m{i}", sessionId: session.Id, model: "claude-opus-4"));
             }
 
             var first = await store.GetMessagesAsync(session.Id);

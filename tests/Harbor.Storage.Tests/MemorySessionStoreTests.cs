@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 namespace Harbor.Storage.Tests;
 /// <summary>
 ///     Tests for MemorySessionStore covering full CRUD: Create, Get, List, Append, GetMessages, Delete.
@@ -113,12 +114,9 @@ public class MemorySessionStoreTests
         var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
         var baseTime = DateTimeOffset.UtcNow;
 
-        await store.AppendMessageAsync(session.Id, new UserMessage(
-            "m1", session.Id, baseTime.AddSeconds(1), "first", "code", "claude"));
-        await store.AppendMessageAsync(session.Id, new UserMessage(
-            "m2", session.Id, baseTime.AddSeconds(3), "third", "code", "claude"));
-        await store.AppendMessageAsync(session.Id, new UserMessage(
-            "m3", session.Id, baseTime.AddSeconds(2), "second", "code", "claude"));
+        await store.AppendMessageAsync(session.Id, TestMessages.User("first", id: "m1", sessionId: session.Id, createdAt: baseTime.AddSeconds(1), model: "claude"));
+        await store.AppendMessageAsync(session.Id, TestMessages.User("third", id: "m2", sessionId: session.Id, createdAt: baseTime.AddSeconds(3), model: "claude"));
+        await store.AppendMessageAsync(session.Id, TestMessages.User("second", id: "m3", sessionId: session.Id, createdAt: baseTime.AddSeconds(2), model: "claude"));
 
         var messages = await store.GetMessagesAsync(session.Id);
 

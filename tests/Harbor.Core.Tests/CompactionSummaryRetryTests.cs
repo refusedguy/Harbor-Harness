@@ -42,14 +42,10 @@ public class CompactionSummaryRetryTests
 
     private static List<AgentMessage> FourLongMessages() =>
     [
-        new UserMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "code", "test-model"),
-        new AssistantMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            new[] { new TextPart("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") }, StopReason.Stop, new Usage(0, 0), "test-model"),
-        new UserMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            "cccccccccccccccccccccccccccccccccccccccc", "code", "test-model"),
-        new AssistantMessage(Guid.NewGuid().ToString("N"), "session-1", DateTimeOffset.UtcNow,
-            new[] { new TextPart("dddddddddddddddddddddddddddddddddddd") }, StopReason.Stop, new Usage(0, 0), "test-model")
+        TestMessages.User("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        TestMessages.Assistant("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+        TestMessages.User("cccccccccccccccccccccccccccccccccccccccc"),
+        TestMessages.Assistant("dddddddddddddddddddddddddddddddddddd")
     ];
 
     [Test]

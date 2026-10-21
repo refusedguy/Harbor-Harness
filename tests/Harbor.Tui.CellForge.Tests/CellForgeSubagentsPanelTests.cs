@@ -12,6 +12,7 @@ using Harbor.Ui.Framework.Sessions;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Harbor.TestKit;
 
 namespace Harbor.Tui.CellForge.Tests;
 
@@ -305,8 +306,7 @@ public class CellForgeSubagentsPanelTests
         {
             User("s1", "do the thing"),
             Assistant("s1", new ToolCallPart("tc1", "read", default)),
-            new ToolResultMessage(Guid.NewGuid().ToString("N"), "s1", Now,
-                [new ToolResultEntry("tc1", "read", "file contents", false)]),
+            TestMessages.ToolResult([new ToolResultEntry("tc1", "read", "file contents", false)], sessionId: "s1", createdAt: Now),
             Assistant("s1", new TextPart("did it")),
         };
 

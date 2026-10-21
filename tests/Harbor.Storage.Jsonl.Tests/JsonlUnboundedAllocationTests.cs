@@ -104,8 +104,7 @@ public class JsonlUnboundedAllocationTests
         var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
         for (int i = 0; i < messageCount; i++)
         {
-            var appended = await store.AppendMessageAsync(session.Id, new UserMessage(
-                $"m{i}", session.Id, Epoch.AddSeconds(i + 1), $"message {i}", "code", "claude-opus-4"));
+            var appended = await store.AppendMessageAsync(session.Id, TestMessages.User($"message {i}", id: $"m{i}", sessionId: session.Id, createdAt: Epoch.AddSeconds(i + 1), model: "claude-opus-4"));
             await Assert.That(appended.IsSuccess).IsTrue();
         }
         return (store, session.Id);
@@ -118,8 +117,7 @@ public class JsonlUnboundedAllocationTests
     private static async Task AppendFatMessageAsync(
         JsonlSessionStore store, string sessionId, string id, int payloadBytes)
     {
-        var appended = await store.AppendMessageAsync(sessionId, new UserMessage(
-            id, sessionId, Epoch, new string('x', payloadBytes), "code", "claude-opus-4"));
+        var appended = await store.AppendMessageAsync(sessionId, TestMessages.User(new string('x', payloadBytes), id: id, sessionId: sessionId, createdAt: Epoch, model: "claude-opus-4"));
         await Assert.That(appended.IsSuccess).IsTrue();
     }
 
@@ -862,8 +860,7 @@ public class JsonlUnboundedAllocationTests
             await AppendFatMessageAsync(store, sessionId, "m1", 22);
             await AppendFatMessageAsync(store, sessionId, "m1", 33);
 
-            var updated = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "m1", sessionId, Epoch.AddSeconds(99), "final body", "code", "claude-opus-4"));
+            var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("final body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(99), model: "claude-opus-4"));
             await Assert.That(updated.IsSuccess).IsTrue();
 
             var reread = await store.GetMessagesAsync(sessionId);
@@ -891,8 +888,7 @@ public class JsonlUnboundedAllocationTests
         var (store, sessionId) = await SeedAsync(3);
         try
         {
-            var updated = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "m1", sessionId, Epoch.AddSeconds(99), "edited body", "code", "claude-opus-4"));
+            var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(99), model: "claude-opus-4"));
             await Assert.That(updated.IsSuccess).IsTrue();
 
             var reread = await store.GetMessagesAsync(sessionId);
@@ -926,8 +922,7 @@ public class JsonlUnboundedAllocationTests
             // with the file untouched. "Not found" must not create a temp at all.
             DateTime dirStampBefore = File.GetLastWriteTimeUtc(store.GetRootDirectory());
 
-            var updated = await store.UpdateMessageAsync(sessionId, new UserMessage(
-                "does-not-exist", sessionId, Epoch, "nope", "code", "claude-opus-4"));
+            var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("nope", id: "does-not-exist", sessionId: sessionId, createdAt: Epoch, model: "claude-opus-4"));
 
             await Assert.That(updated.IsFailure).IsTrue();
             await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo(before);

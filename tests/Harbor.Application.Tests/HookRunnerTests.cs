@@ -619,13 +619,7 @@ public class HookRunnerTests
         Session.Create("/tmp/harbor-hooks-tests", "code", "test", "test-model"),
         new AgentMessage[]
         {
-            new UserMessage(
-                Guid.NewGuid().ToString("N"),
-                "session-id",
-                DateTimeOffset.UtcNow,
-                content,
-                "code",
-                "test-model")
+            TestMessages.User(content, sessionId: "session-id")
         });
 
     [Test]

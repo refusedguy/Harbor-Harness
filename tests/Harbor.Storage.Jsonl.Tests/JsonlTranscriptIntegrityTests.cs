@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -42,7 +43,7 @@ public class JsonlTranscriptIntegrityTests
     /// <summary>One user message, encoded exactly as the store would write it.</summary>
     private static byte[] UserLine(string sessionId, string id, int second, string content)
     {
-        var message = new UserMessage(id, sessionId, At(second), content, "code", "test-model");
+        var message = TestMessages.User(content, id: id, sessionId: sessionId, createdAt: At(second));
         var entry = new MessageEntry(
             "message",
             message.Id,
@@ -60,14 +61,7 @@ public class JsonlTranscriptIntegrityTests
     private static byte[] AssistantToolCallLine(string sessionId, string id, int second, string callId, string toolName)
     {
         using var args = JsonDocument.Parse("{}");
-        var message = new AssistantMessage(
-            id,
-            sessionId,
-            At(second),
-            [new ToolCallPart(callId, toolName, args.RootElement.Clone())],
-            StopReason.ToolUse,
-            new Usage(1, 1),
-            "test-model");
+        var message = TestMessages.AssistantParts([new ToolCallPart(callId, toolName, args.RootElement.Clone())], id: id, sessionId: sessionId, createdAt: At(second), stopReason: StopReason.ToolUse, usage: new Usage(1, 1));
         var entry = new MessageEntry(
             "message",
             message.Id,
@@ -218,9 +212,9 @@ public class JsonlTranscriptIntegrityTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("m1", session.Id, At(1), "hello", "code", "test-model"));
+                TestMessages.User("hello", id: "m1", sessionId: session.Id, createdAt: At(1)));
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("m2", session.Id, At(2), "again", "code", "test-model"));
+                TestMessages.User("again", id: "m2", sessionId: session.Id, createdAt: At(2)));
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
@@ -297,20 +291,9 @@ public class JsonlTranscriptIntegrityTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
             await store.AppendMessageAsync(session.Id,
-                new UserMessage("m1", session.Id, At(1), "read the file", "code", "test-model"));
-            await store.AppendMessageAsync(session.Id, new AssistantMessage(
-                "m2",
-                session.Id,
-                At(2),
-                [new ToolCallPart("call-1", "read", JsonDocument.Parse("{}").RootElement.Clone())],
-                StopReason.ToolUse,
-                new Usage(1, 1),
-                "test-model"));
-            await store.AppendMessageAsync(session.Id, new ToolResultMessage(
-                "m3",
-                session.Id,
-                At(3),
-                [new ToolResultEntry("call-1", "read", "file contents", false)]));
+                TestMessages.User("read the file", id: "m1", sessionId: session.Id, createdAt: At(1)));
+            await store.AppendMessageAsync(session.Id, TestMessages.AssistantParts([new ToolCallPart("call-1", "read", JsonDocument.Parse("{}").RootElement.Clone())], id: "m2", sessionId: session.Id, createdAt: At(2), stopReason: StopReason.ToolUse, usage: new Usage(1, 1)));
+            await store.AppendMessageAsync(session.Id, TestMessages.ToolResult([new ToolResultEntry("call-1", "read", "file contents", false)], id: "m3", sessionId: session.Id, createdAt: At(3)));
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 

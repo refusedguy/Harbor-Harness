@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Collections.Concurrent;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -36,13 +37,7 @@ public class JsonlSessionStoreConcurrencyTests
 
                     for (int j = 0; j < messagesPerSession; j++)
                     {
-                        var msg = new UserMessage(
-                            $"msg-{index}-{j}",
-                            session.Id,
-                            DateTimeOffset.UtcNow,
-                            $"message {j}",
-                            "code",
-                            "claude-opus-4");
+                        var msg = TestMessages.User($"message {j}", id: $"msg-{index}-{j}", sessionId: session.Id, model: "claude-opus-4");
 
                         var result = await store.AppendMessageAsync(session.Id, msg);
                     }
@@ -84,13 +79,7 @@ public class JsonlSessionStoreConcurrencyTests
                 {
                     for (int j = 0; j < messagesPerTask; j++)
                     {
-                        var msg = new UserMessage(
-                            $"msg-{index}-{j}",
-                            session.Id,
-                            DateTimeOffset.UtcNow,
-                            $"message {j} from task {index}",
-                            "code",
-                            "claude-opus-4");
+                        var msg = TestMessages.User($"message {j} from task {index}", id: $"msg-{index}-{j}", sessionId: session.Id, model: "claude-opus-4");
 
                         var result = await store.AppendMessageAsync(session.Id, msg);
                     }
@@ -118,13 +107,7 @@ public class JsonlSessionStoreConcurrencyTests
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
-            var msg = new UserMessage(
-                "msg-1",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                "hello",
-                "code",
-                "claude-opus-4");
+            var msg = TestMessages.User("hello", id: "msg-1", sessionId: session.Id, model: "claude-opus-4");
 
             await store.AppendMessageAsync(session.Id, msg);
 

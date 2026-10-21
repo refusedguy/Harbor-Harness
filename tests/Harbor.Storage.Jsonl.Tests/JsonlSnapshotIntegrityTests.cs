@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -47,7 +48,7 @@ public class JsonlSnapshotIntegrityTests
     /// </summary>
     private static byte[] UserLine(string sessionId, string id, int second, string content)
     {
-        var message = new UserMessage(id, sessionId, At(second), content, "code", "test-model");
+        var message = TestMessages.User(content, id: id, sessionId: sessionId, createdAt: At(second));
         var entry = new MessageEntry(
             "message",
             message.Id,
@@ -65,7 +66,7 @@ public class JsonlSnapshotIntegrityTests
         for (int i = 0; i < messageCount; i++)
         {
             var appended = await store.AppendMessageAsync(session.Id,
-                new UserMessage($"m{i}", session.Id, At(i + 1), $"message {i}", "code", "test-model"));
+                TestMessages.User($"message {i}", id: $"m{i}", sessionId: session.Id, createdAt: At(i + 1)));
             await Assert.That(appended.IsSuccess).IsTrue();
         }
         return (store, session.Id);
@@ -221,7 +222,7 @@ public class JsonlSnapshotIntegrityTests
                 for (int i = 1; i <= messageCount; i++)
                 {
                     var result = await store.AppendMessageAsync(sessionId,
-                        new UserMessage($"r{i}", sessionId, At(i), $"racing {i}", "code", "test-model"));
+                        TestMessages.User($"racing {i}", id: $"r{i}", sessionId: sessionId, createdAt: At(i)));
 
                     // A write can legitimately lose a platform-level race with a
                     // concurrent reader; the store reports that, so count only

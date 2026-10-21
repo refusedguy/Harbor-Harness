@@ -4,6 +4,7 @@ using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -131,11 +132,7 @@ public class StorageTranscriptIntegrityTests
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             await store.AppendMessageAsync(session.Id, User("m1", session.Id));
             await store.AppendMessageAsync(session.Id, Asking("m2", session.Id));
-            await store.AppendMessageAsync(session.Id, new ToolResultMessage(
-                "m3",
-                session.Id,
-                T0,
-                [new ToolResultEntry("call-1", "read", "file contents", false)]));
+            await store.AppendMessageAsync(session.Id, TestMessages.ToolResult([new ToolResultEntry("call-1", "read", "file contents", false)], id: "m3", sessionId: session.Id, createdAt: T0));
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 

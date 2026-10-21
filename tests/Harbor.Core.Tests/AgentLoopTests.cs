@@ -117,13 +117,7 @@ public class AgentLoopTests
         var messages = new List<AgentMessage>(seedCount);
         for (int i = 0; i < seedCount; i++)
         {
-            messages.Add(new UserMessage(
-                Guid.NewGuid().ToString("N"),
-                session.Id,
-                DateTimeOffset.UtcNow,
-                new string('x', 3000),
-                "code",
-                "test-model"));
+            messages.Add(TestMessages.User(new string('x', 3000), sessionId: session.Id));
         }
 
         return new Harbor.TestKit.TestSessionContext(session, messages);

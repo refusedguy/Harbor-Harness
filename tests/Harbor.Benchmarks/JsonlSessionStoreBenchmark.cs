@@ -5,6 +5,7 @@ using BenchmarkDotNet.Attributes;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 namespace Harbor.Benchmarks;
 /// <summary>
 ///     Benchmarks <see cref="JsonlSessionStore" /> hot paths:
@@ -63,25 +64,9 @@ public class JsonlSessionStoreBenchmark
         _sessionId = _session.Id;
 
         var now = DateTimeOffset.UtcNow;
-        _userMessage = new UserMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now,
-            "Write a C# function that reverses a string.",
-            "code",
-            "stub-1");
+        _userMessage = TestMessages.User("Write a C# function that reverses a string.", sessionId: _sessionId, createdAt: now, model: "stub-1");
 
-        _assistantMessage = new AssistantMessage(
-            Guid.NewGuid().ToString("N"),
-            _sessionId,
-            now.AddSeconds(1),
-            new ContentPart[]
-            {
-                new TextPart("Here is a function that reverses a string:\n\n```csharp\nstring Reverse(string s) => new string(s.Reverse().ToArray());\n```")
-            },
-            StopReason.Stop,
-            new Usage(120, 35),
-            "stub-1");
+        _assistantMessage = TestMessages.Assistant("Here is a function that reverses a string:\n\n```csharp\nstring Reverse(string s) => new string(s.Reverse().ToArray());\n```", sessionId: _sessionId, createdAt: now.AddSeconds(1), usage: new Usage(120, 35), model: "stub-1");
     }
 
     [IterationCleanup]
@@ -314,7 +299,7 @@ public class JsonlParseBenchmark
             if (content is null || agent is null || model is null)
                 return Result.Failure<AgentMessage>("missing content/agent/model");
 
-            return Result.Success<AgentMessage>(new UserMessage(id, _sessionId, createdAt, content, agent, model, parentId));
+            return Result.Success<AgentMessage>(TestMessages.User(content, id: id, sessionId: _sessionId, createdAt: createdAt, agent: agent, model: model, parentId: parentId));
         }
         catch (Exception ex)
         {
@@ -415,8 +400,7 @@ public class JsonlParseBenchmark
             if (parts is null || stopReason is null || usage is null || model is null)
                 return Result.Failure<AgentMessage>("missing parts/stopReason/usage/model");
 
-            return Result.Success<AgentMessage>(new AssistantMessage(
-                id, _sessionId, createdAt, parts, stopReason.Value, usage, model, parentId, isSummary, summaryFirstKeptId));
+            return Result.Success<AgentMessage>(TestMessages.AssistantParts(parts, id: id, sessionId: _sessionId, createdAt: createdAt, stopReason: stopReason.Value, usage: usage, model: model, parentId: parentId, isSummary: isSummary, summaryFirstKeptId: summaryFirstKeptId));
         }
         catch (Exception ex)
         {

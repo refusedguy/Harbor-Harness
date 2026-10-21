@@ -273,14 +273,7 @@ public class DanglingToolCall1751Tests
         // transcript cannot prove the call never ran, so the code is the
         // conservative one: the model may NOT retry blindly.
         var converter = new MessageConverter();
-        var assistant = new AssistantMessage(
-            "a1",
-            "session-1",
-            DateTimeOffset.UtcNow,
-            [new ToolCallPart("call-1", "read", TestArgs.Empty())],
-            StopReason.ToolUse,
-            new Usage(1, 1),
-            "test-model");
+        var assistant = TestMessages.AssistantParts([new ToolCallPart("call-1", "read", TestArgs.Empty())], id: "a1", stopReason: StopReason.ToolUse, usage: new Usage(1, 1));
 
         var result = converter.ToLlmMessages([assistant]);
 
@@ -301,19 +294,8 @@ public class DanglingToolCall1751Tests
         // already has one — a duplicated tool_result is as invalid as a
         // missing one.
         var converter = new MessageConverter();
-        var assistant = new AssistantMessage(
-            "a1",
-            "session-1",
-            DateTimeOffset.UtcNow,
-            [new ToolCallPart("call-1", "read", TestArgs.Empty())],
-            StopReason.ToolUse,
-            new Usage(1, 1),
-            "test-model");
-        var answered = new ToolResultMessage(
-            "r1",
-            "session-1",
-            DateTimeOffset.UtcNow,
-            [new ToolResultEntry("call-1", "read", "file contents", false)]);
+        var assistant = TestMessages.AssistantParts([new ToolCallPart("call-1", "read", TestArgs.Empty())], id: "a1", stopReason: StopReason.ToolUse, usage: new Usage(1, 1));
+        var answered = TestMessages.ToolResult([new ToolResultEntry("call-1", "read", "file contents", false)], id: "r1");
 
         var result = converter.ToLlmMessages([assistant, answered]);
 

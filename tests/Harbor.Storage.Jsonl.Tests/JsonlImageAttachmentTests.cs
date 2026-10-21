@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Microsoft.Extensions.Logging.Abstractions;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
@@ -43,14 +44,7 @@ public class JsonlImageAttachmentTests
             var session = (await store.CreateAsync("/test", "code", "kilocode", "kilo-auto/free")).Value;
             byte[] png = OnePixelPng();
 
-            var message = new UserMessage(
-                "msg-img",
-                session.Id,
-                DateTimeOffset.UtcNow,
-                "what is in this screenshot?",
-                "code",
-                "kilo-auto/free",
-                Attachments: [new ImageAttachment("/tmp/shot.png", "image/png", 1, 1, png)]);
+            var message = TestMessages.User("what is in this screenshot?", id: "msg-img", sessionId: session.Id, model: "kilo-auto/free", attachments: [new ImageAttachment("/tmp/shot.png", "image/png", 1, 1, png)]);
 
             var appended = await store.AppendMessageAsync(session.Id, message);
             await Assert.That(appended.IsSuccess).IsTrue();
@@ -83,8 +77,7 @@ public class JsonlImageAttachmentTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "msg-plain", session.Id, DateTimeOffset.UtcNow, "hi", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("hi", id: "msg-plain", sessionId: session.Id, model: "claude-opus-4"));
 
             string line = File.ReadAllText(SessionFile(store, session))
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -110,8 +103,7 @@ public class JsonlImageAttachmentTests
         try
         {
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "msg-broken", session.Id, DateTimeOffset.UtcNow, "hello", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("hello", id: "msg-broken", sessionId: session.Id, model: "claude-opus-4"));
 
             // An entry missing mimeType/data must not make the turn unreadable —
             // a broken image degrades to a text-only turn, it does not drop it.
@@ -168,8 +160,7 @@ public class JsonlImageAttachmentTests
 
             // Seed the session file through the store first (header line and a
             // valid message), so the hand-written line is the only new one.
-            await store.AppendMessageAsync(session.Id, new UserMessage(
-                "m-seed", session.Id, DateTimeOffset.UtcNow, "seed", "code", "claude-opus-4"));
+            await store.AppendMessageAsync(session.Id, TestMessages.User("seed", id: "m-seed", sessionId: session.Id, model: "claude-opus-4"));
 
             string file = SessionFile(store, session);
             File.AppendAllText(file, line + "\n");

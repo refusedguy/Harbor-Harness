@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 
 namespace Harbor.Abstractions.Tests;
 
@@ -19,12 +20,6 @@ internal static class LogEntryFixtures
         Kind = SessionLogEntryKind.Message,
         Id = id,
         Position = position,
-        Message = new UserMessage(
-            id,
-            "s1",
-            DateTimeOffset.UnixEpoch,
-            content,
-            "code",
-            "test-model"),
+        Message = TestMessages.User(content, id: id, sessionId: "s1", createdAt: DateTimeOffset.UnixEpoch),
     };
 }
