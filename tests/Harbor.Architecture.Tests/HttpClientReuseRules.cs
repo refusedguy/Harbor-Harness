@@ -374,6 +374,38 @@ public class HttpClientReuseRules
     private static readonly Lazy<Task<ClientCreationCensus>> LazyCensus = new(BuildCensus);
 
     /// <summary>
+    ///     The product compilations THIS rule grades, one per product project.
+    /// </summary>
+    /// <remarks>
+    ///     They carry the project's implicit global usings, because a
+    ///     compilation without them is not the project's compilation: four of
+    ///     the five files that create an HTTP client never say
+    ///     <c>using System.Net.Http;</c> — they rely on the SDK's implicit
+    ///     usings — and in a compilation that lacks them the name does not
+    ///     resolve, so the semantic model answers "error type" and the rule
+    ///     sees nothing in those files. That was measured, not reasoned: the
+    ///     first run of this rule found the two creations in the one file that
+    ///     DOES say <c>using System.Net.Http;</c>, and none of the other five.
+    /// </remarks>
+    private static readonly Lazy<IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)>>
+        LazyCompilations = new(BuildCompilations);
+
+    /// <summary>Compiles every product project once, with the implicit usings.</summary>
+    private static IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> BuildCompilations()
+    {
+        var result = new List<(RoslynProjectCompilation.Project, CSharpCompilation)>();
+
+        foreach (RoslynProjectCompilation.Project project in RoslynProjectCompilation.ProductProjects())
+        {
+            result.Add((project, RoslynProjectCompilation.ForProject(
+                project,
+                RoslynProjectCompilation.ImplicitGlobalUsings)));
+        }
+
+        return result;
+    }
+
+    /// <summary>
     ///     Runs the analyzer over the product tree and reads its verdicts.
     /// </summary>
     private static async Task<ClientCreationCensus> BuildCensus()
@@ -382,7 +414,7 @@ public class HttpClientReuseRules
         var inDelegate = new List<ClientCreationSite>();
         var scopeFiles = new List<string>();
 
-        foreach ((_, CSharpCompilation compilation) in ArchAnalyzerPromotionTests.LiveCompilations.Value)
+        foreach ((_, CSharpCompilation compilation) in LazyCompilations.Value)
         {
             foreach (SyntaxTree tree in compilation.SyntaxTrees)
             {

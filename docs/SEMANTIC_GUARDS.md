@@ -97,6 +97,33 @@ private static bool IsInsideADelegate(SyntaxNode node)
 | the analyzer | 206 | `src/Harbor.Arch.Analyzers/` |
 | the controls and the differential | 256 | `tests/Harbor.Architecture.Tests/Roslyn/` |
 
+**And the first run of the semantic rule found a defect in the substrate.** It reported the two
+client creations in `McpHttpClientFactory.cs` and NONE of the other five — and the reason is the
+one line that separates the file that worked from the files that did not:
+
+```
+src/Harbor.Tools.Builtin/Tools/Mcp/McpHttpClientFactory.cs     using System.Net.Http;   ← found
+src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs            (no using)               ← missed
+```
+
+The harness that builds the product compilations
+(`tests/Harbor.Architecture.Tests/Roslyn/RoslynProjectCompilation.cs`) did not carry the SDK's
+**implicit global usings**, so in those files the name `HttpClient` did not resolve: the semantic
+model answered "error type", and a rule that asks about the TYPE cannot see a type it could not
+resolve. **A compilation without the project's implicit global usings is not the project's
+compilation**, and every rule that asks about a type the global usings bring into scope is blind to
+the files that rely on them.
+
+The harness now carries them (`RoslynProjectCompilation.ImplicitGlobalUsings`), as a PARAMETER and
+not as a default: the rules that were measured against the old substrate are not moved onto the new
+one by this slice, because moving them is a separate piece of work with its own findings. The
+`HARCH003` rule is the one to look at first: it asks whether a discarded value is a `Task`, and
+`System.Threading.Tasks` IS one of the implicit usings — so on the full compilation it sees the
+three deliberate "observe the task" shapes in the product tree (`ToolDispatcher.cs`,
+`UserQuestionService.cs`, `FileToolOutputSpillStore.cs`) that it cannot see today. That is a
+projection from reading the three sites, not a measured number: the measurement is the next slice's
+job.
+
 **The rule's own lines GREW by 202, and the honest conclusion is that this route does not pay for
 itself in lines.** The reason is visible in the table above and it is not a detail: this rule
 already sits on the shared `ScanRule` engine (#1086), so its text machinery was three regexes and
