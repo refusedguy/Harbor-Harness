@@ -416,10 +416,10 @@ public sealed class SessionArchiveWriter
         CancellationToken ct)
     {
         var logResult = await store.GetSessionLogAsync(sessionId, ct).ConfigureAwait(false);
-        if (logResult.IsSuccess)
+        if (logResult.IsSuccess && logResult.Value is { Count: > 0 })
         {
-            IReadOnlyList<SessionLogEntry>? entries = logResult.Value;
-            return Result.Success(new ArchiveLog(entries ?? [], SessionArchiveFormat.LogSourceLog));
+            // The log holds entries, so it is the archive's source.
+            return Result.Success(new ArchiveLog(logResult.Value, SessionArchiveFormat.LogSourceLog));
         }
 
         // The store does not expose a log: the surface is what it can offer,
