@@ -1072,14 +1072,42 @@ jobs:
           # payload, and the repository's 10 GB cache budget cannot hold them
           # — the first version of this cache (1,921 MiB per entry) was
           # evicted within minutes of being written, because the NuGet caches
-          # already fill the budget. The debug symbols go for the same
-          # reason: the artifacts do not carry them either.
+          # already fill the budget.
+          #
+          # THE DEBUG SYMBOLS STAY (issue #2100). They used to go with the
+          # runtime assets, for a reason that was about the ARTIFACTS and not
+          # about the cache: the uploaded slices do not carry a .pdb. But the
+          # cache is not the artifacts, and the exclusion broke MSBuild's
+          # up-to-date check for EVERY project:
+          #
+          #   obj/Release/net10.0/<Target>.pdb is
+          #   @(_DebugSymbolsIntermediatePath), and that item is one of the
+          #   OUTPUTS of the `CoreCompile` target (SDK:
+          #   Roslyn/Microsoft.CSharp.Core.targets, CoreCompile's Outputs
+          #   list; the item is created in
+          #   Microsoft.Common.CurrentVersion.targets, inside an ItemGroup
+          #   conditioned on '$(_DebugSymbolsProduced)' == 'true', which
+          #   Directory.Build.props makes true with <DebugType>portable</DebugType>).
+          #
+          #   MSBuild treats a MISSING OUTPUT as "must build" (dotnet/msbuild,
+          #   src/Build/BackEnd/Components/RequestBuilder/TargetUpToDateChecker.cs:
+          #   "First output is missing: we must build the target" / "An output
+          #   is missing: we must build the target"). So with the pdb absent
+          #   from the restored tree, CoreCompile was out of date for every
+          #   project on every run, whatever the mtimes said: the compile was
+          #   always the full 112-project rebuild. That is the measured reason
+          #   the wall did not fall after #2047.
+          #
+          # The cost of keeping them is one more file per project per
+          # configuration; the measured size is in the PR body. The path list
+          # below and the save step's list MUST stay byte-for-byte identical:
+          # the cache's VERSION is a hash of these lines, and two different
+          # lists are two different versions.
           path: |
             **/obj
             **/bin
             !**/runtimes/**
             !**/*.resources.dll
-            !**/*.pdb
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
           # then the prefix.
@@ -1763,12 +1791,18 @@ jobs:
           || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
+          # BYTE-FOR-BYTE the restore step's path list. The cache's VERSION is
+          # a hash of these lines, and the restore asks for the entry with this
+          # key AND this version: two different lists are two different
+          # versions, and then the restore can never find the entry the save
+          # wrote (that is how #2047's predecessor never fired at all).
+          # The debug symbols STAY in the list - see the restore step for why
+          # excluding them made every project look out of date (issue #2100).
           path: |
             **/obj
             **/bin
             !**/runtimes/**
             !**/*.resources.dll
-            !**/*.pdb
           key: ${{ steps.cache-key.outputs.key }}
 
   # ── pack ───────────────────────────────────────────────────────────────────
