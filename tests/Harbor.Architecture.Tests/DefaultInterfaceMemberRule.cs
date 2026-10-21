@@ -498,6 +498,18 @@ public sealed class DefaultInterfaceMemberRule
             ""),
         new(
             "Harbor.Abstractions.Sessions.ISessionContext",
+            "CheckpointAsync",
+            DimDirection.Conservative,
+            "Fails loudly (#1765): a context that cannot say whether the session's state "
+            + "survives a crash must not report that it does, because the caller would start work "
+            + "whose record the log cannot keep, which is the exact gap the durability "
+            + "checkpoint closes. The omission is visible: the run stops and names the "
+            + "reason, so the direction is the one #579's convention requires. A success "
+            + "here would be the banned shape: it accepts every state, durable or not, "
+            + "and nobody finds out.",
+            ""),
+        new(
+            "Harbor.Abstractions.Sessions.ISessionContext",
             "CompactionEvents",
             DimDirection.Conservative,
             "Returns null: a session context whose store records no compaction events says so "
