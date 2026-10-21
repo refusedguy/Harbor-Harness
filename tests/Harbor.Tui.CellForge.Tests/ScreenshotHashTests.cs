@@ -30,7 +30,7 @@ public class ScreenshotHashTests
         }
 
         string manifestPath = ManifestPath();
-        if (Golden.IsUpdateMode())
+        if (CelldiffGoldens.IsUpdateMode())
         {
             File.WriteAllLines(
                 manifestPath,
@@ -86,7 +86,7 @@ public class ScreenshotHashTests
     }
 
     internal static string ManifestPath() =>
-        Path.Combine(Golden.FixtureDir, ManifestName + ".txt");
+        Path.Combine(CelldiffGoldens.FixtureDir, ManifestName + ".txt");
 
     internal static string HashOf(ScreenBuffer buffer)
     {

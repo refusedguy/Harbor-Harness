@@ -413,7 +413,7 @@ public class GoldenDiffBlockTests
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("ce3-diff-block", back, backend);
-        string expected = Golden.Verify("ce3-diff-block", doc, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("ce3-diff-block", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng)).IsTrue();
     }
