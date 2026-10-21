@@ -2474,19 +2474,31 @@ jobs:
           # is "Exec format error". The repository ships one binary per
           # platform (tools/bin/harbor-gates-linux-{x64,arm64}), and the
           # gates-binary workflow rebuilds both.
-          case "$(uname -m)" in
-            x86_64)        gate=tools/bin/harbor-gates-linux-x64 ;;
-            aarch64|arm64) gate=tools/bin/harbor-gates-linux-arm64 ;;
-            *) echo "unknown architecture: $(uname -m)" >&2; exit 2 ;;
-          esac
-          "$gate" guard-triage \
-            --trx "TestResults/${{ matrix.shard }}/*.trx" \
-            --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
-            --project Harbor.Architecture.Tests \
-            --repo-root . \
-            --min-guard-files 100 \
-            --out "guard-firings-${{ matrix.shard }}.json" \
-            --summary "$GITHUB_STEP_SUMMARY"
+          #
+          # The command is written out twice because the gate policy
+          # checker reads the LITERAL command out of the workflow, and a
+          # command behind a shell variable is a command it cannot see.
+          # The table in docs/CI_GATES.md names the x64 one, for the same
+          # reason: the checker reads the literal out of the workflow.
+          if [ "$(uname -m)" = "x86_64" ]; then
+            tools/bin/harbor-gates-linux-x64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            tools/bin/harbor-gates-linux-arm64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          fi
 
       # The tool's own failure path runs in `docs.yml`'s selftest job, with
       # the other python tools: a rule edited until it matches nothing is
