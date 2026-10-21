@@ -113,7 +113,15 @@ internal static class RegistryFacade
         IInstalledPluginInventory? pluginInventory = null;
 #endif
 
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, pluginInventory);
+        // The provider registry is built BEFORE the tool registry (#1732): the
+        // `harbor_inspect` tool reports the providers this runtime has
+        // registered, and it reads that registry live. Nothing in the provider
+        // registry depends on the tool registry, so the order was free; it is
+        // now chosen rather than inherited from the sequence the two lines
+        // happened to be written in.
+        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
+
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, pluginInventory);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup
@@ -130,7 +138,6 @@ internal static class RegistryFacade
             supervisedSessions.Attach(store);
             return real;
         });
-        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
 
         // #562: publish the bundle before Freeze() so a module that runs

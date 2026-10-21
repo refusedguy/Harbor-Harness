@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Instantiation;
 using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
 
@@ -217,7 +218,7 @@ public sealed class FileSystemPluginInventory : IInstalledPluginInventory
         {
             return Result.Failure<PluginInventoryChangeResult>(
                 $"'{entry.Name}' declares Harbor >= {entry.RequiredHarborVersion}, but this Harbor is "
-                + $"{HarborRuntimeVersion.Current}. The plugin was NOT installed — the host would refuse "
+                + $"{PluginLifecycle.CurrentHarborVersion}. The plugin was NOT installed — the host would refuse "
                 + "it at load time. Next step: install a plugin that supports this Harbor, or report the "
                 + "diagnostic to the user.");
         }
@@ -480,7 +481,7 @@ public sealed class FileSystemPluginInventory : IInstalledPluginInventory
 
         PluginManifest value = manifest.Value;
         string? floor = value.RequiredHarborVersion?.ToString();
-        bool compatible = PluginCompatibility.IsCompatible(HarborRuntimeVersion.Current, value.RequiredHarborVersion);
+        bool compatible = PluginCompatibility.IsCompatible(PluginLifecycle.CurrentHarborVersion, value.RequiredHarborVersion);
         IReadOnlyList<string> axes = value.Axes ?? [];
 
         return new InstalledPluginEntry(

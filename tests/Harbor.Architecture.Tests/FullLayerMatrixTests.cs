@@ -727,6 +727,14 @@ public class FullLayerMatrixTests
         // the registrar cannot disagree about which axes a plugin carries, and
         // reading it names the plugin contract's facade (Harbor.Abstractions),
         // which is Domain and always allowed. The other two edges stay vestigial.
+        //
+        // #1732: Instantiation is permitted again, and the edge is REAL this
+        // time: `PluginRuntimeVersions` states the two versions a plugin is
+        // checked against (the Harbor version the instantiation layer hands
+        // every plugin context, and the manifest schema version the contract
+        // layer declares), so the assembly now binds the type and the IL gate
+        // sees the reference. It is the same edge Registration already carries.
+        //
         // #1738: the plugin INVENTORY (FileSystemPluginInventory) lives here —
         // the plugin runtime's composition root — and it names the manifest
         // reader in Harbor.Plugins.Storage. It is here and not in
@@ -737,6 +745,7 @@ public class FullLayerMatrixTests
         [
             "Harbor.Abstractions",
             "Harbor.Plugins.Abstractions",
+            "Harbor.Plugins.Instantiation",
             "Harbor.Plugins.Registration",
             "Harbor.Plugins.Storage",
         ]),

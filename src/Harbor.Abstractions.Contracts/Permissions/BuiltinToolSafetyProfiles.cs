@@ -56,6 +56,12 @@ public static class BuiltinToolSafetyProfiles
         new("webfetch", ToolSafetyProfile.Opaque) { Category = ToolCategory.Network },
         new("task", ToolSafetyProfile.Opaque) { Category = ToolCategory.Exec },
         new("skill", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        // #1732: the runtime catalog. It takes no path and no command — it
+        // answers from the registries that are already in memory — so it is
+        // Opaque. It is Read because it only reads: the read-only agents may
+        // ask what the runtime has, and the write-category deny the read-only
+        // agents carry cannot touch it.
+        new("harbor_inspect", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
         new("mcp_prompt", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         new("read_mcp_resource", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         // Peer supervision (#793). The system-prompt recipe used to string-match

@@ -166,6 +166,12 @@ public sealed record PermissionRuleset
         new("patch", "*", PermissionAction.Ask),
         new("task", "*", PermissionAction.Allow),
         new("skill", "*", PermissionAction.Allow),
+        // #1732: the runtime catalog is read-only, so it is allowed outright.
+        // The other agents allow it through the Read class their rulesets
+        // already name — `new("read", "*", Allow)` matches every tool the Read
+        // category holds, this one included — so this row is the explicit
+        // statement for the canonical ruleset rather than the only allowance.
+        new("harbor_inspect", "*", PermissionAction.Allow),
         new("session_read", "*", PermissionAction.Allow),
         new("session_steer", "*", PermissionAction.Ask),
         new("session_broadcast", "*", PermissionAction.Allow),
