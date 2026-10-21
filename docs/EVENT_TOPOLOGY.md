@@ -16,7 +16,7 @@
 > perfectly while naming the WRONG line. The file is there, the line is inside
 > the file, the line is not empty — and the thing this document says is on
 > that line is not there. So a citation here may carry the **anchor** it
-> expects to find — `path/File.cs:123#Symbol` — and the compiled gate
+> expects to find — `src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305#PublishAsync` — and the compiled gate
 > `check-doc-anchors` then holds the document to it: the cited line must
 > carry code, and the symbol must be on it. The producer and subscriber tables
 > below are anchored; a citation without an anchor is the citation gate's

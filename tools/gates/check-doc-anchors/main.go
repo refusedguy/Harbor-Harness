@@ -12,7 +12,7 @@
 // that no longer held a publish, and eleven more citations in the same
 // document had slid onto a comment or a blank line.
 //
-// WHY THE EXISTING CITATION GATE DOES NOT SEE IT
+// # WHY THE EXISTING CITATION GATE DOES NOT SEE IT
 //
 // `check-doc-cites` asks whether the citation RESOLVES: the file is in the
 // tree, the line is inside the file, the line is not empty. A drifted
@@ -36,7 +36,7 @@
 // that names its anchor is a citation that says what it expects to find, and
 // this gate is what makes that promise checkable.
 //
-// THE SCOPE
+// # THE SCOPE
 //
 // The documents carrying the `Status: normative` banner, and only those: a
 // dated record of what a run once measured is allowed to name a line that

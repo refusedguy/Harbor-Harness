@@ -170,7 +170,6 @@ on:
       # request, and on the push that lands it — so the trigger is the
       # workflow files themselves, not the gate's own sources alone.
       - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. The `gen-seam-graph` gate generates docs/SEAM_GRAPH.md from the C#
       # sources, and `--check` fails when the committed document no longer
@@ -291,7 +290,6 @@ on:
       # touches a workflow file is the one that gets merged LOCALLY, so the
       # gate has to run on it.
       - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
@@ -413,7 +411,7 @@ jobs:
       # planted duplicate — the gate MUST fail on it, and MUST stay quiet on
       # a same-shape body that shares no identifiers with it.
       - name: Merge-loss checker reports a dropped line
-        run: python3 tools/check-local-merge-loss.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-local-merge-loss --self-test
       # The changelog assembler is a RELEASE-time tool, not a gate on the
       # pull-request path: the fragments are glued into the [Unreleased] section
       # when the release is cut, so a pull request never edits CHANGELOG.md
@@ -556,9 +554,9 @@ jobs:
       # exists for: a file that stopped being covered, and a row that is no
       # longer needed.
       - name: Coverage reporter still tells the three states of a file apart
-        run: python3 tools/coverage_report.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 coverage-report --self-test
       - name: Coverage registry gate still fires on both sides of the ratchet
-        run: python3 tools/check-coverage-registry.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-coverage-registry --self-test
       # #1780. The eleventh gate is the only one that asks whether the
       # parameter schema of a tool still is the one that was pinned. Its
       # failure path is tested here for the same reason as the others, and
@@ -591,6 +589,16 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # #2085. The two E2E plan tools. The generator derives the class
+      # universe from the source tree, and the runner reads the plan the
+      # generator wrote: a generator that stops finding the classes writes a
+      # plan that drops them, and a runner that stops noticing a dropped class
+      # reports a green suite with fewer tests than it has. Neither had a
+      # self-test before the port; both have one now, and both run it here.
+      - name: E2E shard generator still finds the classes of the tree
+        run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
+      - name: E2E shard runner still refuses a plan it cannot run
+        run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
       # #2119. The anchor gate asks whether a citation in a normative
       # document still points at CODE, and at the symbol the document names
       # beside it. Its failure path is tested here for the same reason as the
@@ -922,7 +930,7 @@ jobs:
           done
       - name: The local squash-merges dropped nothing
         run: >-
-          python3 tools/check-local-merge-loss.py
+          tools/bin/harbor-gates-linux-x64 check-local-merge-loss
           --range origin/dev --tip HEAD --min-merges 1
           --allow-missing-heads
 
