@@ -33,6 +33,16 @@
     tests/Harbor.E2E.Framework.Tests, a project nothing references, so they run
     exactly once.
 
+    WHAT THE FRAMEWORK'S OWN TESTS COVER NOW (issue #1812)
+
+    The 26 tests that moved out of here in #1943 asserted on StateTestRunner,
+    and StateTestRunner had no consumer: the state-based E2E harness it was
+    written for was never wired to a scenario, so the 26 tests were green and
+    guarded nothing. StateTestRunner is gone (495 lines), and the framework's
+    tests now cover the helpers the OTHER five E2E projects depend on at run
+    time: the ANSI scrubber (AnsiStripper) and the 2D terminal emulator
+    (AnsiTerminalBuffer), which is what every PTY scenario asserts on.
+
     tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs enforces both
     halves of that: a test project must not reference another test project
     unless it uses its types, and a test project that another test project
@@ -55,6 +65,13 @@
   <ItemGroup>
     <!-- CE-5 Зона 1: PtySession/AnsiTerminalBuffer internals for the PTY scenario suite. -->
     <InternalsVisibleTo Include="Harbor.Tui.CellForge.PtyTests"/>
+    <!--
+      The framework's own unit tests (#1812). AnsiStripper and
+      AnsiTerminalBuffer are internal, and the tests are about them, so the
+      edge has to be declared: without it the test project could not name the
+      types it is about.
+    -->
+    <InternalsVisibleTo Include="Harbor.E2E.Framework.Tests"/>
   </ItemGroup>
 
 </Project>
