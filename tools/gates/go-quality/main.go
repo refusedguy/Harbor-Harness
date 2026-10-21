@@ -166,20 +166,7 @@ func Run(args []string) int {
 	// The floors are the non-vacuity proof: a scan that quietly narrowed --
 	// the module moved, the walk broke, the directory was renamed -- must go
 	// red instead of reporting a clean tree.
-	if minFiles > 0 && files < minFiles {
-		findings = append(findings, finding{
-			path: relPath(t.root, t.gatesDir),
-			rule: ruleFloor,
-			msg:  fmt.Sprintf("scanned %d Go file(s), the floor is %d -- the scan narrowed", files, minFiles),
-		})
-	}
-	if minPackages > 0 && packages < minPackages {
-		findings = append(findings, finding{
-			path: relPath(t.root, t.gatesDir),
-			rule: ruleFloor,
-			msg:  fmt.Sprintf("scanned %d gate package(s), the floor is %d -- the scan narrowed", packages, minPackages),
-		})
-	}
+	findings = append(findings, checkFloors(t, files, packages, minFiles, minPackages)...)
 
 	// The two rules that need the toolchain. A missing toolchain is not a
 	// clean tree: it is a gate that could not run, and it says so.
@@ -340,6 +327,30 @@ func checkFile(t tree, path string) (finding, bool) {
 		rule: ruleFormat,
 		msg:  "the file is not gofmt-clean; run gofmt -w on it",
 	}, true
+}
+
+// checkFloors is the non-vacuity proof: a scan that quietly narrowed must
+// go red instead of reporting a clean tree.
+//
+// A floor of zero is no floor at all, and the gate says nothing about it:
+// the flag is the caller’s decision.
+func checkFloors(t tree, files, packages, minFiles, minPackages int) []finding {
+	var findings []finding
+	if minFiles > 0 && files < minFiles {
+		findings = append(findings, finding{
+			path: relPath(t.root, t.gatesDir),
+			rule: ruleFloor,
+			msg:  fmt.Sprintf("scanned %d Go file(s), the floor is %d -- the scan narrowed", files, minFiles),
+		})
+	}
+	if minPackages > 0 && packages < minPackages {
+		findings = append(findings, finding{
+			path: relPath(t.root, t.gatesDir),
+			rule: ruleFloor,
+			msg:  fmt.Sprintf("scanned %d gate package(s), the floor is %d -- the scan narrowed", packages, minPackages),
+		})
+	}
+	return findings
 }
 
 // checkToolchain runs the two rules that need the Go toolchain.

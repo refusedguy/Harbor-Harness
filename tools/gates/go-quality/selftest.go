@@ -183,6 +183,18 @@ const (
 		"func Run() {\n" +
 		"\tfmt.Printf(\"%d\\n\", \"not a number\")\n" +
 		"}\n"
+
+	// A module that does not compile: the call has no function behind it.
+	fixtureBuildGoMod = "module harbor.local/goqualitybuildfixture\n" +
+		"\n" +
+		"go 1.21\n"
+
+	fixtureBuildMain = "package fixture\n" +
+		"\n" +
+		"// Run calls a function that does not exist.\n" +
+		"func Run() string {\n" +
+		"\treturn missing()\n" +
+		"}\n"
 )
 
 // selfTestRun plants every defect the gate exists to catch and requires it
@@ -302,12 +314,56 @@ func selfTestRun() int {
 			"a printf vet rejects is caught", verdict(vetFired), verdict(ruleVet), mark)
 	}
 
+	// The build rule: a module that does not compile.
+	buildFired, buildRan, err := buildFixture()
+	switch {
+	case err != nil:
+		fmt.Printf("  [%-42s] << MISMATCH: %v\n", "a module that does not compile is caught", err)
+		ok = false
+	case !buildRan:
+		fmt.Printf("  [%-42s] did not run: no Go toolchain on PATH\n", "a module that does not compile is caught")
+	default:
+		// The build rule is the one under test; vet sees the same broken
+		// module and has its own opinion about it, and that is fine.
+		good := strings.Contains(buildFired, ruleBuild)
+		ok = ok && good
+		mark := "ok"
+		if !good {
+			mark = "<< MISMATCH"
+		}
+		fmt.Printf("  [%-42s] fired %-22s expected %-22s %s\n",
+			"a module that does not compile is caught", verdict(buildFired), verdict(ruleBuild), mark)
+	}
+
+	// The floor: the rule that says a scan which quietly narrowed must go
+	// red. It is the non-vacuity proof, and it is a rule like any other.
+	floorFired := floorFixture()
+	floorGood := floorFired == ruleFloor
+	ok = ok && floorGood
+	floorMark := "ok"
+	if !floorGood {
+		floorMark = "<< MISMATCH"
+	}
+	fmt.Printf("  [%-42s] fired %-22s expected %-22s %s\n",
+		"a narrowed scan is caught", verdict(floorFired), verdict(ruleFloor), floorMark)
+
 	if ok {
 		fmt.Println("\nself-test PASS")
 		return gate.Green
 	}
 	fmt.Println("\nself-test FAIL")
 	return gate.Red
+}
+
+// floorFixture plants a scan that read less than the floor says, and asks
+// the gate whether it says so.
+func floorFixture() string {
+	t := tree{root: "/nowhere", gatesDir: "/nowhere/tools/gates"}
+	findings := checkFloors(t, 3, 1, 71, 26)
+	if len(findings) == 0 {
+		return ""
+	}
+	return findings[0].rule
 }
 
 // cleanTree is the tree every fixture starts from: one registered gate,
@@ -401,6 +457,45 @@ func vetFixture() (string, bool, error) {
 		return "", false, err
 	}
 	if err := os.WriteFile(filepath.Join(gatesDir, "fixture", "main.go"), []byte(fixtureVetMain), 0o644); err != nil {
+		return "", false, err
+	}
+
+	t := tree{root: dir, gatesDir: gatesDir}
+	findings, err := checkToolchain(t)
+	if err != nil {
+		return "", true, err
+	}
+	if len(findings) == 0 {
+		return "", true, nil
+	}
+	rules := make([]string, 0, len(findings))
+	for _, f := range findings {
+		rules = append(rules, f.rule)
+	}
+	sort.Strings(rules)
+	return strings.Join(rules, ","), true, nil
+}
+
+// buildFixture plants a module that does not compile, and asks the gate
+// whether it names it.
+func buildFixture() (string, bool, error) {
+	if _, err := exec.LookPath("go"); err != nil {
+		return "", false, nil
+	}
+	dir, err := os.MkdirTemp("", "harbor-go-quality-build-")
+	if err != nil {
+		return "", false, err
+	}
+	defer os.RemoveAll(dir)
+
+	gatesDir := filepath.Join(dir, "tools", "gates")
+	if err := os.MkdirAll(filepath.Join(gatesDir, "fixture"), 0o755); err != nil {
+		return "", false, err
+	}
+	if err := os.WriteFile(filepath.Join(gatesDir, "go.mod"), []byte(fixtureBuildGoMod), 0o644); err != nil {
+		return "", false, err
+	}
+	if err := os.WriteFile(filepath.Join(gatesDir, "fixture", "main.go"), []byte(fixtureBuildMain), 0o644); err != nil {
 		return "", false, err
 	}
 
