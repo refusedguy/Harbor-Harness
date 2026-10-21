@@ -32,6 +32,10 @@ namespace Harbor.Tools.Builtin;
         "prefer `task(explore)` for broad code searches, keep small lookups in your own session",
         "long independent recon: `background: true`, keep working — the report arrives as a follow-up message, do not poll"
     })]
+[ToolSchema]
+[ToolParam("agent", "string", Description = "Name of the sub-agent to use (e.g. 'explore', 'plan')", Required = true)]
+[ToolParam("prompt", "string", Description = "Task description for the sub-agent. Should be self-contained.", Required = true)]
+[ToolParam("background", "boolean", Description = "Run detached and return immediately with a handle (task_N). The final report arrives as a follow-up message; continue other work meanwhile.")]
 public sealed partial class TaskTool : ITool
 {
     private readonly IAgentRegistry _agents;
@@ -49,34 +53,6 @@ public sealed partial class TaskTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "agent": {
-                                                                            "type": "string",
-                                                                            "description": "Name of the sub-agent to use (e.g. 'explore', 'plan')"
-                                                                          },
-                                                                          "prompt": {
-                                                                            "type": "string",
-                                                                            "description": "Task description for the sub-agent. Should be self-contained."
-                                                                          },
-                                                                          "background": {
-                                                                            "type": "boolean",
-                                                                            "description": "Run detached and return immediately with a handle (task_N). The final report arrives as a follow-up message; continue other work meanwhile."
-                                                                            }
-                                                                        },
-                                                                        "required": ["agent", "prompt"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {
