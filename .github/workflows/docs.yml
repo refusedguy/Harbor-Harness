@@ -506,6 +506,7 @@ jobs:
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
         run: python3 tools/check-shard-balance.py --self-test
+        run: python3 tools/check-coverage-registry.py --self-test
   links:
     name: internal links
     runs-on: ubuntu-latest

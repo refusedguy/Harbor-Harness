@@ -1227,6 +1227,7 @@ that swap requires no call-site changes.
 
 **Проверено локально (сборка — только на CI, локальный dotnet на этой машине запрещён).** `tools/gen-seam-graph.py --self-test` и `--check`; `tools/check-md-links.py`; `tools/md-lint.py`; `tools/check-doc-facts.py`; `tools/check-gate-policy.py` — таблица гейтов в `docs/CI_GATES.md` дополнена строкой нового гейта. C# не менялся: граф читает дерево как текст, компиляция его бы не изменила.
 
+**Инструменты.** `tools/coverage_report.py` — отчёт и модель; `tools/check-coverage-registry.py` — гейт. Оба на стандартной библиотеке, без pip, без сети, без dotnet. Self-test'ы обоих живут в `docs.yml` (джоб `selftest`) и проверяют свои пути отказа: подсаженный «перестал покрываться» обязан упасть, подсаженная «лишняя строка реестра» тоже.
 ## [0.1.0-alpha] - 2026-07-16
 
 Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage, and 65 tests.
