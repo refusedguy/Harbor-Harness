@@ -109,7 +109,7 @@ Harbor follows **Clean / Hexagonal / Onion Architecture**. The dependency direct
 **inward only**: an outer layer may reference an inner layer, never the reverse. The
 innermost layer (Domain/Abstractions) references no other Harbor assembly — only BCL
 plus a gated set of 7 NuGet packages (см. AGENTS.md §What NOT to do п.1;
-gate: `tools/check-abstractions-contract.py`).
+gate: the compiled `check-abstractions-contract` gate).
 
 | Layer            | Harbor projects                                                                                              | May reference                                |
 |------------------|--------------------------------------------------------------------------------------------------------------|----------------------------------------------|

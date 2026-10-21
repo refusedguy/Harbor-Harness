@@ -521,13 +521,13 @@ jobs:
   # dilutes the ratio by a fixed amount. The nightly job switches it off,
   # which is the right shape for a compile-phase measurement.
   #
-  # The instrument is `tools/measure-build-cpu.py` (dev's): it runs the
+  # The instrument is the compiled `measure-build-cpu` gate (dev's): it runs the
   # command, samples /proc/stat once a second, and writes the wall time,
   # the CPU utilisation (average and peak busy cores, and how long the
   # machine sat at 3.5+), MSBuild's own task aggregates (the `Csc` work, the
   # `Exec` gate) and the project timeline (how many projects were in flight
   # over time — the "was the graph ever able to keep four compilers busy?"
-  # question, measured instead of modelled). `tools/aggregate-build-vcpu.py`
+  # question, measured instead of modelled). the compiled `aggregate-build-vcpu` gate
   # turns the per-run JSONs into the ratio table.
   #
   # It is a MEASUREMENT, never a gate: the job cannot fail the build, and
@@ -605,7 +605,7 @@ jobs:
       - name: Arm A — the all-cores compile (the baseline)
         run: |
           set -uo pipefail
-          python3 tools/measure-build-cpu.py --label a-prop0-r1 --out-dir meas -- \
+          tools/bin/harbor-gates-linux-x64 measure-build-cpu --label a-prop0-r1 --out-dir meas -- \
             dotnet build Harbor.slnx -c Release --no-restore \
             -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
             -v:m -clp:PerformanceSummary || true
@@ -625,7 +625,7 @@ jobs:
       - name: Arm C — the strictly serial compile
         run: |
           set -uo pipefail
-          python3 tools/measure-build-cpu.py --label c-m1-r1 --out-dir meas -- \
+          tools/bin/harbor-gates-linux-x64 measure-build-cpu --label c-m1-r1 --out-dir meas -- \
             dotnet build Harbor.slnx -c Release --no-restore \
             -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true \
             -maxcpucount:1 -v:m -clp:PerformanceSummary || true
@@ -649,7 +649,7 @@ jobs:
             echo "| runner image | ${ImageOS:-unknown} (${ImageVersion:-unknown}) |"
             echo "| kernel | $(uname -sr) |"
             echo
-            python3 tools/aggregate-build-vcpu.py meas --baseline a-prop0 || true
+            tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu meas --baseline a-prop0 || true
             echo
             echo "_The ratio is the number that adjudicates #1929: ~4 means the"
             echo "build is core-bound (more cores would help), ~2-2.5 means"
@@ -684,9 +684,15 @@ jobs:
             args+=(--run "${label}:${clean}:${wall}")
           done
           if [ ${#args[@]} -gt 0 ]; then
-            python3 tools/msbuild-evaluation-cost.py --self-test
-            python3 tools/msbuild-evaluation-cost.py "${args[@]}" --summary "$GITHUB_STEP_SUMMARY" || true
+            tools/bin/harbor-gates-linux-x64 msbuild-evaluation-cost --self-test
+            tools/bin/harbor-gates-linux-x64 msbuild-evaluation-cost "${args[@]}" --summary "$GITHUB_STEP_SUMMARY" || true
           fi
+
+      # The aggregator's own failure path: it reads the measurement JSON the
+      # arms wrote, and a reader edited until it matches nothing is
+      # indistinguishable from a measurement of an empty run.
+      - name: The vCPU aggregator still reads the measurements
+        run: tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu --self-test
 
       - name: Upload the measurements
         if: always()
