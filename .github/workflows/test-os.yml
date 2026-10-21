@@ -337,8 +337,10 @@ jobs:
       # longer does here — the gate is a static, source-scanning gate whose
       # rules normalise path separators (`Path.DirectorySeparatorChar`,
       # `Replace('\\', '/')`), and the copy that GATES the PR is the ubuntu
-      # one, which still runs twice there (as the build-time gate and again
-      # as the `core` shard's test suite).
+      # one, which runs the suite once — in the `core` shard, since #1928
+      # switched the build-time gate off on the pull-request path and #1923
+      # moved the coverage collection to the nightly lane (issue #1920; the
+      # count is held by tools/check-arch-suite-once.py).
       - name: Build OS-shard projects on ${{ matrix.os }} (local, no Linux artifact)
         shell: bash
         run: |

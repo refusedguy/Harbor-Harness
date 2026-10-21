@@ -15,22 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `9b0eebd4`, plus the
-shard-balance gate of #1781), the tree the table was last reconciled
-against:
+Measured on this branch (one commit on `dev` at `9b0eebd4`, plus the gate this
+branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 38 files, 29 910 lines |
-| of them, the `check-*.py` family | 20 files, 20 864 lines |
+| python tools in `tools/` | 38 files, 30 004 lines |
+| of them, the `check-*.py` family | 20 files, 20 958 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
 | gates that block a build | 23 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 29 |
-| tools with a ratchet | 15 |
-| tools with a floor | 18 |
+| tools with a self-test | 28 |
+| tools with a ratchet | 14 |
+| tools with a floor | 17 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -216,13 +215,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (38 files). 32 of them are run by a workflow; the
+Every python tool in `tools/` (37 files). 31 of them are run by a workflow; the
 other six are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
 `string-switch-rewrites.py`, which are loaded by other tools rather than run,
 the measurement helper `aggregate-build-vcpu.py`, which a human runs after a
 measurement run, `measure-project-graph.py`, which a human runs to read the
 project graph, and `codemod-test-events.py`, which rewrites the hand-built
-test events. All 38 are listed, because a tool that is not listed is a tool
+test events. All 37 are listed, because a tool that is not listed is a tool
 nobody reviews. The table records, for each one, the question it answers, where
 it runs, whether it blocks a build, whether it has a self-test, the ratchet it
 holds, and the floors CI passes it. The table is checked by
@@ -256,7 +255,6 @@ The modes are:
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
 | `tools/check-result-chains.py` | the chain candidates among the `if (x.IsFailure)` guard sites in `src/` and `apps/` — the census issue #1558 is measured against, and a ratchet on it | docs.yml | result-chains, selftest | gate | `--self-test` | `tools/result-chains-baseline.json` | — |
-| `tools/check-shard-balance.py` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/check-reference-trimmer.py` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
 | `tools/check-string-switch.py` | does a `switch` compare a string literal, and is every ladder that is still there named with a reason | docs.yml | selftest, stringswitch | gate | `--self-test` | `tools/string-switch-exceptions.txt` | `--min-labels 280` |
 | `tools/string-switch-rewrites.py` | shared data for the string-switch gate: the reviewed rewrites its `--apply` mode replays, so the change is reproducible and its effect measured rather than asserted | — | — | library | — | — | — |
@@ -281,6 +279,7 @@ The modes are:
 | `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 | `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
+| `tools/check-arch-suite-once.py` | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `core` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

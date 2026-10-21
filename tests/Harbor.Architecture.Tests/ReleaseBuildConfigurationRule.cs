@@ -126,6 +126,25 @@
 // Claim 2 has no perimeter at all: a Debug-built assembly is a Debug-built
 // assembly wherever it lands.
 //
+// WHERE CLAIM 2 HAS A SUBJECT
+// ---------------------------
+// Claim 2 reads the BUILD OUTPUT: it compares each project's own `bin/Debug`
+// output against the copies in the dependents' `bin/Release`. That makes it
+// the one claim in this suite that needs a BUILD to have happened where it
+// runs.
+//
+// The suite runs twice (issue #1920): once inside the Release build, as the
+// `HarborArchGate` MSBuild target, and once in the `core` test shard. The
+// shard runs on a fresh checkout with only its own slice of the build
+// output, so there is no `bin/Debug` anywhere in it: the copy set is empty
+// by construction and the claim passes for the wrong reason there. The
+// non-vacuity check below cannot see that either — `considered` counts the
+// RELEASE outputs, and the shard does carry its own.
+//
+// So the build-time execution is the one that HOLDS this claim, which is
+// why the gate stays on for a push to dev/master even though the
+// pull-request lane runs the suite exactly once.
+//
 // NON-VACUITY
 // -----------
 // A guard that cannot fail is a comment. This file carries four checks:
