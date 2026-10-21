@@ -1,12 +1,19 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Text.Json;
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Plugins;
+using Harbor.Application.Configuration;
 #if HARBOR_WITH_PLUGINS
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Hosting;
+using Harbor.Plugins.Storage;
 #endif
 
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     <c>harbor plugin list|install|uninstall</c> — manage CS-source plugins.
+///     <c>harbor plugin list|inventory|install|uninstall|config</c> — manage CS-source plugins.
 ///     Scope follows the loader split (<see cref="Harbor.Plugins.Storage.FileSystemPluginSource" />):
 ///     global plugins live in <c>~/.harbor/plugins</c>, project-local ones in
 ///     <c>&lt;cwd&gt;/.harbor/plugins</c>. Install copies a reviewed <c>.cs</c> file
@@ -41,6 +48,7 @@ public sealed partial class PluginsCommand : ICommand
             "inventory" => InventoryAsync(),
             "install" => InstallAsync(args.Skip(1).ToArray()),
             "uninstall" or "remove" or "rm" => UninstallAsync(args.Skip(1).ToArray()),
+            "config" or "settings" => ConfigAsync(args.Skip(1).ToArray()),
             _ => PrintUsage()
         };
     }
@@ -205,14 +213,257 @@ public sealed partial class PluginsCommand : ICommand
         return 1;
     }
 
+    /// <summary>
+    ///     The <c>harbor plugin config</c> verb: the settings form a plugin's
+    ///     schema generates (#1734).
+    /// </summary>
+    private Task<int> ConfigAsync(string[] args)
+    {
+#if HARBOR_WITH_PLUGINS
+        return ReadConfigAsync(args);
+#else
+        _error.WriteLine("The plugin settings form is not available in this build: this binary was built without the plugin host.");
+        return Task.FromResult(2);
+#endif
+    }
+
+#if HARBOR_WITH_PLUGINS
+    // ── The settings form a plugin's schema generates (#1734) ─────────────────
+
+    /// <summary>
+    ///     Show what a plugin's settings are: the form its schema generates.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The point of the command is that the user does NOT have to guess
+    ///         the shape of the section. The plugin declares its settings, and
+    ///         this prints what it declared: the name, the type, the default,
+    ///         the range the value has to fall in and the value the user has
+    ///         set so far.
+    ///     </para>
+    ///     <para>
+    ///         The section is checked against the schema before it is shown, so
+    ///         a section that is wrong is reported with the setting that is
+    ///         wrong. It is the same message the plugin host refuses the plugin
+    ///         with, because it is the same check.
+    ///     </para>
+    /// </remarks>
+    /// <param name="args">The command arguments: the plugin id, or nothing.</param>
+    /// <returns>The exit code.</returns>
+    private async Task<int> ReadConfigAsync(string[] args)
+    {
+        string? nameArg = args.FirstOrDefault(a => !a.StartsWith('-'));
+        IReadOnlyList<(string Name, PluginManifest Manifest)> manifests = await ReadManifestsAsync().ConfigureAwait(false);
+
+        if (nameArg is null)
+        {
+            var declared = new List<(string Name, PluginManifest Manifest)>();
+            foreach ((string name, PluginManifest manifest) in manifests)
+            {
+                if (manifest.Config is not null)
+                {
+                    declared.Add((name, manifest));
+                }
+            }
+
+            if (declared.Count == 0)
+            {
+                await _output.WriteLineAsync("No installed plugin declares settings.").ConfigureAwait(false);
+                return 0;
+            }
+
+            await _output.WriteLineAsync("Plugins that declare settings:").ConfigureAwait(false);
+            foreach ((string name, PluginManifest manifest) in declared)
+            {
+                await _output.WriteLineAsync(
+                    $"  {name}: {manifest.Config!.Fields.Count} setting(s): `harbor plugin config {name}`")
+                    .ConfigureAwait(false);
+            }
+
+            return 0;
+        }
+
+        (string Name, PluginManifest Manifest)? found = null;
+        foreach ((string name, PluginManifest manifest) in manifests)
+        {
+            if (string.Equals(name, nameArg, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(manifest.Name, nameArg, StringComparison.OrdinalIgnoreCase))
+            {
+                found = (name, manifest);
+                break;
+            }
+        }
+
+        if (found is null)
+        {
+            await _error.WriteLineAsync($"No plugin named '{nameArg}' was found in {_globalRoot} or {_projectRoot}.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+
+        PluginConfigSchema? schema = found.Value.Manifest.Config;
+        if (schema is null || schema.Fields.Count == 0)
+        {
+            await _output.WriteLineAsync($"The plugin '{found.Value.Name}' declares no settings.").ConfigureAwait(false);
+            return 0;
+        }
+
+        JsonElement? section = await ReadSectionAsync(found.Value.Name).ConfigureAwait(false);
+        Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved = PluginConfigValidator.Validate(
+            schema,
+            section.GetValueOrDefault(),
+            $"plugins.{found.Value.Name}");
+        if (resolved.IsFailure)
+        {
+            await _error.WriteLineAsync($"✗ {resolved.Error}").ConfigureAwait(false);
+            return 1;
+        }
+
+        await _output.WriteLineAsync($"Settings of '{found.Value.Name}' (write them under plugins.{found.Value.Name}):")
+            .ConfigureAwait(false);
+        foreach (PluginConfigFormRow row in PluginConfigForm.Build(schema, resolved.Value))
+        {
+            await _output.WriteLineAsync("  " + Describe(row)).ConfigureAwait(false);
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    ///     One row of the settings form, as it is shown.
+    /// </summary>
+    /// <param name="row">The row.</param>
+    /// <returns>The written form.</returns>
+    private static string Describe(PluginConfigFormRow row)
+    {
+        var parts = new List<string> { row.Name, row.Type.ToString().ToLowerInvariant() };
+
+        if (row.AllowedValues is { Count: > 0 } allowed)
+        {
+            parts.Add("one of: " + string.Join(", ", allowed));
+        }
+
+        if (row.Minimum is not null || row.Maximum is not null)
+        {
+            parts.Add("range: "
+                + (row.Minimum is { } low
+                    ? low.ToString(CultureInfo.InvariantCulture)
+                    : "-")
+                + ".."
+                + (row.Maximum is { } high
+                    ? high.ToString(CultureInfo.InvariantCulture)
+                    : "-"));
+        }
+
+        parts.Add("default: " + (row.Default?.ToString() ?? "(required)"));
+
+        if (row.IsSecret)
+        {
+            parts.Add("current: (secret)");
+        }
+        else
+        {
+            parts.Add("current: " + (row.Current?.ToString() ?? "(not set)"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(row.Description))
+        {
+            parts.Add("- " + row.Description);
+        }
+
+        return string.Join("  ", parts);
+    }
+
+    /// <summary>
+    ///     Read the manifests of the installed plugins, from both scopes.
+    /// </summary>
+    /// <returns>The manifests, with the id each one is known by.</returns>
+    private async Task<IReadOnlyList<(string Name, PluginManifest Manifest)>> ReadManifestsAsync()
+    {
+        var found = new List<(string Name, PluginManifest Manifest)>();
+
+        foreach (string root in new[] { _projectRoot, _globalRoot })
+        {
+            if (!Directory.Exists(root))
+            {
+                continue;
+            }
+
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(root, "*" + PluginManifestReader.FileSuffix);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                await _error.WriteLineAsync($"Could not read '{root}': {ex.Message}").ConfigureAwait(false);
+                continue;
+            }
+
+            Array.Sort(files, StringComparer.Ordinal);
+            foreach (string file in files)
+            {
+                string text;
+                try
+                {
+                    text = await File.ReadAllTextAsync(file).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    await _error.WriteLineAsync($"Could not read '{file}': {ex.Message}").ConfigureAwait(false);
+                    continue;
+                }
+
+                Result<PluginManifest> manifest = PluginManifestReader.Parse(text, Path.GetFileName(file));
+                if (manifest.IsSuccess)
+                {
+                    // The manifest is named after the source it describes, so the
+                    // file name without the suffix is the plugin's id when the
+                    // manifest does not declare one.
+                    string fileName = Path.GetFileName(file);
+                    string id = manifest.Value.Name
+                        ?? (fileName.EndsWith(PluginManifestReader.FileSuffix, StringComparison.Ordinal)
+                            ? fileName[..^PluginManifestReader.FileSuffix.Length]
+                            : fileName);
+                    found.Add((id, manifest.Value));
+                }
+                else
+                {
+                    await _error.WriteLineAsync($"✗ {manifest.Error}").ConfigureAwait(false);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    ///     Read the configuration section the user wrote for a plugin.
+    /// </summary>
+    /// <param name="pluginName">The plugin's id.</param>
+    /// <returns>The section, or <see langword="null" /> when the user wrote none.</returns>
+    private static async Task<JsonElement?> ReadSectionAsync(string pluginName)
+    {
+        var store = new JsonConfigStore();
+        Result<HarborConfig> loaded = await store.LoadAsync().ConfigureAwait(false);
+        if (loaded.IsFailure)
+        {
+            return null;
+        }
+
+        return loaded.Value.Plugins.TryGetValue(pluginName, out JsonElement section) ? section : null;
+    }
+#endif
+
     private Task<int> PrintUsage()
     {
         _error.WriteLine("""
-                         Usage: harbor plugin [list|inventory|install|uninstall]
+                         Usage: harbor plugin [list|inventory|install|uninstall|config]
                            plugin list                       show global + project plugins
                            plugin inventory                  the live plugin composition, as JSON (#1722)
                            plugin install <file.cs>          copy into ~/.harbor/plugins (--project targets <cwd>/.harbor/plugins)
                            plugin uninstall <name>           remove from either scope
+                           plugin config [<name>]            show a plugin's settings form
                          """);
         return Task.FromResult(2);
     }

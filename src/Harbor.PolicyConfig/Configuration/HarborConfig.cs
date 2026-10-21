@@ -55,6 +55,27 @@ public sealed class HarborConfig
     /// <summary>Custom provider configs (path to JSON or inline).</summary>
     public Dictionary<string, ProviderConfigEntry> Providers { get; set; } = new();
 
+    /// <summary>
+    ///     The per-plugin configuration sections, keyed by plugin id (#1734).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A plugin's own settings live under <c>plugins.&lt;plugin-id&gt;</c>
+    ///         and nowhere else. The section is kept exactly as the user wrote
+    ///         it: what it means is the plugin's schema, and the schema
+    ///         travels with the plugin, so the host does not interpret the
+    ///         section here. The plugin pipeline checks it against that schema
+    ///         before the plugin starts.
+    ///     </para>
+    ///     <para>
+    ///         Keeping the section raw is what lets the configuration survive
+    ///         a round trip: a section for a plugin this build does not have
+    ///         is still the user's setting, and writing the configuration back
+    ///         does not lose it.
+    ///     </para>
+    /// </remarks>
+    public Dictionary<string, JsonElement> Plugins { get; set; } = new();
+
     /// <summary>Effective provider ID.</summary>
     [JsonIgnore]
     public string Provider
@@ -276,7 +297,13 @@ public sealed class HarborConfig
         CostLimit = Cost.Limit,
         Compaction = Compaction,
         SecondaryModel = SecondaryModel,
-        Permissions = Permissions.Count == 0 ? null : Permissions
+        Permissions = Permissions.Count == 0 ? null : Permissions,
+        // The per-plugin sections are kept as the user wrote them (#1734), so
+        // they are written back unchanged. A section for a plugin this build
+        // does not have survives the round trip: it is still the user's
+        // setting, and dropping it would be the host losing data it never
+        // owned.
+        Plugins = Plugins.Count == 0 ? null : Plugins,
     };
 
     /// <summary>
@@ -308,6 +335,37 @@ public sealed class HarborConfig
             sections.Add(entry.Validate());
         }
 
+        // #1734: a plugin id is a path segment, so it has to BE one. An id with
+        // a dot in it would make `plugins.a.b` ambiguous between a plugin
+        // called `a.b` and a setting called `b` of a plugin called `a`, and the
+        // host would have to guess which one the user meant.
+        foreach (var entry in Plugins)
+        {
+            sections.Add(ValidatePluginId(entry.Key));
+        }
+
         return Result.Combine(sections).Map(() => this);
+    }
+
+    /// <summary>
+    ///     Check that a plugin id can be used as a path segment.
+    /// </summary>
+    /// <param name="pluginId">The plugin id, as written in the configuration file.</param>
+    /// <returns>Success, or a failure naming the id.</returns>
+    private static Result ValidatePluginId(string pluginId)
+    {
+        if (string.IsNullOrWhiteSpace(pluginId))
+        {
+            return Result.Failure("plugins: a plugin id must not be empty");
+        }
+
+        if (pluginId.Contains('.') || pluginId.Contains(':'))
+        {
+            return Result.Failure(
+                $"plugins.{pluginId}: a plugin id must not contain '.' or ':'. The section path "
+                + "plugins.<id>.<setting> has to name exactly one plugin");
+        }
+
+        return Result.Success();
     }
 }

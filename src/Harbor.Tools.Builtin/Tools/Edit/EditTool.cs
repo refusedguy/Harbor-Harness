@@ -257,7 +257,7 @@ public sealed partial class EditTool : ITool
         catch (Exception ex)
         {
             // ROP-A П.13: boundary message policy lives in one handler.
-            return ToolResult.Error(ToolErrors.Handler("edit", cancellationToken, failurePrefix: "Failed to write: ")(ex));
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Edit, cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
         // #1757: the version of what was just written, so the model can keep

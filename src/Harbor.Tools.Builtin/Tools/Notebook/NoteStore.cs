@@ -38,7 +38,7 @@ internal sealed class NoteStore
         string notesPath, CancellationToken ct)
         => await Result.Try(
                 () => LoadCoreAsync(notesPath, ct),
-                ToolErrors.Handler("notebook", ct, failurePrefix: "Failed to load notes: "))
+                ToolErrors.Handler(WellKnownTools.Notebook, ct, failurePrefix: "Failed to load notes: "))
             .ConfigureAwait(false);
 
     /// <summary>
@@ -49,7 +49,7 @@ internal sealed class NoteStore
     internal async Task<Result> SaveAsync(
         string notesPath, Dictionary<string, NoteEntry> notes, CancellationToken ct)
         => await Result.Try(() => SaveCoreAsync(notesPath, notes, ct),
-                ToolErrors.Handler("notebook", ct, failurePrefix: "Failed to save notes: "))
+                ToolErrors.Handler(WellKnownTools.Notebook, ct, failurePrefix: "Failed to save notes: "))
             .ConfigureAwait(false);
 
     /// <summary>

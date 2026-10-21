@@ -484,7 +484,7 @@ var denyBash = rules.Merge(new PermissionRuleset(new[]
 var denyAll = PermissionRuleset.Empty;
 ```
 
-> Check the exact rule constructors in `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:321`.
+> Check the exact rule constructors in `src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:322`.
 
 ### Testing the "Ask" callback
 

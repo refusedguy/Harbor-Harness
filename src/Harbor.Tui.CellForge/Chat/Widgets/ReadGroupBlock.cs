@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
 using System.Text;
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Tui.CellForge.Rendering;
 using Harbor.Ui.Framework;
@@ -152,7 +153,7 @@ public sealed class ReadGroupBlock : ICollapsibleChatBlock
         int reads = 0;
         for (int i = 0; i < _members.Count; i++)
         {
-            if (string.Equals(_members[i].Info.ToolName, "read", StringComparison.Ordinal))
+            if (string.Equals(_members[i].Info.ToolName, WellKnownTools.Read, StringComparison.Ordinal))
             {
                 reads++;
             }
