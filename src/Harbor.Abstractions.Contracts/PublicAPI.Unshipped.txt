@@ -151,3 +151,45 @@ static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.WebFetch -
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Write -> Harbor.Abstractions.Models.Identifiers.ToolName!
 Harbor.Abstractions.Models.RunLimitKind.MaxGoalRounds = 5 -> Harbor.Abstractions.Models.RunLimitKind
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Goal -> Harbor.Abstractions.Models.Identifiers.ToolName!
+
+Harbor.Abstractions.Models.ToolErrorInfo
+Harbor.Abstractions.Models.ToolErrorInfo.<Clone>$() -> Harbor.Abstractions.Models.ToolErrorInfo!
+Harbor.Abstractions.Models.ToolErrorInfo.Code.get -> string!
+Harbor.Abstractions.Models.ToolErrorInfo.Code.init -> void
+Harbor.Abstractions.Models.ToolErrorInfo.Deconstruct(out string! Name, out string! Code, out string? Reason) -> void
+Harbor.Abstractions.Models.ToolErrorInfo.Equals(Harbor.Abstractions.Models.ToolErrorInfo? other) -> bool
+Harbor.Abstractions.Models.ToolErrorInfo.Name.get -> string!
+Harbor.Abstractions.Models.ToolErrorInfo.Name.init -> void
+Harbor.Abstractions.Models.ToolErrorInfo.Reason.get -> string?
+Harbor.Abstractions.Models.ToolErrorInfo.Reason.init -> void
+Harbor.Abstractions.Models.ToolErrorInfo.ToolErrorInfo(string! Name, string! Code, string? Reason = null) -> void
+override Harbor.Abstractions.Models.ToolErrorInfo.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ToolErrorInfo.GetHashCode() -> int
+override Harbor.Abstractions.Models.ToolErrorInfo.ToString() -> string!
+static Harbor.Abstractions.Models.ToolErrorInfo.operator !=(Harbor.Abstractions.Models.ToolErrorInfo? left, Harbor.Abstractions.Models.ToolErrorInfo? right) -> bool
+static Harbor.Abstractions.Models.ToolErrorInfo.operator ==(Harbor.Abstractions.Models.ToolErrorInfo? left, Harbor.Abstractions.Models.ToolErrorInfo? right) -> bool
+Harbor.Abstractions.Models.ToolErrorCodes
+const Harbor.Abstractions.Models.ToolErrorCodes.AbortedBeforeDispatch = "TOOL_ABORTED_BEFORE_DISPATCH" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.Abandoned = "TOOL_ABANDONED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.Cancelled = "TOOL_CANCELLED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.Error = "TOOL_ERROR" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.ExecutionFailed = "TOOL_EXECUTION_FAILED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.HookDenied = "TOOL_HOOK_DENIED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.MalformedArguments = "TOOL_MALFORMED_ARGUMENTS" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.NotFound = "TOOL_NOT_FOUND" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.NotStarted = "TOOL_NOT_STARTED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.OutcomeUnknown = "TOOL_OUTCOME_UNKNOWN" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.PermissionDenied = "TOOL_PERMISSION_DENIED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.PermissionFailed = "TOOL_PERMISSION_FAILED" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.Timeout = "TOOL_TIMEOUT" -> string!
+const Harbor.Abstractions.Models.ToolErrorCodes.ValidationFailed = "TOOL_VALIDATION_FAILED" -> string!
+static Harbor.Abstractions.Models.ToolErrorCodes.Create(string! code, string? reason = null) -> Harbor.Abstractions.Models.ToolErrorInfo!
+static Harbor.Abstractions.Models.ToolErrorCodes.Format(string! code, string! detail) -> string!
+static Harbor.Abstractions.Models.ToolErrorCodes.IsKnown(string? code) -> bool
+static Harbor.Abstractions.Models.ToolErrorCodes.NameFor(string? code) -> string!
+Harbor.Abstractions.Models.ToolResult.ErrorInfo.get -> Harbor.Abstractions.Models.ToolErrorInfo?
+Harbor.Abstractions.Models.ToolResult.ErrorInfo.init -> void
+static Harbor.Abstractions.Models.ToolResult.Failed(string! detail, Harbor.Abstractions.Models.ToolErrorInfo! error, object? metadata = null) -> Harbor.Abstractions.Models.ToolResult!
+Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.get -> Harbor.Abstractions.Models.ToolErrorInfo?
+Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.init -> void
+static Harbor.Abstractions.Models.ToolCallLink.IsAbandoned(Harbor.Abstractions.Models.ToolResultEntry! entry) -> bool

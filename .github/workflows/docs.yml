@@ -422,6 +422,14 @@ jobs:
       # a same-shape body that shares no identifiers with it.
       - name: Merge-loss checker reports a dropped line
         run: python3 tools/check-local-merge-loss.py --self-test
+      # The changelog assembler is a RELEASE-time tool, not a gate on the
+      # pull-request path: the fragments are glued into the [Unreleased] section
+      # when the release is cut, so a pull request never edits CHANGELOG.md
+      # itself. Its self-test runs here for the same reason every other gate's
+      # does — a tool that quietly stopped noticing a diverged CHANGELOG.md is
+      # indistinguishable from one that found nothing.
+      - name: Changelog assembler fails on a diverged changelog
+        run: python3 tools/changelog-assemble.py --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
 

@@ -951,21 +951,27 @@ internal sealed class TurnRunner(
         for (int i = 0; i < malformedCalls.Count; i++)
         {
             var malformed = malformedCalls[i];
-            results.Add(new ToolResultEntry(
+            // #1760: the call never ran — the arguments were not valid JSON.
+            // The code says so, and a policy can tell it apart from a call
+            // that ran and failed.
+            var malformedResult = ToolResult.Failed(
+                $"Malformed JSON arguments for tool '{malformed.ToolName}' — tool was NOT executed. Raw arguments tail: {malformed.RawArgsTail}",
+                ToolErrorCodes.Create(ToolErrorCodes.MalformedArguments, malformed.RawArgsTail));
+            results.Add(ToolResultEntry.From(
                 malformed.Id,
                 malformed.ToolName,
-                $"Malformed JSON arguments for tool '{malformed.ToolName}' — tool was NOT executed. Raw arguments tail: {malformed.RawArgsTail}",
-                true));
+                malformedResult));
         }
 
         // #401 B2: make the Accepted boundary visible at runtime — Abandoned
         // entries persist above like any other result; the count lands in the
         // log next to the dispatcher's own accepted-stop record.
+        // #1760: the classification is the structured code, with the legacy
+        // marker as the fallback for a result written before the code existed.
         int abandoned = 0;
         for (int i = 0; i < results.Count; i++)
         {
-            if (results[i].Output.Contains(
-                    ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal))
+            if (ToolCallLink.IsAbandoned(results[i]))
             {
                 abandoned++;
             }
@@ -1061,8 +1067,14 @@ internal sealed class TurnRunner(
         for (int i = 0; i < closure.Results.Count; i++)
         {
             ToolResultEntry entry = closure.Results[i];
+            // #1760: the event carries the same structured code the persisted
+            // entry does, so a renderer reading the event and a policy reading
+            // the transcript see the same fact.
             await eventBus.PublishAsync(
-                new ToolExecutionEndEvent(entry.ToolCallId, ToolResult.Error(entry.Output), true),
+                new ToolExecutionEndEvent(
+                    entry.ToolCallId,
+                    ToolResult.Error(entry.Output) with { ErrorInfo = entry.ErrorInfo },
+                    true),
                 CancellationToken.None).ConfigureAwait(false);
         }
 
