@@ -43,6 +43,8 @@ import (
 	"strings"
 
 	docfacts "harbor.local/gates/check-doc-facts"
+	pinschema "harbor.local/gates/check-tool-schema-pin"
+	codemodschemas "harbor.local/gates/codemod-tool-schemas"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
 )
@@ -64,6 +66,16 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-tool-schema-pin",
+		summary: "the parameter schema of every builtin tool still is the one that was pinned",
+		run:     pinschema.Run,
+	},
+	{
+		name:    "codemod-tool-schemas",
+		summary: "the one-shot migration of the tool schemas, and the writer of the pin",
+		run:     codemodschemas.Run,
 	},
 	{
 		name:    "gen-seam-graph",

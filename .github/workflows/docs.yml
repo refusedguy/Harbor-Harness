@@ -130,9 +130,9 @@ on:
       # #1780. The tool-schema pin is read by a gate and by the compiler
       # (Harbor.CodeGen.ToolSchemaGenerator), so a PR that edits the pin, the
       # gate or the model it reads has to run it — and so must a PR that edits
-      # the tool declarations the pin describes.
-      - 'tools/check-tool-schema-pin.py'
-      - 'tools/tool_schema_model.py'
+      # the tool declarations the pin describes. The gate and the model are
+      # compiled now; their sources are under `tools/gates/`, which the
+      # trigger below already covers.
       - 'src/Harbor.Tools.Builtin/Schemas/*.json'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
@@ -565,7 +565,7 @@ jobs:
       # the fixture is the one that matters: a schema that moved while the
       # pin did not. The gate MUST fail on it, or the pin protects nothing.
       - name: Tool-schema pin gate fails on a planted divergence
-        run: python3 tools/check-tool-schema-pin.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --selftest
       # #1722. The plugin-inventory gate compares the committed snapshot with
       # the tree it describes, so its failure path has to be tested here for
       # the same reason as the others: a gate edited until it matches nothing
@@ -1215,7 +1215,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The pinned tool schemas agree with the declarations
-        run: python3 tools/check-tool-schema-pin.py --min-tools 25
+        run: tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #
