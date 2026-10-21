@@ -16,6 +16,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -152,6 +153,10 @@ public class CompactionEventStoreTests
         }
         finally
         {
+            // The pooled connections keep the database file open, and Windows
+            // refuses to delete a file another process holds. Releasing the
+            // pools first is the pattern the sibling sqlite suites use.
+            SqliteConnection.ClearAllPools();
             if (File.Exists(dbPath))
             {
                 File.Delete(dbPath);

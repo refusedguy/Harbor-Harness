@@ -591,7 +591,7 @@ It exists because nothing else answered it (issue #1882). `BannedSymbols.txt`
 bans `N:Newtonsoft.Json`, but that file is an RS0030 analyzer input: it covers
 source code only, and RS0030 is switched off for `tests/` and `samples/` in
 `Directory.Build.props`, so a *transitive* dependency could put Newtonsoft into
-a test project's `bin/` with no rule noticing. `tools/check-abstractions-contract.py`
+a test project's `bin/` with no rule noticing. The compiled `check-abstractions-contract` gate
 covers four `src/` projects, `harbor-gates aot-publish-gate` covers `src/` and
 `apps/`, and the rule in `AGENTS.md` is prose.
 

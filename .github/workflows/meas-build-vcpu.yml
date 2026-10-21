@@ -83,8 +83,8 @@ on:
     # not spend 14 build slots.
     paths:
       - '.github/workflows/meas-build-vcpu.yml'
-      - 'tools/measure-build-cpu.py'
-      - 'tools/aggregate-build-vcpu.py'
+      - 'tools/gates/measure-build-cpu/**'
+      - 'tools/gates/aggregate-build-vcpu/**'
 
 permissions:
   contents: read
@@ -225,7 +225,7 @@ jobs:
           BUILD_CMD: ${{ matrix.cmd }}
         run: |
           set +e
-          python3 tools/measure-build-cpu.py --label "$LABEL" --out-dir meas -- bash -c "$BUILD_CMD"
+          tools/bin/harbor-gates-linux-x64 measure-build-cpu --label "$LABEL" --out-dir meas -- bash -c "$BUILD_CMD"
           rc=$?
           echo "build_exit=$rc" >> "restore-$LABEL.txt"
           exit $rc
@@ -265,7 +265,7 @@ jobs:
             for i in $(seq 1 "$n"); do
               ( end=$((SECONDS + 20)); while [ $SECONDS -lt $end ]; do :; done ) &
             done
-            python3 tools/measure-build-cpu.py --label "calib-$n-way" \
+            tools/bin/harbor-gates-linux-x64 measure-build-cpu --label "calib-$n-way" \
               --out-dir calib -- bash -c "sleep 20"
             wait
           done
@@ -312,6 +312,12 @@ jobs:
               print(f"  CALIBRATION {c['label']}: avg_cores="
                     f"{c['cpu'].get('avg_busy_cores')} ncpu_stat={c.get('ncpu_stat')}")
           PY
+
+      # The meter's own failure path. The meter reads the log it wrote and
+      # the timeline the build printed, and a reader edited until it matches
+      # nothing is indistinguishable from a build with no timeline.
+      - name: The meter still reads the timeline it promises
+        run: tools/bin/harbor-gates-linux-x64 measure-build-cpu --self-test
 
       - name: Upload measurement
         if: always()
