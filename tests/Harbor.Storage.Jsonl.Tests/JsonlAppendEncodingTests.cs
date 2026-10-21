@@ -118,7 +118,7 @@ public class JsonlAppendEncodingTests
 
             // And the surface shows the current version — one message, not two.
             var read = await store.GetMessagesAsync(session.Id);
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)read.Value[0]).Content).IsEqualTo("v2");
         }

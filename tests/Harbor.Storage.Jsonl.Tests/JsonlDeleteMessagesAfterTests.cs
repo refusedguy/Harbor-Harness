@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Jsonl.Tests;
@@ -57,7 +58,7 @@ public class JsonlDeleteMessagesAfterTests
         {
             var result = await second.DeleteMessagesAfterAsync(seeded.SessionId, seeded.Ids[1]);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value).IsEqualTo(2);
 
             // Re-create AGAIN: the rewind must be durable on disk.
@@ -70,17 +71,17 @@ public class JsonlDeleteMessagesAfterTests
                 // The tail is still in the log — the rewind hid it from the
                 // surface, it did not destroy it.
                 var log = await third.GetSessionLogAsync(seeded.SessionId);
-                await Assert.That(log.IsSuccess).IsTrue();
+                await Assert.That(log).IsSuccessful();
                 await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(4);
                 await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Rewind)).IsEqualTo(1);
 
                 var listed = await third.GetAsync(seeded.SessionId);
-                await Assert.That(listed.IsSuccess).IsTrue(); // header survived
+                await Assert.That(listed).IsSuccessful(); // header survived
 
                 // And appending after a rewind works.
                 var fresh = Msg(seeded.SessionId, 99);
                 var append = await third.AppendMessageAsync(seeded.SessionId, fresh);
-                await Assert.That(append.IsSuccess).IsTrue();
+                await Assert.That(append).IsSuccessful();
 
                 var reread = await third.GetMessagesAsync(seeded.SessionId);
                 await Assert.That(reread.Value.Count).IsEqualTo(3);
@@ -116,7 +117,7 @@ public class JsonlDeleteMessagesAfterTests
             var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
             long after = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(after).IsEqualTo(before);
 
             var read = await store.GetMessagesAsync(session.Id);

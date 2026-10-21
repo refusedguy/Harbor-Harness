@@ -301,7 +301,7 @@ public class StorageBackendParityTests
         string line = AssistantLine(partJson);
         var parsed = JsonlLineParser.Parse(Encoding.UTF8.GetBytes(line), SessionId);
 
-        await Assert.That(parsed.IsFailure).IsTrue()
+        await Assert.That(parsed).IsFailed()
             .Because($"the {which} must refuse a record this build cannot rebuild.");
 
         await Assert.That(parsed.Error).Contains(tag);

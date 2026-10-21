@@ -35,7 +35,7 @@ public class MemorySessionLogTests
                 sessionId: created.Id,
                 createdAt: Epoch.AddSeconds(i));
             var appended = await store.AppendMessageAsync(created.Id, message);
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
         }
 
         return (store, created.Id);
@@ -52,15 +52,15 @@ public class MemorySessionLogTests
         var (seeded, sessionId) = await SeedAsync(store);
 
         var before = await seeded.GetSessionLogAsync(sessionId);
-        await Assert.That(before.IsSuccess).IsTrue();
+        await Assert.That(before).IsSuccessful();
         await Assert.That(before.Value.Count).IsEqualTo(4);
 
         var rewind = await seeded.RewindMessagesAfterAsync(sessionId, "m1");
-        await Assert.That(rewind.IsSuccess).IsTrue();
+        await Assert.That(rewind).IsSuccessful();
         await Assert.That(rewind.Value).IsEqualTo(2);
 
         var log = await seeded.GetSessionLogAsync(sessionId);
-        await Assert.That(log.IsSuccess).IsTrue();
+        await Assert.That(log).IsSuccessful();
         await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(4);
         await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Rewind)).IsEqualTo(1);
 
@@ -89,7 +89,7 @@ public class MemorySessionLogTests
                 id: "m1",
                 sessionId: sessionId,
                 createdAt: Epoch.AddSeconds(1)));
-        await Assert.That(edited.IsSuccess).IsTrue();
+        await Assert.That(edited).IsSuccessful();
 
         var log = await seeded.GetSessionLogAsync(sessionId);
         await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(5);
@@ -120,7 +120,7 @@ public class MemorySessionLogTests
         var (seeded, sessionId) = await SeedAsync(store);
 
         var reverted = await seeded.DeleteMessagesAfterAsync(sessionId, "m1");
-        await Assert.That(reverted.IsSuccess).IsTrue();
+        await Assert.That(reverted).IsSuccessful();
         await Assert.That(reverted.Value).IsEqualTo(2);
 
         var surface = await seeded.GetMessagesAsync(sessionId);
@@ -140,7 +140,7 @@ public class MemorySessionLogTests
         var (seeded, sessionId) = await SeedAsync(store);
 
         var purged = await seeded.PurgeMessagesAfterAsync(sessionId, "m1");
-        await Assert.That(purged.IsSuccess).IsTrue();
+        await Assert.That(purged).IsSuccessful();
         await Assert.That(purged.Value).IsEqualTo(2);
 
         var log = await seeded.GetSessionLogAsync(sessionId);

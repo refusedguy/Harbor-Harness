@@ -59,7 +59,7 @@ public class JsonlSessionLogTests
                     sessionId: session.Id,
                     createdAt: Epoch.AddSeconds(i),
                     model: "claude-opus-4"));
-            await Assert.That(append.IsSuccess).IsTrue();
+            await Assert.That(append).IsSuccessful();
         }
 
         return (store, session.Id);
@@ -80,17 +80,17 @@ public class JsonlSessionLogTests
             var (seeded, sessionId) = await SeedAsync(store);
 
             var before = await seeded.GetSessionLogAsync(sessionId);
-            await Assert.That(before.IsSuccess).IsTrue();
+            await Assert.That(before).IsSuccessful();
             await Assert.That(before.Value.Count).IsEqualTo(4);
 
             var rewind = await seeded.RewindMessagesAfterAsync(sessionId, "m1");
-            await Assert.That(rewind.IsSuccess).IsTrue();
+            await Assert.That(rewind).IsSuccessful();
 
             // Two messages left the surface: m2 and m3.
             await Assert.That(rewind.Value).IsEqualTo(2);
 
             var log = await seeded.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
 
             // The four message records are all still there...
             await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(4);
@@ -103,7 +103,7 @@ public class JsonlSessionLogTests
 
             // The surface is the current state: the tail left it.
             var surface = await seeded.GetMessagesAsync(sessionId);
-            await Assert.That(surface.IsSuccess).IsTrue();
+            await Assert.That(surface).IsSuccessful();
             await Assert.That(surface.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1" });
 
             // And the guard says the log lost nothing.
@@ -130,16 +130,16 @@ public class JsonlSessionLogTests
         {
             var (seeded, sessionId) = await SeedAsync(store);
             var rewind = await seeded.RewindMessagesAfterAsync(sessionId, "m1");
-            await Assert.That(rewind.IsSuccess).IsTrue();
+            await Assert.That(rewind).IsSuccessful();
 
             var second = new JsonlSessionStore(root, NullLogger<JsonlSessionStore>.Instance);
             var surface = await second.GetMessagesAsync(sessionId);
-            await Assert.That(surface.IsSuccess).IsTrue();
+            await Assert.That(surface).IsSuccessful();
             await Assert.That(surface.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1" });
 
             // And the text that left the surface is still readable from the log.
             var log = await second.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
             var texts = log.Value
                 .Where(e => e.Kind == SessionLogEntryKind.Message)
                 .Select(e => ((UserMessage)e.Message!).Content)
@@ -175,10 +175,10 @@ public class JsonlSessionLogTests
                     sessionId: sessionId,
                     createdAt: Epoch.AddSeconds(1),
                     model: "claude-opus-4"));
-            await Assert.That(edited.IsSuccess).IsTrue();
+            await Assert.That(edited).IsSuccessful();
 
             var log = await seeded.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
 
             // Five message records now: the four that were there, plus the new
             // version of m1.
@@ -196,7 +196,7 @@ public class JsonlSessionLogTests
 
             // The surface shows the new text, and the message keeps its place.
             var surface = await seeded.GetMessagesAsync(sessionId);
-            await Assert.That(surface.IsSuccess).IsTrue();
+            await Assert.That(surface).IsSuccessful();
             await Assert.That(surface.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1", "m2", "m3" });
             await Assert.That(((UserMessage)surface.Value.Single(m => m.Id == "m1")).Content)
                 .IsEqualTo("the edited body");
@@ -228,7 +228,7 @@ public class JsonlSessionLogTests
                 sessionId,
                 TestMessages.User("nope", id: "does-not-exist", sessionId: sessionId, model: "claude-opus-4"));
 
-            await Assert.That(edited.IsFailure).IsTrue();
+            await Assert.That(edited).IsFailed();
             await Assert.That(edited.Error).Contains("does-not-exist");
 
             var after = await seeded.GetSessionLogAsync(sessionId);
@@ -285,11 +285,11 @@ public class JsonlSessionLogTests
             var (seeded, sessionId) = await SeedAsync(store);
 
             var purged = await seeded.PurgeMessagesAfterAsync(sessionId, "m1");
-            await Assert.That(purged.IsSuccess).IsTrue();
+            await Assert.That(purged).IsSuccessful();
             await Assert.That(purged.Value).IsEqualTo(2);
 
             var log = await seeded.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
 
             // The records are gone — the prune is the one verb that is allowed
             // to say so.
@@ -315,7 +315,7 @@ public class JsonlSessionLogTests
             var (seeded, sessionId) = await SeedAsync(store);
 
             var reverted = await seeded.DeleteMessagesAfterAsync(sessionId, "m1");
-            await Assert.That(reverted.IsSuccess).IsTrue();
+            await Assert.That(reverted).IsSuccessful();
             await Assert.That(reverted.Value).IsEqualTo(2);
 
             var surface = await seeded.GetMessagesAsync(sessionId);
@@ -347,7 +347,7 @@ public class JsonlSessionLogTests
             var before = await seeded.GetSessionLogAsync(sessionId);
 
             var rewind = await seeded.RewindMessagesAfterAsync(sessionId, "no-such-message");
-            await Assert.That(rewind.IsFailure).IsTrue();
+            await Assert.That(rewind).IsFailed();
 
             var after = await seeded.GetSessionLogAsync(sessionId);
             await Assert.That(after.Value.Count).IsEqualTo(before.Value.Count);

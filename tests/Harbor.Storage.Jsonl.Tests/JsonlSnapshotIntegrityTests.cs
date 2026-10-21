@@ -67,7 +67,7 @@ public class JsonlSnapshotIntegrityTests
         {
             var appended = await store.AppendMessageAsync(session.Id,
                 TestMessages.User($"message {i}", id: $"m{i}", sessionId: session.Id, createdAt: At(i + 1)));
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
         }
         return (store, session.Id);
     }
@@ -89,7 +89,7 @@ public class JsonlSnapshotIntegrityTests
         try
         {
             var warm = await store.GetMessagesAsync(sessionId);
-            await Assert.That(warm.IsSuccess).IsTrue();
+            await Assert.That(warm).IsSuccessful();
             await Assert.That(warm.Value.Count).IsEqualTo(1);
 
             string path = Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
@@ -99,7 +99,7 @@ public class JsonlSnapshotIntegrityTests
             File.SetLastWriteTimeUtc(path, frozen);
 
             var after = await store.GetMessagesAsync(sessionId);
-            await Assert.That(after.IsSuccess).IsTrue();
+            await Assert.That(after).IsSuccessful();
             await Assert.That(after.Value.Count).IsEqualTo(2);
             await Assert.That(after.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m-late" });
         }
@@ -127,7 +127,7 @@ public class JsonlSnapshotIntegrityTests
             File.SetLastWriteTimeUtc(path, frozen);
 
             var during = await store.GetMessagesAsync(sessionId);
-            await Assert.That(during.IsSuccess).IsTrue();
+            await Assert.That(during).IsSuccessful();
             await Assert.That(during.Value.Count).IsEqualTo(1);
             await Assert.That(during.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0" });
 
@@ -138,7 +138,7 @@ public class JsonlSnapshotIntegrityTests
             File.SetLastWriteTimeUtc(path, frozen);
 
             var after = await store.GetMessagesAsync(sessionId);
-            await Assert.That(after.IsSuccess).IsTrue();
+            await Assert.That(after).IsSuccessful();
             await Assert.That(after.Value.Count).IsEqualTo(2);
             await Assert.That(after.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m-torn" });
         }
@@ -162,7 +162,7 @@ public class JsonlSnapshotIntegrityTests
             var result = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, sessionId, NullLogger.Instance, CancellationToken.None);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.IsStable).IsTrue();
             await Assert.That(result.Value.Messages.Count).IsEqualTo(3);
             await Assert.That(result.Value.Messages.Select(m => m.Id))
@@ -189,13 +189,13 @@ public class JsonlSnapshotIntegrityTests
 
             var result = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, session.Id, NullLogger.Instance, CancellationToken.None);
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.IsStable).IsTrue();
             await Assert.That(result.Value.Messages).IsEmpty();
             await Assert.That(result.Value.Stat.Length).IsGreaterThan(0L);
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value).IsEmpty();
         }
         finally
@@ -250,7 +250,7 @@ public class JsonlSnapshotIntegrityTests
             int appended = await writer;
 
             var final = await store.GetMessagesAsync(sessionId);
-            await Assert.That(final.IsSuccess).IsTrue();
+            await Assert.That(final).IsSuccessful();
             await Assert.That(final.Value.Count).IsEqualTo(appended);
             await Assert.That(final.Value.Count).IsGreaterThanOrEqualTo(maxSeen);
         }

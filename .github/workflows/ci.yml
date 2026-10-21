@@ -238,7 +238,7 @@ jobs:
               # silences the gate would also be the edit that stops the gate
               # from running — unvalidated, which is the #618 defect again with
               # a different payload. Editing the tool has the same problem.
-              - 'tools/aot-publish-gate.py'
+              - 'tools/gates/aot-publish-gate/**'
               - '.github/aot-warning-baseline.txt'
               # The TUnit analyzer gate's instrument (#1836). The same #618
               # argument as the lines above: editing the tool that proves the
@@ -819,40 +819,72 @@ jobs:
       # capability agree.
       actions: write
     env:
-      # ── The architecture gate, off the PR path only ──────────────────────
+      # ── The architecture gate: OFF for every event in this file ───────────
       #
       # HarborArchitectureGate (Directory.Build.props) runs the WHOLE
       # Harbor.Architecture.Tests assembly with `dotnet exec` after
-      # Harbor.Architecture.Tests builds: 68.0 s of work measured on run
-      # 39389070999 (the [arch-gate] message at +309.70 s, the suite's own
-      # summary at +377.71 s, the compile's last project at +387.83 s).
+      # Harbor.Architecture.Tests builds. It is a good gate and it stays a
+      # gate — but it does not run HERE, on any event.
       #
-      # It is a good gate and it stays a gate: on a push to dev/master (and
-      # on every non-pull_request event, which includes the nightly lane and
-      # workflow_dispatch) a layering regression still fails the BUILD
-      # itself. What changes is the PR lane, where the same suite ran THREE
-      # times for one result (issue #1920, measured on run 39389070999:
-      # 68.0 s here, 65.9 s in the `core` shard, 63.3 s in `coverage`).
-      # #1923 moved the coverage collection to the nightly lane and this
-      # variable switched the gate off here, so the PR lane runs the suite
-      # ONCE now — in the `arch` shard (#1781 gave the suite a shard of its
-      # own). It ran TWICE for a day: the local squash #1987 brought the
-      # `coverage` job back into this file, and the lane paid the second
-      # execution for a report-only number until #1783 took it out again.
+      # WHY (issue #2114, measured on the dev push of 165813bf, run
+      # 39613662649 — the `build` job's log, the `[arch-gate]` message and
+      # the compile's own "Time Elapsed"):
+      #
+      #   the build job          430 s wall
+      #     of which the compile 270.5 s (NUKE's own "Compile: done
+      #                          (270548 ms)")
+      #     of which the arch-gate Exec  87.9 s (14:10:04.64 -> 14:11:32.4)
+      #   the `arch` shard        117 s wall — the SAME 1118 rules again
+      #
+      # A push to dev/master paid for the same suite TWICE: once inside the
+      # build and once in the `arch` shard (#1781 gave the suite a shard of
+      # its own). The PR lane already ran it ONCE — #1928 switched the gate
+      # off here for pull_request events, and #1923 moved the coverage
+      # collection to the nightly lane. This block makes the push lane the
+      # SAME shape as the PR lane: the shard is the one execution, and this
+      # job only COMPILES the suite (the shard needs the DLL).
+      #
+      # The issue's baseline run 39483960190 measured the same duplication
+      # larger: the gate's Exec 132.4 s of a 411.4 s compile, 32 % of it.
       #
       # The count is not a convention: tools/check-arch-suite-once.py reads
-      # this file and fails the build when the PR lane runs the suite more
-      # than once, or not at all, or when this variable stops switching the
-      # gate off for pull_request events.
+      # this file and fails the build when a lane runs the suite more than
+      # once, or not at all, or when this variable stops switching the gate
+      # off.
+      #
+      # WHAT THE BUILD-TIME EXECUTION WAS HOLDING, AND WHERE IT WENT
+      # -----------------------------------------------------------
+      # One rule of the suite reads the BUILD OUTPUT:
+      # ReleaseBuildConfigurationRule's second claim — "no Release output
+      # directory holds a copy of a project's own Debug output" — compares
+      # each project's `bin/Debug` against the copies in the dependents'
+      # `bin/Release`. The shard downloads only its own slice of the build
+      # output, so there is no `bin/Debug` anywhere in it and that claim
+      # passes for the wrong reason THERE. It was already the case on the PR
+      # lane, where the gate has been off since #1928.
+      #
+      # The claim's SOURCE half — "every project a Release build pulls in
+      # through a <ProjectReference> is built in the configuration of the
+      # build that asks for it" — reads the props and the solution graph, so
+      # the shard checks it on every lane.
+      #
+      # The byte half is evaluated where the tree is: the nightly lane's
+      # coverage job builds the tree itself and runs the suite in that
+      # workspace (.github/workflows/nightly.yml runs on every push to
+      # dev/master, and on the schedule its build-time gate is ON as well).
+      # Its per-suite failures are recorded, not fatal — the coverage job is
+      # report-only by contract (#99) — so the byte half is a REPORT there,
+      # not a gate. Closing that last gap is a separate change and is not
+      # this one.
       #
       # The ASSEMBLY is still built here — the `arch` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
       # MSBuild, and an environment variable of the same name IS an MSBuild
       # property (Directory.Build.props only defaults it when it is empty),
       # so it reaches the `dotnet build` that NUKE runs without touching
-      # build/_build. To put the gate back on the PR path, delete this env
-      # block: the value is the only thing that turns it off.
-      HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      # build/_build. To put the gate back on, delete this env block: the
+      # value is the only thing that turns it off.
+      HarborArchGate: 'false'
       # The NuGet global-packages folder is PINNED (#1927). The restored
       # obj/*.csproj.nuget.g.props and obj/project.assets.json carry
       # ABSOLUTE paths into it, so a cached build is only valid for the
@@ -1146,13 +1178,10 @@ jobs:
           exit "$rc"
 
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
-      # also re-runs the 47-rule architecture gate embedded in
-      # Directory.Build.props (HarborArchGate) — any layering regression
-      # fails the build itself.
-      #
-      # On the PR path that EXECUTION is switched off by the job-level
-      # HarborArchGate env var above (the suite still runs in the `core`
-      # shard); on a push to dev/master the gate runs exactly as before.
+      # also COMPILES the 47-rule architecture gate embedded in
+      # Directory.Build.props (HarborArchGate); the gate's EXECUTION is
+      # switched off by the job-level HarborArchGate env var above, on every
+      # event (issue #2114) — the suite runs once, in the `arch` shard.
       # The suite is still COMPILED here — the shard needs the DLL.
       #
       # #701 — the master/dev fork is GONE, and the reason it existed was not
@@ -1406,21 +1435,27 @@ jobs:
       # runs ONCE now, in the `arch` shard (#1781 gave the suite a shard of
       # its own).
       #
+      # Issue #2114 measured the SAME duplication on the push path: the gate
+      # ran inside this build (87.9 s of a 270.5 s compile, run 39613662649)
+      # and the `arch` shard ran the same suite again. The gate is now off
+      # for every event, so the shard is the one execution on every lane.
+      #
       # Nothing held that count. The gate is ONE environment variable (see
       # the job's env block above), and a coverage-like job on this lane is
-      # one block of YAML; either can come back by accident, and the pull
-      # request would still be green while the suite ran twice.
+      # one block of YAML; either can come back by accident, and the lane
+      # would still be green while the suite ran twice.
       #
       # So the gate below reads this file and fails when the lane runs the
       # suite more than once (or not at all), when a job that compiles the
       # solution stops switching the build-time gate off for pull_request
-      # events, and when the merge path loses the gate altogether. Its own
+      # events, when it switches it back on for a push, and when the
+      # MSBuild target stops asking the property at all. Its own
       # failure path is proved first, for the same reason every other gate
       # here has one: a checker edited until it matches nothing is
       # indistinguishable from a checker that found nothing.
       - name: The architecture-once gate still fails on a planted duplicate
         run: python3 tools/check-arch-suite-once.py --self-test
-      - name: The architecture suite runs once on the pull-request lane (#1920)
+      - name: The architecture suite runs once on every lane (#1920, #2114)
         run: python3 tools/check-arch-suite-once.py --min-shards 4
 
       # The evaluation-cost instrument's own failure path (issue #1919).
@@ -2772,7 +2807,7 @@ jobs:
       # truncated log, absent log), so a matcher that matches nothing cannot
       # pass them. No publish, no network, ~1s.
       - name: Self-test the gate tool (synthetic, guaranteed-hit fixtures)
-        run: python3 tools/aot-publish-gate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 aot-publish-gate --selftest
 
       - name: Publish Harbor.App.Cli (NativeAOT, linux-x64, full tree)
         id: publish
@@ -2816,12 +2851,36 @@ jobs:
           # not silently depend on that file: Directory.Build.props sets
           # SelfContained=false repo-wide and NETSDK1102 is the first thing a
           # reshaped AOT block would hit.
+          #
+          # `-p:EnableSingleFileAnalyzer=true` is the SWITCH THAT KEEPS THE
+          # ILLink ANALYZER IN THIS PUBLISH (#2109). The repository-root
+          # Directory.Build.props used to set PublishSingleFile=true, which
+          # made the SDK pull the ILLink pack into every project of the tree
+          # and put the SDK's own AOT/trim analyzer into all 113
+          # compilations of the ordinary build — 212.2 analyzer-seconds, 32 %
+          # of the build's analyzer time, for three IL3000 warnings that are
+          # all under tests/ and cannot fail a build. The property moved to
+          # apps/Harbor.App.Cli (the app that ships single-file), so the
+          # LIBRARIES no longer carry the analyzer in an ordinary build.
+          #
+          # THIS JOB IS WHERE THAT COVERAGE WENT. The global property reaches
+          # every project of the publish graph, so the ILLink analyzer runs
+          # over the whole product tree here — which is what makes the three
+          # `#pragma warning disable IL3000` in
+          # src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs
+          # load-bearing, and what makes a NEW Assembly.Location in the
+          # product tree a red publish instead of a silent one.
+          #
+          # EnableSingleFileAnalyzer is the switch, NOT PublishSingleFile:
+          # the first turns the ANALYZER on, the second turns the BUNDLER on,
+          # and an AOT publish must not ask for the bundler.
           # The log is the gate's evidence, so it is captured in full rather
           # than relying on the step's own console scrollback.
           dotnet publish apps/Harbor.App.Cli \
             -c Release -r "$RID" \
             --self-contained true \
             -p:HarborWithAot=true \
+            -p:EnableSingleFileAnalyzer=true \
             -p:ContinuousIntegrationBuild=true \
             -o publish/aot 2>&1 | tee publish/aot-publish.log
           status=${PIPESTATUS[0]}
@@ -2939,7 +2998,7 @@ jobs:
 
       - name: Compare the publish against the committed record
         run: |
-          python3 tools/aot-publish-gate.py \
+          tools/bin/harbor-gates-linux-x64 aot-publish-gate \
             --log publish/aot-publish.log \
             --baseline .github/aot-warning-baseline.txt \
             --expect-rid linux-x64 \
