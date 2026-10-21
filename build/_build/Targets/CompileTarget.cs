@@ -1,5 +1,6 @@
 using Harbor.Build.Meta;
 using Nuke.Common.ProjectModel;
+using Nuke.Common.Tooling;
 using Nuke.Common.Tools.DotNet;
 namespace Harbor.Build.Targets;
 /// <summary>
@@ -39,9 +40,25 @@ public static class CompileTarget
     ///         "used references" answer is less accurate, because a reference
     ///         used only from a <c>&lt;see cref="…"/&gt;</c> is bound only
     ///         when the documentation is generated. It has to be a GLOBAL
-    ///         property (<c>/p:</c>), because fourteen test projects turn the
-    ///         doc file off in their own .csproj and a project-level
-    ///         assignment wins over a props file.
+    ///         property (<c>-p:</c>), and the reason is measured, not
+    ///         guessed: fourteen test projects turn the doc file off in their
+    ///         own <c>.csproj</c>, and a props file does not beat a project
+    ///         file — the first merged run carried the doc file in the props
+    ///         and answered with fourteen RT-DOC-OFF findings and five
+    ///         baseline rows the tree no longer produced. A global property
+    ///         does beat it: MSBuild ignores a project-level assignment of a
+    ///         property that was set globally ("Global properties cannot be
+    ///         overridden. We silently ignore them if we try.").
+    ///     </para>
+    ///     <para>
+    ///         Both arguments go in as RAW MSBuild arguments, through
+    ///         <c>SetProcessAdditionalArguments</c>, because that is what
+    ///         reaches <c>dotnet build</c> unchanged. The alternative —
+    ///         NUKE's own <c>Loggers</c> setting — renders
+    ///         <c>/logger:{value}</c>, and MSBuild reads a single word there
+    ///         as an ASSEMBLY name: the first merged run died with
+    ///         "MSBUILD : error MSB1021: Cannot create an instance of the
+    ///         logger flp. Could not load file or assembly flp".
     ///     </para>
     /// </remarks>
     private const string WarningLogVariable = "HARBOR_WARNING_LOG";
@@ -56,11 +73,24 @@ public static class CompileTarget
         var solutionPath = solution.Path.ToString();
         var warningLog = Environment.GetEnvironmentVariable(WarningLogVariable);
         var scan = !string.IsNullOrWhiteSpace(warningLog);
+        // The file logger's own spelling: `-flp:logfile=<path>;warningsonly`.
+        // The path is quoted when it carries a space, because NUKE appends
+        // these arguments to the command line verbatim and does not quote
+        // them — a path with a space would otherwise be split in two and the
+        // logger would write to a file whose name is half a path.
+        var fileLoggerArgument = warningLog is null
+            ? null
+            : warningLog.Contains(' ')
+                ? $"-flp:\"logfile={warningLog};warningsonly\""
+                : $"-flp:logfile={warningLog};warningsonly";
         var extraArgs = scan
             ? new[]
             {
+                // The doc file, as a GLOBAL property. See the remark above:
+                // a props file does not beat a project file, a global
+                // property does.
                 "-p:GenerateDocumentationFile=true",
-                $"-flp:logfile={warningLog};warningsonly"
+                fileLoggerArgument!
             }
             : Array.Empty<string>();
         var argv = new List<string>
