@@ -208,6 +208,11 @@ jobs:
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
               - 'tools/check-arch-suite-once.py'
+              # The control for the TUnit analyzer gate (#1836) runs INSIDE
+              # the build job, and it is compiled now. Same #618 argument: an
+              # edit to its sources must run the job that executes it, or the
+              # edit lands unvalidated.
+              - 'tools/gates/check-tunit-analyzer-gate/**'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -244,8 +249,9 @@ jobs:
               # argument as the lines above: editing the tool that proves the
               # gate must run the job that executes it, or the edit lands
               # unvalidated. The canary's own source is under tests/, which the
-              # dotnet filter already covers.
-              - 'tools/check-tunit-analyzer-gate.py'
+              # dotnet filter already covers. The instrument is compiled now;
+              # its sources are under `tools/gates/`, which the filter below
+              # already covers.
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
@@ -1251,8 +1257,8 @@ jobs:
       # diagnostic on the wrong line.
       - name: The TUnit analyzer gate is armed (planted offender, waived site)
         run: |
-          python3 tools/check-tunit-analyzer-gate.py --selftest
-          python3 tools/check-tunit-analyzer-gate.py
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate --selftest
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version

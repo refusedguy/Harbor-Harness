@@ -44,6 +44,7 @@ import (
 
 	docfacts "harbor.local/gates/check-doc-facts"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
+	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -71,6 +72,11 @@ var registry = []registered{
 		name:    "check-tool-schema-pin",
 		summary: "the parameter schema of every builtin tool still is the one that was pinned",
 		run:     pinschema.Run,
+	},
+	{
+		name:    "check-tunit-analyzer-gate",
+		summary: "the analyzer must report a planted offender, and a waiver must suppress exactly its own site",
+		run:     tunitanalyzer.Run,
 	},
 	{
 		name:    "codemod-tool-schemas",

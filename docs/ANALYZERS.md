@@ -1955,7 +1955,7 @@ site and says why the constant is the subject.
 
 ### The control
 
-`tools/check-tunit-analyzer-gate.py` builds `tests/TUnitAnalyzerCanary` —
+`harbor-gates check-tunit-analyzer-gate` builds `tests/TUnitAnalyzerCanary` —
 a project deliberately kept out of `Harbor.slnx`, because its planted
 offender is an error by design — and asserts that the planted offender is
 reported as an error and that the planted *waived* offender is not. If the
