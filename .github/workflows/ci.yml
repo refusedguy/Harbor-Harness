@@ -890,11 +890,21 @@ jobs:
       # conditioned on it — so the pdb leaves CoreCompile's OUTPUTS entirely
       # and the missing file stops being a reason to rebuild.
       #
-      # WHY AN ENV VAR. An environment variable of the same name IS an MSBuild
-      # property (the same mechanism as HarborArchGate above): it reaches the
-      # `dotnet build` that NUKE runs without touching build/_build, and a
-      # global property wins over the `<DebugType>portable</DebugType>` that
-      # Directory.Build.props sets.
+      # WHY A GLOBAL PROPERTY, AND NOT AN ENVIRONMENT VARIABLE. An environment
+      # variable of the same name is NOT enough, and the reason is worth
+      # writing down because the repo says the opposite two hundred lines
+      # above (about HarborArchGate): MSBuild's own documentation says "If the
+      # project contains a property definition that has the same name as an
+      # environment property, the property in the project overrides the value
+      # of the environment variable", and "These global property values
+      # override property values that are set in the project file. This
+      # includes environment properties".
+      #
+      # `Directory.Build.props` sets `<DebugType>portable</DebugType>`
+      # UNCONDITIONALLY, so an environment variable named DebugType loses
+      # against it. A global property wins — and the only way to make one is
+      # the command line, so build/_build/Targets/CompileTarget.cs passes it
+      # through from HARBOR_BUILD_PROPERTY.
       #
       # WHAT IT COSTS. The CI binaries carry no debug directory, so a stack
       # trace from a failed test names the method and not the line. The CI
@@ -903,7 +913,7 @@ jobs:
       # — keep the .pdb files IN the build-output cache — needs an entry that
       # carries them, and the entry the pull-request lane restores predates
       # that change; it is measured separately.
-      DebugType: none
+      HARBOR_BUILD_PROPERTY: DebugType=none
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
