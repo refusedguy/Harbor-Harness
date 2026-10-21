@@ -57,6 +57,7 @@ src/                                   — ~50 projects (all included in Harbor.
 │                                        (read/write/edit/bash/glob/grep/ls/skill/patch/notebook/tree/lsp/task/
 │                                        webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt/session_read/session_steer/
 │                                        plugin_manager)
+│                                        webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt/session_read/session_steer/goal)
 ├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs
 ├── Harbor.Tui.AnsiPlain/               — ANSI streaming + plain-text renderers (AnsiTuiRenderer, PlainTuiRenderer)
 ├── Harbor.Tui.CellForge(+.Engine)/        — canonical fullscreen cell-diff renderer (raw-mode input,

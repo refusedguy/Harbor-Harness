@@ -88,6 +88,8 @@ src/Harbor.Tools.Builtin/             — 22 builtin tools under Tools/ (read/wr
                                         ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
                                         read_mcp_resource/mcp_prompt/session_read/session_steer/
                                         harbor_inspect/plugin_manager)
+                                        read_mcp_resource/mcp_prompt/session_read/session_steer/goal/
+                                        harbor_inspect)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
