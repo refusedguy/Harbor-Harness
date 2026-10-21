@@ -194,16 +194,19 @@ public sealed class FileToolOutputSpillStore : IToolOutputSpillStore
 }
 
 /// <summary>
-///     SG1: BCL <c>[LoggerMessage]</c> delegates for the spill store.
+///     SG1: BCL <c>[LoggerMessage]</c> delegates for the spill store. The
+///     exception is the LAST parameter of each, so the generator renders it
+///     with the message — the templates carry no <c>{Error}</c> placeholder,
+///     because there is no such parameter to fill it with (SYSLIB1014).
 /// </summary>
 internal static partial class FileToolOutputSpillStoreLog
 {
-    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cannot spill the tool output of session {SessionId}: {Error}")]
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "Cannot spill the tool output of session {SessionId}")]
     public static partial void SpillFailed(ILogger logger, Exception ex, string sessionId);
 
-    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cannot read the spill file {Path}: {Error}")]
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cannot read the spill file {Path}")]
     public static partial void ReadFailed(ILogger logger, Exception ex, string path);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Cannot sweep the spill area {Root}: {Error}")]
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Cannot sweep the spill area {Root}")]
     public static partial void SweepFailed(ILogger logger, Exception ex, string root);
 }
