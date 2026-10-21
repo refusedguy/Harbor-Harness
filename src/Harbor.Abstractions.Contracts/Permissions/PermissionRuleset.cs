@@ -191,7 +191,7 @@ public sealed record PermissionRuleset
         // names the file, the scope and the effect. A user who does not want
         // an agent touching plugins writes new("plugin_manager", "*", Deny)
         // and the tool never starts.
-        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
+        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow),
         // #1761: the goal axis. The agent's verdict on the session's own
         // goal is not a workspace mutation and needs no approval — asking
         // the user "did you finish?" on every round would be noise. The
