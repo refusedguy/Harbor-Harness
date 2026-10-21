@@ -76,6 +76,19 @@ public sealed class AgentLoop : IAgentLoop
     private readonly UserHookGates _hookGates;
 
     /// <summary>
+    ///     The goal round driver (#1761). It reserves a goal's next round at
+    ///     the agent's quiescence point and injects the round prompt into the
+    ///     SAME session.
+    /// </summary>
+    /// <remarks>
+    ///     A driver without a goal store is inert: the run ends exactly where
+    ///     it would have ended without a goal. That is the shape of every
+    ///     optional dependency here — absent means "the old behaviour", never
+    ///     "a broken one".
+    /// </remarks>
+    private readonly GoalRoundDriver _goalDriver;
+
+    /// <summary>
     ///     Construct an <see cref="AgentLoop" /> wired to the supplied services.
     /// </summary>
     public AgentLoop(
@@ -141,7 +154,13 @@ public sealed class AgentLoop : IAgentLoop
         // process-wide provider registry, which is what the product resolved
         // before scopes existed. Forwarded to the turn runner below, which
         // resolves the client a run uses.
-        IScopedProviderResolver? scopedProviders = null)
+        IScopedProviderResolver? scopedProviders = null,
+        // #1761: the session store, for the GOAL axis. Optional so every
+        // direct-construction caller keeps compiling unchanged; null (or a
+        // store that has no goal axis) keeps the run free of goals: the
+        // round driver is then inert and the loop behaves exactly as it
+        // did before the goal existed.
+        ISessionStore? sessionStore = null)
     {
         _providers = providers;
         _tools = tools;
@@ -200,6 +219,11 @@ public sealed class AgentLoop : IAgentLoop
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
             _compactionBehavior, _steering, _backgroundDrain, view,
             updateFlushPolicy, _clock, skillRegistry, scopedProviders);
+        // #1761: the goal axis is a SEPARATE seam from the session store
+        // itself — only a durable backend implements it — so the driver is
+        // built from the store's goal view, and from nothing at all when the
+        // store has none.
+        _goalDriver = new GoalRoundDriver(sessionStore as ISessionGoalStore, logger);
     }
 
     /// <summary>
@@ -363,6 +387,34 @@ public sealed class AgentLoop : IAgentLoop
                 if (step.EndRun)
                 {
                     limit = step.Limit;
+
+                    // #1761: the goal's round. The turn went QUIET — the
+                    // agent asked for no more tools — so a goal that still
+                    // has rounds gets one, in THIS session: the round prompt
+                    // is appended to the same conversation the earlier rounds
+                    // are in. The driver decides; the loop only carries the
+                    // answer.
+                    if (step.Quiescent)
+                    {
+                        GoalRoundDriver.RoundOutcome outcome = await _goalDriver
+                            .TryReserveRoundAsync(session, agent, ct).ConfigureAwait(false);
+                        if (outcome == GoalRoundDriver.RoundOutcome.Scheduled)
+                        {
+                            // Another round: the loop keeps going, and the
+                            // step budget still caps the whole run.
+                            continue;
+                        }
+
+                        if (outcome == GoalRoundDriver.RoundOutcome.Blocked)
+                        {
+                            // The goal's rounds are spent. The run ends the
+                            // way every other bounded run ends — with a
+                            // limit on the terminal event — and the goal
+                            // itself carries the reason.
+                            limit = RunLimitKind.MaxGoalRounds;
+                        }
+                    }
+
                     break;
                 }
             }

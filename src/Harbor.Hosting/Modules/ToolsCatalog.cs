@@ -237,6 +237,16 @@ internal static class ToolsCatalog
             tb.AddTool(lf => new SessionReadTool(sessionStore, lf.CreateLogger<SessionReadTool>()));
             tb.AddTool(lf => new SessionSteerTool(sessionStore, lf.CreateLogger<SessionSteerTool>()));
         }
+
+        // #1761: the goal axis. The tool records the agent's verdict on the
+        // session's durable goal, so it needs the store's GOAL view — a
+        // backend that has none simply does not keep goals, and the tool says
+        // so when it is called. It is registered whenever there is a store at
+        // all, because the round driver and the tool must agree: a driver
+        // that runs without the tool would tell the model to call a tool that
+        // is not there.
+        tb.AddTool(lf => new GoalTool(
+            sessionStore as ISessionGoalStore, lf.CreateLogger<GoalTool>()));
         tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));
         tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
         if (full)

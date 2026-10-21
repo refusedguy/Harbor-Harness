@@ -37,6 +37,7 @@
    - [session_steer](#session_steer)
    - [harbor_inspect](#harbor_inspect)
 - [plugin_manager](#plugin_manager)
+   - [goal](#goal)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
 5. [Building your own tool — WebFetchTool walkthrough](#5-building-your-own-tool--webfetchtool-walkthrough)
@@ -50,22 +51,23 @@
 
 ## 1. Inventory
 
-Harbor ships **22 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **23 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 22 tools
+> (the CLI default — the enum name predates the tool count) registers all 23 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer` + `harbor_inspect` + `plugin_manager`); `Standard10` (name
-> likewise predates the count — 13 members today) omits the eight heavier ones
+> `session_steer` + `harbor_inspect` + `plugin_manager` + `goal`); `Standard10` (name
+> likewise predates the count — 14 members today) omits the eight heavier ones
 > (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`,
 > `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 19. `plugin_manager` requires the plugin runtime to be compiled in
-> (`HarborWithPlugins=true`, the default).
+> catalog registers 21. `plugin_manager` requires the plugin runtime to be compiled in
+> (`HarborWithPlugins=true`, the default). `goal` registers either way — it is the one
+> tool whose store dependency is optional, and it says so when it is called.
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -91,6 +93,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
 | 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
 | 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
+| 23 | `goal` | Sequential | Allow | Report the goal as complete, or as blocked with a reason |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1118,6 +1121,13 @@ version, the extension axes with their verdicts, the provider catalogue) are cop
 out of the product's own declarations by the composition root: the axes and their
 reasons from `PluginRouteAxisRegistry` (#1723), the providers from `ProviderPresets`
 (#580), the versions from `PluginRuntimeVersions`.
+### `goal`
+
+**Description.** Reports the agent's verdict on the session's *goal*: the
+objective was met, or it cannot be reached from here (#1761). A goal is a
+durable, phased record — `active` / `blocked` / `complete` — that lives in
+the session log, so the phase survives a restart and the progress of a long
+run is readable by anyone who opens the session.
 
 **Args schema.**
 
@@ -1134,6 +1144,12 @@ reasons from `PluginRouteAxisRegistry` (#1723), the providers from `ProviderPres
     "section": { "type": "string", "description": "Which part of the runtime to describe: overview (default), tools, agents, providers, skills, plugins, versions, limits" },
     "name":    { "type": "string", "description": "One entry of that section, by its exact name (tool, agent, provider id, skill, plugin axis). Omit to list the whole section." }
   }
+    "operation": { "type": "string", "enum": ["complete", "block"], "description": "complete — the objective was met; block — it cannot be reached from here" },
+    "reason":    { "type": "string", "description": "Why the goal is blocked (required for operation \"block\")" }
+    "operation": { "type": "string", "enum": ["complete", "block"], "description": "complete - the objective was met; block - it cannot be reached from here" },
+    "reason":    { "type": "string", "description": "Why the goal is blocked (required for operation 'block')" }
+  },
+  "required": ["operation"]
 }
 ```
 
@@ -1210,6 +1226,32 @@ read-only agents may ask it what the runtime has.
   (`inventory.json`, #1722) when there is one: the plugin's name, version,
   phase, the axes it carries and what each door it called did. The path comes
   from the host, never from the model.
+// 1. The objective is met and verified
+{"operation": "complete"}
+
+// 2. Something outside the agent's reach blocks the work
+{"operation": "block", "reason": "the CI service is unreachable from this host"}
+
+// 3. A dependency the work needs is missing
+{"operation": "block", "reason": "the task references a config file that does not exist"}
+```
+
+**Permissions.** Allow (default) — the agent's verdict on its own goal is a
+report, not a workspace mutation. The read-only modes do not carry the rule,
+so their goal tool is asked about rather than allowed, and their round prompt
+does not name a tool the turn was not offered.
+
+**Mode.** `Sequential` (it is a read-modify-write against the goal record).
+
+**Tips.**
+- Call it only when you have VERIFIED the objective — the verdict is a
+  durable record, not a sentence in the transcript.
+- `block` needs a `reason`: the reason is what the user reads to decide
+  whether to unblock, escalate, or give up.
+- The tool does not START a goal. The objective is the user's, and a model
+  that could set its own objective would be marking its own homework.
+- A backend that keeps no goals (the memory store, today) says so when the
+  tool is called, rather than pretending a phase was set.
 
 ---
 

@@ -224,3 +224,41 @@ Harbor.Abstractions.Tools.ITool.TimeoutMs.get -> int?
 Harbor.Abstractions.Tools.ToolTimeouts
 static Harbor.Abstractions.Tools.ToolTimeouts.IsValid(int? toolTimeoutMs) -> bool
 static Harbor.Abstractions.Tools.ToolTimeouts.Resolve(int? toolTimeoutMs, System.TimeSpan? commonDefault) -> System.TimeSpan?
+Harbor.Abstractions.Sessions.Goal
+Harbor.Abstractions.Sessions.Goal.<Clone>$() -> Harbor.Abstractions.Sessions.Goal!
+Harbor.Abstractions.Sessions.Goal.BlockedCode.get -> Harbor.Abstractions.Sessions.GoalBlockCode?
+Harbor.Abstractions.Sessions.Goal.BlockedCode.init -> void
+Harbor.Abstractions.Sessions.Goal.BlockedReason.get -> string?
+Harbor.Abstractions.Sessions.Goal.BlockedReason.init -> void
+Harbor.Abstractions.Sessions.Goal.CreatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.Goal.CreatedAt.init -> void
+Harbor.Abstractions.Sessions.Goal.Deconstruct(out string! Objective, out Harbor.Abstractions.Sessions.GoalPhase Phase, out int MaxRounds, out int RoundsStarted, out int Revision, out System.DateTimeOffset CreatedAt, out System.DateTimeOffset UpdatedAt, out string? BlockedReason, out Harbor.Abstractions.Sessions.GoalBlockCode? BlockedCode) -> void
+Harbor.Abstractions.Sessions.Goal.Equals(Harbor.Abstractions.Sessions.Goal? other) -> bool
+Harbor.Abstractions.Sessions.Goal.MaxRounds.get -> int
+Harbor.Abstractions.Sessions.Goal.MaxRounds.init -> void
+Harbor.Abstractions.Sessions.Goal.Objective.get -> string!
+Harbor.Abstractions.Sessions.Goal.Objective.init -> void
+Harbor.Abstractions.Sessions.Goal.Phase.get -> Harbor.Abstractions.Sessions.GoalPhase
+Harbor.Abstractions.Sessions.Goal.Phase.init -> void
+Harbor.Abstractions.Sessions.Goal.Revision.get -> int
+Harbor.Abstractions.Sessions.Goal.Revision.init -> void
+Harbor.Abstractions.Sessions.Goal.RoundsStarted.get -> int
+Harbor.Abstractions.Sessions.Goal.RoundsStarted.init -> void
+Harbor.Abstractions.Sessions.Goal.Goal(string! Objective, Harbor.Abstractions.Sessions.GoalPhase Phase, int MaxRounds, int RoundsStarted, int Revision, System.DateTimeOffset CreatedAt, System.DateTimeOffset UpdatedAt, string? BlockedReason = null, Harbor.Abstractions.Sessions.GoalBlockCode? BlockedCode = null) -> void
+Harbor.Abstractions.Sessions.Goal.UpdatedAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.Goal.UpdatedAt.init -> void
+override Harbor.Abstractions.Sessions.Goal.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.Goal.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.Goal.ToString() -> string!
+static Harbor.Abstractions.Sessions.Goal.operator !=(Harbor.Abstractions.Sessions.Goal? left, Harbor.Abstractions.Sessions.Goal? right) -> bool
+static Harbor.Abstractions.Sessions.Goal.operator ==(Harbor.Abstractions.Sessions.Goal? left, Harbor.Abstractions.Sessions.Goal? right) -> bool
+Harbor.Abstractions.Sessions.GoalBlockCode
+Harbor.Abstractions.Sessions.GoalBlockCode.AgentReported = 0 -> Harbor.Abstractions.Sessions.GoalBlockCode
+Harbor.Abstractions.Sessions.GoalBlockCode.RoundLimit = 1 -> Harbor.Abstractions.Sessions.GoalBlockCode
+Harbor.Abstractions.Sessions.GoalPhase
+Harbor.Abstractions.Sessions.GoalPhase.Active = 0 -> Harbor.Abstractions.Sessions.GoalPhase
+Harbor.Abstractions.Sessions.GoalPhase.Blocked = 1 -> Harbor.Abstractions.Sessions.GoalPhase
+Harbor.Abstractions.Sessions.GoalPhase.Complete = 2 -> Harbor.Abstractions.Sessions.GoalPhase
+Harbor.Abstractions.Sessions.ISessionGoalStore
+Harbor.Abstractions.Sessions.ISessionGoalStore.AppendGoalAsync(string! sessionId, Harbor.Abstractions.Sessions.Goal! goal, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.Goal!>>!
+Harbor.Abstractions.Sessions.ISessionGoalStore.GetGoalAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<CSharpFunctionalExtensions.Maybe<Harbor.Abstractions.Sessions.Goal!>>>!
