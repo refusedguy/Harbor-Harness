@@ -3028,9 +3028,14 @@ VSTHRD110 only suggested.
 
 #### The zero-warning gate did not get weaker
 
-The ILLink analyzer's only findings in the ordinary build were three
-`IL3000` warnings, all under `tests/`, where `TreatWarningsAsErrors` is
-off — so none of them could fail a build. The product tree's own `IL3000`
+The ILLink analyzer's only findings in the ordinary build were four
+`IL3000` warnings — `Assembly.Location` in
+`tests/Harbor.CodeGen.Tests/ObservedGeneratorDriverTests.cs:233`,
+`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests.cs:364`,
+`tests/Harbor.Plugins.Runtime.Tests/Security/SandboxAlcTests.cs:92` and
+`tests/Harbor.TestKit.Generators.Tests/FakeGeneratorDriverTests.cs:164` —
+all under `tests/`, where `TreatWarningsAsErrors` is off, so none of them
+could fail a build. The product tree's own `IL3000`
 site is a `#pragma warning disable IL3000` in
 `src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs`, and the
 proof that the gate moved rather than disappeared is a run with that

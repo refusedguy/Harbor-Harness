@@ -187,10 +187,19 @@ the analyzer runs where it has something to say:
 | every other project | nothing | 105 compilations that carried an analyzer nobody read |
 
 **What the analyzer was buying, measured.** In the ordinary build it
-produced exactly THREE diagnostics, all of them `IL3000` ("Assembly.Location
+produced exactly FOUR diagnostics, all of them `IL3000` ("Assembly.Location
 always returns an empty string for assemblies embedded in a single-file
 app"), all of them under `tests/` — and the test tree sets
-`TreatWarningsAsErrors=false`, so not one of them could fail a build. The
+`TreatWarningsAsErrors=false`, so not one of them could fail a build:
+
+| site | tree |
+|------|------|
+| `tests/Harbor.CodeGen.Tests/ObservedGeneratorDriverTests.cs:233` | `tests/` |
+| `tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests.cs:364` | `tests/` |
+| `tests/Harbor.Plugins.Runtime.Tests/Security/SandboxAlcTests.cs:92` | `tests/` |
+| `tests/Harbor.TestKit.Generators.Tests/FakeGeneratorDriverTests.cs:164` | `tests/` |
+
+The
 product tree's own `IL3000` sites are three `#pragma warning disable
 IL3000` in `src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs`,
 and those pragmas are still load-bearing: the `aot-publish` job publishes
