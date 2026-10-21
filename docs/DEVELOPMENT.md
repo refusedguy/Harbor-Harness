@@ -1364,7 +1364,8 @@ Console.Error.WriteLine($"Debug: {value}");
 (Planned — not yet implemented)
 
 1. Update version in `Directory.Build.props`.
-2. Assemble the changelog: `python3 tools/changelog-assemble.py`. Every pull
+2. Assemble the changelog: `tools/bin/harbor-gates-linux-x64 changelog-assemble`.
+   Every pull
    request put its entry in `changelog/fragments/<pr-number>.md`; the
    assembler glues them into the `[Unreleased]` section of `CHANGELOG.md`.
    A pull request does NOT edit `CHANGELOG.md` itself: one file edited by

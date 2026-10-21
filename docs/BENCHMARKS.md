@@ -2012,7 +2012,8 @@ processes, `tests/Harbor.E2E.App.Avalonia/e2e-shards.json`).
 runner's own speed, not the layout. The layout is what the gate judges, and
 the gate judges it by a recorded measurement on purpose.
 
-**What the gate is, and why it is not a timing gate.** `tools/check-shard-balance.py`
+**What the gate is, and why it is not a timing gate.** The shard-balance gate
+(`tools/gates/check-shard-balance`, the compiled port of the python original)
 reads the shard lists out of their one source (`tools/ci-project-lists.json`,
 issue #1800) and the recorded cost of every project
 out of `tools/shard-costs.json`, computes what each shard would cost, and
