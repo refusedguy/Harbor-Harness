@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
 ///     Strategy consulted by <see cref="PermissionRuleset.Evaluate" /> for tool-specific
@@ -72,7 +73,7 @@ public interface IArgSafetyPolicy
 /// </remarks>
 public sealed class BashSafetyPolicy : IArgSafetyPolicy
 {
-    private static readonly FrozenSet<string> BashOnly = new[] { "bash" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+    private static readonly FrozenSet<string> BashOnly = new string[] { WellKnownTools.Bash }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Shared stateless instance over the <c>bash</c> tool alone.</summary>
     public static readonly BashSafetyPolicy Instance = new();
