@@ -1,6 +1,6 @@
 // SessionRewritePlans.cs — the JSONL rewrite shapes, as strategies (#460).
 //
-// All three used to be spelled the same way: File.ReadAllLines(sessionFile)
+// The plans used to be spelled the same way: File.ReadAllLines(sessionFile)
 // into a List<string>, filter/index the list, then write a temp file and
 // rename it over the original. That is two full copies of the session in
 // memory, taken while holding the per-session semaphore, for an operation
@@ -10,6 +10,10 @@
 // A plan is now just a per-record verdict, and SessionFileIO does the copying
 // a block at a time. No plan sees more than one record at a time, and none of
 // them can see the file length.
+//
+// Two plans are left (#1752): the header rewrite, and the prune. The header
+// rewrite changes the session's own metadata; the prune is the ONE operation
+// that removes message records from the file, and it is never automatic.
 
 using System.Text;
 
@@ -163,73 +167,7 @@ internal sealed class HeaderRewritePlan : SessionRewritePlan
 }
 
 /// <summary>
-///     Replace the record that is a <c>"message"</c> entry carrying the given
-///     id, IN PLACE: the fresh record takes the position the stale one held,
-///     and every other record keeps its own (#1798). Header records and
-///     unparseable records are never matched, so the file stays readable.
-/// </summary>
-/// <remarks>
-///     <para>
-///         The position is the point. File order IS insertion order for this
-///         store, and a rewind anchors on a record's position in the file
-///         (<see cref="DeleteAfterAnchorPlan" />) — so a rewrite that drops
-///         the stale record and appends the fresh one at the END moves the
-///         message to the tail of the history without a trace, and a rewind
-///         anchored on it then removes nothing. Replacing in place keeps
-///         "file order = insertion order" true across an edit.
-///     </para>
-///     <para>
-///         A second record with the same id — a file written before the
-///         duplicate-drop, or an append that raced the edit — is stale and
-///         goes, so the file keeps exactly one record per id. The net file is
-///         the same as the drop-and-append rewrite produced, minus the move.
-///     </para>
-/// </remarks>
-internal sealed class ReplaceMessagePlan : SessionRewritePlan
-{
-    private readonly string _messageId;
-    private readonly byte[] _idNeedle;
-    private readonly byte[] _replacement;
-    private bool _replaced;
-
-    internal ReplaceMessagePlan(string messageId, byte[] replacement)
-    {
-        _messageId = messageId;
-        _idNeedle = Encoding.UTF8.GetBytes($"\"id\":\"{messageId}\"");
-        _replacement = replacement;
-    }
-
-    /// <summary>The fresh record, written where the stale one stood.</summary>
-    internal override byte[] Replacement => _replacement;
-
-    internal override void Reset()
-    {
-        ClearFound();
-        _replaced = false;
-    }
-
-    internal override LineAction Decide(ReadOnlySpan<byte> record)
-    {
-        if (!SessionFileReader.IsMessageEntryWithId(record, _messageId, _idNeedle))
-        {
-            return LineAction.Keep;
-        }
-
-        if (_replaced)
-        {
-            // A second record for the same id: the fresh one is already in
-            // place, so this one is the stale leftover.
-            return LineAction.Drop;
-        }
-
-        _replaced = true;
-        MarkFound();
-        return LineAction.Replace;
-    }
-}
-
-/// <summary>
-///     "Rewind to here": keep every record up to and including the one carrying
+///     "Prune to here": keep every record up to and including the one carrying
 ///     the given id, then drop every further <c>"message"</c> record. Header
 ///     and non-message records survive wherever they are — except checkpoint
 ///     markers past the anchor (#1247 slice 1): a checkpoint pointing into
@@ -238,10 +176,14 @@ internal sealed class ReplaceMessagePlan : SessionRewritePlan
 ///     when taken, so it always sits past the anchor in file order.
 ///
 ///     One pass, and it needs to be one: file order IS insertion order for this
-///     store (append-only plus rewrite-in-place), so the first id match is the
-///     anchor and everything the old index-scan kept or dropped follows from
-///     having passed it. Records before the anchor are kept, including message
-///     records — that is the point of a rewind.
+///     store (append-only, plus the rewrites that keep a record in place), so
+///     the first id match is the anchor and everything the old index-scan kept
+///     or dropped follows from having passed it. Records before the anchor are
+///     kept, including message records — that is the point of a prune.
+///
+///     This is the ONLY plan that drops a message record (#1752): a rewind
+///     writes an event and leaves the records alone, so the only way to
+///     destroy what the agent said is to ask for the prune by name.
 /// </summary>
 internal sealed class DeleteAfterAnchorPlan : SessionRewritePlan
 {

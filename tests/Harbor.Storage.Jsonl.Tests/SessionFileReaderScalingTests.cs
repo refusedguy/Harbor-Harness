@@ -80,9 +80,16 @@ public class SessionFileReaderScalingTests
     ///     independent, so it is compared as measured, with no band. Pinned
     ///     from the CI measurement of the ratio gate this replaced (run
     ///     39423151864): 16 583 576 B over 13 reads of a 4 000-message file =
-    ///     1 275 659 B per read. The budget leaves ~1.25x headroom.
+    ///     1 275 659 B per read.
+    ///     <para>
+    ///         Re-measured on this branch's CI (run 39550470314) at
+    ///         1 693 591 B per read: the append-only log (#1752) makes the
+    ///         reader materialise the log's RECORDS as well as the messages,
+    ///         because the history has to be readable back. The budget leaves
+    ///         ~1.24x headroom.
+    ///     </para>
     /// </summary>
-    private const long MaxBytesPerRead = 1_600_000;
+    private const long MaxBytesPerRead = 2_100_000;
 
     /// <summary>
     ///     Time budget for ONE full file read, in PROBE UNITS (see
@@ -132,7 +139,7 @@ public class SessionFileReaderScalingTests
             // TestScalingGate (#1652), whose leg SCALER chose how much work a
             // leg carried. It is now:
             //
-            //     bytes per full read   <= 1 600 000   (machine-independent, HARD)
+            //     bytes per full read   <= 2 100 000   (machine-independent, HARD)
             //     probe units per read   <= 300 000     (machine-scaled time, SOFT)
             //
             // measured over a FIXED amount of work (8 full reads of the

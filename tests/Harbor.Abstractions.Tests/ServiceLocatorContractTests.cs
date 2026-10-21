@@ -1,6 +1,7 @@
 using System.Reflection;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.TestKit;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 
@@ -89,15 +90,7 @@ public class ServiceLocatorContractTests
     [Test]
     public async Task ToolContext_RoundTripsItsCoreMembers()
     {
-        var context = new ToolContext(
-            "s1",
-            "m1",
-            "c1",
-            "code",
-            CancellationToken.None,
-            Array.Empty<Harbor.Abstractions.Models.AgentMessage>(),
-            (_, _) => Task.CompletedTask,
-            (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+        var context = TestToolContext.Create(sessionId: "s1", messageId: "m1", callId: "c1");
 
         await Assert.That(context.SessionId).IsEqualTo("s1");
         await Assert.That(context.Agent).IsEqualTo("code");

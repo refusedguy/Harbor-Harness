@@ -1,13 +1,14 @@
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
-///     Round-trip tests for <c>DeleteMessagesAfterAsync</c> on the JSONL
-///     backend: the truncate survives a store RE-CREATE (i.e. it is on-disk,
-///     not just in the parse cache), the header line stays intact, and
+///     Round-trip tests for the rewind on the JSONL backend: the rewind
+///     survives a store RE-CREATE (i.e. it is on-disk, not just in the parse
+///     cache), the header line stays intact, the tail stays in the LOG, and
 ///     unknown ids fail without touching the file.
 /// </summary>
 public class JsonlDeleteMessagesAfterTests
@@ -28,7 +29,7 @@ public class JsonlDeleteMessagesAfterTests
         "claude");
 
     [Test]
-    public async Task Truncate_Persists_Across_StoreRecreate_AndKeepsHeader()
+    public async Task Rewind_Persists_Across_StoreRecreate_AndKeepsHeader()
     {
         string root;
         (string SessionId, List<string> Ids) seeded;
@@ -59,12 +60,19 @@ public class JsonlDeleteMessagesAfterTests
             await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value).IsEqualTo(2);
 
-            // Re-create AGAIN: truncation must be durable on disk.
+            // Re-create AGAIN: the rewind must be durable on disk.
             var third = new JsonlSessionStore(root, NullLogger<JsonlSessionStore>.Instance);
             try
             {
                 var read = await third.GetMessagesAsync(seeded.SessionId);
                 await Assert.That(read.Value.Count).IsEqualTo(2);
+
+                // The tail is still in the log — the rewind hid it from the
+                // surface, it did not destroy it.
+                var log = await third.GetSessionLogAsync(seeded.SessionId);
+                await Assert.That(log.IsSuccess).IsTrue();
+                await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(4);
+                await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Rewind)).IsEqualTo(1);
 
                 var listed = await third.GetAsync(seeded.SessionId);
                 await Assert.That(listed.IsSuccess).IsTrue(); // header survived
@@ -99,11 +107,11 @@ public class JsonlDeleteMessagesAfterTests
             var message = Msg(session.Id, 0);
             await store.AppendMessageAsync(session.Id, message);
 
-            // The DIRECTORY's mtime, not the file's: #460 rewrites through a
-            // temp sibling, and creating then deleting that temp moves the
-            // directory even when the file itself is untouched. A no-op update
-            // has to decide "nothing to do" BEFORE any temp exists, or this
-            // contract quietly breaks.
+            // The DIRECTORY's mtime, not the file's: a rewrite stages through
+            // a temp sibling, and creating then deleting that temp moves the
+            // directory even when the file itself is untouched. A failed
+            // rewind has to decide "nothing to do" BEFORE anything is
+            // written, or this contract quietly breaks.
             long before = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
             var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
             long after = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
