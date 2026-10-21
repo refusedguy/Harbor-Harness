@@ -13,6 +13,7 @@ namespace Harbor.Application.Configuration;
 /// </summary>
 [JsonSerializable(typeof(RawConfigDto))]
 [JsonSerializable(typeof(CompactionConfig))]
+[JsonSerializable(typeof(ToolOutputConfig))]
 [JsonSerializable(typeof(ProviderConfigEntry))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(Dictionary<string, ProviderConfigEntry>))]

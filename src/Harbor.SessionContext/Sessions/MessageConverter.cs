@@ -5,8 +5,40 @@ namespace Harbor.Application.Sessions;
 ///     Converts domain <see cref="AgentMessage" /> instances to LLM-specific <see cref="LlmMessage" /> format.
 ///     Implements Adapter pattern (GOF).
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#1748 — the context boundary is where a big tool output is
+///         handled.</b> The converter is the single choke point between the
+///         domain transcript and the provider request, so it is where the
+///         inline budget is applied: an output that does not fit is spilled to
+///         a file and reaches the model as a preview plus a locator. The
+///         domain message keeps the full text — the session log, the event bus
+///         and the TUI still see everything the tool produced.
+///     </para>
+/// </remarks>
 public sealed class MessageConverter
 {
+    private readonly IToolOutputSpillStore? _spillStore;
+    private readonly int _maxInlineChars;
+
+    /// <summary>
+    ///     Construct a converter.
+    /// </summary>
+    /// <param name="spillStore">
+    ///     The spill area for oversized tool outputs, or <see langword="null" />
+    ///     when none is wired — the historical head + marker behaviour.
+    /// </param>
+    /// <param name="maxInlineChars">
+    ///     The inline budget per tool result, in characters.
+    /// </param>
+    public MessageConverter(
+        IToolOutputSpillStore? spillStore = null,
+        int maxInlineChars = ToolResultContextTrim.MaxToolResultChars)
+    {
+        _spillStore = spillStore;
+        _maxInlineChars = maxInlineChars;
+    }
+
     /// <summary>
     ///     Convert an ordered list of domain <see cref="AgentMessage" />s to LLM-specific
     ///     <see cref="LlmMessage" />s ready to send to a provider.
@@ -51,7 +83,7 @@ public sealed class MessageConverter
         // #461: the per-kind dispatch lives in the visitor, not in a switch that
         // every consumer had to re-type. An unhandled message kind now throws
         // instead of silently vanishing from the model context.
-        new ToLlmMessagesVisitor(result, answeredCallIds).Walk(messages);
+        new ToLlmMessagesVisitor(result, answeredCallIds, _spillStore, _maxInlineChars).Walk(messages);
 
         return result;
     }
@@ -130,7 +162,11 @@ public sealed class MessageConverter
     ///     Message-level arm of the conversion: the three roles, nothing else.
     ///     Part-level behaviour lives in <see cref="PartsToLlmBlocks" />.
     /// </summary>
-    private sealed class ToLlmMessagesVisitor(List<LlmMessage> sink, HashSet<string>? answeredCallIds)
+    private sealed class ToLlmMessagesVisitor(
+        List<LlmMessage> sink,
+        HashSet<string>? answeredCallIds,
+        IToolOutputSpillStore? spillStore,
+        int maxInlineChars)
         : AgentMessageVisitor<ToLlmMessagesVisitor>
     {
         public override ToLlmMessagesVisitor Visit(UserMessage message)
@@ -190,10 +226,16 @@ public sealed class MessageConverter
                 // #235: cap giant payloads before they enter model context.
                 // Stores, events and TUI keep the full Output — only the
                 // provider-bound copy is trimmed (head kept, tail cut).
+                // #1748: the cut is now a SPILL — the full text goes to a file
+                // and the model gets a preview plus the locator to read it
+                // back. Without a store wired, the historical marker stands.
                 sink.Add(new LlmToolResultMessage(
                     r.ToolCallId,
                     r.ToolName,
-                    ToolResultContextTrim.Trim(r.Output),
+                    ToolResultContextTrim.Trim(
+                        r.Output,
+                        SpillRequest(message.SessionId, r),
+                        maxInlineChars),
                     r.IsError));
             }
 
@@ -208,6 +250,18 @@ public sealed class MessageConverter
 
             return this;
         }
+
+        /// <summary>
+        ///     Where this result would be spilled, or <see langword="null" />
+        ///     when no store is wired.
+        /// </summary>
+        /// <param name="sessionId">The session the result belongs to.</param>
+        /// <param name="entry">The tool result entry.</param>
+        /// <returns>The spill request, or <see langword="null" />.</returns>
+        private ToolOutputSpillRequest? SpillRequest(string sessionId, ToolResultEntry entry) =>
+            spillStore is null
+                ? null
+                : new ToolOutputSpillRequest(spillStore, sessionId, entry.ToolCallId);
 
         /// <summary>
         ///     Append the deferred contexts of one tool-result batch as a

@@ -89,7 +89,7 @@ public sealed class TurnChangeOracle : IDisposable
         {
             "read", "glob", "grep", "ls", "tree", "lsp", "ripgrep",
             "notebook", "skill", "webfetch", "session_read", "session_steer",
-            "mcp_prompt", "read_mcp_resource",
+            "mcp_prompt", "read_mcp_resource", "spill_read",
         }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>

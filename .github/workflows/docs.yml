@@ -82,7 +82,6 @@ on:
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
-      - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
@@ -232,7 +231,6 @@ on:
       - 'tools/check-md-links.py'
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
-      - 'tools/check-doc-facts.py'
       - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
@@ -372,7 +370,7 @@ jobs:
       # number that is not the one in the document) and a rule whose capture
       # group was edited away (reported BLIND, the one verdict CI passes).
       - name: Repo-map counter fails on a stale count and detects its own blindness
-        run: python3 tools/check-doc-facts.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-doc-facts --self-test
       # #428. The fifth gate is the only one that reads a `.csproj`, and the only
       # one that asks about a package rather than about a document: is every
       # PackageReference a guarded project declares load-bearing, and is every
@@ -709,7 +707,7 @@ jobs:
   # equals the tree or it does not, and a record quoting an old count cannot
   # make the number agree.
   #
-  # --min-facts is the floor. Measured today: 6 counts compared. The floor is
+  # --min-facts is the floor. Measured today: 8 counts compared. The floor is
   # 5, so a rule that silently stops matching drives the number down and this
   # job goes red instead of reporting a clean tree — the #591 shape, which the
   # --self-test also pins from the other side.
@@ -722,7 +720,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every repo-map count against the tree
-        run: python3 tools/check-doc-facts.py --min-facts 5
+        run: tools/bin/harbor-gates-linux-x64 check-doc-facts --min-facts 5
 
   # #428. Fifth question, and the only one about a package rather than a
   # document: not "do the links resolve", not "is the file shaped right", not
@@ -1217,7 +1215,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The pinned tool schemas agree with the declarations
-        run: python3 tools/check-tool-schema-pin.py --min-tools 21
+        run: python3 tools/check-tool-schema-pin.py --min-tools 25
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

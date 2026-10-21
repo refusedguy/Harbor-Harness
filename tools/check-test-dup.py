@@ -2,14 +2,14 @@
 """Duplicate-test-body detector and CI gate for the tests/ tree (#1778).
 
 Stdlib only — no pip, no network, no dotnet. It lives in `tools/` next to
-check-md-links.py / md-lint.py / check-doc-cites.py / check-doc-facts.py /
+check-md-links.py / md-lint.py / check-doc-cites.py / check-doc-facts /
 check-abstractions-contract.py / check-public-api-resign.py, and it asks a
 question none of them asks:
 
   check-md-links.py             does the link resolve?
   md-lint.py                    is the file shaped the way the repo says it is?
   check-doc-cites.py            does a `file:line` still point at a line?
-  check-doc-facts.py            does a COUNT a document states still equal the
+  check-doc-facts              does a COUNT a document states still equal the
                                 count of tracked files it is counting?
   check-abstractions-contract.py is every <PackageReference> load-bearing?
   check-public-api-resign.py    is every change to the frozen public surface

@@ -115,14 +115,22 @@ public sealed class ToolDispatcher(
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         It is a code of its own, not the stop code, because the two
-    ///         facts are different: a call stopped before the checkpoint never
-    ///         reached a barrier, while a call stopped after it WAS recorded
-    ///         durably and the body simply never ran. Both had no effect; only
-    ///         the second one can say the record is on disk.
+    ///         The literal has ONE home: the vocabulary of #1760
+    ///         (<see cref="ToolErrorCodes.AbortedBeforeDispatch" />). This
+    ///         member is the dispatcher's name for it, not a second spelling
+    ///         of it — two names for one code is how a contract drifts.
+    ///     </para>
+    ///     <para>
+    ///         The two facts the code covers are different, and the
+    ///         difference is in the REASON, not in the code: a call stopped
+    ///         before the checkpoint never reached a barrier, while a call
+    ///         stopped after it WAS recorded durably and the body simply
+    ///         never ran. Both had no effect and both are safe to retry,
+    ///         which is exactly what the code says; only the second one can
+    ///         say the record is on disk, and its text says so.
     ///     </para>
     /// </remarks>
-    public const string AbortedBeforeDispatchCode = "TOOL_ABORTED_BEFORE_DISPATCH";
+    public const string AbortedBeforeDispatchCode = ToolErrorCodes.AbortedBeforeDispatch;
 
     private readonly TimeSpan _abandonGrace = abandonGrace ?? AbandonGraceDefault;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -411,6 +419,13 @@ public sealed class ToolDispatcher(
     ///         run, because the session log is not durable" knows the retry is
     ///         safe, because there was no effect to repeat.
     ///     </para>
+    ///     <para>
+    ///         The code is the vocabulary's <see cref="ToolErrorCodes.AbortedBeforeDispatch" />
+    ///         (#1760): the call was never sent to the tool, so it had no
+    ///         effect. The cause rides the reason, and the text leads with
+    ///         the code, which is the invariant
+    ///         <c>docs/TOOL_ERROR_CODES.md</c> states.
+    ///     </para>
     /// </remarks>
     /// <param name="toolCall">The call that was refused.</param>
     /// <param name="cause">Why the checkpoint failed.</param>
@@ -418,7 +433,10 @@ public sealed class ToolDispatcher(
     private static ToolResultEntry RefusedByCheckpoint(ToolCallPart toolCall, string cause)
     {
         string message = $"Tool '{toolCall.ToolName}' was NOT executed: {cause}";
-        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(message));
+        var refused = ToolResult.Failed(
+            message,
+            ToolErrorCodes.Create(ToolErrorCodes.AbortedBeforeDispatch, cause));
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, refused);
     }
 
     /// <summary>
@@ -427,19 +445,22 @@ public sealed class ToolDispatcher(
     /// </summary>
     /// <remarks>
     ///     The call is durably recorded and the body never ran, so the call
-    ///     had no effect and is safe to retry. That is the same fact
-    ///     <see cref="UnresolvedToolCall.NotStartedCode" /> carries, under a
-    ///     code of its own so a reader can tell "stopped before the barrier"
-    ///     from "stopped after it".
+    ///     had no effect and is safe to retry. That is the fact
+    ///     <see cref="ToolErrorCodes.AbortedBeforeDispatch" /> carries, and
+    ///     the code rides the result as a structured error (#1760) so a
+    ///     policy can branch on it, not only read it out of the text.
     /// </remarks>
     /// <param name="toolCall">The call that was aborted.</param>
     /// <returns>The refusal entry.</returns>
     private static ToolResultEntry AbortedBeforeDispatch(ToolCallPart toolCall)
     {
         string message =
-            $"{AbortedBeforeDispatchCode}: tool '{toolCall.ToolName}' was aborted after the session-log checkpoint "
+            $"tool '{toolCall.ToolName}' was aborted after the session-log checkpoint "
             + "and before the dispatch. The tool body never ran, so the call had no effect and is safe to retry.";
-        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(message));
+        var aborted = ToolResult.Failed(
+            message,
+            ToolErrorCodes.Create(AbortedBeforeDispatchCode));
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, aborted);
     }
 
     /// <summary>

@@ -40,7 +40,7 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersExactlyTheBuiltinTools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyFiveBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
@@ -53,7 +53,8 @@ public class RegistrationCompositionTests
         // + goal (#1761, the goal axis — registered whatever the store is, so the
         //   round prompt never names a tool the turn was not offered)
         // + ask_user_question (#1759, the model-facing question channel)
-        // = 24.
+        // + spill_read (#1748 — the way back to a spilled tool output)
+        // = 25.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -66,9 +67,9 @@ public class RegistrationCompositionTests
             "read", "write", "edit", "bash", "glob", "grep", "ls", "skill",
             "task", "webfetch", "session_read", "session_steer",
             "patch", "notebook", "ripgrep", "tree", "lsp",
-            "mcp", "read_mcp_resource", "mcp_prompt",
-            "harbor_inspect", "plugin_manager", "goal",
-            "ask_user_question",
+            "mcp", "read_mcp_resource", "mcp_prompt", "spill_read",
+            "harbor_inspect",
+            "plugin_manager", "goal", "ask_user_question",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
@@ -94,9 +95,11 @@ public class RegistrationCompositionTests
         var names = ToolNames(sp);
         // 10 classic tools + lsp + skill + harbor_inspect + goal (#1761 — the
         // goal axis is registered whatever the store is, so a round prompt
-        // never names a tool the turn was not offered).
-        await Assert.That(names.Count).IsEqualTo(14);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect", "goal" })
+        // never names a tool the turn was not offered) + spill_read (#1748 —
+        // the spill read is not a full-only tool: a pointer without a way to
+        // read it back would be a lie).
+        await Assert.That(names.Count).IsEqualTo(15);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect", "goal", "spill_read" })
         {
             await Assert.That(names).Contains(safe);
         }

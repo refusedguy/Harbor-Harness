@@ -225,7 +225,11 @@ internal sealed class TurnRunner(
         int turn,
         bool truncationFallback,
         CancellationToken ct,
-        RunBudgetTracker? budget = null)
+        RunBudgetTracker? budget = null,
+        // #1756: the repeat guard. Per-run state (the loop owns one instance
+        // per run), handed down so the turn can count the calls it executed.
+        // Null keeps the guard-free path.
+        RepeatToolGuard? repeatGuard = null)
     {
         TurnRunnerLog.TurnStart(logger, turn, agent.Name.Value, agent.Model);
         // #1103: the turn boundary is a fact, not work — it rides None so a
@@ -560,7 +564,7 @@ internal sealed class TurnRunner(
 
         // 8. Execute tool calls (+ synthesize error results for malformed ones)
         var toolResults = await ExecuteTurnToolCallsAsync(
-            toolCalls, malformedCalls, session, partial, agent, ct).ConfigureAwait(false);
+            toolCalls, malformedCalls, session, partial, agent, ct, repeatGuard).ConfigureAwait(false);
 
         // Persist the tool results so the next turn can feed them back
         // to the model (OpenAI requires a `tool` role message after a
@@ -968,9 +972,16 @@ internal sealed class TurnRunner(
         ISessionContext session,
         AssistantMessage partial,
         AgentDefinition agent,
-        CancellationToken ct)
+        CancellationToken ct,
+        RepeatToolGuard? repeatGuard)
     {
         var results = new List<ToolResultEntry>(toolCalls.Count + malformedCalls.Count);
+
+        // #1756: the repeat guard sees the history BEFORE the calls are
+        // counted. A user message that joined the history ends the chain:
+        // repetition ACROSS an interjection is not the same loop, and the
+        // model may legitimately repeat a call because the user asked for it.
+        repeatGuard?.SyncUserContext(session.Messages);
 
         if (toolCalls.Count > 0)
         {
@@ -980,6 +991,36 @@ internal sealed class TurnRunner(
                     ? TimeSpan.FromSeconds(seconds)
                     : null).ConfigureAwait(false);
             results.AddRange(executed.Results);
+
+            // #1756: count the calls in the order the MODEL wrote them — the
+            // dispatcher's own order is not the model's when the batch runs in
+            // parallel, and "consecutive" is a statement about the model's
+            // sequence. The reminder rides the repeated call's OWN result: it
+            // is the one place the model reads before its next turn, and the
+            // result-per-call pairing providers require is untouched.
+            if (repeatGuard is not null)
+            {
+                for (int i = 0; i < toolCalls.Count && i < results.Count; i++)
+                {
+                    Maybe<RepeatReminder> reminder = repeatGuard.Observe(
+                        toolCalls[i].ToolName, toolCalls[i].Args);
+                    if (!reminder.HasValue)
+                    {
+                        continue;
+                    }
+
+                    results[i] = results[i] with
+                    {
+                        // The reminder goes FIRST, not last: the model-context
+                        // trim (ToolResultContextTrim) keeps the HEAD of a long
+                        // tool output and cuts the tail, so a reminder appended
+                        // to a big result would never reach the model — and a
+                        // `read` of a big file is exactly the call that repeats.
+                        Output = reminder.Value.Text + "\n\n" + results[i].Output,
+                    };
+                    TurnRunnerLog.RepeatedToolCall(logger, toolCalls[i].ToolName, reminder.Value.Count);
+                }
+            }
         }
 
         for (int i = 0; i < malformedCalls.Count; i++)
@@ -1223,9 +1264,18 @@ internal static partial class TurnRunnerLog
     [LoggerMessage(EventId = 17, Level = LogLevel.Warning, Message = "Turn {Turn} hit a context overflow and the request was not retried: {Reason}")]
     public static partial void OverflowNotRecovered(ILogger logger, int turn, string reason);
 
-    // #1765: the id continues after #1755's 16 and 17, so the ids dev already
-    // shipped for the overflow recovery keep their numbers.
-    [LoggerMessage(EventId = 18, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; the model request was not dispatched: {Error}")]
+    // #1756. The event id is 18 and not 16: the overflow recovery (#1755)
+    // took 16 and 17 when the two branches met, and two messages sharing an
+    // id in one class is one event stream wearing two names.
+    [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "Tool {ToolName} repeated with identical arguments {Count} times in a row; the model was told to change its approach")]
+    public static partial void RepeatedToolCall(ILogger logger, string toolName, int count);
+
+    // #1765: the id is 19 and not 18. Dev's #1756 shipped the repeat
+    // reminder as 18, and the shipped number wins — the same rule the
+    // overflow recovery's 16 and 17 set: two messages sharing an id in one
+    // class is one event stream wearing two names. The checkpoint's failure
+    // takes the next free id.
+    [LoggerMessage(EventId = 19, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; the model request was not dispatched: {Error}")]
     public static partial void DurabilityCheckpointFailed(ILogger logger, string sessionId, string error);
 
 }

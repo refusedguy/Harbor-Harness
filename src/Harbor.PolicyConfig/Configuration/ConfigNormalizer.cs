@@ -134,9 +134,16 @@ public static class ConfigNormalizer
     private static void ApplyLimits(HarborConfig config, RawConfigDto raw)
     {
         // ── Run / Cost / Compaction ──
-        config.Run = new RunLimitsConfig(raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps);
+        config.Run = new RunLimitsConfig(
+            raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps,
+            RepeatToolThreshold: raw.RepeatToolThreshold ?? RunLimitsConfig.Default.RepeatToolThreshold);
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
         if (raw.Compaction is not null) config.Compaction = raw.Compaction;
+
+        // ── Tool output (#1748) ──
+        // Absent means "not configured": the defaults apply, and the section is
+        // only written back when it diverges from them.
+        config.ToolOutput = raw.ToolOutput ?? ToolOutputConfig.Default;
 
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;

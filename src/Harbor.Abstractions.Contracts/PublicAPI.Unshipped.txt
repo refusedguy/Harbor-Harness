@@ -127,6 +127,7 @@ static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Bash -> Ha
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Edit -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Glob -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Grep -> Harbor.Abstractions.Models.Identifiers.ToolName!
+static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Goal -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.HarborInspect -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Ls -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Lsp -> Harbor.Abstractions.Models.Identifiers.ToolName!
@@ -143,6 +144,7 @@ static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.SessionInb
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.SessionRead -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.SessionSteer -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Skill -> Harbor.Abstractions.Models.Identifiers.ToolName!
+static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.SpillRead -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Task -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Tree -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.WebFetch -> Harbor.Abstractions.Models.Identifiers.ToolName!

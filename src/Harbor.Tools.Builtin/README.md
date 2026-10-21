@@ -1,6 +1,6 @@
 # Harbor.Tools.Builtin
 
-The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 24 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`.
+The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 25 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`, `spill_read`.
 
 > Plugins can add more tools via `IToolPlugin` — see [`docs/PLUGIN_SYSTEM.md`](../../docs/PLUGIN_SYSTEM.md). The full tool reference with examples and the "when to use X vs Y" matrix lives in [`docs/TOOLS_CATALOG.md`](../../docs/TOOLS_CATALOG.md).
 
@@ -56,7 +56,7 @@ public sealed class ReadTool : ITool
 
 MCP is wired as three cooperating pieces plus an adapter, all driven by `mcp.json`
 (`~/.harbor/mcp.json`, `<project>/.harbor/mcp.json`, or `HARBOR_MCP_CONFIG`) loaded by
-`Harbor.Hosting` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:61-73`):
+`Harbor.Hosting` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:69-81`):
 
 - `McpRegistry` (`IMcpRegistry`) — server definitions from config; the agent-facing registry.
 - `McpProcessClient` — spawns and talks JSON-RPC stdio to an MCP server process.
@@ -65,7 +65,7 @@ MCP is wired as three cooperating pieces plus an adapter, all driven by `mcp.jso
 
 ### Sub-agent definitions
 
-Agent definitions live in `Harbor.Abstractions` (`src/Harbor.Abstractions/Agents/AgentDefinition.cs:65-108`):
+Agent definitions live in `Harbor.Abstractions` (`src/Harbor.Abstractions/Agents/AgentDefinition.cs:93-136`):
 
 - `code` — focused code generation, can call any tool
 - `plan` — produces a plan only (read-only)
@@ -81,6 +81,13 @@ model never to call it.
 
 Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
 `src/Harbor.Hosting/Modules/ToolsCatalog.cs:75-109`), not via a registration facade here.
+Fifteen tools are registered in every preset (`read`, `write`, `edit`, `bash`, `glob`,
+`grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `harbor_inspect`,
+`goal`, `spill_read`); `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`,
+`mcp_prompt`, `session_read`, `session_steer`, `plugin_manager` and
+`ask_user_question` join when the host selects `HarborToolSetKind.Full14`
+(25 tools total). `tools.freeze()` runs after
+`src/Harbor.Hosting/Modules/ToolsCatalog.cs:83-117`), not via a registration facade here.
 Ten tools are always registered; `task`, `webfetch`, `ripgrep`, and `mcp` join when the
 host selects `HarborToolSetKind.Full14` (14 tools total). `tools.freeze()` runs after
 registration, and the CLI's `DisabledTools` config list can keep specific tools out at

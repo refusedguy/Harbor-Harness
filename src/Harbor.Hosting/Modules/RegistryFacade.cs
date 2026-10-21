@@ -72,6 +72,18 @@ internal static class RegistryFacade
             ctx.LoggerFactory.CreateLogger<Harbor.Lsp.LspManager>());
         services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
 
+        // #1748: the tool-output spill area. ONE instance serves both sides —
+        // the context boundary writes an oversized tool output into it, and the
+        // `spill_read` tool reads it back. The tool registry is built EAGERLY
+        // here, before the container exists, so the store is a plain object
+        // constructed here and published into the container as the same
+        // instance: the file the model is pointed at and the file the tool
+        // reads are the same file, not two stores' files.
+        var spillStore = new Harbor.Application.Filesystem.FileToolOutputSpillStore(
+            ctx.LoggerFactory.CreateLogger<Harbor.Application.Filesystem.FileToolOutputSpillStore>(),
+            ttl: TimeSpan.FromHours(ctx.Harbor.ToolOutput.SpillTtlHours));
+        services.AddSingleton<IToolOutputSpillStore>(spillStore);
+
         // #1735: the skill provider and the registry over it are built HERE,
         // eagerly, for the same reason the tool registry is: the skill tool
         // is constructed in the next step and needs the registry, and the
@@ -135,7 +147,7 @@ internal static class RegistryFacade
         services.AddSingleton<Harbor.Abstractions.Interaction.IUserQuestionService>(
             sp => sp.GetRequiredService<Harbor.Application.Interaction.UserQuestionService>());
 
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, pluginInventory);
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, spillStore, pluginInventory);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup

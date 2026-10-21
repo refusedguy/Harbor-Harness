@@ -553,6 +553,8 @@ internal static class SessionFileReader
         if (IsRewindLine(record))
         {
             return FoldRewindRecord(record, sessionId, inbox, errors);
+        }
+
         // #1761: the goal lines are metadata too — what the HARNESS tracks
         // about the work, never part of the work itself. They are dropped
         // here, before the message parser sees them, so the history the model

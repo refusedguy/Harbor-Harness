@@ -75,7 +75,7 @@ services.AddSingleton<Harbor.Abstractions.Lsp.ILspService>(lspService);
 ```
 
 It is constructed eagerly rather than resolved from DI, and
-[`ToolsCatalog.cs:163`](../Harbor.Hosting/Modules/ToolsCatalog.cs) takes an
+[`ToolsCatalog.cs:171`](../Harbor.Hosting/Modules/ToolsCatalog.cs) takes an
 optional `ILspService` to hand to the agent-facing `lsp` tool. There is **no
 `HARBOR_*` env var and no config switch** — the service is always registered;
 servers spawn lazily, on first use for a matching file extension.
