@@ -28,7 +28,8 @@ internal sealed record TurnStepResult(
     bool TruncationFallback,
     bool EndRun,
     string? RunFailure = null,
-    RunLimitKind? Limit = null);
+    RunLimitKind? Limit = null,
+    bool Quiescent = false);
 
 /// <summary>
 ///     Per-turn execution extracted from <see cref="AgentLoop" /> ([G4]):
@@ -538,7 +539,17 @@ internal sealed class TurnRunner(
                 if (earlyHit.HasValue)
                     return new TurnStepResult(truncationFallback, EndRun: true, Limit: earlyHit.Value);
             }
-            return new TurnStepResult(truncationFallback, EndRun: true);
+
+            // #1761: QUIESCENCE. The turn produced no tool activity, so the
+            // agent has nothing left to do on its own — the only moment at
+            // which "the agent went quiet" is a fact rather than a guess.
+            // The caller (the loop) uses this to decide whether a goal wants
+            // another round; an aborted stream is not quiescence, it is a
+            // cancel, and it never opens a round.
+            bool quiescent = toolCalls.Count == 0
+                             && malformedCalls.Count == 0
+                             && stopReason != StopReason.Aborted;
+            return new TurnStepResult(truncationFallback, EndRun: true, Quiescent: quiescent);
         }
 
         // Some providers report a terminal finish_reason (stop / length)
