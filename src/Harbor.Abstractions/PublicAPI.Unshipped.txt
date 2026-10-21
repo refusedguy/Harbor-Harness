@@ -139,6 +139,9 @@ Harbor.Abstractions.Providers.IScopedProviderResolver
 Harbor.Abstractions.Providers.IScopedProviderResolver.GetClient(Harbor.Abstractions.Models.ServiceScope! scope, Harbor.Abstractions.Models.Identifiers.ProviderId! providerId) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Providers.ILlmClient!>
 Harbor.Abstractions.Providers.IScopedProviderResolver.GetModelsAsync(Harbor.Abstractions.Models.ServiceScope! scope, Harbor.Abstractions.Models.Identifiers.ProviderId! providerId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.ModelInfo!>!>>!
 Harbor.Abstractions.Providers.IScopedProviderResolver.ScopeFor(Harbor.Abstractions.Models.Identifiers.AgentName! agent) -> Harbor.Abstractions.Models.ServiceScope!
+const Harbor.Abstractions.Agents.AgentDefinition.DefaultRepeatToolThreshold = 3 -> int
+Harbor.Abstractions.Agents.AgentDefinition.RepeatToolThreshold.get -> int
+Harbor.Abstractions.Agents.AgentDefinition.RepeatToolThreshold.init -> void
 Harbor.Abstractions.Sessions.ICompactionEventStore
 Harbor.Abstractions.Sessions.ICompactionEventStore.AppendCompactionEventAsync(string! sessionId, Harbor.Abstractions.Sessions.SessionCompactionEvent! compactionEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
 Harbor.Abstractions.Sessions.ICompactionEventStore.GetCompactionEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>!>>!

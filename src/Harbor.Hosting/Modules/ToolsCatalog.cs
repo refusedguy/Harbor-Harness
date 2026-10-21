@@ -40,13 +40,20 @@ internal static class ToolsCatalog
         // `MaxStepsBehavior.IsExhausted` comparison enforces it. Without this
         // the configured value reached no agent at all and the REPL ran to the
         // agent's own default (50 turns for `code`) whatever the config said.
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.CodeDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.PlanDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.ExploreDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.AskDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.ArchitectDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.DebugDefault(modelId, providerId)));
-        ab.AddAgent(AgentStepBudget.Apply(ctx.Harbor, AgentDefinition.OrchestratorDefault(modelId, providerId)));
+        //
+        // #1756: the repeat-guard threshold rides the same road — one
+        // projection point, so the configured value reaches the agent the run
+        // uses and the guard counts the calls that agent makes.
+        AgentDefinition Declare(AgentDefinition definition) =>
+            AgentRepeatThreshold.Apply(ctx.Harbor, AgentStepBudget.Apply(ctx.Harbor, definition));
+
+        ab.AddAgent(Declare(AgentDefinition.CodeDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.PlanDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.ExploreDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.AskDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.ArchitectDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.DebugDefault(modelId, providerId)));
+        ab.AddAgent(Declare(AgentDefinition.OrchestratorDefault(modelId, providerId)));
         return registry;
     }
 
