@@ -102,15 +102,15 @@ internal static class RegistryFacade
         // /plugins panel (through PluginReloadService). Two inventories would
         // be two answers to one question, and the drift would show up as an
         // agent proposing to remove a plugin the panel does not list.
-        IPluginInventory pluginInventory = new FileSystemPluginInventory(
+        IInstalledPluginInventory pluginInventory = new FileSystemPluginInventory(
             Path.Combine(ctx.Options.HarborDir, "plugins"),
             Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins"),
             ctx.LoggerFactory.CreateLogger<FileSystemPluginInventory>());
-        services.AddSingleton<IPluginInventory>(pluginInventory);
+        services.AddSingleton<IInstalledPluginInventory>(pluginInventory);
 #else
         // No plugin runtime in this build: the inventory does not exist and the
         // plugin_manager tool is not registered (ToolsCatalog asks for it).
-        IPluginInventory? pluginInventory = null;
+        IInstalledPluginInventory? pluginInventory = null;
 #endif
 
         var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, pluginInventory);

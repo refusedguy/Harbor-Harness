@@ -299,6 +299,16 @@ internal sealed class JsonlFeedbackStore : ISessionFeedbackStore
         string sessionId,
         CancellationToken ct)
     {
+        // #1749: a session file is read as a whole or not at all. A file in
+        // a format generation this build does not read is refused HERE,
+        // before the scan, rather than scanned for the feedback records of
+        // a format this build does not know.
+        var generation = SessionFileReader.ReadFormatGeneration(sessionFile, sessionId);
+        if (generation.IsFailure)
+        {
+            return generation.ConvertFailure<SessionFeedback>();
+        }
+
         return await Result.Try(async () =>
         {
             var semaphore = await _owner.GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);

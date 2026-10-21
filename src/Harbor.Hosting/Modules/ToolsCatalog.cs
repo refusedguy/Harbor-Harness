@@ -158,7 +158,7 @@ internal static class ToolsCatalog
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
         ISessionStore? sessionStore = null,
         ISkillRegistry? skillRegistry = null,
-        IPluginInventory? pluginInventory = null)
+        IInstalledPluginInventory? pluginInventory = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);

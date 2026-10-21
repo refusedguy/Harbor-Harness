@@ -43,7 +43,7 @@ public sealed record InstalledPlugin(string Name, string Scope, string FullPath,
 ///     <para>
 ///         <b>One inventory, two consumers (#1738).</b> The scope enumeration
 ///         is NOT this class's own: it reads the same
-///         <see cref="IPluginInventory" /> the agent-facing
+///         <see cref="IInstalledPluginInventory" /> the agent-facing
 ///         <c>plugin_manager</c> tool reads, so the panel and the agent cannot
 ///         disagree about what is installed.
 ///     </para>
@@ -57,7 +57,7 @@ public sealed record InstalledPlugin(string Name, string Scope, string FullPath,
 /// </remarks>
 public sealed class PluginReloadService
 {
-    private readonly IPluginInventory _inventory;
+    private readonly IInstalledPluginInventory _inventory;
     private readonly ILogger<PluginReloadService> _logger;
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class PluginReloadService
     ///     over the process-wide plugin inventory.
     /// </summary>
     public PluginReloadService(
-        IPluginInventory inventory,
+        IInstalledPluginInventory inventory,
         ILogger<PluginReloadService> logger)
     {
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
@@ -95,14 +95,14 @@ public sealed class PluginReloadService
     /// <summary>
     ///     List installed plugin files across both scopes for the
     ///     <c>/plugins</c> panel. Reads the process-wide
-    ///     <see cref="IPluginInventory" /> — the same one the agent-facing
+    ///     <see cref="IInstalledPluginInventory" /> — the same one the agent-facing
     ///     <c>plugin_manager</c> tool reads — and overlays the version bound
     ///     by any reload pass so far. A scope that exists but cannot be read
     ///     reads as an empty list, with the reason logged.
     /// </summary>
     public IReadOnlyList<InstalledPlugin> ListInstalled()
     {
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = _inventory.List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = _inventory.List();
         if (listed.IsFailure)
         {
             PluginReloadServiceLog.InventoryUnavailable(_logger, listed.Error);
@@ -115,11 +115,11 @@ public sealed class PluginReloadService
             versions = new Dictionary<string, string>(_loadedVersions, StringComparer.Ordinal);
         }
 
-        IReadOnlyList<PluginInventoryEntry> entries = listed.Value;
+        IReadOnlyList<InstalledPluginEntry> entries = listed.Value;
         var result = new List<InstalledPlugin>(entries.Count);
         for (int i = 0; i < entries.Count; i++)
         {
-            PluginInventoryEntry entry = entries[i];
+            InstalledPluginEntry entry = entries[i];
             versions.TryGetValue(entry.FullPath, out string? version);
             result.Add(new InstalledPlugin(
                 entry.Name,

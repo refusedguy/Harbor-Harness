@@ -36,7 +36,7 @@ public class FileSystemPluginInventoryTests
     [Test]
     public async Task List_EmptyScopes_ReportsNoPlugins()
     {
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = NewInventory().List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = NewInventory().List();
 
         await Assert.That(listed.IsSuccess).IsTrue();
         await Assert.That(listed.Value.Count).IsEqualTo(0);
@@ -49,14 +49,14 @@ public class FileSystemPluginInventoryTests
         File.WriteAllText(Path.Combine(GlobalRoot, "Beta.cs.disabled"), "// plugin");
         File.WriteAllText(Path.Combine(ProjectRoot, "Gamma.cs"), "// plugin");
 
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = NewInventory().List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = NewInventory().List();
 
         await Assert.That(listed.IsSuccess).IsTrue();
         await Assert.That(listed.Value.Count).IsEqualTo(3);
 
-        PluginInventoryEntry? alpha = null;
-        PluginInventoryEntry? beta = null;
-        PluginInventoryEntry? gamma = null;
+        InstalledPluginEntry? alpha = null;
+        InstalledPluginEntry? beta = null;
+        InstalledPluginEntry? gamma = null;
         for (int i = 0; i < listed.Value.Count; i++)
         {
             if (listed.Value[i].Name == "Alpha.cs") alpha = listed.Value[i];
@@ -84,10 +84,10 @@ public class FileSystemPluginInventoryTests
             Path.Combine(GlobalRoot, "Alpha.harbor-plugin.json"),
             """{"schemaVersion":1,"name":"alpha","version":"1.2.0","harbor":"0.4.0","axes":["IToolPlugin"]}""");
 
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = NewInventory().List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = NewInventory().List();
 
         await Assert.That(listed.IsSuccess).IsTrue();
-        PluginInventoryEntry entry = listed.Value[0];
+        InstalledPluginEntry entry = listed.Value[0];
         await Assert.That(entry.DeclaredVersion).IsEqualTo("1.2.0");
         await Assert.That(entry.RequiredHarborVersion).IsEqualTo("0.4.0");
         await Assert.That(entry.Compatible).IsTrue();
@@ -103,7 +103,7 @@ public class FileSystemPluginInventoryTests
             Path.Combine(GlobalRoot, "Alpha.harbor-plugin.json"),
             """{"schemaVersion":1,"harbor":"99.0.0"}""");
 
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = NewInventory().List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = NewInventory().List();
 
         await Assert.That(listed.IsSuccess).IsTrue();
         await Assert.That(listed.Value[0].Compatible).IsFalse()
@@ -117,7 +117,7 @@ public class FileSystemPluginInventoryTests
         File.WriteAllText(Path.Combine(GlobalRoot, "Alpha.cs"), "// plugin");
         File.WriteAllText(Path.Combine(GlobalRoot, "Alpha.harbor-plugin.json"), "{ not json");
 
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = NewInventory().List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = NewInventory().List();
 
         await Assert.That(listed.IsSuccess).IsTrue();
         await Assert.That(listed.Value[0].ManifestError).IsNotNull()
@@ -203,7 +203,7 @@ public class FileSystemPluginInventoryTests
         await Assert.That(disabled.IsSuccess).IsTrue();
         await Assert.That(File.Exists(Path.Combine(GlobalRoot, "Alpha.cs.disabled"))).IsTrue();
 
-        Result<IReadOnlyList<PluginInventoryEntry>> afterDisable = inventory.List();
+        Result<IReadOnlyList<InstalledPluginEntry>> afterDisable = inventory.List();
         await Assert.That(afterDisable.Value[0].Enabled).IsFalse();
 
         Result<PluginInventoryChangeResult> enabled = await inventory.ApplyAsync(

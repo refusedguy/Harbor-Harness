@@ -39,7 +39,7 @@ internal static class RegistriesModule
             // plugin_manager tool reads, so the two cannot disagree about what
             // is installed. The inventory is published by RegistryFacade.Compose.
             var reload = new PluginReloadService(
-                sp.GetRequiredService<IPluginInventory>(),
+                sp.GetRequiredService<IInstalledPluginInventory>(),
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger<PluginReloadService>());
             // The startup load is always empty out-of-process; Attach fires
             // immediately so the /plugins panel seeds with zero plugins.

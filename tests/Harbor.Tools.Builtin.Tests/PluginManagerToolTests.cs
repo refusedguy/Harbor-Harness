@@ -48,7 +48,7 @@ public class PluginManagerToolTests
     [Test]
     public async Task List_ReportsTheInstalledPlugins_AndAsksNobody()
     {
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Global,
             "/home/u/.harbor/plugins/TodoWrite.cs",
@@ -113,7 +113,7 @@ public class PluginManagerToolTests
     [Test]
     public async Task Uninstall_WithoutApproval_ChangesNothing()
     {
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Global,
             "/home/u/.harbor/plugins/TodoWrite.cs",
@@ -136,7 +136,7 @@ public class PluginManagerToolTests
     [Test]
     public async Task Uninstall_WithApproval_AppliesTheChange()
     {
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Global,
             "/home/u/.harbor/plugins/TodoWrite.cs",
@@ -160,7 +160,7 @@ public class PluginManagerToolTests
     [Test]
     public async Task Disable_WithApproval_AsksForTheDisable()
     {
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Project,
             "/work/.harbor/plugins/TodoWrite.cs",
@@ -188,7 +188,7 @@ public class PluginManagerToolTests
         // treat it as "yes, this time": an approval is never written back to a
         // ruleset, so the session's permission mode is unchanged and the NEXT
         // call asks again.
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Global,
             "/home/u/.harbor/plugins/TodoWrite.cs",
@@ -231,7 +231,7 @@ public class PluginManagerToolTests
     [Test]
     public async Task ApplyFailure_IsReportedWithItsReason()
     {
-        _inventory.Entries.Add(new PluginInventoryEntry(
+        _inventory.Entries.Add(new InstalledPluginEntry(
             "TodoWrite.cs",
             PluginScope.Global,
             "/home/u/.harbor/plugins/TodoWrite.cs",

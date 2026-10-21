@@ -42,7 +42,7 @@ namespace Harbor.Plugins.Storage;
 ///         reaches the file system.
 ///     </para>
 /// </remarks>
-public sealed class FileSystemPluginInventory : IPluginInventory
+public sealed class FileSystemPluginInventory : IInstalledPluginInventory
 {
     /// <summary>
     ///     The suffix that marks a disabled plugin source. The loader's glob
@@ -83,9 +83,9 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     public string ProjectRoot => _projectRoot;
 
     /// <inheritdoc />
-    public Result<IReadOnlyList<PluginInventoryEntry>> List()
+    public Result<IReadOnlyList<InstalledPluginEntry>> List()
     {
-        var entries = new List<PluginInventoryEntry>();
+        var entries = new List<InstalledPluginEntry>();
 
         foreach ((PluginScope scope, string root) in Scopes())
         {
@@ -106,7 +106,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                return Result.Failure<IReadOnlyList<PluginInventoryEntry>>(
+                return Result.Failure<IReadOnlyList<InstalledPluginEntry>>(
                     $"The {ScopeText(scope)} plugin scope '{root}' could not be read: {ex.Message} "
                     + "The plugin list is INCOMPLETE — fix the directory and retry; an incomplete list "
                     + "is never reported as 'no plugins'.");
@@ -123,24 +123,24 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             int byScope = a.Scope.CompareTo(b.Scope);
             return byScope != 0 ? byScope : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
-        return Result.Success<IReadOnlyList<PluginInventoryEntry>>(entries);
+        return Result.Success<IReadOnlyList<InstalledPluginEntry>>(entries);
     }
 
     /// <inheritdoc />
-    public Result<PluginInventoryEntry> DescribeSource(string sourcePath, PluginScope scope)
+    public Result<InstalledPluginEntry> DescribeSource(string sourcePath, PluginScope scope)
     {
         ArgumentNullException.ThrowIfNull(sourcePath);
 
         if (!File.Exists(sourcePath))
         {
-            return Result.Failure<PluginInventoryEntry>(
+            return Result.Failure<InstalledPluginEntry>(
                 $"The plugin source '{sourcePath}' does not exist. Next step: call list and install a source "
                 + "that is on disk.");
         }
 
         if (!".cs".Equals(Path.GetExtension(sourcePath), StringComparison.OrdinalIgnoreCase))
         {
-            return Result.Failure<PluginInventoryEntry>(
+            return Result.Failure<InstalledPluginEntry>(
                 $"'{sourcePath}' is not a plugin source: a CS-source plugin is one '.cs' file. "
                 + "Next step: point the tool at a '.cs' file.");
         }
@@ -185,7 +185,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
                 + "what is installed, and pass 'source' with the '.cs' file to install.");
         }
 
-        Result<PluginInventoryEntry> described = DescribeSource(source, change.Scope);
+        Result<InstalledPluginEntry> described = DescribeSource(source, change.Scope);
         if (described.IsFailure)
         {
             // The explicit form: the refusal is traced here, not only re-typed.
@@ -199,7 +199,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             return Result.Failure<PluginInventoryChangeResult>(described.Error);
         }
 
-        PluginInventoryEntry entry = described.Value;
+        InstalledPluginEntry entry = described.Value;
 
         // The target is the name that was PROPOSED, not the name the source
         // happens to have: the human approved a name, and the copy must land
@@ -328,7 +328,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     /// <summary>
     ///     Remove the plugin's source and, when it ships one, its manifest.
     /// </summary>
-    private Result<PluginInventoryChangeResult> UninstallCore(PluginInventoryEntry entry, string path)
+    private Result<PluginInventoryChangeResult> UninstallCore(InstalledPluginEntry entry, string path)
     {
         try
         {
@@ -365,7 +365,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     ///     loader's glob skips.
     /// </summary>
     private Result<PluginInventoryChangeResult> ToggleCore(
-        PluginInventoryEntry entry,
+        InstalledPluginEntry entry,
         string path,
         bool enable)
     {
@@ -404,11 +404,11 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     ///     first, then the user's, which is the order the CLI's
     ///     <c>harbor plugin uninstall</c> uses.
     /// </summary>
-    private Result<(PluginInventoryEntry Entry, string Path)> Find(string name)
+    private Result<(InstalledPluginEntry Entry, string Path)> Find(string name)
     {
         if (!IsPlainName(name))
         {
-            return Result.Failure<(PluginInventoryEntry Entry, string Path)>(
+            return Result.Failure<(InstalledPluginEntry Entry, string Path)>(
                 $"'{name}' is not a plugin file name. Next step: call list and use the exact file name it "
                 + "reports (e.g. 'TodoWrite.cs').");
         }
@@ -423,7 +423,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             return Result.Success((Describe(actual, scope), actual));
         }
 
-        return Result.Failure<(PluginInventoryEntry Entry, string Path)>(
+        return Result.Failure<(InstalledPluginEntry Entry, string Path)>(
             $"No plugin named '{name}' is installed in {_projectRoot} or {_globalRoot}. Next step: call list "
             + "and use the exact file name it reports.");
     }
@@ -439,7 +439,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     ///     to the ENABLED name, and a disabled plugin keeps the manifest it was
     ///     installed with.
     /// </param>
-    private PluginInventoryEntry Describe(string path, PluginScope scope, string? manifestSource = null)
+    private InstalledPluginEntry Describe(string path, PluginScope scope, string? manifestSource = null)
     {
         string full = Path.GetFullPath(path);
         bool enabled = !full.EndsWith(DisabledSuffix, StringComparison.OrdinalIgnoreCase);
@@ -449,7 +449,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         string manifestPath = PluginManifestReader.PathFor(source);
         if (!File.Exists(manifestPath))
         {
-            return new PluginInventoryEntry(name, scope, full, enabled, null, [], null, true);
+            return new InstalledPluginEntry(name, scope, full, enabled, null, [], null, true);
         }
 
         string text;
@@ -462,7 +462,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return new PluginInventoryEntry(name, scope, full, enabled, null, [], null, true)
+            return new InstalledPluginEntry(name, scope, full, enabled, null, [], null, true)
             {
                 ManifestError = $"the manifest '{manifestPath}' could not be read: {ex.Message}",
             };
@@ -471,7 +471,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         Result<PluginManifest> manifest = PluginManifestReader.Parse(text, manifestPath, _logger);
         if (manifest.IsFailure)
         {
-            return new PluginInventoryEntry(name, scope, full, enabled, null, [], null, true)
+            return new InstalledPluginEntry(name, scope, full, enabled, null, [], null, true)
             {
                 ManifestError = manifest.Error,
             };
@@ -482,7 +482,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         bool compatible = PluginCompatibility.IsCompatible(HarborRuntimeVersion.Current, value.RequiredHarborVersion);
         IReadOnlyList<string> axes = value.Axes ?? [];
 
-        return new PluginInventoryEntry(
+        return new InstalledPluginEntry(
             name,
             scope,
             full,

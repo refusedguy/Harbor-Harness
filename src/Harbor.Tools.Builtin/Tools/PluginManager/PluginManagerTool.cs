@@ -77,7 +77,7 @@ namespace Harbor.Tools.Builtin;
 [ToolParam("scope", "string", Description = "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'")]
 public sealed partial class PluginManagerTool : ITool
 {
-    private readonly IPluginInventory _inventory;
+    private readonly IInstalledPluginInventory _inventory;
     private readonly ILogger<PluginManagerTool> _logger;
 
     /// <summary>
@@ -85,7 +85,7 @@ public sealed partial class PluginManagerTool : ITool
     /// </summary>
     /// <param name="inventory">The inventory the tool reads and, after approval, changes.</param>
     /// <param name="logger">Logger for the proposal / approval / outcome trail.</param>
-    public PluginManagerTool(IPluginInventory inventory, ILogger<PluginManagerTool> logger)
+    public PluginManagerTool(IInstalledPluginInventory inventory, ILogger<PluginManagerTool> logger)
     {
         _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -216,7 +216,7 @@ public sealed partial class PluginManagerTool : ITool
     /// </summary>
     private ToolResult List()
     {
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = _inventory.List();
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = _inventory.List();
         if (listed.IsFailure)
         {
             PluginManagerToolLog.ListFailed(_logger, listed.Error);
@@ -225,7 +225,7 @@ public sealed partial class PluginManagerTool : ITool
                 new { action = "list" });
         }
 
-        IReadOnlyList<PluginInventoryEntry> entries = listed.Value;
+        IReadOnlyList<InstalledPluginEntry> entries = listed.Value;
         PluginManagerToolLog.Listed(_logger, entries.Count);
 
         if (entries.Count == 0)
@@ -252,7 +252,7 @@ public sealed partial class PluginManagerTool : ITool
     /// <summary>
     ///     One line per installed plugin.
     /// </summary>
-    private static string Describe(PluginInventoryEntry entry)
+    private static string Describe(InstalledPluginEntry entry)
     {
         var text = new StringBuilder();
         text.Append("  ").Append(entry.Name);
@@ -317,7 +317,7 @@ public sealed partial class PluginManagerTool : ITool
         }
 
         return _inventory.List()
-            .Bind<PluginInventoryEntry>(listed => FindByName(listed, name))
+            .Bind<InstalledPluginEntry>(listed => FindByName(listed, name))
             .Map<Proposal>(found =>
             {
                 string text = $"{spec.Verb} plugin '{found.Name}' in the {ScopeText(found.Scope)} scope "
@@ -330,8 +330,8 @@ public sealed partial class PluginManagerTool : ITool
     ///     The installed plugin with that name, or the failure that says the
     ///     agent has to look at the list first.
     /// </summary>
-    private static Result<PluginInventoryEntry> FindByName(
-        IReadOnlyList<PluginInventoryEntry> entries,
+    private static Result<InstalledPluginEntry> FindByName(
+        IReadOnlyList<InstalledPluginEntry> entries,
         string name)
     {
         for (int i = 0; i < entries.Count; i++)
@@ -340,7 +340,7 @@ public sealed partial class PluginManagerTool : ITool
                 return Result.Success(entries[i]);
         }
 
-        return Result.Failure<PluginInventoryEntry>(
+        return Result.Failure<InstalledPluginEntry>(
             $"No plugin named '{name}' is installed. Next step: call list and use the exact file "
             + "name it reports.");
     }

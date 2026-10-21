@@ -13,10 +13,10 @@ namespace Harbor.Tools.Builtin.Tests;
 ///         applied" as loudly as "the change was applied".
 ///     </para>
 /// </remarks>
-internal sealed class FakePluginInventory : IPluginInventory
+internal sealed class FakePluginInventory : IInstalledPluginInventory
 {
     /// <summary>What <see cref="List" /> reports.</summary>
-    internal List<PluginInventoryEntry> Entries { get; } = [];
+    internal List<InstalledPluginEntry> Entries { get; } = [];
 
     /// <summary>Every change that reached <see cref="ApplyAsync" />, in order.</summary>
     internal List<PluginInventoryChange> Applied { get; } = [];
@@ -31,19 +31,19 @@ internal sealed class FakePluginInventory : IPluginInventory
     internal string? ApplyError { get; set; }
 
     /// <summary>The declared facts <see cref="DescribeSource" /> reports.</summary>
-    internal PluginInventoryEntry? DescribedEntry { get; set; }
+    internal InstalledPluginEntry? DescribedEntry { get; set; }
 
-    public Result<IReadOnlyList<PluginInventoryEntry>> List()
+    public Result<IReadOnlyList<InstalledPluginEntry>> List()
         => ListError is { } error
-            ? Result.Failure<IReadOnlyList<PluginInventoryEntry>>(error)
-            : Result.Success<IReadOnlyList<PluginInventoryEntry>>(Entries);
+            ? Result.Failure<IReadOnlyList<InstalledPluginEntry>>(error)
+            : Result.Success<IReadOnlyList<InstalledPluginEntry>>(Entries);
 
-    public Result<PluginInventoryEntry> DescribeSource(string sourcePath, PluginScope scope)
+    public Result<InstalledPluginEntry> DescribeSource(string sourcePath, PluginScope scope)
     {
         Described.Add(sourcePath);
         return DescribedEntry is { } entry
             ? Result.Success(entry)
-            : Result.Success(new PluginInventoryEntry(
+            : Result.Success(new InstalledPluginEntry(
                 Path.GetFileName(sourcePath),
                 scope,
                 Path.Combine("/plugins", Path.GetFileName(sourcePath)),

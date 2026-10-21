@@ -1,4 +1,7 @@
 using System.Text.RegularExpressions;
+#if HARBOR_WITH_PLUGINS
+using Harbor.Plugins.Hosting;
+#endif
 
 namespace Harbor.App.Cli.Commands;
 
@@ -35,6 +38,7 @@ public sealed partial class PluginsCommand : ICommand
         return sub switch
         {
             "list" => ListAsync(),
+            "inventory" => InventoryAsync(),
             "install" => InstallAsync(args.Skip(1).ToArray()),
             "uninstall" or "remove" or "rm" => UninstallAsync(args.Skip(1).ToArray()),
             _ => PrintUsage()
@@ -58,6 +62,66 @@ public sealed partial class PluginsCommand : ICommand
             return "(none)";
 
         return string.Join(", ", files.Select(Path.GetFileName)!);
+    }
+
+#if HARBOR_WITH_PLUGINS
+    /// <summary>
+    ///     Print the live plugin composition the plugin host published (#1722).
+    /// </summary>
+    /// <remarks>
+    ///     The document is printed as it was written: it IS the snapshot, and a
+    ///     reader that reformats it would be reading something the host did not
+    ///     say. The host rewrites the file whenever the composition changes, so
+    ///     the file is the state of the last load — the MCP method
+    ///     <c>harbor/plugins/inventory</c> answers with the same document, live.
+    /// </remarks>
+    private async Task<int> ReadInventoryAsync()
+    {
+        string path = Path.Combine(_globalRoot, PluginInventory.FileName);
+
+        string content;
+        try
+        {
+            content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        }
+        catch (FileNotFoundException)
+        {
+            await _error.WriteLineAsync(
+                $"No plugin inventory has been published: '{path}' does not exist. The plugin host publishes one when it loads plugins.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            await _error.WriteLineAsync(
+                $"No plugin inventory has been published: '{path}' does not exist. The plugin host publishes one when it loads plugins.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            await _error.WriteLineAsync(
+                $"The plugin inventory at '{path}' could not be read: {ex.Message}").ConfigureAwait(false);
+            return 1;
+        }
+
+        await _output.WriteLineAsync(content.TrimEnd('\r', '\n')).ConfigureAwait(false);
+        return 0;
+    }
+#endif
+
+    /// <summary>
+    ///     The <c>harbor plugin inventory</c> verb: the machine-readable
+    ///     snapshot of the live plugin composition (#1722).
+    /// </summary>
+    private Task<int> InventoryAsync()
+    {
+#if HARBOR_WITH_PLUGINS
+        return ReadInventoryAsync();
+#else
+        _error.WriteLine("The plugin inventory is not available in this build: this binary was built without the plugin host.");
+        return Task.FromResult(2);
+#endif
     }
 
     private async Task<int> InstallAsync(string[] args)
@@ -144,8 +208,9 @@ public sealed partial class PluginsCommand : ICommand
     private Task<int> PrintUsage()
     {
         _error.WriteLine("""
-                         Usage: harbor plugin [list|install|uninstall]
+                         Usage: harbor plugin [list|inventory|install|uninstall]
                            plugin list                       show global + project plugins
+                           plugin inventory                  the live plugin composition, as JSON (#1722)
                            plugin install <file.cs>          copy into ~/.harbor/plugins (--project targets <cwd>/.harbor/plugins)
                            plugin uninstall <name>           remove from either scope
                          """);

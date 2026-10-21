@@ -69,7 +69,7 @@ public enum PluginScope
 ///     Whether the plugin may run against the running Harbor. True when the
 ///     plugin declares no floor — there is nothing to enforce.
 /// </param>
-public sealed record PluginInventoryEntry(
+public sealed record InstalledPluginEntry(
     string Name,
     PluginScope Scope,
     string FullPath,
@@ -161,9 +161,19 @@ public sealed record PluginInventoryChangeResult(
     string Summary);
 
 /// <summary>
-///     The plugin inventory: what is installed, and the one way to change it.
+///     The plugin inventory: what is INSTALLED on disk, and the one way to
+///     change it.
 /// </summary>
 /// <remarks>
+///     <para>
+///         <b>Not the live composition.</b> The plugin host has its own
+///         inventory (#1722, <c>Harbor.Plugins.Hosting.PluginInventory</c>):
+///         the plugins it LOADED, the phase each one is in, the doors it
+///         called. This one is the other half — the plugin FILES in the two
+///         scopes, whether they are enabled, and what their manifests
+///         declare. The host runs out of process, so the file side is what
+///         the CLI process can answer.
+///     </para>
 ///     <para>
 ///         <b>Why a port, and not a static helper.</b> Two surfaces answer
 ///         "what is installed" today — the agent-facing tool
@@ -187,7 +197,7 @@ public sealed record PluginInventoryChangeResult(
 ///         read and write separately would invite a second, ungated writer.
 ///     </para>
 /// </remarks>
-public interface IPluginInventory
+public interface IInstalledPluginInventory
 {
     /// <summary>
     ///     List the installed plugins across both scopes.
@@ -203,7 +213,7 @@ public interface IPluginInventory
     ///     the read is a directory enumeration plus a few small manifest files.
     ///     The write is asynchronous because it copies a file.
     /// </remarks>
-    Result<IReadOnlyList<PluginInventoryEntry>> List();
+    Result<IReadOnlyList<InstalledPluginEntry>> List();
 
     /// <summary>
     ///     Describe what a plugin SOURCE declares, without installing it.
@@ -222,7 +232,7 @@ public interface IPluginInventory
     ///     installed. Without this member the human would approve an install
     ///     whose only outcome is a refusal at load time.
     /// </remarks>
-    Result<PluginInventoryEntry> DescribeSource(string sourcePath, PluginScope scope);
+    Result<InstalledPluginEntry> DescribeSource(string sourcePath, PluginScope scope);
 
     /// <summary>
     ///     Apply one change to the inventory.
