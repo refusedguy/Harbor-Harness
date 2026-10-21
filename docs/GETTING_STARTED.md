@@ -388,7 +388,7 @@ harbor sessions  # list
 ## Tools available to the agent
 
 Full set (`HarborToolSetKind.Full14`, the CLI default — the enum name predates the
-23-tool count, see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
+24-tool count, see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
 
 | Tool | Description |
 |---|---|
@@ -414,10 +414,11 @@ Full set (`HarborToolSetKind.Full14`, the CLI default — the enum name predates
 | `session_steer` | Send a message / redirect / restart directive to a peer session (requires a session store) |
 | `harbor_inspect` | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes) |
 | `plugin_manager` | List installed plugins; propose installing / removing / enabling / disabling one (asks about every change) |
+| `goal` | Report the goal as complete, or as blocked with a reason |
 | `spill_read` | Read back a tool output that was too large to fit the context |
 
 The Avalonia desktop host registers the smaller `Standard10` set (the enum name
-predates the count — 14 members today: without `task`, `webfetch`, `ripgrep`,
+predates the count — 15 members today: without `task`, `webfetch`, `ripgrep`,
 `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
 `plugin_manager`).
 

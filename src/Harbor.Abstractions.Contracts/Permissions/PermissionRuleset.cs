@@ -185,7 +185,13 @@ public sealed record PermissionRuleset
         // names the file, the scope and the effect. A user who does not want
         // an agent touching plugins writes new("plugin_manager", "*", Deny)
         // and the tool never starts.
-        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow),
+        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
+        // #1761: the goal axis. The agent's verdict on the session's own
+        // goal is not a workspace mutation and needs no approval — asking
+        // the user "did you finish?" on every round would be noise. The
+        // read-only modes do not carry this rule, so their goal tool is
+        // asked about, not allowed.
+        new(WellKnownTools.Goal, "*", PermissionAction.Allow),
         // #1748: reading back a tool output that was spilled to a file. The
         // tool is confined to the CURRENT session's spill directory by the
         // store, so it needs no prompt: the file it can reach holds the output

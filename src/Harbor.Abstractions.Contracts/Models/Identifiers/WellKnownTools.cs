@@ -69,6 +69,9 @@ public static class WellKnownTools
     /// <summary>The <c>grep</c> tool — searches file contents by pattern.</summary>
     public static readonly ToolName Grep = ToolName.Create("grep");
 
+    /// <summary>The <c>goal</c> tool — reports the agent's verdict on the session's goal.</summary>
+    public static readonly ToolName Goal = ToolName.Create("goal");
+
     /// <summary>The <c>harbor_inspect</c> tool — reads the live runtime-API catalog.</summary>
     public static readonly ToolName HarborInspect = ToolName.Create("harbor_inspect");
 

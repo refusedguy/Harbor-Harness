@@ -37,6 +37,7 @@ internal static class ToolSchemaFixtures
         ("BashTool", () => new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance)),
         ("EditTool", () => new EditTool(NullLogger<EditTool>.Instance)),
         ("GlobTool", () => new GlobTool(NullLogger<GlobTool>.Instance)),
+        ("GoalTool", () => new GoalTool(null, NullLogger<GoalTool>.Instance)),
         ("GrepTool", () => new GrepTool(NullLogger<GrepTool>.Instance)),
         // #1732: the runtime catalog. The factories need the registries it
         // reads — the same objects the product hands it — so the schema the

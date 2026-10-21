@@ -11,7 +11,7 @@ namespace Harbor.Tools.Builtin;
 ///     container can build it. Detached state fails honestly instead of
 ///     NRE-ing — never a fake read or a dropped steer.
 /// </summary>
-public sealed class DeferredSessionStore : ISessionStore
+public sealed class DeferredSessionStore : ISessionStore, ISessionGoalStore
 {
     private volatile ISessionStore? _inner;
 
@@ -169,8 +169,61 @@ public sealed class DeferredSessionStore : ISessionStore
         return current is not null
             ? current.PurgeMessagesAfterAsync(sessionId, messageId, ct)
             : Task.FromResult(Result.Failure<int>(NotReady));
+    /// <summary>
+    ///     The goal of the session, forwarded to the real store when it keeps
+    ///     goals (#1761).
+    /// </summary>
+    /// <remarks>
+    ///     The goal axis is OPTIONAL on the store, and this forwarder is the
+    ///     tools' window onto the store — so it forwards the axis the same way
+    ///     it forwards every other member. A backend that keeps no goals
+    ///     answers "this session has no goal", which is the honest reading for
+    ///     a store that has never heard of one.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The goal, or none when the session has none.</returns>
+    public Task<Result<Maybe<Goal>>> GetGoalAsync(string sessionId, CancellationToken ct = default)
+    {
+        var current = Current;
+        if (current is null)
+        {
+            return Task.FromResult(Result.Failure<Maybe<Goal>>(NotReady));
+        }
+
+        return current is ISessionGoalStore goals
+            ? goals.GetGoalAsync(sessionId, ct)
+            : Task.FromResult(Result.Success(Maybe<Goal>.None));
+    }
+
+    /// <summary>
+    ///     Append a new revision of the session's goal, forwarded to the real
+    ///     store when it keeps goals (#1761).
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="goal">The goal revision to append.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The appended goal, or failure when the backend keeps no goals.</returns>
+    public Task<Result<Goal>> AppendGoalAsync(string sessionId, Goal goal, CancellationToken ct = default)
+    {
+        var current = Current;
+        if (current is null)
+        {
+            return Task.FromResult(Result.Failure<Goal>(NotReady));
+        }
+
+        return current is ISessionGoalStore goals
+            ? goals.AppendGoalAsync(sessionId, goal, ct)
+            : Task.FromResult(Result.Failure<Goal>(NoGoalAxis));
     }
 
     private const string NotReady =
         "Session runtime is not initialized yet (host composition incomplete).";
+
+    /// <summary>
+    ///     The answer a backend that keeps no goals gives: the goal axis is
+    ///     optional, and a store that has never heard of a goal cannot have
+    ///     one recorded against it.
+    /// </summary>
+    private const string NoGoalAxis = "This session backend keeps no goals.";
 }

@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ICompactionEventStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ISessionGoalStore, ICompactionEventStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -44,6 +44,11 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     // the forwarders so the ISessionFeedbackStore impl site stays here, the
     // way the checkpoint axis does.
     private readonly JsonlFeedbackStore _feedback;
+
+    // #1761: the goal axis lives in JsonlGoalStore; the store keeps the
+    // forwarders so the ISessionGoalStore impl site stays here, the way the
+    // checkpoint and feedback axes do.
+    private readonly JsonlGoalStore _goals;
 
     /// <summary>
     ///     Parsed-message cache. Architecture audit v2 §3.3: keyed by session id,
@@ -115,6 +120,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         _redactor = new SecretRedactor(literalSecrets);
         _checkpoints = new JsonlCheckpointStore(this, rootDirectory, logger);
         _feedback = new JsonlFeedbackStore(this, rootDirectory, logger);
+        _goals = new JsonlGoalStore(this, rootDirectory, logger);
 
         if (!Directory.Exists(_rootDirectory))
         {
@@ -1106,6 +1112,41 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         _feedback.GetFeedbackAsync(sessionId, ct);
 
     /// <summary>
+    ///     Read the session's goal (#1761): the durable goal the session is
+    ///     working toward, read back from the goal lines in the session file.
+    /// </summary>
+    /// <remarks>
+    ///     Forwarder over <see cref="JsonlGoalStore" /> — the goal axis has one
+    ///     home; the <see cref="ISessionGoalStore" /> impl site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The goal, or none when the session has none.</returns>
+    public Task<Result<Maybe<Goal>>> GetGoalAsync(
+        string sessionId,
+        CancellationToken ct = default) =>
+        _goals.GetGoalAsync(sessionId, ct);
+
+    /// <summary>
+    ///     Append a new revision of the session's goal (#1761): the goal line
+    ///     is appended to the session file, so the goal survives a restart and
+    ///     stays out of the message history the model reads.
+    /// </summary>
+    /// <remarks>
+    ///     Forwarder over <see cref="JsonlGoalStore" /> — the goal axis has one
+    ///     home; the <see cref="ISessionGoalStore" /> impl site stays here.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="goal">The goal revision to append.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The appended goal, or failure when the revision is stale.</returns>
+    public Task<Result<Goal>> AppendGoalAsync(
+        string sessionId,
+        Goal goal,
+        CancellationToken ct = default) =>
+        _goals.AppendGoalAsync(sessionId, goal, ct);
+
+    /// <summary>
     ///     Aggregate per-session stats from the message history. Every fallible
     ///     step (<see cref="GetMessagesAsync" />) already returns a
     ///     <see cref="Result{T}" /> and nothing here throws, so no try boundary
@@ -1275,4 +1316,19 @@ internal static partial class JsonlSessionStoreLog
     /// </summary>
     [LoggerMessage(EventId = 20, Level = LogLevel.Warning, Message = "Skipping session {SessionId}: its header could not be read ({Reason}).")]
     public static partial void SessionHeaderUnreadable(ILogger logger, string sessionId, string reason);
+
+    [LoggerMessage(EventId = 21, Level = LogLevel.Error, Message = "Failed to append a goal to session {SessionId}: {Error}")]
+    public static partial void AppendGoalFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 22, Level = LogLevel.Error, Message = "Failed to read the goal of session {SessionId}: {Error}")]
+    public static partial void ReadGoalFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 23, Level = LogLevel.Warning, Message = "Skipping malformed goal line in session {SessionId}.")]
+    public static partial void SkippingMalformedGoalLine(ILogger logger, Exception ex, string sessionId);
+
+    [LoggerMessage(EventId = 24, Level = LogLevel.Warning, Message = "Goal line in session {SessionId} is missing its objective.")]
+    public static partial void GoalLineMissingObjective(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 25, Level = LogLevel.Warning, Message = "Skipping goal line in session {SessionId}: unknown value '{Value}'.")]
+    public static partial void SkippingUnknownGoalPhase(ILogger logger, string sessionId, string value);
 }
