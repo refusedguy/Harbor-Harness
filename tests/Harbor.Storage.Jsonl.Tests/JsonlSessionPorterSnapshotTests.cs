@@ -90,13 +90,13 @@ public class JsonlSessionPorterSnapshotTests
             await store.AppendMessageAsync(created.Id, Assistant(created.Id, "m-a", 10, 5));
 
             var snapshot = await store.ReadSessionSnapshotAsync(created.Id, default);
-            await Assert.That(snapshot.IsSuccess).IsTrue();
+            await Assert.That(snapshot).IsSuccessful();
 
             var porter = new JsonlSessionPorter(NullLogger<JsonlSessionPorter>.Instance);
             var payload = new StringWriter();
 
             var exported = await porter.ExportAsync(store, created.Id, payload);
-            await Assert.That(exported.IsSuccess).IsTrue();
+            await Assert.That(exported).IsSuccessful();
 
             var (envelope, messages) = ParseExport(payload.ToString());
             await Assert.That(envelope.GetProperty("session").GetProperty("title").GetString())
@@ -143,7 +143,7 @@ public class JsonlSessionPorterSnapshotTests
             });
 
             var exported = await porter.ExportAsync(store, created.Id, payload);
-            await Assert.That(exported.IsSuccess).IsTrue();
+            await Assert.That(exported).IsSuccessful();
 
             var (envelope, messages) = ParseExport(payload.ToString());
             int counted = messages.Count(m => m.GetProperty("role").GetString() == "assistant");
@@ -200,7 +200,7 @@ public class JsonlSessionPorterSnapshotTests
             var payload = new StringWriter();
 
             var exported = await porter.ExportAsync(store, created.Id, payload);
-            await Assert.That(exported.IsSuccess).IsTrue();
+            await Assert.That(exported).IsSuccessful();
 
             var (envelope, messages) = ParseExport(payload.ToString());
 
@@ -253,7 +253,7 @@ public class JsonlSessionPorterSnapshotTests
         var payload = new StringWriter();
 
         var exported = await porter.ExportAsync(store, created.Id, payload);
-        await Assert.That(exported.IsSuccess).IsTrue();
+        await Assert.That(exported).IsSuccessful();
 
         var (envelope, messages) = ParseExport(payload.ToString());
         await Assert.That(messages.Count).IsEqualTo(1);

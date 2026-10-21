@@ -15,7 +15,7 @@
 # else at its default (plugins/providers/tools stay compiled in). ci.yml
 # proves that recipe produces a binary that runs `--version/--help/--providers`
 # on content (its smoke asserts ollama/kilocode/openrouter registered), and
-# `tools/aot-publish-gate.py` holds the publish to a warning baseline. This
+# `harbor-gates aot-publish-gate` holds the publish to a warning baseline. This
 # workflow does not duplicate the gate — at tag time the publish must simply
 # SUCCEED, or no Release is created (`fail-fast: false` keeps sibling legs
 # building so one flaky OS does not hide all evidence).
