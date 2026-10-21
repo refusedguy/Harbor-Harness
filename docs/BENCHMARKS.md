@@ -3324,7 +3324,7 @@ are the count of the processes the gate actually started and the time the
 gate actually spent waiting for them. The 1277 processes are 1231
 `git blame` calls, 41 `git show` calls and 5 others; the 37 are 29
 `git blame` calls (the fallback for the files whose history crosses a
-merge), 4 `git ls-files`, 2 `git rev-parse`, and one `git log`, one
+merge), 4 `git ls-files`, one `git rev-parse`, one `git log`, one
 `git diff` and one `git cat-file --batch`.
 
 **What the two gate versions are.** The difference between them is 370
@@ -3338,7 +3338,7 @@ difference between that column and §10.2's number is the tree.
 
 **The blame call is the expensive one**, and its cost is not the output:
 it is the per-process walk of the history that finds the commit that wrote
-a line. On a quiet machine that is 92 ms per call; the 347 ms the older
+a line. On a quiet machine that is 96 ms per call; the 347 ms the older
 measurement quoted was the same call on a loaded machine.
 
 What replaced it:
