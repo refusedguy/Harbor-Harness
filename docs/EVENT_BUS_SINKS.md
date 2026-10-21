@@ -98,7 +98,7 @@ recorded, because they answer #44's topology question.
 | `apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467` | mandatory | REPL renderer, live for the session |
 | `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103` | mandatory | CellForge REPL event pump (`_events` channel → render loop) |
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
-| `apps/Harbor.App.Cli/Commands/DemoCommand.cs:236` | optional | demo renderer; no state depends on it |
+| `apps/Harbor.App.Cli/Commands/DemoCommand.cs:237` | optional | demo renderer; no state depends on it |
 | plugin subscriptions (#16 above) | optional | third-party extension point |
 | `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:30` | n/a | the proxy holds no subscription of its own — it forwards to the agent, and since #1561 the agent's subscription IS a bus subscription |
 
