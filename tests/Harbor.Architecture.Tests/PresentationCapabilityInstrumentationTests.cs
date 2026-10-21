@@ -26,6 +26,10 @@
 
 using Mono.Cecil;
 
+// The project imports System.Reflection globally, and Mono.Cecil has a TypeAttributes
+// of its own: without the alias the simple name is ambiguous (CS0104).
+using TypeAttributes = Mono.Cecil.TypeAttributes;
+
 namespace Harbor.Architecture.Tests;
 
 public sealed class PresentationCapabilityInstrumentationTests
