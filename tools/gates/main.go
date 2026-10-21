@@ -126,11 +126,6 @@ var registry = []registered{
 		run:     docfacts.Run,
 	},
 	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
-	},
-	{
 		name:    "check-local-merge-loss",
 		summary: "a local squash-merge into dev dropped no content",
 		run:     mergeloss.Run,
@@ -174,16 +169,6 @@ var registry = []registered{
 		name:    "gen-e2e-shards",
 		summary: "the process plan of the headless Avalonia E2E suite",
 		run:     gene2eshards.Run,
-	},
-	{
-		name:    "gen-plugin-inventory",
-		summary: "the committed plugin inventory snapshot still matches the tree",
-		run:     genplugininventory.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
 	},
 	{
 		name:    "gen-plugin-inventory",

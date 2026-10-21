@@ -254,7 +254,6 @@ and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool th
 is not listed is a tool nobody
 reviews. is a tool nobody
 reviews. is a tool nobody
-reviews. is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
