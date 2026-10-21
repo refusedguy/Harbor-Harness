@@ -225,7 +225,7 @@ public sealed class DefaultAgentLoadFailureTests
 
         Result result = await subject.PromptAsync("hello");
 
-        await Assert.That(result.IsFailure).IsTrue()
+        await Assert.That(result).IsFailed()
             .Because(
                 "The context load failed, so the run cannot start. It must FAIL with the store's reason.");
         await Assert.That(result.Error).IsEqualTo(LoadFailureText)
@@ -311,7 +311,7 @@ public sealed class DefaultAgentLoadFailureTests
 
         Result result = await subject.PromptAsync("hello");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("loop exploded (simulated)")
             .Because(
                 "An exception from the loop is a genuine fault, not an expected failure — it travels as a "

@@ -58,7 +58,7 @@ public class MyToolTests
 
         var result = tool.ValidateArguments(args);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("my required arg");
     }
 
@@ -70,7 +70,7 @@ public class MyToolTests
 
         var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
-        await Assert.That(result.IsError).IsFalse();
+        await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("hello");
     }
 
@@ -82,7 +82,7 @@ public class MyToolTests
 
         var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
-        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result).HasFailed();
         await Assert.That(result.Output).Contains("not found");
     }
 }
@@ -271,7 +271,7 @@ public class AgentLoopTests
         var result = await loop.RunAsync(session,
             AgentDefinition.CodeDefault("test-model", "test"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(received.Any(e => e is AgentStartEvent)).IsTrue();
         await Assert.That(received.Any(e => e is TurnStartEvent)).IsTrue();
         await Assert.That(received.Any(e => e is MessageStartEvent)).IsTrue();
@@ -444,7 +444,7 @@ public class MyPermissionTests
         var result = await svc.CheckAsync("code", "my_tool",
             Args(new { path = "/src/foo.cs" }));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -574,7 +574,7 @@ public class MyStoreTests
         {
             var result = await store.CreateAsync("/test/dir", "code", "anthropic", "claude-opus-4");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Id).IsNotNull();
             await Assert.That(result.Value.Directory).IsEqualTo("/test/dir");
         }
@@ -597,7 +597,7 @@ public class MyStoreTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("hello");
         }
@@ -834,6 +834,46 @@ Keep a manual CTS only when the test drives the cancellation itself: a
 pre-cancelled token, a token the test cancels mid-run, or a bounded negative
 probe whose window is the assertion.
 
+#### The three CTS shapes, and which one owns what
+
+The census on `origin/dev` counted **76 hand-rolled
+`new CancellationTokenSource(...)` sites in 51 files** (81 textual matches, 5
+of them string literals inside architecture scan controls). They are NOT one
+shape, and only one of the three is boilerplate:
+
+| Shape | Count | Where it lives |
+|---|---|---|
+| the source is a DEADLINE | 12 | TUnit's `[Timeout(ms)]` + the injected `CancellationToken` |
+| the test cancels the source LATER | 45 | the test's own instrument — write it out |
+| the source is handed to a collaborator that cancels it | 14 | the test's own instrument — write it out |
+| neither (long test, cancel further down) | 5 | the test's own instrument — write it out |
+
+Issue #1837 already moved the 44 sites that were pure deadlines to `[Timeout]`. The
+76 that are left are the test's own instrument: the source has to stay
+writable, because the test (or the code under test) cancels it.
+
+The one shape worth a shared name is the **already-cancelled** token, which
+the tree wrote as two lines:
+
+```csharp
+// WRONG — the fact ("already cancelled") is spread over two lines
+using var cts = new CancellationTokenSource();
+await cts.CancelAsync();
+... cts.Token ...
+```
+
+```csharp
+// RIGHT — one factory, one name
+using var cts = TestCancellation.Cancelled();
+... cts.Token ...
+```
+
+`TestCancellation.Cancelled()` lives in `tests/Harbor.TestKit.Support/`
+(namespace `Harbor.TestKit`), because it needs no product assembly and no
+TUnit package — it is the BCL's `CancellationTokenSource` and nothing else.
+Issue #1569 migrated the 13 such sites in `Harbor.Application.Tests`.
+
+
 ### Parallelism: what each `[NotInParallel]` form actually guarantees
 
 Read from TUnit 1.61.0's scheduler, not from the XML docs. This distinction is
@@ -1004,9 +1044,11 @@ dotnet run --project tests/Harbor.Core.Tests -c Release -- --minimum-expected-te
 ### Assertions
 
 ```csharp
-// Booleans
-await Assert.That(result.IsSuccess).IsTrue();
-await Assert.That(result.IsFailure).IsTrue();
+// A RESULT — assert the result, not its boolean flag
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+await Assert.That(toolResult).HasFailed();
 
 // Equality
 await Assert.That(value).IsEqualTo("expected");
@@ -1028,6 +1070,93 @@ await Assert.That(async () => await fragile.Method())
 await Assert.That(async () => await fragile.Method())
     .Throws<InvalidOperationException>(ex => ex.Message.Contains("expected text"));
 ```
+
+#### The ONE spelling for a result: `Assert.That(result)`, never `Assert.That(result.IsSuccess)`
+
+Do **not** write the boolean form:
+
+```csharp
+// WRONG — the old spelling, and the tree's biggest test-side debt
+await Assert.That(result).IsSuccessful();
+```
+
+It asserts a `bool`, so the failure says "found False" and leaves the reader
+with two questions the assertion cannot answer: **which** result failed, and
+**why**. The chain form asserts the result, and the kit's helper puts the
+error text into the failure message:
+
+```csharp
+// RIGHT
+await Assert.That(result).IsSuccessful();
+```
+
+The helpers live in `tests/Harbor.TestKit.Support/ResultAssertions.cs` (the
+support part, so every test project can reach them without pulling the core
+kit into its closure; the namespace is still `Harbor.TestKit`). The families
+and the method each one gets:
+
+| The value you hold | What it carries | Assert it with |
+|---|---|---|
+| `Result<T>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `Result` (no `T`) | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `Result<TValue, TError>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `ToolResult` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolResultEntry` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolCallLink` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolExecutionEndEvent` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+
+The mapping is mechanical, and it is what the migration in #1569 did:
+
+| Old | New |
+|---|---|
+| `Assert.That(x.IsSuccess).IsTrue()` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsSuccess).IsFalse()` | `Assert.That(x).IsFailed()` |
+| `Assert.That(x.IsSuccess).IsEqualTo(true)` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsFailure).IsTrue()` | `Assert.That(x).IsFailed()` |
+| `Assert.That(x.IsFailure).IsFalse()` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsError).IsFalse()` | `Assert.That(x).HasSucceeded()` |
+| `Assert.That(x.IsError).IsTrue()` | `Assert.That(x).HasFailed()` |
+
+Two things to know before you write one:
+
+- **`.Because(...)` still works** and is still the place for the reason: the
+  generated assertion derives from TUnit's `Assertion<T>`, so
+  `await Assert.That(result).IsFailed().Because("…")` compiles. Do NOT put
+  `result.Error` inside the `Because` argument: `Because` takes its argument
+  EAGERLY, and `Error` throws on a successful result, so a passing test would
+  fail with an exception. The helper already puts the error text into the
+  message; `Because` is for the reason the assertion matters.
+- **`LlmToolResultMessage` and `LlmToolResultBlock` have no helper on
+  purpose.** They are the wire the model sees, not a result the tree owns, and
+  their sites assert a different thing. Keep the plain boolean form there.
+
+**The census on `origin/dev` (measured by scanning `tests/` for
+`Assert.That(<recv>.IsSuccess|IsFailure|Error)` followed by `.IsTrue()`,
+`.IsFalse()` or `.IsEqualTo(true|false)`):**
+
+| Shape | Sites |
+|---|---|
+| `Assert.That(x.IsSuccess).IsTrue()` | 1 106 |
+| `Assert.That(x.IsFailure).IsTrue()` | 498 |
+| `Assert.That(x.IsError).IsFalse()` | 134 |
+| `Assert.That(x.IsError).IsTrue()` | 125 |
+| `Assert.That(x.IsSuccess).IsFalse()` | 35 |
+| `Assert.That(x.IsSuccess).IsEqualTo(true)` | 11 |
+| `Assert.That(x.IsFailure).IsFalse()` | 1 |
+| `Assert.That(x.IsError).IsEqualTo(...)` | 1 |
+| **total** | **1 911** |
+
+1 604 of them are the `IsSuccess`/`IsFailure` pair; the issue tracked the
+narrower slice where the receiver is literally named `result` (699 today).
+The biggest blocks: `Harbor.Tools.Builtin.Tests` 314,
+`Harbor.Application.Tests` 286, `Harbor.Storage.Jsonl.Tests` 253,
+`Harbor.Storage.Tests` 184, `Harbor.ChangeTracking.Tests` 169,
+`Harbor.Plugins.Runtime.Tests` 135, `Harbor.Config.Tests` 82,
+`Harbor.Core.Tests` 72, `Harbor.Abstractions.Tests` 70.
+
+Issue #1569 migrated the `Harbor.Application.Tests` block — 286 sites in 63 files.
+The rest is still open, one project per PR.
+
 
 ### The TUnit analyzer gate: an assertion may not be made on a constant
 
@@ -1197,6 +1326,9 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 
 | Helper | What it provides |
 |---|---|
+| `ResultAssertions.IsSuccessful()` / `.IsFailed()` | The chain links for a `Result`, a `Result<T>` and a `Result<TValue, TError>` — assert the result, not its boolean flag. |
+| `ResultAssertions.HasSucceeded()` / `.HasFailed()` | The chain links for a `ToolResult`, a `ToolResultEntry`, a `ToolCallLink` and a `ToolExecutionEndEvent`. |
+| `TestCancellation.Cancelled()` | A `CancellationTokenSource` whose token is ALREADY cancelled — the "the caller was cancelled before we got here" probe. |
 | `FakeAgentRegistry(params AgentDefinition[])` | `IAgentRegistry` with exactly the given agents. |
 | `FakeToolRegistry(params ITool[])` | `IToolRegistry` over the given tools; `Freeze()` is a no-op. |
 | `CountingTool` | `ITool` that counts executions and records raw args — use as a canary for timeout/permission tests. |
@@ -1204,6 +1336,14 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 | `ThrowingLlmClient` | `ILlmClient` whose `StreamAsync` always throws. |
 | `TestMessages.*` | Message builders: `User(content, …)`, `Assistant(text, …)`, `AssistantParts(parts, …)`, `ToolResult(entries, …)`. The payload comes first, the rest is named. |
 | `TestSessionContext(Session, seedMessages?)` | `ISessionContext` with `SteeringQueue` + `EnqueueSteering`. |
+
+`ResultAssertions` and `TestCancellation` live in
+`tests/Harbor.TestKit.Support/`, not in the core kit: they need no product
+assembly beyond the two contract assemblies, so every test project can reach
+them without pulling the core kit (the fakes, the two cost gates) into its
+closure. The namespace is `Harbor.TestKit` either way, so a consumer's
+`using` line does not change.
+
 
 ### Example: using TestKit in an agent-loop test
 

@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Application.Agents;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;
@@ -45,7 +46,7 @@ public class BackgroundTaskRegistryWaitTests
                 return Result.Success(new SubAgentRunResult("s-1", "explore", "done", 1));
             },
             CancellationToken.None);
-        await Assert.That(started.IsSuccess).IsTrue();
+        await Assert.That(started).IsSuccessful();
 
         gate.SetResult(true);
         await Assert.That(await registry.WaitForIdleAsync("s-1", TimeSpan.FromSeconds(10))).IsTrue();
@@ -56,7 +57,7 @@ public class BackgroundTaskRegistryWaitTests
     {
         var registry = new BackgroundTaskRegistry();
         var started = registry.Start("explore", "s-1", HangingRun(), CancellationToken.None);
-        await Assert.That(started.IsSuccess).IsTrue();
+        await Assert.That(started).IsSuccessful();
 
         await Assert.That(await registry.WaitForIdleAsync("s-1", TimeSpan.FromMilliseconds(50))).IsFalse();
 
@@ -69,7 +70,7 @@ public class BackgroundTaskRegistryWaitTests
     {
         var registry = new BackgroundTaskRegistry();
         var started = registry.Start("explore", "other", HangingRun(), CancellationToken.None);
-        await Assert.That(started.IsSuccess).IsTrue();
+        await Assert.That(started).IsSuccessful();
 
         await Assert.That(await registry.WaitForIdleAsync("mine", TimeSpan.FromMilliseconds(50))).IsTrue();
         await Assert.That(await registry.WaitForIdleAsync(timeout: TimeSpan.FromMilliseconds(20))).IsFalse();
@@ -82,7 +83,7 @@ public class BackgroundTaskRegistryWaitTests
     {
         var registry = new BackgroundTaskRegistry();
         var started = registry.Start("explore", "s-1", QuickRun(), CancellationToken.None);
-        await Assert.That(started.IsSuccess).IsTrue();
+        await Assert.That(started).IsSuccessful();
 
         await Assert.That(await registry.WaitForIdleAsync("s-1", TimeSpan.FromSeconds(10))).IsTrue();
     }

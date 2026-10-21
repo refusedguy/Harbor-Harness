@@ -44,6 +44,32 @@
       it directly widens nothing.
     -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <!--
+      #1569: the shared RESULT ASSERTIONS live here, and they need two
+      packages that are already in the closure of every test project that
+      consumes this part.
+
+      Neither is a product assembly, so the closure rule the architecture
+      guard pins (the support part reaches the two contract assemblies and
+      nothing else) is untouched: that rule walks <ProjectReference> edges,
+      and these are <PackageReference> edges.
+
+        * TUnit.Assertions — the `[GenerateAssertion]` attribute, the
+          `AssertionResult` the helpers return, and the source generator that
+          turns each helper into an `Assert.That(...)` chain link. The package
+          has no dependencies of its own.
+        * CSharpFunctionalExtensions — `Result`, `Result<T>` and
+          `Result<TValue, TError>`, the types the helpers assert.
+          `Harbor.Abstractions` and `Harbor.Abstractions.Contracts` already
+          carry it in their own closure, so declaring it widens nothing.
+
+      Why the assertions belong to the SUPPORT part and not to the core kit:
+      they need no product assembly beyond the contracts, and the core kit is
+      where 24 test projects could not reach them from. See
+      `tests/Harbor.TestKit.Support/ResultAssertions.cs` for the long form.
+    -->
+    <PackageReference Include="TUnit.Assertions" />
+    <PackageReference Include="CSharpFunctionalExtensions" />
   </ItemGroup>
 
 </Project>

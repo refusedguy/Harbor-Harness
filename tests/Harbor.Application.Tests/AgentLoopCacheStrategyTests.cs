@@ -44,7 +44,7 @@ public class AgentLoopCacheStrategyTests
         var session = new TestSessionContext(
             Session.Create("/tmp/harbor-cache-strategy-tests", "code", "test", "test-model"));
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
         await Assert.That(client.Requests[0].CacheStrategy).IsEqualTo(CacheStrategy.Ephemeral);
         // The acceptance criterion: the SECOND turn with the SAME tools still

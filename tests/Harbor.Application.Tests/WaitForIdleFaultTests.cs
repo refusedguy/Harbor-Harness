@@ -59,7 +59,7 @@ public sealed class WaitForIdleFaultTests
         release.TrySetResult();
 
         Result promptResult = await promptTask;
-        await Assert.That(promptResult.IsFailure).IsTrue()
+        await Assert.That(promptResult).IsFailed()
             .Because("The run itself failed — PromptAsync still reports the failure to its own caller.");
         await Assert.That(subject.IsRunning()).IsFalse()
             .Because("The fault path must settle the running flag exactly like success and cancel.");

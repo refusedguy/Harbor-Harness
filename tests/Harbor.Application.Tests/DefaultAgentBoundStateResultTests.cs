@@ -90,7 +90,7 @@ public sealed class DefaultAgentBoundStateResultTests
 
         Result result = await subject.PromptAsync("hello");
 
-        await Assert.That(result.IsFailure).IsTrue()
+        await Assert.That(result).IsFailed()
             .Because(
                 "An unbound agent has no session to append to and no definition to drive, so the call "
                 + "cannot succeed. It must FAIL with a reason, not throw: a throw unwinds through the "
@@ -118,7 +118,7 @@ public sealed class DefaultAgentBoundStateResultTests
 
         Result result = await subject.PromptAsync(TestMessages.User("hi", sessionId: session.Id, agent: "user"));
 
-        await Assert.That(result.IsFailure).IsTrue()
+        await Assert.That(result).IsFailed()
             .Because("The UserMessage overload must refuse too — it is the overload the image path and the IPC path use.");
         await Assert.That(result.Error).Contains("not initialized");
         await Assert.That(store.Appends).IsEqualTo(0)
@@ -160,7 +160,7 @@ public sealed class DefaultAgentBoundStateResultTests
 
         Result result = await subject.PromptAsync("hello");
 
-        await Assert.That(result.IsSuccess).IsTrue()
+        await Assert.That(result).IsSuccessful()
             .Because("The fix changes the UNBOUND answer. A bound agent must still run its loop.");
         await Assert.That(store.Appends).IsEqualTo(1)
             .Because("The bound path still persists the prompt.");

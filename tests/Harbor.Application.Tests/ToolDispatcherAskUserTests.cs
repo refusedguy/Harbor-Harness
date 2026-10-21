@@ -88,7 +88,7 @@ public class ToolDispatcherAskUserTests
             .WaitAsync(TimeSpan.FromSeconds(10))
             .ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         await Assert.That(message.Results[0].Output).Contains("ask-verdict:Deny");
         await Assert.That(tool.ObservedAction).IsEqualTo("Deny");
     }
