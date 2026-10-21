@@ -3,6 +3,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Env;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Demo;
 using Harbor.App.Cli.Hosting;
@@ -417,7 +418,7 @@ public sealed class DemoCommand : ICommand
         private static readonly DemoReply[] ApprovalReplies =
         [
             // turn 1 — the tool call (bash falls through to Ask in PermissionRuleset.Default)
-            DemoReply.FromToolCall("bash", """{"command":"echo hello from Harbor"}"""),
+            DemoReply.FromToolCall(WellKnownTools.Bash, """{"command":"echo hello from Harbor"}"""),
             // turn 2 — summarize after the tool result
             DemoReply.FromText(
                 "Approved and executed. The approval gate asked once, the demo policy allowed it, and the shell " +

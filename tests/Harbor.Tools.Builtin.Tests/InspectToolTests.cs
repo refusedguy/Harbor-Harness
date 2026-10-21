@@ -67,7 +67,7 @@ public class InspectToolTests
     {
         var tool = NewTool();
 
-        var result = await tool.ExecuteAsync(Args("{}"), TestToolContext.Create());
+        var result = await RunAsync(tool, "{}");
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("sections: overview, tools, agents, providers, skills, plugins, versions, limits");
@@ -88,7 +88,7 @@ public class InspectToolTests
 
         var tool = NewTool(tools, agents);
 
-        var result = await tool.ExecuteAsync(Args("""{"section":"tools"}"""), TestToolContext.Create());
+        var result = await RunAsync(tool, """{"section":"tools"}""");
 
         await Assert.That(result).HasSucceeded();
         await Assert.That(result.Output).Contains("tools: 2 registered, 1 callable by agent 'code'");
@@ -378,6 +378,10 @@ public class InspectToolTests
         ]);
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement;
+
+    /// <summary>Run the tool the way the agent runs it, so the tests say what they check.</summary>
+    private static async Task<ToolResult> RunAsync(InspectTool tool, string args)
+        => await tool.ExecuteAsync(Args(args), TestToolContext.Create());
 
     /// <summary>A tool that does nothing — the catalog only reads its declaration.</summary>
     private sealed class FakeTool(

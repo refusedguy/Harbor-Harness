@@ -82,7 +82,7 @@ public sealed partial class GlobTool : ITool
         catch (OperationCanceledException oce)
         {
             // ROP-A П.13: single boundary classifier.
-            return ToolResult.Error(ToolErrors.Handler("glob", ct)(oce));
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Glob, ct)(oce));
         }
 
         List<string> relative = ToRelativeSorted(basePath, matches);
