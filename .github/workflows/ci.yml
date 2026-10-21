@@ -860,6 +860,21 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      - name: Stash build outputs — arch shard
+        uses: actions/upload-artifact@v7
+        with:
+          name: solution-binaries-arch
+          path: |
+            Harbor.slnx
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
+            tests/Harbor.Architecture.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            !**/*.pdb
+            !**/*.xml
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Stash build outputs — platform shard
         uses: actions/upload-artifact@v7
         with:
