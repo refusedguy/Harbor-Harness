@@ -487,9 +487,19 @@ six times the number of findings. Counting log lines instead of findings
 overstates the surface by that factor.
 
 **41 findings, 9 rules, 18 files, every one of them under `tests/`.** Zero
-under `src/` and zero under `apps/`: `warning` is promoted to an error there
-by `TreatWarningsAsErrors=true`, so a finding there would have turned the
-build red, and the build is green.
+under `src/` and zero under `apps/`: a correctness finding there is promoted
+to an error by `TreatWarningsAsErrors=true`, so it would have turned the build
+red, and the build is green.
+
+**After this change the build log does not carry them, and that is the point.**
+The 33 spelling findings are `suggestion` tree-wide and the 8 correctness
+ones are `suggestion` under `tests/`, and the compiler does not print a
+`suggestion` at the default verbosity. A re-measurement taken from the build
+log of THIS tree therefore reads zero `REFL` lines, while the 41 sites above
+are what the rules still report. The counting unit did not change: the sites
+are the same 41, in the same 18 files, in the same 9 rules — what changed is
+what the build does with them, and the severity table is where that is
+written down.
 
 | ID | Findings | What they are |
 |----|----------|---------------|
