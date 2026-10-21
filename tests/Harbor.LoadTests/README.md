@@ -10,7 +10,12 @@ Files:
 - [MultiSessionLoadTests.cs](MultiSessionLoadTests.cs) — the matrix itself.
 - [MultiSessionLoadHarness.cs](MultiSessionLoadHarness.cs) — stack composition
   plus the `LoadStoreBackend` switch (`memory` / `jsonl` / `sqlite`).
-- [LoadTestFakes.cs](LoadTestFakes.cs) — minimal composition fakes.
+- [LoadTestFakes.cs](LoadTestFakes.cs) — the load harness's own composition
+  facts and the two doubles that are load-specific: the mock-model catalogue
+  and the store-backed session context. Everything else the harness needs
+  (the provider registry, the never-compacting compaction service, the
+  rate-limited client and its token bucket) is the shared kit's
+  (`Harbor.TestKit.Support`), since #1825.
 
 ## Shape
 
@@ -25,9 +30,10 @@ and every message and turn event carries its run's `SessionId`.
 
 ## Determinism
 
-The only pacing is the refund-on-completion `TokenBucketRateLimiter` and the
-mock server's chunk-delay dilation. The harness never sleeps on real time, so
-results do not depend on core count or runner neighbours.
+The only pacing is the refund-on-completion `TokenBucketRateLimiter` (the
+shared kit's) and the mock server's chunk-delay dilation. The harness never
+sleeps on real time, so results do not depend on core count or runner
+neighbours.
 
 ## Budgets are relative, never absolute
 
