@@ -102,6 +102,28 @@ public sealed class ToolDispatcher(
     /// </summary>
     public static readonly TimeSpan AbandonGraceDefault = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    ///     The boundary the durability checkpoint protects, in the words the
+    ///     refusal carries (#1765). A tool body may change the user's
+    ///     repository; the record of the intent must survive a crash first.
+    /// </summary>
+    public const string ToolBodyCheckpointReason = "before the tool body";
+
+    /// <summary>
+    ///     The code that says a call was aborted after the durability
+    ///     checkpoint and before the dispatch (#1765).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         It is a code of its own, not the stop code, because the two
+    ///         facts are different: a call stopped before the checkpoint never
+    ///         reached a barrier, while a call stopped after it WAS recorded
+    ///         durably and the body simply never ran. Both had no effect; only
+    ///         the second one can say the record is on disk.
+    ///     </para>
+    /// </remarks>
+    public const string AbortedBeforeDispatchCode = "TOOL_ABORTED_BEFORE_DISPATCH";
+
     private readonly TimeSpan _abandonGrace = abandonGrace ?? AbandonGraceDefault;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly IHookRunner? _hooks = hookRunner;
@@ -163,6 +185,50 @@ public sealed class ToolDispatcher(
 
         var results = new List<ToolResultEntry>(toolCalls.Count);
 
+        // #1765: the durability checkpoint, before ANY body in this batch
+        // runs. The assistant message that carries these tool calls is
+        // already in the log, but "in the log" was never checked: a write
+        // that failed was logged and forgotten, and the tool ran anyway. The
+        // checkpoint is that check: if the session's state does not survive
+        // a crash, the work that would change the user's repository does not
+        // start.
+        //
+        // A run that was ALREADY stopped dispatches nothing, so it needs no
+        // checkpoint and must not touch the store: the existing refusal below
+        // stands, unchanged.
+        if (!ct.IsCancellationRequested)
+        {
+            Result checkpoint = await session.CheckpointAsync(ToolBodyCheckpointReason, ct).ConfigureAwait(false);
+            if (checkpoint.IsFailure)
+            {
+                // Fail closed: the body of every call in the batch is refused.
+                // The calls still get an answer, because a provider needs one
+                // tool_result per tool_call, and the answer says why.
+                ToolDispatcherLog.DurabilityCheckpointFailed(
+                    logger, session.Session.Id, checkpoint.Error);
+                for (int i = 0; i < toolCalls.Count; i++)
+                {
+                    results.Add(RefusedByCheckpoint(toolCalls[i], checkpoint.Error));
+                }
+
+                return BatchResult(session, results);
+            }
+
+            // #1765: a stop that landed BETWEEN the checkpoint and the
+            // dispatch. The call is recorded durably, and the body never
+            // ran. That is the exact fact the code below carries.
+            if (ct.IsCancellationRequested)
+            {
+                ToolDispatcherLog.ToolAbortedBeforeDispatch(logger, toolCalls.Count);
+                for (int i = 0; i < toolCalls.Count; i++)
+                {
+                    results.Add(AbortedBeforeDispatch(toolCalls[i]));
+                }
+
+                return BatchResult(session, results);
+            }
+        }
+
         if (hasSequential)
         {
             for (int i = 0; i < toolCalls.Count; i++)
@@ -223,12 +289,22 @@ public sealed class ToolDispatcher(
             }
         }
 
-        return new ToolResultMessage(
+        return BatchResult(session, results);
+    }
+
+    /// <summary>
+    ///     The batch's result message. One place, so the three exits of
+    ///     <see cref="ExecuteAsync" /> build the same shape.
+    /// </summary>
+    /// <param name="session">The session the batch belongs to.</param>
+    /// <param name="results">The per-call results.</param>
+    /// <returns>The batch's result message.</returns>
+    private static ToolResultMessage BatchResult(ISessionContext session, List<ToolResultEntry> results) =>
+        new(
             Guid.NewGuid().ToString("N"),
             session.Session.Id,
             DateTimeOffset.UtcNow,
             results);
-    }
 
     /// <summary>
     ///     Check if any resolved tool in the batch declares <see cref="ExecutionMode.Sequential" />.
@@ -304,6 +380,56 @@ public sealed class ToolDispatcher(
             toolCall.Id,
             toolCall.ToolName,
             ToolResult.Error("Tool execution was cancelled before start."));
+    }
+
+    /// <summary>
+    ///     The refusal for a call the durability checkpoint turned away
+    ///     (#1765): the body did not run, and the reason says why.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The entry is a refusal like every other one here: an error
+    ///         result, so the provider still sees one <c>tool_result</c> per
+    ///         <c>tool_call</c>, and it publishes no start and no end event:
+    ///         nothing started, so there is no start to report and no end to
+    ///         pair it with (same shape as
+    ///         <see cref="NotStartedBecauseStopped" />).
+    ///     </para>
+    ///     <para>
+    ///         The text says the tool did NOT run. A model that reads "the
+    ///         call failed" may retry it; a model that reads "the call did not
+    ///         run, because the session log is not durable" knows the retry is
+    ///         safe, because there was no effect to repeat.
+    ///     </para>
+    /// </remarks>
+    /// <param name="toolCall">The call that was refused.</param>
+    /// <param name="cause">Why the checkpoint failed.</param>
+    /// <returns>The refusal entry.</returns>
+    private static ToolResultEntry RefusedByCheckpoint(ToolCallPart toolCall, string cause)
+    {
+        string message = $"Tool '{toolCall.ToolName}' was NOT executed: {cause}";
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(message));
+    }
+
+    /// <summary>
+    ///     The refusal for a call aborted after the durability checkpoint and
+    ///     before the dispatch (#1765).
+    /// </summary>
+    /// <remarks>
+    ///     The call is durably recorded and the body never ran, so the call
+    ///     had no effect and is safe to retry. That is the same fact
+    ///     <see cref="UnresolvedToolCall.NotStartedCode" /> carries, under a
+    ///     code of its own so a reader can tell "stopped before the barrier"
+    ///     from "stopped after it".
+    /// </remarks>
+    /// <param name="toolCall">The call that was aborted.</param>
+    /// <returns>The refusal entry.</returns>
+    private static ToolResultEntry AbortedBeforeDispatch(ToolCallPart toolCall)
+    {
+        string message =
+            $"{AbortedBeforeDispatchCode}: tool '{toolCall.ToolName}' was aborted after the session-log checkpoint "
+            + "and before the dispatch. The tool body never ran, so the call had no effect and is safe to retry.";
+        return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(message));
     }
 
     /// <summary>
@@ -933,5 +1059,11 @@ internal static partial class ToolDispatcherLog
 
     [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Tool execution end: {ToolName} (call {CallId}) isError={IsError}")]
     public static partial void ToolExecutionEnd(ILogger logger, string toolName, string callId, bool isError);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; no tool body in the batch runs: {Error}")]
+    public static partial void DurabilityCheckpointFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "{Count} tool call(s) aborted after the durability checkpoint and before dispatch")]
+    public static partial void ToolAbortedBeforeDispatch(ILogger logger, int count);
 
 }

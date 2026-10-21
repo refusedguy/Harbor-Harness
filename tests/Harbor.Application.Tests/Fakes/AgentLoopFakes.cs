@@ -66,6 +66,14 @@ public sealed class TestSessionContext(Session session, IReadOnlyList<AgentMessa
 
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
 
+    /// <summary>
+    ///     #1765: the durability checkpoint. This double keeps every record in
+    ///     memory and loses none of them, so its state survives as far as the
+    ///     double is concerned. That is the answer a test double owes the loop.
+    /// </summary>
+    public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
+
     public void EnqueueSteering(params AgentMessage[] messages)
     {
         foreach (AgentMessage message in messages)

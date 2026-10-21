@@ -164,6 +164,12 @@ public class CancelMisclassification1103Tests
             ct.ThrowIfCancellationRequested();
             return _inner.UpdateStatsAsync(usage, pricing, ct);
         }
+
+        /// <summary>
+        ///     #1765: the durability checkpoint, forwarded to the inner double.
+        /// </summary>
+        public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default)
+            => _inner.CheckpointAsync(reason, ct);
     }
 
     [Test]
