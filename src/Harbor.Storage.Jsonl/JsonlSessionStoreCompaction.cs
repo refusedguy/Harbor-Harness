@@ -36,7 +36,7 @@ public sealed partial class JsonlSessionStore
     ///     the message appends: a compaction record never interleaves inside
     ///     another write.
     /// </remarks>
-    public async Task<Result> AppendCompactionEventAsync(
+    public Task<Result> AppendCompactionEventAsync(
         string sessionId,
         SessionCompactionEvent compactionEvent,
         CancellationToken ct = default)
@@ -44,13 +44,25 @@ public sealed partial class JsonlSessionStore
         // §3.4: observe cancellation BEFORE the existence policy — an Esc must
         // never surface as "session not found".
         ct.ThrowIfCancellationRequested();
-        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
-        if (resolved.IsFailure)
-        {
-            return resolved.ConvertFailure();
-        }
 
-        string sessionFile = resolved.Value;
+        return SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId)
+            .Bind(sessionFile => AppendCompactionEventToFileAsync(sessionId, sessionFile, compactionEvent, ct));
+    }
+
+    /// <summary>
+    ///     Append the compaction record to the resolved session file.
+    /// </summary>
+    /// <remarks>
+    ///     The write rides the session's own lock, so it is ordered against
+    ///     the message appends: a compaction record never interleaves inside
+    ///     another write.
+    /// </remarks>
+    private async Task<Result> AppendCompactionEventToFileAsync(
+        string sessionId,
+        string sessionFile,
+        SessionCompactionEvent compactionEvent,
+        CancellationToken ct)
+    {
         if (!File.Exists(sessionFile))
         {
             return Result.Failure(SessionStoreErrors.SessionNotFound(sessionId));
@@ -99,13 +111,25 @@ public sealed partial class JsonlSessionStore
         CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
-        if (resolved.IsFailure)
-        {
-            return Task.FromResult(resolved.ConvertFailure<IReadOnlyList<SessionCompactionEvent>>());
-        }
 
-        string sessionFile = resolved.Value;
+        return SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId)
+            .Bind(sessionFile => ReadCompactionEventsFromFileAsync(sessionId, sessionFile, _logger));
+    }
+
+    /// <summary>
+    ///     Read the compaction records of the resolved session file.
+    /// </summary>
+    /// <remarks>
+    ///     The scan is a byte-level pass over the file, the same shape the
+    ///     feedback axis uses: the compaction lines are picked out of the
+    ///     record stream and decoded, and every other line is not this
+    ///     method's business.
+    /// </remarks>
+    private static Task<Result<IReadOnlyList<SessionCompactionEvent>>> ReadCompactionEventsFromFileAsync(
+        string sessionId,
+        string sessionFile,
+        ILogger logger)
+    {
         if (!File.Exists(sessionFile))
         {
             return Task.FromResult(
@@ -116,10 +140,10 @@ public sealed partial class JsonlSessionStore
             Result.Try<IReadOnlyList<SessionCompactionEvent>>(() =>
                 {
                     var events = new List<SessionCompactionEvent>();
-                    ReadCompactionRecords(sessionFile, sessionId, events, _logger);
+                    ReadCompactionRecords(sessionFile, sessionId, events, logger);
                     return (IReadOnlyList<SessionCompactionEvent>)events;
                 }, ResultErrors.Message)
-                .TapError(e => JsonlSessionStoreLog.ReadCompactionEventsFailed(_logger, sessionId, e)));
+                .TapError(e => JsonlSessionStoreLog.ReadCompactionEventsFailed(logger, sessionId, e)));
     }
 
     /// <summary>

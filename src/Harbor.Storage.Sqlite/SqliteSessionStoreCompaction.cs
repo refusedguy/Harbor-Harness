@@ -50,19 +50,31 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
         // never surface as "session not found".
         ct.ThrowIfCancellationRequested();
 
-        // #199: the expected "not found" outcome is decided before the try
-        // boundary so it stays a plain failure (no throw, no error log).
-        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
-        if (sessionRow.IsFailure)
-        {
-            return sessionRow.ConvertFailure();
-        }
+        // #199: the expected "not found" outcome is decided on the session row,
+        // so it stays a plain failure (no throw, no error log).
+        Result<Maybe<Session>> sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
 
-        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-        {
-            return Result.Failure(SessionStoreErrors.SessionNotFound(sessionId));
-        }
+        return await sessionRow
+            .Bind(row => row.HasNoValue
+                ? Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)))
+                : AppendCompactionRecordAsync(sessionId, compactionEvent, ct))
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>
+    ///     Insert the compaction record into the session's table.
+    /// </summary>
+    /// <remarks>
+    ///     The write rides the store's own per-session lock, so it is ordered
+    ///     against the message appends of the same session: a record appended
+    ///     while a compaction is in flight lands inside the compaction's
+    ///     bracket instead of racing it.
+    /// </remarks>
+    private async Task<Result> AppendCompactionRecordAsync(
+        string sessionId,
+        SessionCompactionEvent compactionEvent,
+        CancellationToken ct)
+    {
         var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
         await semaphore.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -103,18 +115,23 @@ public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpoi
     {
         ct.ThrowIfCancellationRequested();
 
-        var sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
-        if (sessionRow.IsFailure)
-        {
-            return sessionRow.ConvertFailure<IReadOnlyList<SessionCompactionEvent>>();
-        }
+        Result<Maybe<Session>> sessionRow = await ReadRowAsync(sessionId, ct).ConfigureAwait(false);
 
-        if (sessionRow.Value.HasNoValue) // guarded: .Value only read after the failure check.
-        {
-            return Result.Failure<IReadOnlyList<SessionCompactionEvent>>(
-                SessionStoreErrors.SessionNotFound(sessionId));
-        }
+        return await sessionRow
+            .Bind(row => row.HasNoValue
+                ? Task.FromResult(Result.Failure<IReadOnlyList<SessionCompactionEvent>>(
+                    SessionStoreErrors.SessionNotFound(sessionId)))
+                : ReadCompactionRecordsAsync(sessionId, ct))
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>
+    ///     Read the session's compaction rows, in write order.
+    /// </summary>
+    private async Task<Result<IReadOnlyList<SessionCompactionEvent>>> ReadCompactionRecordsAsync(
+        string sessionId,
+        CancellationToken ct)
+    {
         return await Result.Try<IReadOnlyList<SessionCompactionEvent>>(async () =>
             {
                 EnsureInitialized();

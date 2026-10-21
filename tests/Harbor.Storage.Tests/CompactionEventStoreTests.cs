@@ -83,7 +83,7 @@ public class CompactionEventStoreTests
         Result ended = await store.AppendCompactionEventAsync(sessionId, EndRecord(3, "the summarizer exploded"));
         await Assert.That(ended.IsSuccess).IsTrue();
 
-        Result<IReadOnlyList<SessionCompactionEvent>>> afterEnd = await store.GetCompactionEventsAsync(sessionId);
+        Result<IReadOnlyList<SessionCompactionEvent>> afterEnd = await store.GetCompactionEventsAsync(sessionId);
         await Assert.That(afterEnd.Value.Count).IsEqualTo(2);
         await Assert.That(afterEnd.Value[1].Kind).IsEqualTo(SessionCompactionEventKind.End);
         await Assert.That(afterEnd.Value[1].Error).IsEqualTo("the summarizer exploded");

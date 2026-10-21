@@ -226,12 +226,28 @@ public sealed class CompactionBehavior(
         Result<IReadOnlyList<SessionCompactionEvent>> existing =
             await compactionEvents.GetCompactionEventsAsync(sessionId, ct).ConfigureAwait(false);
 
-        if (existing.IsFailure)
-        {
-            return existing.ConvertFailure();
-        }
+        return await existing
+            .Bind(events => AppendStartRecordAsync(compactionEvents, sessionId, turn, events, ct))
+            .ConfigureAwait(false);
+    }
 
-        SessionCompactionEvent? orphan = CompactionLock.FindOpenStart(existing.Value);
+    /// <summary>
+    ///     Append the start record, naming the orphan it supersedes.
+    /// </summary>
+    /// <param name="compactionEvents">The session's compaction-record seam.</param>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="turn">The turn that owns the lock.</param>
+    /// <param name="events">The compaction records the session already holds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success when the lock is taken; failure when it cannot be.</returns>
+    private async Task<Result> AppendStartRecordAsync(
+        ICompactionEventStore compactionEvents,
+        string sessionId,
+        int? turn,
+        IReadOnlyList<SessionCompactionEvent> events,
+        CancellationToken ct)
+    {
+        SessionCompactionEvent? orphan = CompactionLock.FindOpenStart(events);
         if (orphan is not null)
         {
             CompactionBehaviorLog.OrphanedCompactionLock(logger, sessionId, orphan.Turn);
