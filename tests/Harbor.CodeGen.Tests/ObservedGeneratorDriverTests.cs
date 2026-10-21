@@ -143,13 +143,22 @@ public class ObservedGeneratorDriverTests
         GeneratorRunResult generator = run.Results[0];
 
         // Nothing is emitted for a seam whose statement contradicts itself.
-        await Assert.That(generator.GeneratedSources.Length).IsEqualTo(0);
+        await Assert.That(HintNames(generator)).IsEqualTo(string.Empty);
 
-        // And the refusal reaches the COMPILATION as an error — which is the
-        // channel a real build fails on.
-        string errors = Errors(output);
+        // And the refusal is an ERROR. The generator's diagnostics travel
+        // BESIDE the compilation the driver produced, not inside it — the
+        // compiler collects them separately — so the severity is the thing
+        // that breaks a build, and it is what this asserts.
+        string reported = string.Join(
+            " | ",
+            generator.Diagnostics.Select(static d => d.Id + ": " + d.Severity + ": " + d.GetMessage()));
 
-        await Assert.That(errors).Contains("HARBOROBS001");
+        await Assert.That(reported).Contains("HARBOROBS001");
+        await Assert.That(generator.Diagnostics.Any(static d => d.Id == "HARBOROBS001" && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+
+        // The compilation itself is untouched: the generator refused, it did
+        // not emit half a decorator.
+        await Assert.That(Errors(output)).IsEqualTo(string.Empty);
     }
 
     [Test]

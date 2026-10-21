@@ -418,7 +418,7 @@ The generator is only as good as the tripwire around it, so PR-2 ships one, in
 | a marked seam emits a decorator, and the compilation that contains it has no errors | the decorator really implements the seam it claims to |
 | the same decorator, run against a real `ActivityListener` and `MeterListener`, opens the span and records the counter and the histogram | the decorator really measures |
 | an unmarked seam emits nothing | the generator decorates what it is told to, not everything it sees |
-| a contradictory marker is reported as an error on the compilation | the planted violator breaks the build |
+| a contradictory marker is reported as an ERROR diagnostic | the planted violator breaks the build: the compiler fails on an error, not on a warning |
 | the switch set to `false` emits nothing | "off" means nothing is emitted, not "a decorator that measures nothing" |
 
 The behavioural half cannot pass vacuously: if the generator emitted nothing,
