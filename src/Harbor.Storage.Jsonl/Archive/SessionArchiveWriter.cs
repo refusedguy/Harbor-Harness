@@ -127,9 +127,12 @@ public sealed class SessionArchiveWriter
         // the archive is a pipeline of three reads, and a ladder of three
         // guards beside a hundred lines of assembly reads worse than the
         // chain (docs/ROP-API-INVENTORY.md §3.1).
+        //
+        // Each link awaits the read it continues: the combinators ride a
+        // `Result`, and the read that feeds one is a `Task`.
         return await sessionResult
-            .Bind(async session => (await ReadLogAsync(store, session.Id, ct).ConfigureAwait(false))
-                .Bind(log => WriteArchiveAsync(store, session, log, output, ct)))
+            .Bind(async session => await (await ReadLogAsync(store, session.Id, ct).ConfigureAwait(false))
+                .Bind(async log => await WriteArchiveAsync(store, session, log, output, ct)))
             .ConfigureAwait(false);
     }
 

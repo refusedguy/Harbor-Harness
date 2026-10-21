@@ -125,7 +125,7 @@ public sealed class SessionArchiveReader
     private static async Task<Result<SessionArchive>> ReadArchiveAsync(ZipArchive archive, CancellationToken ct)
     {
         return await ReadManifest(archive)
-            .Bind(async manifest => (await ReadSessionLineAsync(archive, ct).ConfigureAwait(false))
+            .Bind(async manifest => await (await ReadSessionLineAsync(archive, ct).ConfigureAwait(false))
                 .Bind(async session => (await ReadLogAsync(archive, session.Id, ct).ConfigureAwait(false))
                     .Map(log => new SessionArchive(manifest, session, log))))
             .ConfigureAwait(false);
