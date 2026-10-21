@@ -313,7 +313,7 @@ Composition: `src/Harbor.Registries/Tools/CompositeToolRegistry.cs:6` holds
 `List<IToolSource> _sources`, folds first-success in `GetTool` (`:97`), and
 makes `Register`/`Unregister` **read-only** (`:119,121`, each returning an
 explanatory `Result.Failure`). Two internal sources exist:
-`ToolRegistry.cs:157` (`ConcurrentToolSource`, a `private sealed class` nested in
+`ToolRegistry.cs:169` (`ConcurrentToolSource`, a `private sealed class` nested in
 `ToolRegistry` itself, unfrozen path) and
 `FrozenToolView.cs:26` (frozen path). The "single read path" rationale is
 documented at `ToolRegistry.cs:26-29` — including the sentence that states the
