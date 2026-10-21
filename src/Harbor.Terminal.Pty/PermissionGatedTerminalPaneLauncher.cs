@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Terminal;
 
@@ -46,7 +47,7 @@ public sealed class PermissionGatedTerminalPaneLauncher : ITerminalPaneLauncher
     public const string PanePermission = "terminal";
 
     /// <summary>Permission name whose <c>Deny</c> is final, whatever the pane rule says.</summary>
-    private const string ShellPermission = "bash";
+    private static readonly ToolName ShellPermission = WellKnownTools.Bash;
 
     private readonly PermissionRuleset _ruleset;
 

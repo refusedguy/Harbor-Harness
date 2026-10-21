@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
+
 namespace Harbor.Plugins.Instantiation;
 /// <summary>
 ///     Lifecycle helpers for live <see cref="IPlugin" /> instances. The registration
@@ -24,12 +25,18 @@ public static class PluginLifecycle
     /// <param name="plugin">The plugin to build a context for.</param>
     /// <param name="pluginRoot">Host plugin root directory (e.g. <c>~/.harbor/plugins</c>).</param>
     /// <param name="sourcePath">Source identity — directory part becomes <c>PluginDirectory</c>.</param>
+    /// <param name="config">
+    ///     The plugin's own configuration section, already validated against the
+    ///     schema the plugin declared (#1734). Null, the default, means the
+    ///     plugin has no settings of its own.
+    /// </param>
     /// <returns>A populated <see cref="PluginContext" />.</returns>
     public static PluginContext BuildContext(
         IPluginLoadHost host,
         IPlugin plugin,
         string pluginRoot,
-        string sourcePath)
+        string sourcePath,
+        IReadOnlyDictionary<string, PluginConfigValue>? config = null)
     {
         if (host is null)
             throw new ArgumentNullException(nameof(host));
@@ -47,7 +54,8 @@ public static class PluginLifecycle
             EventBus = host.EventBus,
             PluginDirectory = pluginDir,
             DataDirectory = dataDir,
-            HarborVersion = CurrentHarborVersion
+            HarborVersion = CurrentHarborVersion,
+            Config = config ?? new Dictionary<string, PluginConfigValue>()
         };
     }
 

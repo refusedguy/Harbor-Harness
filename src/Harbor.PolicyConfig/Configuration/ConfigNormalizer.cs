@@ -37,6 +37,7 @@ public static class ConfigNormalizer
                 ApplyPresentation(config, raw);
                 ApplyTooling(config, raw);
                 ApplyLimits(config, raw);
+                ApplyPlugins(config, raw);
                 ApplyPermissions(config, raw);
                 return config;
             });
@@ -145,6 +146,20 @@ public static class ConfigNormalizer
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;
         if (raw.Providers is not null) config.Providers = raw.Providers;
+    }
+
+    private static void ApplyPlugins(HarborConfig config, RawConfigDto raw)
+    {
+        // ── Per-plugin sections (#1734) ──
+        //
+        // The sections are copied through as the user wrote them. What a
+        // section MEANS is the plugin's schema, and the schema travels with
+        // the plugin, so this layer has no business reading one: it stores
+        // them, and the plugin pipeline checks them against the schema when
+        // the plugin starts.
+        if (raw.Plugins is null) return;
+
+        config.Plugins = new Dictionary<string, JsonElement>(raw.Plugins);
     }
 
     private static void ApplyPermissions(HarborConfig config, RawConfigDto raw)

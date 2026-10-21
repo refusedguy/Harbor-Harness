@@ -164,7 +164,7 @@ public sealed partial class RipGrepTool : ITool
             // kill-and-message branches; kill semantics live in KillQuietly.
             ToolErrors.KillQuietly(process);
             await DrainAsync().ConfigureAwait(false);
-            return ToolResult.Error(ToolErrors.Handler("ripgrep", cancellationToken,
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.RipGrep, cancellationToken,
                 timeout: TimeSpan.FromSeconds(TimeoutSeconds))(oce));
         }
         finally

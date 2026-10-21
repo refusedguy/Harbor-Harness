@@ -120,29 +120,29 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
             // #1748: the way back to a tool output that did not fit the
             // context. It is a READ of the agent's own tool output, it writes
             // nothing, and without it the pointer in the spilled tool result
             // would be a dead end for every agent but `code`.
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "git status", PermissionAction.Allow),
-            new("bash", "git diff *", PermissionAction.Allow),
-            new("bash", "git log *", PermissionAction.Allow),
-            new("bash", "*", PermissionAction.Deny),
-            new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny),
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "*", PermissionAction.Deny),
+            new(WellKnownTools.Edit, "*", PermissionAction.Deny),
+            new(WellKnownTools.Write, "*", PermissionAction.Deny),
             // #1738: the agent-facing plugin management tool is REFUSED to the
             // read-only agents, exactly as write / edit / bash are. The tool
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new("plugin_manager", "*", PermissionAction.Deny)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve.");
@@ -161,25 +161,29 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "find *", PermissionAction.Allow),
-            new("bash", "rg *", PermissionAction.Allow),
-            new("bash", "*", PermissionAction.Deny),
-            new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "find *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "rg *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "*", PermissionAction.Deny),
+            new(WellKnownTools.Edit, "*", PermissionAction.Deny),
+            new(WellKnownTools.Write, "*", PermissionAction.Deny),
             // #1738: the agent-facing plugin management tool is REFUSED to the
             // read-only agents, exactly as write / edit / bash are. The tool
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new("plugin_manager", "*", PermissionAction.Deny),
-            new("webfetch", "*", PermissionAction.Allow)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny),
+            new(WellKnownTools.WebFetch, "*", PermissionAction.Allow)
         }),
         20,
         IsSubAgent: true,
@@ -218,34 +222,38 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("tree", "*", PermissionAction.Allow),
-            new("ripgrep", "*", PermissionAction.Allow),
-            new("lsp", "*", PermissionAction.Allow),
-            new("skill", "*", PermissionAction.Allow),
-            new("session_read", "*", PermissionAction.Allow),
-            new("webfetch", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "grep *", PermissionAction.Allow),
-            new("bash", "rg *", PermissionAction.Allow),
-            new("bash", "find *", PermissionAction.Allow),
-            new("bash", "git status", PermissionAction.Allow),
-            new("bash", "git diff *", PermissionAction.Allow),
-            new("bash", "git log *", PermissionAction.Allow),
-            new("bash", "*", PermissionAction.Deny),
-            new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Tree, "*", PermissionAction.Allow),
+            new(WellKnownTools.RipGrep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Lsp, "*", PermissionAction.Allow),
+            new(WellKnownTools.Skill, "*", PermissionAction.Allow),
+            new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.WebFetch, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "grep *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "rg *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "find *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "*", PermissionAction.Deny),
+            new(WellKnownTools.Edit, "*", PermissionAction.Deny),
+            new(WellKnownTools.Write, "*", PermissionAction.Deny),
             // #1738: the agent-facing plugin management tool is REFUSED to the
             // read-only agents, exactly as write / edit / bash are. The tool
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new("plugin_manager", "*", PermissionAction.Deny)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         50,
         SystemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead.");
@@ -269,35 +277,39 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("tree", "*", PermissionAction.Allow),
-            new("ripgrep", "*", PermissionAction.Allow),
-            new("lsp", "*", PermissionAction.Allow),
-            new("skill", "*", PermissionAction.Allow),
-            new("session_read", "*", PermissionAction.Allow),
-            new("webfetch", "*", PermissionAction.Allow),
-            new("task", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "grep *", PermissionAction.Allow),
-            new("bash", "rg *", PermissionAction.Allow),
-            new("bash", "find *", PermissionAction.Allow),
-            new("bash", "git status", PermissionAction.Allow),
-            new("bash", "git diff *", PermissionAction.Allow),
-            new("bash", "git log *", PermissionAction.Allow),
-            new("bash", "*", PermissionAction.Deny),
-            new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Tree, "*", PermissionAction.Allow),
+            new(WellKnownTools.RipGrep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Lsp, "*", PermissionAction.Allow),
+            new(WellKnownTools.Skill, "*", PermissionAction.Allow),
+            new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.WebFetch, "*", PermissionAction.Allow),
+            new(WellKnownTools.Task, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "grep *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "rg *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "find *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "*", PermissionAction.Deny),
+            new(WellKnownTools.Edit, "*", PermissionAction.Deny),
+            new(WellKnownTools.Write, "*", PermissionAction.Deny),
             // #1738: the agent-facing plugin management tool is REFUSED to the
             // read-only agents, exactly as write / edit / bash are. The tool
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new("plugin_manager", "*", PermissionAction.Deny)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files.");
@@ -322,39 +334,43 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("tree", "*", PermissionAction.Allow),
-            new("ripgrep", "*", PermissionAction.Allow),
-            new("lsp", "*", PermissionAction.Allow),
-            new("skill", "*", PermissionAction.Allow),
-            new("session_read", "*", PermissionAction.Allow),
-            new("webfetch", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "grep *", PermissionAction.Allow),
-            new("bash", "rg *", PermissionAction.Allow),
-            new("bash", "find *", PermissionAction.Allow),
-            new("bash", "git status", PermissionAction.Allow),
-            new("bash", "git diff *", PermissionAction.Allow),
-            new("bash", "git log *", PermissionAction.Allow),
-            new("bash", "dotnet test *", PermissionAction.Allow),
-            new("bash", "dotnet build *", PermissionAction.Allow),
-            new("bash", "npm test *", PermissionAction.Allow),
-            new("bash", "npm run build *", PermissionAction.Allow),
-            new("bash", "rm -rf /", PermissionAction.Deny),
-            new("bash", "sudo *", PermissionAction.Deny),
-            new("bash", "*", PermissionAction.Ask),
-            new("edit", "*", PermissionAction.Ask),
-            new("write", "*", PermissionAction.Ask),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Tree, "*", PermissionAction.Allow),
+            new(WellKnownTools.RipGrep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Lsp, "*", PermissionAction.Allow),
+            new(WellKnownTools.Skill, "*", PermissionAction.Allow),
+            new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.WebFetch, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "grep *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "rg *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "find *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "dotnet test *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "dotnet build *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "npm test *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "npm run build *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "rm -rf /", PermissionAction.Deny),
+            new(WellKnownTools.Bash, "sudo *", PermissionAction.Deny),
+            new(WellKnownTools.Bash, "*", PermissionAction.Ask),
+            new(WellKnownTools.Edit, "*", PermissionAction.Ask),
+            new(WellKnownTools.Write, "*", PermissionAction.Ask),
             // #1738: the agent-facing plugin management tool. Allow does not
             // mean "without asking": the tool asks the user about every
             // change it proposes, and the answer covers that call only — the
             // same posture as this agent's write / edit rules.
-            new("plugin_manager", "*", PermissionAction.Allow)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
         }),
         50,
         SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
@@ -381,30 +397,34 @@ public sealed record AgentDefinition(
         providerId,
         new PermissionRuleset(new PermissionRule[]
         {
-            new("read", "*", PermissionAction.Allow),
-            new("spill_read", "*", PermissionAction.Allow),
-            new("glob", "*", PermissionAction.Allow),
-            new("grep", "*", PermissionAction.Allow),
-            new("ls", "*", PermissionAction.Allow),
-            new("tree", "*", PermissionAction.Allow),
-            new("skill", "*", PermissionAction.Allow),
-            new("session_read", "*", PermissionAction.Allow),
-            new("session_steer", "*", PermissionAction.Deny),
-            new("task", "*", PermissionAction.Allow),
-            new("bash", "ls *", PermissionAction.Allow),
-            new("bash", "cat *", PermissionAction.Allow),
-            new("bash", "git status", PermissionAction.Allow),
-            new("bash", "git diff *", PermissionAction.Allow),
-            new("bash", "git log *", PermissionAction.Allow),
-            new("bash", "*", PermissionAction.Deny),
-            new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny),
+            new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new(WellKnownTools.SpillRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+            new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+            new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+            new(WellKnownTools.Tree, "*", PermissionAction.Allow),
+            new(WellKnownTools.Skill, "*", PermissionAction.Allow),
+            new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
+            new(WellKnownTools.SessionSteer, "*", PermissionAction.Deny),
+            new(WellKnownTools.Task, "*", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+            new(WellKnownTools.Bash, "*", PermissionAction.Deny),
+            new(WellKnownTools.Edit, "*", PermissionAction.Deny),
+            new(WellKnownTools.Write, "*", PermissionAction.Deny),
             // #1738: the agent-facing plugin management tool is REFUSED to the
             // read-only agents, exactly as write / edit / bash are. The tool
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new("plugin_manager", "*", PermissionAction.Deny)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");

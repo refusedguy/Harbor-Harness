@@ -49,7 +49,7 @@ subscribers (all in-process, each owns its IDisposable — see §6)
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
   CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103
-  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:236
+  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:237
   CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:31
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
 ```
@@ -79,7 +79,7 @@ The bus **never writes a store itself**. What a subscriber does with the event
 is the subscriber's business, and the live branches are:
 
 - **TUI / CLI** — the renderer is the subscriber. `ReplRunner.cs:312,467` and
-  `DemoCommand.cs:236` hand every event to `ITuiRenderer.RenderAsync`, and the
+  `DemoCommand.cs:237` hand every event to `ITuiRenderer.RenderAsync`, and the
   renderer dispatches into a `UiStore`
   (`src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:74`,
   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`), which reduces it
