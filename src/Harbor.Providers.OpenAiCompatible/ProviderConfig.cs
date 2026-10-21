@@ -303,11 +303,34 @@ public sealed class DynamicModelCatalog : IModelCatalog
     private readonly HttpClient _http;
     private readonly ILogger<DynamicModelCatalog> _logger;
 
-    public DynamicModelCatalog(HttpClient http, string cacheDir, ILogger<DynamicModelCatalog> logger)
+    // #1932: the catalogue's freshness window is read through an injected
+    // clock, not through DateTimeOffset.UtcNow. TimeProvider is the BCL clock
+    // seam the product already uses (ProviderRegistry #1878, AgentLoop,
+    // ToolDispatcher, RetryPolicy, MascotDirector), so the 24-hour TTL can be
+    // aged in a test instead of by waiting a day.
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    ///     Construct the catalogue.
+    /// </summary>
+    /// <param name="http">Client the model list is fetched over.</param>
+    /// <param name="cacheDir">Directory the cached catalogue lives in.</param>
+    /// <param name="logger">Logger for diagnostics.</param>
+    /// <param name="timeProvider">
+    ///     Clock source for the catalogue's freshness window (#1932). Production
+    ///     passes nothing and reads <see cref="TimeProvider.System" />; a test
+    ///     passes a manual clock so the cache can be aged on demand.
+    /// </param>
+    public DynamicModelCatalog(
+        HttpClient http,
+        string cacheDir,
+        ILogger<DynamicModelCatalog> logger,
+        TimeProvider? timeProvider = null)
     {
         _http = http;
         _cacheDir = cacheDir;
         _logger = logger;
+        _time = timeProvider ?? TimeProvider.System;
         if (!Directory.Exists(_cacheDir))
             Directory.CreateDirectory(_cacheDir);
     }
@@ -368,6 +391,14 @@ public sealed class DynamicModelCatalog : IModelCatalog
                     string response = await _http.GetStringAsync(modelsUrl, ct).ConfigureAwait(false);
                     Directory.CreateDirectory(_cacheDir);
                     await File.WriteAllTextAsync(cachePath, response, ct).ConfigureAwait(false);
+
+                    // #1932: the file's freshness mark is the PRODUCT's clock,
+                    // not the filesystem's. The reader below compares the same
+                    // clock against that mark, so the entry this path writes
+                    // expires for the reader exactly `maxAge` after it was
+                    // written — not "24 hours after whatever the filesystem
+                    // felt like when it stamped the file".
+                    StampFreshness(cachePath);
                     return response;
                 },
                 ex =>
@@ -392,7 +423,12 @@ public sealed class DynamicModelCatalog : IModelCatalog
             if (!File.Exists(path))
                 return Result.Failure<IReadOnlyList<ModelInfo>>("no cached model catalog");
 
-            if (DateTimeOffset.UtcNow - File.GetLastWriteTimeUtc(path) >= maxAge)
+            // #1932: "now" comes from the injected clock, so the window is
+            // testable without waiting a day. "Written at" is the file's own
+            // freshness mark — stamped by the fetch path from the same clock,
+            // so the two ends of the window are one clock's opinion.
+            DateTimeOffset writtenAt = new(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+            if (_time.GetUtcNow() - writtenAt >= maxAge)
                 return Result.Failure<IReadOnlyList<ModelInfo>>("cached model catalog is stale");
         }
 
@@ -404,6 +440,43 @@ public sealed class DynamicModelCatalog : IModelCatalog
                 ex => $"Cache read failed: {ex.Message}")
             .Bind(json => ParseModelsResponse(json, config))
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Stamp the cache file's freshness mark from the injected clock
+    ///     (#1932).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The catalogue's TTL has two ends: the instant the entry was
+    ///         written, and the instant it is read. Before #1932 the first end
+    ///         was the FILESYSTEM's clock (the file's own last-write time) and
+    ///         the second was the wall clock — two clocks that only ever
+    ///         agreed by accident, and a seam that could be pulled from one
+    ///         side only. Writing the mark from the same clock the reader uses
+    ///         makes the window one clock's, on both ends.
+    ///     </para>
+    ///     <para>
+    ///         BEST-EFFORT: a filesystem that refuses the stamp keeps its own
+    ///         write time, which in production is the same instant (both are
+    ///         the system clock) — so the TTL still means what it meant. A
+    ///         failed stamp must never fail the fetch that produced a good
+    ///         catalogue.
+    ///     </para>
+    /// </remarks>
+    private void StampFreshness(string path)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(path, _time.GetUtcNow().UtcDateTime);
+        }
+        catch (Exception ex) when (ex is IOException
+            or UnauthorizedAccessException
+            or PlatformNotSupportedException
+            or ArgumentOutOfRangeException)
+        {
+            DynamicModelCatalogLog.FreshnessStampFailed(_logger, ex, path);
+        }
     }
 
     /// <summary>
@@ -636,4 +709,7 @@ internal static partial class DynamicModelCatalogLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning, Message = "Provider {Provider}: skipped {Skipped} of {Total} model entries. Reasons: {Reasons}")]
     public static partial void ModelsSkipped(ILogger logger, string provider, int skipped, int total, string reasons);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Debug, Message = "Could not stamp the catalogue freshness mark on '{Path}'; the file keeps its own write time")]
+    public static partial void FreshnessStampFailed(ILogger logger, Exception ex, string path);
 }

@@ -13,23 +13,37 @@ namespace Harbor.App.Cli.Commands;
 /// </summary>
 public static class McpLoginRunner
 {
+    /// <summary>
+    ///     Run the <c>harbor mcp</c> verbs.
+    /// </summary>
+    /// <param name="output">Standard output.</param>
+    /// <param name="error">Standard error.</param>
+    /// <param name="args">Verb and its arguments.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <param name="timeProvider">
+    ///     Clock the cached token's expiry is read from (#1932). Production
+    ///     passes nothing and reads <see cref="TimeProvider.System" />; the
+    ///     same clock the OAuth handler reads, so <c>mcp list</c> and the
+    ///     handler can never disagree about whether a token is expired.
+    /// </param>
     public static async Task<int> RunAsync(
         TextWriter output,
         TextWriter error,
         string[] args,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        TimeProvider? timeProvider = null)
     {
         string sub = args.Length > 0 ? args[0].ToLowerInvariant() : "list";
         return sub switch
         {
-            "list" => await ListAsync(output).ConfigureAwait(false),
-            "login" => await LoginAsync(output, error, args.Skip(1).ToArray(), ct).ConfigureAwait(false),
+            "list" => await ListAsync(output, timeProvider).ConfigureAwait(false),
+            "login" => await LoginAsync(output, error, args.Skip(1).ToArray(), ct, timeProvider).ConfigureAwait(false),
             "logout" => Logout(output, error, args.Skip(1).ToArray()),
             _ => Usage(error),
         };
     }
 
-    private static Task<int> ListAsync(TextWriter output)
+    private static Task<int> ListAsync(TextWriter output, TimeProvider? timeProvider)
     {
         var remotes = LoadRemoteEntries();
         if (remotes.Count == 0)
@@ -38,6 +52,9 @@ public static class McpLoginRunner
             return Task.FromResult(0);
         }
 
+        // #1932: one clock read for the whole listing, and the same clock the
+        // OAuth handler reads the expiry with.
+        DateTimeOffset now = (timeProvider ?? TimeProvider.System).GetUtcNow();
         var cache = new McpOAuthTokenCache();
         foreach (var (name, url, oauth) in remotes)
         {
@@ -45,7 +62,7 @@ public static class McpLoginRunner
             string state = "no-token";
             var cached = cache.Load(name);
             if (cached is not null)
-                state = cached.IsExpired(DateTimeOffset.UtcNow) ? "expired" : "ok";
+                state = cached.IsExpired(now) ? "expired" : "ok";
             output.WriteLine($"{name} [{auth}/{state}] {url}");
         }
 
@@ -53,7 +70,7 @@ public static class McpLoginRunner
     }
 
     private static async Task<int> LoginAsync(
-        TextWriter output, TextWriter error, string[] args, CancellationToken ct)
+        TextWriter output, TextWriter error, string[] args, CancellationToken ct, TimeProvider? timeProvider)
     {
         string? name = args.FirstOrDefault(a => !a.StartsWith('-'));
         if (string.IsNullOrWhiteSpace(name))
@@ -79,7 +96,8 @@ public static class McpLoginRunner
 
         // The handler owns the client it speaks over (#1854) — disposing it here
         // keeps the command from leaving a connection pool behind.
-        using var handler = new McpOAuthHandler(name, new Uri(remote.Url, UriKind.Absolute), remote.OAuth);
+        using var handler = new McpOAuthHandler(
+            name, new Uri(remote.Url, UriKind.Absolute), remote.OAuth, timeProvider: timeProvider);
         output.WriteLine($"Opening browser for '{name}' OAuth login…");
         var result = await handler.LoginAsync(cancellationToken: ct).ConfigureAwait(false);
         if (result.IsFailure)
