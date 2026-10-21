@@ -25,7 +25,7 @@ public class MemorySessionStoreTests
         var store = Create();
         var result = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(string.IsNullOrEmpty(result.Value.Id)).IsFalse();
         await Assert.That(result.Value.Directory).IsEqualTo("/proj");
         await Assert.That(result.Value.Agent).IsEqualTo("code");
@@ -41,7 +41,7 @@ public class MemorySessionStoreTests
 
         var fetched = await store.GetAsync(created.Value.Id);
 
-        await Assert.That(fetched.IsSuccess).IsTrue();
+        await Assert.That(fetched).IsSuccessful();
         await Assert.That(fetched.Value.Id).IsEqualTo(created.Value.Id);
         await Assert.That(fetched.Value.ProviderId).IsEqualTo("openai");
     }
@@ -51,7 +51,7 @@ public class MemorySessionStoreTests
     {
         var store = Create();
         var result = await store.GetAsync("nonexistent-id");
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -64,7 +64,7 @@ public class MemorySessionStoreTests
 
         var list = await store.ListAsync();
 
-        await Assert.That(list.IsSuccess).IsTrue();
+        await Assert.That(list).IsSuccessful();
         await Assert.That(list.Value.Count).IsEqualTo(3);
     }
 
@@ -77,7 +77,7 @@ public class MemorySessionStoreTests
 
         var list = await store.ListAsync(s1.Value.ProjectId);
 
-        await Assert.That(list.IsSuccess).IsTrue();
+        await Assert.That(list).IsSuccessful();
         await Assert.That(list.Value.Count).IsEqualTo(1);
         await Assert.That(list.Value[0].ProjectId).IsEqualTo(s1.Value.ProjectId);
     }
@@ -90,10 +90,10 @@ public class MemorySessionStoreTests
         var msg = NewUserMessage(session.Id, "hello", "1");
 
         var appendResult = await store.AppendMessageAsync(session.Id, msg);
-        await Assert.That(appendResult.IsSuccess).IsTrue();
+        await Assert.That(appendResult).IsSuccessful();
 
         var messages = await store.GetMessagesAsync(session.Id);
-        await Assert.That(messages.IsSuccess).IsTrue();
+        await Assert.That(messages).IsSuccessful();
         await Assert.That(messages.Value.Count).IsEqualTo(1);
         await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("hello");
     }
@@ -104,7 +104,7 @@ public class MemorySessionStoreTests
         var store = Create();
         var msg = NewUserMessage("nonexistent", "hello");
         var result = await store.AppendMessageAsync("nonexistent", msg);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -131,7 +131,7 @@ public class MemorySessionStoreTests
     {
         var store = Create();
         var result = await store.GetMessagesAsync("nonexistent");
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -142,13 +142,13 @@ public class MemorySessionStoreTests
         await store.AppendMessageAsync(session.Id, NewUserMessage(session.Id, "hello"));
 
         var deleteResult = await store.DeleteAsync(session.Id);
-        await Assert.That(deleteResult.IsSuccess).IsTrue();
+        await Assert.That(deleteResult).IsSuccessful();
 
         var fetched = await store.GetAsync(session.Id);
-        await Assert.That(fetched.IsFailure).IsTrue();
+        await Assert.That(fetched).IsFailed();
 
         var messages = await store.GetMessagesAsync(session.Id);
-        await Assert.That(messages.IsFailure).IsTrue();
+        await Assert.That(messages).IsFailed();
     }
 
     [Test]
@@ -156,7 +156,7 @@ public class MemorySessionStoreTests
     {
         var store = Create();
         var result = await store.DeleteAsync("nonexistent");
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -170,7 +170,7 @@ public class MemorySessionStoreTests
         store.Clear();
 
         var list = await store.ListAsync();
-        await Assert.That(list.IsSuccess).IsTrue();
+        await Assert.That(list).IsSuccessful();
         await Assert.That(list.Value.Count).IsEqualTo(0);
     }
 
@@ -196,7 +196,7 @@ public class MemorySessionStoreTests
         var store = Create();
         var msg = NewUserMessage("nonexistent", "hello");
         var result = await store.UpdateMessageAsync("nonexistent", msg);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -206,7 +206,7 @@ public class MemorySessionStoreTests
         var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
         var msg = NewUserMessage(session.Id, "ghost");
         var result = await store.UpdateMessageAsync(session.Id, msg);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
 
         var messages = await store.GetMessagesAsync(session.Id);
         await Assert.That(messages.Value.Count).IsEqualTo(0);
@@ -219,7 +219,7 @@ public class MemorySessionStoreTests
         var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
         var stats = await store.GetStatsAsync(session.Id);
 
-        await Assert.That(stats.IsSuccess).IsTrue();
+        await Assert.That(stats).IsSuccessful();
         await Assert.That(stats.Value.MessageCount).IsEqualTo(0);
     }
 
@@ -231,7 +231,7 @@ public class MemorySessionStoreTests
 
         var newMeta = new SessionMetadata(0.42m, 100, 50, 0, 0, 0, 2, null);
         var updateResult = await store.UpdateStatsAsync(session.Id, newMeta);
-        await Assert.That(updateResult.IsSuccess).IsTrue();
+        await Assert.That(updateResult).IsSuccessful();
 
         var stats = await store.GetStatsAsync(session.Id);
         await Assert.That(stats.Value.Cost).IsEqualTo(0.42m);

@@ -243,9 +243,9 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (24 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (25 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 18 tools are run by a workflow; the other six are
+tree. 19 tools are run by a workflow; the other six are
 `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
 `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
 other tools rather than run, `measure-project-graph.py`, which a human runs to
@@ -293,10 +293,11 @@ The modes are:
 | `tools/ci-shard-slices.py` | python | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
 | `tools/codemod-test-events.py` | python | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/codemod-tool-schemas.py` | python | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/demo_repro.py` | python | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | python | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/md_gate.py` | python | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
 | `tools/tool_schema_model.py` | python | shared data for the tool-schema gates: the one reading of a tool's [ToolParam] declaration, so the pin is written from the same model the gate reads it with | — | — | library | — | — | — |
-| `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
+| `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on every lane of ci.yml: the build job switches the build-time gate off for pull_request AND push events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a lane that switched the gate back on | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
@@ -325,7 +326,6 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
-| `tools/bin/harbor-gates-linux-x64 demo-repro` | compiled: `tools/gates/demo-repro` | the demo GIFs are reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | `--self-test` | `assets/demo/baseline.json` | — |
 
 The rules it does not enforce are the ones no file can answer: what a gate
 checks, that its message names the violator, that it has no allow-list, and

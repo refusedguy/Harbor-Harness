@@ -133,17 +133,28 @@
 // the one claim in this suite that needs a BUILD to have happened where it
 // runs.
 //
-// The suite runs twice (issue #1920): once inside the Release build, as the
-// `HarborArchGate` MSBuild target, and once in the `core` test shard. The
-// shard runs on a fresh checkout with only its own slice of the build
-// output, so there is no `bin/Debug` anywhere in it: the copy set is empty
-// by construction and the claim passes for the wrong reason there. The
+// The suite ran twice (issue #1920): once inside the Release build, as the
+// `HarborArchGate` MSBuild target, and once in a test shard. The shard
+// runs on a fresh checkout with only its own slice of the build output, so
+// there is no `bin/Debug` anywhere in it: the copy set is empty by
+// construction and the claim passes for the wrong reason there. The
 // non-vacuity check below cannot see that either — `considered` counts the
 // RELEASE outputs, and the shard does carry its own.
 //
-// So the build-time execution is the one that HOLDS this claim, which is
-// why the gate stays on for a push to dev/master even though the
-// pull-request lane runs the suite exactly once.
+// The build-time execution was the one that HELD this claim, and that is
+// why it stayed on for a push to dev/master while the pull-request lane
+// ran the suite exactly once. Issue #2114 took the second execution out of
+// the push lane too (the gate is now off for every event in ci.yml, so the
+// `arch` shard is the one execution on every lane), which means the byte
+// half of this claim is no longer held by any GATE: it is evaluated where
+// the tree is — the nightly lane's coverage job builds the tree itself and
+// runs the suite in that workspace — and there it is a REPORT, because that
+// job is report-only by contract (#99).
+//
+// The source half of the rule is unaffected: claim 1 reads the props chain
+// and the solution graph, so the shard checks it on every lane. This file
+// says so, because a reader who assumes the byte half is still gated would
+// be wrong.
 //
 // NON-VACUITY
 // -----------

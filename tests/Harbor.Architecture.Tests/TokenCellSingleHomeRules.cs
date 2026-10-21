@@ -888,4 +888,41 @@ public sealed class TokenCellSingleHomeRules
             return [];
         }
     }
+
+    /// <summary>
+    ///     The hits this rule's own matcher finds, over the live tree.
+    /// </summary>
+    /// <remarks>
+    ///     Internal because the MEASUREMENT reads it: the Go prototype of this
+    ///     rule has to produce the SAME list, and a comparison needs the list
+    ///     itself rather than the verdict — on a clean tree the verdict is
+    ///     "nothing found" for both, which is a weak thing to compare. The
+    ///     accessors below are the reason the comparison is worth anything:
+    ///     the rule's own matcher, over the rule's own scope.
+    /// </remarks>
+    /// <returns>One printable line per hit, in scan order.</returns>
+    internal static IReadOnlyList<string> LiveHits()
+    {
+        var hits = new List<string>();
+
+        foreach (ScanHit hit in ScanRunner.Collect(CsRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(CsRule))))
+        {
+            hits.Add($"{hit.File}:{hit.Line}\t{hit.RuleId}\t{hit.Text}");
+        }
+
+        foreach (ScanHit hit in ScanRunner.Collect(XamlRule, ScanRunner.ReadSources(ScanRunner.ScopeFiles(XamlRule))))
+        {
+            hits.Add($"{hit.File}:{hit.Line}\t{hit.RuleId}\t{hit.Text}");
+        }
+
+        return hits;
+    }
+
+    /// <summary>
+    ///     The rule's own planted controls, so a second implementation can be
+    ///     graded on the SAME inputs.
+    /// </summary>
+    /// <returns>The controls of both scopes, code first.</returns>
+    internal static IReadOnlyList<ScanControl> ControlCorpus() =>
+        [.. CsRule.Controls, .. XamlRule.Controls];
 }

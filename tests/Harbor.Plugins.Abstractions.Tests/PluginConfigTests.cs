@@ -148,76 +148,75 @@ public sealed class PluginConfigTests
     }
 
     /// <summary>
-    ///     A setting the schema does not declare is an error, and the message
-    ///     names it: a user who cannot see which setting is wrong cannot fix
-    ///     it.
+    ///     The refusals the validator owes the user, and what each message has
+    ///     to carry: the path of the setting that is wrong, and what the schema
+    ///     expected instead. A setting the schema does not declare, a value of
+    ///     the wrong type (a port written as text is not the number 8080), a
+    ///     value outside the declared range, a value outside the declared set.
     /// </summary>
-    [Test]
-    public async Task Validator_UnknownSetting_RefusesAndNamesTheSetting()
-    {
-        PluginConfigSchema schema = Schema("""{ "maxResults": { "type": "integer", "default": 5 } }""");
-
-        Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved =
-            PluginConfigValidator.Validate(schema, Section("""{ "prot": 8080 }"""), "plugins.web-search");
-
-        await Assert.That(resolved.IsFailure).IsTrue();
-        await Assert.That(resolved.Error).Contains("plugins.web-search.prot");
-        await Assert.That(resolved.Error).Contains("maxResults");
-    }
+    /// <remarks>
+    ///     One table and one test, because the four refusals are ONE rule with
+    ///     four inputs. As four methods they were four copies of one body:
+    ///     four places to fix one rule, and the copy nobody fixed was the one
+    ///     that stopped testing it.
+    /// </remarks>
+    public static (string Name, string SchemaJson, string SectionJson, string Setting, string Expected)[] RefusedSections =>
+    [
+        (
+            "a setting the schema does not declare",
+            """{ "maxResults": { "type": "integer", "default": 5 } }""",
+            """{ "prot": 8080 }""",
+            "plugins.web-search.prot",
+            "maxResults"
+        ),
+        (
+            "a value of the wrong type",
+            """{ "maxResults": { "type": "integer", "default": 5 } }""",
+            """{ "maxResults": "10" }""",
+            "plugins.web-search.maxResults",
+            "whole number"
+        ),
+        (
+            "a value outside the declared range",
+            """{ "maxResults": { "type": "integer", "default": 5, "minimum": 1, "maximum": 50 } }""",
+            """{ "maxResults": 100 }""",
+            "plugins.web-search.maxResults",
+            "50"
+        ),
+        (
+            "a value outside the declared set",
+            """{ "mode": { "type": "string", "default": "fast", "allowed": ["fast", "thorough"] } }""",
+            """{ "mode": "slow" }""",
+            "plugins.web-search.mode",
+            "thorough"
+        ),
+    ];
 
     /// <summary>
-    ///     A value of the wrong type is refused, and the message says what was
-    ///     expected. A port written as text is not the number 8080.
+    ///     A section the schema does not accept is refused, and the message
+    ///     names what is wrong: the setting, and the rule it breaks. A user who
+    ///     cannot see which setting is wrong cannot fix it.
     /// </summary>
     [Test]
-    public async Task Validator_WrongType_RefusesAndNamesTheSetting()
+    [MethodDataSource(nameof(RefusedSections))]
+    public async Task Validator_RefusesTheSectionAndNamesWhatIsWrong(
+        string name,
+        string schemaJson,
+        string sectionJson,
+        string setting,
+        string expected)
     {
-        PluginConfigSchema schema = Schema("""{ "maxResults": { "type": "integer", "default": 5 } }""");
+        PluginConfigSchema schema = Schema(schemaJson);
 
         Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved =
-            PluginConfigValidator.Validate(schema, Section("""{ "maxResults": "10" }"""), "plugins.web-search");
+            PluginConfigValidator.Validate(schema, Section(sectionJson), "plugins.web-search");
 
-        await Assert.That(resolved.IsFailure).IsTrue();
-        await Assert.That(resolved.Error).Contains("plugins.web-search.maxResults");
-        await Assert.That(resolved.Error).Contains("whole number");
-    }
-
-    /// <summary>
-    ///     A value outside the declared range is refused, and the message names
-    ///     the range the setting accepts.
-    /// </summary>
-    [Test]
-    public async Task Validator_OutOfRange_RefusesAndNamesTheRange()
-    {
-        PluginConfigSchema schema = Schema("""
-            { "maxResults": { "type": "integer", "default": 5, "minimum": 1, "maximum": 50 } }
-            """);
-
-        Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved =
-            PluginConfigValidator.Validate(schema, Section("""{ "maxResults": 100 }"""), "plugins.web-search");
-
-        await Assert.That(resolved.IsFailure).IsTrue();
-        await Assert.That(resolved.Error).Contains("plugins.web-search.maxResults");
-        await Assert.That(resolved.Error).Contains("50");
-    }
-
-    /// <summary>
-    ///     A value outside the declared set is refused, and the message lists
-    ///     the values the setting accepts.
-    /// </summary>
-    [Test]
-    public async Task Validator_NotAnAllowedValue_RefusesAndNamesTheSetting()
-    {
-        PluginConfigSchema schema = Schema("""
-            { "mode": { "type": "string", "default": "fast", "allowed": ["fast", "thorough"] } }
-            """);
-
-        Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved =
-            PluginConfigValidator.Validate(schema, Section("""{ "mode": "slow" }"""), "plugins.web-search");
-
-        await Assert.That(resolved.IsFailure).IsTrue();
-        await Assert.That(resolved.Error).Contains("plugins.web-search.mode");
-        await Assert.That(resolved.Error).Contains("thorough");
+        await Assert.That(resolved.IsFailure).IsTrue()
+            .Because($"{name} is a section the schema does not accept");
+        await Assert.That(resolved.Error).Contains(setting)
+            .Because($"the refusal for {name} names the setting that is wrong");
+        await Assert.That(resolved.Error).Contains(expected)
+            .Because($"the refusal for {name} names what the schema expected instead");
     }
 
     /// <summary>
