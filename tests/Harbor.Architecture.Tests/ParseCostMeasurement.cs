@@ -175,19 +175,29 @@ public sealed class ParseCostMeasurement
             .Because("the measurement reads the repository's own source; with no root it measures nothing.");
 
         // (1) The rule's own scan, through the rule's own matcher.
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        long started = Stopwatch.GetTimestamp();
-        IReadOnlyList<string> hits = TokenCellSingleHomeRules.LiveHits();
-        long finished = Stopwatch.GetTimestamp();
-        long after = GC.GetAllocatedBytesForCurrentThread();
-
-        Console.WriteLine(
-            $"[arch-cost] rule token-cell live hits={hits.Count} ms={ToMilliseconds(finished - started):F1} "
-            + $"alloc-mb={(after - before) / 1024.0 / 1024.0:F1}");
-
-        foreach (string hit in hits)
+        //
+        //     GATED, because it is expensive: one pass over the product tree
+        //     through the rule's own matcher costs 6.2 s, and this suite's
+        //     wall is set by its longest test. The number is worth having when
+        //     somebody is measuring the layer; it is not worth 6.2 s in every
+        //     run of the repository. Measured on 2026-10-21: 6 219 ms and
+        //     107.1 MiB for one pass over 1 328 files.
+        if (Environment.GetEnvironmentVariable("HARBOR_ARCH_MEASURE_RULE_SCAN") == "1")
         {
-            Console.WriteLine($"[arch-count] rule token-cell live hit {hit}");
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            long started = Stopwatch.GetTimestamp();
+            IReadOnlyList<string> hits = TokenCellSingleHomeRules.LiveHits();
+            long finished = Stopwatch.GetTimestamp();
+            long after = GC.GetAllocatedBytesForCurrentThread();
+
+            Console.WriteLine(
+                $"[arch-cost] rule token-cell live hits={hits.Count} ms={ToMilliseconds(finished - started):F1} "
+                + $"alloc-mb={(after - before) / 1024.0 / 1024.0:F1}");
+
+            foreach (string hit in hits)
+            {
+                Console.WriteLine($"[arch-count] rule token-cell live hit {hit}");
+            }
         }
 
         // (2) The pattern style: the lookahead conjunction against the same
@@ -350,17 +360,36 @@ public sealed class ParseCostMeasurement
             return [];
         }
 
+        // The exclusions are RELATIVE to the tree being walked, so walking
+        // `tests/` does not exclude every file in it: the filter is about the
+        // directories a rule must not judge, not about the name of the tree
+        // being judged.
         return
         [
             .. Directory
                 .EnumerateFiles(path, "*.cs", SearchOption.AllDirectories)
-                .Where(p =>
-                    !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    && !p.Contains($"{Path.DirectorySeparatorChar}contrib{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    && !p.Contains($"{Path.DirectorySeparatorChar}tests{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .Where(p => !IsExcludedSegment(Path.GetRelativePath(path, p)))
                 .OrderBy(p => p, StringComparer.Ordinal)
         ];
+    }
+
+    /// <summary>
+    ///     Whether a path holds a directory the rules must not judge.
+    /// </summary>
+    /// <param name="relative">The path, relative to the tree being walked.</param>
+    private static bool IsExcludedSegment(string relative)
+    {
+        foreach (string segment in relative.Split(
+                     new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment is "obj" or "bin" or "contrib" or "tests" or ".worktrees")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>One implementation's cost over the tree, and the files that cost the most.</summary>
