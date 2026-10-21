@@ -197,7 +197,7 @@ public sealed record PermissionRuleset
         // the user "did you finish?" on every round would be noise. The
         // read-only modes do not carry this rule, so their goal tool is
         // asked about, not allowed.
-        new("goal", "*", PermissionAction.Allow)
+        new(WellKnownTools.Goal, "*", PermissionAction.Allow)
     });
 
     /// <summary>

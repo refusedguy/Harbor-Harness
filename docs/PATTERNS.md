@@ -313,7 +313,7 @@ Composition: `src/Harbor.Registries/Tools/CompositeToolRegistry.cs:6` holds
 `List<IToolSource> _sources`, folds first-success in `GetTool` (`:97`), and
 makes `Register`/`Unregister` **read-only** (`:119,121`, each returning an
 explanatory `Result.Failure`). Two internal sources exist:
-`ToolRegistry.cs:157` (`ConcurrentToolSource`, a `private sealed class` nested in
+`ToolRegistry.cs:169` (`ConcurrentToolSource`, a `private sealed class` nested in
 `ToolRegistry` itself, unfrozen path) and
 `FrozenToolView.cs:26` (frozen path). The "single read path" rationale is
 documented at `ToolRegistry.cs:26-29` — including the sentence that states the
@@ -408,7 +408,7 @@ parse/IO failures.
 
 Two more live instances of the banned direction:
 
-- `src/Harbor.Abstractions/Tools/ITool.cs:124` — `ValidateArguments(args) =>
+- `src/Harbor.Abstractions/Tools/ITool.cs:150` — `ValidateArguments(args) =>
   Result.Success()` accepts any argument shape. Currently harmless **only**
   because all 22 in-tree `ITool` implementations override it (`grep -rnE "class
   [A-Za-z0-9_]+ *: *[A-Za-z0-9_.]*ITool" src/`, 22 distinct types, none in a file
@@ -657,7 +657,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |
 | Extension by mutating a concrete registry | `PluginRegistrar.cs:75-87` | Interface + a list of them (§5) |
 | Policy bolted onto an adapter | `SandboxedPluginTool` wraps tools only (`PluginRegistrar.cs:231`); the provider and agent paths get none | Policy at the extension point (§5) |
-| Permissive DIM | `IThemeWatcher.cs:31`, `src/Harbor.Abstractions/Tools/ITool.cs:124`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
+| Permissive DIM | `IThemeWatcher.cs:31`, `src/Harbor.Abstractions/Tools/ITool.cs:150`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
 | Wildcard arm over a Harbor union | 7 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
 | **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |

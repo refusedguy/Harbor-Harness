@@ -102,7 +102,7 @@ public static class BuiltinToolSafetyProfiles
         // verdict on its own work. The unclassified reading is fail-closed
         // and is the right one. `ToolCategoryApprovalTests` names the
         // exemption.
-        new("goal", ToolSafetyProfile.Opaque),
+        new(WellKnownTools.Goal, ToolSafetyProfile.Opaque),
 
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See

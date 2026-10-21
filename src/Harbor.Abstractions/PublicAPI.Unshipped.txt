@@ -360,3 +360,8 @@ Harbor.Abstractions.Sessions.GoalPhase.Complete = 2 -> Harbor.Abstractions.Sessi
 Harbor.Abstractions.Sessions.ISessionGoalStore
 Harbor.Abstractions.Sessions.ISessionGoalStore.AppendGoalAsync(string! sessionId, Harbor.Abstractions.Sessions.Goal! goal, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Sessions.Goal!>>!
 Harbor.Abstractions.Sessions.ISessionGoalStore.GetGoalAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<CSharpFunctionalExtensions.Maybe<Harbor.Abstractions.Sessions.Goal!>>>!
+
+Harbor.Abstractions.Tools.ITool.TimeoutMs.get -> int?
+Harbor.Abstractions.Tools.ToolTimeouts
+static Harbor.Abstractions.Tools.ToolTimeouts.IsValid(int? toolTimeoutMs) -> bool
+static Harbor.Abstractions.Tools.ToolTimeouts.Resolve(int? toolTimeoutMs, System.TimeSpan? commonDefault) -> System.TimeSpan?
