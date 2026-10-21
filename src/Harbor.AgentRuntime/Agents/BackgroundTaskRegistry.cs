@@ -83,15 +83,20 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         AsyncFlowControl flow = ExecutionContext.SuppressFlow();
         try
         {
-            // DELIBERATE BREAK — the proof that the test still catches its
-            // defect (#2093). The detached run is NEVER launched here: the
-            // run's task completes without the body ever running, which is
-            // what "the product does not start the child" looks like from the
-            // outside. The next commit reverts this one; the red CI run this
-            // produces is the evidence, and the green one after it is the
-            // proof that the revert is the whole difference.
-            task = Task.FromResult(Result.Failure<SubAgentRunResult>(
-                "deliberate break: the detached run is never launched"));
+            // The run starts on a DEDICATED thread (#2093), not on the pool: the
+            // pool's queue is drained by whichever worker comes back first, so
+            // on a loaded runner the run's first line waited for a pool slot
+            // that could take minutes — and a background run that has not
+            // started looks exactly like a background run that never will. The
+            // dedicated thread covers the run's synchronous prologue only; the
+            // run's own awaits still resume on the pool, as before.
+            task = Task.Factory
+                .StartNew<Task<Result<SubAgentRunResult>>>(
+                    () => run(cts.Token),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+                    TaskScheduler.Default)
+                .Unwrap();
         }
         finally
         {
