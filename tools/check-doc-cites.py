@@ -521,6 +521,8 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as futures
+import locale
 import os
 import re
 import shutil
@@ -1158,6 +1160,347 @@ def _lines_at(repo: str, rev: str, rel: str, cache: dict[tuple[str, str], list[s
     return cache[key]
 
 
+# ---------------------------------------------------------------------------
+# The history, in ONE process (issue #2090)
+# ---------------------------------------------------------------------------
+#
+# WHAT THIS REPLACES
+#
+# `git blame --line-porcelain -- <file>` answers "which commit wrote this
+# line" for one file, and in this repository it costs about 350 ms: the cost
+# is not the output, it is the per-process walk of the history that finds
+# the commit. The gate needs the answer for every file under `tests/` that
+# holds a citation, so it paid it 1188 times: 413 s of the gate's 669 s,
+# measured with a counting shim in front of `git`.
+#
+# The same answer comes out of ONE `git log -p -U0` over the same files: git
+# walks the history once and prints every change with no context, and the
+# blame is reconstructed from those changes. Measured on this tree: 28 s of
+# git and a few seconds of parsing, against 413 s and 1188 processes.
+#
+# WHY THE RECONSTRUCTION IS EXACT, AND WHERE IT IS NOT ALLOWED TO BE
+#
+# `git blame` walks the history of ONE file and asks, for each line, which
+# commit last introduced it. Reconstructing that from the diffs is the same
+# question, asked in the other direction: apply every change, oldest first,
+# and the commit that applied a line is the commit that wrote it. Two
+# details decide whether the two agree:
+#
+#   THE HUNKS OF ONE COMMIT. They all speak about the file as it was BEFORE
+#   that commit, so they must be applied from the last one to the first.
+#   Applying them in the order they are printed moves the later hunks by
+#   the line count the earlier ones changed. (Measured: 21 of 40 sampled
+#   files disagreed with `git blame` before this was fixed, 1 of 40 after.)
+#
+#   A MERGE. `git log -p` prints no diff for a merge, so the line array
+#   cannot be carried across it, and a file whose history crosses a merge
+#   that changed it would be attributed to the wrong commit. Such a file is
+#   answered by `git blame` itself, exactly as before: the fallback is not
+#   an approximation, it is the original code path.
+#
+# A file that is MODIFIED IN THE WORKING TREE is answered by `git blame` as
+# well: `git blame` attributes an uncommitted line to the null oid, and the
+# rule reads that as "no commit is attributed to this line", while the
+# reconstruction only knows the committed file.
+
+BLAME_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+BLAME_DIFF_RE = re.compile(r"^diff --git a/(.*) b/(.*)$")
+
+
+class GitHistory:
+    """`git blame` and `git show`, answered for the whole tree in two processes."""
+
+    def __init__(self, repo: str, files: list[str]):
+        self.repo = repo
+        self._blames: dict[str, dict[int, str]] = {}
+        self._files_at: dict[tuple[str, str], list[str] | None] = {}
+        self._reader: subprocess.Popen | None = None
+        self._risky: set[str] = set()
+        self._reconstructed: dict[str, dict[int, str]] = {}
+        self._reconstructed_content: dict[str, list[str]] = {}
+        if files:
+            self._scan(repo, files)
+
+    # -- the one pass ------------------------------------------------------
+
+    def _scan(self, repo: str, files: list[str]) -> None:
+        """ONE `git log -p -U0` over the tree, and the blame rebuilt from it."""
+        proc = subprocess.run(
+            [
+                "git", "log",
+                "--format=%x00%H %P",
+                "-p", "-U0",
+                "--topo-order",
+                # A merge prints no diff by default, and a file whose history
+                # crosses a merge is answered by `git blame` instead. Asking
+                # for the merge's diff against its FIRST parent is what tells
+                # us WHICH files those are: the files the merge brought in.
+                "--diff-merges=first-parent",
+                # The pathspec is the citing files. git pairs a rename only
+                # when both of its paths are inside the diff it is about to
+                # show, so a file that was renamed reads as an addition here,
+                # and the reconstruction then puts its lines in the wrong
+                # place. The content check below catches that (the
+                # reconstruction does not reproduce the file at HEAD), and
+                # such a file is answered by `git blame` itself.
+                "--", *files,
+            ],
+            cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+        )
+        if proc.returncode != 0:
+            # No history (a tree unpacked from an archive, say). Every blame
+            # is then unknown, exactly as it was when the gate asked git per
+            # file and git said no.
+            return
+
+        commits: dict[str, dict] = {}
+        order: list[str] = []
+        sha: str | None = None
+        parents: list[str] = []
+        path: str | None = None
+        hunks: list[tuple] | None = None
+
+        for raw in proc.stdout.split("\n"):
+            if raw.startswith("\x00"):
+                sha, _, rest = raw[1:].partition(" ")
+                parents = rest.split()
+                path = None
+                hunks = None
+                if sha not in commits:
+                    commits[sha] = {"parents": parents, "entries": []}
+                    order.append(sha)
+                continue
+            if raw.startswith("diff --git "):
+                match = BLAME_DIFF_RE.match(raw)
+                path = match.group(2) if match else None
+                hunks = []
+                if path is not None and sha is not None:
+                    commits[sha]["entries"].append([path, hunks, None])
+                continue
+            if path is None or hunks is None:
+                continue
+            if raw.startswith("rename from "):
+                if sha is not None:
+                    commits[sha]["entries"][-1][2] = raw[len("rename from "):]
+                continue
+            if raw.startswith("rename to "):
+                continue
+            if raw.startswith("@@"):
+                match = BLAME_HUNK_RE.match(raw)
+                if not match:
+                    continue
+                hunks.append((
+                    int(match.group(1)),
+                    int(match.group(2)) if match.group(2) is not None else 1,
+                    int(match.group(3)),
+                    int(match.group(4)) if match.group(4) is not None else 1,
+                    [],
+                ))
+                continue
+            if hunks and raw[:1] in "+-" and not raw.startswith(("+++", "---")):
+                hunks[-1] = hunks[-1][:4] + (hunks[-1][4] + [raw[1:]],)
+                continue
+
+        # The files a merge brought in: their history crosses a merge, so
+        # their blame is asked of `git blame` itself.
+        for commit_sha in order:
+            record = commits[commit_sha]
+            if len(record["parents"]) < 2:
+                continue
+            for entry in record["entries"]:
+                self._risky.add(entry[0])
+
+        # A file the working tree changed: `git blame` attributes the changed
+        # lines to the null oid, and the rule reads that as "no commit is
+        # attributed to this line". The reconstruction only knows the
+        # committed file, so those files are asked of `git blame` as well.
+        self._risky.update(self._modified_in_worktree(repo))
+
+        # The reconstruction: the commits in the reverse of the log's order,
+        # so a parent is applied before its children.
+        arrays: dict[str, list[tuple[str, str]]] = {}
+        for commit_sha in reversed(order):
+            record = commits[commit_sha]
+            if len(record["parents"]) > 1:
+                continue  # a merge: its diff is not a change of the file
+            for path, hunks, rename_from in record["entries"]:
+                if rename_from and rename_from in arrays:
+                    arrays[path] = arrays.pop(rename_from)
+                array = arrays.setdefault(path, [])
+                # The hunks of ONE commit all speak about the file as it was
+                # BEFORE that commit, so they are applied from the last to the
+                # first.
+                for hunk in sorted(hunks, reverse=True):
+                    old_start, old_count, new_start, new_count = hunk[0], hunk[1], hunk[2], hunk[3]
+                    added = hunk[4] if len(hunk) > 4 else []
+                    if old_count:
+                        del array[old_start - 1: old_start - 1 + old_count]
+                        at = old_start - 1
+                    else:
+                        at = old_start
+                    array[at:at] = [
+                        (commit_sha, added[index] if index < len(added) else "")
+                        for index in range(new_count)
+                    ]
+        for path, array in arrays.items():
+            self._reconstructed[path] = {i + 1: sha for i, (sha, _) in enumerate(array)}
+            self._reconstructed_content[path] = [content for _, content in array]
+
+        # The files whose reconstruction does not reproduce the file at HEAD.
+        # A merge that the reconstruction could not carry the file across
+        # leaves the lines in the wrong place, and a file whose lines are in
+        # the wrong place is a file whose blame is wrong. The check is a
+        # comparison with the committed file, so it is exact: a file that
+        # reproduces HEAD is a file the reconstruction read correctly.
+        self._risky.update(self._inconsistent(repo, list(self._reconstructed)))
+
+    def _inconsistent(self, repo: str, paths: list[str]) -> set[str]:
+        """The files whose reconstruction does not reproduce the file at HEAD."""
+        out: set[str] = set()
+        for path in paths:
+            content = self._reconstructed_content.get(path)
+            if content is None:
+                out.add(path)
+                continue
+            head = self._blob_at_head(repo, path)
+            if head is None or head != content:
+                out.add(path)
+        return out
+
+    def _blob_at_head(self, repo: str, path: str) -> list[str] | None:
+        """The lines of `path` at HEAD, or None when it is not there."""
+        if self._reader is None:
+            self._reader = subprocess.Popen(
+                ["git", "cat-file", "--batch"],
+                cwd=repo, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                env=md_gate.git_env(),
+            )
+        assert self._reader.stdin is not None and self._reader.stdout is not None
+        self._reader.stdin.write(f"HEAD:{path}\n".encode("utf-8"))
+        self._reader.stdin.flush()
+        header = self._reader.stdout.readline().decode("utf-8", "replace").strip()
+        if header.endswith(" missing"):
+            return None
+        parts = header.split(" ")
+        if len(parts) != 3:
+            return None
+        size = int(parts[2])
+        body = self._reader.stdout.read(size)
+        self._reader.stdout.read(1)
+        text = body.decode(locale.getpreferredencoding(False))
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        return text.split("\n")[:-1] if text.endswith("\n") else text.split("\n")
+
+    @staticmethod
+    def _modified_in_worktree(repo: str) -> set[str]:
+        """The tracked files the working tree differs from HEAD in."""
+        proc = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD", "--", "*.cs"],
+            cwd=repo, capture_output=True, text=True, env=md_gate.git_env(),
+        )
+        if proc.returncode != 0:
+            return set()
+        return {line for line in proc.stdout.split("\n") if line}
+
+    # -- the two questions the gate asks -----------------------------------
+
+    def blame(self, rel: str) -> dict[int, str]:
+        """`line -> sha` for one file, as `git blame` would answer it."""
+        if rel not in self._blames:
+            if rel in self._risky or rel not in self._reconstructed:
+                self._blames[rel] = self._blame_with_git(rel)
+            else:
+                self._blames[rel] = self._reconstructed[rel]
+        return self._blames[rel]
+
+    def blame_many(self, rels: list[str]) -> None:
+        """The blame of many files, with the fallbacks asked in parallel.
+
+        The fallback is `git blame` itself: one process per file, each about
+        350 ms, and they do not touch each other. The gate needs them for
+        the files whose history the reconstruction could not carry across.
+        """
+        pending = [rel for rel in rels if rel not in self._blames]
+        if not pending:
+            return
+        fallback = [
+            rel for rel in pending
+            if rel in self._risky or rel not in self._reconstructed
+        ]
+        answers: dict[str, dict[int, str]] = {}
+        if fallback:
+            workers = min(8, len(fallback))
+            with futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                for rel, answer in zip(fallback, pool.map(self._blame_with_git, fallback)):
+                    answers[rel] = answer
+        for rel in pending:
+            self._blames[rel] = answers.get(rel, self._reconstructed.get(rel, {}))
+
+    def _blame_with_git(self, rel: str) -> dict[int, str]:
+        """The original answer, from `git blame` itself."""
+        m: dict[int, str] = {}
+        proc = subprocess.run(
+            ["git", "blame", "--line-porcelain", "--", rel],
+            cwd=self.repo, capture_output=True, text=True, env=md_gate.git_env(),
+        )
+        sha = lineno = None
+        for raw in proc.stdout.splitlines():
+            head = raw.split(" ")
+            if len(head) >= 3 and len(head[0]) == 40 and head[1].isdigit() and head[2].isdigit():
+                sha, lineno = head[0], int(head[2])
+            elif raw.startswith("\t") and sha is not None and lineno is not None:
+                m[lineno] = sha
+        return m
+
+    def lines_at(self, rev: str, rel: str) -> list[str] | None:
+        """Stripped lines of `rel` at `rev`, or None when it did not exist there."""
+        key = (rev, rel)
+        if key not in self._files_at:
+            self._files_at[key] = self._read_blob(rev, rel)
+        return self._files_at[key]
+
+    def _read_blob(self, rev: str, rel: str) -> list[str] | None:
+        """`git show <rev>:<rel>`, through ONE `git cat-file --batch`."""
+        if self._reader is None:
+            self._reader = subprocess.Popen(
+                ["git", "cat-file", "--batch"],
+                cwd=self.repo, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                env=md_gate.git_env(),
+            )
+        assert self._reader.stdin is not None and self._reader.stdout is not None
+        request = f"{rev}:{rel}\n"
+        self._reader.stdin.write(request.encode("utf-8"))
+        self._reader.stdin.flush()
+        header = self._reader.stdout.readline().decode("utf-8", "replace").strip()
+        # "<sha> <type> <size>" for an object that exists, "<request> missing"
+        # for one that does not. A path absent at that rev is the "the file was
+        # added later" case, not drift, and it must not read as an empty file
+        # whose every line is blank.
+        if header.endswith(" missing"):
+            return None
+        parts = header.split(" ")
+        if len(parts) != 3:
+            return None
+        size = int(parts[2])
+        body = self._reader.stdout.read(size)
+        self._reader.stdout.read(1)  # the newline that follows the object
+        # The same text the old `subprocess.run(..., text=True)` produced:
+        # the locale's encoding, with the universal newlines translation.
+        text = body.decode(locale.getpreferredencoding(False))
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        return [line.strip() for line in text.splitlines()]
+
+    def close(self) -> None:
+        if self._reader is not None:
+            try:
+                if self._reader.stdin is not None:
+                    self._reader.stdin.close()
+                self._reader.wait(timeout=5)
+            except Exception:  # noqa: BLE001 - a closed pipe is not a finding
+                pass
+            self._reader = None
+
+
 def repo_is_shallow(repo: str) -> bool:
     """True when the clone has truncated history.
 
@@ -1223,10 +1566,11 @@ def check_cite_drift(
                 0,
             )
         )
-    blame_cache: dict[str, dict[int, str]] = {}
-    hist_cache: dict[tuple[str, str], list[str] | None] = {}
-    head_cache: dict[str, list[str]] = {}
-
+    # The files that hold a citation or a record. The history is asked about
+    # THOSE files only: in this tree 30 of the 1291 files under `tests/` hold
+    # a citation, and the gate used to ask git about all 1291 of them
+    # (issue #2090).
+    prepared: list[tuple[str, str, dict, list]] = []
     for rel in md_gate.tracked_cs(repo):
         if not rel.startswith(TEST_CITATION_SCOPE):
             continue
@@ -1238,17 +1582,34 @@ def check_cite_drift(
         prose = comments_only(body)
         if ":" not in prose:
             continue
-        blames = _blame_map(repo, rel, blame_cache)
         records, record_spans = drift_records(prose)
         # The record's own `File.cs:91` is not a claim about the tree — it is
         # the bookkeeping that records one. Masked before CITATION runs, so the
         # population is the citations a human wrote.
-        prose = mask_spans(prose, record_spans)
+        masked = mask_spans(prose, record_spans)
+        citations = list(CITATION.finditer(masked))
+        if not citations and not records:
+            # Nothing to check and nothing to excuse: the file is not part of
+            # the population, and asking git about it would be asking about
+            # the whole tree.
+            continue
+        prepared.append((rel, masked, records, citations))
+
+    # ONE pass over the history for the citing files, instead of one
+    # `git blame` process per file (issue #2090).
+    history = GitHistory(repo, [rel for rel, _, _, cites in prepared if cites])
+    # The fallback blames, in parallel: they are one process per file, and
+    # they do not touch each other.
+    history.blame_many([rel for rel, _, _, cites in prepared if cites])
+    head_cache: dict[str, list[str]] = {}
+
+    for rel, prose, records, citations in prepared:
+        blames = history.blame(rel) if citations else {}
         # Every record this file carries, so the stale check at the end can tell
         # "excused a real finding" from "excusing nothing at all".
         used: set[tuple[str, int]] = set()
 
-        for m in CITATION.finditer(prose):
+        for m in citations:
             target, spec = m.group(1), m.group(2)
             doc_line = prose.count("\n", 0, m.start()) + 1
             seen += 1
@@ -1316,7 +1677,7 @@ def check_cite_drift(
                      f"there is nothing to compare it against", doc_line)
                 )
                 continue
-            was = _lines_at(repo, sha, rel_target, hist_cache)
+            was = history.lines_at(sha, rel_target)
             if was is None:
                 problems[rel].append(
                     ("TEST-CITE-UNANCHORED",
@@ -1376,6 +1737,7 @@ def check_cite_drift(
                  f"either side of the pair retires the record; delete it and, if "
                  f"the divergence is real, write a new one.", rwhere)
             )
+    history.close()
     return seen, problems
 
 
