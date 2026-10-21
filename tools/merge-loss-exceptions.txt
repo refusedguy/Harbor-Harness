@@ -87,3 +87,23 @@ docs/BENCHMARKS.md | 1946 | \| C,\ 39440361839\ \(final\ tree\)\| 3\ \|\ \*\*15\
 # project lists). The gate compares LINES, so the old wording is a loss once
 # the row is rewritten.
 tools/README.md | 1992 | The build-output slices must match the test shards | PR #2035 rewrote the row: the same tool is still listed, with the description of its new role
+
+# The local squash-merges of #2029, #2034, #2037 and #2039 dropped content
+# that is still missing from dev, and it is back (restored by this pull request).
+docs/CI_GATES.md | 2034 | re-counted after the guard triage | the measured picture was REWRITTEN when the guard-triage reporter landed: the block in the file today is the newer wording of the same census, and the numbers in it were re-counted
+docs/CI_GATES.md | 2034 | reporter \(issue #1726\) landed: | the measured picture was REWRITTEN when the guard-triage reporter landed (see the neighbouring exception)
+docs/CI_GATES.md | 2034 | 38 files, 30 482 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
+docs/CI_GATES.md | 2034 | 19 files, 20 304 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
+docs/CI_GATES.md | 2034 | 7 reporters, 5 helpers, 2 libraries | the census was RE-COUNTED: the row in the file today carries the newer numbers
+docs/CI_GATES.md | 2037 | , plus the$ | the measured picture was REWRITTEN: the block in the file today is the newer wording of the same census, and the numbers in it were re-counted
+docs/CI_GATES.md | 2037 | shard-balance gate of #1781\) | the measured picture was REWRITTEN (see the neighbouring exception)
+docs/CI_GATES.md | 2037 | 38 files, 29 910 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
+docs/CI_GATES.md | 2037 | 20 files, 20 864 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
+docs/CI_GATES.md | 2037 | \| tools with a self-test \| 29 \| | the census was RE-COUNTED: the row in the file today carries the newer number
+docs/CI_GATES.md | 2037 | \| tools with a ratchet \| 15 \| | the census was RE-COUNTED: the row in the file today carries the newer number
+docs/CI_GATES.md | 2037 | \| tools with a floor \| 18 \| | the census was RE-COUNTED: the row in the file today carries the newer number
+docs/CI_GATES.md | 2037 | Every python tool in `tools/` \(38 files\)\. 32 of them | the census was RE-COUNTED: the sentence in the file today carries the newer numbers
+docs/CI_GATES.md | 2037 | All 38 are listed, because a tool that is not listed is a tool | the census was RE-COUNTED: the sentence in the file today carries the newer numbers
+tools/merge-loss-exceptions.txt | 2034 | PR #2035 rewrote the row for tools/ci-shard-slices\.py | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
+tools/merge-loss-exceptions.txt | 2034 | the ROW for the same tool was rewritten by #1800 | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
+tools/merge-loss-exceptions.txt | 2037 | the row was rewritten by #1800: the CI project lists have ONE source now | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
