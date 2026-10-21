@@ -199,6 +199,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] Session search (`harbor sessions search <query>`)
 - [x] JSONL import/export (`harbor sessions export/import` via `ISessionPorter`)
 - [x] Session rename (`harbor sessions rename` via `ISessionStore.UpdateAsync`)
+- [x] Reactive context-overflow recovery (#1755) — the provider's "context length exceeded" is classified as `ProviderErrorKind.ContextOverflow` (from the error BODY, not the status code), the history is compacted FORCED and the SAME request is retried from the compacted view, bounded by `CompactionBehavior.MaxOverflowRetries`. A compaction that frees nothing keeps the original refusal, and the run reports why it could not continue.
 
 ### v0.9.0 — Two-Process Architecture
 
