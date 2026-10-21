@@ -3301,8 +3301,9 @@ made cheap.
 #### The measurement, on ONE tree
 
 Two columns, ONE tree, and the tree is named in the column head: the tree
-is `origin/dev` at `73c0b485` (4051 files, 1334 tracked `.cs` files under
-`tests/`), and the two columns differ by ONE file: the gate itself. The
+is the one at `73c0b485` (4051 files, 1334 tracked `.cs` files under
+`tests/`; it was `origin/dev` when the measurement was taken), and the two
+columns differ by ONE file: the gate itself. The
 "before" column is the gate as `a763c824` has it, the "after" column is
 the gate as the batching commit `ab4638f3` has it, dropped into the same
 tree. Every other input — the documents the gate reads, the citations it
@@ -3410,64 +3411,65 @@ passes arguments CI does not pass. The set below is therefore complete by
 construction, not by memory: **37 gates**, and a gate added to a workflow
 without a row in the table is red.
 
-**Method.** The tree at `42d47de9` (`origin/dev` at `73c0b485` plus this
+**Method.** The tree at `1f19a8c9` (`origin/dev` at `b8aabf3c` plus this
 branch's commits), with the git history. Five runs per gate, the MINIMUM
 wall time kept. The exit code is the gate's own: `0` is a clean run, `1`
 is a run that found something, and `2` is "could not run".
 
-**The machine is shared, and the load is worth 2.2x.** The same set, the
-same tree, the same harness, measured twice: once while the box carried
-other people's runs and once on a quiet machine, gives **142.9 s** and
-**65.5 s**. The minimum of five runs is the estimate that the least
-foreign work distorts, and this is what that means in practice: a number
-from this section is a number from a quiet machine, and the same number
-from a busy one is 2.2 times worse. A CI runner is quiet AND cold, and
-the cold part is in §10.1.
+**The machine is shared, and the load is worth 2 to 4x.** The same set,
+the same tree, the same harness, measured while the box carried other
+people's runs and again on a quiet machine, gave **142.9 s** and **65.5 s**
+on the tree of the day before five more gates moved into the binary. The
+minimum of five runs is the estimate that the least foreign work
+distorts, and this is what that means in practice: a number from this
+section is a number from a quiet machine, and the same number from a busy
+one is two to four times worse. A CI runner is quiet AND cold, and the
+cold part is in §10.1.
 
 | gate | wall (s) | median (s) | peak RSS | exit |
 |---|---:|---:|---:|---:|
-| `check-doc-cites.py` | **31.803** | 42.775 | 56.6 MB | 0 |
-| `check-local-merge-loss.py` | **12.889** | 13.334 | 39.7 MB | 0 |
-| `check-test-dup.py` | 4.320 | 9.355 | 53.0 MB | 0 |
-| `check-test-projects.py` | 3.893 | 4.555 | 23.7 MB | 0 |
-| `check-result-chains.py` | 3.346 | 3.858 | 18.3 MB | 0 |
-| `check-string-switch.py` | 3.045 | 3.473 | 18.2 MB | 0 |
-| `check-abstractions-contract` | 0.823 | 0.858 | 13.6 MB | 0 |
-| `check-gate-policy.py` | 0.817 | 0.908 | 25.1 MB | 0 |
-| `check-md-links.py` | 0.686 | 0.759 | 20.4 MB | 0 |
-| `gen-seam-graph` | 0.683 | 0.711 | 81.4 MB | 0 |
-| `guard-triage.py` | 0.650 | 0.928 | 30.7 MB | 0 |
-| `check-arch-anchors.py` | 0.418 | 0.542 | 17.2 MB | 0 |
-| `md-lint.py` | 0.402 | 0.468 | 19.3 MB | 0 |
-| `check-coverage-registry.py` | 0.307 | 0.430 | 19.0 MB | 1 |
-| `coverage_report.py` | 0.260 | 0.281 | 19.1 MB | 0 |
-| `check-test-json-reflection.py` | 0.207 | 0.218 | 17.0 MB | 0 |
-| `check-test-packages.py` | 0.122 | 0.153 | 18.7 MB | 1 |
-| `check-arch-suite-once.py` | 0.120 | 0.138 | 17.6 MB | 0 |
-| `check-tool-schema-pin.py` | 0.114 | 0.159 | 19.5 MB | 0 |
-| `ci-shard-slices.py` | 0.112 | 0.122 | 19.3 MB | 0 |
-| `gen-plugin-inventory.py` | 0.112 | 0.119 | 18.1 MB | 0 |
-| `aot-publish-gate.py` | 0.081 | 0.104 | 16.3 MB | 2 |
-| `normalize-mtimes` | 0.069 | 0.073 | 11.3 MB | 0 |
-| `check-no-test-sdk` | 0.044 | 0.059 | 9.7 MB | 0 |
-| `check-public-api-resign` | 0.043 | 0.062 | 7.8 MB | 0 |
-| `check-doc-facts` | 0.036 | 0.038 | 7.4 MB | 0 |
-| `check-xml-doc-coverage` | 0.035 | 0.037 | 9.3 MB | 0 |
-| `check-analyzer-scope` | 0.020 | 0.022 | 11.6 MB | 0 |
-| `check-gate-bench-set` | 0.008 | 0.011 | 7.4 MB | 0 |
-| `pack-validate` | 0.007 | 0.008 | 6.2 MB | 1 |
-| `check-reference-trimmer` | 0.005 | 0.009 | 5.3 MB | 1 |
-| `aggregate-analyzer-cost` | 0.004 | 0.005 | 5.3 MB | 1 |
-| `aggregate-build-vcpu` | 0.004 | 0.004 | 5.3 MB | 1 |
-| `test-measurements` | 0.004 | 0.004 | 5.3 MB | 0 |
-| `check-shard-balance` | 0.003 | 0.004 | 5.6 MB | 0 |
-| `test-census` | 0.003 | 0.004 | 5.3 MB | 0 |
-| `test-skips` | 0.003 | 0.004 | 5.2 MB | 0 |
-| **the whole set** | **65.498** | | | |
+| `check-doc-cites.py` | **20.373** | 20.825 | 57.0 MB | 0 |
+| `check-local-merge-loss` | 7.741 | 7.835 | 38.3 MB | 0 |
+| `check-test-dup.py` | 2.257 | 2.268 | 53.1 MB | 0 |
+| `check-test-projects.py` | 1.976 | 2.109 | 23.8 MB | 0 |
+| `check-string-switch.py` | 1.771 | 1.789 | 18.2 MB | 0 |
+| `check-result-chains.py` | 1.691 | 1.723 | 18.3 MB | 0 |
+| `check-gate-policy.py` | 0.862 | 0.876 | 24.9 MB | 0 |
+| `gen-seam-graph` | 0.491 | 0.496 | 76.0 MB | 0 |
+| `check-abstractions-contract` | 0.438 | 0.487 | 11.8 MB | 0 |
+| `guard-triage.py` | 0.428 | 0.432 | 30.7 MB | 0 |
+| `check-md-links.py` | 0.370 | 0.373 | 20.4 MB | 0 |
+| `md-lint.py` | 0.281 | 0.296 | 19.4 MB | 0 |
+| `check-arch-anchors.py` | 0.234 | 0.268 | 17.3 MB | 0 |
+| `check-test-json-reflection.py` | 0.152 | 0.154 | 17.0 MB | 0 |
+| `check-test-packages.py` | 0.093 | 0.095 | 18.7 MB | 1 |
+| `ci-shard-slices.py` | 0.086 | 0.087 | 19.4 MB | 0 |
+| `gen-plugin-inventory.py` | 0.085 | 0.093 | 18.2 MB | 0 |
+| `check-tool-schema-pin.py` | 0.083 | 0.083 | 19.5 MB | 0 |
+| `check-arch-suite-once.py` | 0.068 | 0.069 | 17.6 MB | 0 |
+| `aot-publish-gate.py` | 0.056 | 0.063 | 16.3 MB | 2 |
+| `normalize-mtimes` | 0.055 | 0.055 | 11.5 MB | 0 |
+| `check-xml-doc-coverage` | 0.022 | 0.024 | 9.8 MB | 0 |
+| `coverage-report` | 0.022 | 0.023 | 9.7 MB | 0 |
+| `check-coverage-registry` | 0.018 | 0.018 | 9.2 MB | 1 |
+| `check-doc-facts` | 0.016 | 0.016 | 7.6 MB | 0 |
+| `check-analyzer-scope` | 0.014 | 0.016 | 10.7 MB | 0 |
+| `check-no-test-sdk` | 0.013 | 0.013 | 10.0 MB | 0 |
+| `check-public-api-resign` | 0.013 | 0.013 | 8.2 MB | 0 |
+| `check-gate-bench-set` | 0.007 | 0.007 | 7.7 MB | 0 |
+| `pack-validate` | 0.006 | 0.006 | 6.7 MB | 1 |
+| `aggregate-analyzer-cost` | 0.003 | 0.003 | 5.8 MB | 1 |
+| `aggregate-build-vcpu` | 0.003 | 0.003 | 5.6 MB | 1 |
+| `check-reference-trimmer` | 0.003 | 0.003 | 5.8 MB | 1 |
+| `check-shard-balance` | 0.003 | 0.003 | 6.0 MB | 0 |
+| `test-census` | 0.003 | 0.003 | 5.8 MB | 0 |
+| `test-measurements` | 0.003 | 0.003 | 5.7 MB | 0 |
+| `test-skips` | 0.003 | 0.003 | 5.8 MB | 0 |
+| **the whole set** | **39.743** | | | |
 
-**The set costs 65.5 s**, and two gates are 68 % of it: the doc-cites gate
-(31.8 s, 49 %) and the merge-loss gate (12.9 s, 20 %). The other 35 gates
-together cost 20.8 s.
+**The set costs 39.7 s**, and two gates are 71 % of it: the doc-cites gate
+(20.4 s, 51 %) and the merge-loss gate (7.7 s, 19 %). The other 35 gates
+together cost 11.6 s.
 
 **What the exit codes mean here.** Seven gates read an artifact the build
 produced, and the measuring machine has none of them, so they were measured
@@ -3566,9 +3568,9 @@ python scanning: about 55 s of scanning and 13 s of git. The full port is
 therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
 
-Since then the port landed: twenty-one gates are compiled, and the set is
+Since then the port landed: twenty-six gates are compiled, and the set is
 measured again above. The 117 s of that table is the set of 28 gates on
-the tree of that day; the 65.5 s of the table above is the set of 37 gates
+the tree of that day; the 39.7 s of the table above is the set of 37 gates
 on today's tree, and the two numbers differ by the gates that were not in
 the old set at all, by the language mix, and by the machine's load.
 
