@@ -91,7 +91,13 @@ public sealed class OutputLimitToolDecorator : ITool
             return result; // within budget: verbatim pass-through, zero allocation
 
         OutputLimitDecoratorLog.OutputLimited(_logger, _inner.Name.Value, result.Output.Length, _cap);
-        return new ToolResult(capped, result.IsError, result.Metadata, result.Attachments);
+        // #1763: the cap rewrites the OUTPUT, not the rest of the result. A
+        // deferred context the tool handed over rides along untouched — the
+        // decorator is not allowed to swallow the tool's second exit.
+        return new ToolResult(capped, result.IsError, result.Metadata, result.Attachments)
+        {
+            DeferredContexts = result.DeferredContexts
+        };
     }
 }
 
