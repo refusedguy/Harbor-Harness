@@ -30,7 +30,7 @@
 //   3. MaterializeCompactedView IS IDEMPOTENT.
 //      The compacted view is recomputed from the raw append-only history on every turn
 //      (src/Harbor.AgentRuntime/Agents/TurnRunner.cs:232,
-//       src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:175). Materializing a view that has
+//       src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:230). Materializing a view that has
 //      already been materialized must not shrink it again, or the session bleeds one
 //      turn at a time.
 //   4. MaterializeCompactedView FAILS SAFE.
@@ -270,7 +270,7 @@ public class CompactionPolicyInvariantTests
     ///     Rule 3: materializing an already-materialized view changes nothing. The view
     ///     is rebuilt from the raw append-only history on every single turn
     ///     (<c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:232</c>,
-    ///      <c>src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:175</c>), so a second pass
+    ///      <c>src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:230</c>), so a second pass
     ///     over an already-folded view is a guaranteed code path, not a hypothetical.
     /// </summary>
     [Test]

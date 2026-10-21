@@ -59,13 +59,18 @@ public sealed class CompactionBehavior(
     /// <param name="model">The resolved model (context window drives the check).</param>
     /// <param name="truncationFallback">Whether the fallback is already engaged for this run.</param>
     /// <param name="ct">Caller cancellation token.</param>
+    /// <param name="turn">
+    ///     The turn the compaction runs in — the OWNER of the compaction lock
+    ///     (#1767). Null for a standalone attempt.
+    /// </param>
     /// <returns>The turn's message view and the (possibly newly engaged) fallback flag.</returns>
     public async Task<CompactionOutcome> BeforeTurnAsync(
         ISessionContext session,
         IReadOnlyList<AgentMessage> turnMessages,
         ModelInfo model,
         bool truncationFallback,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? turn = null)
     {
         // Never retried once the fallback is engaged — the summarizer just
         // failed, so every turn after the failure derives its request from
@@ -77,6 +82,33 @@ public sealed class CompactionBehavior(
 
         using var activity = HarborTelemetry.Source.StartActivity("Compaction");
         CompactionBehaviorLog.CompactionTriggered(logger, session.Session.Id);
+
+        // #1767: THE LOCK. The compaction is a BRACKET in the session log —
+        // the start record is appended FIRST and the end record LAST — and a
+        // compaction that cannot take the lock does not run at all: its
+        // summary would land in the log without the marker that says a
+        // compaction was under way, and that is exactly the write the marker
+        // exists to forbid.
+        ICompactionEventStore? compactionEvents = session.CompactionEvents;
+        if (compactionEvents is null)
+        {
+            // The store records no compaction events: there is no marker
+            // vocabulary at all, so the in-process guard is the only
+            // exclusion. Said out loud rather than pretended away.
+            CompactionBehaviorLog.CompactionLockUnavailable(logger, session.Session.Id);
+        }
+        else
+        {
+            Result lockTaken = await TakeCompactionLockAsync(
+                compactionEvents, session.Session.Id, turn, ct).ConfigureAwait(false);
+
+            if (lockTaken.IsFailure)
+            {
+                CompactionBehaviorLog.CompactionLockFailed(logger, session.Session.Id, lockTaken.Error);
+                return await PublishFailureAsync(session.Session.Id, lockTaken.Error, turnMessages).ConfigureAwait(false);
+            }
+        }
+
         // PX4 slice 2: advisory notification before the history is summarized.
         // Runs first so a hook that observes the shrink sees the pre-summary
         // world; it cannot veto, delay or rewrite the compaction itself.
@@ -103,7 +135,7 @@ public sealed class CompactionBehavior(
         }
 
         Result<IReadOnlyList<AgentMessage>, string> outcome =
-            await CompactAndPublishAsync(session, turnMessages, model, ct).ConfigureAwait(false);
+            await CompactAndPublishAsync(session, turnMessages, model, ct, compactionEvents, turn).ConfigureAwait(false);
 
         // Railway Oriented Programming: Match dispatches to the
         // success or failure branch without an explicit
@@ -136,7 +168,9 @@ public sealed class CompactionBehavior(
     /// <summary>
     ///     Run one compaction and publish its lifecycle events: the summary is
     ///     appended to the session, the compacted view is materialized, and the
-    ///     started/completed events go out.
+    ///     started/completed events go out. The compaction lock is RELEASED
+    ///     here as well — the end record is the last thing the compaction
+    ///     writes, and both compaction paths release it.
     /// </summary>
     /// <remarks>
     ///     Both compaction paths go through here — the preventive one
@@ -147,11 +181,20 @@ public sealed class CompactionBehavior(
     ///     truncation fallback, the reactive one keeps the provider's refusal
     ///     standing), so that decision belongs to the caller.
     /// </remarks>
+    /// <param name="session">The run's session context.</param>
+    /// <param name="messages">The history to compact.</param>
+    /// <param name="model">The resolved model.</param>
+    /// <param name="ct">Caller cancellation token.</param>
+    /// <param name="compactionEvents">The session's compaction-record seam, or null when it has none.</param>
+    /// <param name="turn">The turn that owns the lock, or null for a standalone attempt.</param>
+    /// <returns>The compacted view, or the failure text.</returns>
     private async Task<Result<IReadOnlyList<AgentMessage>, string>> CompactAndPublishAsync(
         ISessionContext session,
         IReadOnlyList<AgentMessage> messages,
         ModelInfo model,
-        CancellationToken ct)
+        CancellationToken ct,
+        ICompactionEventStore? compactionEvents,
+        int? turn)
     {
         await eventBus.PublishAsync(new CompactionStartedEvent(session.Session.Id), ct).ConfigureAwait(false);
         // O9/T.6: record the PRE-compaction context size so the drop
@@ -164,10 +207,22 @@ public sealed class CompactionBehavior(
         Result<CompactionResult> compactionResult =
             await compaction.CompactAsync(session.Session.Id, messages, model, ct).ConfigureAwait(false);
 
+        // Railway Oriented Programming: Match dispatches to the
+        // success or failure branch without an explicit
+        // `if (result.IsSuccess)` check, making the
+        // happy-path/error-path split structural rather than
+        // control-flow.
         return await compactionResult.Match(
             async result =>
             {
                 await session.AppendMessageAsync(result.SummaryMessage, ct).ConfigureAwait(false);
+                // The lock is released AFTER the summary landed: the end
+                // record is the last thing the compaction writes, so a crash
+                // between the two leaves an unmatched start — the detectable
+                // shape of a compaction that did not finish.
+                await ReleaseCompactionLockAsync(
+                    compactionEvents, session.Session.Id, turn, error: null,
+                    result.PrunedMessageCount, result.TokensSaved, ct).ConfigureAwait(false);
                 // Recompute so THIS turn's request is already built
                 // from the compacted view instead of the overfull
                 // pre-compaction history.
@@ -185,8 +240,29 @@ public sealed class CompactionBehavior(
                     result.Duration), ct).ConfigureAwait(false);
                 return Result.Success<IReadOnlyList<AgentMessage>, string>(compacted);
             },
-            error => Task.FromResult(Result.Failure<IReadOnlyList<AgentMessage>, string>(error)))
-            .ConfigureAwait(false);
+            async error =>
+            {
+                // The failure is RECORDED, not swallowed: the end record
+                // carries the reason, so "the compaction failed, and here is
+                // why" survives the process. A cancelled run is recorded as
+                // what it is, and the release rides a token that is not the
+                // cancelled one: an unmatched start would read as a crash
+                // that never happened.
+                if (ct.IsCancellationRequested)
+                {
+                    await ReleaseCompactionLockAsync(
+                        compactionEvents, session.Session.Id, turn, "Compaction cancelled.",
+                        prunedMessageCount: 0, tokensSaved: 0, ct: CancellationToken.None).ConfigureAwait(false);
+                }
+                else
+                {
+                    await ReleaseCompactionLockAsync(
+                        compactionEvents, session.Session.Id, turn, error,
+                        prunedMessageCount: 0, tokensSaved: 0, ct: CancellationToken.None).ConfigureAwait(false);
+                }
+
+                return Result.Failure<IReadOnlyList<AgentMessage>, string>(error);
+            }).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -218,11 +294,22 @@ public sealed class CompactionBehavior(
     ///         the slice), so "the surface shrank" is measured on the
     ///         materialized view, not on a replaced range.
     ///     </para>
+    ///     <para>
+    ///         #1767: the reactive compaction takes the SAME lock as the
+    ///         preventive one. It appends the summary to the session log, and
+    ///         a summary that lands without its marker is a compaction the log
+    ///         does not know about — the very write the marker exists to
+    ///         forbid. The records name the turn whose overflow triggered it.
+    ///     </para>
     /// </remarks>
     /// <param name="session">The run's session context.</param>
     /// <param name="overfullMessages">The history the refused request was built from.</param>
     /// <param name="model">The resolved model.</param>
     /// <param name="ct">Caller cancellation token.</param>
+    /// <param name="turn">
+    ///     The turn whose overflow triggered the recovery — the OWNER of the
+    ///     compaction lock (#1767). Null for a standalone attempt.
+    /// </param>
     /// <returns>
     ///     The recovery outcome: the view a retry must be built from, and
     ///     whether the surface actually shrank.
@@ -231,12 +318,46 @@ public sealed class CompactionBehavior(
         ISessionContext session,
         IReadOnlyList<AgentMessage> overfullMessages,
         ModelInfo model,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? turn = null)
     {
         int tokensBefore = tokenTracker.EstimateTokens(overfullMessages);
 
+        // #1767: THE LOCK, on the reactive path too. The reactive compaction
+        // writes to the log exactly like the preventive one, so it is
+        // bracketed the same way — and a compaction that cannot take the
+        // lock does not run at all.
+        ICompactionEventStore? compactionEvents = session.CompactionEvents;
+        if (compactionEvents is null)
+        {
+            CompactionBehaviorLog.CompactionLockUnavailable(logger, session.Session.Id);
+        }
+        else
+        {
+            Result lockTaken = await TakeCompactionLockAsync(
+                compactionEvents, session.Session.Id, turn, ct).ConfigureAwait(false);
+
+            if (lockTaken.IsFailure)
+            {
+                CompactionBehaviorLog.CompactionLockFailed(logger, session.Session.Id, lockTaken.Error);
+                // The reactive path does NOT engage the truncation fallback:
+                // the turn ends with the provider's refusal either way, and a
+                // fallback nobody gets to use is a promise the run does not
+                // keep. The failure is published, so the history says WHY the
+                // request was not retried.
+                string reason = $"the compaction could not be marked in the log: {lockTaken.Error}";
+                await PublishFailureEventAsync(session.Session.Id, reason).ConfigureAwait(false);
+                return new OverflowRecoveryOutcome(
+                    overfullMessages,
+                    SurfaceShrunk: false,
+                    tokensBefore,
+                    tokensBefore,
+                    reason);
+            }
+        }
+
         Result<IReadOnlyList<AgentMessage>, string> outcome =
-            await CompactAndPublishAsync(session, overfullMessages, model, ct).ConfigureAwait(false);
+            await CompactAndPublishAsync(session, overfullMessages, model, ct, compactionEvents, turn).ConfigureAwait(false);
 
         return await outcome.Match(
             compacted =>
@@ -274,9 +395,7 @@ public sealed class CompactionBehavior(
                 // provider's refusal either way and a fallback nobody gets to
                 // use is a promise the run does not keep.
                 CompactionBehaviorLog.OverflowRecoveryFailed(logger, session.Session.Id, error);
-                await eventBus.PublishAsync(
-                    new CompactionFailedEvent(session.Session.Id, error), CancellationToken.None)
-                    .ConfigureAwait(false);
+                await PublishFailureEventAsync(session.Session.Id, error).ConfigureAwait(false);
                 return new OverflowRecoveryOutcome(
                     overfullMessages,
                     SurfaceShrunk: false,
@@ -286,12 +405,135 @@ public sealed class CompactionBehavior(
             }).ConfigureAwait(false);
     }
 
+    /// <summary>
+    ///     Take the compaction lock: read the session's compaction records,
+    ///     report an orphaned lock if the log holds one, and append the start
+    ///     record (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         An unmatched start in the log is the EVIDENCE of a compaction
+    ///         that never finished. It does not block: a session whose
+    ///         previous compaction died has to stay usable, and a lock that
+    ///         blocks forever is a session that can never compact again. It is
+    ///         reported, and carried forward on the new start record so the
+    ///         trail survives the next successful compaction.
+    ///     </para>
+    /// </remarks>
+    /// <param name="compactionEvents">The session's compaction-record seam.</param>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="turn">The turn that owns the lock.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success when the lock is taken; failure when it cannot be.</returns>
+    private async Task<Result> TakeCompactionLockAsync(
+        ICompactionEventStore compactionEvents,
+        string sessionId,
+        int? turn,
+        CancellationToken ct)
+    {
+        Result<IReadOnlyList<SessionCompactionEvent>> existing =
+            await compactionEvents.GetCompactionEventsAsync(sessionId, ct).ConfigureAwait(false);
+
+        return await existing
+            .Bind(events => AppendStartRecordAsync(compactionEvents, sessionId, turn, events, ct))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Append the start record, naming the orphan it supersedes.
+    /// </summary>
+    /// <param name="compactionEvents">The session's compaction-record seam.</param>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="turn">The turn that owns the lock.</param>
+    /// <param name="events">The compaction records the session already holds.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Success when the lock is taken; failure when it cannot be.</returns>
+    private async Task<Result> AppendStartRecordAsync(
+        ICompactionEventStore compactionEvents,
+        string sessionId,
+        int? turn,
+        IReadOnlyList<SessionCompactionEvent> events,
+        CancellationToken ct)
+    {
+        SessionCompactionEvent? orphan = CompactionLock.FindOpenStart(events);
+        if (orphan is not null)
+        {
+            CompactionBehaviorLog.OrphanedCompactionLock(logger, sessionId, orphan.Turn);
+        }
+
+        var start = new SessionCompactionEvent
+        {
+            Kind = SessionCompactionEventKind.Start,
+            Turn = turn,
+            OccurredAt = DateTimeOffset.UtcNow,
+            OrphanedTurn = orphan?.Turn,
+        };
+
+        return await compactionEvents.AppendCompactionEventAsync(sessionId, start, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     Release the compaction lock: append the end record (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     The end record is the LAST thing the compaction writes, and it
+    ///     carries the outcome — the failure text when the compaction failed.
+    ///     A lock that cannot be released leaves the unmatched start behind,
+    ///     which is the detectable shape; the failure to release is logged so
+    ///     the orphan is never a mystery later.
+    /// </remarks>
+    /// <param name="compactionEvents">The session's compaction-record seam, or null when it has none.</param>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="turn">The turn that owned the lock.</param>
+    /// <param name="error">The failure text, or null when the compaction succeeded.</param>
+    /// <param name="prunedMessageCount">How many messages the compaction folded.</param>
+    /// <param name="tokensSaved">How many tokens the compaction saved.</param>
+    /// <param name="ct">Cancellation token for the append.</param>
+    private async Task ReleaseCompactionLockAsync(
+        ICompactionEventStore? compactionEvents,
+        string sessionId,
+        int? turn,
+        string? error,
+        int prunedMessageCount,
+        int tokensSaved,
+        CancellationToken ct)
+    {
+        if (compactionEvents is null)
+        {
+            return;
+        }
+
+        var end = new SessionCompactionEvent
+        {
+            Kind = SessionCompactionEventKind.End,
+            Turn = turn,
+            Error = error,
+            PrunedMessageCount = prunedMessageCount,
+            TokensSaved = tokensSaved,
+            OccurredAt = DateTimeOffset.UtcNow,
+        };
+
+        Result released = await compactionEvents.AppendCompactionEventAsync(sessionId, end, ct).ConfigureAwait(false);
+        if (released.IsFailure)
+        {
+            CompactionBehaviorLog.CompactionLockReleaseFailed(logger, sessionId, released.Error);
+        }
+    }
+
+    /// <summary>Publish the failure event (awaited — never fire-and-forget).</summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="error">The failure text.</param>
+    private async Task PublishFailureEventAsync(string sessionId, string error)
+    {
+        await eventBus.PublishAsync(new CompactionFailedEvent(sessionId, error), CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+
     /// <summary>Publish the failure event (awaited — never fire-and-forget) and engage the fallback.</summary>
     private async Task<CompactionOutcome> PublishFailureAsync(
         string sessionId, string error, IReadOnlyList<AgentMessage> turnMessages)
     {
-        await eventBus.PublishAsync(new CompactionFailedEvent(sessionId, error), CancellationToken.None)
-            .ConfigureAwait(false);
+        await PublishFailureEventAsync(sessionId, error).ConfigureAwait(false);
         return new CompactionOutcome(turnMessages, TruncationFallback: true);
     }
 }
@@ -345,13 +587,25 @@ internal static partial class CompactionBehaviorLog
     [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Compaction failed: {Error}. Falling back to truncation.")]
     public static partial void CompactionFailed(ILogger logger, string error);
 
-    [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "Context overflow recovery compacted session {SessionId}: {TokensBefore} -> {TokensAfter} estimated tokens")]
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning, Message = "The session store of session {SessionId} records no compaction events; the compaction lock is in-process only (#1767)")]
+    public static partial void CompactionLockUnavailable(ILogger logger, string sessionId);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Could not take the compaction lock of session {SessionId}: {Error}. The compaction does not run, so nothing is written to the log without its marker.")]
+    public static partial void CompactionLockFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Session {SessionId} carries an orphaned compaction lock (turn {Turn}): a previous compaction never released it. The session stays usable; the orphan is recorded (#1767)")]
+    public static partial void OrphanedCompactionLock(ILogger logger, string sessionId, int? turn);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Could not release the compaction lock of session {SessionId}: {Error}. The log keeps an unmatched start, which is the detectable shape of a compaction that did not finish.")]
+    public static partial void CompactionLockReleaseFailed(ILogger logger, string sessionId, string error);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information, Message = "Context overflow recovery compacted session {SessionId}: {TokensBefore} -> {TokensAfter} estimated tokens")]
     public static partial void OverflowRecoveryCompacted(ILogger logger, string sessionId, int tokensBefore, int tokensAfter);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Context overflow recovery did not free the window for session {SessionId}: {TokensBefore} -> {TokensAfter} estimated tokens")]
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "Context overflow recovery did not free the window for session {SessionId}: {TokensBefore} -> {TokensAfter} estimated tokens")]
     public static partial void OverflowRecoveryDidNotShrink(ILogger logger, string sessionId, int tokensBefore, int tokensAfter);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Context overflow recovery failed for session {SessionId}: {Error}")]
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning, Message = "Context overflow recovery failed for session {SessionId}: {Error}")]
     public static partial void OverflowRecoveryFailed(ILogger logger, string sessionId, string error);
 
 }

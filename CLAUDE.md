@@ -19,7 +19,7 @@
 - **[docs/PATTERNS.md](./docs/PATTERNS.md)** — 8 pattern catalog with real code (Observer, Factory, Decorator, Command, Extension points, Default members, Type unions, State).
 - **[docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md)** — 39 antipatterns we forbid (with before/after code).
 - **[docs/EXAMPLES.md](./docs/EXAMPLES.md)** — 40+ recipes ("How do I...?").
-- **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 20 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
+- **[docs/TOOLS_CATALOG.md](./docs/TOOLS_CATALOG.md)** — comprehensive reference for all 21 builtin tools: args schema, 3+ examples per tool, "when to use X vs Y" matrix, tool chains, JSON Schema tips, permission rationale, sub-agent `task` deep dive, MCP integration, and a full WebFetchTool walkthrough.
 - **[docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md)** — Roslyn `.cs` plugin system + 5 full examples.
 - **[docs/BENCHMARKS.md](./docs/BENCHMARKS.md)** — **the only place a measured number is recorded.** Project counts, tool counts and benchmark figures quoted in other docs are copies; when you re-measure, update this file first and propagate in the same commit.
 - **[docs/audit-archive/](./docs/audit-archive/)** — dated audit snapshots kept for provenance. Never cite these as current state; see its README for where each conclusion now lives.
@@ -53,7 +53,7 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Storage.{Jsonl,Memory,Sqlite,Shared}/  — session stores (HARBOR_STORAGE=jsonl|memory|sqlite);
 │                                        Shared/ is linked-source (no .csproj, compiled into Jsonl+Sqlite)
 ├── Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible,Shared}/ — LLM clients
-├── Harbor.Tools.Builtin/              — 20 builtin tools under Tools/
+├── Harbor.Tools.Builtin/              — 21 builtin tools under Tools/
 │                                        (read/write/edit/bash/glob/grep/ls/skill/patch/notebook/tree/lsp/task/
 │                                        webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt/session_read/session_steer)
 ├── Harbor.Terminal.Abstractions/      — ITuiRenderer, ITuiRenderContext, BaseTuiRenderer, views/VMs

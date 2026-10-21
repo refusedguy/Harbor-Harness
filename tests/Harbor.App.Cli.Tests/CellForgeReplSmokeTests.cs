@@ -104,7 +104,7 @@ public class CellForgeReplSmokeTests
         await Assert.That(art).Contains("Готово: mock-ответ");     // committed ответ агента
         await Assert.That(art).Contains("mock/mock-model");       // статус-бар
 
-        string expected = Golden.Verify("ce4-consoleex-repl", art);
+        string expected = Golden.VerifyText(Golden.FixtureDir("celldiff"), "ce4-consoleex-repl", art);
         await Assert.That(art).IsEqualTo(expected);
     }
 
@@ -409,44 +409,4 @@ public class CellForgeReplSmokeTests
     }
 
     // ── Local test infrastructure (CellForge.Tests helpers are internal to that assembly) ──
-}
-
-/// <summary>Fixture plumbing mirroring CellForge.Tests' Golden helper (same fixtures dir).</summary>
-internal static class Golden
-{
-    private static readonly Lazy<string> FixtureDir = new(ResolveFixtureDir);
-
-    public static string Verify(string name, string actualContent)
-    {
-        string normalizedActual = Normalize(actualContent);
-        string path = Path.Combine(FixtureDir.Value, name + ".golden.txt");
-        if (Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1")
-        {
-            Directory.CreateDirectory(FixtureDir.Value);
-            File.WriteAllText(path, normalizedActual);
-            return normalizedActual;
-        }
-
-        if (!File.Exists(path))
-        {
-            throw new InvalidOperationException(
-                $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
-        }
-
-        return Normalize(File.ReadAllText(path));
-    }
-
-    /// <summary>
-    ///     Normalizes environment-dependent line endings so goldens are stable
-    ///     across Windows (CRLF checkout) / Linux (LF checkout) test hosts.
-    /// </summary>
-    public static string Normalize(string s) =>
-        s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
-
-    /// <summary>
-    ///     The fixture directory under the repository root. The root is found
-    ///     once, by the shared helper, instead of by a walk-up this file owns.
-    /// </summary>
-    private static string ResolveFixtureDir() =>
-        Path.Combine(RepoPaths.Root, "tests", "fixtures", "celldiff");
 }

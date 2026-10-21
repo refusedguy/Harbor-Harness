@@ -50,7 +50,7 @@ public class GoldenChatScreenTests
         await session.FlushFrameAsync();
 
         string doc = GoldenDoc.Build("ce3-chat-screen", session.PaintBuffer, backend);
-        string expected = Golden.Verify("ce3-chat-screen", doc, GridDump.ToSvg(session.PaintBuffer));
+        string expected = CelldiffGoldens.Verify("ce3-chat-screen", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 

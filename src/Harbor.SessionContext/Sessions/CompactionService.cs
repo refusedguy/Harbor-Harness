@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using Harbor.Abstractions.Extensions;
@@ -89,6 +90,25 @@ public sealed class CompactionService(
     }
 
     private ResolvedSecondary? _resolvedSecondary;
+
+    /// <summary>
+    ///     The sessions whose compaction is running RIGHT NOW (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     The in-process half of the compaction lock. The durable half — the
+    ///     <c>compaction/start</c> / <c>compaction/end</c> bracket in the
+    ///     session log — is written by the compaction behavior around this
+    ///     call; this set is what stops TWO compactions of one session from
+    ///     running at the same time inside one process.
+    /// </remarks>
+    /// <para>
+    ///     Without it, two compactions would each summarize the same head,
+    ///     each count the tokens saved against the same starting state, and
+    ///     each append a summary — and the model would meet two summaries and
+    ///     a torn history.
+    /// </para>
+    /// </remarks>
+    private readonly ConcurrentDictionary<string, byte> _activeCompactions = new();
 
     /// <summary>
     ///     Resolve the secondary summarization client+model asynchronously, or
@@ -264,28 +284,47 @@ public sealed class CompactionService(
         ModelInfo model,
         CancellationToken ct = default)
     {
+        // #1767: the in-process guard. A second compaction of the SAME
+        // session is refused while one is running: two summaries in one
+        // history is the defect the lock exists to prevent.
+        if (!_activeCompactions.TryAdd(sessionId, 0))
+        {
+            CompactionServiceLog.CompactionAlreadyRunning(logger, sessionId);
+            return Result.Failure<CompactionResult>($"A compaction is already running for session '{sessionId}'.");
+        }
+
         try
         {
-            // 1. Find cut point (index-based; no List allocations)
-            int tailStart = FindCutPoint(messages, model, KeepRecentTokens, TailTurns);
-
-            if (tailStart == 0)
+            try
             {
-                return Result.Failure<CompactionResult>("No messages to compact.");
-            }
+                // 1. Find cut point (index-based; no List allocations)
+                int tailStart = FindCutPoint(messages, model, KeepRecentTokens, TailTurns);
 
-            // 2. Build summarization request — name parse → registry lookup ride
-            // one Bind chain (ROP-B П.12 pattern); a passthrough ladder here would
-            // just re-raise each Error verbatim.
-            return await ProviderId.TryCreate(model.ProviderId)
-                .Bind(providers.GetClient)
-                .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
-                .ConfigureAwait(false);
+                if (tailStart == 0)
+                {
+                    return Result.Failure<CompactionResult>("No messages to compact.");
+                }
+
+                // 2. Build summarization request — name parse → registry lookup ride
+                // one Bind chain (ROP-B П.12 pattern); a passthrough ladder here would
+                // just re-raise each Error verbatim.
+                return await ProviderId.TryCreate(model.ProviderId)
+                    .Bind(providers.GetClient)
+                    .Bind(client => CompactCoreAsync(sessionId, messages, model, client, tailStart, ct))
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                CompactionServiceLog.CompactionExecuteFailed(logger, ex, sessionId);
+                return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            CompactionServiceLog.CompactionExecuteFailed(logger, ex, sessionId);
-            return Result.Failure<CompactionResult>($"Compaction failed: {ex.Message}");
+            // The guard is released on EVERY path — success, failure and
+            // cancellation — so a failed compaction never leaves the session
+            // unable to compact again.
+            _activeCompactions.TryRemove(sessionId, out _);
         }
     }
 
@@ -835,5 +874,8 @@ internal static partial class CompactionServiceLog
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Configured secondary compaction model '{Secondary}' is invalid ({Error}); fallback summarization stays on the primary model")]
     public static partial void SecondaryModelInvalid(ILogger logger, string secondary, string error);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "A compaction of session {SessionId} is already running; the second one is refused")]
+    public static partial void CompactionAlreadyRunning(ILogger logger, string sessionId);
 
 }
