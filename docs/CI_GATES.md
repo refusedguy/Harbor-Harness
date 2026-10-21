@@ -246,10 +246,14 @@ findings that are not defects.
 Every python tool in `tools/` (25 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
 tree. 19 tools are run by a workflow; the other six are
-`md_gate.py`, `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
-other tools rather than run, `codemod-test-events.py`, `codemod-tool-schemas.py`
+`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
+`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
+other tools rather than run, `measure-project-graph.py`, which a human runs to
+read the project graph, `codemod-test-events.py`, `codemod-tool-schemas.py`
 and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool that
 is not listed is a tool nobody
+reviews. is a tool nobody
+reviews. is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
