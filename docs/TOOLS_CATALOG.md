@@ -43,20 +43,21 @@
 
 ## 1. Inventory
 
-Harbor ships **20 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **21 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 20 tools
+> (the CLI default — the enum name predates the tool count) registers all 21 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer`); `Standard10` (name likewise predates the count — 12 members today)
-> omits the eight heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
+> `session_steer` + `ask_user_question`); `Standard10` (name likewise predates the count — 12 members today)
+> omits the nine heavier ones (`task`, `webfetch`,
+> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
+> `ask_user_question`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 18.
+> catalog registers 19.
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -80,6 +81,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
+| 21 | `ask_user_question` | Sequential | Allow | Ask the user a structured question and read the answer back |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1082,6 +1084,107 @@ side effect the user has not explicitly requested.
 
 ---
 
+### `ask_user_question`
+
+**Description.** Asks the *user* a structured question and reads the answer
+back as the tool result (#1759). This is the model's way of saying "which of
+these do you want?", not the permission channel's "may I run this?".
+
+A call carries one to five questions. Each question has an id the model
+chooses, the text of the question, and optionally a list of choices. The
+answer comes back as JSON: one entry per answered question, with the id it
+answers and either the chosen labels or the free text the user typed.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id":          { "type": "string",  "description": "Stable id of the question; echoed back in the answer." },
+          "question":    { "type": "string",  "description": "The question to ask, in your own words." },
+          "header":      { "type": "string",  "description": "Short label for the question." },
+          "options": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "label":       { "type": "string", "description": "The option text; echoed back when picked." },
+                "description": { "type": "string", "description": "What picking this option means." }
+              },
+              "required": ["label"]
+            }
+          },
+          "multi_select": { "type": "boolean", "description": "Whether the user may pick more than one option (default false)." }
+        },
+        "required": ["id", "question"]
+      }
+    },
+    "timeout_ms": { "type": "integer", "description": "How long to wait for the answer, in milliseconds (default 120000, max 600000)." }
+  },
+  "required": ["questions"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. One question, two choices
+{"questions": [{"id": "db", "question": "Which database should we use?", "options": [{"label": "PostgreSQL"}, {"label": "SQLite"}]}]}
+
+// 2. Two questions in one call
+{"questions": [
+  {"id": "scope", "question": "Test or documentation first?", "options": [{"label": "tests"}, {"label": "docs"}]},
+  {"id": "framework", "question": "Which test framework?"}
+]}
+
+// 3. A free-text question with a short window
+{"questions": [{"id": "target", "question": "Which service should I look at first?"}], "timeout_ms": 30000}
+
+// 4. A question that may take several answers
+{"questions": [{"id": "areas", "question": "Which areas should I touch?", "multi_select": true,
+  "options": [{"label": "storage"}, {"label": "transport"}, {"label": "tui"}]}]}
+```
+
+**Result.** An answer comes back as JSON:
+
+```jsonc
+{"status":"ASK_ANSWERED","answers":[{"id":"db","selected":["PostgreSQL"]}]}
+```
+
+`selected` holds the labels the user picked, and `custom` holds the free text
+when the user typed one instead of picking an option. A question the user left
+blank has no entry, so the model can tell "not answered" from "answered with
+nothing".
+
+**Permissions.** Allow. Asking a question writes nothing and runs nothing; the
+question channel is what the answer gates, not the permission system.
+
+**Mode.** `Sequential` (it waits for a human, so it must not race other calls).
+
+**Tips.**
+- Every outcome is coded: `ASK_ANSWERED`, `ASK_PENDING` (the window expired),
+  `ASK_ABORTED` (the user dismissed it), `ASK_NO_CHANNEL` (this host has no
+  interactive user). A non-answer is never silence.
+- The wait is bounded. The default window is 120 s and the maximum is 600 s;
+  after that the tool returns `ASK_PENDING` and the turn continues.
+- Batch related questions into one call. A call may carry up to five.
+- Use it for a decision only the user can make ("which approach?"), never to
+  ask for permission to act. That is what the permission prompt is for.
+- The console surface reads one line per question: a number picks an option,
+  the option's own text picks it too, anything else is the user's own answer,
+  and a leading `!` skips the rest of the batch.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1102,6 +1205,7 @@ side effect the user has not explicitly requested.
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
 | Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
 | Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
+| Ask the user which way to go | `ask_user_question` | (nothing) | A structured question with a bounded wait; a permission prompt cannot carry a choice |
 
 ---
 
@@ -1497,6 +1601,20 @@ Surfacing each call to the user is the safe default. If you trust a specific ser
 an explicit rule: `new("mcp:filesystem", "*", PermissionAction.Allow)` (note: the ruleset
 matches `(permission, pattern)`, so you'd need to extend it to handle namespaced MCP
 servers — currently MCP calls all use the `mcp` permission).
+
+### Why `ask_user_question` is Allow
+
+Asking a question writes nothing and runs nothing: the tool waits for a person
+and hands the answer back to the model. What the answer gates is the model's
+next step, not a side effect on the machine, so the permission system has
+nothing to approve.
+
+The tool has its own class, `ToolCategory.Interaction`, so a user who does not
+want the model interrupting them can say so once:
+
+```csharp
+new PermissionRule("interaction", "*", PermissionAction.Deny)
+```
 
 ### How to override
 
