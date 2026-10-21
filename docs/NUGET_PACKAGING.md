@@ -11,7 +11,7 @@ inside the existing job, no new job or matrix axis:
 
 1. `dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages`
    Pack warnings fail the job (`TreatWarningsAsErrors` in `Directory.Build.props`).
-2. `python3 tools/pack-validate.py out/packages` — for each of the 43 packable
+2. `tools/bin/harbor-gates-linux-x64 pack-validate out/packages` — for each of the 43 packable
    `src/` projects asserts the `.nupkg` exists and carries: non-empty description,
    MIT license expression, `RepositoryUrl`/`RepositoryType` pointing at
    `refusedguy/Harbor-Harness`, a project URL, at least 3 tags, `README.md` at
@@ -57,8 +57,8 @@ unchanged.)
 
 ```bash
 dotnet pack Harbor.slnx -c Release -p:ContinuousIntegrationBuild=true -o out/packages
-python3 tools/pack-validate.py out/packages
-python3 tools/pack-validate.py --selftest
+tools/bin/harbor-gates-linux-x64 pack-validate out/packages
+tools/bin/harbor-gates-linux-x64 pack-validate --selftest
 ```
 
 ## Deferred (not this slice)

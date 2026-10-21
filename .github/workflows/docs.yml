@@ -180,14 +180,14 @@ on:
       - 'tools/gates/**'
       - 'tools/bin/**'
       - 'docs/SEAM_GRAPH.md'
-      # #1888. The gate policy's own checker, and the three tools whose
+      # #1888. The gate policy's own checker, and the two tools whose
       # self-test no workflow ran until the policy asked for one. A PR that
       # edits any of them must run the checker, because the checker's
       # verdict about the tree depends on what those files say.
+      # The gates that moved into the binary are covered by `tools/gates/**`
+      # above, and their sources are what an edit touches.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
       - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
       # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
@@ -197,8 +197,8 @@ on:
       # #1781. The shard-balance gate reads the shard lists in ci.yml and the
       # recorded cost of every project, so a PR that edits the gate, the
       # measurement or the workflow's shard lists has to run it — and so must
-      # a PR that edits the tree it measures.
-      - 'tools/check-shard-balance.py'
+      # a PR that edits the tree it measures. The gate's own sources are
+      # covered by `tools/gates/**` above.
       - 'tools/shard-costs.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
@@ -301,12 +301,12 @@ on:
       - 'tools/gates/**'
       - 'tools/bin/**'
       - 'docs/SEAM_GRAPH.md'
-      # #1888. Same trigger as above: the policy checker, and the three tools
-      # whose self-test no workflow ran until the policy asked for one.
+      # #1888. Same trigger as above: the policy checker, and the two tools
+      # whose self-test no workflow ran until the policy asked for one. The
+      # gates that moved into the binary are covered by `tools/gates/**`
+      # above.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
       - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
       # #1558. Same trigger as above: the chain census measures `src/` and
       # `apps/` (the .cs paths above), so a PR that edits the gate or the
       # baseline must run it.
@@ -315,8 +315,7 @@ on:
       # #1781. Same trigger as above: the shard-balance gate reads the shard
       # lists in ci.yml and the recorded cost of every project, so a PR that
       # edits the gate, the measurement or the workflow's shard lists must run
-      # it.
-      - 'tools/check-shard-balance.py'
+      # it. The gate's own sources are covered by `tools/gates/**` above.
       - 'tools/shard-costs.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
@@ -354,7 +353,7 @@ jobs:
       # the others: a script edited until it assembles nothing is
       # indistinguishable from a script that assembles nothing.
       - name: Changelog assembler fails on a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #664. The third gate is the only one that asks whether a `file:line`
       # in a normative document still points at a line, and whether a backticked
       # type is constructed by anything. Its failure path is tested here for
@@ -427,7 +426,7 @@ jobs:
       # does — a tool that quietly stopped noticing a diverged CHANGELOG.md is
       # indistinguishable from one that found nothing.
       - name: Changelog assembler fails on a diverged changelog
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
 
@@ -495,7 +494,7 @@ jobs:
       # file and still glues a fragment: a PR that edits the assembler must
       # run it, or the edit lands unvalidated.
       - name: Changelog assembler glues a fragment and notices a diverged file
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1888. The three tools whose self-test no workflow ran. The policy
       # says every gate and every reporter proves its own failure path in
       # CI, and these three had a self-test that nothing called — a
@@ -504,7 +503,7 @@ jobs:
       # helper's self-tests are offline too, so all three cost about a
       # second.
       - name: Pack validator still fails on a package without its metadata
-        run: python3 tools/pack-validate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 pack-validate --selftest
       # #1795. The third reporter: the SKIPPED tests of a run, with the reason
       # each one declared. Same argument as the two above — a reporter that
       # stops reporting is green on every run and tells nobody anything. Its
@@ -514,7 +513,7 @@ jobs:
       - name: Skip reporter still finds a skipped test
         run: python3 tools/test-skips.py TestResults --self-test
       - name: Mtime normaliser still tells a changed file from an unchanged one
-        run: python3 tools/normalize-mtimes.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 normalize-mtimes --self-test
       # #1558. The chain census. Its failure path is tested here for the same
       # reason as the others: a scanner edited until it matches nothing is
       # indistinguishable from a scanner that found nothing. The load-bearing
@@ -550,7 +549,7 @@ jobs:
       # fixture is the RUNAWAY SHARD — one project's cost blown up so that the
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
-        run: python3 tools/check-shard-balance.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --self-test
       # #1753. The coverage tools. The reporter reads the cobertura files
       # the nightly lane produced and prints the per-file tables; the gate
       # compares the registry of accepted holes against the measurement, in
@@ -589,7 +588,7 @@ jobs:
       # self-test nobody calls, and the table cannot say honestly that it
       # exists.
       - name: Changelog assembler notices a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
 
   links:
     name: internal links
@@ -1196,7 +1195,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that the CI test shards are balanced by cost
-        run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 
   # #1780. The parameter schema of a tool is the tool's contract with the
   # model: the JSON the model may send. It is declared once, as [ToolParam]

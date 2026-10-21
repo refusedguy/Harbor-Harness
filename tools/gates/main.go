@@ -42,9 +42,13 @@ import (
 	"sort"
 	"strings"
 
+	changelog "harbor.local/gates/changelog-assemble"
 	docfacts "harbor.local/gates/check-doc-facts"
+	shardbalance "harbor.local/gates/check-shard-balance"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
+	normalizemtimes "harbor.local/gates/normalize-mtimes"
+	packvalidate "harbor.local/gates/pack-validate"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -61,14 +65,34 @@ type registered struct {
 
 var registry = []registered{
 	{
+		name:    "changelog-assemble",
+		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
+		run:     changelog.Run,
+	},
+	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
 	},
 	{
+		name:    "check-shard-balance",
+		summary: "are the CI test shards balanced by what their projects cost",
+		run:     shardbalance.Run,
+	},
+	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "normalize-mtimes",
+		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
+		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "pack-validate",
+		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
+		run:     packvalidate.Run,
 	},
 }
 
