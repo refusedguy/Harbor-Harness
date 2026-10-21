@@ -152,6 +152,7 @@ internal static class ToolsCatalog
 
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
+        Harbor.Abstractions.Interaction.IUserQuestionService questionService,
         Harbor.Abstractions.Agents.ISubAgentRunner subAgentRunner,
         Harbor.Abstractions.Agents.IBackgroundTaskRegistry? backgroundTasks = null,
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
@@ -212,6 +213,14 @@ internal static class ToolsCatalog
         tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
         if (full)
         {
+            // #1759: the model-facing question channel. It is a FULL-set tool
+            // for the same reason `session_read` and `session_steer` are: the
+            // question needs a human on the other end, and the desktop subset
+            // is the one that has no question surface. The CHANNEL decides
+            // whether an answer is possible: a host with no interactive user
+            // gets the same tool and an explicit "there is nobody here to ask"
+            // instead of a hang.
+            tb.AddTool(lf => new AskUserQuestionTool(questionService, lf.CreateLogger<AskUserQuestionTool>()));
             tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));
         }
         tb.AddTool(lf => new OutputLimitToolDecorator(

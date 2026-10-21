@@ -91,7 +91,21 @@ internal static class RegistryFacade
             ctx.LoggerFactory.CreateLogger<Harbor.Application.Skills.SkillRegistry>());
         services.AddSingleton<ISkillRegistry>(skillRegistry);
 
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry);
+        // #1759: the question channel the model asks the human through. It is
+        // built HERE, eagerly, for the same reason the tool registry is: the
+        // ask_user_question tool needs it while the registry is being built,
+        // and the registry is frozen before the container exists. The instance
+        // is published so the host can attach its presenter (the surface that
+        // shows the question) once it knows which UI it has. A headless run
+        // never attaches one, and every question is then answered
+        // "there is nobody here to ask" instead of hanging.
+        var questionService = new Harbor.Application.Interaction.UserQuestionService(
+            ctx.LoggerFactory.CreateLogger<Harbor.Application.Interaction.UserQuestionService>());
+        services.AddSingleton(questionService);
+        services.AddSingleton<Harbor.Abstractions.Interaction.IUserQuestionService>(
+            sp => sp.GetRequiredService<Harbor.Application.Interaction.UserQuestionService>());
+
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup

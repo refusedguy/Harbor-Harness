@@ -168,6 +168,12 @@ public sealed record PermissionRuleset
         new("skill", "*", PermissionAction.Allow),
         new("session_read", "*", PermissionAction.Allow),
         new("session_steer", "*", PermissionAction.Ask),
+        // #1759: asking the human a question is not an action on the machine.
+        // Nothing is written, nothing is executed, and the question channel is
+        // what the human's answer gates, not the permission system. Allow it,
+        // so the model may ask without a second prompt on top of the question
+        // itself.
+        new("ask_user_question", "*", PermissionAction.Allow),
         new("session_broadcast", "*", PermissionAction.Allow),
         new("session_inbox", "*", PermissionAction.Allow)
     });

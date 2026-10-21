@@ -74,6 +74,17 @@ public static class BuiltinToolSafetyProfiles
             PeerSupervision = PeerSupervisionRole.Direct
         },
 
+        // #1759: the model-facing question channel. Its argument is a QUESTION,
+        // not a path and not a command: there is nothing for the path guard
+        // or the destructive-command deny to look at, so the profile is Opaque
+        // (the same reading `webfetch` and `task` get).
+        //
+        // The class is Interaction, its own class: the tool neither inspects
+        // nor changes the workspace, so Read and Write would both be a lie,
+        // and a rule that names the class is how a user says "the model may
+        // not interrupt me".
+        new("ask_user_question", ToolSafetyProfile.Opaque) { Category = ToolCategory.Interaction },
+
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See
         // `BuiltinToolSafetyDeclarationsTests`, which is what keeps that honest.

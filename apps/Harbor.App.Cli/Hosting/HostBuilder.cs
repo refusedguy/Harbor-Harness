@@ -73,7 +73,45 @@ internal static partial class HostBuilder
         // "sub-agents cannot invoke" error on a detached forwarder.
         _ = host.Services.GetRequiredService<Harbor.Abstractions.Agents.ISubAgentRunner>();
 
+        AttachQuestionPresenter(host.Services);
+
         return host;
+    }
+
+    /// <summary>
+    ///     Attach the console surface to the model-facing question channel
+    ///     (#1759), when this host has one.
+    /// </summary>
+    /// <param name="services">The built container.</param>
+    /// <remarks>
+    ///     <para>
+    ///         The question channel lives in the core and knows nothing about
+    ///         terminals; the surface that shows a question and reads the
+    ///         answer lives here. Attaching it is this host's job, and the
+    ///         host is the only place that knows which renderer is in charge.
+    ///     </para>
+    ///     <para>
+    ///         The fullscreen renderer owns stdin for its frame loop, so the
+    ///         console surface is not attached there: a question would be
+    ///         printed over a screen that repaints itself, and the read would
+    ///         fight the frame loop for the same keystrokes. A host with no
+    ///         presenter answers every question with "there is nobody here to
+    ///         ask", which is honest and never hangs.
+    ///     </para>
+    /// </remarks>
+    private static void AttachQuestionPresenter(IServiceProvider services)
+    {
+        if (TuiMode.IsCellForgeSelected())
+        {
+            return;
+        }
+
+        var questions = services.GetService<Harbor.Application.Interaction.UserQuestionService>();
+        var asker = services.GetService<Harbor.App.Cli.Repl.PlainUserQuestionAsker>();
+        if (questions is not null && asker is not null)
+        {
+            questions.AttachPresenter(asker.AskAsync);
+        }
     }
 
     /// <summary>

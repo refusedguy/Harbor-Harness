@@ -50,3 +50,4 @@ static Harbor.Abstractions.Models.ServiceScope.TryCreate(string? value) -> CShar
 static Harbor.Abstractions.Models.ServiceScope.implicit operator string!(Harbor.Abstractions.Models.ServiceScope! scope) -> string!
 static Harbor.Abstractions.Models.ServiceScope.operator !=(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
 static Harbor.Abstractions.Models.ServiceScope.operator ==(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
+Harbor.Abstractions.Permissions.ToolCategory.Interaction = 5 -> Harbor.Abstractions.Permissions.ToolCategory
