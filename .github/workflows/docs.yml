@@ -100,11 +100,11 @@ on:
       # run it, or the snapshot drifts from the tree it describes.
       - 'tools/gen-plugin-inventory.py'
       - 'docs/PLUGIN_INVENTORY.json'
-      # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
+      # #1778. The duplicate-body gate scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
-      # measures.
-      - 'tools/check-test-dup.py'
+      # measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, which the trigger below already covers.
       - 'tools/test-dup-baseline.json'
       # #1847. The second duplication gate scans `src/`, `apps/` and `tests/`
       # and compares the result against its committed baseline, so a PR that
@@ -247,8 +247,8 @@ on:
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
       # baseline, so a PR that edits the tree it measures — or the gate, or
-      # the baseline — must run it.
-      - 'tools/check-test-dup.py'
+      # the baseline — must run it. The gate is compiled now; its sources
+      # are under `tools/gates/`, which the trigger below already covers.
       - 'tools/test-dup-baseline.json'
       # #1847. Same trigger as above: the second duplication gate measures
       # `src/`, `apps/` and `tests/` and compares the result against its
@@ -428,7 +428,7 @@ jobs:
       # the only one that asks whether a test body is a copy of another test
 
       - name: Duplicate-test-body gate fails on a planted duplicate
-        run: python3 tools/check-test-dup.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-dup --self-test
       # #1847. The second duplication detector, the one that scans the
       # PRODUCT code and the duplication that is not a method body. Its
       # failure path is tested for the same reason as the others, and its
@@ -820,7 +820,7 @@ jobs:
       # `--update`, not before. The findings are printed as WARN and the job
       # goes green; the blocking default of the script is unchanged.
       - name: Check the test tree for duplicated bodies
-        run: python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+        run: tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
       - name: Upload the duplicate-group list
         if: always()
         uses: actions/upload-artifact@v7
@@ -832,7 +832,7 @@ jobs:
   # #1847. The SECOND duplication detector, and the one that covers the
   # ground the python gate above cannot see.
   #
-  # `check-test-dup.py` matches duplicated TEST METHOD BODIES, and only
+  # `harbor-gates check-test-dup` matches duplicated TEST METHOD BODIES, and only
   # method bodies: it slices a body out of the file, normalises it and
   # hashes it. What it cannot see is duplication that is not a method body —
   # a duplicated record declaration, a duplicated nested class, a duplicated

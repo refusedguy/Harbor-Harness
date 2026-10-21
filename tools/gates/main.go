@@ -44,6 +44,7 @@ import (
 
 	docfacts "harbor.local/gates/check-doc-facts"
 	dupjscpd "harbor.local/gates/check-dup-jscpd"
+	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	testpackages "harbor.local/gates/check-test-packages"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
@@ -80,6 +81,11 @@ var registry = []registered{
 		name:    "check-test-json-reflection",
 		summary: "no test serializes through the reflection resolver",
 		run:     jsonreflection.Run,
+	},
+	{
+		name:    "check-test-dup",
+		summary: "a test body is a copy of another test body",
+		run:     testdup.Run,
 	},
 	{
 		name:    "check-test-packages",

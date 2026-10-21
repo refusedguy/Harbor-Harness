@@ -28,19 +28,19 @@ check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels
 check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
 check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600
 md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
-check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
-check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
 check-abstractions-contract.py	python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
 check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40
 check-string-switch-report.py	python3 tools/check-string-switch.py --report
 check-result-chains-report.py	python3 tools/check-result-chains.py --report
-check-test-json-reflection.py	python3 tools/check-test-json-reflection.py
+check-test-json-reflection.py	python3 tools/check-test-json-reflection.py	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
 check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
 gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
 check-doc-facts.py	python3 tools/check-doc-facts.py --min-facts 5
 check-analyzer-scope.py	python3 tools/check-analyzer-scope.py --min-files 150
-check-tunit-analyzer-gate.py	python3 tools/check-tunit-analyzer-gate.py
+check-tunit-analyzer-gate.py	python3 tools/check-tunit-analyzer-gate.py	tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate
 check-coverage-registry.py	python3 tools/check-coverage-registry.py
 check-shard-balance.py	python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37

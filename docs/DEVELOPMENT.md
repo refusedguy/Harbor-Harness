@@ -176,7 +176,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `checker self-test` | both gates still **fail** on fixtures that are known-broken |
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
-| `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
+| `test duplication` | `harbor-gates check-test-dup --min-files 800 --min-methods 9000` (#1778) |
 | `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
@@ -315,16 +315,16 @@ The measurement and the numbers are in
 
 ## Test duplication gate — issue 1778
 
-`tools/check-test-dup.py` finds duplicated **test bodies** in `tests/` and
+`harbor-gates check-test-dup` finds duplicated **test bodies** in `tests/` and
 fails when a NEW one appears. It is the mandatory tail of epic #1808: that
 epic removes ~21 000 lines of copy-pasted test code, and without this gate the
 copy-paste comes straight back.
 
 ```bash
-./tools/check-test-dup.py --report        # census + every duplicate group, exit 0
-./tools/check-test-dup.py --self-test     # prove the gate still fails on a planted duplicate
-./tools/check-test-dup.py --update        # regenerate the baseline after the programme lands
-./tools/check-test-dup.py --new-since origin/dev   # only groups touching files this branch changed
+tools/bin/harbor-gates-linux-x64 check-test-dup --report        # census + every duplicate group, exit 0
+tools/bin/harbor-gates-linux-x64 check-test-dup --self-test     # prove the gate still fails on a planted duplicate
+tools/bin/harbor-gates-linux-x64 check-test-dup --update        # regenerate the baseline after the programme lands
+tools/bin/harbor-gates-linux-x64 check-test-dup --new-since origin/dev   # only groups touching files this branch changed
 ```
 
 **How it matches.** Every method body in `tests/**/*.cs` (minus `bin/`, `obj/`
@@ -353,7 +353,7 @@ expiry date, and an expired exemption fails the gate.
 ## The second duplication detector — issue 1847
 
 `harbor-gates check-dup-jscpd` is a **second** detector. It does not replace
-`check-test-dup.py`, and it is not a second copy of it: the two engines
+`harbor-gates check-test-dup`, and it is not a second copy of it: the two engines
 answer different questions, and the answers only partly overlap.
 
 ```bash
@@ -383,7 +383,7 @@ gate scans `tests/` only, so the product code has no duplication gate at all.
 
 | | files | clones / groups | duplicated lines | wall |
 |---|---|---|---|---|
-| `check-test-dup.py` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
+| `check-test-dup` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
 | `check-dup-jscpd` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
 
 Over the test tree the two overlap on 1965 lines: 30.0% of the python gate's
