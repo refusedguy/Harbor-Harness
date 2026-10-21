@@ -26,6 +26,12 @@ Application — the plugin CONTRACT layer, and the matrix places it in **Applica
   took effect and is observable, `Failure` means it was not registered and says
   why. A host that does not carry a door MUST refuse it, not accept it (#1758).
 - `PluginAxisRegistry` — the single registry of plugin extension axes (marker + host door per axis)
+- `PluginCompatibility` — the compatibility rule: may a plugin that declares a
+  Harbor floor run against the Harbor that is running? The registrar applies it
+  to the in-code floor (#1721), the host applies it to the manifest's floor
+  (#1739)
+- `PluginManifest` — a plugin's declaration as DATA: version, Harbor floor, capabilities and
+  extension axes, read from a JSON file next to the plugin without loading its code (#1739)
 - `IPluginDependencyResolver` — says whether a dependency a plugin declared is ready right now (#1733)
 - `PendingPlugin` — a plugin that is loaded but not activated, and the dependencies it waits for (#1733)
 - `PluginScript` — immutable wrapper around a single `.cs` source file (path + content + hash)

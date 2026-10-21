@@ -21,6 +21,14 @@ namespace Harbor.Plugins.Storage;
 ///         a plugin may live in a subdirectory (e.g. for organization), but it must
 ///         stay self-contained in its own file. See #1046.
 ///     </para>
+///     <para>
+///         <b>Manifests are read here (#1739).</b> A plugin may ship a JSON
+///         manifest next to its source, named after it
+///         (<c>MyPlugin.cs</c> → <c>MyPlugin.harbor-plugin.json</c>). The manifest
+///         is read as data and travels with the script, so the host can refuse an
+///         incompatible plugin before it pays to compile it. A plugin without a
+///         manifest is unaffected.
+///     </para>
 /// </remarks>
 public sealed class FileSystemPluginSource : IPluginSource
 {
@@ -76,7 +84,7 @@ public sealed class FileSystemPluginSource : IPluginSource
                 var load = await PluginScript.LoadAsync(file, ct).ConfigureAwait(false);
                 if (load.IsSuccess)
                 {
-                    yield return load.Value;
+                    yield return await WithManifestAsync(load.Value, ct).ConfigureAwait(false);
                 }
                 else
                 {
@@ -84,5 +92,48 @@ public sealed class FileSystemPluginSource : IPluginSource
                 }
             }
         }
+    }
+
+    /// <summary>
+    ///     Attach the manifest that belongs to a plugin source, when the plugin
+    ///     ships one.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The manifest is a file NEXT TO the source, named after it
+    ///         (<c>MyPlugin.cs</c> → <c>MyPlugin.harbor-plugin.json</c>). It is
+    ///         read here, at the layer that knows where plugin files come from,
+    ///         and it travels with the script from this point on.
+    ///     </para>
+    ///     <para>
+    ///         A manifest that cannot be read is NOT dropped here: the script
+    ///         carries the reason, and the host refuses the plugin with that
+    ///         reason. Dropping it at discovery would make a broken manifest
+    ///         look like a plugin that does not exist.
+    ///     </para>
+    /// </remarks>
+    /// <param name="script">The loaded plugin source.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The script with its manifest attached.</returns>
+    private async Task<PluginScript> WithManifestAsync(PluginScript script, CancellationToken ct)
+    {
+        string manifestPath = PluginManifestReader.PathFor(script.Path);
+        if (!File.Exists(manifestPath))
+            return script;
+
+        var read = await PluginManifestReader
+            .ReadAsync(manifestPath, _logger, ct)
+            .ConfigureAwait(false);
+
+        if (read.IsSuccess)
+        {
+            return script.WithManifest(read.Value);
+        }
+
+        _logger.LogWarning(
+            "The plugin manifest {Manifest} could not be read: {Error} The plugin was not loaded.",
+            manifestPath,
+            read.Error);
+        return script.WithManifest(null, read.Error);
     }
 }

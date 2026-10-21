@@ -28,6 +28,13 @@ namespace Harbor.Plugins.Hosting;
 ///         itself runs one activation pass at the end, so a plugin that depends on another
 ///         plugin loaded in the same pass comes up with it.
 ///     </para>
+///     <para>
+///         <b>The manifest gate (#1739).</b> A plugin may ship a manifest next to its
+///         source, and the manifest is read as DATA — before the plugin is compiled. A
+///         manifest the host cannot read, and a manifest that asks for a Harbor newer
+///         than the one running, are both refused here, with the reason. A plugin with
+///         no manifest is not affected: it compiles and registers exactly as before.
+///     </para>
 /// </remarks>
 public sealed class PluginHost
 {
@@ -139,6 +146,19 @@ public sealed class PluginHost
         await foreach (var script in _source.GetScriptsAsync(ct).ConfigureAwait(false))
         {
             ct.ThrowIfCancellationRequested();
+
+            // #1739: the manifest is read as data, before the plugin is built, so
+            // a plugin that cannot run on this Harbor is refused for the price of
+            // a JSON read instead of a Roslyn compile.
+            string? refusal = RefuseBeforeCompile(script);
+            if (refusal is not null)
+            {
+                _logger.LogWarning("Plugin {Path} was not loaded: {Reason}", script.Path, refusal);
+                if (FailOrContinue(refusal))
+                    return Result.Failure<IReadOnlyList<LoadedPlugin>>(refusal);
+                continue;
+            }
+
             var compiled = await _compiler.CompileAsync(script, ct).ConfigureAwait(false);
             if (compiled.IsFailure)
             {
@@ -290,6 +310,69 @@ public sealed class PluginHost
     {
         _ = error;
         return !_options.ContinueOnError;
+    }
+
+    /// <summary>
+    ///     The reason a plugin must not be compiled, or <c>null</c> when it may.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Two things are refused here, and both are refusals of the
+    ///         DECLARATION, not of the code:
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <description>
+    ///                 A manifest the host could not read. The plugin shipped a
+    ///                 declaration and the host failed to apply it, so the
+    ///                 plugin is not loaded — running it would mean running a
+    ///                 plugin whose own constraints were dropped.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 A manifest that asks for a Harbor newer than the one
+    ///                 running. The check is the same one
+    ///                 <see cref="PluginCompatibility" /> applies to the
+    ///                 in-code floor, so the manifest and the code cannot
+    ///                 disagree about what the rule is.
+    ///             </description>
+    ///         </item>
+    ///     </list>
+    ///     <para>
+    ///         A plugin with no manifest is not refused here: it is compiled and
+    ///         registered exactly as it was before the manifest existed.
+    ///     </para>
+    /// </remarks>
+    /// <param name="script">The discovered plugin source.</param>
+    /// <returns>The reason to refuse, or <c>null</c>.</returns>
+    private string? RefuseBeforeCompile(PluginScript script)
+    {
+        if (script.ManifestError is not null)
+            return script.ManifestError;
+
+        PluginManifest? manifest = script.Manifest;
+        if (manifest is null)
+            return null;
+
+        Version? floor = manifest.RequiredHarborVersion;
+        if (floor is null)
+            return null;
+
+        // The host does not read the running version from anywhere itself: the
+        // composition root injects it, because the layer that owns it is a lower
+        // plugin layer the host may not bind. Without it the early check is
+        // skipped, and the registration gate remains the authoritative one.
+        Version? runtime = _options.HarborVersion;
+        if (runtime is null)
+            return null;
+
+        string name = manifest.Name ?? Path.GetFileName(script.Path);
+        var compatibility = PluginCompatibility.Check(name, floor, runtime);
+        if (compatibility.IsFailure)
+            return compatibility.Error;
+
+        return null;
     }
 
     /// <summary>

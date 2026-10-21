@@ -14,6 +14,9 @@ Infrastructure — plugin pipeline layer. Depends only on `Harbor.Plugins.Abstra
 ## Public API
 
 - `FileSystemPluginSource` — reads `.cs` files from local directories
+- `PluginManifestReader` — reads the JSON manifest a plugin ships next to its
+  source (`MyPlugin.cs` → `MyPlugin.harbor-plugin.json`); a plugin without one
+  is unaffected (#1739)
 - `InMemoryPluginSource` — for tests + ephemeral plugins
 - `CompositePluginSource` — fan-in over multiple sources
 - `EmbeddedResourcePluginSource` — reads `.cs` from assembly resources

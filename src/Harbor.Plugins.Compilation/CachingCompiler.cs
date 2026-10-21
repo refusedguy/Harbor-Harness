@@ -80,7 +80,7 @@ public sealed class CachingCompiler : IPluginCompiler
                 // LoadedPlugin.LoadedFromCache. The hand-rolled CompilationResult carried a
                 // second copy of the same flag; #561 removed it.
                 return Result.Success(new CompiledPluginAssembly(
-                    cachedAsm, script.Hash, script.Path, null, true, script.DeclaredCapabilities));
+                    cachedAsm, script.Hash, script.Path, null, true, script.DeclaredCapabilities, script.Manifest));
             }
             catch (Exception ex)
             {

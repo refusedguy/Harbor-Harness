@@ -52,8 +52,12 @@ public sealed class TrustingPluginSource : IPluginSource
         {
             ct.ThrowIfCancellationRequested();
             // Fail-closed: an unknown capability token in the manifest directive rejects
-            // the plugin regardless of user choice (contracted by PluginScript docs).
-            var decision = script.HasInvalidManifest
+            // the plugin regardless of user choice (contracted by PluginScript docs), and
+            // a manifest file the host could not read rejects it for the same reason —
+            // the plugin shipped a declaration the host failed to apply, so there is
+            // nothing to ask the user about (#1739).
+            bool declarationInvalid = script.HasInvalidManifest || script.ManifestError is not null;
+            var decision = declarationInvalid
                 ? PluginTrustDecision.Untrusted
                 : await _policy.DecideAsync(script, ct).ConfigureAwait(false);
             var trusted = decision == PluginTrustDecision.Trusted;
@@ -65,9 +69,7 @@ public sealed class TrustingPluginSource : IPluginSource
                     PluginCapability.ReadFiles,
                     script.Path,
                     trusted ? "allow" : "deny",
-                    trusted ? null : script.HasInvalidManifest
-                        ? "invalid capability manifest — unknown token"
-                        : "trust denied — plugin not loaded",
+                    trusted ? null : DeclarationError(script),
                     ct).ConfigureAwait(false);
             }
 
@@ -87,5 +89,23 @@ public sealed class TrustingPluginSource : IPluginSource
                     script.Hash);
             }
         }
+    }
+
+    /// <summary>
+    ///     Why the plugin was not loaded, for the audit trail.
+    /// </summary>
+    /// <remarks>
+    ///     A declaration the host could not read is named as such, because it is
+    ///     a different defect from a plugin the user declined to approve.
+    /// </remarks>
+    /// <param name="script">The refused script.</param>
+    /// <returns>The reason to record.</returns>
+    private static string DeclarationError(PluginScript script)
+    {
+        if (script.HasInvalidManifest)
+            return "invalid capability manifest — unknown token";
+        if (script.ManifestError is not null)
+            return $"invalid plugin manifest — {script.ManifestError}";
+        return "trust denied — plugin not loaded";
     }
 }

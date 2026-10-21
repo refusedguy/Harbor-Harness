@@ -67,6 +67,10 @@ public static class Program
             .WithOptions(o =>
             {
                 o.PluginRoot = parsed.PluginRoot;
+                // #1739: the running version, for the host's early manifest check
+                // (a plugin whose manifest asks for a newer Harbor is refused
+                // before it is compiled).
+                o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
                 o.Dependencies = dependencies;
             })
             .Build(loggerFactory.CreateLogger<PluginHost>());

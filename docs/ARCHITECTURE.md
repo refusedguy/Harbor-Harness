@@ -279,7 +279,7 @@ Two loading paths:
 `RequiredHarborVersion` is enforced at the registration boundary, the one seam both
 loading paths pass through: a plugin that declares a newer Harbor than the one
 running is refused before it is initialized (#1721,
-`src/Harbor.Plugins.Registration/PluginCompatibility.cs`).
+`src/Harbor.Plugins.Abstractions/PluginCompatibility.cs`).
 
 ### 9. JSONL session storage
 

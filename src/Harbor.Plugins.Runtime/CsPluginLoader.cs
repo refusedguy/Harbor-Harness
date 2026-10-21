@@ -140,6 +140,11 @@ public sealed class CsPluginLoader
             {
                 o.PluginRoot = _globalPluginsDir;
                 o.ContinueOnError = false;
+                // #1739: the host refuses a plugin whose manifest asks for a
+                // newer Harbor BEFORE it compiles it, and that check needs the
+                // running version. The host does not read it from anywhere
+                // itself — the composition root injects it.
+                o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
             })
             .Build(_host.LoggerFactory.CreateLogger<PluginHost>());
 
@@ -183,7 +188,12 @@ public sealed class CsPluginLoader
             .WithRegistrar(new SafePluginRegistrar(
                 new PluginRegistrar(_globalPluginsDir, _host.LoggerFactory.CreateLogger<PluginRegistrar>(), _host.LoggerFactory),
                 _logger))
-            .WithOptions(o => o.PluginRoot = _globalPluginsDir)
+            .WithOptions(o =>
+            {
+                o.PluginRoot = _globalPluginsDir;
+                // #1739: the running version, for the host's early manifest check.
+                o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
+            })
             .Build(_host.LoggerFactory.CreateLogger<PluginHost>());
 
         var result = await host.LoadAllAsync(_host, ct).ConfigureAwait(false);
@@ -223,7 +233,12 @@ public sealed class CsPluginLoader
             .WithCompiler(compiler)
             .WithInstantiator(instantiator)
             .WithRegistrar(registrar)
-            .WithOptions(o => o.PluginRoot = _globalPluginsDir)
+            .WithOptions(o =>
+            {
+                o.PluginRoot = _globalPluginsDir;
+                // #1739: the running version, for the host's early manifest check.
+                o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
+            })
             .Build(_host.LoggerFactory.CreateLogger<PluginHost>());
     }
 }

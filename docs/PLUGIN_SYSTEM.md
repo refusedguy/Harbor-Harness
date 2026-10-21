@@ -307,7 +307,7 @@ load fails with that reason. Under the default `ContinueOnError=true` the
 incompatible plugin is skipped and the other plugins still load. Either way the
 plugin does not appear in the loaded-plugins list, because it did not load.
 
-The gate lives in `src/Harbor.Plugins.Registration/PluginCompatibility.cs` and is
+The gate lives in `src/Harbor.Plugins.Abstractions/PluginCompatibility.cs` and is
 called from `PluginRegistrar.Register`, the one seam both load routes pass
 through: the out-of-process `harbor-plugins-host` and the legacy in-process
 `CsPluginLoader`.
@@ -370,6 +370,126 @@ recursion, so it terminates, and the cycle is reported rather than waited on
 silently:
 
 > Plugin a@1.0.0 is blocked by a circular dependency (a -> b -> a). It will not activate until the cycle is broken.
+
+## The plugin manifest (#1739)
+
+A plugin may ship a **manifest**: a JSON document that says what the plugin
+declares about itself, next to its code. The manifest is DATA. The host reads
+it without compiling the plugin, without loading its assembly and without
+running a line of its code.
+
+The file lives next to the source and is named after it:
+
+| Plugin source | Manifest |
+|---|---|
+| `~/.harbor/plugins/MyPlugin.cs` | `~/.harbor/plugins/MyPlugin.harbor-plugin.json` |
+| `<project>/.harbor/plugins/tools/MyPlugin.cs` | `<project>/.harbor/plugins/tools/MyPlugin.harbor-plugin.json` |
+
+One manifest, one plugin. A directory may hold several plugins, and each of
+them has its own manifest, so two plugins in one directory never share one
+declaration of name and version.
+
+A minimal manifest:
+
+```json
+{
+  "name": "web-search",
+  "version": "1.2.0",
+  "harbor": "0.4.0",
+  "capabilities": ["http_requests"],
+  "axes": ["IToolPlugin"]
+}
+```
+
+### What each field means
+
+| Field | Meaning |
+|---|---|
+| `schemaVersion` | The manifest format. Absent means 1. A manifest that asks for a format this Harbor does not implement is refused, not guessed at. |
+| `name` | The plugin's id. Optional. When present it must equal `IPlugin.Name`. |
+| `version` | The plugin's own version. Optional. When present it must equal `IPlugin.Version`. |
+| `harbor` | The minimum Harbor version the plugin needs — the same floor `IPlugin.RequiredHarborVersion` declares, checked by the same gate. |
+| `capabilities` | The capabilities the plugin asks for. Optional. When present it REPLACES the `// harbor:capabilities` directive. |
+| `axes` | The extension axes the plugin contributes, named as `PluginAxisRegistry` names them (`IToolPlugin`, `IProviderPlugin`, …). Optional. When present it must equal the axes the plugin implements. |
+
+Every field is optional. A manifest that declares nothing is a valid manifest,
+and a plugin with no manifest at all is a plugin the host knows nothing extra
+about: it loads exactly as it did before the manifest existed.
+
+### Who reads it, and when
+
+**The host reads it at discovery, before the plugin is compiled.** A manifest
+that asks for a Harbor newer than the running one is refused there, so an
+incompatible plugin costs a JSON read instead of a Roslyn compile. The refusal
+is the same one the in-code floor gets:
+
+> Plugin 'web-search' requires Harbor >= 0.6.0, but this Harbor is 0.4.0. The plugin was not loaded.
+
+**The registrar reads it again at registration**, where the code is loaded and
+the declaration can be checked against it. A manifest that names the plugin
+differently, declares a different version, or declares axes the plugin does not
+implement is refused, and the refusal names both sides:
+
+> The manifest of plugin 'web-search' declares the extension axes [IToolPlugin], but the plugin implements [IToolPlugin, IAgentPlugin]. The manifest and the plugin must agree, or the manifest must not declare axes.
+
+The code stays the truth for what the plugin DOES. The manifest says what it
+CLAIMS, and a claim that does not match the code is refused: a plugin that
+ships two versions of itself is a plugin the host cannot describe.
+
+### The rules the read follows
+
+| Situation | What happens |
+|---|---|
+| A field this build does not know | Ignored, and reported in the log. A manifest written for a newer Harbor still loads here. |
+| A capability name the host does not know | The manifest is refused. The same strict reading the comment directive gets. |
+| An extension axis the host does not have | The manifest is refused, and the message names the axes that exist. |
+| A version that is not a version | The manifest is refused, and the message says what a version looks like. |
+| A schema version this build does not implement | The manifest is refused. |
+| A manifest that cannot be parsed at all | The plugin is not loaded, with the reason. |
+
+A manifest that cannot be read is a REFUSAL of the plugin, not a fallback to
+the no-manifest behaviour. The plugin shipped a declaration and the host
+failed to apply it, and loading it anyway would mean running a plugin whose own
+constraints were dropped.
+
+### Capabilities: the manifest replaces the directive
+
+The comment directive stays, and it stays the fallback:
+
+```csharp
+// harbor:capabilities read_files,http_requests
+```
+
+| Plugin ships | The declared capability set is |
+|---|---|
+| No manifest | The directive, exactly as before. |
+| A manifest without `capabilities` | The directive, exactly as before. |
+| A manifest with `capabilities` | The manifest's list. The directive is not read at all. |
+
+The manifest's list is the plugin's CEILING, not a request: the trust gate
+narrows it to what the user approved, and the sandbox enforces the approved
+subset. A manifest that declares `"capabilities": []` is a plugin that asks for
+nothing.
+
+### The manifest is part of the plugin's content
+
+The content hash of a plugin covers its source AND its manifest, so:
+
+- editing the manifest invalidates the compiled-assembly cache entry (the
+  plugin is rebuilt);
+- editing the manifest invalidates the persisted trust decision, so the user is
+  asked again. A trust decision given for a different declaration is not a
+  decision about this plugin.
+
+A plugin with no manifest hashes exactly as it did before, so existing caches
+and trust decisions keep working.
+
+### What the manifest does NOT carry
+
+**The dependencies.** They live on `IPlugin.Dependencies` (§Declared
+dependencies) and they are a runtime concern: the host resolves a dependency
+name against what is loaded and what it publishes, so a name in a file would be
+a second spelling of a name the host owns.
 
 ## Minimal example — a hello tool
 
