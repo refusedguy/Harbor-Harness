@@ -78,6 +78,18 @@ public sealed class ToolRegistry : IToolRegistry
     /// <inheritdoc />
     public Result Register(ITool tool)
     {
+        // #1760: a tool's own budget is validated at the door, not at dispatch.
+        // A zero budget would cancel the call before it started, and a negative
+        // one is a typo that would otherwise read as "no deadline" — the
+        // failure would surface as a mysterious instant cancellation at run
+        // time instead of at the registration that caused it.
+        if (!ToolTimeouts.IsValid(tool.TimeoutMs))
+        {
+            return Result.Failure(
+                $"Tool '{tool.Name}' declares a non-positive TimeoutMs ({tool.TimeoutMs}). "
+                + "A budget must be a positive number of milliseconds, or null for 'no opinion'.");
+        }
+
         if (!_tools.TryAdd(tool.Name, tool))
         {
             return Result.Failure($"Tool '{tool.Name}' is already registered.");

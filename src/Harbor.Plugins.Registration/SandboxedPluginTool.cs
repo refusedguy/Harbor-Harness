@@ -215,7 +215,13 @@ public sealed class SandboxedPluginTool : ITool
             new PluginBlockedEvent(_pluginName, reason, detail),
             ct).ConfigureAwait(false);
 
-        return ToolResult.Error($"[sandbox:{reason}] {detail}");
+        // #1760: a sandbox refusal is a POLICY decision, not a malfunction —
+        // the same fact a permission deny is, and the code says so. The
+        // dispatcher does not guess: a tool that fails without saying why
+        // would get the generic code, and this one DOES say why.
+        return ToolResult.Failed(
+            $"[sandbox:{reason}] {detail}",
+            ToolErrorCodes.Create(ToolErrorCodes.PermissionDenied, $"{reason}: {detail}"));
     }
 
     /// <summary>

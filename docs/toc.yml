@@ -132,6 +132,8 @@
   href: TASK_TEMPLATE.md
 - name: Test Patterns
   href: TEST_PATTERNS.md
+- name: Tool Error Codes
+  href: TOOL_ERROR_CODES.md
 - name: Tools Catalog
   href: TOOLS_CATALOG.md
 - name: Tui Ux Plan
