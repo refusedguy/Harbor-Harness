@@ -48,6 +48,7 @@
 //
 // That slice goes straight into the next LLM request:
 // src/Harbor.AgentRuntime/Agents/TurnRunner.cs:248 calls
+// src/Harbor.AgentRuntime/Agents/TurnRunner.cs:244 calls
 // TruncateToFitStrict and hands the result to the request builder, on the same turn
 // where summarization has ALREADY failed. The provider rejects an unpaired tool result,
 // so the run that was already degraded becomes a hard failure — and the fallback stays
@@ -165,6 +166,7 @@ public class CompactionPolicyInvariantTests
     ///     Rule 1 again, for <c>TruncateToFitStrict</c> — and this is the one that
     ///     matters, because unlike its sibling this method is ON the live path:
     ///     <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:248</c> calls it and feeds the result straight into the next
+    ///     <c>src/Harbor.AgentRuntime/Agents/TurnRunner.cs:244</c> calls it and feeds the result straight into the next
     ///     LLM request, on a turn where summarization has already failed.
     /// </summary>
     [Test]
