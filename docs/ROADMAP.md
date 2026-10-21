@@ -60,11 +60,11 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 - **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=cellforge` or `tui: "cellforge"` (+ kill-switch `ui.consoleEx.enabled`), `CellForgeModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.CellForge/README.md).
 - **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.CellForge.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
 
-### ✅ Completed — Tools (24 builtin)
+### ✅ Completed — Tools (25 builtin)
 
 `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`,
 `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
-`harbor_inspect`, `plugin_manager`, `goal`, `spill_read`
+`harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`, `spill_read`
 — full reference in [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)
 
 ### ✅ Completed — Plugin System (R30 fix) + Plugin Host Decomposition (F-sprints)
@@ -369,7 +369,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Test projects (`tests/`, csproj dirs) | 37 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
 | E2E tests passing | 12 + CellForge PTY suite |
-| Builtin tools | 24 (`HarborToolSetKind.Full14` — enum name predates the count) |
+| Builtin tools | 25 (`HarborToolSetKind.Full14` — enum name predates the count) |
 | Sample plugins | 4 CS-source + 4 DLL legacy |
 | TUI renderers | 7 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.CellForge.Syntax, Tui.CellForge.Prompts, Tui.Notifications) → 3 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`)) + 8 in contrib/tui |
 | Desktop platforms | Avalonia (`apps/`); WPF / MAUI (`contrib/apps/`) |

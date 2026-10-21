@@ -1215,7 +1215,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The pinned tool schemas agree with the declarations
-        run: python3 tools/check-tool-schema-pin.py --min-tools 24
+        run: python3 tools/check-tool-schema-pin.py --min-tools 25
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

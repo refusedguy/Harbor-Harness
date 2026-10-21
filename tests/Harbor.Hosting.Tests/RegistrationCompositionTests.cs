@@ -40,7 +40,7 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyFourBuiltinTools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyFiveBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
@@ -52,9 +52,9 @@ public class RegistrationCompositionTests
         // + plugin_manager (registered when the plugin runtime is compiled in — #1738)
         // + goal (#1761, the goal axis — registered whatever the store is, so the
         //   round prompt never names a tool the turn was not offered)
+        // + ask_user_question (#1759, the model-facing question channel)
         // + spill_read (#1748 — the way back to a spilled tool output)
-        // = 24.
-        // = 23.
+        // = 25.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -69,7 +69,7 @@ public class RegistrationCompositionTests
             "patch", "notebook", "ripgrep", "tree", "lsp",
             "mcp", "read_mcp_resource", "mcp_prompt", "spill_read",
             "harbor_inspect",
-            "plugin_manager", "goal",
+            "plugin_manager", "goal", "ask_user_question",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
@@ -104,7 +104,7 @@ public class RegistrationCompositionTests
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "plugin_manager", "ask_user_question" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }

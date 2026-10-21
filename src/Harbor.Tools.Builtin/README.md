@@ -1,6 +1,6 @@
 # Harbor.Tools.Builtin
 
-The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`.
+The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 25 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`, `spill_read`.
 
 > Plugins can add more tools via `IToolPlugin` — see [`docs/PLUGIN_SYSTEM.md`](../../docs/PLUGIN_SYSTEM.md). The full tool reference with examples and the "when to use X vs Y" matrix lives in [`docs/TOOLS_CATALOG.md`](../../docs/TOOLS_CATALOG.md).
 
@@ -84,8 +84,9 @@ Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
 Fifteen tools are registered in every preset (`read`, `write`, `edit`, `bash`, `glob`,
 `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `harbor_inspect`,
 `goal`, `spill_read`); `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`,
-`mcp_prompt`, `session_read`, `session_steer` and `plugin_manager` join when the host
-selects `HarborToolSetKind.Full14` (24 tools total). `tools.freeze()` runs after
+`mcp_prompt`, `session_read`, `session_steer`, `plugin_manager` and
+`ask_user_question` join when the host selects `HarborToolSetKind.Full14`
+(25 tools total). `tools.freeze()` runs after
 registration, and the CLI's `DisabledTools` config list can keep specific tools out at
 startup (`apps/Harbor.App.Cli/Configuration/CliConfig.cs:67-70`).
 

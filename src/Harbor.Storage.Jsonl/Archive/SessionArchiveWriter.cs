@@ -410,7 +410,7 @@ public sealed class SessionArchiveWriter
     ///     Read the session's log, or its surface when the store has no
     ///     append-only log yet (#1784).
     /// </summary>
-    private static async Task<Result<ArchiveLog>> ReadLogAsync(
+    private async Task<Result<ArchiveLog>> ReadLogAsync(
         ISessionStore store,
         string sessionId,
         CancellationToken ct)
@@ -423,7 +423,13 @@ public sealed class SessionArchiveWriter
         }
 
         // The store does not expose a log: the surface is what it can offer,
-        // and the manifest says which of the two the archive holds.
+        // and the manifest says which of the two the archive holds. The
+        // reason is logged, because a silent fallback is a log that quietly
+        // lost its shadowed records.
+        SessionArchiveWriterLog.LogUnavailable(
+            _logger,
+            sessionId,
+            logResult.IsFailure ? logResult.Error : "the log is empty");
         var messages = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
         if (messages.IsFailure) // §4.6-ok: propagate the store diagnostic verbatim.
             return messages.ConvertFailure<ArchiveLog>()
@@ -495,4 +501,10 @@ internal static partial class SessionArchiveWriterLog
         Level = LogLevel.Information,
         Message = "Wrote the archive of session {SessionId}: {Entries} record(s), {Attachments} attachment(s)")]
     public static partial void ArchiveWritten(ILogger logger, string sessionId, int entries, int attachments);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "The store of session {SessionId} offers no session log ({Reason}); the archive holds the surface")]
+    public static partial void LogUnavailable(ILogger logger, string sessionId, string reason);
 }
