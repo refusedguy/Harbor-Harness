@@ -336,21 +336,22 @@ public sealed partial class PluginsCommand : ICommand
                 }
 
                 Result<PluginManifest> manifest = PluginManifestReader.Parse(text, Path.GetFileName(file));
-                if (manifest.IsFailure)
+                if (manifest.IsSuccess)
+                {
+                    // The manifest is named after the source it describes, so the
+                    // file name without the suffix is the plugin's id when the
+                    // manifest does not declare one.
+                    string fileName = Path.GetFileName(file);
+                    string id = manifest.Value.Name
+                        ?? (fileName.EndsWith(PluginManifestReader.FileSuffix, StringComparison.Ordinal)
+                            ? fileName[..^PluginManifestReader.FileSuffix.Length]
+                            : fileName);
+                    found.Add((id, manifest.Value));
+                }
+                else
                 {
                     await _error.WriteLineAsync($"✗ {manifest.Error}").ConfigureAwait(false);
-                    continue;
                 }
-
-                // The manifest is named after the source it describes, so the
-                // file name without the suffix is the plugin's id when the
-                // manifest does not declare one.
-                string fileName = Path.GetFileName(file);
-                string id = manifest.Value.Name
-                    ?? (fileName.EndsWith(PluginManifestReader.FileSuffix, StringComparison.Ordinal)
-                        ? fileName[..^PluginManifestReader.FileSuffix.Length]
-                        : fileName);
-                found.Add((id, manifest.Value));
             }
         }
 
