@@ -47,6 +47,7 @@ internal static class ToolSchemaFixtures
             new Harbor.Registries.Providers.ProviderRegistry(),
             null,
             null,
+            null,
             RuntimeApiFacts.Empty,
             NullLogger<InspectTool>.Instance)),
         ("LsTool", () => new LsTool(NullLogger<LsTool>.Instance)),

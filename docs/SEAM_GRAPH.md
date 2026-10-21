@@ -155,10 +155,10 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 - **Registered in the container**: `IToolRegistry` → a factory (Singleton, [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs))
 - **Bypassed**: 2 direct construction(s) of the concrete type, 3 signature(s) naming the concrete type where the interface was the contract:
   - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):140
-  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):163
+  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):172
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):188
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):200
-  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):154
+  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):163
 
 ### `ILlmClient`
 

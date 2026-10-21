@@ -261,6 +261,60 @@ public class InspectToolTests
     }
 
     [Test]
+    public async Task Plugins_Lists_The_Published_Live_Composition()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"harbor-inspect-{Guid.NewGuid():N}", "inventory.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, """
+            {
+              "schemaVersion": 1,
+              "route": "mcp-stdio",
+              "plugins": [
+                {
+                  "name": "todo-write",
+                  "version": "1.2.0",
+                  "phase": "active",
+                  "axes": ["IToolPlugin"],
+                  "registrations": [
+                    { "door": "RegisterTool", "subject": "todo_write", "outcome": "registered", "reason": null }
+                  ],
+                  "failureReason": null
+                }
+              ]
+            }
+            """);
+
+        try
+        {
+            var tool = NewTool(pluginInventoryPath: path);
+
+            var result = await tool.ExecuteAsync(Args("""{"section":"plugins"}"""), TestToolContext.Create());
+
+            await Assert.That(result).HasSucceeded();
+            await Assert.That(result.Output).Contains("plugins: 1 in the published composition");
+            await Assert.That(result.Output).Contains("- todo-write | 1.2.0 | active | axes IToolPlugin");
+            await Assert.That(result.Output).Contains("RegisterTool todo_write: registered");
+        }
+        finally
+        {
+            try { Directory.Delete(Path.GetDirectoryName(path)!, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    [Test]
+    public async Task Plugins_Say_So_When_No_Composition_Was_Published()
+    {
+        var tool = NewTool(pluginInventoryPath: Path.Combine(Path.GetTempPath(), $"harbor-inspect-missing-{Guid.NewGuid():N}.json"));
+
+        var result = await tool.ExecuteAsync(Args("""{"section":"plugins"}"""), TestToolContext.Create());
+
+        await Assert.That(result).HasSucceeded();
+        await Assert.That(result.Output).Contains("plugins: (no plugin composition has been published yet)");
+    }
+
+    [Test]
     public async Task The_Catalog_Changes_Nothing()
     {
         var tools = new ToolRegistry();
@@ -285,13 +339,15 @@ public class InspectToolTests
         ToolRegistry? tools = null,
         AgentRegistry? agents = null,
         ProviderRegistry? providers = null,
-        ISkillRegistry? skills = null)
+        ISkillRegistry? skills = null,
+        string? pluginInventoryPath = null)
         => new(
             tools ?? new ToolRegistry(),
             agents ?? new AgentRegistry(),
             providers ?? new ProviderRegistry(),
             skills,
             null,
+            pluginInventoryPath,
             Facts(),
             NullLogger<InspectTool>.Instance);
 

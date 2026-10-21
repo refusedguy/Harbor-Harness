@@ -1151,6 +1151,10 @@ read-only agents may ask it what the runtime has.
   variable that holds it. It says *whether* a key is required, and where to get one.
 - Plugin tools arrive as MCP tools (the out-of-process route), so the `plugins`
   section names the axes and the MCP servers rather than listing plugin tools.
+- The section also reads the live plugin composition the plugin host published
+  (`inventory.json`, #1722) when there is one: the plugin's name, version,
+  phase, the axes it carries and what each door it called did. The path comes
+  from the host, never from the model.
 
 ---
 

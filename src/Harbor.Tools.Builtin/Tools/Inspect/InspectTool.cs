@@ -89,6 +89,7 @@ public sealed partial class InspectTool : ITool
     private readonly IProviderRegistry _providers;
     private readonly ISkillRegistry? _skills;
     private readonly IMcpRegistry? _mcp;
+    private readonly string? _pluginInventoryPath;
     private readonly RuntimeApiFacts _facts;
     private readonly ILogger<InspectTool> _logger;
 
@@ -107,6 +108,12 @@ public sealed partial class InspectTool : ITool
     ///     The MCP registry — the place plugin tools arrive in this runtime;
     ///     <see langword="null" /> in a host that composes no MCP bridge.
     /// </param>
+    /// <param name="pluginInventoryPath">
+    ///     The published live plugin composition (#1722), or
+    ///     <see langword="null" /> in a host that publishes none. The path comes
+    ///     from the composition root, never from the model, so the catalog can
+    ///     read the file without the model ever naming a path.
+    /// </param>
     /// <param name="facts">The static facts the registries do not own.</param>
     /// <param name="logger">Logger for diagnostics.</param>
     public InspectTool(
@@ -115,6 +122,7 @@ public sealed partial class InspectTool : ITool
         IProviderRegistry providers,
         ISkillRegistry? skills,
         IMcpRegistry? mcp,
+        string? pluginInventoryPath,
         RuntimeApiFacts facts,
         ILogger<InspectTool> logger)
     {
@@ -123,6 +131,7 @@ public sealed partial class InspectTool : ITool
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _skills = skills;
         _mcp = mcp;
+        _pluginInventoryPath = pluginInventoryPath;
         _facts = facts ?? throw new ArgumentNullException(nameof(facts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -538,8 +547,134 @@ public sealed partial class InspectTool : ITool
 
         sb.Append("mcp servers: ").Append(servers.Count == 0 ? "(none)" : string.Join(", ", servers)).Append('\n');
         sb.Append("plugin tools arrive as mcp tools; the 'mcp' tool is the bridge\n");
+        AppendComposition(sb);
         return Result.Success(sb.ToString());
     }
+
+    /// <summary>
+    ///     The live plugin composition, as the plugin host published it (#1722).
+    ///     The document is a snapshot the host wrote; the catalog reads it and
+    ///     says what it says. A host that publishes none says so.
+    /// </summary>
+    private void AppendComposition(StringBuilder sb)
+    {
+        string? path = _pluginInventoryPath;
+        if (path is null)
+        {
+            sb.Append("plugins: (this host publishes no plugin composition)\n");
+            return;
+        }
+
+        string text;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                sb.Append("plugins: (no plugin composition has been published yet)\n");
+                return;
+            }
+
+            text = File.ReadAllText(path);
+        }
+        catch (IOException)
+        {
+            sb.Append("plugins: (the published plugin composition could not be read)\n");
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            sb.Append("plugins: (the published plugin composition could not be read)\n");
+            return;
+        }
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(text);
+        }
+        catch (JsonException)
+        {
+            sb.Append("plugins: (the published plugin composition is not readable json)\n");
+            return;
+        }
+
+        using (document)
+        {
+            JsonElement root = document.RootElement;
+            if (!root.TryGetProperty("plugins", out JsonElement plugins) || plugins.ValueKind != JsonValueKind.Array)
+            {
+                sb.Append("plugins: (the published composition carries no plugin list)\n");
+                return;
+            }
+
+            sb.Append("plugins: ").Append(plugins.GetArrayLength()).Append(" in the published composition\n");
+            foreach (JsonElement plugin in plugins.EnumerateArray())
+            {
+                sb.Append("- ").Append(Text(plugin, "name"));
+                sb.Append(" | ").Append(Text(plugin, "version"));
+                sb.Append(" | ").Append(Text(plugin, "phase"));
+                AppendAxes(sb, plugin);
+                if (plugin.TryGetProperty("failureReason", out JsonElement failure) && failure.ValueKind == JsonValueKind.String)
+                {
+                    sb.Append(" | failed: ").Append(failure.GetString());
+                }
+
+                AppendRegistrations(sb, plugin);
+                sb.Append('\n');
+            }
+        }
+    }
+
+    private static void AppendAxes(StringBuilder sb, JsonElement plugin)
+    {
+        if (!plugin.TryGetProperty("axes", out JsonElement axes) || axes.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        var names = new List<string>();
+        foreach (JsonElement axis in axes.EnumerateArray())
+        {
+            if (axis.ValueKind == JsonValueKind.String)
+            {
+                names.Add(axis.GetString() ?? string.Empty);
+            }
+        }
+
+        if (names.Count > 0)
+        {
+            sb.Append(" | axes ").Append(string.Join(", ", names));
+        }
+    }
+
+    private static void AppendRegistrations(StringBuilder sb, JsonElement plugin)
+    {
+        if (!plugin.TryGetProperty("registrations", out JsonElement registrations)
+            || registrations.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (JsonElement registration in registrations.EnumerateArray())
+        {
+            sb.Append("\n    ").Append(Text(registration, "door"));
+            sb.Append(' ').Append(Text(registration, "subject"));
+            sb.Append(": ").Append(Text(registration, "outcome"));
+            if (registration.TryGetProperty("reason", out JsonElement reason) && reason.ValueKind == JsonValueKind.String)
+            {
+                sb.Append(" - ").Append(reason.GetString());
+            }
+        }
+    }
+
+    /// <summary>
+    ///     A string member of a JSON document, or the empty string when it is
+    ///     absent or not a string.
+    /// </summary>
+    private static string Text(JsonElement element, string name)
+        => element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
 
     private string BuildVersions()
     {

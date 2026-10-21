@@ -10,9 +10,10 @@ using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 using Harbor.Registries.Agents;
 using Harbor.Registries.Tools;
-#if HARBOR_WITH_PLUGINS
+// The plugin hosting assembly is read OUTSIDE the plugin feature flag: the
+// runtime catalog names the file the plugin host publishes its live
+// composition into, and that name is one constant (#1722).
 using Harbor.Plugins.Hosting;
-#endif
 
 namespace Harbor.Hosting;
 
@@ -151,6 +152,14 @@ internal static class ToolsCatalog
     }
 #endif
 
+    /// <summary>
+    ///     Where the plugin host publishes its live composition (#1722): the
+    ///     global plugin root, the file name the product declares. The path
+    ///     comes from the composition root and never from the model.
+    /// </summary>
+    private static string PluginInventoryPath(HarborCompositionContext ctx)
+        => Path.Combine(ctx.Options.HarborDir, "plugins", PluginInventory.FileName);
+
     internal static ToolRegistry CreateToolRegistry(
         HarborCompositionContext ctx, IMcpRegistry mcpRegistry, IAgentRegistry agentRegistry,
         IProviderRegistry providerRegistry,
@@ -207,6 +216,7 @@ internal static class ToolsCatalog
             providerRegistry,
             skillRegistry,
             mcpRegistry,
+            PluginInventoryPath(ctx),
             RuntimeApiFactsFactory.Create(),
             lf.CreateLogger<InspectTool>()));
         if (full)
