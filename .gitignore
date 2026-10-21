@@ -41,6 +41,11 @@ bld/
 !tools/bin/harbor-gates-linux-x64
 !tools/bin/harbor-gates-linux-arm64
 !tools/bin/SHA256SUMS
+# The compile-cost instrument's FIXTURE is a committed build log: a small
+# MSBuild performance summary, so the instrument can be checked on a known
+# input without a build and without a network (#2112). The ignore rule above
+# is for build output; this one is an input.
+!tools/gates/measure-compile-cost/testdata/*.log
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
