@@ -88,6 +88,26 @@ The records are append-only, like the rest of the store. A second rating of the 
 
 Read them back through `ISessionFeedbackStore` — the seam the JSONL store implements beside `ISessionStore` (the SQLite and memory backends do not implement it yet).
 
+## Format version
+
+**The session file is a public artifact, so its format has a version, a catalog of generations, and a chain of migrations from a file's own generation to the current one (#1749).**
+
+The header carries the generation in `formatVersion`:
+
+```json
+{"type":"session","version":1,"formatVersion":1,"id":"…", …}
+```
+
+`version` (1) is the version of the header RECORD's field set. `formatVersion` (1) is the generation of the SESSION FILE — the whole contract, header and records together. A file that states no `formatVersion` was written before the marker existed: it is the legacy generation, V0.
+
+**The current generation is 1, not 4.** The format grew three times already — the feedback records (#1746), the keyless marker (#1740), the transcript contract (#1806) — and every one of those growths was ADDITIVE: a new optional field, a new optional record kind, never a change to a record that already existed. An extension that had needed a retroactive migration would have shown up as a second generation, with a migration step and a fixture of its own.
+
+**Every read runs the chain.** A V0 file is carried to V1 before anything reads its header: the header gains the format marker, and the last-activity stamp a V0 header cannot state is materialized from the file's own write time. The step is idempotent, and the writer always writes the current generation, so the first header rewrite upgrades a legacy file on disk.
+
+**A file in a generation this build does not read is refused, everywhere it could be read** — the session record, the message history, the feedback records, the checkpoint markers — with the version in the message. The listing is the one path that cannot refuse (one unreadable file must not empty the session picker), so it skips the file and says so in the log.
+
+The full contract, the catalog and the corpus are in [../../docs/SESSION_FORMAT.md](../../docs/SESSION_FORMAT.md). The corpus is one committed fixture per generation under `tests/Harbor.Storage.Jsonl.Tests/fixtures/`, and a test fails when a generation is declared without one.
+
 ## See also
 
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)

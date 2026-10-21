@@ -27,7 +27,7 @@ namespace Harbor.Storage.Memory;
 ///         the fold of that log, by the same shared fold every backend uses.
 ///     </para>
 /// </remarks>
-public sealed partial class MemorySessionStore : ISessionStore
+public sealed partial class MemorySessionStore : ISessionStore, ICompactionEventStore
 {
     private readonly ConcurrentDictionary<string, List<SessionLogEntry>> _logs = new();
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
@@ -164,6 +164,9 @@ public sealed partial class MemorySessionStore : ISessionStore
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
         _sessions.TryRemove(sessionId, out _);
         _logs.TryRemove(sessionId, out _);
+        // #1767: the compaction records are part of the session's log — a
+        // deleted session leaves none of them behind.
+        _compactionEvents.TryRemove(sessionId, out _);
         return Task.FromResult(Result.Success());
     }
 
@@ -320,6 +323,8 @@ public sealed partial class MemorySessionStore : ISessionStore
     {
         _sessions.Clear();
         _logs.Clear();
+        // #1767: the compaction axis is cleared with the rest of the store.
+        _compactionEvents.Clear();
     }
 
     /// <summary>

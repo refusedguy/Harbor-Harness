@@ -141,10 +141,36 @@ internal sealed record SessionReadResult(
 ///         it had before the tier existed, and it is present on a keyless log so
 ///         a reader can tell a shareable artifact from a private notebook.
 ///     </para>
+///     <para>
+///         <b>#1749:</b> <see cref="FormatVersion" /> says which generation of
+///         the session FORMAT the file is in — see <see cref="SessionFormatCatalog" />.
+///         A file that states none is the legacy generation, and the read path
+///         carries it to the current one through the migration chain
+///         (<see cref="SessionFormatMigrator" />) before anything reads it.
+///     </para>
 /// </remarks>
 internal sealed record SessionHeaderEntry(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("version")] int Version,
+    // #1749: the generation of the SESSION FILE, as opposed to `version`
+    // above, which is the version of the header RECORD's own field set and
+    // has been 1 since the first commit of the store. The generation is the
+    // version of the whole contract — header and records together — and it
+    // is what the migration chain walks (SessionFormatMigrations.cs).
+    //
+    // It is null in a file written before the marker existed: that file is
+    // the legacy generation (V0), and the read path carries it to the
+    // current one through the chain. A file this build writes always states
+    // it.
+    //
+    // The JsonIgnore attribute (rather than the context-wide ignore rule)
+    // omits the field when it is null, so "no marker" is ABSENT from the
+    // file rather than written as a null — the same rule the tier marker
+    // follows, and for the same reason: the source-generated metadata does
+    // not inherit JsonlCodecContext.JsonOptions.
+    [property: JsonPropertyName("formatVersion")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? FormatVersion,
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("projectId")] string ProjectId,
     [property: JsonPropertyName("directory")] string Directory,

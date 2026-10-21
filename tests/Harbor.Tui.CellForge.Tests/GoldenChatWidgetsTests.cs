@@ -9,7 +9,7 @@ namespace Harbor.Tui.CellForge.Tests;
 /// <summary>
 /// T3 (#1185, epic #1155) — pytest-textual-snapshot steal, per-widget half:
 /// one golden frame snapshot per Chat/Widgets widget. The frame-serialize +
-/// approve half already exists (<see cref="Golden"/> /
+/// approve half already exists (<see cref="CelldiffGoldens"/> /
 /// <see cref="GridDump"/> / <c>HARBOR_UPDATE_GOLDENS=1</c>); this suite adds
 /// the per-widget coverage — each test paints one widget into a small
 /// <c>ScreenBuffer</c> in-process (fast — NOT PtyTests) and pins the
@@ -41,7 +41,7 @@ public class GoldenChatWidgetsTests
     private static async Task<string> VerifyAsync(string name, ScreenBuffer buffer)
     {
         string doc = Snap(name, buffer);
-        string expected = Golden.Verify(name, doc);
+        string expected = CelldiffGoldens.Verify(name, doc);
         await Assert.That(doc).IsEqualTo(expected);
         return TestRender.Art(buffer);
     }

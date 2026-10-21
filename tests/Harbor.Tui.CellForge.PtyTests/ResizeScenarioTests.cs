@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Tui.CellForge.PtyTests;
@@ -81,7 +82,7 @@ public sealed class ResizeScenarioTests : CellForgePtyScenarioBase
         await Assert.That(actual.Contains("Harbor — modular AI coding agent [consoleex]") || actual.Contains("model: mock/test-model")).IsTrue();
         if (Environment.GetEnvironmentVariable("HARBOR_ENFORCE_GOLDEN") == "1")
         {
-            string expected = PtyGolden.Verify("resize-60x30", actual);
+            string expected = Golden.VerifyText(Golden.FixtureDir("consoleex-pty"), "resize-60x30", actual);
             await Assert.That(actual).IsEqualTo(expected);
         }
 

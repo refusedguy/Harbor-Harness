@@ -77,9 +77,32 @@ internal static class SessionFileReader
     ///     structural lines. A rewind is an event, not history: the message
     ///     read path folds it into the LOG and never into the messages.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The second question is asked too, and it is the one that keeps
+    ///         the probe from stealing: a tool call's arguments are written as
+    ///         raw JSON, so a call carrying <c>{"type":"rewind"}</c> puts the
+    ///         literal in the line UNESCAPED. A bare probe would take that
+    ///         message for a rewind record, fail to decode it as one, and drop
+    ///         it from the history — the text the agent produced, gone over a
+    ///         substring. So the probe asks "is this line a MESSAGE?" as well,
+    ///         the same second question <see cref="IsMessageRatingLine" />
+    ///         asks.
+    ///     </para>
+    ///     <para>
+    ///         The cost is on the line that carries the literal, not on every
+    ///         line: the byte probe runs first and a line that does not
+    ///         mention "rewind" at all never reaches the second question.
+    ///     </para>
+    /// </remarks>
     internal static bool IsRewindLine(ReadOnlySpan<byte> line)
     {
-        return line.IndexOf("\"type\":\"rewind\""u8) >= 0;
+        if (line.IndexOf("\"type\":\"rewind\""u8) < 0)
+        {
+            return false;
+        }
+
+        return !IsAnyMessageEntry(line);
     }
 
     /// <summary>
@@ -113,6 +136,19 @@ internal static class SessionFileReader
     /// </summary>
     internal static bool IsSessionRemarkLine(ReadOnlySpan<byte> line) =>
         CarriesTypeValue(line, "\"sessionRemark\""u8);
+
+    /// <summary>
+    ///     True when the line is a compaction record (<c>"type":"compaction"</c>).
+    /// </summary>
+    /// <remarks>
+    ///     The compaction records are the lock and the audit trail of a
+    ///     compaction operation — what happened to the SESSION, never what
+    ///     the model said (#1767). The message read path drops these lines the
+    ///     way it drops the feedback ones, so the history the model context
+    ///     is built from cannot carry a lock marker.
+    /// </remarks>
+    internal static bool IsCompactionLine(ReadOnlySpan<byte> line) =>
+        CarriesTypeValue(line, "\"compaction\""u8);
 
     /// <summary>
     ///     True when the line carries feedback — a rating or a remark. The
@@ -297,7 +333,7 @@ internal static class SessionFileReader
         if (stat.Length > int.MaxValue)
             return TooLarge<SnapshotAttempt>(stat.Length);
 
-        var inbox = new MessageInbox();
+        var inbox = new MessageInbox(stat.LastWriteUtc, sessionId, sessionFile);
         var errors = new ParseErrors();
 
         long lastRead;
@@ -319,12 +355,32 @@ internal static class SessionFileReader
             while (await reader.FillAsync(ct).ConfigureAwait(false))
             {
                 FoldRecords(reader, sessionId, inbox, errors);
+
+                // #1749: the header said the file is in a format generation
+                // this build does not read. Nothing after it can change
+                // that, so the read stops instead of parsing a history it
+                // would throw away.
+                if (inbox.FormatError is not null)
+                {
+                    break;
+                }
             }
 
-            tail = FoldTrailingRecord(reader, sessionId, inbox, errors);
+            tail = inbox.FormatError is null
+                ? FoldTrailingRecord(reader, sessionId, inbox, errors)
+                : TrailingRecord.None;
             lastRead = reader.BytesRead;
             sawOversized = reader.SawOversizedRecord;
             sawOversizedTail = reader.SawOversizedTail;
+        }
+
+        // #1749: the refusal is the read's outcome, not a warning beside
+        // it. A session in a generation this build does not read is not
+        // "a few messages missing" — it is a file whose meaning this build
+        // does not have.
+        if (inbox.FormatError is { } formatError)
+        {
+            return Result.Failure<SnapshotAttempt>(formatError);
         }
 
         // Unchanged mtime across the read, unchanged length, and every
@@ -498,6 +554,17 @@ internal static class SessionFileReader
             return true;
         }
 
+        // #1767: the compaction records are the lock and the audit trail of a
+        // compaction operation — what happened to the SESSION, not what the
+        // model said. They are dropped here, before the message parser sees
+        // them, so the history the model context is built from carries no
+        // lock marker. The records themselves stay in the file: they are read
+        // by the compaction axis, which asks for them by name.
+        if (IsCompactionLine(record))
+        {
+            return true;
+        }
+
         var msgResult = JsonlLineParser.Parse(record, sessionId);
         if (msgResult.IsSuccess)
         {
@@ -589,11 +656,35 @@ internal static class SessionFileReader
         private readonly List<SessionLogEntry> _log = [];
         private readonly List<AgentMessage> _arrival = [];
         private readonly Dictionary<string, int> _slots = new();
+
+        /// <summary>
+        ///     The file's last-write time — what a legacy header's
+        ///     last-activity stamp is materialized from (#1749).
+        /// </summary>
+        private readonly DateTimeOffset _fileLastWriteUtc;
+
+        /// <summary>The session id, for the diagnostic of a refused file.</summary>
+        private readonly string _sessionId;
+
+        /// <summary>The session file's path, for the diagnostic of a refused file.</summary>
+        private readonly string _path;
+
         private bool _headerSeen;
 
         /// <summary>
-        ///     Records one parsed message; a repeated id replaces its value in place.
+        ///     Creates the collector for one read of one file.
         /// </summary>
+        /// <param name="fileLastWriteUtc">The file's last-write time.</param>
+        /// <param name="sessionId">The session id.</param>
+        /// <param name="path">The session file's path.</param>
+        internal MessageInbox(DateTimeOffset fileLastWriteUtc, string sessionId, string path)
+        {
+            _fileLastWriteUtc = fileLastWriteUtc;
+            _sessionId = sessionId;
+            _path = path;
+        }
+
+        /// <summary>Records one parsed message; a repeated id replaces its value in place.</summary>
         internal void Add(AgentMessage message)
         {
             // The log keeps EVERY version: the earlier one is the record that
@@ -647,6 +738,13 @@ internal static class SessionFileReader
         internal SessionHeaderEntry? Header { get; private set; }
 
         /// <summary>
+        ///     The failure the read cannot continue past: a file whose format
+        ///     generation this build does not read (<b>#1749</b>). Null while
+        ///     the file is readable.
+        /// </summary>
+        internal string? FormatError { get; private set; }
+
+        /// <summary>
         ///     Capture the header line. Only the FIRST header line counts: a
         ///     second one is a leftover of a rewritten file, not a second
         ///     generation, and taking the later one would mix generations
@@ -662,7 +760,29 @@ internal static class SessionFileReader
             _headerSeen = true;
             try
             {
-                Header = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.SessionHeaderEntry);
+                var header = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.SessionHeaderEntry);
+                if (header is null)
+                {
+                    // A header record that deserializes to null is not a
+                    // header: the caller reports a header-less file, and the
+                    // history under it still parses.
+                    return;
+                }
+
+                // #1749: the same migration the header-only read applies.
+                // A file in a generation this build does not read is a
+                // FAILURE of this read, not a message list under a strange
+                // header: the records under it were written by a format this
+                // build does not know.
+                var migrated = SessionFormatMigrator.MigrateToCurrent(
+                    header, _fileLastWriteUtc, _sessionId, _path);
+                if (migrated.IsFailure)
+                {
+                    FormatError = migrated.Error;
+                    return;
+                }
+
+                Header = migrated.Value;
             }
             catch (JsonException)
             {
@@ -732,6 +852,68 @@ internal static class SessionFileReader
     }
 
     /// <summary>
+    ///     The format generation a session file's header declares, or the
+    ///     legacy generation when it declares none (<b>#1749</b>).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The read paths that DO read the header learn the generation
+    ///         from the migration chain
+    ///         (<see cref="SessionFormatMigrator.MigrateToCurrent" />).
+    ///         This probe is for the ones that do not: the checkpoint and the
+    ///         feedback axes scan a file whose header they never needed. A
+    ///         session file is read as a whole or not at all, so a file in a
+    ///         generation this build does not read is refused here too —
+    ///         rather than scanned for the records of a format this build
+    ///         does not know.
+    ///     </para>
+    ///     <para>
+    ///         A header this probe cannot read at all is treated as the
+    ///         legacy generation: a corrupt header is the HEADER's problem,
+    ///         and the auxiliary axes have always scanned a file whose
+    ///         header they do not need. The session's own read still reports
+    ///         a corrupt header as corrupt.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sessionFile">The session file.</param>
+    /// <param name="sessionId">The session id, for the diagnostic.</param>
+    /// <returns>
+    ///     The generation the file is in, or a failure naming the generation
+    ///     this build does not read.
+    /// </returns>
+    internal static Result<int> ReadFormatGeneration(string sessionFile, string sessionId)
+    {
+        int generation = SessionFormatCatalog.Legacy;
+
+        try
+        {
+            using var reader = new StreamReader(sessionFile);
+            string? firstLine = reader.ReadLine();
+            if (!string.IsNullOrWhiteSpace(firstLine))
+            {
+                var header = JsonSerializer.Deserialize<SessionHeaderEntry>(
+                    firstLine, JsonlCodecContext.Default.SessionHeaderEntry);
+                if (header is not null)
+                {
+                    generation = SessionFormatMigrator.VersionOf(header);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            // The header is unreadable: the generation stays the legacy one,
+            // which the chain can carry. The session's own read reports the
+            // corrupt header as corrupt.
+            return Result.Success(SessionFormatCatalog.Legacy);
+        }
+
+        return SessionFormatCatalog.IsSupported(generation)
+            ? Result.Success(generation)
+            : Result.Failure<int>(
+                SessionFormatMigrator.UnsupportedVersionMessage(generation, sessionId, sessionFile));
+    }
+
+    /// <summary>
     ///     Decode the line-1 session header. Every expected bad state (empty
     ///     file, blank first line, unparseable JSON, null record) is a
     ///     <see cref="Result.Failure{T}" /> naming the session, the reason, and
@@ -739,6 +921,16 @@ internal static class SessionFileReader
     ///     to check. Cancellation still propagates via
     ///     <see cref="Harbor.Abstractions.Results.ResultErrors.Message" />.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>#1749:</b> the header is carried from its own format
+    ///         generation to the current one before it is handed back, so
+    ///         every reader of a session sees the current shape. A file whose
+    ///         generation this build does not read is a FAILURE here, with
+    ///         the version in the message — not a header read as if it were
+    ///         the present.
+    ///     </para>
+    /// </remarks>
     internal static async Task<Result<SessionHeaderEntry>> TryReadHeaderAsync(
         string path, string sessionId, CancellationToken ct)
     {
@@ -772,7 +964,14 @@ internal static class SessionFileReader
             .Bind(header => header is not null
                 ? Result.Success(header)
                 : Result.Failure<SessionHeaderEntry>(
-                    $"Session '{sessionId}' is corrupt (header deserialized to null): {path}."));
+                    $"Session '{sessionId}' is corrupt (header deserialized to null): {path}."))
+            // #1749: the migration chain. The last-activity stamp a legacy
+            // header does not state comes from the file's own write time —
+            // the same value the reader used to fall back to at the use
+            // site, so the migration changes the header's SHAPE and not what
+            // a caller sees.
+            .Bind(header => SessionFormatMigrator.MigrateToCurrent(
+                header, File.GetLastWriteTimeUtc(path), sessionId, path));
     }
 }
 

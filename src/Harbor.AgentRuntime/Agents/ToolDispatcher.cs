@@ -934,4 +934,7 @@ internal static partial class ToolDispatcherLog
     [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Tool execution end: {ToolName} (call {CallId}) isError={IsError}")]
     public static partial void ToolExecutionEnd(ILogger logger, string toolName, string callId, bool isError);
 
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Tool {ToolName} (call {CallId}) promised a deferred context that did not arrive; the result stands on its own")]
+    public static partial void ToolDeferredContextMissing(ILogger logger, string toolName, string callId);
+
 }

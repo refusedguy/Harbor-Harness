@@ -142,10 +142,21 @@ public sealed class EnforcerIntegrityTests
             "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Compilation",
             "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
-        new("Harbor.Plugins.Hosting", "Harbor.Plugins.Instantiation",
-            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
-        new("Harbor.Plugins.Hosting", "Harbor.Plugins.Registration",
-            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
+        // #1722: the (Hosting -> Registration) exemption is GONE. It was a #450
+        // dead edge until the live-composition inventory started reading the ONE
+        // marker table the registrar dispatches on, which bound a real type in
+        // IL. DeclaredButUnboundProjectReferences_AreReallyUnbound fails the
+        // moment an exempt edge turns out to be live, so the exemption was
+        // removed and the edge justified in the matrix instead (the
+        // Harbor.Plugins.Hosting row in FullLayerMatrixTests.Matrix) — same
+        // shape as #665 for Notifications and #663 for Sessions.
+        //
+        // #1732: the (Hosting -> Instantiation) exemption is GONE for the same
+        // reason: PluginRuntimeVersions read the Harbor version the
+        // instantiation layer hands every plugin context, and that bound a real
+        // type in IL. The exemption was removed and the edge justified in the
+        // matrix instead (the Harbor.Plugins.Hosting row in
+        // FullLayerMatrixTests.Matrix).
         new("Harbor.Hosting", "Harbor.Tui.CellForge.Engine",
             "#450/#546: pre-existing vestigial edge — DI wires the CellForge renderer, not the engine assembly directly. Remove the reference; see issue #546."),
         new("Harbor.Desktop.Shared", "Harbor.Ui.Framework",

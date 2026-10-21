@@ -157,6 +157,20 @@ public sealed class HeuristicTokenEstimator : ITokenEstimator
             for (int i = 0; i < results.Count; i++)
             {
                 sum += owner.Estimate(results[i].Output);
+
+                // #1763: a deferred context is part of what the model reads —
+                // the converter puts it in the request right after the
+                // results. Estimating the results alone would under-count the
+                // turn and let the history grow past the window that is
+                // actually sent.
+                IReadOnlyList<DeferredToolContext>? contexts = results[i].DeferredContexts;
+                if (contexts is not null)
+                {
+                    for (int j = 0; j < contexts.Count; j++)
+                    {
+                        sum += owner.Estimate(contexts[j].Content);
+                    }
+                }
             }
 
             return sum + 100;

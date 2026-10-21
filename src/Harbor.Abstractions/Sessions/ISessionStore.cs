@@ -64,15 +64,10 @@ namespace Harbor.Abstractions.Sessions;
 ///         rewriting the file, and append a new version of a message instead
 ///         of replacing the record. The SQLite store has not been migrated
 ///         yet, and says so by failing the append-only members loudly rather
-///         than by quietly destroying records behind the caller's back.
-///     </para>
-///     <para>
-///         <b>What is guaranteed where.</b> The invariant is guaranteed by the
-///         backends that implement <see cref="GetSessionLogAsync" /> and
-///         <see cref="RewindMessagesAfterAsync" />. For a store that has not
-///         been migrated, the members below fail loudly rather than deleting
-///         anything, and the legacy destructive behaviour stays reachable only
-///         through the explicitly deprecated
+///         than by quietly destroying records behind the caller's back. For a
+///         store that has not been migrated, the members below fail loudly
+///         rather than deleting anything, and the legacy destructive behaviour
+///         stays reachable only through the explicitly deprecated
 ///         <see cref="DeleteMessagesAfterAsync" />.
 ///     </para>
 /// </remarks>
@@ -431,4 +426,25 @@ public interface ISessionContext
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default);
+
+    /// <summary>
+    ///     The compaction-record seam of this session's store, or null when the
+    ///     store records no compaction events (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A compaction that runs against a store WITH this seam is
+    ///         bracketed in the session log: <c>compaction/start</c> is
+    ///         appended before the summarizer runs and <c>compaction/end</c>
+    ///         after everything the compaction wrote, so a crash in between
+    ///         leaves a detectable unmatched start.
+    ///     </para>
+    ///     <para>
+    ///         The default is null: a session context whose store records no
+    ///         compaction events says so instead of pretending the bracket is
+    ///         there. The omission is visible to the caller, which is the
+    ///         direction the default-member convention requires.
+    ///     </para>
+    /// </remarks>
+    public ICompactionEventStore? CompactionEvents => null;
 }

@@ -485,6 +485,15 @@ public sealed class DefaultInterfaceMemberRule
             + "exists to remove.",
             ""),
         new(
+            "Harbor.Abstractions.Sessions.ISessionContext",
+            "CompactionEvents",
+            DimDirection.Conservative,
+            "Returns null: a session context whose store records no compaction events says so "
+            + "instead of pretending the lock marker is there. The omission is visible to the "
+            + "caller — the compaction path asks for the seam BEFORE it writes anything, so a "
+            + "null answer is a decision it can act on, not a silent gap (#1767).",
+            ""),
+        new(
             "Harbor.Terminal.Abstractions.Views.ITuiView",
             "HandleKey",
             DimDirection.Conservative,

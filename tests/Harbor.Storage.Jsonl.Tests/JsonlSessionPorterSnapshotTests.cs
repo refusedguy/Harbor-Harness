@@ -181,12 +181,12 @@ public class JsonlSessionPorterSnapshotTests
 
             byte[] header = SessionFileIO.EncodeLine(
                 new SessionHeaderEntry(
-                    "session", 1, created.Id, "project-1", "/proj", "first header",
+                    "session", 1, SessionFormatCatalog.Current, created.Id, "project-1", "/proj", "first header",
                     "code", "test-model", "anthropic", Epoch, Epoch),
                 JsonlCodecContext.Default.SessionHeaderEntry);
             byte[] secondHeader = SessionFileIO.EncodeLine(
                 new SessionHeaderEntry(
-                    "session", 1, created.Id, "project-1", "/proj", "second header",
+                    "session", 1, SessionFormatCatalog.Current, created.Id, "project-1", "/proj", "second header",
                     "code", "test-model", "anthropic", Epoch, Epoch),
                 JsonlCodecContext.Default.SessionHeaderEntry);
             byte[] firstRecord = MessageLine(created.Id, "m-1", 10, 5);

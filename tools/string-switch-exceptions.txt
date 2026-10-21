@@ -47,6 +47,7 @@ apps/Harbor.App.Cli/Configuration/ConfigValueSetter.cs | key.ToLowerInvariant() 
 
 src/Harbor.CodeGen/EscapeCodeGenerator.cs | na.Key | The arms read Roslyn metadata: "na.Key" is an attribute's named-argument key, and each arm extracts a different kind of value (a string, a nullable namespace, a member name). There is no shared value to put in a table.
 src/Harbor.CodeGen/MoodFrameGenerator.cs | na.Key | Same shape as EscapeCodeGenerator: a Roslyn named-argument key, and each arm does something different with it.
+src/Harbor.CodeGen/ObservedGenerator.cs | named.Key | Same shape: a Roslyn named-argument key (the [Observed] marker's own properties), and each arm reads a different kind of value out of it.
 src/Harbor.CodeGen/ReactiveHookGenerator.cs | named.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
 src/Harbor.CodeGen/RendererAdapterGenerator.cs | na.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
 src/Harbor.CodeGen/ToolGlueGenerator.cs | na.Key | Same shape: a Roslyn named-argument key, and each arm does something different with it.
