@@ -48,6 +48,7 @@ import (
 	mdlinks "harbor.local/gates/check-md-links"
 	resultchains "harbor.local/gates/check-result-chains"
 	"harbor.local/gates/gen-seam-graph"
+	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
 	mdlint "harbor.local/gates/md-lint"
 )
@@ -84,6 +85,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "guard-triage",
+		summary: "what each architecture-guard firing MEANT: defect, style, noise or unknown",
+		run:     guardtriage.Run,
 	},
 	{
 		name:    "md-lint",

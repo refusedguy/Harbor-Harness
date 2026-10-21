@@ -229,7 +229,7 @@ jobs:
               # the tool, or the registry that says what a firing MEANT,
               # must run the job that executes them, or the edit lands
               # unvalidated.
-              - 'tools/guard-triage.py'
+              - 'tools/gates/guard-triage/**'
               - 'tools/guard-triage-classes.json'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
@@ -2451,7 +2451,7 @@ jobs:
         if: always() && matrix.shard == 'core'
         shell: bash
         run: |
-          python3 tools/guard-triage.py \
+          tools/bin/harbor-gates-linux-x64 guard-triage \
             --trx "TestResults/${{ matrix.shard }}/*.trx" \
             --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
             --project Harbor.Architecture.Tests \

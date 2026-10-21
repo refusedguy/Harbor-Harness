@@ -289,7 +289,7 @@ three is missing.
 
 ## What a guard firing meant — issue #1726
 
-`tools/guard-triage.py` reads what a CI run already produced (a TRX, or a job
+The `guard-triage` gate reads what a CI run already produced (a TRX, or a job
 log) and writes down what each guard firing MEANT: a **defect** (the code the
 rule named was broken), a **style** rule (the rule is bound to the form of the
 tree), or **noise** (the rule fired on code the repository explicitly allows,
@@ -297,9 +297,9 @@ or on its own table). It runs in the `test` job of `ci.yml` and uploads
 `guard-firings-core.json`.
 
 ```bash
-./tools/guard-triage.py --self-test        # prove it still finds a failure
-./tools/guard-triage.py --trx "TestResults/core/*.trx" --out firings.json
-./tools/guard-triage.py --log run-12345.log --markdown firings.md
+./tools/bin/harbor-gates-linux-x64 guard-triage --self-test        # prove it still finds a failure
+./tools/bin/harbor-gates-linux-x64 guard-triage --trx "TestResults/core/*.trx" --out firings.json
+./tools/bin/harbor-gates-linux-x64 guard-triage --log run-12345.log --markdown firings.md
 ```
 
 The class of a rule is a human decision, and it lives in

@@ -88,7 +88,6 @@ on:
       # self-test runs here with the other python tools. A PR that edits the
       # tool, or the registry that says what a firing MEANT, must run the
       # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
       - 'tools/guard-triage-classes.json'
       # #1722. The plugin-inventory gate reads the two plugin registries, the
       # sample plugins and the product's own JSON writer, and compares the
@@ -232,7 +231,6 @@ on:
       # self-test runs here with the other python tools. A PR that edits the
       # tool, or the registry that says what a firing MEANT, must run the
       # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
       - 'tools/guard-triage-classes.json'
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
@@ -464,7 +462,7 @@ jobs:
       # "unknown". The load-bearing fixtures are both: a failure it must
       # find, and a firing it must refuse to classify.
       - name: Guard triage finds a failure and refuses to guess its class
-        run: python3 tools/guard-triage.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 guard-triage --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a
