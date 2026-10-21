@@ -240,12 +240,15 @@ internal static class IlCapabilityProbe
 
         using AssemblyDefinition definition = AssemblyDefinition.ReadAssembly(path);
 
-        IReadOnlyList<TypeDefinition> types = definition.MainModule.Types;
+        // `IEnumerable<T>`, not `IReadOnlyList<T>`: Cecil's `Collection<T>`
+        // implements the former and not the latter (build 39646970537, error
+        // CS0266).
+        IEnumerable<TypeDefinition> types = definition.MainModule.Types;
 
         return new AssemblyScan
         {
             AssemblyName = simpleName,
-            TopLevelTypeCount = types.Count,
+            TopLevelTypeCount = definition.MainModule.Types.Count,
             Instrumented = IsInstrumentedCopy(types),
             Hits = ScanTypes(types, simpleName, rules),
         };
