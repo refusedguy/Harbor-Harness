@@ -24,6 +24,9 @@ Infrastructure — session/persistence backend. References `Harbor.Abstractions`
 - `SessionLogTier` — `Local` (the default: nothing is scrubbed) or `Keyless` (credentials are scrubbed on the way to disk, and the header says so) (#1740)
 - `JsonlMessageCodec` — line serialization helpers for messages
 - `JsonlCodecContext` — AOT-compatible compile-time `JsonSerializerContext` for the wire format (`JsonlCodecContext.cs:1-34`; per-line parsing avoids reflection on hot paths)
+- `SessionArchiveWriter` — writes one session as a ZIP archive: the canonical log, the content-addressed attachments and the manifest (#1750)
+- `SessionArchiveReader` — reads such an archive back: the manifest, the session record and the whole log, attachments resolved into bytes (#1750)
+- `SessionArchiveManifest` / `SessionArchiveAttachment` / `SessionArchiveIntegrity` — what the archive says about itself (#1750)
 
 ## Usage
 
@@ -57,6 +60,26 @@ The keyless tier also needs the credential values the process holds. The provide
 - A rule that matches the SHAPE of a credential cannot catch a credential with an unfamiliar shape. The value-based pass (the environment the process holds) is what closes that gap, and it only closes it for the values this process actually holds.
 - The tier is a property of the STORE, so it is a property of the process. One sessions directory carries one tier: a directory written by a keyless run and then appended to by a local run holds both kinds of record.
 - The tier changes what LEAVES the machine, never what the agent sees. The in-memory message keeps its real text, so a run in the keyless tier behaves exactly like a local run.
+
+## The session archive (#1750)
+
+`harbor sessions export-zip <session-id> [file]` writes one session as ONE zip. The archive is the artifact a user attaches to a bug report, and it has three parts:
+
+```
+manifest.json                     the marker, the format version, the counts, the attachment index
+session.jsonl                     the canonical log: a header line, then one line per record
+attachments/<sha256>.<ext>        the attachment bytes, named by the SHA-256 of their content
+```
+
+**Why it is not a copy of the file.** The JSONL backend happens to keep a session in one file, so exporting it is a copy — but the SQLite backend keeps the same session in tables and has no such answer. The archive is assembled through `ISessionStore`, so every backend exports the same bytes for the same session. The file a backend happens to keep is that backend's business, not the session's.
+
+**The log, not the surface.** The archive holds the WHOLE log: the version of a message an edit replaced, and the records a rewind took out of the surface. Each line carries the fold's verdict (`current` / `shadowed` / `logOnly`), because "current" is a property of the log as a whole and a reader must not be left to re-derive it. No backend has been migrated to the append-only log yet (#1784), so where the store offers no log the archive holds the surface and the manifest says so — `logSource` is `log` or `surface`, and a reader is never left to infer which.
+
+**Content-addressed attachments.** An attachment's file is named by the SHA-256 of its bytes, so the same image attached to three turns is one file in the zip and three references to it. The bytes live in the file; the message line carries the reference plus the description the session recorded (path, MIME type, pixel size).
+
+**No credential travels with it.** The archive is the one artifact that leaves the machine. The keyless tier (#1740) scrubs the log on the way to disk and the archive is built from that already-scrubbed log; the local tier does not scrub the log, and that is where the archive scrubs — with the same `SecretRedactor`, so both artifacts read alike.
+
+**What the archive does not carry.** A `file` part names a path on the machine that produced the session; the file itself is not in the archive. Collecting files from disk would turn "export my session" into an exfiltration channel, and the session file does not carry those bytes either — the archive is exactly as complete as the log it is built from.
 
 ## Record order
 
