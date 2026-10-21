@@ -60,6 +60,16 @@ import (
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
 	"harbor.local/gates/test-skips"
+	changelog "harbor.local/gates/changelog-assemble"
+	registrygate "harbor.local/gates/check-coverage-registry"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
+	shardbalance "harbor.local/gates/check-shard-balance"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	normalizemtimes "harbor.local/gates/normalize-mtimes"
+	packvalidate "harbor.local/gates/pack-validate"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
+
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -159,6 +169,51 @@ var registry = []registered{
 		name:    "test-skips",
 		summary: "the tests a run skipped, and the reason each declared",
 		run:     testskips.Run,
+	},
+	{
+		name:    "changelog-assemble",
+		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
+		run:     changelog.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
+	},
+	{
+		name:    "check-shard-balance",
+		summary: "are the CI test shards balanced by what their projects cost",
+		run:     shardbalance.Run,
+	},
+	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
+		name:    "normalize-mtimes",
+		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
+		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "pack-validate",
+		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
+		run:     packvalidate.Run,
+	},
+	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
 	},
 }
 

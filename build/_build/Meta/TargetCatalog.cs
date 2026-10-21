@@ -109,7 +109,7 @@ public static class TargetCatalog
             ],
             [new TargetOutput("dir", "artifacts/packages/*.nupkg")],
             ["./build.sh Pack", "./build.sh Pack --release-tag v0.7.0"],
-            ["packs every project with IsPackable=true; CI validates with tools/pack-validate.py"]),
+            ["packs every project with IsPackable=true; CI validates with the pack-validate gate"]),
         new("PublishIpcServer",
             "Publish the CLI as ipc-server host (HarborMode=ipc-server) into artifacts/ipc-server.",
             ["Compile"], [],

@@ -189,7 +189,7 @@ jobs:
               # The pack-validation gate's instrument (#429). Same #618
               # argument: editing the validator must run the build job that
               # executes it, or the edit lands unvalidated.
-              - 'tools/pack-validate.py'
+              - 'tools/gates/pack-validate/**'
               # The gate that keeps the build job's per-consumer artifacts in
               # step with the test job's shard lists. Same #618 argument:
               # editing it must run the build job that executes it.
@@ -215,7 +215,7 @@ jobs:
               # with a sharper payload: an edit that makes the tool skip the
               # wrong files builds stale binaries, and a stale build is not
               # a red build).
-              - 'tools/normalize-mtimes.py'
+              - 'tools/gates/normalize-mtimes/**'
               # The instrument that reads the MSBuild performance summary
               # (issue #1919). It runs in its own workflow, on demand, and
               # its own self-test runs in the build job — but editing it
@@ -1137,7 +1137,7 @@ jobs:
           base="${key##*-}"
           echo "restored cache entry: ${key} (built from ${base})"
           rc=0
-          python3 tools/normalize-mtimes.py --repo "$GITHUB_WORKSPACE" --base "$base" || rc=$?
+          tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo "$GITHUB_WORKSPACE" --base "$base" || rc=$?
           if [ "$rc" -eq 3 ]; then
             echo "::error::the cached base ${base} could not be resolved, so the changed set is unknown: the restored outputs cannot be told apart from stale ones. They are discarded and the tree is rebuilt from scratch."
             find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
@@ -1823,7 +1823,7 @@ jobs:
   # WHAT MOVED, AS ONE UNIT
   # ------------------------
   #   * `dotnet pack` (the NuGet packages),
-  #   * `tools/pack-validate.py` (the metadata/README/lib gate, issue #429),
+  #   * `tools/bin/harbor-gates-linux-x64 pack-validate` (the metadata/README/lib gate, issue #429),
   #   * the DETERMINISM gate — the second pack and the entry-by-entry zip
   #     comparison. The two packs MUST stay together: the gate compares two
   #     packs of the SAME tree, so splitting them across jobs would compare
@@ -1923,7 +1923,7 @@ jobs:
         run: dotnet pack Harbor.slnx -c Release --no-build -p:ContinuousIntegrationBuild=true -o out/packages
 
       - name: Validate NuGet packages (metadata, README, lib)
-        run: python3 tools/pack-validate.py out/packages
+        run: tools/bin/harbor-gates-linux-x64 pack-validate out/packages
 
       # Payload determinism across two packs. NuGet stamps zip entry
       # timestamps with pack wall-clock time, so two `dotnet pack` runs are
@@ -2271,7 +2271,7 @@ jobs:
             # from the same per-project costs), and the skew from 5.96x
             # (measured) to 3.46x (computed).
             #
-            # The gate that keeps it that way is tools/check-shard-balance.py,
+            # The gate that keeps it that way is harbor-gates check-shard-balance,
             # which reads these lists and the recorded costs and fails when the
             # shards drift apart again.
             projects: >-
@@ -2371,12 +2371,30 @@ jobs:
               # fails loudly when a shard's filter drops a class (a filter that
               # silently drops tests is worse than the serialisation this
               # removes).
-              if python3 tools/run-e2e-avalonia-shards.py \
-                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
-                status="pass"
+              # The compiled gates ship one binary per architecture, and the
+              # test shards run on the ARM64 pool (issue #1919). The binary
+              # has to match the runner: the x64 one on an x64 runner and the
+              # arm64 one on an arm64 one, or the shell says "cannot execute
+              # binary file" and the shard is red for a reason that has
+              # nothing to do with the tests. Both commands are written out,
+              # because the runner is chosen by the shard's label and not by
+              # the pool the whole job happens to be in.
+              if [ "$RUNNER_ARCH" = "ARM64" ]; then
+                if tools/bin/harbor-gates-linux-arm64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               else
-                status="FAIL"
-                rc=1
+                if tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               fi
             elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
@@ -2423,6 +2441,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Report test measurements (issue #618, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2449,6 +2468,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
+      - name: Report the test census (issue #1884, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2468,6 +2488,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Report skipped tests (issue #1795, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |

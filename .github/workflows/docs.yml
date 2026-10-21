@@ -175,7 +175,6 @@ on:
       # request, and on the push that lands it — so the trigger is the
       # workflow files themselves, not the gate's own sources alone.
       - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. The `gen-seam-graph` gate generates docs/SEAM_GRAPH.md from the C#
       # sources, and `--check` fails when the committed document no longer
@@ -190,9 +189,7 @@ on:
       # edits any of them must run the checker, because the checker's
       # verdict about the tree depends on what those files say.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
       - 'tools/gates/test-skips/**'
-      - 'tools/normalize-mtimes.py'
       # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
@@ -203,7 +200,6 @@ on:
       # recorded cost of every project, so a PR that edits the gate, the
       # measurement or the workflow's shard lists has to run it — and so must
       # a PR that edits the tree it measures.
-      - 'tools/check-shard-balance.py'
       - 'tools/shard-costs.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
@@ -299,7 +295,6 @@ on:
       # touches a workflow file is the one that gets merged LOCALLY, so the
       # gate has to run on it.
       - '.github/workflows/**'
-      - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
@@ -309,9 +304,7 @@ on:
       # #1888. Same trigger as above: the policy checker, and the three tools
       # whose self-test no workflow ran until the policy asked for one.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
       - 'tools/gates/test-skips/**'
-      - 'tools/normalize-mtimes.py'
       # #1558. Same trigger as above: the chain census measures `src/` and
       # `apps/` (the .cs paths above), so a PR that edits the gate or the
       # baseline must run it.
@@ -321,7 +314,6 @@ on:
       # lists in ci.yml and the recorded cost of every project, so a PR that
       # edits the gate, the measurement or the workflow's shard lists must run
       # it.
-      - 'tools/check-shard-balance.py'
       - 'tools/shard-costs.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
@@ -359,7 +351,7 @@ jobs:
       # the others: a script edited until it assembles nothing is
       # indistinguishable from a script that assembles nothing.
       - name: Changelog assembler fails on a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #664. The third gate is the only one that asks whether a `file:line`
       # in a normative document still points at a line, and whether a backticked
       # type is constructed by anything. Its failure path is tested here for
@@ -424,7 +416,7 @@ jobs:
       # planted duplicate — the gate MUST fail on it, and MUST stay quiet on
       # a same-shape body that shares no identifiers with it.
       - name: Merge-loss checker reports a dropped line
-        run: python3 tools/check-local-merge-loss.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-local-merge-loss --self-test
       # The changelog assembler is a RELEASE-time tool, not a gate on the
       # pull-request path: the fragments are glued into the [Unreleased] section
       # when the release is cut, so a pull request never edits CHANGELOG.md
@@ -432,7 +424,7 @@ jobs:
       # does — a tool that quietly stopped noticing a diverged CHANGELOG.md is
       # indistinguishable from one that found nothing.
       - name: Changelog assembler fails on a diverged changelog
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
 
@@ -500,7 +492,7 @@ jobs:
       # file and still glues a fragment: a PR that edits the assembler must
       # run it, or the edit lands unvalidated.
       - name: Changelog assembler glues a fragment and notices a diverged file
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1888. The three tools whose self-test no workflow ran. The policy
       # says every gate and every reporter proves its own failure path in
       # CI, and these three had a self-test that nothing called — a
@@ -509,7 +501,7 @@ jobs:
       # helper's self-tests are offline too, so all three cost about a
       # second.
       - name: Pack validator still fails on a package without its metadata
-        run: python3 tools/pack-validate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 pack-validate --selftest
       # #1795. The third reporter: the SKIPPED tests of a run, with the reason
       # each one declared. Same argument as the two above — a reporter that
       # stops reporting is green on every run and tells nobody anything. Its
@@ -519,7 +511,7 @@ jobs:
       - name: Skip reporter still finds a skipped test
         run: tools/bin/harbor-gates-linux-x64 test-skips TestResults --self-test
       - name: Mtime normaliser still tells a changed file from an unchanged one
-        run: python3 tools/normalize-mtimes.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 normalize-mtimes --self-test
       # #1558. The chain census. Its failure path is tested here for the same
       # reason as the others: a scanner edited until it matches nothing is
       # indistinguishable from a scanner that found nothing. The load-bearing
@@ -555,7 +547,7 @@ jobs:
       # fixture is the RUNAWAY SHARD — one project's cost blown up so that the
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
-        run: python3 tools/check-shard-balance.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --self-test
       # #1753. The coverage tools. The reporter reads the cobertura files
       # the nightly lane produced and prints the per-file tables; the gate
       # compares the registry of accepted holes against the measurement, in
@@ -567,9 +559,9 @@ jobs:
       # exists for: a file that stopped being covered, and a row that is no
       # longer needed.
       - name: Coverage reporter still tells the three states of a file apart
-        run: python3 tools/coverage_report.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 coverage-report --self-test
       - name: Coverage registry gate still fires on both sides of the ratchet
-        run: python3 tools/check-coverage-registry.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-coverage-registry --self-test
       # #1780. The eleventh gate is the only one that asks whether the
       # parameter schema of a tool still is the one that was pinned. Its
       # failure path is tested here for the same reason as the others, and
@@ -594,7 +586,7 @@ jobs:
       # self-test nobody calls, and the table cannot say honestly that it
       # exists.
       - name: Changelog assembler notices a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # The project-graph measurement: the depth, the level widths and the
       # critical path of the dependency graph. It is a tool a human runs, and
       # no workflow runs it — but its self-test is called here for the same
@@ -602,6 +594,16 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # #2085. The two E2E plan tools. The generator derives the class
+      # universe from the source tree, and the runner reads the plan the
+      # generator wrote: a generator that stops finding the classes writes a
+      # plan that drops them, and a runner that stops noticing a dropped class
+      # reports a green suite with fewer tests than it has. Neither had a
+      # self-test before the port; both have one now, and both run it here.
+      - name: E2E shard generator still finds the classes of the tree
+        run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
+      - name: E2E shard runner still refuses a plan it cannot run
+        run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
       # The runner of the tree gates, and the list it runs. Its failure path
       # is the same shape as every other gate's: a gate that cannot start,
       # a gate that reports green when it did not run, and a report whose
@@ -962,7 +964,7 @@ jobs:
           done
       - name: The local squash-merges dropped nothing
         run: >-
-          python3 tools/check-local-merge-loss.py
+          tools/bin/harbor-gates-linux-x64 check-local-merge-loss
           --range origin/dev --tip HEAD --min-merges 1
           --allow-missing-heads
 
@@ -1248,7 +1250,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that the CI test shards are balanced by cost
-        run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 
   # #1780. The parameter schema of a tool is the tool's contract with the
   # model: the JSON the model may send. It is declared once, as [ToolParam]
