@@ -335,11 +335,13 @@ public sealed partial record ToolResult
     ///     survives a round-trip the way <see cref="Metadata" /> never could.
     /// </summary>
     [MemoryPackConstructor]
+    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, IReadOnlyList<DeferredToolContext>? DeferredContexts)
     private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, ToolErrorInfo? ErrorInfo)
     {
         this.Output = Output;
         this.IsError = IsError;
         this.Attachments = Attachments;
+        this.DeferredContexts = DeferredContexts;
         this.ErrorInfo = ErrorInfo;
     }
 
@@ -361,6 +363,43 @@ public sealed partial record ToolResult
 
     /// <summary>Optional file attachments.</summary>
     public IReadOnlyList<FileAttachment>? Attachments { get; init; }
+
+    /// <summary>
+    ///     The deferred contexts this call produced (#1763) — the tool's second
+    ///     exit, next to the ordinary result.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Three states, and the difference between them is the whole
+    ///         point of the exit:
+    ///     </para>
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <term><see langword="null" /></term>
+    ///             <description>
+    ///                 The tool had no deferred context to give. The ordinary
+    ///                 result is the whole story, and the loop injects nothing.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <term>an EMPTY list</term>
+    ///             <description>
+    ///                 The tool PROMISED a deferred context and it did not
+    ///                 arrive — its producer failed, timed out, or was
+    ///                 cancelled. The loop reports the miss and keeps the
+    ///                 result; the run continues either way.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <term>a non-empty list</term>
+    ///             <description>
+    ///                 The context arrived. The loop injects it into the
+    ///                 history after the result it belongs to.
+    ///             </description>
+    ///         </item>
+    ///     </list>
+    /// </remarks>
+    public IReadOnlyList<DeferredToolContext>? DeferredContexts { get; init; }
 
     /// <summary>
     ///     Optional metadata. Excluded from MemoryPack serialization because
@@ -450,12 +489,14 @@ public sealed partial record ToolResultEntry
     ///     the same way the message does.
     /// </summary>
     [MemoryPackConstructor]
+    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, IReadOnlyList<DeferredToolContext>? DeferredContexts)
     private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, ToolErrorInfo? ErrorInfo)
     {
         this.ToolCallId = ToolCallId;
         this.ToolName = ToolName;
         this.Output = Output;
         this.IsError = IsError;
+        this.DeferredContexts = DeferredContexts;
         this.ErrorInfo = ErrorInfo;
     }
 
@@ -481,6 +522,24 @@ public sealed partial record ToolResultEntry
 
     /// <summary>Whether the result represents an error.</summary>
     public bool IsError { get; init; }
+
+    /// <summary>
+    ///     The deferred contexts this call produced (#1763), carried with the
+    ///     result so the loop can inject them into the history right after it.
+    /// </summary>
+    /// <remarks>
+    ///     The three states are the ones
+    ///     <see cref="ToolResult.DeferredContexts" /> documents: <see langword="null" />
+    ///     (the tool had none), an empty list (the tool promised one and it did
+    ///     not arrive), a non-empty list (it arrived).
+    ///     <para>
+    ///         The property is omitted from the persisted JSON when it is
+    ///         <see langword="null" />, so a session written before #1763 keeps
+    ///         the byte-identical shape it had.
+    ///     </para>
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<DeferredToolContext>? DeferredContexts { get; init; }
 
     /// <summary>
     ///     Optional metadata. Excluded from MemoryPack serialization because
@@ -513,6 +572,10 @@ public sealed partial record ToolResultEntry
     /// <param name="result">The raw tool result.</param>
     /// <returns>A <see cref="ToolResultEntry" /> ready to persist in a <see cref="ToolResultMessage" />.</returns>
     public static ToolResultEntry From(string toolCallId, string toolName, ToolResult result) =>
+        new(toolCallId, toolName, result.Output, result.IsError, result.Metadata)
+        {
+            DeferredContexts = result.DeferredContexts
+        };
         new(toolCallId, toolName, result.Output, result.IsError, result.Metadata) { ErrorInfo = result.ErrorInfo };
 }
 

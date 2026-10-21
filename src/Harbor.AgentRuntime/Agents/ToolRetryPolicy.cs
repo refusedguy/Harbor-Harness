@@ -314,6 +314,17 @@ internal sealed class ToolRetryPolicy(
                 }
             }
 
+            // #1763: the tool's second exit. A tool that PROMISED a deferred
+            // context and returned without one — its producer failed, timed
+            // out, or was cancelled — leaves the result standing on its own.
+            // The run continues either way; the miss is reported so the
+            // operator can see that the context the tool meant to hand over
+            // never arrived.
+            if (result.DeferredContexts is { Count: 0 })
+            {
+                ToolDispatcherLog.ToolDeferredContextMissing(logger, toolCall.ToolName, toolCall.Id);
+            }
+
             ToolDispatcherLog.ToolExecutionEnd(logger, toolCall.ToolName, toolCall.Id, result.IsError);
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, result, result.IsError), TerminalEventToken).ConfigureAwait(false);

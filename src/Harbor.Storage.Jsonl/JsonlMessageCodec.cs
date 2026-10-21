@@ -150,6 +150,12 @@ internal static class JsonlMessageCodec
     ///     ToolResultEntry(...)).ToArray()</c> chain on the same append path.
     ///     <see cref="ToolResultEntry.Metadata" /> is still dropped — see #51
     ///     in the <see cref="SerializeMessagePayload" /> remarks.
+    ///     <para>
+    ///         #1763: the deferred contexts ride with the entry, so a session
+    ///         reload keeps the context the tool handed over. The property is
+    ///         omitted from the line when it is <c>null</c>, so a session
+    ///         written before #1763 keeps the byte-identical shape it had.
+    ///     </para>
     /// </summary>
     public static ToolResultEntry[] SerializeToolResults(IReadOnlyList<ToolResultEntry> results)
     {
@@ -160,11 +166,12 @@ internal static class JsonlMessageCodec
         for (int i = 0; i < results.Count; i++)
         {
             ToolResultEntry r = results[i];
+            payload[i] = new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)
+            {
+                DeferredContexts = r.DeferredContexts
             // #1760: the structured code rides along. It holds primitives
             // only, so unlike Metadata it survives the round-trip — which is
             // the whole point of a separate typed field.
-            payload[i] = new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)
-            {
                 ErrorInfo = r.ErrorInfo,
             };
         }
@@ -439,6 +446,7 @@ internal static class JsonlMessageCodec
 
             results.Add(new ToolResultEntry(tcId, tn, output, isError)
             {
+                DeferredContexts = DecodeDeferredContexts(rEl)
                 ErrorInfo = DecodeErrorInfo(rEl),
             });
         }
@@ -448,34 +456,107 @@ internal static class JsonlMessageCodec
     }
 
     /// <summary>
-    ///     Read the structured error of a persisted result entry (#1760).
+    ///     Read the deferred contexts of one persisted result entry (#1763).
     /// </summary>
     /// <remarks>
+    ///     <para>
+    ///         The three states of the contract survive the round trip: an
+    ///         absent array means the tool had no deferred context to give
+    ///         (<c>null</c>), an empty array means it promised one and it did
+    ///         not arrive, and a filled array carries the contexts.
+    ///     </para>
+    ///     <para>
+    ///         A malformed entry is skipped rather than failing the message:
+    ///         one broken context must not make the whole tool-result message
+    ///         unreadable — the same treatment the image attachments get.
+    ///     </para>
+    /// </remarks>
+    /// <param name="entryEl">The persisted result entry.</param>
+    /// <returns>The decoded contexts, or <see langword="null" /> when the entry carries none.</returns>
+    private static IReadOnlyList<DeferredToolContext>? DecodeDeferredContexts(JsonElement entryEl)
+    {
+        if (!entryEl.TryGetProperty("deferredContexts", out var arr) && !entryEl.TryGetProperty("DeferredContexts", out arr))
+    ///     Read the structured error of a persisted result entry (#1760).
     ///     An entry written before the structured code existed has no
     ///     <c>errorInfo</c> member at all, and that is not a defect: the code
     ///     was added later, and an absent member is the honest reading of a
     ///     record that never carried one. A member that IS there but has no
     ///     <c>code</c> is unreadable — the code is the record — and yields no
     ///     error rather than a half-built one.
-    /// </remarks>
     private static ToolErrorInfo? DecodeErrorInfo(JsonElement entry)
-    {
         if (!entry.TryGetProperty("errorInfo", out var error) && !entry.TryGetProperty("ErrorInfo", out error))
         {
             return null;
         }
 
+        if (arr.ValueKind != JsonValueKind.Array)
         if (error.ValueKind != JsonValueKind.Object)
         {
             return null;
         }
 
-        string? code = JsonArgs.GetFirstString(error, "code", "Code");
-        if (code is null)
+        var contexts = new List<DeferredToolContext>(arr.GetArrayLength());
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            string? content = JsonArgs.GetFirstString(el, "content", "Content");
+            string? source = JsonArgs.GetFirstString(el, "source", "Source");
+            if (content is null || source is null)
+            {
+                // A context without content or without a source cannot be
+                // framed for the model — the source is what tells the model
+                // the context is not the user's words.
+                continue;
+            }
+
+            contexts.Add(new DeferredToolContext(content, source, DecodeDeferredMetadata(el)));
+        }
+
+        return contexts;
+    }
+
+    /// <summary>
+    ///     Read the metadata pairs of one persisted deferred context (#1763).
+    /// </summary>
+    /// <param name="contextEl">The persisted deferred context.</param>
+    /// <returns>The decoded pairs, or <see langword="null" /> when there are none.</returns>
+    private static IReadOnlyList<DeferredContextMetadata>? DecodeDeferredMetadata(JsonElement contextEl)
+    {
+        if (!contextEl.TryGetProperty("metadata", out var arr) && !contextEl.TryGetProperty("Metadata", out arr))
         {
             return null;
         }
 
+        if (arr.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var metadata = new List<DeferredContextMetadata>(arr.GetArrayLength());
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            string? key = JsonArgs.GetFirstString(el, "key", "Key");
+            string? value = JsonArgs.GetFirstString(el, "value", "Value");
+            if (key is null)
+            {
+                continue;
+            }
+
+            metadata.Add(new DeferredContextMetadata(key, value ?? string.Empty));
+        }
+
+        return metadata.Count == 0 ? null : metadata;
+        string? code = JsonArgs.GetFirstString(error, "code", "Code");
+        if (code is null)
         string? name = JsonArgs.GetFirstString(error, "name", "Name");
         string? reason = JsonArgs.GetFirstString(error, "reason", "Reason");
         return new ToolErrorInfo(name ?? ToolErrorCodes.NameFor(code), code, reason);
