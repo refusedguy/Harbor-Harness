@@ -339,10 +339,53 @@ public sealed partial class AskUserQuestionTool : ITool
                 header = headerEl.GetString();
             }
 
-            Result<IReadOnlyList<UserQuestionOption>> options = ParseOptions(question, id);
-            if (options.IsFailure)
+            // The options are read HERE, not in a helper that returns a second
+            // Result: a nested Result would make the caller a guard-then-unwrap
+            // ladder, and this read is one linear pass over one question.
+            var options = new List<UserQuestionOption>();
+            if (question.TryGetProperty("options", out var optionsEl)
+                && optionsEl.ValueKind == JsonValueKind.Array)
             {
-                return Result.Failure<IReadOnlyList<UserQuestion>>(options.Error);
+                int optionCount = optionsEl.GetArrayLength();
+                if (optionCount > MaxOptions)
+                {
+                    return Result.Failure<IReadOnlyList<UserQuestion>>(
+                        $"Question '{id}' carries {optionCount} options; at most {MaxOptions} are allowed.");
+                }
+
+                var labels = new HashSet<string>(StringComparer.Ordinal);
+                foreach (JsonElement option in optionsEl.EnumerateArray())
+                {
+                    if (option.ValueKind != JsonValueKind.Object)
+                    {
+                        return Result.Failure<IReadOnlyList<UserQuestion>>(
+                            $"Every option of question '{id}' must be an object with a 'label'.");
+                    }
+
+                    if (!option.TryGetProperty("label", out var labelEl)
+                        || labelEl.ValueKind != JsonValueKind.String
+                        || string.IsNullOrWhiteSpace(labelEl.GetString()))
+                    {
+                        return Result.Failure<IReadOnlyList<UserQuestion>>(
+                            $"Every option of question '{id}' needs a non-empty string 'label'.");
+                    }
+
+                    string label = labelEl.GetString()!;
+                    if (!labels.Add(label))
+                    {
+                        return Result.Failure<IReadOnlyList<UserQuestion>>(
+                            $"Question '{id}' has two options labelled '{label}': labels must be unique.");
+                    }
+
+                    string? description = null;
+                    if (option.TryGetProperty("description", out var descriptionEl)
+                        && descriptionEl.ValueKind == JsonValueKind.String)
+                    {
+                        description = descriptionEl.GetString();
+                    }
+
+                    options.Add(new UserQuestionOption(label, description));
+                }
             }
 
             bool multiSelect = false;
@@ -352,71 +395,10 @@ public sealed partial class AskUserQuestionTool : ITool
                 multiSelect = multiEl.GetBoolean();
             }
 
-            questions.Add(new UserQuestion(id, text, header, options.Value, multiSelect));
+            questions.Add(new UserQuestion(id, text, header, options, multiSelect));
         }
 
         return Result.Success<IReadOnlyList<UserQuestion>>(questions);
-    }
-
-    /// <summary>
-    ///     Read one question's options.
-    /// </summary>
-    /// <param name="question">The question object.</param>
-    /// <param name="id">The question's id, for the error text.</param>
-    /// <returns>The options, or the reason they are unusable.</returns>
-    private static Result<IReadOnlyList<UserQuestionOption>> ParseOptions(JsonElement question, string id)
-    {
-        if (!question.TryGetProperty("options", out var optionsEl)
-            || optionsEl.ValueKind != JsonValueKind.Array)
-        {
-            // No options is a free-text question, not an error.
-            return Result.Success<IReadOnlyList<UserQuestionOption>>(Array.Empty<UserQuestionOption>());
-        }
-
-        int count = optionsEl.GetArrayLength();
-        if (count > MaxOptions)
-        {
-            return Result.Failure<IReadOnlyList<UserQuestionOption>>(
-                $"Question '{id}' carries {count} options; at most {MaxOptions} are allowed.");
-        }
-
-        var options = new List<UserQuestionOption>(count);
-        var labels = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (JsonElement option in optionsEl.EnumerateArray())
-        {
-            if (option.ValueKind != JsonValueKind.Object)
-            {
-                return Result.Failure<IReadOnlyList<UserQuestionOption>>(
-                    $"Every option of question '{id}' must be an object with a 'label'.");
-            }
-
-            if (!option.TryGetProperty("label", out var labelEl)
-                || labelEl.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(labelEl.GetString()))
-            {
-                return Result.Failure<IReadOnlyList<UserQuestionOption>>(
-                    $"Every option of question '{id}' needs a non-empty string 'label'.");
-            }
-
-            string label = labelEl.GetString()!;
-            if (!labels.Add(label))
-            {
-                return Result.Failure<IReadOnlyList<UserQuestionOption>>(
-                    $"Question '{id}' has two options labelled '{label}': labels must be unique.");
-            }
-
-            string? description = null;
-            if (option.TryGetProperty("description", out var descriptionEl)
-                && descriptionEl.ValueKind == JsonValueKind.String)
-            {
-                description = descriptionEl.GetString();
-            }
-
-            options.Add(new UserQuestionOption(label, description));
-        }
-
-        return Result.Success<IReadOnlyList<UserQuestionOption>>(options);
     }
 }
 

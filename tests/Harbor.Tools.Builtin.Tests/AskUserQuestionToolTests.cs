@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Harbor.Abstractions.Interaction;
+using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
 using Harbor.TestKit;

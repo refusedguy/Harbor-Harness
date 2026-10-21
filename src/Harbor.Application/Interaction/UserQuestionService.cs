@@ -25,7 +25,7 @@ namespace Harbor.Application.Interaction;
 ///     </para>
 ///     <para>
 ///         <b>Cancellation is not a verdict.</b> A cancelled caller
-///         (<paramref name="ct" />) gets an exception, not a "no answer": the
+///         (the <c>ct</c> argument) gets an exception, not a "no answer": the
 ///         same rule the permission channel follows, and the reason: a stop
 ///         must never be reported to the model as a decision the human made.
 ///     </para>
