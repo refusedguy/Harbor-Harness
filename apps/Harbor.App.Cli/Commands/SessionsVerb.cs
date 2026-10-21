@@ -238,7 +238,8 @@ internal static class SessionsVerb
         {
             Console.Error.WriteLine("""
                                     Usage: harbor sessions revert <session-id> <message-id>
-                                      Delete every message AFTER the given one (the target itself is kept).
+                                      Rewind to the given message: every message AFTER it leaves the
+                                      conversation (the target itself is kept).
                                     """);
             return 2;
         }
@@ -258,7 +259,9 @@ internal static class SessionsVerb
 
         var messages = await store.GetMessagesAsync(sessionId).ConfigureAwait(false);
         int remaining = messages.IsSuccess ? messages.Value.Count : -1;
-        Console.WriteLine($"Reverted session {sessionId}: deleted {reverted.Value} message(s), {remaining} remain.");
+        // #1752: the rewind moves the tail out of the conversation; it does
+        // not delete anything, so the sentence must not say it did.
+        Console.WriteLine($"Reverted session {sessionId}: {reverted.Value} message(s) left the conversation, {remaining} remain.");
         return 0;
     }
 
@@ -367,7 +370,7 @@ internal static class SessionsVerb
             return 1;
         }
 
-        Console.WriteLine($"Rewound session {sessionId} to checkpoint {checkpointId}: deleted {rewound.Value.Removed} message(s), {rewound.Value.Remaining} remain.");
+        Console.WriteLine($"Rewound session {sessionId} to checkpoint {checkpointId}: {rewound.Value.Removed} message(s) left the conversation, {rewound.Value.Remaining} remain.");
         return 0;
     }
 

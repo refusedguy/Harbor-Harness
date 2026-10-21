@@ -114,8 +114,14 @@ public class JsonlCheckpointsTests
     }
 
     [Test]
-    public async Task RewindToCheckpoint_DropsLaterCheckpoints_KeepsEarlierOnes()
+    public async Task RewindToCheckpoint_KeepsTheLaterCheckpoints_AndLeavesAnHonestTrail()
     {
+        // #1752: the restore is an append-only rewind, so it no longer
+        // REWRITES the file — and the checkpoint over a message that left the
+        // surface stays in the log with it. The checkpoint is a record of
+        // where the user marked a point; dropping it would destroy exactly
+        // what the append-only log exists to keep. What says the restore
+        // happened is the trail marker beside them.
         var store = CreateStore();
         try
         {
@@ -131,10 +137,12 @@ public class JsonlCheckpointsTests
             await Assert.That(rewound.Value.Remaining).IsEqualTo(1);
 
             var listed = await store.ListCheckpointsAsync(session.Id);
-            await Assert.That(listed.Value.Count).IsEqualTo(2);
+            await Assert.That(listed.Value.Count).IsEqualTo(3);
             await Assert.That(listed.Value[0].Id).IsEqualTo(early.Id);
-            await Assert.That(listed.Value[1].IsRewindTrail).IsTrue();
-            await Assert.That(listed.Value.Any(c => c.Id == late.Value.Id)).IsFalse();
+            await Assert.That(listed.Value[1].Id).IsEqualTo(late.Value.Id);
+            await Assert.That(listed.Value[2].IsRewindTrail).IsTrue();
+            await Assert.That(listed.Value[2].RewindOf).IsEqualTo(early.Id);
+            await Assert.That(listed.Value[2].Removed).IsEqualTo(3);
         }
         finally
         {

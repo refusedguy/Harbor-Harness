@@ -37,6 +37,9 @@ entries in `CHANGELOG.md` do.
 - a pull request does NOT edit `CHANGELOG.md` itself: the assembler owns that
   file, and two pull requests editing it is exactly the conflict this
   directory exists to remove;
+- a link inside a fragment is written against the REPOSITORY ROOT (`./docs/...`),
+  because the fragment ends up inside the root-level `CHANGELOG.md`; the link
+  checker knows this and resolves a fragment's links the same way;
 - the assembler is idempotent: running it twice changes nothing;
 - `python3 tools/changelog-assemble.py --self-test` proves the assembler
   still notices a diverged `CHANGELOG.md`.

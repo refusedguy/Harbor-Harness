@@ -47,7 +47,7 @@ public sealed partial class MemorySessionStore : ISessionStore, ICompactionEvent
         SessionCompactionEvent compactionEvent,
         CancellationToken ct = default)
     {
-        if (!_messages.ContainsKey(sessionId))
+        if (!_logs.ContainsKey(sessionId))
         {
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
         }
@@ -68,7 +68,7 @@ public sealed partial class MemorySessionStore : ISessionStore, ICompactionEvent
         string sessionId,
         CancellationToken ct = default)
     {
-        if (!_messages.ContainsKey(sessionId))
+        if (!_logs.ContainsKey(sessionId))
         {
             return Task.FromResult(
                 Result.Failure<IReadOnlyList<SessionCompactionEvent>>(SessionStoreErrors.SessionNotFound(sessionId)));
