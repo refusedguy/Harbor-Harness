@@ -21,6 +21,12 @@ namespace Harbor.Tools.Builtin;
         "Use `path` for a specific directory; default is the working directory"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("path", "string", Description = "Directory to list (default: cwd)")]
+[ToolParam("all", "boolean", Description = "Include hidden files (default: false)")]
+[ToolParam("recursive", "boolean", Description = "List recursively (default: false)")]
+[ToolParam("depth", "integer", Description = "Max recursion depth when recursive (default: 3, max: 8)")]
+[ToolParam("maxEntries", "integer", Description = "Max entries to return (default: 500)")]
 public sealed partial class LsTool : ITool
 {
 
@@ -39,26 +45,6 @@ public sealed partial class LsTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":      { "type": "string",  "description": "Directory to list (default: cwd)" },
-                                                                          "all":       { "type": "boolean", "description": "Include hidden files (default: false)" },
-                                                                          "recursive": { "type": "boolean", "description": "List recursively (default: false)" },
-                                                                          "depth":     { "type": "integer", "description": "Max recursion depth when recursive (default: 3, max: 8)" },
-                                                                          "maxEntries":{ "type": "integer", "description": "Max entries to return (default: 500)" }
-                                                                        }
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {
