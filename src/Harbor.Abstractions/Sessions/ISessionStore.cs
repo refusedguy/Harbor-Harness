@@ -404,4 +404,25 @@ public interface ISessionContext
     /// </param>
     /// <param name="ct">Cancellation token.</param>
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default);
+
+    /// <summary>
+    ///     The compaction-record seam of this session's store, or null when the
+    ///     store records no compaction events (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A compaction that runs against a store WITH this seam is
+    ///         bracketed in the session log: <c>compaction/start</c> is
+    ///         appended before the summarizer runs and <c>compaction/end</c>
+    ///         after everything the compaction wrote, so a crash in between
+    ///         leaves a detectable unmatched start.
+    ///     </para>
+    ///     <para>
+    ///         The default is null: a session context whose store records no
+    ///         compaction events says so instead of pretending the bracket is
+    ///         there. The omission is visible to the caller, which is the
+    ///         direction the default-member convention requires.
+    ///     </para>
+    /// </remarks>
+    public ICompactionEventStore? CompactionEvents => null;
 }
