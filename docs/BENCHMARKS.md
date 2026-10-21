@@ -2926,7 +2926,7 @@ growing a second parser.
 
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 
-Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-Harness/actions/runs/39528039639), branch `ci/1753-per-file-coverage` at `c480a98f`, 2026-10-21. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/coverage_report.py`](../tools/coverage_report.py), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/check-coverage-registry.py`](../tools/check-coverage-registry.py).
+Measured on the nightly run [39627786424](https://github.com/refusedguy/Harbor-Harness/actions/runs/39627786424), branch `dev` at `259d0a5d`, 2026-10-21 — the first run in which the lane got all the way to the measurement. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/coverage_report.py`](../tools/coverage_report.py), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/check-coverage-registry.py`](../tools/check-coverage-registry.py). All twenty suites of the lane passed and every report parsed, so the measurement is COMPLETE, not partial.
 
 **WHAT THIS NUMBER IS NOT.** There is no global percentage here, on purpose. The number the lane used to publish was a sum over the per-suite columns, and those columns OVERLAP on the shared `src/` assemblies — the same line is counted once per suite that touched it — so the sum was never the coverage of anything, and the report said so in five words ("the TOTAL is indicative"). What is below is per project and per file, with the scope written down.
 
@@ -2936,83 +2936,117 @@ Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-H
 
 | state | what it means | files |
 |---|---|---|
-| covered | at least one line was hit | 497 |
-| never ran | the engine saw the file and not one of its lines ran | 373 |
-| not loaded | the file's project is not in this lane at all | 208 |
-| no code to cover | the engine reported nothing for the file: an interface, an enum, a global-using file, a source-generated context | 172 |
+| covered | at least one line was hit | 554 |
+| never ran | the engine saw the file and not one of its lines ran | 378 |
+| not loaded | the file's project is not in this lane at all | 210 |
+| no code to cover | the engine reported nothing for the file: an interface, an enum, a global-using file, a source-generated context | 186 |
 
-**THE PRODUCT, PER PROJECT** (1250 files under `src/` and `apps/`)
+**THE PRODUCT, PER PROJECT** (1328 files under `src/` and `apps/`)
 
 | project | files | covered | never ran | not loaded | no code to cover |
 |---|---|---|---|---|---|
 | `src/Harbor.Tui.CellForge` | 113 | 30 | 82 | 0 | 1 |
 | `src/Harbor.Tui.CellForge.Engine` | 91 | 4 | 75 | 0 | 12 |
 | `src/Harbor.Ui.Framework.Rendering` | 50 | 7 | 32 | 0 | 11 |
-| `src/Harbor.Ui.Framework.State` | 51 | 23 | 22 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Services` | 32 | 3 | 23 | 0 | 6 |
-| `src/Harbor.Desktop.Abstractions` | 30 | 1 | 23 | 0 | 6 |
-| `src/Harbor.Abstractions` | 61 | 34 | 6 | 0 | 21 |
-| `src/Harbor.Application` | 29 | 22 | 1 | 0 | 6 |
-| `src/Harbor.Abstractions.Contracts` | 41 | 32 | 5 | 0 | 4 |
-| `src/Harbor.Tools.Builtin` | 69 | 59 | 1 | 0 | 9 |
-| `src/Harbor.Hosting` | 35 | 32 | 2 | 0 | 1 |
+| `src/Harbor.Ui.Framework.State` | 51 | 23 | 22 | 0 | 6 |
+| `src/Harbor.Desktop.ViewModels` | 20 | 0 | 18 | 0 | 2 |
 | `src/Harbor.Terminal.Abstractions` | 27 | 5 | 16 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Projection` | 19 | 2 | 11 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Abstractions` | 18 | 0 | 10 | 0 | 8 |
-| `src/Harbor.Ui.Framework.Sessions` | 15 | 2 | 8 | 0 | 5 |
+| `src/Harbor.CodeGen` | 9 | 0 | 9 | 0 | 0 |
 | `src/Harbor.Ui.Framework.ViewModels` | 10 | 1 | 9 | 0 | 0 |
-| `src/Harbor.Plugins.Abstractions` | 16 | 6 | 1 | 0 | 9 |
-| `src/Harbor.Plugins.Hosting` | 9 | 7 | 1 | 0 | 1 |
-| `src/Harbor.Plugins.Storage` | 8 | 6 | 1 | 0 | 1 |
-| `src/Harbor.Plugins.Host` | 4 | 2 | 2 | 0 | 0 |
-| `src/Harbor.DesignSystem` | 14 | 4 | 5 | 0 | 5 |
+| `src/Harbor.Tui.CellForge.Syntax` | 9 | 0 | 8 | 0 | 1 |
+| `src/Harbor.Ui.Framework.Sessions` | 15 | 2 | 8 | 0 | 5 |
 | `src/Harbor.Desktop.Shared` | 9 | 0 | 7 | 0 | 2 |
+| `src/Harbor.Abstractions` | 71 | 41 | 5 | 0 | 25 |
+| `src/Harbor.Abstractions.Contracts` | 48 | 38 | 5 | 0 | 5 |
+| `src/Harbor.DesignSystem` | 14 | 4 | 5 | 0 | 5 |
+| `src/Harbor.Desktop.Abstractions` | 11 | 1 | 5 | 0 | 5 |
+| `src/Harbor.Plugins.Host` | 6 | 2 | 4 | 0 | 0 |
+| `src/Harbor.Terminal.Pty` | 4 | 0 | 4 | 0 | 0 |
 | `src/Harbor.Desktop.Animations` | 5 | 0 | 3 | 0 | 2 |
 | `src/Harbor.Extensions` | 5 | 2 | 2 | 0 | 1 |
+| `src/Harbor.Hosting` | 37 | 34 | 2 | 0 | 1 |
+| `src/Harbor.Tools.Builtin` | 77 | 65 | 2 | 0 | 10 |
 | `src/Harbor.Tui.AnsiPlain` | 9 | 3 | 2 | 0 | 4 |
-| `src/Harbor.Tui.CellForge.Syntax` | 9 | 0 | 8 | 0 | 1 |
-| `src/Harbor.Tui.CellForge.Prompts` | 3 | 1 | 1 | 0 | 1 |
-| `src/Harbor.Tui.Notifications` | 1 | 0 | 1 | 0 | 0 |
-| `src/Harbor.Terminal.Pty` | 4 | 0 | 4 | 0 | 0 |
+| `src/Harbor.Application` | 32 | 25 | 1 | 0 | 6 |
 | `src/Harbor.Logging` | 1 | 0 | 1 | 0 | 0 |
+| `src/Harbor.Plugins.Abstractions` | 25 | 11 | 1 | 0 | 13 |
+| `src/Harbor.Plugins.Hosting` | 13 | 11 | 1 | 0 | 1 |
+| `src/Harbor.Plugins.Storage` | 9 | 7 | 1 | 0 | 1 |
 | `src/Harbor.Telemetry.Otlp` | 1 | 0 | 1 | 0 | 0 |
 | `src/Harbor.Transport.Remote` | 5 | 3 | 1 | 0 | 1 |
-| `src/Harbor.AgentRuntime` | 33 | 29 | 0 | 0 | 4 |
-| `src/Harbor.Storage.Jsonl` | 21 | 20 | 0 | 0 | 1 |
-| `src/Harbor.Ipc.Abstractions` | 20 | 15 | 0 | 0 | 5 |
-| `src/Harbor.SessionContext` | 18 | 16 | 0 | 0 | 2 |
-| `src/Harbor.Ipc.Server` | 14 | 13 | 0 | 0 | 1 |
-| `src/Harbor.PolicyConfig` | 13 | 9 | 0 | 0 | 4 |
+| `src/Harbor.Tui.CellForge.Prompts` | 3 | 1 | 1 | 0 | 1 |
+| `src/Harbor.Tui.Notifications` | 1 | 0 | 1 | 0 | 0 |
+| `apps/Harbor.App.Avalonia` | 93 | 0 | 0 | 93 | 0 |
+| `apps/Harbor.App.Cli` | 117 | 0 | 0 | 117 | 0 |
+| `src/Harbor.AgentRuntime` | 36 | 32 | 0 | 0 | 4 |
+| `src/Harbor.Arch.Analyzers` | 2 | 2 | 0 | 0 | 0 |
 | `src/Harbor.ChangeTracking` | 12 | 11 | 0 | 0 | 1 |
-| `src/Harbor.Ipc.Client` | 12 | 10 | 0 | 0 | 2 |
-| `src/Harbor.Registries` | 12 | 10 | 0 | 0 | 2 |
-| `src/Harbor.Telemetry.Core` | 10 | 10 | 0 | 0 | 0 |
-| `src/Harbor.Permissions` | 8 | 6 | 0 | 0 | 2 |
-| `src/Harbor.Storage.Sqlite` | 8 | 7 | 0 | 0 | 1 |
-| `src/Harbor.Plugins.Registration` | 7 | 6 | 0 | 0 | 1 |
+| `src/Harbor.Diagnostics.Abstractions` | 3 | 2 | 0 | 0 | 1 |
 | `src/Harbor.Hooks` | 6 | 3 | 0 | 0 | 3 |
-| `src/Harbor.Plugins.Compilation` | 6 | 5 | 0 | 0 | 1 |
-| `src/Harbor.CodeGen` | 6 | 0 | 6 | 0 | 0 |
-| `src/Harbor.Providers.OpenAiCompatible` | 5 | 3 | 0 | 0 | 2 |
-| `src/Harbor.Providers.Shared` | 5 | 5 | 0 | 0 | 0 |
+| `src/Harbor.Ipc.Abstractions` | 20 | 15 | 0 | 0 | 5 |
+| `src/Harbor.Ipc.Client` | 12 | 10 | 0 | 0 | 2 |
+| `src/Harbor.Ipc.InProcess` | 2 | 2 | 0 | 0 | 0 |
+| `src/Harbor.Ipc.Server` | 14 | 13 | 0 | 0 | 1 |
 | `src/Harbor.Lsp` | 4 | 4 | 0 | 0 | 0 |
 | `src/Harbor.Onboarding` | 4 | 3 | 0 | 0 | 1 |
-| `src/Harbor.Storage.Shared` | 4 | 4 | 0 | 0 | 0 |
-| `src/Harbor.Diagnostics.Abstractions` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Permissions` | 8 | 6 | 0 | 0 | 2 |
+| `src/Harbor.Plugins.Compilation` | 6 | 5 | 0 | 0 | 1 |
 | `src/Harbor.Plugins.Instantiation` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Plugins.Registration` | 8 | 7 | 0 | 0 | 1 |
 | `src/Harbor.Plugins.Runtime` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.PolicyConfig` | 14 | 10 | 0 | 0 | 4 |
 | `src/Harbor.Providers.Anthropic` | 3 | 3 | 0 | 0 | 0 |
-| `src/Harbor.Providers.OpenAI` | 3 | 3 | 0 | 0 | 0 |
-| `src/Harbor.Ipc.InProcess` | 2 | 2 | 0 | 0 | 0 |
-| `src/Harbor.Storage.Memory` | 2 | 2 | 0 | 0 | 0 |
 | `src/Harbor.Providers.Ollama` | 1 | 1 | 0 | 0 | 0 |
-| `apps/Harbor.App.Cli` | 115 | 0 | 0 | 115 | 0 |
-| `apps/Harbor.App.Avalonia` | 93 | 0 | 0 | 93 | 0 |
-| **total** | **1250** | **497** | **373** | **208** | **172** |
+| `src/Harbor.Providers.OpenAI` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Providers.OpenAiCompatible` | 5 | 3 | 0 | 0 | 2 |
+| `src/Harbor.Providers.Shared` | 5 | 5 | 0 | 0 | 0 |
+| `src/Harbor.Registries` | 14 | 12 | 0 | 0 | 2 |
+| `src/Harbor.SessionContext` | 19 | 16 | 0 | 0 | 3 |
+| `src/Harbor.Storage.Jsonl` | 35 | 32 | 0 | 0 | 3 |
+| `src/Harbor.Storage.Memory` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Shared` | 4 | 4 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Sqlite` | 9 | 8 | 0 | 0 | 1 |
+| `src/Harbor.Telemetry.Core` | 10 | 10 | 0 | 0 | 0 |
+| **total** | **1328** | **554** | **378** | **210** | **186** |
 
-**THE LINE COUNT, for the files the engine instrumented.** 61 539 product lines, 27 228 of them hit (44.2 %). The 23 316 lines of the 373 "never ran" files are the other half of that gap, and they are the deletion candidates: a file nobody ever ran is the strongest form of the "an uncovered line is often dead code" rule (#772, #755).
+**THE LINE COUNT, for the files the engine instrumented.** 67 426 product lines, 31 249 of them hit (46.3 %). The 24 415 lines of the 378 "never ran" files are the other half of that gap, and they are the deletion candidates: a file nobody ever ran is the strongest form of the "an uncovered line is often dead code" rule (#772, #755).
 
-**THE SHARE OF CONSCIOUSLY UNCOVERED CODE.** 581 of the 1250 product files (46.5 %) are holes of this measurement, and every one of them is in the registry with a reason: 373 file rows for the files the measurement saw and never ran, and 2 project rows (`apps/Harbor.App.Cli/`, `apps/Harbor.App.Avalonia/`) for the two projects the lane does not load at all. The registry is a RATCHET in both directions: a file that stops being covered has to have a row added, and a row whose file got covered has to have it deleted — the gate fails on either.
+**THE SHARE OF CONSCIOUSLY UNCOVERED CODE.** 588 of the 1328 product files (44.3 %) are holes of this measurement, and every one of them is in the registry with a reason: 378 file rows for the files the measurement saw and never ran, and 2 project rows (`apps/Harbor.App.Cli/`, `apps/Harbor.App.Avalonia/`) for the two projects the lane does not load at all. The registry is a RATCHET in both directions: a file that stops being covered has to have a row added, and a row whose file got covered has to have it deleted — the gate fails on either.
+
+#### 6.8.1 The registry against the measurement (#2064) ✅ the first reconciliation
+
+**THE STATE THE ISSUE FOUND.** The registry was written against run 39528039639 (branch `ci/1753-per-file-coverage` at `c480a98f`) and never checked against a measurement again. Since then the tree grew by 78 product files, and five of the new ones landed outside the lane's reach: the tool-schema generator (#2063), the [Observed] generator's diagnostics (#2072), the plugin host's config source (#2048) and its inventory publisher (#2076), and the `[ToolParam]` attribute (#2063). Meanwhile `src/Harbor.Abstractions/Sessions/ISessionStore.cs` got covered. The registry was wrong in both directions, and it stayed wrong because NO measurement had been taken since — the lane died before it measured, first on a broken build (`CS0234` in `Harbor.Application.Tests`), then on a missing `Coverage/` directory, so the gate read "no coverage directory" instead of a verdict.
+
+**THE RECONCILIATION, against run 39627786424** (`dev` at `259d0a5d`; 20 suites, all passed, all reports parsed, so the measurement is complete).
+
+| | before | after |
+|---|---|---|
+| rows in the registry | 376 | 380 |
+| file rows / project rows | 374 / 2 | 378 / 2 |
+| holes in the measurement (files the lane cannot account for) | 588 | 588 |
+| holes the registry accepted | 583 | 588 |
+| holes NO row accepted | 5 | 0 |
+| rows that outlived their file (the file got covered) | 1 | 0 |
+| files the registry names and the tree does not have | 0 | 0 |
+| **the gate's verdict** | **6 findings, exit 1** | **0 findings, exit 0** |
+
+**THE SIX FINDINGS** the gate printed on the dev tree, and what each one became:
+
+| finding | file | what it is | what was done |
+|---|---|---|---|
+| `COV-UNCOVERED` | `src/Harbor.CodeGen/ToolSchemaGenerator.cs` | the generator runs inside the compiler at build time | row added |
+| `COV-UNCOVERED` | `src/Harbor.CodeGen/ObservedDiagnostics.cs` | the descriptors of the [Observed] generator; same reason | row added |
+| `COV-UNCOVERED` | `src/Harbor.Plugins.Host/ConfigFilePluginConfigSource.cs` | read by the plugin host at its startup; no suite of the lane starts the host | row added |
+| `COV-UNCOVERED` | `src/Harbor.Plugins.Host/PluginInventoryPublisher.cs` | called by the host after its load and after every activation pass | row added |
+| `COV-UNCOVERED` | `src/Harbor.Tools.Builtin/ToolParamAttribute.cs` | read by the schema generator inside the compiler; a test process only carries its metadata | row added |
+| `COV-ROW-STALE` | `src/Harbor.Abstractions/Sessions/ISessionStore.cs` | the file is covered now, so the row outlived its reason | row deleted |
+
+Each new row carries a reason of at least 40 characters and an owner, like every other row: the registry is a list of conscious holes, not a list of excuses.
+
+**THE GATE FALLS WHEN THE TWO DISAGREE — the negative check.** A gate that cannot fail is not a gate, so the divergence is planted on purpose and the lane is run again with it. The planted defect is the row that was deleted above (`src/Harbor.Abstractions/Sessions/ISessionStore.cs`, a file the measurement says is covered): the lane must report `COV-ROW-STALE` and fail. The run number is in the table at the end of this section. The gate's own `--self-test` proves the same thing without a runner: it plants a file that stopped being covered, a row that is no longer needed, an empty measurement, an unreadable report, a row for a file that is gone, and a partial measurement, and it asserts that each one produces its finding.
 
 **THE MEASUREMENT WAS EMPTY BEFORE THIS.** Run 39508517419 uploaded twenty cobertura files and every one of them was `<coverage line-rate="1"><packages /></coverage>`; every suite printed "Total - Line: N/A" and the summary printed "No cobertura files produced". The cause: Release sets `DebugType=none` (`Directory.Build.props`), so the build carries no PDB, and the coverage engine on Linux instruments the assemblies STATICALLY — the instrumentation maps IL back to source lines through the portable PDB next to each DLL. With no PDB there is nothing to instrument, and an empty report reads as "100 % covered" to anything that parses `line-rate`. The lane now builds with `-p:DebugType=portable -p:DebugSymbols=true`.
 
