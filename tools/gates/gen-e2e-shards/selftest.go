@@ -69,8 +69,9 @@ internal class AlphaHelper
 	// The referenced test project: its classes are NOT discovered here, and
 	// they CANNOT be. A referenced test project may not declare test
 	// methods (`TestProjectReferenceRules.ARereferencedTestProjectIsDiscoveredInExactlyOneModule`
-	// is a build gate), and the framework's own tests live in
-	// `tests/Harbor.E2E.Framework.Tests`, a project nothing references.
+	// is a gate: the architecture suite turns red), and the framework's own
+	// tests live in `tests/Harbor.E2E.Framework.Tests`, a project nothing
+	// references.
 	framework := filepath.Join(root, "tests", "Harbor.E2E.Framework")
 	writeFile(filepath.Join(framework, "GammaTests.cs"), `public class GammaTests
 {
@@ -107,8 +108,8 @@ func selfTestRun() int {
 	}
 	// The scope: a class in the REFERENCED test project is not in this
 	// assembly's universe. If this fires, the generator reads a project whose
-	// classes the assembly never discovers, and a `[Test]` there is a red
-	// build anyway.
+	// classes the assembly never discovers, and a `[Test]` there turns the
+	// architecture suite red anyway.
 	if _, ok := universe["GammaTests"]; ok {
 		fail("the class universe holds GammaTests, which lives in the referenced " +
 			"test project: a referenced test project may not carry tests, and the " +

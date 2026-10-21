@@ -42,7 +42,8 @@ const trxNamespace = "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"
 // That half is unreachable BY CONSTRUCTION now, not merely unused:
 // `TestProjectReferenceRules.ARereferencedTestProjectIsDiscoveredInExactlyOneModule`
 // forbids a referenced test project to declare test methods at all, and it is
-// a build gate. The framework's own tests live in
+// a gate: a `[Test]` in the framework turns the architecture suite red, it
+// does not add a silent extra shard. The framework's own tests live in
 // `tests/Harbor.E2E.Framework.Tests`, a project nothing references (#1943
 // moved them there), so they run exactly once.
 var projectDirs = []string{"Harbor.E2E.App.Avalonia"}

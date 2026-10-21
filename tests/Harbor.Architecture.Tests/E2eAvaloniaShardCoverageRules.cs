@@ -43,9 +43,9 @@
 // The second half is now unreachable BY CONSTRUCTION, not merely unused.
 // `TestProjectReferenceRules.ARereferencedTestProjectIsDiscoveredInExactlyOneModule`
 // forbids a referenced test project to declare test methods at all, and it is
-// a build gate: a `[Test]` in `Harbor.E2E.Framework` is a red build, not a
-// silent extra shard. The framework's own tests live in
-// `tests/Harbor.E2E.Framework.Tests`, a project nothing references (#1943
+// a gate: a `[Test]` in `Harbor.E2E.Framework` turns the architecture suite
+// red, it does not add a silent extra shard. The framework's own tests live
+// in `tests/Harbor.E2E.Framework.Tests`, a project nothing references (#1943
 // moved them there), so they run exactly once.
 //
 // Grading the second half anyway would teach a reader that a trap is live
