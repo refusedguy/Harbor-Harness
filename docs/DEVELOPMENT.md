@@ -180,7 +180,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
-| `seam graph` | `gen-seam-graph.py --check` — the committed seam graph still matches the tree (#1731) |
+| `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
 | `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 
 Three things make this a real gate rather than decoration:
@@ -532,7 +532,7 @@ measured rather than asserted.
 
 ## Seam-graph gate — issue 1731
 
-`tools/gen-seam-graph.py` answers four questions about every seam in the
+The `gen-seam-graph` gate answers four questions about every seam in the
 product, and the answer is a generated document rather than a hand-written
 one: **who implements it**, **who extends what implements it**, **who consumes
 it**, and **who is registered in the container**. It also reports the fifth
@@ -541,10 +541,10 @@ bypassed**, the places that name the concrete type where the interface was
 the contract.
 
 ```bash
-./tools/gen-seam-graph.py --write    # regenerate docs/SEAM_GRAPH.md
-./tools/gen-seam-graph.py --check    # fail if the committed document is stale
-./tools/gen-seam-graph.py --report   # the numbers, on stdout
-./tools/gen-seam-graph.py --self-test # prove the checker can fail
+tools/bin/harbor-gates-linux-x64 gen-seam-graph --write    # regenerate docs/SEAM_GRAPH.md
+tools/bin/harbor-gates-linux-x64 gen-seam-graph --check    # fail if the committed document is stale
+tools/bin/harbor-gates-linux-x64 gen-seam-graph --report   # the numbers, on stdout
+tools/bin/harbor-gates-linux-x64 gen-seam-graph --self-test # prove the checker can fail
 ```
 
 **Why a generator and not a document.** The repository had exactly one
@@ -578,7 +578,7 @@ requires the route grader to tell a registering route from a refusing one.
 say so. Regenerate and commit it in the same change:
 
 ```bash
-./tools/gen-seam-graph.py --write
+tools/bin/harbor-gates-linux-x64 gen-seam-graph --write
 ```
 
 ## Package-set checks (test and sample projects)

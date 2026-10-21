@@ -173,12 +173,13 @@ on:
       - '.github/workflows/**'
       - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
-      # #1731. `gen-seam-graph.py` generates docs/SEAM_GRAPH.md from the C#
+      # #1731. The `gen-seam-graph` gate generates docs/SEAM_GRAPH.md from the C#
       # sources, and `--check` fails when the committed document no longer
       # matches the tree. The gate reads src/ and apps/, so a PR that edits
       # either has to run it - and a PR that edits the generator or the
       # document it writes has to run it too.
-      - 'tools/gen-seam-graph.py'
+      - 'tools/gates/**'
+      - 'tools/bin/**'
       - 'docs/SEAM_GRAPH.md'
       # #1888. The gate policy's own checker, and the three tools whose
       # self-test no workflow ran until the policy asked for one. A PR that
@@ -299,7 +300,8 @@ on:
       - 'tools/merge-loss-exceptions.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
-      - 'tools/gen-seam-graph.py'
+      - 'tools/gates/**'
+      - 'tools/bin/**'
       - 'docs/SEAM_GRAPH.md'
       # #1888. Same trigger as above: the policy checker, and the three tools
       # whose self-test no workflow ran until the policy asked for one.
@@ -534,7 +536,7 @@ jobs:
       # fail, and separately requires the route grader to tell a registering
       # route from a refusing one.
       - name: Seam-graph gate fails on a stale document
-        run: python3 tools/gen-seam-graph.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 gen-seam-graph --self-test
       # #1781. The shard-balance gate is the only one that asks whether the CI
       # TEST SHARDS are laid out by cost. Its failure path is tested here for
       # the same reason as the others: a rule edited until it matches nothing
@@ -1243,7 +1245,7 @@ jobs:
   # #1731. Twelfth question, and the only one that asks whether a GENERATED
   # document still matches the tree it was generated from.
   #
-  # `tools/gen-seam-graph.py` reads the C# sources and writes
+  # The `gen-seam-graph` gate reads the C# sources and writes
   # `docs/SEAM_GRAPH.md`: the seam graph — who implements a seam, who extends
   # what implements it, who consumes it, who is registered in the container,
   # and where the seam is bypassed. The point of generating it rather than
@@ -1272,7 +1274,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the committed seam graph matches the tree
-        run: python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191
+        run: tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
 
   # #1888. Eleventh question, and the only one about the gates themselves:
   # not "do the links resolve" and not "is the file shaped right" and not
