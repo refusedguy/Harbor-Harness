@@ -10,13 +10,11 @@ using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
 using Harbor.Application.Resilience;
 using Harbor.Application.Sessions;
-using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
