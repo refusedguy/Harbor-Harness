@@ -306,19 +306,19 @@ public class DeferredToolContext1763Tests
         // and among themselves they keep the call order.
         var first = new ScriptedResultTool(() => ToolResult.Success("first output") with
         {
-            DeferredContexts = new[] { new DeferredToolContext("context A", "tool-a") }
-        }, "tool-a");
+            DeferredContexts = new[] { new DeferredToolContext("context A", "tool_a") }
+        }, "tool_a");
         var second = new ScriptedResultTool(() => ToolResult.Success("second output") with
         {
-            DeferredContexts = new[] { new DeferredToolContext("context B", "tool-b") }
-        }, "tool-b");
+            DeferredContexts = new[] { new DeferredToolContext("context B", "tool_b") }
+        }, "tool_b");
 
         var client = new ScriptedLlmClient(
         [
             [
-                TestEvents.ToolCallStart(id: "call-1", toolName: "tool-a"),
+                TestEvents.ToolCallStart(id: "call-1", toolName: "tool_a"),
                 TestEvents.ToolCallDelta(id: "call-1"),
-                TestEvents.ToolCallStart(id: "call-2", toolName: "tool-b"),
+                TestEvents.ToolCallStart(id: "call-2", toolName: "tool_b"),
                 TestEvents.ToolCallDelta(id: "call-2"),
                 TestEvents.StepFinish(finishReason: "tool_use", usage: new Usage(3, 4))
             ],
