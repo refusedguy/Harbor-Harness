@@ -24,6 +24,16 @@ namespace Harbor.Tools.Builtin;
         "Set replaceAll=true only when every occurrence should change",
         "Pass expectedVersion (the [file-version: …] token from your last read/write/edit) so an external change is rejected instead of overwritten"
     })]
+[ToolSchema]
+[ToolParam("path", "string", Description = "File path to edit", Required = true)]
+[ToolParam("oldString", "string", Description = "Exact text to find (unique unless replaceAll)")]
+[ToolParam("newString", "string", Description = "Replacement (empty = delete)")]
+[ToolParam("replaceAll", "boolean", Description = "Replace all occurrences (default: false)")]
+[ToolParam("expectedVersion", "string", Description = "Version of the file as you last read it (the [file-version: sha256:…] token). The edit is rejected when the file changed on disk since")]
+[ToolParam("edits", "array", Description = "Multiple edits applied in order")]
+[ToolParam("oldString", "string", ItemsOf = "edits", Required = true)]
+[ToolParam("newString", "string", ItemsOf = "edits", Required = true)]
+[ToolParam("replaceAll", "boolean", ItemsOf = "edits")]
 public sealed partial class EditTool : ITool
 {
 
@@ -52,40 +62,6 @@ public sealed partial class EditTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path": { "type": "string", "description": "File path to edit" },
-                                                                          "oldString": { "type": "string", "description": "Exact text to find (unique unless replaceAll)" },
-                                                                          "newString": { "type": "string", "description": "Replacement (empty = delete)" },
-                                                                          "replaceAll": { "type": "boolean", "description": "Replace all occurrences (default: false)" },
-                                                                          "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The edit is rejected when the file changed on disk since" },
-                                                                          "edits": {
-                                                                            "type": "array",
-                                                                            "description": "Multiple edits applied in order",
-                                                                            "items": {
-                                                                              "type": "object",
-                                                                              "properties": {
-                                                                                "oldString": { "type": "string" },
-                                                                                "newString": { "type": "string" },
-                                                                                "replaceAll": { "type": "boolean" }
-                                                                              },
-                                                                              "required": ["oldString", "newString"]
-                                                                            }
-                                                                          }
-                                                                        },
-                                                                        "required": ["path"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {

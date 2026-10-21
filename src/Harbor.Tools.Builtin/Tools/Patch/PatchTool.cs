@@ -25,6 +25,9 @@ namespace Harbor.Tools.Builtin;
         "Hunks with mismatched context are rejected — the file is left untouched"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("path", "string", Description = "File to patch", Required = true)]
+[ToolParam("patch", "string", Description = "Unified diff (one or more hunks starting with @@ ... @@)", Required = true)]
 public sealed partial class PatchTool : ITool
 {
     private const int MaxFileChars = 5_000_000;
@@ -35,24 +38,6 @@ public sealed partial class PatchTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":  { "type": "string", "description": "File to patch" },
-                                                                          "patch": { "type": "string", "description": "Unified diff (one or more hunks starting with @@ ... @@)" }
-                                                                        },
-                                                                        "required": ["path", "patch"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
