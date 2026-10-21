@@ -7,6 +7,7 @@ using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Sessions;
 using Harbor.TestKit;
 using TUnit.Assertions;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
