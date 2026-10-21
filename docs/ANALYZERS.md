@@ -125,7 +125,11 @@ different things, and why only the second one is a performance lever.
 The other half of the measurement is where the findings are, because a
 family that produces nothing in a tree cannot lose anything by not running
 there. Read out of the build log of the same run, deduplicated by
-file/line/column:
+file/line/column **per project and per diagnostic id** — the counting unit
+of this table, which is why its Reflection row reads 48 while
+[§Reflection rules](#reflection-rules-reflectionanalyzers-031) below counts
+the same family differently (that section counts the rule's own instances,
+not the distinct sites):
 
 | family | findings | under `tests/` | under `src/` + `apps/` |
 |--------|----------|----------------|----------------------|
