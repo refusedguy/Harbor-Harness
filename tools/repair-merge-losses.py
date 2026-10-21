@@ -49,6 +49,7 @@ def main() -> int:
     order = sorted(by_merge, key=lambda m: git("show", "-s", "--format=%ct", m).strip() or "0")
     restored_total = 0
     replaced: list[tuple[str, str, str]] = []
+    pending: dict[str, list[str]] = {}
     for merge in order:
         for path, text in by_merge[merge]:
             parent = git("show", f"{merge}^:{path}")
@@ -89,13 +90,16 @@ def main() -> int:
                 current = current + [text]
                 where = "в конец файла (соседей нет — проверь глазами)"
             restored_total += 1
+            pending[path] = current
             print(f"  + {path}: {text.strip()[:60]!r} ({where})")
-            if apply:
-                with open(path, "w", encoding="utf-8") as handle:
-                    handle.write("\n".join(current))
     print(f"\nвосстановлено строк: {restored_total}; заменённых (в исключения): {len(replaced)}")
     for path, text, merge in replaced:
         print(f"  ~ {path}: {text.strip()[:60]!r} (заменена новой версией)")
+    if apply and pending:
+        for path, lines in pending.items():
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write("\n".join(lines))
+        print(f"записано файлов: {len(pending)}")
     if apply and replaced:
         import datetime
         with open("tools/merge-loss-exceptions.txt", "a", encoding="utf-8") as handle:
