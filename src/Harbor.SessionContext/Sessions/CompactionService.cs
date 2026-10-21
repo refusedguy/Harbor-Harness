@@ -267,7 +267,7 @@ public sealed class CompactionService(
         try
         {
             // 1. Find cut point (index-based; no List allocations)
-            int tailStart = FindCutPoint(messages, KeepRecentTokens, TailTurns);
+            int tailStart = FindCutPoint(messages, model, KeepRecentTokens, TailTurns);
 
             if (tailStart == 0)
             {
@@ -512,13 +512,86 @@ public sealed class CompactionService(
     ///     Returns the index at which the tail begins (head = messages[0..tailStart], tail = messages[tailStart..]).
     ///     Returning an index (instead of two List slices) eliminates two List allocations per compaction.
     /// </summary>
+    /// <remarks>
+    ///     #1755: two rules the reactive overflow recovery depends on. The tail
+    ///     budget is capped by what the model's context window can hold — a
+    ///     compaction that keeps a tail the window cannot take frees nothing,
+    ///     and the retry after an overflow would overflow again. And the cut
+    ///     never opens the tail on an orphan tool result, so the request the
+    ///     retry sends is a valid transcript.
+    /// </remarks>
     private int FindCutPoint(
         IReadOnlyList<AgentMessage> messages,
+        ModelInfo model,
         int keepRecentTokens,
         int tailTurns)
     {
-        int tailStart = FindTailStartByBudget(messages, keepRecentTokens);
-        return ApplyTailTurnsMinimum(messages, tailStart, tailTurns);
+        int tailStart = FindTailStartByBudget(messages, ClampTailBudget(model, keepRecentTokens));
+        tailStart = ApplyTailTurnsMinimum(messages, tailStart, tailTurns);
+        return SkipOrphanToolResults(messages, tailStart);
+    }
+
+    /// <summary>
+    ///     The tail budget, capped by the model's usable context (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     The configured <see cref="KeepRecentTokens" /> is a fixed number,
+    ///     but the tail has to FIT the model the request goes to: the 20k
+    ///     default overflows a 16k model on its own, and a compaction that
+    ///     frees nothing cannot fix an overflow. The cap is the model's usable
+    ///     budget — the window minus the reserve and the output slice — so the
+    ///     compacted view is smaller than the window by construction.
+    /// </remarks>
+    /// <param name="model">The model the request goes to.</param>
+    /// <param name="keepRecentTokens">The configured tail budget.</param>
+    /// <returns>The tail budget to compact with.</returns>
+    private int ClampTailBudget(ModelInfo model, int keepRecentTokens)
+    {
+        int budget = model.ContextWindow - ReserveTokens - model.MaxOutputTokens;
+        if (budget <= 0)
+        {
+            // The window is smaller than the reserve — the tracker's own guard
+            // refuses to compact such a model at all. Leave the configured
+            // budget alone rather than inventing a negative one.
+            return keepRecentTokens;
+        }
+
+        return Math.Min(keepRecentTokens, budget);
+    }
+
+    /// <summary>
+    ///     The token reserve the tracker's own compaction verdict uses — the
+    ///     single source (#1106: two reserves drifted once already).
+    /// </summary>
+    private int ReserveTokens =>
+        (tokenTracker as TokenTracker)?.ReserveTokens ?? CompactionPolicy.DefaultReserveTokens;
+
+    /// <summary>
+    ///     The cut point never opens the kept tail on an orphan tool result
+    ///     (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     The tail-turns floor can move the cut BACKWARD, onto a tool result
+    ///     whose tool_use is in the pruned head. The kept slice would then
+    ///     carry a tool_result with no tool_use before it, and providers reject
+    ///     that pair outright — the request the reactive retry sends would be
+    ///     refused for a reason that has nothing to do with the context
+    ///     window. The cut moves FORWARD past the orphan run instead: the
+    ///     results and their calls then both sit in the pruned head, so the
+    ///     summary covers the pair and the kept slice stays self-consistent.
+    /// </remarks>
+    /// <param name="messages">The history being compacted.</param>
+    /// <param name="tailStart">The cut point to adjust.</param>
+    /// <returns>The adjusted cut point.</returns>
+    private static int SkipOrphanToolResults(IReadOnlyList<AgentMessage> messages, int tailStart)
+    {
+        int count = messages.Count;
+        while (tailStart < count && messages[tailStart] is ToolResultMessage)
+        {
+            tailStart++;
+        }
+
+        return tailStart;
     }
 
     /// <summary>
@@ -541,13 +614,16 @@ public sealed class CompactionService(
                 break;
             }
 
-            // Don't cut in the middle of a turn (tool_call ↔ tool_result pair)
+            // The tool result is KEPT (its tool_call is in the tail too), so
+            // its tokens count against the budget — but the cut never lands on
+            // it: the tail starts at the call, so the pair stays together.
+            tailTokens += msgTokens;
+
             if (messages[i] is ToolResultMessage)
             {
                 continue;
             }
 
-            tailTokens += msgTokens;
             tailStart = i;
         }
 
@@ -592,7 +668,7 @@ public sealed class CompactionService(
         // Single reserve source: the tracker owns the threshold. CompactionService
         // kept its own (now deleted) copy that drifted from this one; the tracker's
         // is the only one that applies (#1106 divergent reserves).
-        int reserveTokens = (tokenTracker as TokenTracker)?.ReserveTokens ?? CompactionPolicy.DefaultReserveTokens;
+        int reserveTokens = ReserveTokens;
         int budget = summaryModel.ContextWindow - SummaryMaxOutputTokens - reserveTokens;
         int start = tailStart - 1;
         if (budget <= 0 || start < 0)

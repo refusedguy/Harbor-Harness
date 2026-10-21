@@ -100,6 +100,11 @@ internal sealed class TurnRunner(
         RateLimitBaseDelay: TimeSpan.FromSeconds(5),
         MaxRetryAfter: TimeSpan.FromMinutes(5));
 
+    // #1755: the reactive overflow recovery's retry budget lives on the
+    // compaction behavior (the policy owner) — the number is stated in ONE
+    // place so the runtime and the tests cannot drift on it.
+    internal const int MaxOverflowRetries = CompactionBehavior.MaxOverflowRetries;
+
     // #1100: the per-turn tool table is stable while the resolved set is.
     // FrozenToolView already memoizes ResolveTools per ruleset (repeat calls
     // return the same array instance), but BuildToolDefinitions rebuilt the
@@ -270,24 +275,30 @@ internal sealed class TurnRunner(
             session.Session.Directory);
         string systemPrompt = await promptBuilder.BuildAsync(promptContext, ct).ConfigureAwait(false);
 
-        // 4. Convert messages — the truncated view after a compaction
-        // failure, the full history otherwise.
-        var llmMessages = messageConverter.ToLlmMessages(turnMessages);
-
-        // 5. Build request — the ToolDefinition array is built once per resolved
+        // 4/5. Build request — the ToolDefinition array is built once per resolved
         // set and shared across turns (#1100); a new set rebuilds once.
         var toolDefs = GetOrBuildToolDefinitions(resolvedTools);
         // Ф6/A1: the system prompt is stable across turns (tools/agent rarely change
         // mid-run and A2 memoizes rebuilds), so every request is a prefix-cache
         // candidate — flag it Ephemeral for providers that support cache_control.
-        var request = LlmRequestBuilder.ForTurn(
-            agent.Model,
-            llmMessages,
-            systemPrompt,
-            toolDefs,
-            model.MaxOutputTokens,
-            agent.Temperature,
-            agent.ReasoningEffort).Build();
+        //
+        // #1755: the request is built by a local function because the reactive
+        // overflow recovery REBUILDS it from the compacted view — the system
+        // prompt and the tool table do not change, only the history does.
+        LlmRequest BuildRequest(IReadOnlyList<AgentMessage> history)
+        {
+            var historyMessages = messageConverter.ToLlmMessages(history);
+            return LlmRequestBuilder.ForTurn(
+                agent.Model,
+                historyMessages,
+                systemPrompt,
+                toolDefs,
+                model.MaxOutputTokens,
+                agent.Temperature,
+                agent.ReasoningEffort).Build();
+        }
+
+        var request = BuildRequest(turnMessages);
 
         // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
         //    failures (HTTP 429/5xx, network errors, timeouts) restart the
@@ -304,11 +315,65 @@ internal sealed class TurnRunner(
         //    the turn is handled below as a value — no exception crosses the
         //    attempt boundary for an expected provider failure.
         AssistantMessage? lastPartial = null;
-        Result<TurnStreamResult, StreamFailure> outcome = await retryPolicy.ExecuteValueAsync<TurnStreamResult>(
-            attemptCt => ConsumeTurnStreamAsync(client, request, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
-            StreamRetryOptions,
-            (streamFailure, attempt) => TurnRunnerLog.TransientStreamFailure(logger, streamFailure.Message, attempt),
-            ct).ConfigureAwait(false);
+
+        async Task<Result<TurnStreamResult, StreamFailure>> StreamTurnAsync(LlmRequest turnRequest)
+        {
+            return await retryPolicy.ExecuteValueAsync<TurnStreamResult>(
+                attemptCt => ConsumeTurnStreamAsync(client, turnRequest, session, model, turn, attemptCt, reportPartial: m => lastPartial = m, budget: budget),
+                StreamRetryOptions,
+                (streamFailure, attempt) => TurnRunnerLog.TransientStreamFailure(logger, streamFailure.Message, attempt),
+                ct).ConfigureAwait(false);
+        }
+
+        Result<TurnStreamResult, StreamFailure> outcome = await StreamTurnAsync(request).ConfigureAwait(false);
+
+        // #1755 — the reactive branch. A provider that refuses the request
+        // because the context window was exceeded is answered with a
+        // compaction and a retry of the SAME request from the compacted view.
+        // The retry is bounded, and it is granted only when the compaction
+        // measurably shrank the surface: a compaction that folded nothing
+        // leaves the request exactly as overfull as it was, and retrying it
+        // would only pay for the same refusal twice.
+        int overflowRetries = 0;
+        string? overflowNote = null;
+        while (outcome.IsFailure
+               && ProviderErrors.IsContextOverflow(outcome.Error.Kind)
+               && overflowRetries < MaxOverflowRetries)
+        {
+            // A cancelled run wins over the recovery: the compaction is an LLM
+            // call of its own, and a run the user stopped must not start one.
+            if (ct.IsCancellationRequested)
+            {
+                break;
+            }
+
+            overflowRetries++;
+            OverflowRecoveryOutcome recovery = await compactionBehavior
+                .RecoverFromOverflowAsync(session, turnMessages, model, ct)
+                .ConfigureAwait(false);
+
+            if (!recovery.SurfaceShrunk)
+            {
+                overflowNote = recovery.Reason ?? "the compaction did not free the window";
+                TurnRunnerLog.OverflowNotRecovered(logger, turn, overflowNote);
+                break;
+            }
+
+            turnMessages = recovery.TurnMessages;
+            request = BuildRequest(turnMessages);
+            TurnRunnerLog.OverflowRetrying(logger, turn, overflowRetries, recovery.TokensBefore, recovery.TokensAfter);
+            outcome = await StreamTurnAsync(request).ConfigureAwait(false);
+        }
+
+        if (outcome.IsFailure
+            && ProviderErrors.IsContextOverflow(outcome.Error.Kind)
+            && overflowNote is null)
+        {
+            // The retries ran out and the request still overflowed. Say so —
+            // the provider's refusal alone would read as "the harness gave up
+            // without trying".
+            overflowNote = $"the request still overflowed after {overflowRetries} compaction attempt(s)";
+        }
 
         if (outcome.IsFailure)
         {
@@ -340,6 +405,20 @@ internal sealed class TurnRunner(
                 // AgentErrorEvent for the storm (never N duplicates).
                 await eventBus.PublishAsync(new AgentErrorEvent(failure.Message, failure.Details), ct).ConfigureAwait(false);
                 return new TurnStepResult(truncationFallback, EndRun: true);
+            }
+
+            // #1755: the context overflow is the one provider failure the turn
+            // reports ITSELF — the stream consumer stays silent for it (the
+            // turn may yet recover by compacting), so the error is published
+            // here, on the path that actually ends the run, with the recovery
+            // verdict attached.
+            if (ProviderErrors.IsContextOverflow(failure.Kind))
+            {
+                string message = overflowNote is null
+                    ? failure.Message
+                    : $"{failure.Message} (context overflow recovery: {overflowNote})";
+                await eventBus.PublishAsync(new AgentErrorEvent(message, failure.Details), ct).ConfigureAwait(false);
+                return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: message);
             }
 
             // Terminal provider error — same outcome as the pre-extraction
@@ -649,7 +728,14 @@ internal sealed class TurnRunner(
                         // blob N times). Only fatal errors publish immediately,
                         // transient ones publish once when the budget is
                         // exhausted (see the caller), zero on recovery.
-                        if (!ProviderErrors.IsTransient(err.Kind))
+                        // #1755: a context overflow is silent here for the same
+                        // reason — the turn may yet recover by compacting and
+                        // retrying, and an error published for a request that
+                        // then succeeds reads as a failure the run did not
+                        // have. The turn publishes it when the recovery does
+                        // not happen.
+                        if (!ProviderErrors.IsTransient(err.Kind)
+                            && !ProviderErrors.IsContextOverflow(err.Kind))
                         {
                             await eventBus.PublishAsync(new AgentErrorEvent(err.Message, err.Exception), ct).ConfigureAwait(false);
                         }
@@ -1073,5 +1159,11 @@ internal static partial class TurnRunnerLog
 
     [LoggerMessage(EventId = 15, Level = LogLevel.Debug, Message = "Turn carried {Abandoned} abandoned tool call(s) after the accepted stop")]
     public static partial void TurnCarriedAbandoned(ILogger logger, int abandoned);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "Turn {Turn} hit a context overflow; compacted {TokensBefore} -> {TokensAfter} estimated tokens and is retrying the request (attempt {Attempt})")]
+    public static partial void OverflowRetrying(ILogger logger, int turn, int attempt, int tokensBefore, int tokensAfter);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Warning, Message = "Turn {Turn} hit a context overflow and the request was not retried: {Reason}")]
+    public static partial void OverflowNotRecovered(ILogger logger, int turn, string reason);
 
 }
