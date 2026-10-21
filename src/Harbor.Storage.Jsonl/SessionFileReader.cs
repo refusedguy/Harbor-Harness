@@ -70,6 +70,19 @@ internal static class SessionFileReader
     }
 
     /// <summary>
+    ///     True when the line is a rewind event (<c>"type":"rewind"</c>).
+    ///     Pure byte probe, same as <see cref="IsCheckpointLine" />: a message
+    ///     payload carrying the literal is JSON-escaped
+    ///     (<c>\"type\":\"rewind\"</c>), so the unescaped probe only matches
+    ///     structural lines. A rewind is an event, not history: the message
+    ///     read path folds it into the LOG and never into the messages.
+    /// </summary>
+    internal static bool IsRewindLine(ReadOnlySpan<byte> line)
+    {
+        return line.IndexOf("\"type\":\"rewind\""u8) >= 0;
+    }
+
+    /// <summary>
     ///     True when the line is a message rating (<c>"type":"messageRating"</c>).
     /// </summary>
     /// <remarks>
@@ -338,7 +351,8 @@ internal static class SessionFileReader
             stable,
             inbox.Header,
             unreadable,
-            tailTruncated);
+            tailTruncated,
+            inbox.Log);
         return Result.Success(new SnapshotAttempt(snapshot, errors.Total, errors.Summary(), sawOversized));
     }
 
@@ -459,6 +473,17 @@ internal static class SessionFileReader
             return true;
         }
 
+        // #1752: a rewind event is a LOG record, not history. It says which
+        // messages left the surface; it is not one of them. A rewind record
+        // that does not decode is counted as unreadable (the read says what it
+        // could not deliver) and the rewind does not happen — fail-open, so
+        // the messages it named stay in the surface rather than vanishing with
+        // an event nobody can read.
+        if (IsRewindLine(record))
+        {
+            return FoldRewindRecord(record, sessionId, inbox, errors);
+        }
+
         // #1746: the feedback lines are metadata too — what the user said
         // ABOUT the agent's work, never part of the work itself. They are
         // dropped here, before the message parser sees them, so the history
@@ -485,6 +510,46 @@ internal static class SessionFileReader
     }
 
     /// <summary>
+    ///     Fold one rewind event into <paramref name="inbox" />'s log.
+    /// </summary>
+    /// <remarks>
+    ///     A rewind record that does not decode is counted as an unreadable
+    ///     record and skipped: the read says what it could not deliver, and a
+    ///     rewind nobody can read must not remove anything (fail-open).
+    /// </remarks>
+    /// <returns>
+    ///     True when the record decoded into a rewind event. False when it did
+    ///     not — which is also what tells the caller "the tail was cut", the
+    ///     shape a killed process leaves.
+    /// </returns>
+    private static bool FoldRewindRecord(
+        ReadOnlySpan<byte> record,
+        string sessionId,
+        MessageInbox inbox,
+        ParseErrors errors)
+    {
+        SessionRewindEntry? entry;
+        try
+        {
+            entry = JsonSerializer.Deserialize(record, JsonlCodecContext.Default.SessionRewindEntry);
+        }
+        catch (JsonException ex)
+        {
+            errors.Add($"Rewind record parse failed in session '{sessionId}': {ex.Message}");
+            return false;
+        }
+
+        if (entry is not { Type: "rewind", Id: { Length: > 0 } })
+        {
+            errors.Add($"Rewind record in session '{sessionId}' is missing its id.");
+            return false;
+        }
+
+        inbox.AddRewind(entry);
+        return true;
+    }
+
+    /// <summary>
     ///     Arrival-order store for a read: the collector behind the JSONL
     ///     messages → snapshot pipeline.
     /// </summary>
@@ -505,6 +570,15 @@ internal static class SessionFileReader
     ///         O(n log n) machinery plus a fresh list on every cache miss.
     ///     </para>
     ///     <para>
+    ///         <b>#1752 — the collector keeps the LOG too.</b> The message
+    ///         list is the surface's view: one record per id, the latest
+    ///         version. The log is the whole truth: EVERY record, in the order
+    ///         it was written, including the versions the surface dropped and
+    ///         the rewind events that moved messages out of it. The two are
+    ///         collected in the same pass, because a second pass would be a
+    ///         second generation of the file.
+    ///     </para>
+    ///     <para>
     ///         The list this collector returns is privately owned — built by
     ///         this read, handed to the <see cref="MessageReadSnapshot" />, and
     ///         never re-sorted in place afterwards.
@@ -512,13 +586,26 @@ internal static class SessionFileReader
     /// </remarks>
     private sealed class MessageInbox
     {
+        private readonly List<SessionLogEntry> _log = [];
         private readonly List<AgentMessage> _arrival = [];
         private readonly Dictionary<string, int> _slots = new();
         private bool _headerSeen;
 
-        /// <summary>Records one parsed message; a repeated id replaces its value in place.</summary>
+        /// <summary>
+        ///     Records one parsed message; a repeated id replaces its value in place.
+        /// </summary>
         internal void Add(AgentMessage message)
         {
+            // The log keeps EVERY version: the earlier one is the record that
+            // proves what the agent said before the edit.
+            _log.Add(new SessionLogEntry
+            {
+                Kind = SessionLogEntryKind.Message,
+                Id = message.Id,
+                Position = _log.Count,
+                Message = message,
+            });
+
             if (_slots.TryGetValue(message.Id, out int slot))
             {
                 _arrival[slot] = message;
@@ -528,6 +615,29 @@ internal static class SessionFileReader
             _slots.Add(message.Id, _arrival.Count);
             _arrival.Add(message);
         }
+
+        /// <summary>
+        ///     Records one rewind event in the log (#1752). It is never a
+        ///     message: it is the record of the messages that left the
+        ///     surface, and it stays in the log for good.
+        /// </summary>
+        internal void AddRewind(SessionRewindEntry entry)
+        {
+            _log.Add(new SessionLogEntry
+            {
+                Kind = SessionLogEntryKind.Rewind,
+                Id = entry.Id,
+                Position = _log.Count,
+                AnchorId = entry.AnchorId,
+                OccurredAt = entry.At,
+                RemovedCount = entry.Removed,
+            });
+        }
+
+        /// <summary>
+        ///     The whole log: every record the file holds, in write order.
+        /// </summary>
+        internal IReadOnlyList<SessionLogEntry> Log => _log;
 
         /// <summary>
         ///     The file's header record, captured from the SAME pass as the

@@ -39,22 +39,26 @@ internal readonly record struct SessionFileStat(DateTimeOffset LastWriteUtc, lon
 /// </summary>
 /// <param name="FileLastWriteUtc">The file's last-write stamp the parse was taken from.</param>
 /// <param name="FileLength">The file's length the parse was taken from.</param>
-/// <param name="Messages">
-///     The LOG's messages — what the file holds, unaltered. This is what
-///     <c>GetMessagesAsync</c> hands back: a fork copies them and the stats
+/// <param name="Surface">
+///     The SURFACE: the messages the log still shows — what
+///     <c>GetMessagesAsync</c> hands back. A fork copies them and the stats
 ///     fold over them, so nothing may be added to them behind the store's back.
 /// </param>
 /// <param name="Transcript">
 ///     The READER's view of the same read: the messages with the turns the log
 ///     never closed closed in memory, plus what the read could not deliver
-///     (#1744). Derived from <paramref name="Messages" /> and never written
+///     (#1744). Derived from <paramref name="Surface" /> and never written
 ///     back.
+/// </param>
+/// <param name="Log">
+///     The whole log: every record the file holds, in write order (#1752).
 /// </param>
 internal sealed record SessionCacheEntry(
     DateTimeOffset FileLastWriteUtc,
     long FileLength,
-    IReadOnlyList<AgentMessage> Messages,
-    SessionTranscript Transcript)
+    IReadOnlyList<AgentMessage> Surface,
+    SessionTranscript Transcript,
+    IReadOnlyList<SessionLogEntry> Log)
 {
     /// <summary>True when this entry was parsed from exactly this file state.</summary>
     internal bool IsFreshFor(SessionFileStat stat) =>
@@ -91,6 +95,13 @@ internal sealed record SessionCacheEntry(
 ///         skipped — its content is unknowable — but the skip is counted and
 ///         reported, so it never reads as "the agent never said that".
 ///     </para>
+///     <para>
+///         <b>#1752:</b> <see cref="Log" /> rides along too — the WHOLE log,
+///         every record the file holds, in write order. The messages are the
+///         surface's view of that log (one record per id); the log is the
+///         truth, and it is what "what did the agent actually say?" is
+///         answered from.
+///     </para>
 /// </remarks>
 internal sealed record MessageReadSnapshot(
     IReadOnlyList<AgentMessage> Messages,
@@ -98,19 +109,22 @@ internal sealed record MessageReadSnapshot(
     bool IsStable,
     SessionHeaderEntry? Header = null,
     int UnreadableRecordCount = 0,
-    bool IsTailTruncated = false);
+    bool IsTailTruncated = false,
+    IReadOnlyList<SessionLogEntry>? Log = null);
 
 /// <summary>
-///     One cold read of a session: the log's messages and the reader's view of
-///     the same read (#1744). Both come from ONE pass over the file — a second
-///     read would be a second generation, and the two halves could describe
-///     different moments.
+///     One cold read of a session: the surface's messages, the whole log and
+///     the reader's view of the same read (#1744). All of it comes from ONE
+///     pass over the file — a second read would be a second generation, and
+///     the halves could describe different moments.
 /// </summary>
-/// <param name="Messages">The log's messages, in chronological order.</param>
+/// <param name="Surface">The surface: the messages the log still shows.</param>
 /// <param name="Transcript">The reader's view: the closed transcript and its integrity.</param>
+/// <param name="Log">The whole log: every record the file holds, in write order.</param>
 internal sealed record SessionReadResult(
-    IReadOnlyList<AgentMessage> Messages,
-    SessionTranscript Transcript);
+    IReadOnlyList<AgentMessage> Surface,
+    SessionTranscript Transcript,
+    IReadOnlyList<SessionLogEntry> Log);
 
 /// <summary>
 ///     Line-1 header of a session file. Optional trailing fields carry the

@@ -406,43 +406,63 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     }
 
     /// <summary>
-    ///     Update a message IN PLACE: the fresh record takes the position the
-    ///     stale one held, so "file order = insertion order" survives an edit
-    ///     (<b>#1798</b>). <b>ROP-C Z3 (DDD-audit 25.08):</b> this used to be a
-    ///     plain re-append — every edit grew the file with a duplicate entry
-    ///     (the "latest wins" read made it invisible until the file ballooned)
-    ///     — and then a drop-and-append rewrite, which dropped the stale
-    ///     entry and appended the fresh one at the END of the file. That
-    ///     second shape kept the file free of duplicates but MOVED the record:
-    ///     the edited message jumped to the tail of the history, and a rewind
-    ///     anchored on it (<see cref="DeleteMessagesAfterAsync" />) removed
-    ///     nothing, because the anchor was the last record in the file. The
-    ///     record now keeps its position, and a stale duplicate of the same id
-    ///     (a file written before the duplicate-drop, or an append that raced
-    ///     the edit) is still dropped, so the file holds one record per id.
+    ///     Append a NEW VERSION of a message (#1752).
     /// </summary>
-    public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
+    /// <remarks>
+    ///     <para>
+    ///         <b>The record is immutable.</b> This used to rewrite the file:
+    ///         the stale record was dropped and the fresh one written in its
+    ///         place, so the text the agent produced before the edit was gone
+    ///         for good. An append-only log cannot do that — the new version
+    ///         is APPENDED, the earlier one stays in the file, and the surface
+    ///         shows the new one while the log keeps the old one as a shadowed
+    ///         record.
+    ///     </para>
+    ///     <para>
+    ///         The message keeps its place in the conversation: the surface
+    ///         orders a message by where it was written FIRST, so an edit
+    ///         changes what was said, not when it was said.
+    ///     </para>
+    ///     <para>
+    ///         The message has to exist: an update of a message the log never
+    ///         held is a mistake, and it fails the way it always did.
+    ///     </para>
+    /// </remarks>
+    public async Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
         // §3.4: observe cancellation BEFORE the existence policy — an Esc must
         // never surface as "session not found".
         ct.ThrowIfCancellationRequested();
         var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
         if (resolved.IsFailure)
-            return Task.FromResult(resolved.ConvertFailure());
+            return resolved.ConvertFailure();
         string sessionFile = resolved.Value;
         if (!File.Exists(sessionFile))
         {
             _messageCache.TryRemove(sessionId, out _);
-            return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
+            return Result.Failure(SessionStoreErrors.SessionNotFound(sessionId));
         }
 
-        return Result.Try(async () =>
+        return await Result.Try(async () =>
         {
             var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
                 ct.ThrowIfCancellationRequested();
+
+                var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+                if (read is not { IsSuccess: true, Value: var snapshot })
+                {
+                    return (Written: false, Failure: (string?)read.Error);
+                }
+
+                if (!LogHoldsMessage(snapshot.Log, message.Id))
+                {
+                    return (
+                        Written: false,
+                        Failure: (string?)SessionStoreErrors.MessageNotFound(sessionId, message.Id));
+                }
 
                 var entry = new MessageEntry(
                     "message",
@@ -452,36 +472,46 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                     message.CreatedAt,
                     JsonlMessageCodec.SerializeMessagePayload(ForWrite(message)));
 
-                // #177: pre-serialized UTF-8 entry + line-wise atomic rewrite —
-                // no List<string> join of the new entry.
-                byte[] entryBytes = JsonSerializer.SerializeToUtf8Bytes(entry, JsonlCodecContext.Default.MessageEntry);
+                // #177: source-gen straight to UTF-8 bytes + newline byte, async
+                // append — no intermediate string, no Serialize + concat.
+                byte[] line = SessionFileIO.EncodeLine(entry, JsonlCodecContext.Default.MessageEntry);
+                await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
 
-                // #460: streamed record by record into the temp sibling, so
-                // dropping the stale entry no longer reads the whole session
-                // into a List<string> (twice) under this semaphore. False means
-                // the id was not in the file: the rewrite is decided before any
-                // temp is created, so the original — and its directory's mtime —
-                // are left exactly as they were, which is what makes this a
-                // "not found" outcome instead of an appended duplicate.
-                //
-                // #1798: the fresh record REPLACES the stale one where it
-                // stands. The rewrite is the same one it always was (a full
-                // atomic copy of the file), so the cost of an update does not
-                // change — only the position of the record does.
-                return SessionFileIO.RewriteRecordsAtomic(
-                    sessionFile,
-                    new ReplaceMessagePlan(message.Id, entryBytes));
+                return (Written: true, Failure: (string?)null);
             }
             finally
             {
                 semaphore.Release();
             }
         }, ResultErrors.Message)
-            .Bind(wrote => wrote
-                ? Result.Success()
-                : Result.Failure(SessionStoreErrors.MessageNotFound(sessionId, message.Id)))
+            .Bind(outcome => outcome.Failure is { } failure
+                ? Result.Failure(failure)
+                : Result.Success())
             .Tap(() => _messageCache.TryRemove(sessionId, out _))
             .TapError(e => JsonlSessionStoreLog.UpdateMessageFailed(_logger, sessionId, e));
+    }
+
+    /// <summary>
+    ///     Whether the log holds a message with this id — the check the
+    ///     append-only verbs make before they act on a message.
+    /// </summary>
+    /// <param name="log">The session's log.</param>
+    /// <param name="messageId">The message id to look for.</param>
+    /// <returns>True when the log holds such a message.</returns>
+    private static bool LogHoldsMessage(IReadOnlyList<SessionLogEntry> log, string messageId)
+    {
+        for (int i = 0; i < log.Count; i++)
+        {
+            SessionLogEntry entry = log[i];
+
+            if (entry.Kind == SessionLogEntryKind.Message
+                && string.Equals(entry.Id, messageId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -509,13 +539,19 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     ///         remembered.
     ///     </para>
     ///     <para>
-    ///         <b>#1744:</b> this returns the LOG's messages — what the file
-    ///         holds, unaltered. The reader's view of the same read (the
+    ///         <b>#1744:</b> this returns the SURFACE's messages — what the
+    ///         log still shows. The reader's view of the same read (the
     ///         transcript with the interrupted turns closed in memory, and what
     ///         the read could not deliver) is <see cref="GetTranscriptAsync" />.
     ///         The two are kept apart on purpose: a fork copies these messages
     ///         and the stats fold over them, so nothing may be added to them
     ///         behind the store's back.
+    ///     </para>
+    ///     <para>
+    ///         <b>#1752:</b> the surface is the FOLD of the log: the current
+    ///         version of every message, minus the ones a rewind took out of
+    ///         it. The records behind them are not gone — they are in the log,
+    ///         which <see cref="GetSessionLogAsync" /> hands back whole.
     ///     </para>
     /// </remarks>
     public async Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
@@ -525,8 +561,39 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             return read.ConvertFailure<IReadOnlyList<AgentMessage>>();
 
         // (read.Value is guarded by the failure check above.)
-        var messages = read.Value.Messages;
+        var messages = read.Value.Surface;
         return Result.Success(messages);
+    }
+
+    /// <summary>
+    ///     The session's whole LOG: every record the file holds, in write
+    ///     order — the current messages, the versions they replaced, and the
+    ///     rewind events that moved messages out of the surface (#1752).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the read side of the append-only model. The log is the
+    ///         truth; <see cref="GetMessagesAsync" /> returns the SURFACE, the
+    ///         fold of that log. A caller that needs to know what the agent
+    ///         said BEFORE a rewind, or what a message said before it was
+    ///         edited, reads the log.
+    ///     </para>
+    ///     <para>
+    ///         The records are returned unclassified: "current" and "shadowed"
+    ///         are properties of the log as a whole, so
+    ///         <see cref="SessionLogFold" /> decides them. A caller that wants
+    ///         the classification folds the log it gets.
+    ///     </para>
+    /// </remarks>
+    public async Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(string sessionId, CancellationToken ct = default)
+    {
+        var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+        if (read.IsFailure)
+            return read.ConvertFailure<IReadOnlyList<SessionLogEntry>>();
+
+        // (read.Value is guarded by the failure check above.)
+        var log = read.Value.Log;
+        return Result.Success(log);
     }
 
     /// <summary>
@@ -561,8 +628,9 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     }
 
     /// <summary>
-    ///     ONE cold read of a session: the log's messages and the reader's view
-    ///     of the same read, from the same pass over the file (#1744).
+    ///     ONE cold read of a session: the surface's messages, the whole log
+    ///     and the reader's view of the same read, from the same pass over the
+    ///     file (#1744, #1752).
     /// </summary>
     private async Task<Result<SessionReadResult>> ReadSessionAsync(string sessionId, CancellationToken ct)
     {
@@ -586,8 +654,8 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             var stat = SessionFileStat.Read(sessionFile);
             if (_messageCache.TryGetValue(sessionId, out var cached) && cached.IsFreshFor(stat))
             {
-                // Cache hit — return the cached list directly. Zero allocations.
-                return Result.Success(new SessionReadResult(cached.Messages, cached.Transcript));
+                // Cache hit — return the cached surface directly. Zero allocations.
+                return Result.Success(new SessionReadResult(cached.Surface, cached.Transcript, cached.Log));
             }
 
             // Cache miss (or stale) — parse from disk.
@@ -600,7 +668,9 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
 
             // (parseResult.Value is guarded by the failure check above.)
             var snapshot = parseResult.Value;
-            var transcript = BuildTranscript(snapshot);
+            IReadOnlyList<SessionLogEntry> log = snapshot.Log ?? Array.Empty<SessionLogEntry>();
+            var surface = SessionLogFold.Fold(log).Current;
+            var transcript = BuildTranscript(surface, snapshot);
             if (snapshot.IsStable)
             {
                 // The ConcurrentDictionary slot is updated atomically and the
@@ -608,7 +678,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 // either the old entry or the new entry but never a half-built
                 // one.
                 _messageCache[sessionId] = new SessionCacheEntry(
-                    snapshot.Stat.LastWriteUtc, snapshot.Stat.Length, snapshot.Messages, transcript);
+                    snapshot.Stat.LastWriteUtc, snapshot.Stat.Length, surface, transcript, log);
             }
             else
             {
@@ -619,25 +689,29 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 _messageCache.TryRemove(sessionId, out _);
             }
 
-            return Result.Success(new SessionReadResult(snapshot.Messages, transcript));
+            return Result.Success(new SessionReadResult(surface, transcript, log));
         }, ResultErrors.Message)
             .Bind(x => x)
             .TapError(e => JsonlSessionStoreLog.ReadMessagesFailed(_logger, sessionId, e));
     }
 
     /// <summary>
-    ///     The reader's view of one read: the messages with the turns the log
-    ///     never closed closed IN MEMORY, plus the honest statement of what
-    ///     the read could not deliver (#1744).
+    ///     The reader's view of one read: the surface's messages with the turns
+    ///     the log never closed closed IN MEMORY, plus the honest statement of
+    ///     what the read could not deliver (#1744).
     /// </summary>
-    private static SessionTranscript BuildTranscript(MessageReadSnapshot snapshot)
+    /// <param name="surface">The surface's messages.</param>
+    /// <param name="snapshot">The read's provenance and its integrity counters.</param>
+    private static SessionTranscript BuildTranscript(
+        IReadOnlyList<AgentMessage> surface,
+        MessageReadSnapshot snapshot)
     {
-        var unclosed = TranscriptInspector.FindUnclosedToolCalls(snapshot.Messages);
+        var unclosed = TranscriptInspector.FindUnclosedToolCalls(surface);
         var integrity = new TranscriptIntegrity(
             snapshot.UnreadableRecordCount,
             snapshot.IsTailTruncated,
             unclosed);
-        var balanced = TranscriptInspector.CloseUnclosedToolCalls(snapshot.Messages);
+        var balanced = TranscriptInspector.CloseUnclosedToolCalls(surface);
         return new SessionTranscript(balanced, integrity);
     }
 
@@ -692,16 +766,154 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     }
 
     /// <summary>
-    ///     "Rewind to here": drop every <c>"message"</c> entry AFTER the target
-    ///     id in file order. File order IS insertion order for this store
-    ///     (append-only + rewrite-in-place — <see cref="UpdateMessageAsync" />
-    ///     keeps an edited record at its position, <b>#1798</b>), which is
-    ///     exactly the ordering the read path reconstructs. Header/session lines
-    ///     are never touched; the target message itself is kept. Rewrites the
-    ///     file in place — same semantics as
-    ///     <see cref="UpdateMessageAsync" />.
+    ///     Rewind to a message: every message after the anchor LEAVES THE
+    ///     SURFACE, and the records stay in the file (#1752).
     /// </summary>
-    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    /// <remarks>
+    ///     <para>
+    ///         The rewind is a RECORD, appended to the file like any other:
+    ///         the tail is not removed, the rewind says which messages left
+    ///         the surface. That is the whole difference between "shadowed"
+    ///         and "gone" — the text the agent produced after the anchor is
+    ///         still in the log, so "what did it actually say?" still has an
+    ///         answer.
+    ///     </para>
+    ///     <para>
+    ///         The number reported is how many messages left the surface. It
+    ///         is the same number the destructive verb used to report, and it
+    ///         does NOT mean that many records were destroyed.
+    ///     </para>
+    /// </remarks>
+    public async Task<Result<int>> RewindMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        // §3.4: observe cancellation BEFORE the existence policy.
+        ct.ThrowIfCancellationRequested();
+        var resolved = SessionFilePaths.TryResolveSessionFile(_rootDirectory, sessionId);
+        if (resolved.IsFailure)
+            return resolved.ConvertFailure<int>();
+        string sessionFile = resolved.Value; // guarded: returned above on failure.
+        // #199: the expected "not found" outcome is decided before the try
+        // boundary so it stays a plain failure (no throw, no error log).
+        if (!File.Exists(sessionFile))
+        {
+            _messageCache.TryRemove(sessionId, out _);
+            return Result.Failure<int>(SessionStoreErrors.SessionNotFound(sessionId));
+        }
+
+        // The read and the append happen under the session lock, so the count
+        // the rewind reports is decided against the log the event is appended
+        // to — a message appended in between is a message the rewind cuts,
+        // and the number says so.
+        var written = await Result.Try(async () =>
+        {
+            var semaphore = await GetSessionLockAsync(sessionId, ct).ConfigureAwait(false);
+            await semaphore.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var read = await ReadSessionAsync(sessionId, ct).ConfigureAwait(false);
+                if (read is not { IsSuccess: true, Value: var snapshot })
+                {
+                    return (AnchorFound: false, Removed: 0, Failure: (string?)read.Error);
+                }
+
+                if (!LogHoldsMessage(snapshot.Log, messageId))
+                {
+                    return (
+                        AnchorFound: false,
+                        Removed: 0,
+                        Failure: SessionStoreErrors.MessageNotFound(sessionId, messageId));
+                }
+
+                var plan = PlanRewind(snapshot, messageId);
+
+                var record = new SessionRewindEntry(
+                    "rewind",
+                    plan.EventId,
+                    messageId,
+                    plan.At,
+                    plan.Removed);
+
+                byte[] line = SessionFileIO.EncodeLine(record, JsonlCodecContext.Default.SessionRewindEntry);
+                await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
+
+                return (AnchorFound: true, Removed: plan.Removed, Failure: (string?)null);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }, ResultErrors.Message).ConfigureAwait(false);
+
+        if (written is not { IsSuccess: true, Value: var outcome })
+            return written.ConvertFailure<int>();
+
+        if (outcome.Failure is { } failure)
+            return Result.Failure<int>(failure);
+
+        // Always drop the parse cache on success — cheap and immune to mtime quirks.
+        _messageCache.TryRemove(sessionId, out _);
+        return Result.Success(outcome.Removed);
+    }
+
+    /// <summary>
+    ///     Plan the rewind against the log as it is right now: the event that
+    ///     will be appended, and how many messages leave the surface when it
+    ///     is.
+    /// </summary>
+    /// <remarks>
+    ///     The count is the surface before the event against the surface the
+    ///     event produces. Deciding it any other way would let the number
+    ///     disagree with what the log actually says.
+    /// </remarks>
+    /// <param name="snapshot">The session's log and surface, as read.</param>
+    /// <param name="messageId">The anchor message id.</param>
+    /// <returns>The event id, the moment it happens, and the count it carries.</returns>
+    private static (string EventId, DateTimeOffset At, int Removed) PlanRewind(
+        SessionReadResult snapshot,
+        string messageId)
+    {
+        string eventId = Guid.NewGuid().ToString("N");
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+
+        var projected = new List<SessionLogEntry>(snapshot.Log.Count + 1);
+        projected.AddRange(snapshot.Log);
+        projected.Add(new SessionLogEntry
+        {
+            Kind = SessionLogEntryKind.Rewind,
+            Id = eventId,
+            Position = snapshot.Log.Count,
+            AnchorId = messageId,
+            OccurredAt = at,
+        });
+
+        int after = SessionLogFold.Fold(projected).Current.Count;
+        int removed = snapshot.Surface.Count - after;
+
+        return (eventId, at, removed < 0 ? 0 : removed);
+    }
+
+    /// <summary>
+    ///     Prune: physically remove the messages after the anchor from the
+    ///     file (#1752).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the ONE operation that destroys records, and it is
+    ///         never automatic: a caller has to ask for it by name. Everything
+    ///         else that takes messages out of the surface — a rewind, an
+    ///         edit, a compaction — leaves the records in the log.
+    ///     </para>
+    ///     <para>
+    ///         The rewrite drops every <c>"message"</c> record after the
+    ///         anchor and the checkpoint markers pointing into the dropped
+    ///         future — a checkpoint over a message that no longer exists
+    ///         would be a dangling reference. The marker over the anchor
+    ///         itself survives.
+    ///     </para>
+    /// </remarks>
+    public Task<Result<int>> PurgeMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
         // §3.4: observe cancellation BEFORE the existence policy.
         ct.ThrowIfCancellationRequested();
@@ -724,20 +936,16 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
             await semaphore.WaitAsync(ct).ConfigureAwait(false);
             try
             {
+                ct.ThrowIfCancellationRequested();
+
                 // #460: streamed. The plan walks the file, keeping every record
                 // up to the anchor and dropping every message record after it,
-                // so nothing but the current record is ever in memory. The
-                // anchor is the FIRST id match and file order is insertion
-                // order for this store, which makes a single pass exact — the
-                // old code got the same answer from an index scan over a
-                // List<string> of the whole file, held under this semaphore.
+                // so nothing but the current record is ever in memory.
                 //
                 // The rewrite hands back the plan that carried the counts, so
                 // these are read off the object the decision was made on:
-                // reaching the last message still reports a successful rewind of
-                // zero messages and leaves the file (and its mtime) alone, which
-                // is the pre-#460 behaviour where the rewrite was skipped when
-                // nothing was actually removed.
+                // reaching the last message still reports a successful prune of
+                // zero messages and leaves the file (and its mtime) alone.
                 var plan = SessionFileIO.RewriteRecords(
                     sessionFile, new DeleteAfterAnchorPlan(messageId));
                 return (Found: plan.Found, Removed: plan.Removed);

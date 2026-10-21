@@ -13,9 +13,23 @@ namespace Harbor.Storage.Memory;
 ///     Implements Repository pattern (GOF) via ISessionStore.
 ///     All data is lost on process exit. Use for unit tests or one-shot prompts.
 /// </summary>
+/// <remarks>
+///     <para>
+///         <b>#1752 — the store keeps a LOG.</b> Not a list of messages: a list
+///         of the CURRENT messages, with the versions they replaced and the
+///         events that moved them out of the surface kept beside them. An
+///         edit appends a new version; a rewind appends an event. Neither
+///         rewrites what is already there, so "what did the agent actually
+///         say?" still has an answer after either of them.
+///     </para>
+///     <para>
+///         The surface — what <see cref="GetMessagesAsync" /> hands back — is
+///         the fold of that log, by the same shared fold every backend uses.
+///     </para>
+/// </remarks>
 public sealed partial class MemorySessionStore : ISessionStore
 {
-    private readonly ConcurrentDictionary<string, List<AgentMessage>> _messages = new();
+    private readonly ConcurrentDictionary<string, List<SessionLogEntry>> _logs = new();
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
 
     public Task<Result<Session>> CreateAsync(
@@ -24,7 +38,7 @@ public sealed partial class MemorySessionStore : ISessionStore
     {
         var session = Session.Create(directory, agentName, providerId, modelId);
         _sessions[session.Id] = session;
-        _messages[session.Id] = new List<AgentMessage>();
+        _logs[session.Id] = new List<SessionLogEntry>();
         return Task.FromResult(Result.Success(session));
     }
 
@@ -47,48 +61,100 @@ public sealed partial class MemorySessionStore : ISessionStore
 
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out var list))
+        if (!_logs.TryGetValue(sessionId, out var log))
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
 
-        lock (list)
+        lock (log)
         {
-            list.Add(message);
+            log.Add(new SessionLogEntry
+            {
+                Kind = SessionLogEntryKind.Message,
+                Id = message.Id,
+                Position = log.Count,
+                Message = message,
+            });
         }
 
-        if (_sessions.TryGetValue(sessionId, out var session))
-        {
-            _sessions[sessionId] = session with { UpdatedAt = DateTimeOffset.UtcNow };
-        }
+        Touch(sessionId);
 
         return Task.FromResult(Result.Success());
     }
 
+    /// <summary>
+    ///     Append a NEW VERSION of a message (#1752). The version that was
+    ///     there before stays in the log: an edit is a new record, not a
+    ///     rewrite, so the text the agent produced before the edit is still
+    ///     there to be read.
+    /// </summary>
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out var list))
+        if (!_logs.TryGetValue(sessionId, out var log))
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
 
-        lock (list)
+        lock (log)
         {
-            int idx = list.FindIndex(m => m.Id == message.Id);
-            if (idx < 0)
+            bool known = false;
+            for (int i = 0; i < log.Count; i++)
+            {
+                SessionLogEntry entry = log[i];
+                if (entry.Kind == SessionLogEntryKind.Message
+                    && string.Equals(entry.Id, message.Id, StringComparison.Ordinal))
+                {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known)
                 return Task.FromResult(
                     Result.Failure(SessionStoreErrors.MessageNotFound(sessionId, message.Id)));
-            list[idx] = message;
+
+            log.Add(new SessionLogEntry
+            {
+                Kind = SessionLogEntryKind.Message,
+                Id = message.Id,
+                Position = log.Count,
+                Message = message,
+            });
         }
+
+        Touch(sessionId);
+
         return Task.FromResult(Result.Success());
     }
 
+    /// <summary>
+    ///     The surface: the messages the log still shows — the current version
+    ///     of every message, minus the ones a rewind took out of it.
+    /// </summary>
     public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(string sessionId, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out var list))
+        if (!_logs.TryGetValue(sessionId, out var log))
             return Task.FromResult(
                 Result.Failure<IReadOnlyList<AgentMessage>>(SessionStoreErrors.SessionNotFound(sessionId)));
 
-        lock (list)
+        lock (log)
         {
-            var copy = list.OrderBy(m => m.CreatedAt).ToList();
+            var copy = SessionLogFold.Fold(log).Current;
             return Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(copy));
+        }
+    }
+
+    /// <summary>
+    ///     The whole log: every record the session holds, in write order —
+    ///     the current messages, the versions they replaced, and the rewind
+    ///     events that moved messages out of the surface (#1752).
+    /// </summary>
+    public Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(string sessionId, CancellationToken ct = default)
+    {
+        if (!_logs.TryGetValue(sessionId, out var log))
+            return Task.FromResult(
+                Result.Failure<IReadOnlyList<SessionLogEntry>>(SessionStoreErrors.SessionNotFound(sessionId)));
+
+        lock (log)
+        {
+            var copy = new List<SessionLogEntry>(log);
+            return Task.FromResult(Result.Success<IReadOnlyList<SessionLogEntry>>(copy));
         }
     }
 
@@ -97,31 +163,110 @@ public sealed partial class MemorySessionStore : ISessionStore
         if (!_sessions.ContainsKey(sessionId))
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
         _sessions.TryRemove(sessionId, out _);
-        _messages.TryRemove(sessionId, out _);
+        _logs.TryRemove(sessionId, out _);
         return Task.FromResult(Result.Success());
     }
 
-    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    /// <summary>
+    ///     Rewind to a message: the tail after the anchor leaves the SURFACE,
+    ///     and the records stay in the log (#1752).
+    /// </summary>
+    /// <remarks>
+    ///     The rewind is an EVENT in the log — the same record the file-backed
+    ///     store writes — so the two backends fold the same log the same way.
+    /// </remarks>
+    public Task<Result<int>> RewindMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out var list))
+        if (!_logs.TryGetValue(sessionId, out var log))
             return Task.FromResult(Result.Failure<int>(SessionStoreErrors.SessionNotFound(sessionId)));
 
-        lock (list)
+        lock (log)
         {
-            // Insertion order is the list order; the target itself stays.
-            int tailIndex = list.FindIndex(m => m.Id == messageId);
-            if (tailIndex < 0)
+            bool anchorFound = false;
+            for (int i = 0; i < log.Count; i++)
+            {
+                SessionLogEntry entry = log[i];
+                if (entry.Kind == SessionLogEntryKind.Message
+                    && string.Equals(entry.Id, messageId, StringComparison.Ordinal))
+                {
+                    anchorFound = true;
+                    break;
+                }
+            }
+
+            if (!anchorFound)
                 return Task.FromResult(Result.Failure<int>(
                     SessionStoreErrors.MessageNotFound(sessionId, messageId)));
 
-            int removed = list.Count - (tailIndex + 1);
-            if (removed > 0)
-                list.RemoveRange(tailIndex + 1, removed);
+            int before = SessionLogFold.Fold(log).Current.Count;
 
-            if (_sessions.TryGetValue(sessionId, out var session))
+            log.Add(new SessionLogEntry
             {
-                _sessions[sessionId] = session with { UpdatedAt = DateTimeOffset.UtcNow };
+                Kind = SessionLogEntryKind.Rewind,
+                Id = Guid.NewGuid().ToString("N"),
+                Position = log.Count,
+                AnchorId = messageId,
+                OccurredAt = DateTimeOffset.UtcNow,
+            });
+
+            int after = SessionLogFold.Fold(log).Current.Count;
+            int removed = before - after;
+
+            Touch(sessionId);
+
+            return Task.FromResult(Result.Success(removed < 0 ? 0 : removed));
+        }
+    }
+
+    /// <summary>
+    ///     Prune: physically remove the messages after the anchor from the log
+    ///     (#1752).
+    /// </summary>
+    /// <remarks>
+    ///     The ONE operation that destroys records, and it is never automatic:
+    ///     a caller has to ask for it by name. A rewind writes an event and
+    ///     leaves the records alone.
+    /// </remarks>
+    public Task<Result<int>> PurgeMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        if (!_logs.TryGetValue(sessionId, out var log))
+            return Task.FromResult(Result.Failure<int>(SessionStoreErrors.SessionNotFound(sessionId)));
+
+        lock (log)
+        {
+            // The anchor is the FIRST record of that id — the place the
+            // message was written, which is the place it holds in the
+            // conversation.
+            int anchorIndex = -1;
+            for (int i = 0; i < log.Count; i++)
+            {
+                SessionLogEntry entry = log[i];
+                if (entry.Kind == SessionLogEntryKind.Message
+                    && string.Equals(entry.Id, messageId, StringComparison.Ordinal))
+                {
+                    anchorIndex = i;
+                    break;
+                }
             }
+
+            if (anchorIndex < 0)
+                return Task.FromResult(Result.Failure<int>(
+                    SessionStoreErrors.MessageNotFound(sessionId, messageId)));
+
+            int removed = 0;
+            for (int i = log.Count - 1; i > anchorIndex; i--)
+            {
+                SessionLogEntry entry = log[i];
+                if (entry.Kind != SessionLogEntryKind.Message)
+                {
+                    continue;
+                }
+
+                log.RemoveAt(i);
+                removed++;
+            }
+
+            Touch(sessionId);
 
             return Task.FromResult(Result.Success(removed));
         }
@@ -158,6 +303,19 @@ public sealed partial class MemorySessionStore : ISessionStore
     public void Clear()
     {
         _sessions.Clear();
-        _messages.Clear();
+        _logs.Clear();
+    }
+
+    /// <summary>
+    ///     Stamp the session as just active — the same thing a write to the
+    ///     file does.
+    /// </summary>
+    /// <param name="sessionId">The session that was written to.</param>
+    private void Touch(string sessionId)
+    {
+        if (_sessions.TryGetValue(sessionId, out var session))
+        {
+            _sessions[sessionId] = session with { UpdatedAt = DateTimeOffset.UtcNow };
+        }
     }
 }
