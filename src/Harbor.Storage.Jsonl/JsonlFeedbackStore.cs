@@ -173,7 +173,10 @@ internal sealed class JsonlFeedbackStore : ISessionFeedbackStore
                 }
 
                 byte[] line = SessionFileIO.EncodeLine(
-                    SessionFeedbackMapperKit.ToRow(rating),
+                    // #1740: the note is free text the user typed, and a
+                    // credential can be in it as easily as in a tool result.
+                    SessionFeedbackMapperKit.ToRow(
+                        rating with { Note = _owner.ScrubOptionalTextForWrite(rating.Note) }),
                     JsonlCodecContext.Default.MessageRatingEntry);
                 await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
                 _owner.InvalidateMessageCache(rating.SessionId);
@@ -246,7 +249,10 @@ internal sealed class JsonlFeedbackStore : ISessionFeedbackStore
                 ct.ThrowIfCancellationRequested();
 
                 byte[] line = SessionFileIO.EncodeLine(
-                    SessionFeedbackMapperKit.ToRow(remark),
+                    // #1740: the remark is free text about the session, and it
+                    // leaves the machine with the rest of the log.
+                    SessionFeedbackMapperKit.ToRow(
+                        remark with { Text = _owner.ScrubTextForWrite(remark.Text) }),
                     JsonlCodecContext.Default.SessionRemarkEntry);
                 await File.AppendAllBytesAsync(sessionFile, line, ct).ConfigureAwait(false);
                 _owner.InvalidateMessageCache(remark.SessionId);

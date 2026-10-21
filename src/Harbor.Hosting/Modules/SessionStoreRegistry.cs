@@ -50,10 +50,32 @@ internal sealed class MemorySessionStoreFactory : ISessionStoreFactory
 /// <summary>JSONL file store (<c>HARBOR_STORAGE=jsonl</c>).</summary>
 internal sealed class JsonlSessionStoreFactory : ISessionStoreFactory
 {
+    private readonly SessionLogTier _tier;
+
+    /// <summary>
+    ///     Build the factory.
+    /// </summary>
+    /// <remarks>
+    ///     <b>#1740:</b> the tier is read HERE, when the registry is built, and
+    ///     not when the store is first resolved. The registry is built during
+    ///     composition, so a misspelled <c>HARBOR_SESSION_TIER</c> fails the
+    ///     start-up instead of the first session write — and the default tier
+    ///     is the UNSCRUBBED one, so a silent fallback would write a log full
+    ///     of credentials into a repository.
+    /// </remarks>
+    internal JsonlSessionStoreFactory()
+    {
+        _tier = SessionLogEnvironment.ReadTier();
+    }
+
     public string BackendId => "jsonl";
 
     public ISessionStore Create(IServiceProvider sp, string sessionsDir, string sqlitePath) =>
-        new JsonlSessionStore(sessionsDir, sp.GetRequiredService<ILogger<JsonlSessionStore>>());
+        new JsonlSessionStore(
+            sessionsDir,
+            sp.GetRequiredService<ILogger<JsonlSessionStore>>(),
+            _tier,
+            SessionLogEnvironment.ReadSecretValues());
 }
 
 #if HARBOR_WITH_ALL_PROVIDERS

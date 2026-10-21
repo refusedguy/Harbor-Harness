@@ -74,7 +74,6 @@ public class ReadmeCoverageTests
         ("Harbor.Desktop.Shared", new[] { "public", "wiring", "limits" }),
         ("Harbor.Diagnostics.Abstractions", new[] { "wiring" }),
         ("Harbor.Extensions", new[] { "wiring", "usage", "limits" }),
-        ("Harbor.Hosting", new[] { "wiring" }),
         ("Harbor.Ipc.Abstractions", new[] { "public", "wiring", "usage", "deps", "limits" }),
         ("Harbor.Ipc.Client", new[] { "usage", "deps" }),
         ("Harbor.Ipc.InProcess", new[] { "usage", "deps" }),
@@ -91,7 +90,6 @@ public class ReadmeCoverageTests
         ("Harbor.Providers.OpenAI", new[] { "what", "limits" }),
         ("Harbor.Providers.OpenAiCompatible", new[] { "what", "limits" }),
         ("Harbor.Registries", new[] { "wiring", "usage", "limits" }),
-        ("Harbor.Storage.Jsonl", new[] { "what", "wiring", "limits" }),
         ("Harbor.Storage.Memory", new[] { "what", "wiring", "limits" }),
         ("Harbor.Storage.Sqlite", new[] { "what", "wiring", "limits" }),
         // #1741/#1742: both telemetry READMEs gained the "wiring" section —

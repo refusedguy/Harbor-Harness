@@ -16,6 +16,9 @@
     <ProjectReference Include="../../src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj"/>
     <ProjectReference Include="../../src/Harbor.Registries/Harbor.Registries.csproj"/>
     <ProjectReference Include="../../src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj"/>
+    <!-- #1740: the recorded-session replay reads a session log off the JSONL
+         store and plays it back through the agent loop. -->
+    <ProjectReference Include="../../src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj"/>
     <ProjectReference Include="../../tests/Harbor.TestKit/Harbor.TestKit.csproj"/>
     <!-- #1875: the source-generated doubles (Harbor.TestKit.Generated.Fake*)
          live in their OWN assembly since #1875, and this project uses them, so
