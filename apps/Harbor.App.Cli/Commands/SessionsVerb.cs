@@ -1,16 +1,19 @@
 using Harbor.Abstractions.Sessions;
 using Harbor.App.Cli.Hosting;
+using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     <c>harbor sessions</c> family: list (default), rename, export, import,
+///     <c>harbor sessions</c> family: list (default), rename, export, export-zip, import,
 ///     search, revert, checkpoint, checkpoints, rewind, tree, fork. Extracted from <c>Program</c> (#176);
 ///     rename persists a new title via ISessionStore.UpdateAsync,
 ///     export/import round-trip one session through the portable line payload
-///     built by <c>ISessionPorter</c> (see StorageModule for the backend wiring).
+///     built by <c>ISessionPorter</c> (see StorageModule for the backend wiring),
+///     export-zip writes the same session as ONE archive — log, attachments and
+///     manifest — through <c>SessionArchiveWriter</c> (#1750).
 ///     Behavior is 1:1 with the former <c>Program.RunSessionsAsync*</c>.
 /// </summary>
 internal static class SessionsVerb
@@ -26,6 +29,8 @@ internal static class SessionsVerb
                 return await RunRenameSessionAsync(logger, args.Skip(1).ToArray());
             case "export":
                 return await RunExportSessionAsync(logger, args.Skip(1).ToArray());
+            case "export-zip":
+                return await RunExportZipSessionAsync(logger, args.Skip(1).ToArray());
             case "import":
                 return await RunImportSessionAsync(logger, args.Skip(1).ToArray());
             case "search":
@@ -44,10 +49,12 @@ internal static class SessionsVerb
                 return await RunForkSessionAsync(logger, args.Skip(1).ToArray());
             default:
                 Console.Error.WriteLine("""
-                                        Usage: harbor sessions [list|rename|export|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
+                                        Usage: harbor sessions [list|rename|export|export-zip|import|search|revert|checkpoint|checkpoints|rewind|tree|fork]
                                           sessions                        list all sessions
                                           sessions rename <id> <title>    rename a session
                                           sessions export <id> [file]     export session to a portable file (default: harbor-session-<id>.jsonl)
+                                          sessions export-zip <id> [file] export session as ONE zip archive: log + attachments + manifest
+                                                                  (default: harbor-session-<id>.zip)
                                           sessions import <file>          import an exported file as a NEW session
                                           sessions search <query> [--session <id>]   find messages by substring
                                           sessions revert <id> <message-id>          rewind session to the given message
@@ -151,6 +158,39 @@ internal static class SessionsVerb
 
         Console.WriteLine($"Exported session {sessionId} → {path}");
         return 0;
+    }
+
+    /// <summary>
+    ///     <c>harbor sessions export-zip &lt;session-id&gt; [file]</c> —
+    ///     write the session as ONE zip archive: the canonical log (every
+    ///     record, shadowed ones included), the attachments, and the manifest
+    ///     that says which format wrote them (#1750). The archive is the
+    ///     artifact a user attaches to a bug report, so it never carries a
+    ///     credential — whatever tier the log on disk was written in.
+    /// </summary>
+    internal static async Task<int> RunExportZipSessionAsync(ILogger logger, string[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine("Usage: harbor sessions export-zip <session-id> [file]");
+            return 2;
+        }
+
+        string sessionId = args[0];
+        string path = args.Length > 1 ? args[1] : $"harbor-session-{sessionId}.zip";
+        using var host = HostBuilder.Build();
+        var store = host.Services.GetRequiredService<ISessionStore>();
+        var writer = host.Services.GetRequiredService<SessionArchiveWriter>();
+
+        int code = await SessionExportZipRunner
+            .RunAsync(Console.Out, Console.Error, store, writer, sessionId, path)
+            .ConfigureAwait(false);
+        if (code != 0)
+        {
+            SessionsVerbLog.ExportZipFailed(logger, sessionId);
+        }
+
+        return code;
     }
 
     internal static async Task<int> RunImportSessionAsync(ILogger logger, string[] args)
@@ -451,4 +491,7 @@ internal static partial class SessionsVerbLog
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Error, Message = "Fork failed: {Error}")]
     public static partial void ForkFailed(ILogger logger, string error);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Error, Message = "Zip export of session {SessionId} failed")]
+    public static partial void ExportZipFailed(ILogger logger, string sessionId);
 }

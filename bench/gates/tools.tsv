@@ -1,0 +1,51 @@
+# The gate suite CI runs, with the arguments CI passes.
+#
+# Column 1: the gate's name.
+# Column 2: the command that runs it, the way the workflow runs it.
+# Column 3: the command that runs the compiled port, once the port exists.
+#           Empty means "not ported yet"; the measurement says so instead of
+#           pretending the python number stands for the port.
+#
+# The flags are the ones the workflows pass, taken from .github/workflows,
+# not from the documentation. A flag that only asserts a floor does not
+# change the work, and a floor that the tree does not meet would make the
+# gate exit 1 without changing the time; the exit code is recorded anyway.
+#
+# The gates that read an artifact the build produced (TRX files, packed
+# NuGet packages, the analyzer's log) are measured against an empty
+# directory of the right shape, so their number is the cost of walking the
+# tree, not the cost of parsing a real artifact. They are the cheap gates,
+# and the difference does not move the total.
+#
+# msbuild-evaluation-cost.py is NOT here: it measures a `dotnet build`, and
+# this box has no SDK. It is listed in the README with the reason.
+
+# gate	python command	go command
+check-gate-policy.py	python3 tools/check-gate-policy.py --min-gates 42
+check-reference-trimmer.py	python3 tools/check-reference-trimmer.py --min-projects 100
+check-no-test-sdk.py	python3 tools/check-no-test-sdk.py --min-files 150
+check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280
+check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
+check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600
+md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
+check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+check-abstractions-contract.py	python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
+check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40
+check-string-switch-report.py	python3 tools/check-string-switch.py --report
+check-result-chains-report.py	python3 tools/check-result-chains.py --report
+check-test-json-reflection.py	python3 tools/check-test-json-reflection.py
+check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
+gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
+check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
+check-doc-facts.py	python3 tools/check-doc-facts.py --min-facts 5
+check-analyzer-scope.py	python3 tools/check-analyzer-scope.py --min-files 150
+check-tunit-analyzer-gate.py	python3 tools/check-tunit-analyzer-gate.py
+check-coverage-registry.py	python3 tools/check-coverage-registry.py
+check-shard-balance.py	python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
+test-census.py	python3 tools/test-census.py TestResults
+test-skips.py	python3 tools/test-skips.py TestResults
+test-measurements.py	python3 tools/test-measurements.py TestResults
+pack-validate.py	python3 tools/pack-validate.py out/packages
+guard-triage.py	python3 tools/guard-triage.py

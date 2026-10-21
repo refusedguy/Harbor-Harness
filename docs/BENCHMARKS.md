@@ -3243,7 +3243,63 @@ carries five shards with 347 s of service time, and it is the pool the
 4. **NativeAOT publish for CLI** — DONE on `fulltree`: 29 MB binary, 18 ms cold start, ~29 MB RSS idle (§4.4). Open: the `minimal` profile.
 5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
 
-## 10. How to reproduce
+## 10. The gate suite: the python gates in `tools/`
+
+The gates are a product too: every pull request pays for them, and a
+gate that costs minutes costs every pull request. This section holds the
+numbers for the gate set, measured the way the workflows run it.
+
+**Method.** A clean checkout of the commit under test, with the git
+history (the gate `TEST-CITE-DRIFT` reads the history, so a tree without
+it is not the tree CI runs). Every gate is run with the arguments its
+workflow passes, from `bench/gates/tools.tsv`, five times, and the
+MINIMUM wall time is kept: the machine is shared and its load is 18-26, so
+the minimum is the estimate that the least foreign work distorts. The peak
+RSS is `/proc/<pid>/status VmHWM`, polled while the child runs, and not
+`getrusage(RUSAGE_CHILDREN).ru_maxrss`: on this host the latter carries a
+value the child never reached, because it inherits the accounting of the
+parent's own high-water mark. The measuring parent is a 2 KB C program
+(`bench/gates/maxrss.c`) for the same reason.
+
+### 10.1 `check-doc-cites.py`: the git processes, batched (#2090)
+
+| | before | after |
+|---|---|---|
+| wall time, whole gate | **669 s** | **209 s** (3.2x) |
+| `git` processes | **1233** | **37** |
+| time inside `git` | **414 s** | **39 s** |
+| peak RSS | 75.6 MB | 74.9 MB |
+| output | the findings | **byte-identical** |
+
+Tree: `origin/dev` at `a763c824`, 3876 files, 1291 tracked `.cs` files
+under `tests/`. The gate's own output is byte-identical before and after
+(the two runs are compared with `diff`), and its self-test still passes
+(67 checks).
+
+What the 1233 processes were: 1188 `git blame` calls, one per file under
+`tests/` that the gate read, 40 `git show` calls, and 5 others. The blame
+call is the expensive one: **347 ms each**, and the cost is not the output
+but the per-process walk of the history that finds the commit that wrote a
+line.
+
+What replaced it:
+
+- the gate asks git about the files that HOLD a citation, not about every
+  file it read. In this tree **30 of the 1291** files under `tests/` hold a
+  citation (94 citations), and the gate used to ask git about all of them;
+- one `git log -p -U0` over those files, and the blame rebuilt from the
+  diffs. The hunks of one commit are applied from the last to the first,
+  because they all speak about the file as it was BEFORE that commit;
+- a file whose reconstruction does not reproduce the file at HEAD is
+  answered by `git blame` itself, in parallel. That is the fallback for the
+  files whose history crosses a merge, which a diff-based reconstruction
+  cannot carry across;
+- the `git show` calls go through one `git cat-file --batch` process.
+
+The reconstruction was checked against `git blame` line by line for every
+file of this tree: of the files the gate uses it for, **0 disagree**.
+
+## 11. How to reproduce
 
 All numbers in this doc are reproducible from the repo:
 
@@ -3279,7 +3335,7 @@ dotnet build -c Release
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-## 11. See also
+## 12. See also
 
 - [Architecture layers](./ARCHITECTURE_LAYERS.md) — why the project is split this way
 - [Code principles audit](./CODE_PRINCIPLES_AUDIT.md) — performance findings and fixes

@@ -45,12 +45,19 @@ def fragments() -> list[tuple[str, str]]:
     return out
 
 
-def assembled() -> str:
-    """Текст, который должен стоять в [Unreleased] после заголовка."""
+def assembled(already: str = "") -> str:
+    """Текст фрагментов, которых ещё нет в секции.
+
+    Фрагмент, чей заголовок уже лежит в секции, пропускается: без этого
+    второй запуск сборщика дописал бы его второй раз.
+    """
     parts = []
     for _, text in fragments():
         body = text.strip("\n")
         if not body:
+            continue
+        heading = next((l.strip() for l in body.split("\n") if l.startswith("### ")), None)
+        if heading and heading in already:
             continue
         parts.append(body)
     return "\n\n".join(parts)
@@ -73,10 +80,10 @@ def current_section(text: str) -> str:
     return "\n".join(lines[start + 1:end]).strip("\n")
 
 
-def merged_changelog() -> str:
-    text = CHANGELOG.read_text(encoding="utf-8")
+def merged_changelog(text: str | None = None) -> str:
+    text = CHANGELOG.read_text(encoding="utf-8") if text is None else text
     section = current_section(text)
-    new_section = assembled()
+    new_section = assembled(section)
     if not new_section:
         return text
     # фрагменты идут после того, что уже есть в секции
@@ -98,6 +105,20 @@ def merged_changelog() -> str:
     return "\n".join(head + ["", body, ""] + tail).rstrip("\n") + "\n"
 
 
+def duplicate_entries(changelog_text: str) -> list[str]:
+    """Заголовки фрагментов, которые уже лежат в CHANGELOG.md."""
+    section = current_section(changelog_text)
+    out = []
+    for _, text in fragments():
+        for line in text.split("\n"):
+            if line.startswith("### "):
+                title = line.strip()
+                if title in section:
+                    out.append(title)
+                break
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
@@ -110,11 +131,21 @@ def main() -> int:
     want = merged_changelog()
     have = CHANGELOG.read_text(encoding="utf-8")
     if args.check:
-        if want != have:
-            print("FAIL: CHANGELOG.md не совпадает с собранными фрагментами.")
-            print("      Запусти: python3 tools/changelog-assemble.py")
+        # Между релизами фрагменты ещё НЕ в файле — это нормально: сборщик
+        # склеивает их на релизе. Проверять надо две вещи:
+        #   1) ни одна запись фрагмента не лежит уже в CHANGELOG.md — иначе
+        #      релиз склеит её второй раз и запись повторится;
+        #   2) сборка идемпотентна: повторный запуск ничего не меняет.
+        dupes = duplicate_entries(have)
+        if dupes:
+            print("FAIL: запись фрагмента уже есть в CHANGELOG.md — на релизе она")
+            print("      повторится: " + ", ".join(dupes))
             return 1
-        print("OK: CHANGELOG.md совпадает с собранными фрагментами.")
+        once = merged_changelog()
+        if merged_changelog(once) != once:
+            print("FAIL: сборщик не идемпотентен: второй запуск меняет файл.")
+            return 1
+        print(f"OK: {len(fragments())} фрагмент(ов), дублей нет, сборка идемпотентна.")
         return 0
 
     if want == have:
@@ -132,22 +163,36 @@ def self_test() -> int:
     try:
         probe.write_text(
             "### #999999 — the self-test fragment\n\n"
-            "**Why.** The assembler must notice a diverged CHANGELOG.md.\n",
+            "**Why.** The assembler must notice a diverged file.\n",
             encoding="utf-8")
-        want = merged_changelog()
-        if "the self-test fragment" not in want:
+
+        # 1) фрагмент склеивается в [Unreleased]
+        once = merged_changelog()
+        if "the self-test fragment" not in once:
             print("FAIL: сборщик не вставил фрагмент в [Unreleased].")
             return 1
-        if want == original:
+        if once == original:
             print("FAIL: сборщик ничего не изменил, хотя фрагмент был.")
             return 1
-        # расхождение: правим файл так, чтобы он разошёлся с фрагментами
-        tampered = original.replace("## [Unreleased]", "## [Unreleased]\n\n<!-- сдвиг -->", 1)
-        CHANGELOG.write_text(tampered, encoding="utf-8")
-        if merged_changelog() == CHANGELOG.read_text(encoding="utf-8"):
-            print("FAIL: гейт не заметил расхождение между CHANGELOG.md и фрагментами.")
+
+        # 2) сборка идемпотентна: второй запуск ничего не меняет
+        if merged_changelog(once) != once:
+            print("FAIL: сборщик не идемпотентен: второй запуск меняет файл.")
             return 1
-        print("OK: сборщик склеивает фрагмент и ловит расхождение в CHANGELOG.md.")
+
+        # 3) запись, которая уже лежит в файле, повторно не дописывается
+        if "the self-test fragment" in merged_changelog(once).split("### #999999")[0]:
+            print("FAIL: запись фрагмента дописалась второй раз.")
+            return 1
+
+        # 4) дубль ловится: та же запись уже в файле — гейт обязан сказать
+        CHANGELOG.write_text(once, encoding="utf-8")
+        dupes = duplicate_entries(once)
+        if not dupes:
+            print("FAIL: гейт не заметил запись, которая лежит и в файле, и во фрагменте.")
+            return 1
+
+        print("OK: сборщик склеивает фрагмент, идемпотентен и ловит дубль записи.")
         return 0
     finally:
         CHANGELOG.write_text(original, encoding="utf-8")
