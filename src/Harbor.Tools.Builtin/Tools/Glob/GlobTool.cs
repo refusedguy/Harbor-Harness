@@ -25,6 +25,11 @@ namespace Harbor.Tools.Builtin;
         "Set ignoreGitignore=true to also search node_modules/bin/obj/etc."
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("pattern", "string", Description = "Glob pattern (e.g. '**/*.cs')", Required = true)]
+[ToolParam("path", "string", Description = "Base directory (default: cwd)")]
+[ToolParam("ignoreGitignore", "boolean", Description = "If true, do not prune node_modules/bin/obj/.git/… (default: false)")]
+[ToolParam("maxResults", "integer", Description = "Max paths (default: 1000)")]
 public sealed partial class GlobTool : ITool
 {
 
@@ -42,29 +47,6 @@ public sealed partial class GlobTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "pattern": { "type": "string", "description": "Glob pattern (e.g. '**/*.cs')" },
-                                                                          "path": { "type": "string", "description": "Base directory (default: cwd)" },
-                                                                          "ignoreGitignore": {
-                                                                            "type": "boolean",
-                                                                            "description": "If true, do not prune node_modules/bin/obj/.git/… (default: false)"
-                                                                          },
-                                                                          "maxResults": { "type": "integer", "description": "Max paths (default: 1000)" }
-                                                                        },
-                                                                        "required": ["pattern"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args) =>
         JsonArgValidator.RequiredString(args, "pattern", "Missing or empty 'pattern'.");

@@ -24,6 +24,10 @@ namespace Harbor.Tools.Builtin;
         "Discover prompt names with mcp {\"method\":\"prompts/list\"} before rendering",
         "Pass template variables through `arguments` — check the prompt's required arguments first",
     })]
+[ToolSchema]
+[ToolParam("server", "string", Description = "Registered MCP server name", Required = true)]
+[ToolParam("name", "string", Description = "Prompt name from prompts/list", Required = true)]
+[ToolParam("arguments", "object", Description = "Template variables (optional)")]
 public sealed partial class McpPromptTool : ITool
 {
     private readonly ILogger<McpPromptTool> _logger;
@@ -54,25 +58,6 @@ public sealed partial class McpPromptTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "server":    { "type": "string", "description": "Registered MCP server name" },
-                                                                          "name":      { "type": "string", "description": "Prompt name from prompts/list" },
-                                                                          "arguments": { "type": "object", "description": "Template variables (optional)" }
-                                                                        },
-                                                                        "required": ["server", "name"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
