@@ -55,9 +55,10 @@ namespace Harbor.Plugins.Hosting;
 ///         ambiguous about which layer spoke.
 ///     </para>
 /// </remarks>
-internal sealed class PluginInventoryLoadHost : IPluginLoadHost
+internal sealed class PluginInventoryLoadHost : IPluginLoadHost, IReversiblePluginLoadHost
 {
     private readonly IPluginLoadHost _inner;
+    private readonly IReversiblePluginLoadHost? _innerReversible;
     private readonly List<PluginInventoryRegistration> _registrations = [];
 
     /// <summary>Wrap a host and start recording what its doors do.</summary>
@@ -65,6 +66,7 @@ internal sealed class PluginInventoryLoadHost : IPluginLoadHost
     internal PluginInventoryLoadHost(IPluginLoadHost inner)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _innerReversible = inner as IReversiblePluginLoadHost;
     }
 
     /// <inheritdoc />
@@ -120,6 +122,53 @@ internal sealed class PluginInventoryLoadHost : IPluginLoadHost
             }
         }
     }
+
+    // ── The undo half (#1737) ───────────────────────────────────────────────────
+    //
+    // The recorder sits BETWEEN the registrar and the real host, so the undo a
+    // run performs has to travel through it: the recorder forwards it to the
+    // host that can actually take a registration back, and says so plainly when
+    // the host cannot.
+
+    /// <inheritdoc />
+    public Result UnregisterTool(ToolName name) => Reversible()
+        ? _innerReversible!.UnregisterTool(name)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterTool));
+
+    /// <inheritdoc />
+    public Result UnregisterProvider(ProviderId providerId) => Reversible()
+        ? _innerReversible!.UnregisterProvider(providerId)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterProvider));
+
+    /// <inheritdoc />
+    public Result UnregisterAgent(AgentName name) => Reversible()
+        ? _innerReversible!.UnregisterAgent(name)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterAgent));
+
+    /// <inheritdoc />
+    public Result UnregisterTuiPlugin(string name) => Reversible()
+        ? _innerReversible!.UnregisterTuiPlugin(name)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterTuiPlugin));
+
+    /// <inheritdoc />
+    public Result UnregisterPanelProvider(string panelId) => Reversible()
+        ? _innerReversible!.UnregisterPanelProvider(panelId)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterPanelProvider));
+
+    /// <inheritdoc />
+    public Result UnregisterSessionStore(string backendId) => Reversible()
+        ? _innerReversible!.UnregisterSessionStore(backendId)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterSessionStore));
+
+    /// <inheritdoc />
+    public Result UnregisterTuiBackend(string backendId) => Reversible()
+        ? _innerReversible!.UnregisterTuiBackend(backendId)
+        : CannotUndo(nameof(IPluginLoadHost.RegisterTuiBackend));
+
+    private bool Reversible() => _innerReversible is not null;
+
+    private static Result CannotUndo(string door) => Result.Failure(
+        $"the host does not implement {nameof(IReversiblePluginLoadHost)}, so a {door} registration cannot be taken back");
 
     /// <summary>
     ///     Pass the host's answer through unchanged, and remember it.
