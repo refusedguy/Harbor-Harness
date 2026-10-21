@@ -506,6 +506,7 @@ jobs:
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
         run: python3 tools/check-shard-balance.py --self-test
+      # and a file with no code to cover — and the two defects the gate
       # exists for: a file that stopped being covered, and a row that is no
       # longer needed.
       - name: Coverage reporter still tells the three states of a file apart
