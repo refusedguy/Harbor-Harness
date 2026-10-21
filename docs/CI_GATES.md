@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `9b0eebd4`, plus the gate this
+Measured on this branch (one commit on `dev` at `766b397f`, plus the gate this
 branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 40 files, 32 048 lines |
-| of them, the `check-*.py` family | 21 files, 21 516 lines |
-| workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
-| gates that block a build | 24 |
+| python tools in `tools/` | 41 files, 34 405 lines |
+| of them, the `check-*.py` family | 21 files, 21 776 lines |
+| workflows that run a python tool | 6: `ci.yml`, `demo.yml`, `docs.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
+| gates that block a build | 25 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 7 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 31 |
-| tools with a ratchet | 16 |
-| tools with a floor | 20 |
+| tools with a self-test | 32 |
+| tools with a ratchet | 17 |
+| tools with a floor | 21 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
