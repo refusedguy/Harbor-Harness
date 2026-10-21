@@ -22,6 +22,11 @@ namespace Harbor.Tools.Builtin;
         "Pass expectedVersion (the [file-version: …] token from your last read/write/edit) so an external change is rejected instead of overwritten"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("path", "string", Description = "File path to write", Required = true)]
+[ToolParam("content", "string", Description = "Full file content", Required = true)]
+[ToolParam("createDirs", "boolean", Description = "Create parent dirs (default: true)")]
+[ToolParam("expectedVersion", "string", Description = "Version of the file as you last read it (the [file-version: sha256:…] token). The write is rejected when the file changed on disk since")]
 public sealed partial class WriteTool : ITool
 {
 
@@ -30,26 +35,6 @@ public sealed partial class WriteTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":       { "type": "string",  "description": "File path to write" },
-                                                                          "content":    { "type": "string",  "description": "Full file content" },
-                                                                          "createDirs": { "type": "boolean", "description": "Create parent dirs (default: true)" },
-                                                                          "expectedVersion": { "type": "string", "description": "Version of the file as you last read it (the [file-version: sha256:…] token). The write is rejected when the file changed on disk since" }
-                                                                        },
-                                                                        "required": ["path", "content"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {

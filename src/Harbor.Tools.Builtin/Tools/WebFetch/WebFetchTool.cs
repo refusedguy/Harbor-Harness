@@ -52,6 +52,10 @@ namespace Harbor.Tools.Builtin;
         "Default maxChars=50000; raise for long pages, lower for snippets",
         "Binary and >5 MiB responses are rejected"
     })]
+[ToolSchema]
+[ToolParam("url", "string", Description = "Absolute URL (http or https)", Required = true)]
+[ToolParam("selector", "string", Description = "Optional CSS-like selector to extract a subtree (e.g. 'main', 'article', '#content', '.docs')")]
+[ToolParam("maxChars", "integer", Description = "Max characters of markdown to return (default: 50000, max: 500000)")]
 public sealed partial class WebFetchTool : ITool
 {
     private const int DefaultMaxChars = 50_000;
@@ -125,25 +129,6 @@ public sealed partial class WebFetchTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "url":       { "type": "string",  "description": "Absolute URL (http or https)" },
-                                                                          "selector":  { "type": "string",  "description": "Optional CSS-like selector to extract a subtree (e.g. 'main', 'article', '#content', '.docs')" },
-                                                                          "maxChars":  { "type": "integer", "description": "Max characters of markdown to return (default: 50000, max: 500000)" }
-                                                                        },
-                                                                        "required": ["url"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

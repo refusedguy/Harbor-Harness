@@ -684,6 +684,7 @@ jobs:
             args+=(--run "${label}:${clean}:${wall}")
           done
           if [ ${#args[@]} -gt 0 ]; then
+            python3 tools/msbuild-evaluation-cost.py --self-test
             python3 tools/msbuild-evaluation-cost.py "${args[@]}" --summary "$GITHUB_STEP_SUMMARY" || true
           fi
 

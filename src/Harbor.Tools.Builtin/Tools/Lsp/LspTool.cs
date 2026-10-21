@@ -32,6 +32,11 @@ namespace Harbor.Tools.Builtin;
         "Pass the file path plus 1-based line and 0-based column of the symbol",
         "Results degrade gracefully: an absent language server binary returns an explanatory message"
     })]
+[ToolSchema]
+[ToolParam("action", "string", Enum = new[] { "diagnostics", "definition", "references" }, Description = "Which LSP query to run", Required = true)]
+[ToolParam("path", "string", Description = "File path (absolute or workspace-relative)", Required = true)]
+[ToolParam("line", "integer", Description = "1-based line of the symbol (required for definition/references)")]
+[ToolParam("column", "integer", Description = "0-based column of the symbol (default 0)")]
 public sealed partial class LspTool : ITool
 {
     private readonly ILogger<LspTool> _logger;
@@ -49,27 +54,6 @@ public sealed partial class LspTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "action":  { "type": "string", "enum": ["diagnostics", "definition", "references"],
-                         "description": "Which LSP query to run" },
-            "path":    { "type": "string", "description": "File path (absolute or workspace-relative)" },
-            "line":    { "type": "integer", "description": "1-based line of the symbol (required for definition/references)" },
-            "column":  { "type": "integer", "description": "0-based column of the symbol (default 0)" }
-          },
-          "required": ["action", "path"]
-        }
-        """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

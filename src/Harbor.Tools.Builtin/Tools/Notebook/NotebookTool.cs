@@ -23,6 +23,10 @@ namespace Harbor.Tools.Builtin;
         "clear removes a single key (or all if no key given)",
         "Notes are scoped to the current session id — they don't leak across sessions"
     })]
+[ToolSchema]
+[ToolParam("action", "string", Description = "One of: get | set | add | clear | list", Required = true)]
+[ToolParam("key", "string", Description = "Note key (required for get/set/add/clear)")]
+[ToolParam("content", "string", Description = "Note content (required for set; appended for add)")]
 public sealed partial class NotebookTool : ITool
 {
     private readonly ILogger<NotebookTool> _logger;
@@ -59,25 +63,6 @@ public sealed partial class NotebookTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "action":  { "type": "string", "description": "One of: get | set | add | clear | list" },
-                                                                          "key":     { "type": "string", "description": "Note key (required for get/set/add/clear)" },
-                                                                          "content": { "type": "string", "description": "Note content (required for set; appended for add)" }
-                                                                        },
-                                                                        "required": ["action"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <summary>
     ///     ROP-A Z1 п.9: the action string parses into an enum exactly once —
