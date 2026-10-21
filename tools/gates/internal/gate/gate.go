@@ -74,9 +74,16 @@ func isRepoRoot(dir string) bool {
 // the tree, and the same reason the gate is portable: it asks the same
 // question the python originals ask.
 //
-// An empty suffix list means every tracked file.
+// The suffix becomes a PATHSPEC, the way the python originals wrote it:
+// `git ls-files "*.cs"` asks git for the `.cs` files and lets git do the
+// filtering. Asking git for everything and filtering here is the same
+// answer and more work — and the pathspec is what git is fast at.
 func TrackedFiles(root string, suffixes ...string) ([]string, error) {
-	cmd := exec.Command("git", "ls-files")
+	args := []string{"ls-files"}
+	for _, suffix := range suffixes {
+		args = append(args, "*."+strings.TrimPrefix(suffix, "."))
+	}
+	cmd := exec.Command("git", args...)
 	cmd.Dir = root
 	cmd.Env = gitEnv()
 	out, err := cmd.Output()
@@ -160,9 +167,24 @@ func ReadText(path string) (string, error) {
 		return "", err
 	}
 	text := strings.ToValidUTF8(string(data), "�")
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.ReplaceAll(text, "\r", "\n")
-	return text, nil
+	if !strings.ContainsRune(text, '\r') {
+		return text, nil
+	}
+	// The line endings in ONE pass: CRLF is one break, and a lone CR is a
+	// break too. Two passes would copy the text twice for nothing.
+	var b strings.Builder
+	b.Grow(len(text))
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\r' {
+			if i+1 < len(text) && text[i+1] == '\n' {
+				i++
+			}
+			b.WriteByte('\n')
+			continue
+		}
+		b.WriteByte(text[i])
+	}
+	return b.String(), nil
 }
 
 // SplitLinesKeepEnds splits text into lines the way python's
@@ -178,23 +200,38 @@ func ReadText(path string) (string, error) {
 func SplitLinesKeepEnds(text string) []string {
 	var out []string
 	start := 0
-	runes := []rune(text)
-	for i := 0; i < len(runes); i++ {
-		width := 1
-		switch runes[i] {
+	for i := 0; i < len(text); {
+		width := 0
+		switch text[i] {
+		case '\n', '\v', '\f', 0x1c, 0x1d, 0x1e:
+			width = 1
 		case '\r':
-			if i+1 < len(runes) && runes[i+1] == '\n' {
+			width = 1
+			if i+1 < len(text) && text[i+1] == '\n' {
 				width = 2
 			}
-		case '\n', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
-		default:
+		case 0xc2:
+			// U+0085 NEXT LINE.
+			if i+1 < len(text) && text[i+1] == 0x85 {
+				width = 2
+			}
+		case 0xe2:
+			// U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR.
+			if i+2 < len(text) && text[i+1] == 0x80 &&
+				(text[i+2] == 0xa8 || text[i+2] == 0xa9) {
+				width = 3
+			}
+		}
+		if width == 0 {
+			i++
 			continue
 		}
-		out = append(out, string(runes[start:i+width]))
-		start = i + width
+		out = append(out, text[start:i+width])
+		i += width
+		start = i
 	}
-	if start < len(runes) {
-		out = append(out, string(runes[start:]))
+	if start < len(text) {
+		out = append(out, text[start:])
 	}
 	return out
 }

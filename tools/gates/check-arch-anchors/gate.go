@@ -34,17 +34,21 @@ const archDir = "tests/Harbor.Architecture.Tests"
 // exceptionsRel is the exceptions file, relative to the repository root.
 const exceptionsRel = "tools/arch-anchor-exceptions.txt"
 
-// citationRe is the same grammar check-doc-cites.py fences with (its
-// CITATION pattern). Copied rather than imported, because the two gates
-// live in different directories and the shape must not drift apart.
+// citationTail is the TAIL of a citation: the extension and the line.
 //
-// The python original writes the shape with a negative LOOKBEHIND:
-// `(?<![A-Za-z0-9_./\-])`. Go's regexp has no lookbehind, so the class is
-// checked by hand in `findCitations`, which reproduces the python
-// `finditer` semantics exactly: the scan restarts one character to the
-// right of a rejected match.
-var citationRe = regexp.MustCompile(
-	`([A-Za-z0-9_][A-Za-z0-9_./\-]*\.(?:cs|json|yml|yaml|csproj|slnx|props|targets|py|axaml|xaml|editorconfig))` +
+// The python original writes the whole citation as one pattern — a path, a
+// dot, an extension, a colon and the line — and Go's regexp engine is
+// RE2, which is QUADRATIC on that shape: the greedy path loop followed by a
+// literal set makes RE2 track every position the path could end at. Measured
+// on the architecture tree (5.3 MB), the whole pattern costs 1.09 s and
+// this tail costs 64 ms — a factor of seventeen, on the same matches.
+//
+// The path is found by walking BACK from the tail instead: the path is the
+// run of path characters that ends at the dot, and the run cannot hold two
+// tails (the colon of one is not a path character), so the tail and the
+// run together are the whole citation.
+var citationTail = regexp.MustCompile(
+	`\.(?:cs|json|yml|yaml|csproj|slnx|props|targets|py|axaml|xaml|editorconfig)` +
 		`:(\d+(?:-\d*)?(?:,\d+(?:-\d*)?)*)`)
 
 // anchorPrefixByte reports whether b is one of the characters the python
@@ -219,28 +223,77 @@ type citation struct {
 
 // findCitations finds every citation in the text.
 //
-// The python original's pattern begins with a negative lookbehind, and the
-// scan below reproduces `re.finditer` on that pattern: the leftmost match
-// is taken, and a match the lookbehind rejects is retried one character to
-// its right rather than being skipped whole.
+// The python original's pattern begins with a negative lookbehind,
+// `(?<![A-Za-z0-9_./\-])`, and RE2 has no lookbehind. The scan below
+// reproduces `re.finditer` on that pattern, and the rules are:
+//
+//   - the path is the run of path characters that ends at the tail's dot;
+//   - the match starts at the FIRST character of that run, and that
+//     character must be a word character (`[A-Za-z0-9_]`);
+//   - the character before the run is not a path character, which is what
+//     the lookbehind asks for — and it holds by construction, because the
+//     run is maximal.
+//
+// A run that starts with a non-word character yields NO citation at all,
+// and so does a run the scan has already passed: the lookbehind would then
+// look at a path character and fail, and every later position in the run
+// fails the same way, because the character in front of it is a path
+// character too.
 func findCitations(text string) []citation {
 	var out []citation
 	pos := 0
-	for pos <= len(text) {
-		loc := citationRe.FindStringSubmatchIndex(text[pos:])
-		if loc == nil {
-			break
-		}
-		start := pos + loc[0]
-		end := pos + loc[1]
-		if start == 0 || !anchorPrefixByte(text[start-1]) {
-			out = append(out, citation{start: start, end: end})
-			pos = end
+	for _, loc := range citationTail.FindAllStringSubmatchIndex(text, -1) {
+		dot := loc[0]
+		end := loc[1]
+		if dot < pos {
 			continue
 		}
-		pos = start + 1
+		start := dot
+		for start > 0 && isPathByte(text[start-1]) {
+			start--
+		}
+		if start < pos {
+			// The scan has already passed the start of the run: the
+			// lookbehind would look at a path character.
+			pos = start + 1
+			continue
+		}
+		if !isWordByte(text[start]) {
+			pos = start + 1
+			continue
+		}
+		out = append(out, citation{start: start, end: end})
+		pos = end
 	}
 	return out
+}
+
+// isPathByte reports whether the byte is one of the characters the citation
+// grammar allows in a path.
+func isPathByte(b byte) bool {
+	switch {
+	case b >= 'A' && b <= 'Z',
+		b >= 'a' && b <= 'z',
+		b >= '0' && b <= '9':
+		return true
+	case b == '_' || b == '.' || b == '/' || b == '-':
+		return true
+	}
+	return false
+}
+
+// isWordByte reports whether the byte is a word character, the ASCII half
+// of python's `\w`.
+func isWordByte(b byte) bool {
+	switch {
+	case b >= 'A' && b <= 'Z',
+		b >= 'a' && b <= 'z',
+		b >= '0' && b <= '9':
+		return true
+	case b == '_':
+		return true
+	}
+	return false
 }
 
 // lineOf is the 1-based line an offset falls on.

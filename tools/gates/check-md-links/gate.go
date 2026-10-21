@@ -30,7 +30,18 @@ import (
 
 // inlineLink is a `[text](target)` link. The target is the first non-space,
 // non-'>' run inside the parens.
-var inlineLink = regexp.MustCompile(`!?\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)`)
+//
+// The python original writes the pattern as `!?\[[^\]]*\]\(...`, with the
+// "!" of an image link INSIDE the match. The port leaves the "!" out, and
+// that is not a cosmetic change: RE2 uses the first literal of a pattern as
+// a prefix to skip ahead, and the optional "!" hides the "[" from it. The
+// pattern with the "!" costs 446 ms over the tracked markdown; the pattern
+// without it costs 35 ms, for the SAME 1427 matches.
+//
+// The match therefore starts at the "[" instead of at the "!". The gate
+// reads the LINE of a match and the TARGET of a match, and the "!" is on
+// the same line as the "[" — so the report is the same.
+var inlineLink = regexp.MustCompile(`\[[^\]]*\]\(\s*<?([^)>\s]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)`)
 
 // refDef is a reference-style link definition, `[id]: target`.
 var refDef = regexp.MustCompile(`(?m)^[\t\n\v\f\r ]{0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?`)
@@ -62,7 +73,6 @@ var (
 	// underscore, in ANY script. Go's `\w` is ASCII-only, and the tracked
 	// markdown has Russian headings, so the class is spelled out.
 	notSlugChar = regexp.MustCompile(`[^\p{L}\p{N}_\- ]+`)
-	inlineCode  = regexp.MustCompile("`[^`\n]*`")
 )
 
 // Run is the gate entry point.
@@ -134,6 +144,7 @@ func Run(args []string) int {
 	badAnchor := map[string]map[locKey]bool{}
 	total := 0
 	var unreadable []string
+	anchors := newAnchorCache()
 
 	for _, rel := range listed {
 		raw, err := gate.ReadText(filepath.Join(root, rel))
@@ -175,7 +186,7 @@ func Run(args []string) int {
 			}
 			dest := normPath(joinPath(base, targetPath(hit.target)))
 			if strings.HasSuffix(dest, ".md") && exists(root, dest) {
-				if !containsFold(headingAnchors(root, dest), strings.ToLower(frag)) {
+				if !containsFold(anchors.anchorsOf(root, dest), strings.ToLower(frag)) {
 					addLoc(badAnchor, rel, line, hit.target)
 				}
 			}
@@ -327,7 +338,43 @@ func stripCode(text string) string {
 		if fenceChar != "" {
 			continue
 		}
-		b.WriteString(inlineCode.ReplaceAllString(line, "``"))
+		b.WriteString(withoutInlineCode(line))
+	}
+	return b.String()
+}
+
+// withoutInlineCode replaces every inline code span of a line with "“".
+//
+// The python original does it with a regular expression, one per line. The
+// pattern is a backtick, then anything that is not a backtick and not a
+// newline, then a backtick — so the span is the text BETWEEN two backticks
+// on one line, and the replacement is the same length as the two backticks.
+//
+// A scan is the same rule without the regex engine: over 398 documents and
+// 1400 links, the regex was the largest single cost of the gate.
+func withoutInlineCode(line string) string {
+	if !strings.ContainsRune(line, '`') {
+		return line
+	}
+	var b strings.Builder
+	b.Grow(len(line))
+	for i := 0; i < len(line); {
+		if line[i] != '`' {
+			b.WriteByte(line[i])
+			i++
+			continue
+		}
+		end := i + 1
+		for end < len(line) && line[end] != '`' && line[end] != '\n' {
+			end++
+		}
+		if end < len(line) && line[end] == '`' {
+			b.WriteString("``")
+			i = end + 1
+			continue
+		}
+		b.WriteByte('`')
+		i++
 	}
 	return b.String()
 }
@@ -421,6 +468,32 @@ func normPath(p string) string {
 func exists(root string, rel string) bool {
 	_, err := os.Stat(filepath.Join(root, rel))
 	return err == nil
+}
+
+// anchorCache remembers the heading slugs of the files a run has already
+// read.
+//
+// The python original re-reads the file for EVERY link that points at it,
+// and a document with twenty links to the same file pays twenty reads. The
+// slugs are a pure function of the file's content, which does not change
+// during a run, so the cache changes the cost and not the verdict.
+type anchorCache struct {
+	slugs map[string]map[string]bool
+}
+
+// newAnchorCache is an empty cache.
+func newAnchorCache() *anchorCache {
+	return &anchorCache{slugs: map[string]map[string]bool{}}
+}
+
+// anchorsOf returns the heading slugs of a markdown file.
+func (c *anchorCache) anchorsOf(root string, rel string) map[string]bool {
+	if slugs, ok := c.slugs[rel]; ok {
+		return slugs
+	}
+	slugs := headingAnchors(root, rel)
+	c.slugs[rel] = slugs
+	return slugs
 }
 
 // headingAnchors returns the GitHub heading slugs of a markdown file.

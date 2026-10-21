@@ -24,16 +24,17 @@
 check-gate-policy.py	python3 tools/check-gate-policy.py --min-gates 42
 check-reference-trimmer.py	python3 tools/check-reference-trimmer.py --min-projects 100
 check-no-test-sdk.py	python3 tools/check-no-test-sdk.py --min-files 150
-check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280
-check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
-check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600
-md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
+check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280	tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280
+check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json	tools/bin/harbor-gates-linux-x64 check-result-chains --check --baseline tools/result-chains-baseline.json
+check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600	tools/bin/harbor-gates-linux-x64 check-md-links --min-files 250 --min-refs 600
+md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000	tools/bin/harbor-gates-linux-x64 md-lint --min-files 250 --min-lines 60000
 check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
 check-abstractions-contract.py	python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
-check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40
-check-string-switch-report.py	python3 tools/check-string-switch.py --report
-check-result-chains-report.py	python3 tools/check-result-chains.py --report
+check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40	tools/bin/harbor-gates-linux-x64 check-arch-anchors --min-files 40
+check-arch-suite-once.py	python3 tools/check-arch-suite-once.py --min-shards 4	tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
+check-string-switch-report.py	python3 tools/check-string-switch.py --report	tools/bin/harbor-gates-linux-x64 check-string-switch --report
+check-result-chains-report.py	python3 tools/check-result-chains.py --report	tools/bin/harbor-gates-linux-x64 check-result-chains --report
 check-test-json-reflection.py	python3 tools/check-test-json-reflection.py
 check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
 gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
@@ -48,4 +49,4 @@ test-census.py	python3 tools/test-census.py TestResults
 test-skips.py	python3 tools/test-skips.py TestResults
 test-measurements.py	python3 tools/test-measurements.py TestResults
 pack-validate.py	python3 tools/pack-validate.py out/packages
-guard-triage.py	python3 tools/guard-triage.py
+guard-triage.py	python3 tools/guard-triage.py	tools/bin/harbor-gates-linux-x64 guard-triage
