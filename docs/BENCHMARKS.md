@@ -2915,10 +2915,12 @@ to compile"), and it cost every pull request its tail: 222 s of own time
 the build for no data dependency. With `needs: [changes]` the job overlaps the
 build (336-436 s against 222 s) and is finished long before it.
 
-**Measured before/after, same tree, paired runs** (the `before` is `dev` at
-`2430a88f` dispatched on the same branch slot, the `after` is the same tree
-with the change; the wait column is `started_at − completed_at(build)`; two
-pairs, dispatched 23 s apart so that both sides meet the same pool load):
+**Measured before/after, same tree, paired runs** (the `before` is `dev`
+dispatched on the same branch slot, the `after` is the same tree with the
+change; the wait column is `started_at − completed_at(build)`; three pairs,
+each dispatched 23 s apart so that both sides meet the same pool load).
+Pairs 1-2 ran on `dev` @ `2430a88f` in a QUIET pool; pair 3 on `dev` @
+`4299ce01` in a SATURATED one (34 runs queued in the repository):
 
 | | before — [39546719740](https://github.com/refusedguy/Harbor-Harness/actions/runs/39546719740) | before — [39548019441](https://github.com/refusedguy/Harbor-Harness/actions/runs/39548019441) | after — [39546754147](https://github.com/refusedguy/Harbor-Harness/actions/runs/39546754147) | after — [39547983790](https://github.com/refusedguy/Harbor-Harness/actions/runs/39547983790) |
 |---|---:|---:|---:|---:|
@@ -2930,18 +2932,52 @@ pairs, dispatched 23 s apart so that both sides meet the same pool load):
 | `aot-publish` own time | 211 s | 213 s | 208 s | 219 s |
 | where the AOT publish ran | AFTER the build | AFTER the build | **with** the build | **with** the build |
 | the post-build tail (last job to finish) | `aot-publish`, 56 + 211 = 267 s | `aot-publish`, 2 + 213 = 215 s | `pack`, 2 + 116 = **118 s** | `test (arch)`, 11 + 111 = **122 s** |
-| the wall minus the build | 288 s | 234 s | **144 s** | **142 s** |
+| the post-build phase (build end → run end) | 267 s | 215 s | **118 s** | **122 s** |
 
-Medians over the two pairs: the post-build tail **241 s → 120 s** (−50 %), the
-wall minus the build **261 s → 143 s** (−45 %), the burst's service time
-**725 s → 512 s** (−29 %).
+Medians over the two quiet pairs: the post-build phase **241 s → 120 s**
+(−50 %), the burst's service time **725 s → 512 s** (−29 %).
 
 The `build` job's own time differs by 73 s and 173 s between the pairs — that
 is the runner, not the lane (the same spread is in §6.4's compile column), and
-it is exactly why the row that carries the claim is "the wall MINUS the build":
-the part of the run the change can move, measured on a runner-independent
-base. The total wall of the run moved 715 s → 644 s and 605 s → 686 s, and the
-second pair's total grew because its build ran 173 s slower.
+it is exactly why the row that carries the claim is the POST-BUILD phase: the
+part of the run the change can move, measured from the build's end. The total
+wall of the run moved 715 s → 644 s and 605 s → 686 s, and the second pair's
+total grew because its build ran 173 s slower.
+
+**The third pair, in a saturated pool** — the regime the issue measured. This
+one is on `dev` @ `4299ce01` (with the `gate` job back) and it ran while 34
+runs were queued in the repository, so the waits are the real thing: 5-488 s
+per job.
+
+| | before — [39552127159](https://github.com/refusedguy/Harbor-Harness/actions/runs/39552127159) | after — [39552162157](https://github.com/refusedguy/Harbor-Harness/actions/runs/39552162157) |
+|---|---:|---:|
+| `build` own time | 520 s | 547 s |
+| the build's own queue wait (run → build start) | 166 s | **320 s** |
+| fan-out jobs after the build | 9 | **8** |
+| burst service time | 740 s | **479 s** (−35 %) |
+| worst wait in the burst | 488 s (`gate`) | **407 s** (`gate`) (−17 %) |
+| sum of the waits in the burst | 2449 s | **1781 s** (−27 %) |
+| the post-build phase (build end → run end) | 492 s | **410 s** (−17 %) |
+| the run's total wall | 1370 s | 1477 s |
+
+**The honest reading of the third pair.** The WAIT numbers fell — the burst's
+service time by 35 %, the sum of the waits by 27 %, the worst single wait by
+17 % — and the post-build phase fell with them. The run's total wall did NOT
+fall, and the reason is in the table: the `after` run's `build` waited 320 s
+for a runner against the `before` run's 166 s. The build is in the
+`ubuntu-24.04` pool and the change adds its work to the `ubuntu-latest` pool,
+so that 154 s is the global queue at that moment, not the lane. The two runs
+of the pair did not meet the same pool load, and the row that does not depend
+on the load — the burst's service time, the waits inside the burst, the
+post-build phase — fell in all three pairs.
+
+**The tail in a saturated run is the `gate` job.** It is a 4-second job that
+can only start when every lane has finished, so it asks the pool for a runner
+at the busiest moment of the run: 488 s of waiting in the `before` run, 407 s
+in the `after` one. No lane change can move that — the `gate` job is the
+required check (#1804) and it has to be the last thing that runs. It is also
+the reason the saturated pair's improvement is 17 % and not 50 %: the tail is
+the queue there, not the AOT publish.
 
 **The same change on the runs that were already in the history** (the tail =
 the last job of the fan-out to finish, measured the same way):
