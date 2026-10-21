@@ -11,7 +11,7 @@ using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using FakeEventBus = Harbor.TestKit.FakeEventBus;
 using FakeToolRegistry = Harbor.TestKit.FakeToolRegistry;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using CSharpFunctionalExtensions;
 using Harbor.Application.Agents;
 using Harbor.Application.Permissions;
@@ -230,7 +230,7 @@ public class SteeringDeliveryTests
     public async Task DefaultAgent_PromptWhileRunning_SteersInsteadOfBusyFailure()
     {
         var session = Session.Create("/tmp/harbor-steering-agent-tests", "code", "test", "test-model");
-        var store = new Harbor.Application.Tests.Fakes.FakeSessionStore(session);
+        var store = new Harbor.TestKit.FakeSessionStore(session);
 
         // A loop that BLOCKS until released — keeps the gate held so the
         // second prompt hits the busy path.

@@ -5,6 +5,7 @@ using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Desktop.ViewModels;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Avalonia.Tests;
@@ -89,7 +90,7 @@ public class ModelRateLabelTests
             new SilentToastService(),
             NullLogger<ProviderModelPickerViewModel>.Instance,
             WeakReferenceMessenger.Default,
-            new NoKeysAnywhereAuthResolver());
+            new FailingAuthResolver());
         var browser = new ProviderBrowserViewModel(
             catalogue, NullLogger<ProviderBrowserViewModel>.Instance);
 

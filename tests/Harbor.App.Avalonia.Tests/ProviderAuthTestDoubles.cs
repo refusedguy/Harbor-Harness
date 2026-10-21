@@ -6,10 +6,17 @@
 // EmptyApiKeyConfigStore is the crucial one. It loads a CommonConfig with an
 // EMPTY ApiKeys map, so any view-model that reads the config dictionary to
 // decide authorization is guaranteed to answer "no key" — which is exactly the
-// false negative #671 reported. EnvOnlyAuthResolver answers the truth for the
-// same provider. Pairing them makes the two answers differ, and the tests then
-// assert the surfaces report the resolver's, because the resolver is the
-// declared single source.
+// false negative #671 reported. The shared kit's AllowListAuthResolver answers
+// the truth for the same provider. Pairing them makes the two answers differ,
+// and the tests then assert the surfaces report the resolver's, because the
+// resolver is the declared single source.
+//
+// The three auth resolvers this file used to carry moved to the shared kit in
+// #1825: the allow-list resolver is the kit's AllowListAuthResolver, the
+// "authorizes nobody" control is the kit's FailingAuthResolver, and the
+// throwing one is the kit's ThrowingAuthResolver. What is LEFT here is
+// Avalonia-specific: the doubles whose interfaces live in the desktop and UI
+// stacks, which the closure-neutral part of the kit may not reach.
 
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Models;
@@ -21,52 +28,6 @@ using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 
 namespace Harbor.App.Avalonia.Tests;
-
-/// <summary>
-///     <see cref="IAuthResolver" /> that authorizes a caller-named set of
-///     provider ids and refuses the rest — the shape of a key that arrived via
-///     the environment, a keychain or a CLI override, i.e. outside every config
-///     file the view-models can read.
-/// </summary>
-internal sealed class EnvOnlyAuthResolver(params string[] authorizedProviderIds) : IAuthResolver
-{
-    private readonly HashSet<string> _authorized =
-        new(authorizedProviderIds, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Provider ids this resolver was asked about, in call order.</summary>
-    internal List<string> Asked { get; } = [];
-
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default)
-    {
-        Asked.Add(providerId);
-        return Task.FromResult(
-            _authorized.Contains(providerId)
-                ? Result.Success($"env-only-key-for-{providerId}")
-                : Result.Failure<string>($"No API key for '{providerId}'."));
-    }
-}
-
-/// <summary>
-///     An <see cref="IAuthResolver" /> that authorizes nobody. The negative
-///     control: without it, a "both surfaces agree" test would also pass if
-///     every surface always said "No key".
-/// </summary>
-internal sealed class NoKeysAnywhereAuthResolver : IAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
-        Task.FromResult(Result.Failure<string>($"No API key for '{providerId}'."));
-}
-
-/// <summary>
-///     An <see cref="IAuthResolver" /> that throws, standing in for a keychain
-///     that is locked or a store that is corrupt. A broken credential source must
-///     render a verdict, not take the window down.
-/// </summary>
-internal sealed class ThrowingAuthResolver : IAuthResolver
-{
-    public Task<Result<string>> ResolveApiKeyAsync(string providerId, CancellationToken ct = default) =>
-        throw new InvalidOperationException("keychain is locked");
-}
 
 /// <summary>
 ///     A config store whose <see cref="CommonConfig.ApiKeys" /> is ALWAYS empty —
@@ -108,6 +69,12 @@ internal sealed class SilentToastService : IToastService
 ///     so a test can make /models answer "here are N models", "here are none",
 ///     or "I am unreachable" without a network.
 /// </summary>
+/// <remarks>
+///     This one stays local (#1825): the kit's provider registry wraps a
+///     client and answers <c>GetClient</c> with it, while this one answers
+///     <c>GetClient</c> with a FAILURE and serves the catalogue directly. The
+///     two are different shapes, and only this project needs the second one.
+/// </remarks>
 internal sealed class StaticModelRegistry : IProviderRegistry
 {
     private readonly Result<IReadOnlyList<ModelInfo>> _models;

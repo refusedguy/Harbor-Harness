@@ -6,6 +6,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
 using Harbor.Desktop.ViewModels;
+using Harbor.TestKit;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -105,7 +106,7 @@ public class ProviderModelPickerErrorSurfaceTests
             new StubToastService(),
             NullLogger<ProviderModelPickerViewModel>.Instance,
             WeakReferenceMessenger.Default,
-            new NoKeysAnywhereAuthResolver());
+            new FailingAuthResolver());
 
     private static FakeRegistry FailingRegistry() =>
         new() { Models = Result.Failure<IReadOnlyList<ModelInfo>>("connection refused") };

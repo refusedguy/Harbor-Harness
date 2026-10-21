@@ -147,11 +147,11 @@ public sealed class MultiSessionLoadHarness : IAsyncDisposable
         }
 
         var loop = new AgentLoop(
-            new SingleProviderRegistry(client),
+            new FakeProviderRegistry(client),
             new ToolRegistry(),
             agents,
             new SystemPromptBuilder(NullLogger<SystemPromptBuilder>.Instance),
-            new NoCompaction(),
+            new FakeCompactionService(),
             new TokenTracker(),
             new RetryPolicy(),
             bus,
