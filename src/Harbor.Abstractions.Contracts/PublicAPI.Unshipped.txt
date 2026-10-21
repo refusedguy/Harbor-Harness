@@ -150,3 +150,4 @@ static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Tree -> Ha
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.WebFetch -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Write -> Harbor.Abstractions.Models.Identifiers.ToolName!
 Harbor.Abstractions.Models.RunLimitKind.MaxGoalRounds = 5 -> Harbor.Abstractions.Models.RunLimitKind
+static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Goal -> Harbor.Abstractions.Models.Identifiers.ToolName!
