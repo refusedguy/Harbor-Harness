@@ -48,6 +48,12 @@
 // the marker says "there was a credential here", it is identical across runs
 // (so two recordings of the same scenario diff cleanly), and it is inert —
 // no rule below matches it, so scrubbing is idempotent.
+//
+// The marker's SHAPE is the repository's: `Harbor.Telemetry.TelemetryRedaction`
+// withholds a value as `[redacted]`, and these are the same shape with the
+// kind spelled out. Square brackets are not escaped by the JSON writer
+// (angle brackets are, as `<`), so the log a reader opens shows the marker
+// itself rather than `<redacted>` spelled in escape sequences.
 
 using System.Buffers;
 using System.Text.RegularExpressions;
@@ -61,19 +67,19 @@ namespace Harbor.Storage.Jsonl;
 internal sealed partial class SecretRedactor
 {
     /// <summary>Placeholder for a credential with a known shape.</summary>
-    internal const string ApiKeyPlaceholder = "<redacted:api-key>";
+    internal const string ApiKeyPlaceholder = "[redacted:api-key]";
 
     /// <summary>Placeholder for an <c>Authorization: Bearer</c> token.</summary>
-    internal const string BearerPlaceholder = "<redacted:bearer-token>";
+    internal const string BearerPlaceholder = "[redacted:bearer-token]";
 
     /// <summary>Placeholder for a JSON web token.</summary>
-    internal const string TokenPlaceholder = "<redacted:token>";
+    internal const string TokenPlaceholder = "[redacted:token]";
 
     /// <summary>Placeholder for a value a credential-named assignment held.</summary>
-    internal const string SecretPlaceholder = "<redacted:secret>";
+    internal const string SecretPlaceholder = "[redacted:secret]";
 
     /// <summary>Placeholder for a PEM private key block.</summary>
-    internal const string PrivateKeyPlaceholder = "<redacted:private-key>";
+    internal const string PrivateKeyPlaceholder = "[redacted:private-key]";
 
     /// <summary>
     ///     A literal shorter than this is not worth replacing: a two-character
@@ -409,6 +415,7 @@ internal sealed partial class SecretRedactor
     [GeneratedRegex(
         @"(?i)(?<![A-Za-z0-9])(?<name>[A-Za-z0-9_\-]*(?:api[_\-]?key|secret[_\-]?key|client[_\-]?secret"
         + @"|access[_\-]?key|private[_\-]?key|session[_\-]?key|signing[_\-]?key|secret|token"
-        + @"|password|passwd|credential))(?<separator>\s*[:=]\s*)(?<quote>[""']?)(?<value>[^\s""',;}\]\)<>]+)")]
+        + @"|password|passwd|credential))(?<separator>\s*[:=]\s*)(?<quote>[""']?)"
+        + @"(?<value>[^\s""',;}\]\)<>\[]+)")]
     private static partial Regex CredentialAssignment();
 }

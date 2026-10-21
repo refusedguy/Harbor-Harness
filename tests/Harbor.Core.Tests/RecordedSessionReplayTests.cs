@@ -219,7 +219,7 @@ public class RecordedSessionReplayTests
             // Turn 2: the same text — and it is the SCRUBBED text, because the
             // log is the only thing a replay reads.
             await Assert.That(assistants[1].Parts.OfType<TextPart>().Single().Text)
-                .IsEqualTo("the key is <redacted:api-key>");
+                .IsEqualTo("the key is [redacted:api-key]");
 
             // And the tool result the replay produced is the recorded one.
             var replayedToolResult = replay.Messages.OfType<ToolResultMessage>().Single();
