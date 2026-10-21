@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Harbor.CodeGen;
@@ -755,7 +756,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
                     statement.CaptureArguments = named.Value.Value is true;
                     break;
                 case "CaptureResult":
-                    statement.CaptureResult = named.Value.Value as true;
+                    statement.CaptureResult = named.Value.Value is true;
                     break;
                 case "Exclude":
                     statement.Exclude = ReadStringArray(named.Value);
@@ -859,9 +860,12 @@ public sealed class ObservedGenerator : IIncrementalGenerator
             _ => statement.SpanPrefix ?? seam,
         };
 
-        string spanName = statement.Level == StatementLevel.Member && statement.Span is not null
-            ? statement.Span
-            : prefix + "." + operation;
+        string spanName = prefix + "." + operation;
+        if (statement.Level == StatementLevel.Member && statement.Span is { } stated)
+        {
+            // A member's own marker names the span outright.
+            spanName = stated;
+        }
 
         return new Instrument
         {
