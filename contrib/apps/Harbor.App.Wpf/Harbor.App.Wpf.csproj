@@ -86,7 +86,13 @@
     <PackageReference Include="Markdig"/>
     <PackageReference Include="AvalonEdit"/>
     <PackageReference Include="Dirkster.AvalonDock"/>
-    <PackageReference Include="LiveChartsCore.SkiaSharpView.WPF"/>
+    <!--
+      LiveChartsCore.SkiaSharpView.WPF was removed here in #1904: nothing in
+      this app referenced it (the token-usage chart is drawn natively with
+      ItemsControl + Border bars), and the README already says the package is
+      deliberately not used. The pin it needed was a pre-release
+      (2.1.0-dev-798) that targeted net8.0-windows only.
+    -->
   </ItemGroup>
 
   <ItemGroup>

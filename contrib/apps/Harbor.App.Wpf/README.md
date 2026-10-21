@@ -35,16 +35,18 @@ Harbor.App.Wpf
    ├── Microsoft.Extensions.Hosting (DI host)
    ├── Markdig                     (markdown → FlowDocument renderer)
    ├── AvalonEdit 6.x              (code editor)
-   └── Dirkster.AvalonDock 4.x     (dockable panels)
+   └── Dirkster.AvalonDock 5.x     (dockable panels)
 ```
 
-> **LiveCharts2 is intentionally omitted.** The prebuilt
-> `LiveChartsCore.SkiaSharpView.WPF` package targets `net8.0-windows` only and
-> trips the WPF markup compiler under `net10.0-windows` with the cryptic
-> `MC1000: Value cannot be null. (Parameter 'key')` error. Token-usage charts
-> are implemented natively with `ItemsControl` + `Border` bars instead — no
-> third-party chart dependency. Swap back to LiveCharts2 when a
-> `net10.0-windows` build is published.
+> **LiveCharts2 is intentionally omitted — and no longer referenced.** The
+> prebuilt `LiveChartsCore.SkiaSharpView.WPF` package targets `net8.0-windows`
+> only and trips the WPF markup compiler under `net10.0-windows` with the
+> cryptic `MC1000: Value cannot be null. (Parameter 'key')` error.
+> Token-usage charts are implemented natively with `ItemsControl` + `Border`
+> bars instead — no third-party chart dependency. Swap back to LiveCharts2
+> when a `net10.0-windows` build is published. Until then the package is not
+> referenced at all: the `PackageReference` and the central pin were both
+> removed in #1904.
 
 ## Run
 

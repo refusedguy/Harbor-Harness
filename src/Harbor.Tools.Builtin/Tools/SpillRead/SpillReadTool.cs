@@ -37,6 +37,10 @@ namespace Harbor.Tools.Builtin;
         "the path comes from the '[spilled: ...]' marker in the tool result",
         "the read is paged — continue with the offset the answer names"
     })]
+[ToolSchema]
+[ToolParam("path", "string", Description = "Path of the spilled output, from the '[spilled: ...]' marker", Required = true)]
+[ToolParam("offset", "integer", Description = "1-based start line (optional)")]
+[ToolParam("limit", "integer", Description = "Max lines to return (optional)")]
 public sealed partial class SpillReadTool : ITool
 {
     /// <summary>How many lines a read returns when the model asks for no window.</summary>
@@ -73,26 +77,6 @@ public sealed partial class SpillReadTool : ITool
     ///     is not inside the CURRENT session's spill directory.
     /// </remarks>
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":   { "type": "string",  "description": "Path of the spilled output, from the '[spilled: ...]' marker" },
-                                                                          "offset": { "type": "integer", "description": "1-based start line (optional)" },
-                                                                          "limit":  { "type": "integer", "description": "Max lines to return (optional)" }
-                                                                        },
-                                                                        "required": ["path"]
-                                                                      }
-                                                                      """);
-
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
