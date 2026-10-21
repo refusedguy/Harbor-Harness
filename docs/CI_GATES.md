@@ -323,6 +323,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 test-skips` | compiled: `tools/gates/test-skips` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-analyzer-scope` | compiled: `tools/gates/check-analyzer-scope` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
 | `tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost` | compiled: `tools/gates/aggregate-analyzer-cost` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | `--self-test` | — | — |
+| `tools/bin/harbor-gates-linux-x64 all` | compiled: `tools/gates/all` | every gate that needs nothing but the tree, in ONE command: the tree gates start in parallel and print one table (gate, exit code, time, first line of the output). The list of them is in `tools/gates/all/gates.go`, and it is checked against the workflows, so a gate that needs what the build produces cannot be in it | docs.yml | tree, selftest | gate | `--self-test` | — | — |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

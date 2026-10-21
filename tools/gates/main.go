@@ -44,6 +44,7 @@ import (
 
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	"harbor.local/gates/all"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	docfacts "harbor.local/gates/check-doc-facts"
@@ -74,6 +75,11 @@ type registered struct {
 }
 
 var registry = []registered{
+	{
+		name:    "all",
+		summary: "every gate that needs nothing but the tree, in one command",
+		run:     all.Run,
+	},
 	{
 		name:    "check-abstractions-contract",
 		summary: "every dependency the five guarded src/ projects declare is load-bearing",

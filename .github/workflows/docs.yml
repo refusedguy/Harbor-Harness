@@ -24,6 +24,11 @@
 #   selftest  all four gates against fixtures that are known-broken. A checker
 #             that has quietly stopped finding anything is still green on every
 #             PR, so the failure path is tested on every docs change.
+#   tree      EVERY gate that needs nothing but the tree, in one command:
+#             `harbor-gates all`. One table, one exit code, and the list of
+#             the gates in tools/gates/all/gates.go. The jobs below run the
+#             same gates one by one, because the policy table in
+#             docs/CI_GATES.md names the job and the floors of each gate.
 #   links     internal link + GitHub anchor resolution, with a file/ref floor.
 #   cites     `file:line` in a normative document resolves, and a type it names
 #             is constructed by something (#664).
@@ -597,6 +602,51 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # The runner of the tree gates, and the list it runs. Its failure path
+      # is the same shape as every other gate's: a gate that cannot start,
+      # a gate that reports green when it did not run, and a report whose
+      # order depends on the speed of the machine are all failures that
+      # only a planted fixture catches.
+      - name: The tree-gate runner fails on a planted defect
+        run: tools/bin/harbor-gates-linux-x64 all --self-test
+
+  # The tree gates, in ONE command.
+  #
+  # Every gate of this repository that needs nothing but the tree — no
+  # build, no SDK, no network — is one subcommand of the compiled binary,
+  # and this job runs all of them: `harbor-gates all` starts the ones that
+  # are compiled, in parallel, and prints ONE table (gate, exit code, time,
+  # first line of the output). The list of the tree gates is in
+  # tools/gates/all/gates.go, and it is checked against the workflows, so a
+  # gate that needs what the build produces cannot be in it.
+  #
+  # The other jobs of this workflow run the gates ONE BY ONE, and they
+  # stay: the table in docs/CI_GATES.md names, for every gate, the job that
+  # runs it and the floors it runs with, and the policy checker compares
+  # that table against the workflows. Replacing the steps would delete the
+  # record of which job owns which gate, and the floors would leave the
+  # table with nothing to say.
+  #
+  # So this job is the one command a developer can run on their own
+  # machine (tools/check-local.sh runs it and the gates that are still
+  # python), and the single-job jobs above keep the per-gate record. The
+  # two run the same gates; the difference is only where the record lives.
+  tree:
+    name: tree gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # The full history, and the reason is one gate: the public-API
+      # re-signing gate reads the commit RANGE of the pull request, and a
+      # shallow checkout has no merge base to read it from. The `public-api`
+      # job of ci.yml needs the same history for the same reason.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run every gate that needs nothing but the tree
+        run: tools/bin/harbor-gates-linux-x64 all
 
   links:
     name: internal links
