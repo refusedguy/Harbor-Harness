@@ -309,23 +309,19 @@ public sealed partial class PluginManagerTool : ITool
                     + "call list to see what is installed, then pass the path of the source to add.");
             }
 
-            Result<PluginInventoryEntry> described = _inventory.DescribeSource(source, scope);
-            if (described.IsFailure)
-                return Result.Failure<Proposal>(described.Error);
-
-            PluginInventoryEntry entry = described.Value;
-
             // The install target is the SOURCE's file name: a plugin is one
             // file, and its name is that file's name. A 'name' the model sent
             // along is not what lands on disk — the proposal and the copy have
             // to name the same path.
-            string targetName = entry.Name;
-            string installText = $"{spec.Verb} plugin '{targetName}' in the {ScopeText(scope)} scope "
-                                 + $"({entry.FullPath}), from {source}. {spec.Effect}";
-            return Result.Success(new Proposal(
-                installText,
-                new PluginInventoryChange(spec.Change, targetName, source, scope),
-                targetName));
+            return _inventory.DescribeSource(source, scope).Map(entry =>
+            {
+                string installText = $"{spec.Verb} plugin '{entry.Name}' in the {ScopeText(scope)} scope "
+                                     + $"({entry.FullPath}), from {source}. {spec.Effect}";
+                return new Proposal(
+                    installText,
+                    new PluginInventoryChange(spec.Change, entry.Name, source, scope),
+                    entry.Name);
+            });
         }
 
         if (string.IsNullOrWhiteSpace(name))
@@ -335,35 +331,33 @@ public sealed partial class PluginManagerTool : ITool
                 + "list and use the exact file name.");
         }
 
-        Result<IReadOnlyList<PluginInventoryEntry>> listed = _inventory.List();
-        if (listed.IsFailure)
-            return Result.Failure<Proposal>(listed.Error);
-
-        PluginInventoryEntry? found = null;
-        for (int i = 0; i < listed.Value.Count; i++)
-        {
-            if (listed.Value[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+        return _inventory.List()
+            .Bind(listed => FindByName(listed, name))
+            .Map(found =>
             {
-                found = listed.Value[i];
-                break;
-            }
-        }
+                string text = $"{spec.Verb} plugin '{found.Name}' in the {ScopeText(found.Scope)} scope "
+                              + $"({found.FullPath}). {spec.Effect}";
+                return new Proposal(text, new PluginInventoryChange(spec.Change, found.Name), found.Name);
+            });
+    }
 
-        if (found is null)
+    /// <summary>
+    ///     The installed plugin with that name, or the failure that says the
+    ///     agent has to look at the list first.
+    /// </summary>
+    private static Result<PluginInventoryEntry> FindByName(
+        IReadOnlyList<PluginInventoryEntry> entries,
+        string name)
+    {
+        for (int i = 0; i < entries.Count; i++)
         {
-            return Result.Failure<Proposal>(
-                $"No plugin named '{name}' is installed. Next step: call list and use the exact file "
-                + "name it reports.");
+            if (entries[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return Result.Success(entries[i]);
         }
 
-        PluginInventoryEntry target = found;
-        string text = $"{spec.Verb} plugin '{target.Name}' in the {ScopeText(target.Scope)} scope "
-                      + $"({target.FullPath}). {spec.Effect}";
-
-        return Result.Success(new Proposal(
-            text,
-            new PluginInventoryChange(spec.Change, target.Name),
-            target.Name));
+        return Result.Failure<PluginInventoryEntry>(
+            $"No plugin named '{name}' is installed. Next step: call list and use the exact file "
+            + "name it reports.");
     }
 
     /// <summary>

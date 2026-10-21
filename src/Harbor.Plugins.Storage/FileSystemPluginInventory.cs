@@ -188,7 +188,17 @@ public sealed class FileSystemPluginInventory : IPluginInventory
 
         Result<PluginInventoryEntry> described = DescribeSource(source, change.Scope);
         if (described.IsFailure)
+        {
+            // The explicit form: the refusal is traced here, not only re-typed.
+            // The inventory is the layer that knows why the source cannot be
+            // installed, and the reason belongs in the log as well as in the
+            // tool's answer.
+            _logger.LogDebug(
+                "The plugin source '{Source}' cannot be installed: {Error}",
+                source,
+                described.Error);
             return Result.Failure<PluginInventoryChangeResult>(described.Error);
+        }
 
         PluginInventoryEntry entry = described.Value;
 
@@ -272,11 +282,14 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     /// </summary>
     private Result<PluginInventoryChangeResult> Uninstall(PluginInventoryChange change)
     {
-        Result<(PluginInventoryEntry Entry, string Path)> found = Find(change.Name);
-        if (found.IsFailure)
-            return Result.Failure<PluginInventoryChangeResult>(found.Error);
+        return Find(change.Name).Bind(found => UninstallCore(found.Entry, found.Path));
+    }
 
-        (PluginInventoryEntry entry, string path) = found.Value;
+    /// <summary>
+    ///     Remove the plugin's source and, when it ships one, its manifest.
+    /// </summary>
+    private Result<PluginInventoryChangeResult> UninstallCore(PluginInventoryEntry entry, string path)
+    {
         try
         {
             File.Delete(path);
@@ -304,11 +317,18 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     /// </summary>
     private Result<PluginInventoryChangeResult> Toggle(PluginInventoryChange change, bool enable)
     {
-        Result<(PluginInventoryEntry Entry, string Path)> found = Find(change.Name);
-        if (found.IsFailure)
-            return Result.Failure<PluginInventoryChangeResult>(found.Error);
+        return Find(change.Name).Bind(found => ToggleCore(found.Entry, found.Path, enable));
+    }
 
-        (PluginInventoryEntry entry, string path) = found.Value;
+    /// <summary>
+    ///     Rename the plugin's source to or from the <c>.disabled</c> form the
+    ///     loader's glob skips.
+    /// </summary>
+    private Result<PluginInventoryChangeResult> ToggleCore(
+        PluginInventoryEntry entry,
+        string path,
+        bool enable)
+    {
         if (entry.Enabled == enable)
         {
             return Result.Failure<PluginInventoryChangeResult>(
