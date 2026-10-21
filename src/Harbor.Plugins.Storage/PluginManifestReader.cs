@@ -50,6 +50,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -76,7 +77,7 @@ public static class PluginManifestReader
 
     /// <summary>The manifest fields this build understands.</summary>
     private static readonly string[] KnownFields =
-        ["schemaVersion", "name", "version", "harbor", "capabilities", "axes"];
+        ["schemaVersion", "name", "version", "harbor", "capabilities", "axes", "config"];
 
     /// <summary>
     ///     The manifest path that belongs to a plugin source path: the same
@@ -305,6 +306,20 @@ public static class PluginManifestReader
             }
         }
 
+        PluginConfigSchema? config = null;
+        if (fields.TryGetValue("config", out JsonElement configElement))
+        {
+            var read = PluginConfigSchemaReader.Read(configElement, origin);
+            if (read.IsSuccess)
+            {
+                config = read.Value;
+            }
+            else
+            {
+                return read.ConvertFailure<PluginManifest>();
+            }
+        }
+
         return Result.Success(new PluginManifest
         {
             SchemaVersion = schemaVersion,
@@ -313,6 +328,7 @@ public static class PluginManifestReader
             RequiredHarborVersion = harbor,
             Capabilities = capabilities,
             Axes = axes,
+            Config = config,
             ContentHash = contentHash,
         });
     }
