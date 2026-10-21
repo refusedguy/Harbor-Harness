@@ -268,9 +268,10 @@ public sealed class PluginAssemblyReferences
     /// </summary>
     private static string? ResolveDeploymentDirectory()
     {
-#pragma warning disable IL3000 // Assembly.Location is intentional here — JIT-only path, not AOT.
+        // PROOF (#2109): the pragma around this site is DELIBERATELY REMOVED.
+        // The single-file analyzer must report IL3000 here, and the job that
+        // owns the check must go red. Do not merge this branch.
         string? located = Path.GetDirectoryName(typeof(IPlugin).Assembly.Location);
-#pragma warning restore IL3000
         if (!string.IsNullOrEmpty(located))
         {
             return located;
