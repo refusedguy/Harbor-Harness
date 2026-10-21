@@ -305,7 +305,16 @@ def check_commit(sha, subject, files, cwd, findings):
         # the commit that introduces it, with no declaration change to
         # accompany it.
         edited = [p for p in baselines if existed_in_parent(sha, p, cwd)]
-        if edited and not sources:
+        # A baseline edit that only REMOVES a row is a CORRECTION, not a
+        # re-signing: the declaration it named did not change, so there is no
+        # code to arrive with. The compiler still holds the surface honest
+        # (RS0025 for a row written twice, RS0017 for a row that names
+        # nothing), so the removal needs no companion.
+        removal_only = all(
+            not additions_in_commit(sha, path, cwd)
+            for path in edited
+        )
+        if edited and not sources and not removal_only:
             findings.append(
                 "RESIGN-001 " + sha[:12] + " " + subject
                 + " — the frozen baseline of " + assembly + " was edited in this "
@@ -328,6 +337,54 @@ def check_commit(sha, subject, files, cwd, findings):
                     + "branch, but a two-commit PR could hide the re-signing "
                     + "from the reviewer. Put the baseline row in the same "
                     + "commit as the declaration it records.")
+
+
+def additions_in_commit(sha, path, cwd):
+    """Whether the commit ADDED lines to the given file."""
+    diff = subprocess.run(
+        ["git", "-C", cwd, "diff", sha + "^", sha, "--", path],
+        capture_output=True, text=True).stdout
+    for line in diff.split("\n"):
+        if line.startswith("+++") or line.startswith("---"):
+            continue
+        if line.startswith("+"):
+            body = strip_comments(line[1:]).strip()
+            if body:
+                return True
+    return False
+
+
+def check_duplicates(repo, findings):
+    """RESIGN-DUP: no row of a frozen baseline appears twice.
+
+    The analyzer reads a baseline as a SET of declarations, so a row written
+    twice is not "the same row twice" — it is one row and a build that stops
+    (RS0025: the symbol appears more than once). The compiler says so, but
+    only in the lane that recompiles the assembly, and a lane that restores
+    a cached build does not recompile it. This check is a file read, and it
+    runs in the lane where a build may not happen at all.
+    """
+    for directory, assembly in FROZEN:
+        for name in BASELINE_NAMES:
+            path = os.path.join(repo, directory, name)
+            if not os.path.isfile(path):
+                continue
+            seen = {}
+            with open(path, encoding="utf-8") as handle:
+                for number, line in enumerate(handle, 1):
+                    row = line.strip()
+                    if not row or row.startswith("#"):
+                        continue
+                    if row in seen:
+                        findings.append(
+                            "RESIGN-DUP " + assembly + " — the row on line "
+                            + str(number) + " of " + path + " is written twice: it "
+                            + "already stands on line " + str(seen[row]) + ". A "
+                            + "baseline is a set: a row written twice is a build "
+                            + "that stops with RS0025, and which of the two rows "
+                            + "is meant to be there is ambiguous.")
+                    else:
+                        seen[row] = number
 
 
 def check_floors(repo, floors, findings):
@@ -362,6 +419,7 @@ def run_gate(repo, base, head, floors):
                         "reads commit history, so it has nothing to read here")
     commits = commit_range(base, head, repo)
     findings = []
+    check_duplicates(repo, findings)
     for sha, subject in commits:
         check_commit(sha, subject, changed_files(sha, repo), repo, findings)
     check_floors(repo, floors, findings)
@@ -500,6 +558,40 @@ def self_test():
         check("floor fires on a short baseline",
               any(f.startswith("RESIGN-FLOOR") for f in findings),
               "findings=%s" % findings)
+
+        # A baseline edit that only REMOVES a row is a correction, not a
+        # re-signing: no declaration changed, so no code has to arrive with
+        # it. (The compiler still holds the surface honest: RS0025 for a row
+        # written twice, RS0017 for a row that names nothing.)
+        _write(os.path.join(root, "src/Harbor.Abstractions/PublicAPI.Shipped.txt"),
+               "#nullable enable\n"
+               "Harbor.Abstractions.Widget\n"
+               "Harbor.Abstractions.Widget.get_Size -> int\n")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-q", "-m", "re-sign the baseline with the member")
+        _write(os.path.join(root, "src/Harbor.Abstractions/PublicAPI.Shipped.txt"),
+               "#nullable enable\n"
+               "Harbor.Abstractions.Widget\n")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-q", "-m", "drop a row that named nothing")
+        findings, _ = run_gate(root, "HEAD~1", "HEAD", {})
+        check("a baseline edit that only removes a row needs no code",
+              not any(f.startswith("RESIGN-001") for f in findings),
+              "findings=%s" % findings)
+
+        # A row written twice is a build that stops with RS0025, and the
+        # compiler only says so in the lane that recompiles the assembly.
+        _write(os.path.join(root, "src/Harbor.Abstractions/PublicAPI.Shipped.txt"),
+               "#nullable enable\n"
+               "Harbor.Abstractions.Widget\n"
+               "Harbor.Abstractions.Widget\n")
+        _git(root, "add", "-A")
+        _git(root, "commit", "-q", "-m", "the same row twice")
+        findings, _ = run_gate(root, "HEAD~1", "HEAD", {})
+        check("a row written twice is reported",
+              any(f.startswith("RESIGN-DUP") for f in findings),
+              "findings=%s" % findings)
+        _git(root, "reset", "-q", "--hard", "HEAD~1")
 
     print("\nself-test %s" % ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
