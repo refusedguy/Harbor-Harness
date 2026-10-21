@@ -105,7 +105,7 @@ public sealed partial class PluginManagerTool : ITool
         if (value.Equals(ListAction, StringComparison.OrdinalIgnoreCase))
             return Result.Success();
 
-        if (!Actions.TryGetValue(value, out ActionSpec spec))
+        if (!Actions.TryGetValue(value, out ActionSpec? spec))
         {
             return Result.Failure(
                 $"Unknown action '{value}'. It must be one of: {ListAction}, {string.Join(", ", Actions.Keys)}.");
@@ -139,9 +139,6 @@ public sealed partial class PluginManagerTool : ITool
         ToolContext context,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(context);
-
         string action = args.GetProperty("action").GetString()!;
 
         if (action.Equals(ListAction, StringComparison.OrdinalIgnoreCase))
@@ -260,8 +257,8 @@ public sealed partial class PluginManagerTool : ITool
         text.Append(entry.Enabled ? " enabled" : " disabled");
         if (entry.DeclaredVersion is { } version)
             text.Append(", version ").Append(version);
-        if (entry.Axes.Count > 0)
-            text.Append(", axes ").Append(string.Join(", ", entry.Axes));
+        if (entry.DeclaredAxes.Count > 0)
+            text.Append(", axes ").Append(string.Join(", ", entry.DeclaredAxes));
         if (entry.RequiredHarborVersion is { } floor)
         {
             text.Append(", harbor >= ").Append(floor);
@@ -279,7 +276,7 @@ public sealed partial class PluginManagerTool : ITool
     /// </summary>
     private Result<Proposal> Propose(string action, string name, string? source, PluginScope scope)
     {
-        if (!Actions.TryGetValue(action, out ActionSpec spec))
+        if (!Actions.TryGetValue(action, out ActionSpec? spec))
         {
             return Result.Failure<Proposal>(
                 $"Unknown action '{action}'. Next step: use one of {ListAction}, {string.Join(", ", Actions.Keys)}.");
@@ -298,15 +295,11 @@ public sealed partial class PluginManagerTool : ITool
             // file, and its name is that file's name. A 'name' the model sent
             // along is not what lands on disk — the proposal and the copy have
             // to name the same path.
-            return _inventory.DescribeSource(source, scope).Map<Proposal>(entry =>
-            {
-                string installText = $"{spec.Verb} plugin '{entry.Name}' in the {ScopeText(scope)} scope "
-                                     + $"({entry.FullPath}), from {source}. {spec.Effect}";
-                return new Proposal(
-                    installText,
-                    new PluginInventoryChange(spec.Change, entry.Name, source, scope),
-                    entry.Name);
-            });
+            return _inventory.DescribeSource(source, scope).Map(entry => new Proposal(
+                $"{spec.Verb} plugin '{entry.Name}' in the {ScopeText(scope)} scope "
+                + $"({entry.FullPath}), from {source}. {spec.Effect}",
+                new PluginInventoryChange(spec.Change, entry.Name, source, scope),
+                entry.Name));
         }
 
         if (string.IsNullOrWhiteSpace(name))
@@ -317,13 +310,12 @@ public sealed partial class PluginManagerTool : ITool
         }
 
         return _inventory.List()
-            .Bind<InstalledPluginEntry>(listed => FindByName(listed, name))
-            .Map<Proposal>(found =>
-            {
-                string text = $"{spec.Verb} plugin '{found.Name}' in the {ScopeText(found.Scope)} scope "
-                              + $"({found.FullPath}). {spec.Effect}";
-                return new Proposal(text, new PluginInventoryChange(spec.Change, found.Name), found.Name);
-            });
+            .Bind(listed => FindByName(listed, name))
+            .Map(found => new Proposal(
+                $"{spec.Verb} plugin '{found.Name}' in the {ScopeText(found.Scope)} scope "
+                + $"({found.FullPath}). {spec.Effect}",
+                new PluginInventoryChange(spec.Change, found.Name),
+                found.Name));
     }
 
     /// <summary>

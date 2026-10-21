@@ -240,7 +240,7 @@ public sealed class FileSystemPluginInventory : IInstalledPluginInventory
         try
         {
             Directory.CreateDirectory(RootOf(change.Scope));
-            await CopyFileAsync(source!, target, overwrite: false, ct: ct).ConfigureAwait(false);
+            await CopyFileAsync(source, target, overwrite: false, ct: ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -251,7 +251,7 @@ public sealed class FileSystemPluginInventory : IInstalledPluginInventory
 
         // The manifest travels with the source: a plugin installed without its
         // declaration is a plugin whose constraints the host cannot apply.
-        string sourceManifest = PluginManifestReader.PathFor(source!);
+        string sourceManifest = PluginManifestReader.PathFor(source);
         if (File.Exists(sourceManifest))
         {
             string targetManifest = PluginManifestReader.PathFor(target);
