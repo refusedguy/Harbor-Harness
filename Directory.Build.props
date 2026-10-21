@@ -591,22 +591,28 @@
     <!--
       ReferenceTrimmer 3.5.13 (#1853) — the unused-reference detector.
 
-      It is OFF by default and ON in exactly one place: the `reference-trimmer`
-      job in .github/workflows/ci.yml, which sets the `HarborReferenceTrimmer`
-      property. The reason it is not simply on is cost and blast radius: the
-      analyzer runs Roslyn's GetUsedAssemblyReferences over every compilation
-      in the solution, and its findings are warnings — which
+      It is OFF by default and ON in exactly one place: the `build` job in
+      .github/workflows/ci.yml, whose compile step sets the
+      `HarborReferenceTrimmer` property. Since #2108 that compile is the
+      ordinary one — the analyzer runs INSIDE the build the lane already pays
+      for, instead of in a second job that compiled the whole tree again
+      (260 s, 22 % of the pull-request lane's runner-minutes, for one gate).
+
+      The analyzer runs Roslyn's GetUsedAssemblyReferences over every
+      compilation in the solution, and its findings are warnings — which
       TreatWarningsAsErrors=true (set above) would turn into build errors on
       the day the package was added. A gate that is red on the tree it lands
-      on is a gate nobody lands, so the tool runs in its own job, with
-      TreatWarningsAsErrors turned off for that job only, and the findings are
-      compared against a baseline by tools/check-reference-trimmer.py.
+      on is a gate nobody lands, so the RT codes are demoted back to warnings
+      (the PropertyGroup below) and compared against a baseline by the
+      `check-reference-trimmer` gate, which runs in the same job.
 
       The property is a global property, so `/p:HarborReferenceTrimmer=true`
       reaches the restore as well as the build. The restore matters: the
       package has to be in the assets file before the compiler can load the
       analyzer, and a restore without the property would write an assets file
-      the build then does not agree with.
+      the build then does not agree with. CI sets it as an ENVIRONMENT
+      variable on the compile step, which MSBuild reads as a property for the
+      restore and the build alike.
 
       PrivateAssets=all: this is a build-time tool, and nothing it brings may
       reach a consumer of a published Harbor package. ExcludeAssets="runtime"
@@ -622,6 +628,32 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!--
+    THE ANALYZER'S FINDINGS ARE WARNINGS, NOT ERRORS (#1853, #2108).
+
+    TreatWarningsAsErrors=true (above) would turn every RT0001/RT0002/RT0003
+    into a build error, so the tree would not build with the analyzer on. The
+    findings are not defects the build should refuse: they are CANDIDATES that
+    a human has to read, and the `check-reference-trimmer` gate compares them
+    with `tools/reference-trimmer-baseline.txt` — a ratchet that goes red on a
+    NEW finding and on a finding the tree no longer produces.
+
+    So the RT codes are demoted back to warnings HERE, and only when the
+    analyzer is on. `WarningsNotAsErrors` is the right switch for that (it
+    maps to the compiler's `/warnaserror-:<ids>`, and a specific id always
+    wins over the general setting); `NoWarn` would be wrong — it would hide
+    the findings from the compiler's output altogether, and the gate would
+    read an empty log and call it clean.
+
+    RT0000 and RT9999 are demoted too: they are statements about the quality
+    of the answer (the doc file was off; the analyzer itself failed), and the
+    gate reports them as RT-DOC-OFF and RT-ANALYZER-ERROR. The build should
+    not fail on them either — the GATE is where they are answered.
+  -->
+  <PropertyGroup Condition="'$(HarborReferenceTrimmer)' == 'true'">
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);RT0000;RT0001;RT0002;RT0003;RT9999</WarningsNotAsErrors>
+  </PropertyGroup>
 
   <!--
     Release architecture gate (compile-time, not runtime):
