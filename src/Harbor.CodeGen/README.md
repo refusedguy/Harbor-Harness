@@ -12,11 +12,15 @@ Internal Roslyn source generator for Harbor. Emits `R` constant classes from AXI
 |------|---------|
 | `ResourceKeyGenerator.cs` | `IIncrementalGenerator` that scans `.axaml` files for `x:Key` / `Key` attributes and emits `Harbor.App.Avalonia.Generated.R` constants. |
 | `ReactiveHookGenerator.cs` | `IIncrementalGenerator` that emits `On<Name>Changed` partial-method implementations for `[Reactive]`-annotated `[ObservableProperty]` fields in classes deriving `ReactiveViewModel` — repaint/layout from the attribute kind, plus the `[Reactive(NonNegative = true)]` / `[Reactive(NonNull = true)]` coerce branch (issue #1542). |
+| `ToolGlueGenerator.cs` | `IIncrementalGenerator` that emits the scalar `ITool` glue (name, display name, glyph, description, execution mode, prompt snippet and guidelines) of every tool carrying `[ToolInfo]`. |
+| `ToolSchemaGenerator.cs` | `IIncrementalGenerator` that renders the JSON Schema of a tool from its `[ToolParam]` declaration and emits the tool's `ParameterSchema` (issue #1780). The rendered schema is hashed and compared with the pin in `src/Harbor.Tools.Builtin/Schemas/tool-schemas.sha256.json`: a schema that differs from its pin is a build error, because the schema is the tool's contract with the model. |
 
 ## Public API summary
 
 - `ResourceKeyGenerator : IIncrementalGenerator` — registered via `<RoslynComponent>Harbor.CodeGen</RoslynComponent>` in consuming projects.
 - `ReactiveHookGenerator : IIncrementalGenerator` — the hook implementation is matched by attribute/base metadata NAME (no project reference needed); attribute lives in `Harbor.Terminal.Abstractions/ViewModels/ReactiveViewModel.cs`. A manual `On<Name>Changed` for a `[Reactive]` field collides with the emitted one and stops the build by design (issue #1542).
+- `ToolGlueGenerator : IIncrementalGenerator` — the scalar `ITool` glue is matched by the metadata name `ToolInfoAttribute` (no project reference needed); the attribute lives in `Harbor.Abstractions/Tools/ToolInfoAttribute.cs`.
+- `ToolSchemaGenerator : IIncrementalGenerator` — the parameter schema of a tool is matched by the metadata names `ToolSchemaAttribute` and `ToolParamAttribute` (no project reference needed); the attributes live in `src/Harbor.Tools.Builtin/`. The pin it compares against is an `AdditionalFiles` input of the consuming project.
 - Output namespace: `Harbor.App.Avalonia.Generated`
 - Output type: `public static class R` with `internal const string` fields for each distinct key.
 
@@ -29,6 +33,8 @@ Internal Roslyn source generator for Harbor. Emits `R` constant classes from AXI
 ## Tests
 
 No dedicated test project. Covered indirectly: `ReactiveHookGenerator` by `tests/Harbor.Terminal.Abstractions.Tests/ReactiveViewModelTests.cs` (the stub's generated hooks end-to-end) and the builtin view models by `tests/Harbor.Tui.Tests` / CellForge render tests; the others by the Avalonia app build and UI tests.
+
+`ToolSchemaGenerator` is covered from both sides: the compile-time half is the generator itself (a schema that differs from its pin is a build error, `HTOOL001`), and the runtime half is `tests/Harbor.Tools.Builtin.Tests/ParameterSchemaPinTests.cs`, which checks that what the runtime hands out hashes to the value that was pinned. The python control for the compile-time half is `tools/check-tool-schema-pin.py`; its `--selftest` plants a divergence and requires the analysis to find it.
 
 ## Build
 

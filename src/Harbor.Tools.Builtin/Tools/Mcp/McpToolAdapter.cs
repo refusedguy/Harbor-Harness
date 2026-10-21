@@ -1,9 +1,12 @@
 using Harbor.Abstractions.Tools;
+using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Tools.Mcp;
 
-public sealed class McpToolAdapter : ITool
+[ToolSchema]
+[ToolParam("arguments", "object", Description = "Tool arguments")]
+public sealed partial class McpToolAdapter : ITool
 {
     private readonly IMcpRegistry _registry;
     private readonly string _server;
@@ -28,22 +31,6 @@ public sealed class McpToolAdapter : ITool
     public ExecutionMode ExecutionMode => ExecutionMode.Sequential;
     public string? PromptSnippet => $"mcp {_server}/{_toolName}: {Description}";
     public IReadOnlyList<string> PromptGuidelines { get; } = Array.Empty<string>();
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-        {
-          "type": "object",
-          "properties": {
-            "arguments": { "type": "object", "description": "Tool arguments" }
-          }
-        }
-        """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
-
     public Result ValidateArguments(JsonElement args) =>
         JsonArgValidator.OptionalObject(args, "arguments", "'arguments' must be a JSON object.");
 
