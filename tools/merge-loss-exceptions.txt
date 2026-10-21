@@ -100,10 +100,6 @@ docs/CI_GATES.md | 2037 | shard-balance gate of #1781\) | the measured picture w
 docs/CI_GATES.md | 2037 | 38 files, 29 910 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
 docs/CI_GATES.md | 2037 | 20 files, 20 864 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
 docs/CI_GATES.md | 2037 | \| tools with a self-test \| 29 \| | the census was RE-COUNTED: the row in the file today carries the newer number
-docs/CI_GATES.md | 2037 | \| tools with a ratchet \| 15 \| | the census was RE-COUNTED: the row in the file today carries the newer number
-docs/CI_GATES.md | 2037 | \| tools with a floor \| 18 \| | the census was RE-COUNTED: the row in the file today carries the newer number
-docs/CI_GATES.md | 2037 | Every python tool in `tools/` \(38 files\)\. 32 of them | the census was RE-COUNTED: the sentence in the file today carries the newer numbers
-docs/CI_GATES.md | 2037 | All 38 are listed, because a tool that is not listed is a tool | the census was RE-COUNTED: the sentence in the file today carries the newer numbers
 tools/merge-loss-exceptions.txt | 2034 | PR #2035 rewrote the row for tools/ci-shard-slices\.py | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
 tools/merge-loss-exceptions.txt | 2034 | the ROW for the same tool was rewritten by #1800 | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
 tools/merge-loss-exceptions.txt | 2037 | the row was rewritten by #1800: the CI project lists have ONE source now | the merge dropped an OLDER generation of this SAME exception row: the row in the file today carries the newer wording
