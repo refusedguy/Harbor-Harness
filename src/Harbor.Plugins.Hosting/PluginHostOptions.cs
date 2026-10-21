@@ -62,4 +62,19 @@ public sealed class PluginHostOptions
     ///     </para>
     /// </remarks>
     public Version? HarborVersion { get; set; }
+
+    /// <summary>
+    ///     The id of the route this host is on — the id the route registry declares
+    ///     (#1723) — so the live inventory says which route the composition it
+    ///     reports belongs to (#1722).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Null — the default — means the composition root did not say, and the
+    ///         inventory says so with a null route rather than guessing. A guess
+    ///         would be a second answer to "which route is this", and the route
+    ///         registry is where that answer lives.
+    ///     </para>
+    /// </remarks>
+    public string? RouteId { get; set; }
 }

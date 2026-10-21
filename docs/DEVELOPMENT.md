@@ -135,6 +135,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
 | `seam graph` | `gen-seam-graph.py --check` — the committed seam graph still matches the tree (#1731) |
+| `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 
 Three things make this a real gate rather than decoration:
 

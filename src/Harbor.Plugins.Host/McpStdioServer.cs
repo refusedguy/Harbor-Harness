@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Tools;
+using Harbor.Plugins.Hosting;
 
 using Microsoft.Extensions.Logging;
 
@@ -14,13 +15,21 @@ namespace Harbor.Plugins.Host;
 ///     Minimal, standard MCP stdio server. Speaks JSON-RPC 2.0 NDJSON on stdin/stdout and
 ///     exposes the <see cref="ITool" />s collected by <see cref="McpPluginLoadHost" />.
 ///     No Harbor-specific protocol is added — only <c>initialize</c>, <c>tools/list</c>, and
-///     <c>tools/call</c> (plus <c>ping</c> and the <c>notifications/initialized</c> no-op).
+///     <c>tools/call</c> (plus <c>ping</c> and the <c>notifications/initialized</c> no-op),
+///     and one namespaced read-only method, <c>harbor/plugins/inventory</c> (#1722).
 /// </summary>
 internal sealed class McpStdioServer
 {
     private const string ProtocolVersion = "2024-11-05";
     private const string ServerName = "harbor-csharp-plugins";
     private const string ServerVersion = "0.4.0-alpha";
+
+    /// <summary>
+    ///     The namespaced method that answers with the live plugin composition
+    ///     (#1722). It is READ-ONLY and it changes nothing: it renders the state
+    ///     the host already has.
+    /// </summary>
+    public const string PluginInventoryMethod = "harbor/plugins/inventory";
 
     /// <summary>
     /// Frozen empty-JSON-object element for argument-less <c>tools/call</c>
@@ -37,6 +46,7 @@ internal sealed class McpStdioServer
     private readonly McpPluginLoadHost _loadHost;
     private readonly ILogger<McpStdioServer> _logger;
     private readonly Action? _onSessionEstablished;
+    private readonly PluginHost? _pluginHost;
 
     /// <summary>
     ///     Construct the MCP stdio server over the given sink.
@@ -49,14 +59,20 @@ internal sealed class McpStdioServer
     ///     the session to be up. A hook that throws is logged and swallowed: a plugin
     ///     problem must not take the protocol loop down with it.
     /// </param>
+    /// <param name="pluginHost">
+    ///     Optional. The host whose live composition the inventory method reports
+    ///     (#1722). Null means the method answers that no composition is available.
+    /// </param>
     public McpStdioServer(
         McpPluginLoadHost loadHost,
         ILogger<McpStdioServer> logger,
-        Action? onSessionEstablished = null)
+        Action? onSessionEstablished = null,
+        PluginHost? pluginHost = null)
     {
         _loadHost = loadHost ?? throw new ArgumentNullException(nameof(loadHost));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _onSessionEstablished = onSessionEstablished;
+        _pluginHost = pluginHost;
     }
 
     public async Task RunAsync(CancellationToken ct)
@@ -153,6 +169,14 @@ internal sealed class McpStdioServer
                 if (!hasId)
                     return null;
                 await HandleToolCallAsync(paramsEl, idEl, writer, ct).ConfigureAwait(false);
+                break;
+
+            case PluginInventoryMethod:
+                // #1722: the live plugin composition. Read-only: it renders the
+                // state the host already has and changes nothing.
+                if (!hasId)
+                    return null;
+                await WriteResultAsync(writer, idEl, WritePluginInventory, ct).ConfigureAwait(false);
                 break;
 
             default:
@@ -274,6 +298,26 @@ internal sealed class McpStdioServer
             w.WriteEndObject();
         }
         w.WriteEndArray();
+    }
+
+    /// <summary>
+    ///     Write the live plugin composition into the result object (#1722).
+    /// </summary>
+    /// <param name="w">The writer to write into.</param>
+    /// <remarks>
+    ///     The document is the host's own inventory, rendered at the moment the
+    ///     method is called: what is loaded, what is pending, what was refused
+    ///     and why, which axes each plugin carries and what it registered.
+    /// </remarks>
+    private void WritePluginInventory(Utf8JsonWriter w)
+    {
+        if (_pluginHost is null)
+        {
+            w.WriteString("error", "this host does not publish a plugin inventory");
+            return;
+        }
+
+        _pluginHost.Inventory.WriteTo(w);
     }
 
     private static void WriteSchema(Utf8JsonWriter w, JsonDocument schema)
