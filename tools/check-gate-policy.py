@@ -110,6 +110,7 @@ Exit codes:  0 = clean, 1 = findings, 2 = bad invocation / no input.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -123,6 +124,7 @@ import tempfile
 TABLE_DOC = "docs/CI_GATES.md"
 TABLE_HEADER = (
     "Script",
+    "Implementation",
     "What it checks",
     "Runs in",
     "Jobs",
@@ -144,6 +146,22 @@ SELF_TEST_FLAGS = ("--self-test", "--selftest")
 # The header marker every python tool carries, and the reason it is there:
 # the tool runs where there is no SDK, no package manager and no network.
 WHY_PYTHON_MARKER = "stdlib only"
+
+# A COMPILED gate: one multi-call binary, one subcommand per gate, and the
+# sources of that gate next to it. The binary is committed to the tree, so
+# that a gate can run where there is no SDK and no build of Harbor, and the
+# workflow rebuilds it from the sources and compares the bytes.
+COMPILED_SOURCE_DIR = "tools/gates"
+COMPILED_BINARY_DIR = "tools/bin"
+COMPILED_MANIFEST = "tools/bin/SHA256SUMS"
+COMPILED_BINARY_RE = re.compile(
+    r"^tools/bin/harbor-gates-linux-(x64|arm64)$"
+)
+
+# An invocation of a compiled gate: the binary, then the gate's name.
+COMPILED_INVOKE_RE = re.compile(
+    r"tools/bin/harbor-gates-linux-(x64|arm64)\s+([A-Za-z0-9_.\-]+)"
+)
 
 # A workflow job id: two spaces, an id, a colon.
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_.\-]+):\s*$")
@@ -272,13 +290,27 @@ def floor_pairs(tokens: list[str]) -> set[str]:
 
 
 class Invocation:
-    """One `python3 tools/<name>.py ...` inside a workflow step."""
+    """One `python3 tools/<name>.py ...` inside a workflow step.
 
-    def __init__(self, workflow: str, job: str, script: str, args: str):
+    A COMPILED gate is invoked the same way, with the binary and the
+    gate's name: `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check`.
+    The `script` is then the binary, and `gate` is the subcommand.
+    """
+
+    def __init__(self, workflow: str, job: str, script: str, args: str,
+                 gate: str = ""):
         self.workflow = workflow
         self.job = job
         self.script = script
         self.args = args
+        self.gate = gate
+
+    @property
+    def key(self) -> str:
+        """What the table's Script cell names this invocation by."""
+        if self.gate:
+            return f"{self.script} {self.gate}"
+        return self.script
 
     @property
     def is_self_test(self) -> bool:
@@ -340,6 +372,19 @@ def parse_workflow(text: str) -> tuple[list[str], list[Invocation]]:
                     workflow="",
                     job=job,
                     script=match.group(1),
+                    args=command[match.end():end].strip(),
+                )
+            )
+        # A compiled gate: the binary, then the gate's name.
+        compiled = list(COMPILED_INVOKE_RE.finditer(command))
+        for index, match in enumerate(compiled):
+            end = compiled[index + 1].start() if index + 1 < len(compiled) else len(command)
+            invocations.append(
+                Invocation(
+                    workflow="",
+                    job=job,
+                    script=f"harbor-gates-linux-{match.group(1)}",
+                    gate=match.group(2),
                     args=command[match.end():end].strip(),
                 )
             )
@@ -448,7 +493,19 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
     # The scripts CI runs, and the scripts it runs that are not in the tree.
     invoked: dict[str, list[Invocation]] = {}
     for invocation in invocations:
-        invoked.setdefault(invocation.script, []).append(invocation)
+        invoked.setdefault(invocation.key, []).append(invocation)
+        if invocation.gate:
+            # A compiled gate: the binary has to be in the tree.
+            binary = f"{COMPILED_BINARY_DIR}/{invocation.script}"
+            if not os.path.isfile(os.path.join(repo, binary)):
+                findings.append(Finding(
+                    "POLICY-INVOCATION-DEAD",
+                    f"workflow {invocation.workflow} runs {binary} "
+                    f"{invocation.gate}, which is not in the tree — a gate "
+                    f"that cannot start checks nothing",
+                    f"{invocation.workflow} · {invocation.job}",
+                ))
+            continue
         if not os.path.isfile(os.path.join(repo, "tools", invocation.script)):
             findings.append(Finding(
                 "POLICY-INVOCATION-DEAD",
@@ -511,9 +568,39 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
                 path,
             ))
 
+    # The compiled gates in the tree, and the table's rows that name one.
+    # BOTH directions: a gate that exists and is not in the table is a gate
+    # nobody reviews, and a row that names a gate that does not exist is a
+    # row that reads as a fact about a repository that is not this one.
+    compiled_gates = compiled_gate_names(repo)
+    documented_gates = set()
+    for script in documented:
+        _, gate = split_compiled(script)
+        if gate:
+            documented_gates.add(gate)
+    for gate in sorted(compiled_gates - documented_gates):
+        findings.append(Finding(
+            "POLICY-GATE-UNDOCUMENTED",
+            f"{COMPILED_SOURCE_DIR}/{gate} is a compiled gate, and the table "
+            f"in {TABLE_DOC} does not list it — either wire it up or say in "
+            f"the table that it is a gate a human runs",
+            f"{COMPILED_SOURCE_DIR}/{gate}",
+        ))
+
     for script in sorted(documented):
         row = documented[script]
-        path = os.path.join(repo, script)
+        implementation = row.get("Implementation", "python")
+        binary, gate = split_compiled(script)
+        if binary:
+            path = os.path.join(repo, binary)
+            name = os.path.basename(binary)
+            key = f"{name} {gate}"
+            source = compiled_source(repo, implementation, gate)
+        else:
+            path = os.path.join(repo, script)
+            name = os.path.basename(script)
+            key = name
+            source = ""
         if not os.path.isfile(path):
             findings.append(Finding(
                 "POLICY-SCRIPT-MISSING",
@@ -521,8 +608,11 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
                 TABLE_DOC,
             ))
             continue
-        name = os.path.basename(script)
-        here = invoked.get(name, [])
+        here = invoked.get(key, [])
+
+        if binary:
+            findings.extend(compiled_findings(repo, script, binary, gate,
+                                              implementation, source))
 
         mode = row["Mode"]
         if mode not in MODES:
@@ -626,7 +716,10 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
         # The self-test. A library is not run, so "CI must run its self-test"
         # does not apply to it, and a library that carries the flag as shared
         # plumbing is not a gate without a self-test.
-        source = source_of(repo, name)
+        if binary:
+            source = compiled_source_text(repo, implementation, gate)
+        else:
+            source = source_of(repo, name)
         flags = [flag for flag in SELF_TEST_FLAGS if flag in source]
         claimed = row["Self-test"]
         if mode == "library":
@@ -706,7 +799,25 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
         # proof that a COMPILE-time gate is armed, so running the compiler
         # is the whole of its job. A gate that needed the SDK would be a
         # different thing.
-        if mode in ("gate", "advisory", "control"):
+        # A COMPILED gate says why it is compiled instead, and the checker
+        # reads the sources of the gate, not a python header.
+        if binary:
+            code = code_only(source)
+            if mode in ("gate", "advisory") and DOTNET_CALL_RE.search(code):
+                findings.append(Finding(
+                    "POLICY-DOTNET-CALL",
+                    f"{script} shells out to dotnet, and a gate that needs "
+                    f"the SDK cannot run on the PR that fixes the build",
+                    script,
+                ))
+            if mode in ("gate", "advisory") and TIME_CALL_RE.search(code):
+                findings.append(Finding(
+                    "POLICY-TIME-CALL",
+                    f"{script} measures time, and a timing threshold is a "
+                    f"benchmark, and benchmarks live in docs/BENCHMARKS.md",
+                    script,
+                ))
+        elif mode in ("gate", "advisory", "control"):
             head = docstring_of(source)
             if WHY_PYTHON_MARKER not in head.lower():
                 findings.append(Finding(
@@ -732,6 +843,149 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
                 ))
 
     return findings, len(rows)
+
+
+# ------------------------------------------------------- the compiled gates
+
+
+def split_compiled(script: str) -> tuple[str, str]:
+    """The binary and the gate's name, if the row names a compiled gate.
+
+    A compiled row's Script cell is the command the workflow runs:
+    `tools/bin/harbor-gates-linux-x64 gen-seam-graph`. A python row's cell
+    is the path of the script.
+    """
+    parts = script.split()
+    if len(parts) != 2:
+        return "", ""
+    if not COMPILED_BINARY_RE.match(parts[0]):
+        return "", ""
+    return parts[0], parts[1]
+
+
+def compiled_gate_names(repo: str) -> set[str]:
+    """The compiled gates in the tree: the directories under tools/gates/."""
+    root = os.path.join(repo, COMPILED_SOURCE_DIR)
+    if not os.path.isdir(root):
+        return set()
+    names = set()
+    for entry in sorted(os.listdir(root)):
+        path = os.path.join(root, entry)
+        if not os.path.isdir(path):
+            continue
+        if entry == "internal":
+            continue  # the shared helpers, not a gate
+        names.add(entry)
+    return names
+
+
+def compiled_source(repo: str, implementation: str, gate: str) -> str:
+    """The directory that holds the sources of a compiled gate."""
+    if implementation.startswith("compiled:"):
+        return implementation.split(":", 1)[1].strip()
+    return f"{COMPILED_SOURCE_DIR}/{gate}"
+
+
+def compiled_source_text(repo: str, implementation: str, gate: str) -> str:
+    """The sources of a compiled gate, as one text."""
+    directory = compiled_source(repo, implementation, gate)
+    parts = []
+    if not os.path.isdir(os.path.join(repo, directory)):
+        return ""
+    for name in sorted(os.listdir(os.path.join(repo, directory))):
+        if not name.endswith(".go"):
+            continue
+        try:
+            with open(os.path.join(repo, directory, name), encoding="utf-8") as handle:
+                parts.append(handle.read())
+        except OSError:
+            continue
+    return "\n".join(parts)
+
+
+def compiled_findings(repo: str, script: str, binary: str, gate: str,
+                      implementation: str, source: str) -> list[Finding]:
+    """The rules that hold for a compiled gate."""
+    findings: list[Finding] = []
+
+    # The binary of every platform, and the manifest that names its hash.
+    manifest = os.path.join(repo, COMPILED_MANIFEST)
+    hashes: dict[str, str] = {}
+    if os.path.isfile(manifest):
+        with open(manifest, encoding="utf-8") as handle:
+            for line in handle:
+                parts = line.split()
+                if len(parts) == 2:
+                    hashes[parts[1]] = parts[0]
+    else:
+        findings.append(Finding(
+            "POLICY-BINARY-MANIFEST-MISSING",
+            f"{COMPILED_MANIFEST} is not in the tree, and it is where the "
+            f"hash of every committed binary is written down",
+            COMPILED_MANIFEST,
+        ))
+
+    for platform in ("x64", "arm64"):
+        name = f"harbor-gates-linux-{platform}"
+        path = os.path.join(repo, COMPILED_BINARY_DIR, name)
+        if not os.path.isfile(path):
+            findings.append(Finding(
+                "POLICY-BINARY-MISSING",
+                f"the compiled gate {script} needs {COMPILED_BINARY_DIR}/{name}, "
+                f"and it is not in the tree",
+                f"{COMPILED_BINARY_DIR}/{name}",
+            ))
+            continue
+        expected = hashes.get(name)
+        if expected is None:
+            findings.append(Finding(
+                "POLICY-BINARY-HASH-MISSING",
+                f"{COMPILED_BINARY_DIR}/{name} has no entry in "
+                f"{COMPILED_MANIFEST}",
+                f"{COMPILED_BINARY_DIR}/{name}",
+            ))
+            continue
+        actual = sha256_of(path)
+        if actual != expected:
+            findings.append(Finding(
+                "POLICY-BINARY-HASH-DIVERGE",
+                f"{COMPILED_BINARY_DIR}/{name} hashes to {actual[:12]}, and "
+                f"{COMPILED_MANIFEST} says {expected[:12]} — rebuild it with "
+                f"tools/build-gates.sh",
+                f"{COMPILED_BINARY_DIR}/{name}",
+            ))
+
+    # The sources of the gate, and the gate's own directory.
+    directory = compiled_source(repo, implementation, gate)
+    if not os.path.isdir(os.path.join(repo, directory)):
+        findings.append(Finding(
+            "POLICY-GATE-SOURCE-MISSING",
+            f"the table says {script} is implemented in {directory}, and that "
+            f"directory is not in the tree",
+            directory,
+        ))
+
+    # No python original and no compiled twin of the same gate: the twin is
+    # how a drifted pair is caught.
+    twin = os.path.join(repo, "tools", f"{gate}.py")
+    if os.path.isfile(twin):
+        findings.append(Finding(
+            "POLICY-GATE-TWIN",
+            f"tools/{gate}.py and the compiled gate {script} are two "
+            f"implementations of one gate — a gate moves from one to the "
+            f"other in one pull request, never both",
+            f"tools/{gate}.py",
+        ))
+    return findings
+
+
+def sha256_of(path: str) -> str:
+    """The SHA-256 of a file, as the manifest writes it."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 # ---------------------------------------------------------------- self-test
@@ -804,14 +1058,56 @@ jobs:
       - name: Self-test
         run: python3 tools/beta.py --self-test
 """)
+    # A COMPILED gate: the binary, the manifest that names its hash, the
+    # sources, and the workflow line that runs it.
+    binary = b"harbor-gates fixture binary\n"
+    _write(os.path.join(root, "tools", "bin", "harbor-gates-linux-x64"), binary.decode())
+    _write(os.path.join(root, "tools", "bin", "harbor-gates-linux-arm64"), binary.decode())
+    digest = hashlib.sha256(binary).hexdigest()
+    _write(os.path.join(root, "tools", "bin", "SHA256SUMS"),
+           f"{digest}  harbor-gates-linux-x64\n"
+           f"{digest}  harbor-gates-linux-arm64\n")
+    _write(os.path.join(root, "tools", "gates", "gamma", "gamma.go"), """// Package gamma is a compiled gate.
+//
+// A compiled gate: no interpreter, no SDK, one static binary per platform.
+// The flags are --self-test and --min-files, the same names the python
+// original had.
+package gamma
+
+import "flag"
+
+func main() {
+    selfTest := flag.Bool("self-test", false, "prove the checker can fail")
+    minFiles := flag.Int("min-files", 0, "a floor over the tree")
+    flag.Parse()
+    _ = *selfTest
+    _ = *minFiles
+}
+""")
+    _write(os.path.join(root, ".github", "workflows", "wf-compiled.yml"), """name: wfc
+on:
+  push:
+    paths:
+      - 'tools/gates/**'
+jobs:
+  compiled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Self-test
+        run: tools/bin/harbor-gates-linux-x64 gamma --self-test
+      - name: Check
+        run: tools/bin/harbor-gates-linux-x64 gamma --min-files 10
+""")
     _write(os.path.join(root, TABLE_DOC), """# Gates
 
 ## The gate table
 
-| Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
-|---|---|---|---|---|---|---|---|
-| `tools/alpha.py` | a floor over the tree | wf.yml | check | gate | `--self-test` | — | `--min-files 10` |
-| `tools/beta.py` | nothing, it prints | wf.yml | report | reporter | `--self-test` | — | — |
+| Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
+|---|---|---|---|---|---|---|---|---|
+| `tools/alpha.py` | python | a floor over the tree | wf.yml | check | gate | `--self-test` | — | `--min-files 10` |
+| `tools/beta.py` | python | nothing, it prints | wf.yml | report | reporter | `--self-test` | — | — |
+| `tools/bin/harbor-gates-linux-x64 gamma` | compiled: `tools/gates/gamma` | a compiled floor over the tree | wf-compiled.yml | compiled | gate | `--self-test` | — | `--min-files 10` |
 """)
 
 
@@ -830,8 +1126,8 @@ def self_test() -> int:
             failures.append(
                 "the clean fixture is not clean: " + "; ".join(map(str, clean))
             )
-        if gates != 2:
-            failures.append(f"the clean fixture has {gates} rows, expected 2")
+        if gates != 3:
+            failures.append(f"the clean fixture has {gates} rows, expected 3")
 
         # The planted defects below are DATA: the strings are what a broken
         # script would contain, and a scan for a dotnet call or for a timer
@@ -848,8 +1144,8 @@ def self_test() -> int:
                 "POLICY-SCRIPT-UNDOCUMENTED",
                 "a script CI runs is not in the table",
                 lambda r: _edit_table(
-                    r, "| `tools/beta.py` | nothing, it prints | wf.yml | "
-                       "report | reporter | `--self-test` | — | — |\n", ""),
+                    r, "| `tools/beta.py` | python | nothing, it prints | "
+                       "wf.yml | report | reporter | `--self-test` | — | — |\n", ""),
             ),
             (
                 "POLICY-INVOCATION-DEAD",
@@ -941,6 +1237,40 @@ def self_test() -> int:
                     "import argparse\nimport time\n"
                     "elapsed = time.perf_counter()"),
             ),
+            (
+                "POLICY-GATE-UNDOCUMENTED",
+                "a compiled gate that the table does not list",
+                lambda r: _edit_table(
+                    r, "| `tools/bin/harbor-gates-linux-x64 gamma` | compiled: "
+                       "`tools/gates/gamma` | a compiled floor over the tree | "
+                       "wf-compiled.yml | compiled | gate | `--self-test` | — | "
+                       "`--min-files 10` |\n", ""),
+            ),
+            (
+                "POLICY-BINARY-MISSING",
+                "a committed binary that is not in the tree",
+                lambda r: _remove(
+                    r, "tools/bin/harbor-gates-linux-arm64"),
+            ),
+            (
+                "POLICY-BINARY-HASH-DIVERGE",
+                "a committed binary that does not match the manifest",
+                lambda r: _write(
+                    os.path.join(r, "tools", "bin", "harbor-gates-linux-x64"),
+                    "a binary that was edited by hand\n"),
+            ),
+            (
+                "POLICY-GATE-SOURCE-MISSING",
+                "a compiled gate whose sources are not in the tree",
+                lambda r: shutil.rmtree(os.path.join(r, "tools", "gates", "gamma")),
+            ),
+            (
+                "POLICY-GATE-TWIN",
+                "a python original and a compiled twin of the same gate",
+                lambda r: _write(
+                    os.path.join(r, "tools", "gamma.py"),
+                    '#!/usr/bin/env python3\n"""Gamma.\n\nStdlib only."""\n'),
+            ),
         ]
         # --- end fixture data ---
 
@@ -974,6 +1304,13 @@ def _edit_table(root: str, old: str, new: str) -> None:
     if old not in text:
         raise AssertionError(f"fixture does not contain {old!r}")
     _write(path, text.replace(old, new, 1))
+
+
+def _remove(root: str, relative: str) -> None:
+    """Take a file out of the fixture tree."""
+    path = os.path.join(root, relative)
+    if os.path.isfile(path):
+        os.remove(path)
 
 
 def _edit_workflow(root: str, old: str, new: str) -> None:

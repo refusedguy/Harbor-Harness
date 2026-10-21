@@ -1,0 +1,104 @@
+# The compiled gate binary: rebuild it from the sources in this tree, compare
+# the bytes with the committed ones, and commit the new bytes when the
+# sources moved.
+#
+# WHY A BINARY IN GIT
+#
+# The rule this repository already states for its gates: a gate must fire
+# where the SDK and the build are NOT, because a documentation-only pull
+# request and the pull request that breaks the build are exactly the ones
+# that need it. A compile step on the runner breaks that rule. A committed
+# binary satisfies it, and the repository already does the same thing for
+# the demo GIFs (demo.yml regenerates assets/demo/* and commits it).
+#
+# The price of a binary in git is that nobody can read it in review. The
+# answer is a machine check, not a promise: this workflow rebuilds the
+# binary from the sources in the same tree and compares the bytes.
+#
+# THE TWO JOBS
+#
+#   rebuild-and-commit   the push path. Rebuilds, and when the bytes differ
+#                        from the committed ones, commits and pushes the new
+#                        binary with [skip ci]. `contents: write` and only
+#                        here.
+#   verify-committed     the pull-request path. Read-only: rebuilds into a
+#                        scratch directory and compares. A pull request that
+#                        hand-edits the binary, or that ships a stale one,
+#                        goes red. No write permission, so it cannot push.
+#
+# The artifact directory is NOT a trigger of the push path. If it were, every
+# commit of the binary would trigger the next commit of the binary.
+
+on:
+  push:
+    branches: [dev, master]
+    paths:
+      - "tools/gates/**"
+      - "tools/build-gates.sh"
+      - ".github/workflows/gates-binary.yml"
+  pull_request:
+    paths:
+      - "tools/gates/**"
+      - "tools/bin/**"
+      - "tools/build-gates.sh"
+      - ".github/workflows/gates-binary.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: gates-binary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild-and-commit:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/gates/go.mod
+          cache: false
+      - name: Build the binary for both architectures
+        run: tools/build-gates.sh
+      - name: Compare the bytes with the committed ones
+        run: |
+          if git diff --quiet -- tools/bin; then
+            echo "the committed binary already matches its sources" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "the committed binary is stale; committing the rebuild" >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/bin
+          git commit -m "ci: the compiled gate binary, rebuilt from its sources [skip ci]"
+          git push origin HEAD:${{ github.ref }}
+      - name: Prove the build is byte-reproducible
+        run: tools/build-gates.sh --verify
+
+  verify-committed:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/gates/go.mod
+          cache: false
+      - name: The committed binary must match a rebuild from the sources
+        run: tools/build-gates.sh --check
+      - name: Prove the build is byte-reproducible
+        run: tools/build-gates.sh --verify
+      - name: The binary must run
+        run: tools/bin/harbor-gates-linux-x64 --list
