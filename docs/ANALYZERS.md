@@ -189,24 +189,23 @@ was between 1.3x and 1.4x slower):
 | the three together | 313.9 s | 160–171 s | **−143…−154 s** |
 | **every analyzer in the build** | **594.4 s** | **459–491 s** | **−103…−135 s (−17…−23 %)** |
 
-**The wall time.** The `build` job's `Compile` step, same job, same image,
-same day:
+**The wall time.** The `build` job's `Compile` step. The first pair is the
+controlled one: the SAME base tree, the same job, the same image, the same
+day, and the two runs differ by this change and nothing else.
 
-| tree | run | compile |
-|------|-----|---------|
-| **narrowed (this change)** | 39520876419 | **199 693 ms** |
-| **narrowed (this change)** | 39518815858 | **210 525 ms** |
-| all-on | 39515287115 (dev@9b0eebd4) | 415 007 ms |
-| all-on | 39511197855 (dev@dec54e5e) | 275 628 ms |
-| all-on | 39508517419 (dev@10c4bf6a) | 261 984 ms |
-| all-on | 39508413079 (dev@cc79bc07) | 409 069 ms |
-| all-on | 39504714459 (dev@b9f3c83c) | 417 037 ms |
-| all-on | 39500486942 (dev@d56aef9f) | 320 091 ms |
+| tree | base | run | compile |
+|------|------|-----|---------|
+| **narrowed (this change)** | 766b397f | 39527276212 | **253 662 ms** |
+| all-on | 766b397f | 39526886179 (dev) | 420 920 ms |
+| **narrowed (this change)** | 9b0eebd4 | 39520876419 | **199 693 ms** |
+| **narrowed (this change)** | 9b0eebd4 | 39518815858 | **210 525 ms** |
+| all-on | 9b0eebd4 | 39515287115 (dev) | 415 007 ms |
 
-The all-on compile ranges over **262–417 s** on this runner — a 1.6x spread
-for the same job — and the issue's own measurement (run 39192015051,
-2026-10-19) was 372.5 s. Both narrowed compiles are **below every one of
-them**.
+On the current base that is **−167 258 ms (−39.7 %)**; on the base this
+branch started on, −204…−215 s (−49…−52 %). The all-on compile of the SAME
+job ranges over **262–417 s** across six dev runs — a 1.6x spread for one
+job on one image, which is why the wall figure is a measurement and not a
+controlled A/B, and why the claim above rests on the analyzer report.
 
 **What the paired arms could and could not resolve, said plainly.** The
 harness builds the same tree twice in one job — the baseline and its own arm
@@ -230,7 +229,13 @@ above are read from.
 #### What the narrowing costs, stated plainly
 
 **Narrowing Sonar to `tests/` removes Sonar's 447 preventive rules from the
-product tree.** The product tree produced none of them, so no finding is
+product tree, and with them the six rules that #2030 demoted under `tests/`
+"because they are noise in a test tree and are worth something in a product
+tree"** (S5443, S1215, S1313, S5332, S3878, S3220). With the family running
+only under `tests/`, those six are now off in the whole tree. The
+`.editorconfig` path section that carries them stays — the gate
+`AnalyzerSeverityScopeRules` holds its shape, and removing it is another
+change — but it no longer buys the product tree anything. The product tree produced none of them, so no finding is
 lost — but a rule that would have caught a new defect in product code will
 not catch it any more. That is a change to the build contract, and it is
 written down as one. It is one row in
@@ -285,12 +290,12 @@ API.
 |---------|-----------------|---------|---------|--------|
 | `Microsoft.CodeAnalysis.NetAnalyzers` | 10.0.402 | MIT | ADOPT, solution-wide | The base layer every other package is judged against. 40 of its rules carry a Harbor severity of their own (4 `none`, 33 `suggestion`, 3 `error`); the rest keep the severity they ship with. The 10.0.302 → 10.0.402 move adds zero ids (329 `CA####` ids in both builds) and changes no severity (#1897). The duplication the SDK's own bundled copy might have caused is not there: the package ships `buildTransitive/DisableNETAnalyzersForNuGetPackage.props`, which sets `EnableNETAnalyzers=false`, and the SDK adds its bundled `Microsoft.CodeAnalysis.NetAnalyzers.dll` under `Condition="$(EnableNETAnalyzers)"` in `Microsoft.NET.Sdk.Analyzers.targets` (read from the SDK on disk, release/10.0.4xx). The package therefore REPLACES the SDK's copy rather than adding to it, which is why a `-p:ReportAnalyzer=true` run is not needed to settle it. What the pin does decide is the rule set: the SDK's bundled copy follows the SDK, this one does not, so the pin is what freezes the CA rules at 10.0.402 until it is moved by hand. |
 | `Roslynator.Analyzers` | 5.0.1 | Apache-2.0 | ADOPT, solution-wide | 284 RCS ids and no severity rows at all: the 4.15.0 to 5.0.1 gap introduced zero new ids and removed twenty obsolete implementations (#1851). |
-| `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, solution-wide | 447 rule ids ship in the package. 23 are configured in `.editorconfig` (22 `none`, 1 `suggestion`), 4 more are NoWarn'd in `Directory.Build.props`, and 6 more are off under `tests/` only; each carries its own reason. Measured on `dev@086ef777` (CI run 39472959027, the Release build of `Harbor.slnx`): 476 sites in 40 rules, every one of them under `tests/`, and 0 under `src/` or `apps/`. The licence is the "SONAR Source-Available License v1.0", not LGPL: its grant covers "any Non-competitive Purpose", and the three carve-outs (SonarQube's own functionality, competition with it, and AI engaging with the Program or the data it provides) do not reach Harbor's product, because the package is build-time (`PrivateAssets=all`, `ExcludeAssets="runtime"`), so no Sonar code or data reaches a binary and the Harbor runtime never consumes a diagnostic. The one reading that does reach Harbor is the dev workflow, where an AI agent reads the analyzer's diagnostics in the build log; that is the owner's call and it is stated as the residual in [`docs/DEVELOPMENT.md §Analyzer licences`](./DEVELOPMENT.md#analyzer-licences). The pin stays at 10.29.0.143774: 10.35.0.4138 is the current release and was measured (10 new rule ids, none removed, the licence file byte-identical, every configured id still present), and taking it needs the #1851 baseline, which is a build this change cannot run. |
+| `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, `tests/` only — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | 447 rule ids ship in the package. 23 are configured in `.editorconfig` (22 `none`, 1 `suggestion`), 4 more are NoWarn'd in `Directory.Build.props`, and 6 more are off under `tests/` only; each carries its own reason. Measured on `dev@086ef777` (CI run 39472959027, the Release build of `Harbor.slnx`): 476 sites in 40 rules, every one of them under `tests/`, and 0 under `src/` or `apps/`. The licence is the "SONAR Source-Available License v1.0", not LGPL: its grant covers "any Non-competitive Purpose", and the three carve-outs (SonarQube's own functionality, competition with it, and AI engaging with the Program or the data it provides) do not reach Harbor's product, because the package is build-time (`PrivateAssets=all`, `ExcludeAssets="runtime"`), so no Sonar code or data reaches a binary and the Harbor runtime never consumes a diagnostic. The one reading that does reach Harbor is the dev workflow, where an AI agent reads the analyzer's diagnostics in the build log; that is the owner's call and it is stated as the residual in [`docs/DEVELOPMENT.md §Analyzer licences`](./DEVELOPMENT.md#analyzer-licences). The pin stays at 10.29.0.143774: 10.35.0.4138 is the current release and was measured (10 new rule ids, none removed, the licence file byte-identical, every configured id still present), and taking it needs the #1851 baseline, which is a build this change cannot run. |
 | `Meziantou.Analyzer` | 3.0.315 | MIT | ADOPT, solution-wide | 207 MA rows. The 3.0.123 to 3.0.315 gap added 31 ids, each baselined at the severity the package ships it with (#1851). |
-| `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, solution-wide | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
+| `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, `src/` + `apps/` — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
 | `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids and no severity rows: nine rules fire 216 times and every one of them is in `tests/`, where `TreatWarningsAsErrors` is off (#1905). The dynamic-code ban is not this package, it is RS0030 (#1844). |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.6.0 | MIT | ADOPT, solution-wide | RS0030 over `BannedSymbols.txt` and `BannedSymbols.DynamicCode.txt`. Since #1844 the compiler enforces the dynamic-code ban that a hand-written regex used to (#626). |
-| `DependencyInjection.Lifetime.Analyzers` | 3.7.8 | MIT | ADOPT, solution-wide | 40 DI rows (37 tree-wide, 3 path-scoped), one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. The 2.18.24 → 3.7.8 move added eleven ids and removed none; each new id is baselined at the severity the package ships it with, and DI033's one finding was written off with a reason rather than fixed (#1897). |
+| `DependencyInjection.Lifetime.Analyzers` | 3.7.8 | MIT | ADOPT, `src/` + `apps/` — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | 40 DI rows (37 tree-wide, 3 path-scoped), one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. The 2.18.24 → 3.7.8 move added eleven ids and removed none; each new id is baselined at the severity the package ships it with, and DI033's one finding was written off with a reason rather than fixed (#1897). |
 | `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. 1.4.1 exists and adds no id, but its rewritten walker crashes the compiler with AD0001 on five production projects — under `TreatWarningsAsErrors` they then fail to compile and emit no CFE0001 at all, so the guard would go blind exactly where the crash class lives. The pin stays at 1.3.0 (`docs/ROP-API-INVENTORY.md` §5.1). |
 | `DotNetProjectFile.Analyzers` | 1.19.1 | MIT | ADOPT, solution-wide | 193 Proj rows in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig). Three rules are errors, one is `none`, two stay `suggestion` because the lock-file question is the owner's (#1851, #1857). |
 | `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
