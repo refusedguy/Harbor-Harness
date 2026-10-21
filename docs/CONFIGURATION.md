@@ -474,6 +474,28 @@ still exists at `~/.harbor/config.json`. It owns:
 - Repeat-guard threshold per agent run
 - Cost limit per session
 - Compaction settings
+- The per-plugin configuration sections (`plugins.<plugin-id>`)
+
+### The per-plugin sections
+
+`plugins.<plugin-id>` holds a plugin's OWN settings, and nothing else. The
+plugin declares them in its manifest, and the host checks the user's values
+against that declaration before the plugin starts:
+
+```json
+{
+  "plugins": {
+    "web-search": { "maxResults": 10 }
+  }
+}
+```
+
+A setting the user did not set carries the default the schema published, so a
+plugin always reads a value. A setting the plugin declares no default for is
+required: the plugin does not start until the user gives it a value. The
+section is stored exactly as the user wrote it, because what a section means is
+the plugin's schema and the schema travels with the plugin. See
+[PLUGIN_SYSTEM.md §The plugin's own settings](./PLUGIN_SYSTEM.md#the-plugins-own-settings-1734).
 
 **`maxSteps` is the step budget of a run.** The value is how many LLM turns an
 agent run may take: the loop stops at exactly that many turns and the run says

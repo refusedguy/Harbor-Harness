@@ -873,7 +873,7 @@ jobs:
       #
       # MSBuild is ALREADY incremental: CoreCompile skips a project whose
       # output is newer than its inputs. CI is cold only because obj/ and
-      # bin/ are absent, so every pull request recompiles all 104 projects.
+      # bin/ are absent, so every pull request recompiles all 112 projects.
       # These three steps restore those two directories and let MSBuild
       # decide the fine-grained work; the rest of the build is unchanged.
       #
@@ -918,26 +918,150 @@ jobs:
           echo "cache prefix: ${prefix}"
           echo "cache key:    ${prefix}-${{ github.sha }}"
 
+      # ── Which entry to restore ─────────────────────────────────────────────
+      #
+      # The build-output cache never fired at all: on the pull-request lane
+      # AND on the dev lane the restore found nothing and the whole tree was
+      # recompiled. The VERSION was the cause (spelled out at the restore step
+      # below); WHICH entry to restore is a question of scope, and this step
+      # answers it by name. The difference is the whole compile: 154-271 s of
+      # the build job's 274-360 s wall.
+      #
+      # MEASURED (the runs and the numbers are in docs/BENCHMARKS.md §6.4.1):
+      # on every pull-request run measured — nine of them, 39533897704,
+      # 39534715983, 39534774534, 39536616567, 39536917277, 39536932230,
+      # 39537006278, 39538144280 and 39538764502 — the restore printed
+      #
+      #   Cache not found for input keys: msbuild-v1-...-<pr sha>, msbuild-v1-...-
+      #
+      # every time, and the "Normalise the source mtimes" step right below it
+      # — the one that runs only when the restore matched something — was
+      # SKIPPED every time. So every pull request restored NOTHING and
+      # recompiled all 112 projects: 154-271 s of the build job's wall, and
+      # the compile alone is 60-80 % of it.
+      #
+      # THE CAUSE WAS THE VERSION, and the dev lane's own runs say that the
+      # scope is not it: on the dev push 39543869492 the dev scope already
+      # held an entry with the same prefix — saved 18 minutes earlier by
+      # 39541235668 — the run was in that same scope, and the restore STILL
+      # printed "Cache not found for input keys". The cache never fired on
+      # the dev lane either on that day: the entry was there and the restore
+      # could not see it. What the version is and why the two inputs
+      # disagreed is spelled out at the restore step below.
+      #
+      # WHY THE ENTRY AND NOT THE PREFIX: a pull-request run's own scope
+      # holds nothing — the pull-request lane never writes, the save is
+      # limited to dev/master pushes and manual dispatches — so the entry
+      # worth restoring lives in the base branch's scope. The prefix asks the
+      # service for "the newest entry with this prefix among the scopes this
+      # run can read"; this step asks the REST API, which lists EVERY scope,
+      # and names the base scope's newest entry with this prefix. The exact
+      # key is what crosses into the base branch's scope: measured, run
+      # 39545372020 — a pull-request run — restored the dev scope's entry
+      # ...-8d82cac1 by its exact key.
+      #
+      # The API instead of a second restore-key, on purpose: the entry the
+      # base branch actually has is not necessarily the one built from the
+      # base branch's HEAD — a push whose save was skipped, or an entry that
+      # has since been evicted, both leave a gap that only the API can see —
+      # and "the newest entry with THIS toolchain and THESE props" is the
+      # one worth restoring either way. The prefix still narrows the search
+      # to the same toolchain and the same package graph, so a stale entry
+      # built from different props can never be picked up.
+      - name: Resolve the base branch's build-output cache entry
+        id: cache-entry
+        shell: bash
+        env:
+          # The job's own token. `GITHUB_TOKEN` is NOT in the runner's
+          # environment by default - the token is a CONTEXT
+          # (`github.token`), and a step only sees it if the step says so.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          prefix="${{ steps.cache-key.outputs.prefix }}"
+          # The base branch of the pull request; for a push it is the branch
+          # the run pushes to. Either way it is the scope the entry worth
+          # restoring is expected to live in.
+          base_ref="${{ github.base_ref }}"
+          [ -n "$base_ref" ] || base_ref="${{ github.ref_name }}"
+          scope="refs/heads/${base_ref}"
+          echo "cache prefix:    ${prefix}"
+          echo "looking in scope: ${scope}"
+          key="$(curl -fsSL --max-time 60 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            | jq -r --arg prefix "$prefix" --arg scope "$scope" '
+                [ .actions_caches[] | select(.key | startswith($prefix)) ]
+                | ( (map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                    // (sort_by(.created_at) | last) )
+                | .key // empty' 2>/dev/null)"
+          if [ -n "$key" ]; then
+            echo "key=${key}" >> "$GITHUB_OUTPUT"
+            echo "cache entry to restore: ${key}"
+          else
+            echo "no build-output cache entry for this prefix — this lane compiles from scratch"
+          fi
+
       - name: Restore the build outputs (obj/ + bin/)
         id: cache-restore
         uses: actions/cache/restore@v6
         with:
+          # THE PATH INPUT BELOW MUST BE BYTE-FOR-BYTE THE PATH INPUT OF THE
+          # SAVE STEP. The cache's VERSION is a hash of that input, and the
+          # restore asks the cache service for "the entry with this key AND
+          # this version". Two path inputs that differ by even one character
+          # are two versions, and then the restore can never find the entry
+          # the save wrote.
+          #
+          # WHAT THE VERSION IS, since it decides whether the cache works at
+          # all: upstream, `getCacheVersion(paths, ...)` is the SHA-256 of
+          # the path LINES (trimmed, empties dropped) joined with "|", plus
+          # the compression method and the salt "1.0". The comment lines are
+          # lines, so they are in the hash.
+          #
+          # They differed by NINE COMMENT lines, which is how the cache never
+          # fired: the restore's block explained why the runtime assets and
+          # the symbols are left out, the save's block did not, and the two
+          # strings hashed to two different versions. Replaying that hash
+          # over the two path inputs of the tree that failed (sha 7c7a13e1):
+          # the restore's 14 lines (9 of them comments) hash to bcff3b41...,
+          # the save's 5 lines hash to 3dd0d4fb..., and after this fix both
+          # inputs are the same 5 lines and hash to 3dd0d4fb....
+          #
+          # Measured: the restore printed "Cache not found for input keys" on
+          # every pull-request run (nine of them, 39533897704 ..
+          # 39538764502), on every dev push of that day, and on the manual
+          # dispatches 39541292620 and 39542435400, while the save step wrote
+          # the entry every time.
+          #
+          # Dispatch 39542435400 is the proof in one run: its resolve step
+          # found the entry that dispatch 39541292620 had saved under the EXACT
+          # key ...-7c7a13e1, and the restore still refused that key —
+          # "Cache not found for input keys: msbuild-v1-...-7c7a13e1,
+          # msbuild-v1-...". Same key, SAME scope, other version: the entry
+          # was there and the restore could not see it. The comments are
+          # here, ABOVE the key, for that reason.
+          #
+          # The runtime assets (the native libraries of every RID) and the
+          # satellite assemblies are COPIES of what the NuGet folder already
+          # holds: nothing in MSBuild's up-to-date check reads them, and the
+          # build re-copies them from the packages. They are the bulk of the
+          # payload, and the repository's 10 GB cache budget cannot hold them
+          # — the first version of this cache (1,921 MiB per entry) was
+          # evicted within minutes of being written, because the NuGet caches
+          # already fill the budget. The debug symbols go for the same
+          # reason: the artifacts do not carry them either.
           path: |
             **/obj
             **/bin
-            # The runtime assets (the native libraries of every RID) and the
-            # satellite assemblies are COPIES of what the NuGet folder already
-            # holds: nothing in MSBuild's up-to-date check reads them, and the
-            # build re-copies them from the packages. They are the bulk of the
-            # payload, and the repository's 10 GB cache budget cannot hold
-            # them — the first version of this cache (1,921 MiB per entry)
-            # was evicted within minutes of being written, because the NuGet
-            # caches already fill the budget. The debug symbols go for the
-            # same reason: the artifacts do not carry them either.
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
-          key: ${{ steps.cache-key.outputs.key }}
+          # The entry the step above resolved, when there is one. The
+          # fallbacks are the old behaviour: the key for THIS commit first,
+          # then the prefix.
+          key: ${{ steps.cache-entry.outputs.key || steps.cache-key.outputs.key }}
           restore-keys: |
             ${{ steps.cache-key.outputs.prefix }}-
 
@@ -1022,6 +1146,7 @@ jobs:
       # (CompileTarget carries it). The bootstrap also compiles
       # build/_build.csproj, so NUKE build-code edits validate here too.
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        id: compile
         run: bash build/build.sh Compile --configuration Release
 
       # The zero-test guard is only a guard if it can go red (#1795). This
@@ -1576,10 +1701,38 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # ── Save the build outputs ────────────────────────────────────────────
+      #
+      # The PULL REQUEST lane never writes. A pull request would create one
+      # entry per run (the key ends in the commit), and the repository's
+      # 10 GB cache budget would fill up with pull-request entries and evict
+      # the ones the base branch needs — that is the thrash the rule exists
+      # to prevent.
+      #
+      # dev and master push, and so does a MANUAL workflow_dispatch: that is
+      # the deliberate way to exercise the cache end to end on a branch that
+      # is not dev/master, and a manual run is rare enough not to thrash.
+      #
+      # The save is the LAST step of the job, after the compile and the
+      # shard-slice uploads: an entry is only worth keeping if the bytes in it
+      # are the ones a green compile produced.
+      #
+      # "Green" here means THE COMPILE, not the whole job. The entry holds
+      # obj/ and bin/ and nothing else, so the compile's outcome is what
+      # decides whether those bytes are worth keeping. Before this, the save
+      # step's condition named the EVENT only, so it inherited the implicit
+      # success() and ANY red step skipped it — the compile included:
+      # measured, six dev pushes (39533121069, 39533217825, 39538626670,
+      # 39539597700, 39539618952, 39540516677) failed in the compile and their
+      # save step was skipped. Now the compile's outcome is the gate: a red
+      # compile still skips the save, and a red step BELOW it (a slice list
+      # that drifted, an upload that failed) no longer costs the lane the
+      # entry, because those bytes are the ones the compile produced.
       - name: Save the build outputs (dev/master pushes and manual runs)
         if: >-
-          (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
-          || github.event_name == 'workflow_dispatch'
+          !cancelled() && steps.compile.outcome == 'success' &&
+          ((github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
+          || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
           path: |

@@ -90,7 +90,7 @@ startup (`apps/Harbor.App.Cli/Configuration/CliConfig.cs:67-70`).
 
 Each tool call goes through the permission ruleset before invocation. Defaults are defined
 in `PermissionRuleset.Default`
-(`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:95-123`):
+(`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:96-124`):
 
 - `read`, `glob`, `grep`, `ls`, `tree`, `ripgrep`, `notebook`: allow always
 - `write` / `edit` / `patch`: allow under `src/*`, deny `.env*` (edit), ask otherwise

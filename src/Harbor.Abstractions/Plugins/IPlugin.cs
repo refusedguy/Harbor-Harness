@@ -138,6 +138,30 @@ public sealed class PluginContext
     public required IConfiguration Configuration { get; init; }
 
     /// <summary>
+    ///     The plugin's OWN configuration section: the values under
+    ///     <c>plugins.&lt;plugin-name&gt;</c> in <c>~/.harbor/config.json</c>,
+    ///     validated against the schema the plugin declared and completed with
+    ///     the defaults that schema publishes (#1734).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the plugin's namespace and nothing else: the host hands
+    ///         over the plugin's own settings, not the host's. A plugin that
+    ///         declares no schema gets an empty section, and a setting the user
+    ///         did not set carries the default the schema published, so the
+    ///         plugin reads a value and never has to know whether the user set
+    ///         it.
+    ///     </para>
+    ///     <para>
+    ///         The values are typed: the host has already checked each one
+    ///         against the declared type and range, so a plugin that starts has
+    ///         a section that is valid by construction.
+    ///     </para>
+    /// </remarks>
+    public IReadOnlyDictionary<string, PluginConfigValue> Config { get; init; } =
+        new Dictionary<string, PluginConfigValue>();
+
+    /// <summary>
     ///     The logger factory for creating <see cref="ILogger{TCategoryName}" /> instances.
     /// </summary>
     public required ILoggerFactory LoggerFactory { get; init; }
