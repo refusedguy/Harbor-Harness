@@ -675,6 +675,10 @@ public sealed class CellForgeWidgetAxisRules
             "docs/ROP-API-INVENTORY.md",
             // Generated coverage table listing documented public members.
             "docs/XML_DOC_AUDIT.md",
+            // The generated seam graph: a table of the seams and the routes that
+            // carry them, and a mermaid diagram of the same. It names the seam to
+            // inventory it, not to teach it.
+            "docs/SEAM_GRAPH.md",
             // Component file table for the load host.
             "src/Harbor.Plugins.Host/README.md",
             // Component file table for the assembly declaring ITuiPlugin. The
