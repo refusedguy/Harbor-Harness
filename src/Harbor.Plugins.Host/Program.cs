@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Harbor.Abstractions.Env;
+using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Compilation;
 using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Instantiation;
@@ -42,8 +43,22 @@ public static class Program
             parsed.CacheDir,
             loggerFactory.CreateLogger<CachingCompiler>());
         var instantiator = new ReflectionPluginInstantiator();
+
+        // #1734: the plugin's own configuration section is read from
+        // ~/.harbor/config.json, ONCE, before the plugins load. The plugin
+        // pipeline never touches the file: it asks this source for a section,
+        // and the section is checked against the schema the plugin declared
+        // before the plugin is initialized.
+        IPluginConfigSource configSource = await ConfigFilePluginConfigSource
+            .LoadAsync(logger)
+            .ConfigureAwait(false);
+
         var registrar = new SafePluginRegistrar(
-            new PluginRegistrar(parsed.PluginRoot, loggerFactory.CreateLogger<PluginRegistrar>(), loggerFactory),
+            new PluginRegistrar(
+                parsed.PluginRoot,
+                loggerFactory.CreateLogger<PluginRegistrar>(),
+                loggerFactory,
+                config: configSource),
             loggerFactory.CreateLogger<SafePluginRegistrar>());
 
         var loadHost = new McpPluginLoadHost(loggerFactory, new NullEventBus());
@@ -152,4 +167,7 @@ internal static partial class ProgramLog
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information, Message = "Exposed {Count} plugin tool(s) over MCP")]
     public static partial void ExposedTools(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Failed to read the plugin configuration: {Error}. The plugins start with their own defaults.")]
+    public static partial void ConfigLoadFailed(ILogger logger, string error);
 }
