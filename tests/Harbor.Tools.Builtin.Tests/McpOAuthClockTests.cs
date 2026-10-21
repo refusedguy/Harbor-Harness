@@ -48,10 +48,14 @@ public class McpOAuthClockTests : IDisposable
     private static HttpClient StubClient(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
         new(new StubHttpMessageHandler(respond));
 
-    private static HttpResponseMessage Json(object payload, HttpStatusCode status = HttpStatusCode.OK) =>
+    private static HttpResponseMessage Json(
+        McpOAuthTokenResponse payload,
+        HttpStatusCode status = HttpStatusCode.OK) =>
         new(status)
         {
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+            Content = new StringContent(
+                JsonSerializer.Serialize(payload, McpOAuthJsonContext.Default.McpOAuthTokenResponse),
+                Encoding.UTF8, "application/json")
         };
 
     /// <summary>
@@ -91,7 +95,7 @@ public class McpOAuthClockTests : IDisposable
     public async Task Flow_RefreshAsync_StampsTheExpiryFromTheInjectedClock()
     {
         var clock = new ManualTimeProvider(Start);
-        using var http = StubClient(_ => Json(new { access_token = "at2", expires_in = 3600 }));
+        using var http = StubClient(_ => Json(new McpOAuthTokenResponse("at2", 3600)));
 
         var result = await McpOAuthFlow.RefreshAsync(
             http, "https://x/token", "cid", null, "rt", timeProvider: clock);
@@ -114,7 +118,7 @@ public class McpOAuthClockTests : IDisposable
         var cache = new McpOAuthTokenCache(_root);
 
         // The WRITE path: the flow stamps the expiry from the clock.
-        using var http = StubClient(_ => Json(new { access_token = "written", expires_in = 3600 }));
+        using var http = StubClient(_ => Json(new McpOAuthTokenResponse("written", 3600)));
         Result<McpOAuthTokens> written = await McpOAuthFlow.RefreshAsync(
             http, "https://x/token", "cid", null, "rt", timeProvider: clock);
         cache.Save("srv", written.Value);
