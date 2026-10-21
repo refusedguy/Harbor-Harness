@@ -190,6 +190,7 @@ same day:
 
 | tree | run | compile |
 |------|-----|---------|
+| **narrowed (this change)** | 39520876419 | **199 693 ms** |
 | **narrowed (this change)** | 39518815858 | **210 525 ms** |
 | all-on | 39515287115 (dev@9b0eebd4) | 415 007 ms |
 | all-on | 39511197855 (dev@dec54e5e) | 275 628 ms |
@@ -200,7 +201,7 @@ same day:
 
 The all-on compile ranges over **262–417 s** on this runner — a 1.6x spread
 for the same job — and the issue's own measurement (run 39192015051,
-2026-10-19) was 372.5 s. The narrowed compile is **below every one of
+2026-10-19) was 372.5 s. Both narrowed compiles are **below every one of
 them**.
 
 **What the paired arms could and could not resolve, said plainly.** The
