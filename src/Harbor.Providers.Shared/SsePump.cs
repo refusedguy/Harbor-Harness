@@ -295,7 +295,14 @@ internal static class SsePump
                     await writer.WriteAsync(new ErrorEvent(
                         bounded,
                         errorBody.Length > ProviderErrors.MaxProviderErrorBodyChars ? errorBody : null,
-                        Kind: ProviderErrors.FromStatus(response.StatusCode),
+                        // #1755: the context-window overflow is not a status
+                        // code — every provider answers it with its own body
+                        // (OpenAI's `context_length_exceeded`, Anthropic's
+                        // "prompt is too long", Ollama's "the input length
+                        // exceeds the context window"). The body is therefore
+                        // what classifies it, and the agent loop compacts and
+                        // retries on that kind.
+                        Kind: ProviderErrors.ClassifyResponse(response.StatusCode, errorBody),
                         StatusCode: (int)response.StatusCode), ct).ConfigureAwait(false);
                     return;
                 }
