@@ -86,7 +86,7 @@ namespace Harbor.Architecture.Tests;
 public class ProviderCatalogueBudgetRules
 {
     /// <summary>The project whose view-models load the provider catalogue.</summary>
-    private const string ProjectDir = "Harbor.Desktop.Abstractions";
+    private const string ProjectDir = "Harbor.Desktop.ViewModels";
 
     /// <summary>The name #671 gave the catalogue wait. Exactly one file declares it.</summary>
     private const string CanonicalName = "UiFeedbackBudget";

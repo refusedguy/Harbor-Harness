@@ -681,6 +681,11 @@ public sealed class CellForgeWidgetAxisRules
             // interface's OWN doc carries the closure instead (rule 5), which is
             // where an IntelliSense reader meets it.
             "src/Harbor.Terminal.Abstractions/README.md",
+            // The GENERATED seam graph (#1731): one table row per seam, naming
+            // who implements it and who consumes it. It names the view seam the
+            // way a component file table names it, and a closure sentence in a
+            // generated table would be noise.
+            "docs/SEAM_GRAPH.md",
             // REMOVED in #794: `samples/plugins/Harbor.Plugin.TodoWrite/README.md`.
             // It used to sit here as a "one-line sample blurb that also names
             // the seam", and that blurb was a fabrication — commit 487a68a0

@@ -77,7 +77,7 @@
   «оплачено» и «занято», и разделение намеренное (#623/#630). Сводить её с
   расходом — регресс, и §6 этот запрет повторяет.
 - **Capability модели** — `ModelEntryViewModel.Summary`
-  (`src/Harbor.Desktop.Abstractions/ViewModels/SharedDataModels.cs:112-115`).
+  (`src/Harbor.Desktop.ViewModels/ViewModels/SharedDataModels.cs:118-121`).
   Это факт каталога, а не измерение. Отдельный вопрос (удалить или
   доиспользовать), не часть нотации.
 

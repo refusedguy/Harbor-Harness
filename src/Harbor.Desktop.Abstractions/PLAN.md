@@ -2,40 +2,30 @@
 
 ## Status: MVP
 
-Shared view-model base classes + service interfaces + config stores for Harbor desktop apps. Created in S3 to eliminate VM duplication across desktop UIs; Avalonia is the only platform shipped today.
+The shared configuration schema, the config-store ports, the cross-view-model
+messages and the shared models/enums for the Harbor desktop apps. The
+concrete desktop view-models live in `Harbor.Desktop.ViewModels` since #1899.
 
 ## Done
 
-- [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels) — verified on `ChatViewModelBase.cs:31`
-- [x] 13 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ThemeSettings, FocusSession, ProviderModelPicker (+ concrete platform-facing VMs) — **ten of them removed in #1835**: they had no implementor in the tree, so they were published public surface with nothing behind them. What stays is `ChatViewModelBase`, `DiffViewModelBase` and `CommandPaletteViewModelBase`.
-- [x] Service interfaces: `IDispatcherAdapter`, `IThemeService`, `IFilePicker`, `IDialogService`, `IToastService`
+- [x] `ViewModelBase` → deprecated and removed; all VMs now derive from `StoreSubscriberViewModel` (Harbor.Ui.Framework.ViewModels)
+- [x] 13 base VMs: Chat, SessionList, ProviderBrowser, Settings, CodeEditor, Diff, TokenUsage, CommandPalette, ToastNotification, ThemeSettings, FocusSession, ProviderModelPicker (+ concrete platform-facing VMs) — **ten of them removed in #1835**: they had no implementor in the tree, so they were published public surface with nothing behind them. The three that stayed (`ChatViewModelBase`, `DiffViewModelBase`, `CommandPaletteViewModelBase`) moved to `Harbor.Desktop.ViewModels` with the rest of the view-models in #1899.
+- [x] Service interfaces (`IDispatcherAdapter`, `IThemeService`, `IFilePicker`, `IDialogService`, `IToastService`) — **gone from this project**: they lived in the `Services/` folder that #1899's predecessor (#534's move of the config stores) had already emptied, and the platform implementations live with the apps.
 - [x] Configuration stores shared by all desktop apps — **ports** (`Configuration/IAppConfigStore<T>`, `ICommonConfigStore`) stay here; the JSON+filesystem implementations moved to `Harbor.Hosting/Configuration` in #534
-- [x] Terminal.Abstractions integration (panel contracts referenced without pulling a renderer)
+- [x] #1899: the assembly became a LEAF — one Harbor reference (`Harbor.Abstractions.Contracts`), a two-assembly closure, and the `#188` Presentation → Application edge moved to `Harbor.Desktop.ViewModels` with the view-models that read the preset catalogue.
 
 ## TODO
 
-- [ ] Document the VM state machine for each base VM (transition diagrams)
-- [ ] Add unit tests for VM state transitions
-- [ ] Add `IMultiWindowService` for detachable panels
-- [ ] Platform implementation audit (verify each platform correctly implements the service interfaces)
-- [ ] Theme service: add HighContrast accessibility theme
+- [ ] Delete `ThemeKind` and `ToastKind` — both are referenced by nothing in the tree, and `ToastKind` duplicates the one in `Harbor.Ui.Framework.Services`. Published surface, so it is an owner decision, not a cleanup.
+- [ ] Move the config STORES' `Result` vocabulary to `Harbor.Abstractions.Contracts` so the leaf does not need `CSharpFunctionalExtensions` directly.
 
 ## Known issues
 
-- Each desktop app still has some platform-specific VM duplication beyond the base classes.
-- IDispatcherAdapter implementations vary in correctness (Avalonia verified; WPF / MAUI / Blazor apps do not exist in-repo — only `apps/Harbor.App.Avalonia` and `apps/Harbor.App.Cli` are present).
-- No multi-window support yet (panels are docked only).
-
-## Next priorities
-
-1. **P0**: Audit + verify each platform's service-interface implementations
-2. **P1**: Add VM state-transition unit tests
-3. **P1**: HighContrast accessibility theme
-4. **P2**: Multi-window support (detachable panels)
-5. **P2**: Theme picker UI in Settings VM
+- The assembly is `IsPackable` (`PackageId Harbor.Desktop.Abstractions`) and nothing has ever been published to a feed, so the package identity is a forward-looking commitment rather than a live contract. The versioning decision for it belongs to the owner (ADR-021).
 
 ## See also
 
 - [README.md](README.md)
-- [../../docs/DESKTOP_APP_PLAN.md](../../docs/DESKTOP_APP_PLAN.md)
-- [../../docs/ALTERNATIVE_UIS.md](../../docs/ALTERNATIVE_UIS.md)
+- [ADR-021](../../docs/adr/ADR-021-desktop-abstractions-split.md)
+- [../../docs/CONFIGURATION.md](../../docs/CONFIGURATION.md)
+- [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)

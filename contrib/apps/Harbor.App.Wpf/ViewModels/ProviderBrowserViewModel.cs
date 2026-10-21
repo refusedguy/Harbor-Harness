@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Provider + model browser view model. Lists known providers, their
@@ -70,12 +70,12 @@ public sealed partial class ProviderBrowserViewModel : ObservableObject
 
 /// <summary>
 ///     One provider in the browser. Platform projection of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.ProviderEntryViewModel" /> record
+///     <see cref="Harbor.Desktop.ViewModels.ProviderEntryViewModel" /> record
 ///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it).
 ///     <see cref="Models" /> is re-exposed with the WPF <see cref="ModelEntryViewModel" />
 ///     element type because the base record types it with the shared element.
 /// </summary>
-public sealed class ProviderEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.ProviderEntryViewModel
+public sealed class ProviderEntryViewModel : Harbor.Desktop.ViewModels.ProviderEntryViewModel
 {
     /// <summary>Construct a <see cref="ProviderEntryViewModel" />.</summary>
     public ProviderEntryViewModel(string id, string displayName, string description, IReadOnlyList<ModelEntryViewModel> models)
@@ -87,10 +87,10 @@ public sealed class ProviderEntryViewModel : Harbor.Desktop.Abstractions.ViewMod
 
 /// <summary>
 ///     One model offered by a provider. Platform projection of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.ModelEntryViewModel" /> record
+///     <see cref="Harbor.Desktop.ViewModels.ModelEntryViewModel" /> record
 ///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings resolve to it).
 /// </summary>
-public sealed class ModelEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.ModelEntryViewModel
+public sealed class ModelEntryViewModel : Harbor.Desktop.ViewModels.ModelEntryViewModel
 {
     /// <summary>Construct a <see cref="ModelEntryViewModel" />.</summary>
     public ModelEntryViewModel(string id, string displayName, int contextWindow, int maxOutputTokens, bool supportsVision, bool supportsTools)

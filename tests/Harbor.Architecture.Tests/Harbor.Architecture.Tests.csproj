@@ -208,6 +208,8 @@
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Rendering\Harbor.Ui.Framework.Rendering.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework.Sessions\Harbor.Ui.Framework.Sessions.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- #1899: the concrete view-models moved out of the leaf. -->
+    <ProjectReference Include="..\..\src\Harbor.Desktop.ViewModels\Harbor.Desktop.ViewModels.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Animations\Harbor.Desktop.Animations.csproj"/>
     <!--

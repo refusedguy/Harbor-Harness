@@ -6,7 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj"/>
+    <!-- #1899: DiffViewModel moved to Harbor.Desktop.ViewModels. -->
+    <ProjectReference Include="../../src/Harbor.Desktop.ViewModels/Harbor.Desktop.ViewModels.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj"/>
     <ProjectReference Include="../../src/Harbor.Ui.Framework.Rendering/Harbor.Ui.Framework.Rendering.csproj"/>
     <!-- #462: SlashCommandCatalogTests pins the shared slash-command registry. -->
@@ -15,7 +16,8 @@
       #1549: the shared UI test doubles (TestDispatcherAdapter and the counting
       view-model stubs) moved here from this assembly's own copies. TestKit's
       closure is a SUBSET of this project's existing closure — Harbor.Application
-      arrives here through Harbor.Desktop.Abstractions, and the Ui.Framework
+      arrives here through Harbor.Desktop.ViewModels (which carries the #188
+      ProviderPresets edge), and the Ui.Framework
       family is referenced directly — so the reference adds no new product
       assembly to the slice the perf gates below measure.
 

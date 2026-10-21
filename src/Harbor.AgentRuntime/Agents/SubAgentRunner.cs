@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using Harbor.Abstractions.Extensions;
+using Harbor.Abstractions.Results;
 using Harbor.Abstractions.Sessions;
 using Microsoft.Extensions.Logging;
 using Result = CSharpFunctionalExtensions.Result;
@@ -224,7 +225,13 @@ public sealed class SubAgentRunner(
                     CancellationToken.None).ConfigureAwait(false);
                 // [UX6] #266: tokens burned before the failure still count —
                 // propagate the partial delta so the parent totals stay honest.
-                Usage failedUsage = await TryAggregateChildUsageAsync(session.Id, CancellationToken.None).ConfigureAwait(false);
+                // A failed aggregate degrades to zero HERE, at the call site:
+                // the run already failed, and the aggregate must not mask that
+                // error with a storage failure of its own.
+                Usage failedUsage = (await TryAggregateChildUsageAsync(session.Id, CancellationToken.None).ConfigureAwait(false))
+                    .Match(
+                        usage => usage,
+                        _ => new Usage(0, 0));
                 await PropagateChildCostAsync(
                     request.ParentSessionId, request.ParentMessageId, session.Id, failedUsage, CancellationToken.None).ConfigureAwait(false);
                 // #270: degrade — surface whatever the sub-run produced before
@@ -420,27 +427,28 @@ public sealed class SubAgentRunner(
     }
 
     /// <summary>
-    ///     Best-effort child-usage aggregate for the failure path: storage
-    ///     breakage degrades to zero instead of masking the original error.
+    ///     Child-usage aggregate for the failure path ([UX6] #266). The read
+    ///     rides the canonical try→Result rail (bible §4.5): a storage failure
+    ///     comes back as a failed Result, and the CALLER decides how to
+    ///     degrade — this method no longer decides "zero" on its own.
     ///     Cancellation propagates — it must never turn a cancel into a quiet
     ///     success-shaped failure message.
     /// </summary>
-    private async Task<Usage> TryAggregateChildUsageAsync(string sessionId, CancellationToken ct)
+    private async Task<Result<Usage>> TryAggregateChildUsageAsync(string sessionId, CancellationToken ct)
     {
-        try
-        {
-            var history = await store.GetMessagesAsync(sessionId, ct).ConfigureAwait(false);
-            return history.IsSuccess ? AggregateUsage(history.Value) : new Usage(0, 0);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            SubAgentRunnerLog.UsageAggregateFailed(logger, ex, sessionId);
-            return new Usage(0, 0);
-        }
+        // The store is the boundary: a read that throws (a third-party store,
+        // a transport hiccup) is an exception, and the canonical handler turns
+        // it into a value. ResultErrors.Message rethrows a cancellation, so a
+        // cancel still escapes instead of masquerading as a zero aggregate.
+        var usage = await Result.Try(
+                () => store.GetMessagesAsync(sessionId, ct),
+                ResultErrors.Message)
+            .Bind(read => read)
+            .Map(AggregateUsage)
+            .TapError(error => SubAgentRunnerLog.UsageAggregateFailed(logger, error, sessionId))
+            .ConfigureAwait(false);
+
+        return usage;
     }
 
     /// <summary>
@@ -682,8 +690,8 @@ internal static partial class SubAgentRunnerLog
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug, Message = "Failed to extract degraded sub-agent output for session {SessionId}")]
     public static partial void DegradedOutputExtractFailed(ILogger logger, Exception ex, string sessionId);
 
-    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Failed to aggregate sub-agent usage for session {SessionId}")]
-    public static partial void UsageAggregateFailed(ILogger logger, Exception ex, string sessionId);
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning, Message = "Failed to aggregate sub-agent usage for session {SessionId}: {Error}")]
+    public static partial void UsageAggregateFailed(ILogger logger, string error, string sessionId);
 
     [LoggerMessage(EventId = 8, Level = LogLevel.Warning, Message = "Failed to read parent session {SessionId} for sub-agent cost propagation: {Error}")]
     public static partial void ReadParentSessionFailed(ILogger logger, string sessionId, string error);

@@ -9,7 +9,7 @@ using Harbor.App.Avalonia.Services;
 using Harbor.App.Avalonia.ViewModels.Board;
 using Harbor.Abstractions.Tools;
 using Harbor.Desktop.Abstractions.Messages;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Animation;
 using Harbor.Ui.Framework.Converters;
 using Harbor.Ui.Framework.Navigation;

@@ -117,7 +117,7 @@ public sealed class ProviderIdDispatchRule
     ///     non-vacuity check can prove discovery still sees it. Not an exemption.
     /// </summary>
     private const string FormerTableFileRelativePath =
-        "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs";
+        "src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs";
 
     /// <summary>
     ///     One C# <c>string</c> literal on a line, captured with its value. Matched

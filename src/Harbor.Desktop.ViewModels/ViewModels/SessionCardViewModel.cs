@@ -17,7 +17,7 @@ using Microsoft.Extensions.Logging;
 using SessionDotState = Harbor.Desktop.Abstractions.Models.SessionDotState;
 using SessionDotStates = Harbor.Desktop.Abstractions.Models.SessionDotStates;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 public partial class SessionCardViewModel : ObservableObject
 {

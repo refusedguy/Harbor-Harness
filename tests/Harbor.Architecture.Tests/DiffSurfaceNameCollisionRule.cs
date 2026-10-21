@@ -1182,11 +1182,11 @@ public sealed class DiffSurfaceNameCollisionRule
             // (2) The same name, in a DIFFERENT project, also calling the engine.
             // This pair is #570 verbatim, and it is the whole finding: one name,
             // two assemblies, two independent things to fix.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/DiffViewModel.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/DiffViewModel.cs",
             [
                 "using Harbor.Ui.Framework.Rendering.Widgets;",
                 string.Empty,
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public sealed partial class DiffViewModel : ObservableObject",
                 "{",
@@ -1227,11 +1227,11 @@ public sealed class DiffSurfaceNameCollisionRule
             ]),
             // (4) A partial type split across two files of ONE project. Legal C#,
             // one implementation, not a collision.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/DiffViewModel.Rows.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/DiffViewModel.Rows.cs",
             [
                 "using Harbor.Ui.Framework.Rendering.Widgets;",
                 string.Empty,
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public sealed partial class DiffViewModel",
                 "{",
@@ -1253,9 +1253,9 @@ public sealed class DiffSurfaceNameCollisionRule
             // (6) A file that only NAMES the engine in its XML docs. The #570
             // copies are full of `<see cref="LineDiff" />`, so a perimeter keyed
             // on the bare word would sweep in prose.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/ProseOnly.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/ProseOnly.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "/// <summary>Reads <see cref=\"LineDiff\" /> and LineDiff.Compute for the diff.</summary>",
                 "public sealed class ProseOnly",
@@ -1311,9 +1311,9 @@ public sealed class DiffSurfaceNameCollisionRule
             // (2) #803 verbatim: the same kind name, in a different project, with a member set
             // that does not match. Nothing here calls the engine, so rule 1 cannot see it — which
             // is exactly why rule 3 exists.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticData.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticData.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public enum SyntheticRowKind",
                 "{",
@@ -1358,7 +1358,7 @@ public sealed class DiffSurfaceNameCollisionRule
                 + "row type was being held to a name it never borrowed. Reported: " + Describe(report.ForeignVocabulary));
 
         ForeignDiffVocabulary finding = report.ForeignVocabulary[0];
-        await Assert.That(finding.DeclaringProject).IsEqualTo("Harbor.Desktop.Abstractions")
+        await Assert.That(finding.DeclaringProject).IsEqualTo("Harbor.Desktop.ViewModels")
             .Because("the finding must name the ASSEMBLY that re-declared the vocabulary, since a type "
                    + "name without an assembly is the whole ambiguity #803 is about");
 
@@ -1390,9 +1390,9 @@ public sealed class DiffSurfaceNameCollisionRule
             // (4) A name that merely CONTAINS the owned one. `SyntheticRowKind` inside
             // `SyntheticRowKindExtra` is a different type, and holding it to the owned name
             // would make the rule unfixable without inventing names.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticExtra.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticExtra.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public enum SyntheticRowKindExtra",
                 "{",
@@ -1420,9 +1420,9 @@ public sealed class DiffSurfaceNameCollisionRule
             // (6) A foreign project declaring a kind+carrier pair of its OWN, with a name
             // nobody owns. A project is allowed its own vocabulary; the rule is about taking
             // one that is already spoken, not about having one.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticOwn.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticOwn.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public enum SyntheticBubbleKind",
                 "{",
@@ -1435,9 +1435,9 @@ public sealed class DiffSurfaceNameCollisionRule
             // (7) Prose that NAMES the owned vocabulary without declaring it. The XML docs in
             // this very file are full of `<see cref="SyntheticRowKind" />`, so a matcher that
             // keyed on the bare word would report the documentation as the defect.
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticProse.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticProse.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "/// <summary>Reads <see cref=\"SyntheticRowKind\" /> to pick a brush.</summary>",
                 "public sealed class SyntheticProse",

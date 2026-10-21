@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 namespace Harbor.App.Wpf.ViewModels;
 /// <summary>
 ///     Sidebar session list. Supports search, fork/branch, and switching the
@@ -117,12 +117,12 @@ public sealed partial class SessionListViewModel : ObservableObject
 
 /// <summary>
 ///     Sidebar entry for a session. Platform projection of the shared
-///     <see cref="Harbor.Desktop.Abstractions.ViewModels.SessionEntryViewModel" /> record
+///     <see cref="Harbor.Desktop.ViewModels.SessionEntryViewModel" /> record
 ///     (kept in this namespace so the WPF XAML <c>vm:</c> mappings and the
 ///     <c>with</c>-expression in <see cref="SessionListViewModel" /> resolve to it).
 ///     The canonical data lives on the shared record.
 /// </summary>
-public sealed class SessionEntryViewModel : Harbor.Desktop.Abstractions.ViewModels.SessionEntryViewModel
+public sealed class SessionEntryViewModel : Harbor.Desktop.ViewModels.SessionEntryViewModel
 {
     /// <summary>Construct a <see cref="SessionEntryViewModel" />.</summary>
     public SessionEntryViewModel(string id, string title, string agentName, DateTimeOffset updatedAt, string? parentId)

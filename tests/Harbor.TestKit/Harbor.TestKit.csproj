@@ -19,7 +19,7 @@
           ToolDescriptor, SystemPromptContext, ...), 26 from
           Harbor.Abstractions.Contracts (Session, AgentMessage, Usage, Pricing,
           ToolName, PermissionRuleset, ProviderId, ...), 2 from
-          Harbor.Desktop.Abstractions (ChatViewModelBase, DiffViewModelBase),
+          Harbor.Desktop.ViewModels (ChatViewModelBase, DiffViewModelBase),
           2 from Harbor.Ui.Framework.Services, 3 from
           Harbor.Ui.Framework.State, 1 from Harbor.Ui.Framework.ViewModels.
           The only mention of Harbor.Application anywhere in the project was
@@ -28,13 +28,23 @@
           types (ITracer/IMetrics/correlation) and TestKit names none of them.
 
       Every remaining reference is load-bearing and is declared explicitly,
-      not leaned on transitively. Note that Harbor.Application is STILL in
-      TestKit's transitive closure — via Harbor.Desktop.Abstractions, which
-      needs Harbor.Application.Configuration.ProviderPresets for the onboarding
-      view-models (the documented #188 Presentation->Application exception).
-      Removing the direct edge therefore does NOT shrink the closure; do not
-      re-add it "for symmetry" — the honest fix for the remaining path is a
-      separate move of ProviderPresets, tracked outside #1809.
+      not leaned on transitively. Note that the preset catalogue is STILL in
+      TestKit's transitive closure — via Harbor.Desktop.ViewModels, which
+      needs ProviderPresets for the onboarding view-models (the documented #188
+      Presentation->Application exception). Removing the direct edge therefore
+      does NOT shrink the closure; do not re-add it "for symmetry" — the
+      honest fix for the remaining path is a separate move of ProviderPresets,
+      tracked outside #1809.
+
+      #1899 renamed that one reference: the two view-model bases moved out of
+      Harbor.Desktop.Abstractions (which is now the config-schema leaf) into
+      Harbor.Desktop.ViewModels, and the #188 edge moved with them, so the
+      assembly that drags the catalogue in is the one the bases live in now —
+      and since #1889 that assembly is reached from the sibling
+      `Harbor.TestKit.Tui`, not from this core. Since #1625 the catalogue
+      itself lives in Harbor.PolicyConfig, so that edge is
+      Harbor.Desktop.ViewModels -> Harbor.PolicyConfig; the namespace it is
+      declared in is still Harbor.Application.Configuration.
     -->
     <!--
       #1889: the four UI references are GONE, and with them the closure
@@ -51,9 +61,10 @@
       The paragraph above is kept as a record, not as a description of this
       file: the "Harbor.Application is STILL in TestKit's transitive closure"
       sentence was true until #1889 and is now false, because the edge that
-      carried it (Harbor.Desktop.Abstractions) left with the doubles. The
+      carried it (Harbor.Desktop.ViewModels since #1899 split the desktop
+      view-models out) left with the doubles. The
       ProviderPresets move it mentions is still worth doing — it is what keeps
-      `Harbor.Desktop.Abstractions` heavy for every project that needs a
+      `Harbor.Desktop.ViewModels` heavy for every project that needs a
       desktop view-model base — but it is no longer what makes TestKit heavy.
 
       The closure is FOUR, not three, and the fourth is the kit's OWN support

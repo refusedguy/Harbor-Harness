@@ -1,7 +1,7 @@
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 public abstract partial class CommandPaletteViewModelBase : StoreSubscriberViewModel
 {

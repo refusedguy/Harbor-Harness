@@ -97,6 +97,8 @@
     <ProjectReference Include="..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Hosting\Harbor.Hosting.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- #1899: the concrete desktop view-models moved out of Harbor.Desktop.Abstractions. -->
+    <ProjectReference Include="..\..\src\Harbor.Desktop.ViewModels\Harbor.Desktop.ViewModels.csproj"/>
     <!-- Centralized view-model / overlay / dialog locator set. -->
     <ProjectReference Include="..\..\src\Harbor.Desktop.Shared\Harbor.Desktop.Shared.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>

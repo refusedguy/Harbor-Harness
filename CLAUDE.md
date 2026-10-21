@@ -71,7 +71,7 @@ src/                                   — ~50 projects (all included in Harbor.
 ├── Harbor.Plugins.{Abstractions,Compilation,Instantiation,Registration,
 │                    Hosting,Runtime,Host,Storage}/  — layered plugin hosting (Roslyn CS loader in Runtime)
 ├── Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ + Harbor.Transport.Remote/ — daemon/remote IPC
-└── ...Logging, Telemetry.{Core,Otlp}, Desktop.{Abstractions,Shared,Animations}, CodeGen, ...
+└── ...Logging, Telemetry.{Core,Otlp}, Desktop.{Abstractions,ViewModels,Shared,Animations}, CodeGen, ...
 
 apps/Harbor.App.Cli/                   — CLI entry point, slash commands, REPL, HostBuilder DI root
 apps/Harbor.App.Avalonia/              — cross-platform desktop GUI
@@ -700,7 +700,8 @@ while (start < span.Length)
 - Use `Channel<T>` for producer-consumer (see `OpenAiCompatibleLlmClient`).
 
 ### JSON
-- `System.Text.Json` only. No Newtonsoft.
+- `System.Text.Json` only. No Newtonsoft. Scope of the ban (our own use vs. a
+  foreign package's transitive dependency): `AGENTS.md` §"What NOT to do" #2.
 - Source-gen `JsonSerializerContext` for AOT-compatibility (planned).
 - `JsonPropertyName` attributes for snake_case JSON properties on internal records.
 

@@ -34,7 +34,9 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │    Tui.NickConsoleEx (SharpConsoleUI — moved out of the         │
 │    product, ADR-019)                                            │
 │  - Harbor.Desktop.Abstractions (config schema: CommonConfig,    │
-│    ICommonConfigStore; desktop VM bases)                        │
+│    ICommonConfigStore; shared models and enums)                 │
+│  - Harbor.Desktop.ViewModels (the concrete desktop VMs and      │
+│    their abstract bases)                                        │
 │  - Harbor.Terminal.Abstractions (TUI interfaces, ITuiPlugin)    │
 │  - Harbor.DesignSystem (HDS v1 token catalog — zero Harbor      │
 │    references; RgbColor + the cell-style primitives live here)  │
@@ -151,6 +153,22 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 > that the guard lands before the rewrite. A split is not a new extension axis: it
 > adds no marker interface and no `Register*` door.
 
+> **Update 2026-10-20 (#1899): the PRESENTATION box gained the desktop
+> view-model layer.** `Harbor.Desktop.Abstractions` used to be one entry that
+> held BOTH the config schema and the concrete desktop view-models — 46 public
+> types, 9 project references, an 18-assembly dependency closure, under a name
+> that promised a contract layer. #1899 split it at the measured dependency
+> seam: `Harbor.Desktop.Abstractions` keeps the config schema, the config-store
+> ports, the cross-view-model messages and the shared models/enums, and the
+> concrete view-models moved to `Harbor.Desktop.ViewModels`. The leaf's closure
+> is now two assemblies (itself + `Harbor.Abstractions.Contracts`) instead of
+> eighteen, and the `#188` Presentation → Application edge moved with the
+> view-models that read the preset catalogue (the edge points at
+> `Harbor.PolicyConfig` since #1625 moved the catalogue out of
+> `Harbor.Application`). The decision and the per-option
+> costs are in
+> [ADR-021](adr/ADR-021-desktop-abstractions-split.md).
+>
 > **Update 2026-10-20: the PRESENTATION box lost a renderer.**
 > `Harbor.Tui.NickConsoleEx` (the SharpConsoleUI wrapper) and the vendored
 > `nickprotop/ConsoleEx` submodule moved to `contrib/`: unmaintained, not built
@@ -270,9 +288,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 | `Harbor.Diagnostics.Abstractions`, `Harbor.Extensions` | Telemetry contracts (`ITracer`, `IMetrics`, `CorrelationContext`) and small cross-cutting helpers. | Zero Harbor references — leaves over BCL. |
 
 Projects named `-Abstractions` that are **not** in this layer: `Harbor.Terminal.Abstractions`
-(TUI contracts — Presentation) and `Harbor.Desktop.Abstractions` (config schema + desktop
-VM bases — Presentation). Both were rows in this table's Domain column until #751; see the
-note above the diagram.
+(TUI contracts — Presentation) and `Harbor.Desktop.Abstractions` (config schema + shared
+models/enums — Presentation). Both were rows in this table's Domain column until #751; see the
+note above the diagram. Since #1899 `Harbor.Desktop.Abstractions` is what its name says it
+is: a leaf holding contracts and models, with `Harbor.Desktop.ViewModels` carrying the
+concrete view-models.
 
 ### Circular-dependency workaround: `ICommonConfigModelRefReader`
 
@@ -284,6 +304,14 @@ Harbor.Desktop.Abstractions (has ICommonConfigStore + CommonConfig)
   ↓  Ui.Framework.{ViewModels,State,Services,Sessions,Rendering})
 Harbor.Ui.Framework  ← CYCLE!
 ```
+
+**#1899 closed the lower half of that diagram.** The leaf's six
+`Ui.Framework.*` edges moved to `Harbor.Desktop.ViewModels` with the
+view-models that needed them, so `Harbor.Desktop.Abstractions` no longer
+references `Harbor.Ui.Framework` at all — it references
+`Harbor.Abstractions.Contracts` and nothing else. The workaround below is
+still the reason the narrow port exists; what changed is that the leaf no
+longer carries the edge the cycle was about.
 
 **Fix**: declared `ICommonConfigModelRefReader` in
 `Harbor.Ui.Framework.Abstractions/Configuration/` with a narrow contract (just
@@ -310,8 +338,9 @@ The UI framework forks sessions, and the fork is Application-layer business logi
 (`SessionForkService`). `FullLayerMatrixTests.Matrix_AllowedEntries_RespectLayerRules`
 draws `Presentation → Application` as a violation, so `Harbor.Ui.Framework.Sessions`
 cannot reference `Harbor.Application` — and the single existing exception on that
-edge (`Harbor.Desktop.Abstractions` → `ProviderPresets`, #188/#96) is a named debt
-with a stated fix, not a precedent to widen.
+edge (`Harbor.Desktop.ViewModels` → `ProviderPresets`, #188/#96; it was
+`Harbor.Desktop.Abstractions` until #1899 moved it with the view-models) is a named
+debt with a stated fix, not a precedent to widen.
 
 **What that cost, and the fix (#670).** `SessionFactory.CreateBranchAsync` used to
 fork sessions itself, and the copy drifted until a desktop fork set no
@@ -341,7 +370,8 @@ flowchart TB
         TuiAnsi["Harbor.Tui.AnsiPlain (ANSI + plain)<br/>/ .Notifications"]
         TuiConsoleEx["Harbor.Tui.CellForge (+ .Engine / .Syntax / .Prompts)<br/>(cell-diff backends)"]
         TuiContrib["contrib/tui: Spectre / SpectreTui<br/>/ TerminalGui / Termina / RazorConsole / Sixel"]
-        DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, desktop VM bases)"]
+        DesktopAbs["Harbor.Desktop.Abstractions<br/>(config schema, models, enums)"]
+        DesktopVms["Harbor.Desktop.ViewModels<br/>(concrete desktop VMs + their bases)"]
     end
 
     subgraph App["Application (use cases)"]
@@ -373,6 +403,8 @@ flowchart TB
     Cli --> TuiAbs
 
     DesktopAbs --> Abs
+    DesktopVms --> Abs
+    DesktopVms --> DesktopAbs
 
     TuiAnsi --> Abs
     TuiAnsi --> TuiAbs
@@ -440,7 +472,9 @@ dragging in model DTOs. Both are Domain and reference each other in one directio
 > deprecated facade, it has no matrix row, and `src/` has no directory for it any more.
 > The Domain layer is six projects deep in the matrix, and §1's diagram lists them. The
 > `-Abstractions`-named projects that are **not** Domain are `Harbor.Terminal.Abstractions`
-> and `Harbor.Desktop.Abstractions` (both Presentation) — corrected in #751.
+> and `Harbor.Desktop.Abstractions` (both Presentation) — corrected in #751. Since #1899 the
+> second of them is a leaf in fact as well as in name: it holds the config schema and the
+> shared models/enums, and the concrete view-models live in `Harbor.Desktop.ViewModels`.
 
 ---
 
@@ -974,12 +1008,15 @@ while enforcing nothing — which is the failure mode these rules exist to preve
 
 Until [#626](https://github.com/refusedguy/Harbor-Harness/issues/626) this existed only as
 an emergent property of the zero-warning bar. The `ReflectionAnalyzers` (`REFL*`) diagnostics
-did not contribute to it: all 46 rules are member-by-member correctness rules (binding flags,
-overloads, `nameof`), and the shipped analyzer contains no rule for `Assembly.Load`,
+did not contribute to it: all 46 rules are about member-by-member reflection — 32 report a
+reflective call that cannot work as written, 14 ask for a different spelling (binding flags,
+overloads, `nameof`) — and the shipped analyzer contains no rule for `Assembly.Load`,
 `AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder` or `DynamicMethod` — measured in
-issue #1905. The dynamic-code ban was held by `ReflectionConventionRule` and by nothing
-else. Nothing in the repo said it was a rule, so a contributor adding `Assembly.Load`
-somewhere new had no way to know it was the thing the codebase is built to avoid. Since
+issue #1905, by reading the ids, titles, severities and strings out of the shipped
+`analyzers/dotnet/cs/ReflectionAnalyzers.dll`. The dynamic-code ban was held by
+`ReflectionConventionRule` and by nothing else. Nothing in the repo said it was a rule, so a
+contributor adding `Assembly.Load` somewhere new had no way to know it was the thing the
+codebase is built to avoid. Since
 [#1844](https://github.com/refusedguy/Harbor-Harness/issues/1844) it is **the compiler's
 rule**: the ban file [`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) is
 listed in every product project's `<AdditionalFiles>` and enforced by the `RS0030`

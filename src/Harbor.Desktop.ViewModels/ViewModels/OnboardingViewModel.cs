@@ -9,7 +9,7 @@ using Harbor.Application.Configuration;
 using Harbor.Ui.Framework.Services;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>Onboarding theme choice as an enum (string-free dispatch, #197).</summary>
 public enum OnboardingTheme

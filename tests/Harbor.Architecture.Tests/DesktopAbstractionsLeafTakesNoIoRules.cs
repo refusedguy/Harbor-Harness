@@ -137,14 +137,21 @@
 //     already outside CI's reach before this change and are tracked in #536's
 //     sibling follow-up rather than fixed here.
 //
-// DOES NOT RULE THE #188 MATRIX EXCEPTION
-// ---------------------------------------
-// #534 also predicts that emptying this leaf "retires the #188 matrix exception"
-// (its `Harbor.Desktop.Abstractions -> Harbor.Application` edge). It does not, and
-// this guard must not pretend otherwise: that edge exists because the leaf's
-// `ProviderModelPickerViewModel` / `OnboardingViewModel` read the
-// `ProviderPresets` catalog out of `Harbor.Application`, which has nothing to do
-// with config persistence. Retiring it is a separate move, in a separate issue.
+// THE #188 MATRIX EXCEPTION LEFT THIS LEAF — #1899
+// -----------------------------------------------
+// #534 predicted that emptying this leaf "retires the #188 matrix exception" (its
+// `Harbor.Desktop.Abstractions -> Harbor.Application` edge). It did not, at the
+// time: that edge existed because the leaf's `ProviderModelPickerViewModel` /
+// `OnboardingViewModel` read the `ProviderPresets` catalog out of
+// `Harbor.Application`, which has nothing to do with config persistence.
+//
+// #1899 moved those two view-models OUT of this leaf, into
+// `Harbor.Desktop.ViewModels`, and the edge moved with them. Since #1625 the
+// catalogue itself lives in `Harbor.PolicyConfig`, so the documented exception
+// is now `Harbor.Desktop.ViewModels -> Harbor.PolicyConfig`, and this leaf has
+// NO edge to either assembly at all. So the prediction came true, four issues
+// later, by a different route: the view-models left, and the exception stayed
+// scoped to the two files that read the catalogue.
 
 // MECHANISM (#1086, step 2, conveyor)
 // -----------------------------------
@@ -218,7 +225,11 @@ public sealed class DesktopAbstractionsLeafTakesNoIoRules
             // Path is string manipulation, not a syscall — deliberately not ruled.
             new ScanControl("Strings.cs", "            string full = Path.Combine(home, name);", null),
         ],
-        MinHits = 10,
+        // #1899: the leaf holds 11 .cs files now (the 19 view-model files left
+        // for Harbor.Desktop.ViewModels), so the old floor of 10 sat exactly on
+        // the count. 8 still separates "the walk reached the leaf" from "the walk
+        // read nothing".
+        MinHits = 8,
         CustomParse = ParseDiskCall,
     };
 

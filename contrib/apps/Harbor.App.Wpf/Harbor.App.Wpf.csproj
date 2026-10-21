@@ -59,6 +59,8 @@
     <ProjectReference Include="..\..\..\src\Harbor.Application\Harbor.Application.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Registries\Harbor.Registries.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
+    <!-- #1899: the concrete view-models moved out of Harbor.Desktop.Abstractions. -->
+    <ProjectReference Include="..\..\..\src\Harbor.Desktop.ViewModels\Harbor.Desktop.ViewModels.csproj"/>
     <ProjectReference Include="..\..\..\src\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
     <!--
       In-memory session store (Harbor.Storage.Memory) — used by the

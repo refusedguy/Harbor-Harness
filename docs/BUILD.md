@@ -447,7 +447,7 @@ The project uses these analyzers (configured in `Directory.Build.props` and `.ed
 - **Roslynator.Analyzers** — code style, refactoring suggestions
 - **SonarAnalyzer.CSharp** — code quality, security
 - **Microsoft.CodeAnalysis.NetAnalyzers** — performance, async
-- **Microsoft.CodeAnalysis.BannedApiAnalyzers** — banned APIs (see `BannedApi.txt`)
+- **Microsoft.CodeAnalysis.BannedApiAnalyzers** — banned APIs (see `BannedSymbols.txt`)
 - **AsyncFixer** — async best practices
 - **ReflectionAnalyzers** — reflection correctness (binding flags, overloads, `nameof`); not a dynamic-code rule — see [`docs/ANALYZERS.md`](./ANALYZERS.md#reflection-rules-reflectionanalyzers-031)
 - **Meziantou.Analyzer** — comprehensive code quality

@@ -7,7 +7,7 @@ using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.ViewModels;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Desktop.Abstractions.ViewModels;
+namespace Harbor.Desktop.ViewModels;
 
 /// <summary>
 ///     Base for the diff view-model. Holds the original and modified text,

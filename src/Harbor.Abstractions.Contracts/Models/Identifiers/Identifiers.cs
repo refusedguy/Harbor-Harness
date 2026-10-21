@@ -37,6 +37,24 @@ internal static class IdentifierValidation
         return true;
     }
 
+    /// <summary>
+    ///     Validate <c>^[a-z0-9][a-z0-9._-]*$</c> for service scopes without allocating a
+    ///     Regex (#1736). A scope label may additionally carry a dot and an underscore
+    ///     because it names a REALM, not an entity — <c>ci</c>, <c>plan</c>,
+    ///     <c>session.dump</c>.
+    /// </summary>
+    public static bool IsValidServiceScope(string value)
+    {
+        if (value.Length == 0) return false;
+        if (!IsLowerOrDigit(value[0])) return false;
+        for (int i = 1; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (!IsLowerOrDigit(c) && c != '-' && c != '_' && c != '.') return false;
+        }
+        return true;
+    }
+
     private static bool IsLower(char c) => (uint)(c - 'a') <= 'z' - 'a';
     private static bool IsLowerOrDigit(char c) => IsLower(c) || (uint)(c - '0') <= '9' - '0';
 }

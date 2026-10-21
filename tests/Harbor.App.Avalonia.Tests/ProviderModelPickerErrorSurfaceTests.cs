@@ -5,7 +5,7 @@ using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Desktop.Abstractions.Configuration;
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Services;
 using Harbor.Ui.Framework.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;

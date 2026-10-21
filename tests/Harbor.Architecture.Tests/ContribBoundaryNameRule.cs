@@ -325,9 +325,9 @@ public sealed class ContribBoundaryNameRule
     private static readonly Lazy<CrossBoundaryReport> Synthetic = new(
         () => ContribBoundaryNameProbe.ScanFiles(
         [
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticRow.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticRow.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public sealed class SyntheticRow",
                 "{",
@@ -461,7 +461,7 @@ public sealed class ContribBoundaryNameRule
                 + "Reported: " + Describe(report.Crossings));
 
         CrossBoundaryName hit = report.Crossings[0];
-        await Assert.That(hit.ProductFiles).IsEquivalentTo(["src/Harbor.Desktop.Abstractions/ViewModels/SyntheticRow.cs"])
+        await Assert.That(hit.ProductFiles).IsEquivalentTo(["src/Harbor.Desktop.ViewModels/ViewModels/SyntheticRow.cs"])
             .Because("the finding must say which BUILT project declares the name, since \"this name "
                    + "exists twice\" without saying where is the ambiguity #843 is about");
 
@@ -520,9 +520,9 @@ public sealed class ContribBoundaryNameRule
         {
             var decoyReport = ContribBoundaryNameProbe.ScanFiles(
             [
-                ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticRow.cs",
+                ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticRow.cs",
                 [
-                    "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                    "namespace Harbor.Desktop.ViewModels;",
                     string.Empty,
                     "public sealed class SyntheticRow",
                     "{",
@@ -578,9 +578,9 @@ public sealed class ContribBoundaryNameRule
 
         var twoSided = ContribBoundaryNameProbe.ScanFiles(
         [
-            ("src/Harbor.Desktop.Abstractions/ViewModels/SyntheticRow.cs",
+            ("src/Harbor.Desktop.ViewModels/ViewModels/SyntheticRow.cs",
             [
-                "namespace Harbor.Desktop.Abstractions.ViewModels;",
+                "namespace Harbor.Desktop.ViewModels;",
                 string.Empty,
                 "public sealed class SyntheticRow",
                 "{",

@@ -296,7 +296,7 @@ API.
 | `SonarAnalyzer.CSharp` | 10.29.0.143774 | source-available, not SPDX (a `LICENSE` file in the package) | ADOPT, `tests/` only — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | 447 rule ids ship in the package. 23 are configured in `.editorconfig` (22 `none`, 1 `suggestion`), 4 more are NoWarn'd in `Directory.Build.props`, and 6 more are off under `tests/` only; each carries its own reason. Measured on `dev@086ef777` (CI run 39472959027, the Release build of `Harbor.slnx`): 476 sites in 40 rules, every one of them under `tests/`, and 0 under `src/` or `apps/`. The licence is the "SONAR Source-Available License v1.0", not LGPL: its grant covers "any Non-competitive Purpose", and the three carve-outs (SonarQube's own functionality, competition with it, and AI engaging with the Program or the data it provides) do not reach Harbor's product, because the package is build-time (`PrivateAssets=all`, `ExcludeAssets="runtime"`), so no Sonar code or data reaches a binary and the Harbor runtime never consumes a diagnostic. The one reading that does reach Harbor is the dev workflow, where an AI agent reads the analyzer's diagnostics in the build log; that is the owner's call and it is stated as the residual in [`docs/DEVELOPMENT.md §Analyzer licences`](./DEVELOPMENT.md#analyzer-licences). The pin stays at 10.29.0.143774: 10.35.0.4138 is the current release and was measured (10 new rule ids, none removed, the licence file byte-identical, every configured id still present), and taking it needs the #1851 baseline, which is a build this change cannot run. |
 | `Meziantou.Analyzer` | 3.0.315 | MIT | ADOPT, solution-wide | 207 MA rows. The 3.0.123 to 3.0.315 gap added 31 ids, each baselined at the severity the package ships it with (#1851). |
 | `AsyncFixer` | 2.1.0 | Apache-2.0 | ADOPT, `src/` + `apps/` — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | Five rules, AsyncFixer01 to AsyncFixer05, all at `suggestion`. |
-| `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids and no severity rows: nine rules fire 216 times and every one of them is in `tests/`, where `TreatWarningsAsErrors` is off (#1905). The dynamic-code ban is not this package, it is RS0030 (#1844). |
+| `ReflectionAnalyzers` | 0.3.1 | MIT | ADOPT, solution-wide | 46 REFL ids, each configured with its own reason (#1905): 32 correctness rules at `warning` and 14 spelling rules at `suggestion`, with the four correctness rules that have findings demoted to `suggestion` under `tests/` only. Measured on `dev@86b52adc` (CI run 39421864352): 41 findings in 9 rules, 18 files, every one of them in `tests/`, where `TreatWarningsAsErrors` is off; the per-rule table is [§Reflection rules](#reflection-rules-reflectionanalyzers-031). The dynamic-code ban is not this package, it is RS0030 (#1844). |
 | `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.6.0 | MIT | ADOPT, solution-wide | RS0030 over `BannedSymbols.txt` and `BannedSymbols.DynamicCode.txt`. Since #1844 the compiler enforces the dynamic-code ban that a hand-written regex used to (#626). |
 | `DependencyInjection.Lifetime.Analyzers` | 3.7.8 | MIT | ADOPT, `src/` + `apps/` — see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs) | 40 DI rows (37 tree-wide, 3 path-scoped), one Harbor severity per rule. DI003, DI015, DI017 and DI019 are errors. The 2.18.24 → 3.7.8 move added eleven ids and removed none; each new id is baselined at the severity the package ships it with, and DI033's one finding was written off with a reason rather than fixed (#1897). |
 | `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. 1.4.1 exists and adds no id, but its rewritten walker crashes the compiler with AD0001 on five production projects — under `TreatWarningsAsErrors` they then fail to compile and emit no CFE0001 at all, so the guard would go blind exactly where the crash class lives. The pin stays at 1.3.0 (`docs/ROP-API-INVENTORY.md` §5.1). |
@@ -397,41 +397,156 @@ version in it is a verdict on that version.
 
 ### Reflection rules (ReflectionAnalyzers 0.3.1)
 
-46 diagnostics, `REFL001`–`REFL046`, all member-by-member correctness rules:
-binding flags, overloads, `nameof`, generic type arguments, `InvokeMember`
-targets. **None of them is about dynamic code** — the shipped analyzer
-assembly contains no `Assembly.Load`, `AssemblyLoadContext`, `Reflection.Emit`,
-`TypeBuilder` or `DynamicMethod` rule. The ban on the dynamic-code family in
-`src/` + `apps/` is held by the compiler: `RS0030` over
+46 diagnostics, `REFL001`–`REFL046`, all member-by-member rules for
+`System.Reflection`: binding flags, overloads, `nameof`, generic type
+arguments, `InvokeMember` targets. **None of them is about dynamic code.**
+The shipped analyzer carries no rule for `Assembly.Load`,
+`AssemblyLoadContext`, `Reflection.Emit`, `TypeBuilder` or `DynamicMethod`:
+the user-string heap of `analyzers/dotnet/cs/ReflectionAnalyzers.dll` (read
+out of the 0.3.1 nupkg) holds no such string, and the 46 `DiagnosticDescriptor`
+instances it builds are all `ReflectionAnalyzers.SystemReflection` rules about
+member lookups. The one `Reflection.Emit` name in that heap,
+`System.Reflection.Emit.AssemblyBuilder`, is an entry of REFL037's
+type-existence table, not a rule. The ban on the dynamic-code family in
+`src/` + `apps/` is the compiler's: `RS0030` over
 [`BannedSymbols.DynamicCode.txt`](../BannedSymbols.DynamicCode.txt) (see
 [the dynamic-code ban](#the-dynamic-code-ban-bannedsymbolsdynamiccodetxt)
 below).
 
-Measured on this tree (#1905, CI build log of a green run): nine rules fire,
-216 instances, and every one of them is in `tests/`:
+**What the package ships.** Every id is enabled by default: 45 as `warning`,
+`REFL007` as `hidden`. The two `.editorconfig` lines that used to configure
+`REL0001` / `REL0002` named ids that do not exist in the package — no `L`, and
+four digits instead of three — so they configured nothing at all, and the 46
+real rules ran at their defaults, unconfigured and unrecorded. They are now
+configured, one row per id, in `.editorconfig`.
 
-| ID | What it says | Instances |
-|----|--------------|-----------|
-| REFL008 | Specify binding flags | 84 |
-| REFL039 | Prefer `typeof(T)` over `instance.GetType` | 30 |
-| REFL016 | Use `nameof` | 30 |
-| REFL029 | Specify the parameter types | 24 |
-| REFL003 | The member does not exist | 24 |
-| REFL005 | The binding flags match nothing | 6 |
-| REFL006 | The binding flags can be more precise | 6 |
-| REFL009 | The referenced member is not known to exist | 6 |
-| REFL037 | The type does not exist | 6 |
+**Two severities, and the line between them.** A rule that reports a
+reflective call that cannot work as written is a defect, so it is `warning`
+here, and `warning` is promoted to an error by `TreatWarningsAsErrors=true`
+in `src/` and `apps/` — which is where such a call is a real bug. A rule that
+asks for a different spelling rather than a different behaviour is
+`suggestion`: visible in the IDE, never promoted. That is 32 rules at
+`warning` and 14 at `suggestion`.
 
-`src/` and `apps/` are silent: the zero-warning bar
-(`TreatWarningsAsErrors=true`) would have turned a hit there into a build
-error, and the build is green. `tests/` sets
-`TreatWarningsAsErrors=false` (`tests/Directory.Build.props`), so those 216
-warnings are warnings nobody reads.
+| ID | Title | Ships as | Harbor | Why |
+|----|-------|----------|--------|-----|
+| `REFL001` | Cast return value to the correct type | warning | warning | The cast target is not the member's return type, so the cast throws at run time. |
+| `REFL002` | Discard the return value | warning | warning | The invoked method returns void, so the captured result is always null. |
+| `REFL003` | The member does not exist | warning | warning | The member does not exist on a sealed, static or interface type, so the lookup can never succeed. |
+| `REFL004` | More than one member is matching the criteria | warning | warning | More than one member matches the filter, so the lookup is ambiguous. |
+| `REFL005` | There is no member matching the filter | warning | warning | The binding flags match no member at all, so the lookup returns null. |
+| `REFL006` | The binding flags can be more precise | warning | suggestion | The binding flags are wider than they need to be; the same members match. |
+| `REFL007` | The binding flags are not in the expected order | hidden | suggestion | The flags are written in an unusual order; the same set is produced. |
+| `REFL008` | Specify binding flags for better performance and less fragile code | warning | suggestion | Name the binding flags explicitly; the loose overload is slower and more fragile. |
+| `REFL009` | The referenced member is not known to exist | warning | warning | The referenced member is not known to exist, and the result is not null-checked. |
+| `REFL010` | Prefer the generic extension method GetCustomAttribute\<T\> | warning | suggestion | The generic `GetCustomAttribute<T>` states the attribute type in the source. |
+| `REFL011` | Duplicate BindingFlag | warning | warning | A duplicated `BindingFlag` is a copy-paste slip in the flag expression. |
+| `REFL012` | Prefer Attribute.IsDefined() | warning | suggestion | `Attribute.IsDefined()` answers the same question in one call. |
+| `REFL013` | The member is of the wrong type | warning | warning | The member exists but is of another kind, so the cast below it throws. |
+| `REFL014` | Prefer GetMember().AccessorMethod | warning | suggestion | `GetMember().AccessorMethod` reads the accessor without a second lookup. |
+| `REFL015` | Use the containing type | warning | warning | The member lives on the containing type, so the lookup on this type misses it. |
+| `REFL016` | Use nameof | warning | suggestion | `nameof` keeps the member name in step with a rename. |
+| `REFL017` | Don't use name of wrong member | warning | warning | `nameof` names a different member than the one the lookup asks for. |
+| `REFL018` | The member is explicitly implemented | warning | warning | An explicitly implemented member is not found by name, so the lookup misses it. |
+| `REFL019` | No member matches the types | warning | warning | No member matches the given types, so the lookup returns null. |
+| `REFL020` | More than one interface is matching the name | warning | warning | More than one interface matches the name, so the lookup is ambiguous. |
+| `REFL021` | The type does not exist | warning | warning | The named type does not exist, so the lookup returns null. The package ships no documentation page for this id, and its README does not list it either; it is in the DLL all the same. |
+| `REFL022` | Use fully qualified name | warning | suggestion | The fully qualified name survives a using-directive change. |
+| `REFL023` | The type does not implement the interface | warning | warning | The type does not implement the interface, so the cast below it throws. |
+| `REFL024` | Prefer null over empty array | warning | suggestion | Null says "no types" without allocating an empty array. |
+| `REFL025` | Use correct arguments | warning | warning | The arguments do not match the member's parameters, so the call throws. |
+| `REFL026` | No parameterless constructor defined for this object | warning | warning | The object has no parameterless constructor, so `Activator.CreateInstance` throws. |
+| `REFL027` | Prefer Type.EmptyTypes | warning | suggestion | `Type.EmptyTypes` is the shared empty array. |
+| `REFL028` | Cast return value to correct type | warning | warning | The cast target is not the member's return type, so the cast throws at run time. |
+| `REFL029` | Specify types in case an overload is added in the future | warning | suggestion | Naming the types keeps the lookup stable when an overload is added. |
+| `REFL030` | Use correct obj parameter | warning | warning | The `obj` argument is not of the type the member expects, so the call throws. |
+| `REFL031` | Use generic arguments that satisfies the type parameters | warning | warning | The generic arguments do not satisfy the type parameters, so the call throws. |
+| `REFL032` | The dependency does not exist | warning | warning | The named dependency does not exist, so the attribute's target is missing. |
+| `REFL033` | Use the same type as the parameter | warning | warning | The argument type differs from the parameter type, so no member matches. |
+| `REFL034` | Don't call MakeGeneric when not a generic definition | warning | warning | `MakeGeneric` on a type that is not a generic definition throws at run time. |
+| `REFL035` | Don't call Invoke on a generic definition | warning | warning | `Invoke` on a generic definition throws at run time. |
+| `REFL036` | Pass 'throwOnError: true' or check if null | warning | warning | `CreateInstance` returns null when it cannot construct, and the result is not checked. |
+| `REFL037` | The type does not exist | warning | warning | The named type does not exist, so the lookup returns null. |
+| `REFL038` | Prefer RuntimeHelpers.RunClassConstructor | warning | suggestion | `RunClassConstructor` runs the static constructor exactly once. |
+| `REFL039` | Prefer typeof(...) over instance.GetType when the type is sealed | warning | suggestion | `typeof(T)` is the type, without the instance lookup. |
+| `REFL040` | Prefer type.IsInstanceOfType(...) | warning | suggestion | `IsInstanceOfType` answers the same question without a cast. |
+| `REFL041` | Delegate type is not matching | warning | warning | The delegate's signature does not match the target, so `CreateDelegate` throws. |
+| `REFL042` | First argument must be reference type | warning | warning | The first argument must be a reference type, so the call throws. |
+| `REFL043` | First argument must match type | warning | warning | The first argument's type does not match the member's, so the call throws. |
+| `REFL044` | Expected attribute type | warning | warning | The attribute is read with the wrong attribute type, so the check reads nothing. |
+| `REFL045` | These flags are insufficient to match any members | warning | warning | The flags match no member, so the lookup returns null. |
+| `REFL046` | The specified default member does not exist | warning | warning | The default member does not exist, so `InvokeMember` throws. |
+
+### What the reflection rules find on this tree
+
+Measured on a green CI build of `dev` (run 39421864352, head `86b52adc`, job
+`build`, 2026-10-20). **The counting unit is a unique `file:line:column`
+triple.** The build log prints every warning six times — twice per build
+pass, twice in the summary — so a raw count of `REFL` strings in the log is
+six times the number of findings. Counting log lines instead of findings
+overstates the surface by that factor.
+
+**41 findings, 9 rules, 18 files, every one of them under `tests/`.** Zero
+under `src/` and zero under `apps/`: a correctness finding there is promoted
+to an error by `TreatWarningsAsErrors=true`, so it would have turned the build
+red, and the build is green.
+
+**After this change the build log does not carry them, and that is the point.**
+The 33 spelling findings are `suggestion` tree-wide and the 8 correctness
+ones are `suggestion` under `tests/`, and the compiler does not print a
+`suggestion` at the default verbosity. A re-measurement taken from the build
+log of THIS tree therefore reads zero `REFL` lines, while the 41 sites above
+are what the rules still report. The counting unit did not change: the sites
+are the same 41, in the same 18 files, in the same 9 rules — what changed is
+what the build does with them, and the severity table is where that is
+written down.
+
+| ID | Findings | What they are |
+|----|----------|---------------|
+| `REFL008` | 13 | Style: the loose `GetMethod(name)` / `GetProperty(name)` overload without binding flags. |
+| `REFL039` | 10 | Style: `instance.GetType()` where `typeof(T)` says the same thing. |
+| `REFL016` | 5 | Style: a member name written as a string literal where `nameof` keeps it in step. |
+| `REFL003` | 4 | Deliberate: a test that asserts a property has **no** setter (2), and a field of a plugin type that is compiled at run time and cannot be resolved (2). |
+| `REFL029` | 4 | Style: the parameter-type list is not named, so an added overload would change the match. |
+| `REFL009` | 2 | Unresolvable: the member is read off an `object`-typed value through `instance.GetType()`, so the analyzer resolves it against `object`. |
+| `REFL005` | 1 | Deliberate: the test asserts that the lookup finds **nothing**. |
+| `REFL006` | 1 | Style: the binding flags are wider than they need to be. |
+| `REFL037` | 1 | Deliberate: the test asks an assembly for a type by name precisely to prove that the type is **not** there. |
+
+**Not one of the 41 is a defect.** Eight of them come from the four
+correctness rules, and each of those eight is a test asking the analyzer to
+report what it reports: a member that must be absent, or a member the
+analyzer cannot resolve because the concrete type is only known at run time.
+The other 33 are spelling preferences.
+
+The eight, with the site:
+
+| Site | Rule | What the test is doing |
+|------|------|------------------------|
+| `tests/Harbor.ChangeTracking.Tests/OwnerReportTests.cs:124` | `REFL003` | Asserts that `ResultText` has no setter. |
+| `tests/Harbor.ChangeTracking.Tests/OwnerReportTests.cs:125` | `REFL003` | Asserts that `EvidenceText` has no setter. |
+| `tests/Harbor.Plugins.Runtime.Tests/RealWorldPluginsTests.cs:38` | `REFL003` | Reads a field of a plugin type that Roslyn compiled at run time. |
+| `tests/Harbor.Plugins.Runtime.Tests/DllRealWorldPluginsTests.cs:49` | `REFL003` | The same, on the DLL-based plugin. |
+| `tests/Harbor.Tui.CellForge.Tests/FrameDiffVisibilityTests.cs:19` | `REFL005` | Asserts that `DiffEngine.Diff` is not public. |
+| `tests/Harbor.Application.Tests/StreamingCoalescerNoStoreTests.cs:289` | `REFL009` | Reads `Builder` off a pooled value the analyzer sees as `object`. |
+| `tests/Harbor.Tools.Builtin.Tests/McpHttpClientFactoryTests.cs:225` | `REFL009` | Reads the private `_clients` field off a transport the analyzer sees as `object`. |
+| `tests/Harbor.App.Avalonia.Tests/NoMainViewModelRefsTests.cs:17` | `REFL037` | Asks the Avalonia assembly for `MainViewModel` by name to prove it is absent. |
+
+**What the configuration does with them.** The 14 spelling rules are
+`suggestion` tree-wide, so those 33 findings are visible in the IDE and
+silent in the build log. The four correctness rules that have findings are
+`suggestion` **under `tests/` only** (the path-scoped `[tests/**.cs]` block in
+`.editorconfig`), and `warning` everywhere else — so product code is gated by
+all 32 correctness rules while the eight known test findings stay recorded
+and un-promoted. The demotion is one row per rule, each with its own reason,
+as `DiSeverityDemotionRules.PathScopedSection_NamesEveryRuleItSets` requires.
 
 > The two `.editorconfig` lines that used to configure `REL0001` / `REL0002`
 > configured ids that do not exist in the package — they were dead
-> configuration, and the real rules have always run at their default
-> severity. See #1905.
+> configuration, and the real rules ran at their default severity, unrecorded,
+> for as long as the package was in the tree. They are configured now, one row
+> per id, with a reason each. See #1905.
+
 ### Version baseline, and what a version move may change
 
 The families in the table above are the ones a version move has been
@@ -1029,6 +1144,13 @@ Scope and enforcement:
   failing CI on those would train people to ignore the rule. Be aware this is
   `NoWarn`, not a severity downgrade: nothing about the rule is visible in test
   builds, so review is the only backstop there.
+- **Package set** — RS0030 reads source code, so it says nothing about a
+  package that drags a banned assembly into a test project's `bin/`.
+  `tools/check-test-packages.py` is that gate: it reads the resolved package
+  graph of every test and sample project and fails on a banned package, direct
+  or transitive, and the named exceptions live in
+  `tools/test-package-exceptions.txt`. `AGENTS.md` §"What NOT to do" #2 states
+  the scope of the ban.
 
 **Adding an exemption.** A legacy call site that cannot be fixed yet carries
 `#pragma warning disable RS0030 // <reason>` and is catalogued by class in
@@ -1607,13 +1729,17 @@ every pre-existing finding into a red build on the day the package lands.
 | File | What goes in it | Why it is there |
 |------|-----------------|-----------------|
 | `.editorconfig`, section `[*.{cs,csx}]` | every diagnostic reported on a C# source tree, tree-wide | Roslyn resolves the severity of a source-tree diagnostic from the editor config. |
-| `.editorconfig`, a path section such as `[apps/Harbor.App.Avalonia/**.cs]` or `[tests/**.cs]` | the same, but only for one directory | Two such sections exist today: the Avalonia DI block and the Sonar block under `tests/`. `AnalyzerSeverityScopeRules` pins the set of paths and fails if a path-scoped section addresses a directory that is not in the checkout. |
+| `.editorconfig`, a path section such as `[apps/Harbor.App.Avalonia/**.cs]` or `[tests/**.cs]` | the same, but only for one directory | Two such sections exist today: the Avalonia desktop root (the DI rules) and `[tests/**.cs]` (the Sonar rules and the four reflection rules whose findings are all in the test tree). `AnalyzerSeverityScopeRules` pins the set of DI-scoped paths and fails if a path-scoped section addresses a directory that is not in the checkout. |
 | [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig) | every diagnostic reported on an additional file, which today means the project-file rules | An additional-file diagnostic has no `SourceTree`, and Roslyn applies an editor-config severity only to a diagnostic that has one. A global analyzer config is the only per-rule mechanism that reaches them. |
 
 A severity written anywhere else reaches nothing. That is not a style rule:
 the two `.editorconfig` lines that used to configure `REL0001` and `REL0002`
 configured ids that do not exist in the package, so they configured nothing at
-all, and the rules they were meant to silence had always been running.
+all, and the rules they were meant to silence had always been running — at
+their shipped severity, in every project, unrecorded. Every id the package
+reports on a C# tree has a row in the tree-wide section now, and every id
+with a tolerated finding has one more in the path-scoped section that covers
+it.
 
 ### The row format
 

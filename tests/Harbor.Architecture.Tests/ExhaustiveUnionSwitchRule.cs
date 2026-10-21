@@ -667,7 +667,7 @@ public sealed class ExhaustiveUnionSwitchRule
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
         [new("src/Harbor.Ui.Framework.State/ToolCallKey.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
-        [new("src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
+        [new("src/Harbor.Desktop.ViewModels/ViewModels/ChatViewModelBase.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",
         [new("src/Harbor.Storage.Jsonl/JsonlLineParser.cs", "ChatRole")] =
             "https://github.com/refusedguy/Harbor-Harness/issues/556",

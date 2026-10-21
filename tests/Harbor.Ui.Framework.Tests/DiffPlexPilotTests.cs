@@ -1,4 +1,4 @@
-using Harbor.Desktop.Abstractions.ViewModels;
+using Harbor.Desktop.ViewModels;
 using Harbor.Ui.Framework.Rendering.Widgets;
 using Harbor.Ui.Framework.State;
 using TUnit.Assertions;

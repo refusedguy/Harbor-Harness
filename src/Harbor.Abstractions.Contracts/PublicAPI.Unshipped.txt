@@ -37,3 +37,16 @@ override Harbor.Abstractions.Sessions.SessionTranscript.ToString() -> string!
 static Harbor.Abstractions.Sessions.SessionTranscript.operator !=(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool
 static Harbor.Abstractions.Sessions.SessionTranscript.operator ==(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool
 const Harbor.Abstractions.Env.HarborEnv.SessionTier = "HARBOR_SESSION_TIER" -> string!
+Harbor.Abstractions.Models.ServiceScope
+Harbor.Abstractions.Models.ServiceScope.<Clone>$() -> Harbor.Abstractions.Models.ServiceScope!
+Harbor.Abstractions.Models.ServiceScope.Equals(Harbor.Abstractions.Models.ServiceScope? other) -> bool
+Harbor.Abstractions.Models.ServiceScope.Value.get -> string!
+override Harbor.Abstractions.Models.ServiceScope.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.ServiceScope.GetHashCode() -> int
+override Harbor.Abstractions.Models.ServiceScope.ToString() -> string!
+static Harbor.Abstractions.Models.ServiceScope.Create(string! value) -> Harbor.Abstractions.Models.ServiceScope!
+static Harbor.Abstractions.Models.ServiceScope.Default.get -> Harbor.Abstractions.Models.ServiceScope!
+static Harbor.Abstractions.Models.ServiceScope.TryCreate(string? value) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Models.ServiceScope!>
+static Harbor.Abstractions.Models.ServiceScope.implicit operator string!(Harbor.Abstractions.Models.ServiceScope! scope) -> string!
+static Harbor.Abstractions.Models.ServiceScope.operator !=(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
+static Harbor.Abstractions.Models.ServiceScope.operator ==(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool

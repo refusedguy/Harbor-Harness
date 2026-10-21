@@ -1,7 +1,15 @@
 # Banned APIs — Harbor project
 # https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-banned-api-analyzer
 
-# Ban Newtonsoft.Json — use System.Text.Json only
+# Ban Newtonsoft.Json — use System.Text.Json only.
+#
+# RS0030 covers SOURCE CODE: it fires on a use of the symbol in our code, and
+# on nothing else. The package graph is a different question, and the `N:`
+# entry is what answers it: tools/check-test-packages.py reads the banned
+# names from THIS file (one source of truth, no second list) and fails when a
+# test or sample project resolves a banned package, directly or transitively.
+# Named exceptions live in tools/test-package-exceptions.txt, and
+# AGENTS.md §"What NOT to do" #2 states the scope of the ban.
 T:System.Web.Script.Serialization.JavaScriptSerializer
 T:System.Runtime.Serialization.Json.DataContractJsonSerializer
 T:Newtonsoft.Json.JsonConvert

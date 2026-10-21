@@ -8,7 +8,7 @@
 // the parse and the catalogue turned out to be THREE separate copies of the same
 // table, and two of the three disagreed with each other and with the tools:
 //
-//   * src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs
+//   * src/Harbor.Desktop.ViewModels/ViewModels/ChatViewModelBase.cs
 //       "edit" => "✎" … "web_fetch" => "🌍"
 //   * apps/Harbor.App.Avalonia/Services/UiRenderEngine.cs
 //       "edit" => "✎" … "web_fetch" => "⇣"    ← same ten names, different glyphs
@@ -100,7 +100,7 @@ public sealed class ToolGlyphTableRule
     ///     non-vacuity check can prove discovery still sees it. Not an exemption.
     /// </summary>
     private const string FormerCatalogueFileRelativePath =
-        "src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs";
+        "src/Harbor.Desktop.ViewModels/ViewModels/ChatViewModelBase.cs";
 
     /// <summary>
     ///     One glyph table arm: a quoted tool name, <c>=&gt;</c>, and a quoted
