@@ -319,6 +319,15 @@ jobs:
       #
       # The numbers are the tree's, measured not guessed: 3 guides / 37 `using`
       # lines and 2 base lists on dev@7aff0c87.
+      #
+      # `--min-test-cites` is the same kind of floor, and its number comes from
+      # the table in `docs/CI_GATES.md` — the repository's own measured
+      # picture of the gates — so the workflow and the table agree on it. The
+      # tree shrank under the old value (whole test suites were deleted or
+      # merged away), so a test file could no longer carry that many
+      # `file:line` citations and the job went red for a number nobody
+      # re-measured. The floor stays a floor: a scan that stops matching still
+      # fails the job.
       - name: Check every normative file:line and named type
         run: python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
 
