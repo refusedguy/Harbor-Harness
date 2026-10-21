@@ -46,12 +46,6 @@ internal static class SourceScan
     /// <summary>Product trees the gates scan for real violations.</summary>
     internal static readonly string[] ProductTrees = ["src", "apps"];
 
-    /// <summary>Matches one or more consecutive single-line comments.</summary>
-    private static readonly Regex LineComment = new("//[^\n]*", RegexOptions.Compiled);
-
-    /// <summary>Matches a C-style block comment, including the newlines it spans.</summary>
-    private static readonly Regex BlockComment = new(@"/\*.*?\*/", RegexOptions.Singleline | RegexOptions.Compiled);
-
     /// <summary>
     ///     Whether a path is build output, a test fixture, unmaintained
     ///     <c>contrib/</c> code, or a sibling worktree — in short, anything that
@@ -182,12 +176,43 @@ internal static class SourceScan
     ///     Blanks out one block-comment match, preserving every newline so a line
     ///     number computed downstream still points at the real source line.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The matched text is read ONCE, and that is the whole content of this
+    ///         method now. <see cref="Match.Value" /> is a PROPERTY that
+    ///         materialises the matched substring, so reading it inside the loop
+    ///         allocated one string PER CHARACTER of the comment — a quadratic
+    ///         cost in both time and memory.
+    ///     </para>
+    ///     <para>
+    ///         The quadratic was invisible and enormous, because this repository's
+    ///         source is comment-heavy and the architecture suite's own file
+    ///         headers run to hundreds of lines: measured over
+    ///         <c>tests/</c>, the 116 block comments hold 130 207 characters and
+    ///         their lengths squared sum to 6 413 000 000, so ONE strip of that
+    ///         tree allocated 12.8 GB of strings to blank out 127 KB of comments.
+    ///         Every rule that read that tree paid it, and the stripper ran on
+    ///         the tree once per reader: the architecture suite spent the better
+    ///         part of its wall in the garbage collector, and every other rule on
+    ///         the runner was slowed by the same pressure.
+    ///     </para>
+    ///     <para>
+    ///         The fix is one line and it changes no verdict: the blanked text is
+    ///         the same characters in the same places, it is simply not rebuilt
+    ///         once per character. The whole stripper moved to
+    ///         <see cref="SourceParse" /> after that, where it is a span-based
+    ///         pass instead of two regexes — and it still produces the same
+    ///         bytes, which <c>SourceParseParityTests</c> proves over every file
+    ///         of the corpus.
+    ///     </para>
+    /// </remarks>
     private static string BlankOutComment(Match match)
     {
-        var blank = new char[match.Length];
-        for (int i = 0; i < match.Length; i++)
+        string value = match.Value;
+        var blank = new char[value.Length];
+        for (int i = 0; i < value.Length; i++)
         {
-            blank[i] = match.Value[i] == '\n' ? '\n' : ' ';
+            blank[i] = value[i] == '\n' ? '\n' : ' ';
         }
 
         return new string(blank);
@@ -195,13 +220,18 @@ internal static class SourceScan
 
     /// <summary>
     ///     Strips comments, preserving line count, so prose about a rule cannot
-    ///     trip it. <see cref="LineComment" /> runs last because it cannot span a
-    ///     line. String literals are NOT stripped: the risk of a false positive
-    ///     there is smaller than the risk of writing a string-literal state
-    ///     machine, and every gate here matches a quoted literal.
+    ///     trip it. String literals are NOT stripped: the risk of a false
+    ///     positive there is smaller than the risk of writing a string-literal
+    ///     state machine, and every gate here matches a quoted literal.
     /// </summary>
-    internal static string StripComments(string source) =>
-        LineComment.Replace(BlockComment.Replace(source, BlankOutComment), " ");
+    /// <remarks>
+    ///     The implementation lives in <see cref="SourceParse" />, with the
+    ///     rest of the parsing substrate. It is the SAME output, byte for byte:
+    ///     one span-based pass over the file instead of two regexes and a
+    ///     <see cref="MatchEvaluator" />, and the parity test compares the two
+    ///     over every file of the corpus.
+    /// </remarks>
+    internal static string StripComments(string source) => SourceParse.StripComments(source);
 
     /// <summary>Matches an XML/markup comment, including the ones that span lines.</summary>
     private static readonly Regex MarkupComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);

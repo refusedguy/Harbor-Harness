@@ -417,17 +417,24 @@ public sealed class ArchAnalyzerPromotionTests
     public async Task The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap()
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
-        List<string> analyzerFiles = await AnalyzerFilesAsync();
+        LiveAnalyzerSweep sweep = await LiveAnalyzerSweepResult.Value.ConfigureAwait(false);
         long elapsedMs = started.ElapsedMilliseconds;
 
+        // The files HARCH001 flagged, read out of the SAME sweep: the
+        // measurement below prints them, and a second sweep to produce them
+        // would be the very cost this change removes.
+        List<string> analyzerFiles = FilesFlaggedBy(sweep.DynamicCode);
+
         var namespaceFindings = new List<string>();
-        foreach ((RoslynProjectCompilation.Project project, CSharpCompilation compilation) in LiveCompilations.Value)
+        foreach (Diagnostic diagnostic in sweep.NamespaceOwnership)
         {
-            List<Diagnostic> diagnostics = await RunAsync(compilation, new NamespaceOwnershipAnalyzer());
-            foreach (Diagnostic diagnostic in diagnostics)
-            {
-                namespaceFindings.Add(project.Dir + ": " + diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
-            }
+            // The file the finding is in, then the finding: a reader needs to
+            // know WHERE before they can act on WHAT.
+            string where = diagnostic.Location.SourceTree?.FilePath is { } path
+                ? SourceScan.Relative(path) + ": "
+                : string.Empty;
+
+            namespaceFindings.Add(where + diagnostic.GetMessage(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         Console.WriteLine(
@@ -442,7 +449,169 @@ public sealed class ArchAnalyzerPromotionTests
     }
 
     // =====================================================================
-    // 3. Harness.
+    // 3. The live-tree sweep.
+    // =====================================================================
+
+    /// <summary>
+    ///     What ONE pass of the analyzer driver over the whole product tree
+    ///     found, one array per analyzer.
+    /// </summary>
+    /// <param name="DynamicCode">HARCH001's diagnostics.</param>
+    /// <param name="NamespaceOwnership">HARCH002's diagnostics.</param>
+    /// <param name="UnguardedResult">HARCH003's diagnostics.</param>
+    internal sealed record LiveAnalyzerSweep(
+        ImmutableArray<Diagnostic> DynamicCode,
+        ImmutableArray<Diagnostic> NamespaceOwnership,
+        ImmutableArray<Diagnostic> UnguardedResult);
+
+    /// <summary>
+    ///     The ONE sweep of the product tree, memoised.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The sweep used to be run FOUR times over the same 64
+    ///         compilations: the differential test wanted HARCH001's file
+    ///         list, the namespace test wanted HARCH001's file list AGAIN and
+    ///         HARCH002's findings, and the unguarded-Result test wanted
+    ///         HARCH003's sites. Each of those was a full driver pass over
+    ///         every product project, and the measured cost of one of them is
+    ///         77 s (#1791's measurement, quoted in docs/BENCHMARKS.md §6.1).
+    ///     </para>
+    ///     <para>
+    ///         One pass with all three analyzers in it costs what one pass
+    ///         costs: the driver walks the syntax trees once, and the second
+    ///         and third sweeps over the same trees bought nothing but the
+    ///         time. The three analyzers are independent, so the diagnostics
+    ///         each of them reports are the same whether it ran alone or
+    ///         beside the other two.
+    ///     </para>
+    ///     <para>
+    ///         The compilations are swept CONCURRENTLY, one per product
+    ///         project, bounded by the number of cores: a runner with four
+    ///         cores should not walk 64 compilations one after another while
+    ///         three of its cores are idle.
+    ///     </para>
+    /// </remarks>
+    internal static readonly Lazy<Task<LiveAnalyzerSweep>> LiveAnalyzerSweepResult =
+        new(BuildLiveAnalyzerSweep, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    ///     How many times the sweep RAN.
+    /// </summary>
+    /// <remarks>
+    ///     The sweep used to be run FOUR times over the same 64 product
+    ///     compilations: the differential test wanted HARCH001's file list,
+    ///     the namespace test wanted HARCH001's file list AGAIN and HARCH002's
+    ///     findings, and the unguarded-Result test wanted HARCH003's sites.
+    ///     Each of those was a full driver pass over every product project.
+    ///     <para>
+    ///         The counter is the PROOF that the memoisation holds: a number
+    ///         that is not 1 means some caller ran the sweep on its own, and
+    ///         the cost is back.
+    ///     </para>
+    /// </remarks>
+    internal static int SweepRuns => Volatile.Read(ref _sweepRuns);
+
+    private static int _sweepRuns;
+
+    /// <summary>
+    ///     Runs the three analyzers over every product project, once.
+    /// </summary>
+    private static async Task<LiveAnalyzerSweep> BuildLiveAnalyzerSweep()
+    {
+        Interlocked.Increment(ref _sweepRuns);
+
+        IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
+            LiveCompilations.Value;
+
+        DiagnosticAnalyzer[] analyzers =
+        [
+            new NoDynamicCodeAnalyzer(),
+            new NamespaceOwnershipAnalyzer(),
+            new UnguardedResultReadAnalyzer(),
+        ];
+
+        // One sweep per product project, at most `ProcessorCount` at a time.
+        using var gate = new SemaphoreSlim(Math.Max(1, Environment.ProcessorCount));
+        var sweeps = new List<Task<LiveAnalyzerSweep>>(compilations.Count);
+
+        foreach ((_, CSharpCompilation compilation) in compilations)
+        {
+            sweeps.Add(SweepOneAsync(compilation, analyzers, gate));
+        }
+
+        LiveAnalyzerSweep[] results = await Task.WhenAll(sweeps).ConfigureAwait(false);
+
+        // The merge is SEQUENTIAL, on purpose: the sweeps ran concurrently and
+        // each of them produced its own arrays, because a `List<T>` that four
+        // threads append to at once is a corrupted list, not a fast one.
+        var dynamicCode = new List<Diagnostic>();
+        var namespaceOwnership = new List<Diagnostic>();
+        var unguardedResult = new List<Diagnostic>();
+
+        foreach (LiveAnalyzerSweep result in results)
+        {
+            dynamicCode.AddRange(result.DynamicCode);
+            namespaceOwnership.AddRange(result.NamespaceOwnership);
+            unguardedResult.AddRange(result.UnguardedResult);
+        }
+
+        return new LiveAnalyzerSweep(
+            [.. dynamicCode],
+            [.. namespaceOwnership],
+            [.. unguardedResult]);
+    }
+
+    /// <summary>
+    ///     The sweep of ONE product project, appended into the three lists.
+    /// </summary>
+    private static async Task<LiveAnalyzerSweep> SweepOneAsync(
+        CSharpCompilation compilation,
+        DiagnosticAnalyzer[] analyzers,
+        SemaphoreSlim gate)
+    {
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(
+                analyzers,
+                new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty));
+
+            ImmutableArray<Diagnostic> diagnostics = await withAnalyzers.GetAnalyzerDiagnosticsAsync().ConfigureAwait(false);
+
+            var dynamicCode = new List<Diagnostic>();
+            var namespaceOwnership = new List<Diagnostic>();
+            var unguardedResult = new List<Diagnostic>();
+
+            foreach (Diagnostic diagnostic in diagnostics)
+            {
+                switch (diagnostic.Id)
+                {
+                    case NoDynamicCodeAnalyzer.DiagnosticId:
+                        dynamicCode.Add(diagnostic);
+                        break;
+                    case NamespaceOwnershipAnalyzer.DiagnosticId:
+                        namespaceOwnership.Add(diagnostic);
+                        break;
+                    case UnguardedResultReadAnalyzer.DiagnosticId:
+                        unguardedResult.Add(diagnostic);
+                        break;
+                }
+            }
+
+            return new LiveAnalyzerSweep(
+                [.. dynamicCode],
+                [.. namespaceOwnership],
+                [.. unguardedResult]);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    // =====================================================================
+    // 4. Harness.
     // =====================================================================
 
     /// <summary>Compiles one synthetic source file as one assembly.</summary>
@@ -491,21 +660,27 @@ public sealed class ArchAnalyzerPromotionTests
     /// <summary>The repo-relative files the ANALYZER flags on the live tree.</summary>
     private static async Task<List<string>> AnalyzerFilesAsync()
     {
+        LiveAnalyzerSweep sweep = await LiveAnalyzerSweepResult.Value.ConfigureAwait(false);
+        return FilesFlaggedBy(sweep.DynamicCode);
+    }
+
+    /// <summary>
+    ///     The repo-relative files a set of diagnostics points at, distinct and
+    ///     sorted.
+    /// </summary>
+    private static List<string> FilesFlaggedBy(ImmutableArray<Diagnostic> diagnostics)
+    {
         var files = new List<string>();
 
-        foreach ((_, CSharpCompilation compilation) in LiveCompilations.Value)
+        foreach (Diagnostic diagnostic in diagnostics)
         {
-            List<Diagnostic> diagnostics = await RunAsync(compilation, new NoDynamicCodeAnalyzer());
-            foreach (Diagnostic diagnostic in diagnostics)
+            string? path = diagnostic.Location.SourceTree?.FilePath;
+            if (path is null)
             {
-                string? path = diagnostic.Location.SourceTree?.FilePath;
-                if (path is null)
-                {
-                    continue;
-                }
-
-                files.Add(SourceScan.Relative(path));
+                continue;
             }
+
+            files.Add(SourceScan.Relative(path));
         }
 
         return
@@ -517,12 +692,23 @@ public sealed class ArchAnalyzerPromotionTests
     /// <summary>Compiles every product project once, and keeps the result.</summary>
     private static IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> BuildLiveCompilations()
     {
-        var result = new List<(RoslynProjectCompilation.Project, CSharpCompilation)>();
+        IReadOnlyList<RoslynProjectCompilation.Project> projects = RoslynProjectCompilation.ProductProjects();
 
-        foreach (RoslynProjectCompilation.Project project in RoslynProjectCompilation.ProductProjects())
-        {
-            result.Add((project, RoslynProjectCompilation.ForProject(project)));
-        }
+        // The compilations are built CONCURRENTLY, one per product project:
+        // a runner with four cores should not parse 64 projects one after
+        // another while three of its cores are idle. The result array is
+        // indexed, so the order of the tree does not depend on the order the
+        // threads finished in.
+        var result = new (RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)[projects.Count];
+
+        Parallel.For(
+            0,
+            projects.Count,
+            index =>
+            {
+                RoslynProjectCompilation.Project project = projects[index];
+                result[index] = (project, RoslynProjectCompilation.ForProject(project));
+            });
 
         return result;
     }

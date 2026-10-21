@@ -323,7 +323,12 @@ internal static class DeadPublicMemberProbe
         var files = new List<ParsedFile>(sources.Count);
         foreach ((string rel, string source) in sources)
         {
-            files.Add(ParsedFile.Parse(rel, source));
+            // The TYPES of a file are only graded in the contract trees, so
+            // they are only PARSED there. A file outside them contributes its
+            // identifiers — it may reference a contract member — and nothing
+            // else, and the seven contract trees hold 224 files out of the
+            // 2 665 the rule reads.
+            files.Add(ParsedFile.Parse(rel, source, IsInContractTree(rel)));
         }
 
         // How often each identifier occurs in the whole reference set.
@@ -501,7 +506,13 @@ internal static class DeadPublicMemberProbe
         /// <summary>Parses one file into the facts above.</summary>
         /// <param name="rel">The repo-relative path.</param>
         /// <param name="source">The raw source.</param>
-        internal static ParsedFile Parse(string rel, string source)
+        /// <param name="parseTypes">
+        ///     Whether the file's public types are graded. A file outside the
+        ///     contract trees contributes its identifiers — it may reference a
+        ///     contract member — and its JSON type names, and NOTHING else, so
+        ///     its types are never read and never parsed.
+        /// </param>
+        internal static ParsedFile Parse(string rel, string source, bool parseTypes)
         {
             // TWO views of the same file, on purpose.
             //
@@ -515,7 +526,7 @@ internal static class DeadPublicMemberProbe
             // The TOKEN view keeps the literal contents, because a member
             // reached by reflection is looked up BY NAME: a name inside a
             // string literal is a real use.
-            string structure = DeadPublicInterfaceProbe.BlankLiteralsAndComments(source);
+            string structure = SourceParse.BlankLiteralsAndComments(source);
             string tokens = SourceScan.StripComments(source);
 
             Match namespaceMatch = NamespaceDeclaration.Match(structure);
@@ -524,16 +535,34 @@ internal static class DeadPublicMemberProbe
                 && namespaceMatch.Groups["terminator"].Value == "{";
             int baseDepth = namespaceIsBlock ? 1 : 0;
 
+            // The identifiers of the file, counted. The legacy form walked the
+            // matches of a regex and materialised a `Match` AND a `string` for
+            // every identifier of every file in the tree; the substrate counts
+            // them through a span lookup, so a string exists only for a token
+            // the dictionary has not seen. The tokens are the regex's own.
             var tokenCounts = new Dictionary<string, int>(StringComparer.Ordinal);
-            foreach (Match identifier in Identifier.Matches(tokens))
-            {
-                tokenCounts[identifier.Value] = tokenCounts.GetValueOrDefault(identifier.Value) + 1;
-            }
+            SourceParse.CountIdentifiers(tokens, tokenCounts);
 
             var jsonTypeNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (Match json in JsonTypeArgument.Matches(structure))
             {
                 jsonTypeNames.Add(json.Groups["name"].Value);
+            }
+
+            // The types of a file outside the contract trees are never graded,
+            // so they are never parsed: the brace frames, the two declaration
+            // regexes and the member walk are the expensive half of this
+            // method, and 94 % of the files the rule reads do not need them.
+            if (!parseTypes)
+            {
+                return new ParsedFile
+                {
+                    Rel = rel,
+                    Namespace = ns,
+                    TokenCounts = tokenCounts,
+                    JsonTypeNames = jsonTypeNames,
+                    PublicTypes = [],
+                };
             }
 
             (int[] starts, int[] depths) = ComputeLineFrames(structure);
@@ -549,6 +578,18 @@ internal static class DeadPublicMemberProbe
             }
 
             var publicTypes = new List<ParsedType>();
+
+            // The member list is walked ONCE, not once per type. The rule used
+            // to iterate EVERY member declaration of the file for EVERY type
+            // of the file, which is the "a loop inside a loop" shape: a file
+            // with twenty types and two hundred members cost four thousand
+            // iterations, and each of them materialised the member's text
+            // twice. The types are in source order and their bodies are
+            // disjoint, so a cursor that only moves forward is enough: it
+            // skips the members that belong to an EARLIER type and stops at
+            // the first member that belongs to a LATER one.
+            int memberCursor = 0;
+
             foreach (Match declaration in PublicTypeDeclaration.Matches(structure))
             {
                 // Only a TOP-LEVEL type is a published contract. A public type
@@ -571,17 +612,27 @@ internal static class DeadPublicMemberProbe
 
                 var members = new List<ParsedMember>();
                 int bodyEnd = EndOfType(structure, declaration);
-                foreach (Match member in memberMatches)
+
+                while (memberCursor < memberMatches.Count
+                    && memberMatches[memberCursor].Index < declaration.Index)
                 {
-                    // A member of THIS type: inside the type's own body, one
-                    // level down. A member of a LATER type in the same file is
-                    // outside the body, and a member of a NESTED type is
-                    // deeper — neither is this type's surface.
-                    if (member.Index < declaration.Index || member.Index > bodyEnd)
+                    memberCursor++;
+                }
+
+                for (int m = memberCursor; m < memberMatches.Count; m++)
+                {
+                    Match member = memberMatches[m];
+
+                    // A member of a LATER type in the same file is outside this
+                    // type's body, and it starts a later type's window.
+                    if (member.Index > bodyEnd)
                     {
-                        continue;
+                        break;
                     }
 
+                    // A member of THIS type: inside the type's own body, one
+                    // level down. A member of a NESTED type is deeper — it is
+                    // not this type's surface.
                     if (DepthAt(frames, member.Index) != baseDepth + 1)
                     {
                         continue;
