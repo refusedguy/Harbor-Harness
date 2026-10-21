@@ -1,3 +1,5 @@
+using Harbor.TestKit;
+
 namespace Harbor.Tui.RendererTests.Support;
 
 /// <summary>
@@ -7,66 +9,55 @@ namespace Harbor.Tui.RendererTests.Support;
 ///     captured frame drifts from the committed golden file.
 /// </summary>
 /// <remarks>
-///     Regenerate goldens after an intentional visual change with
-///     <c>HARBOR_UPDATE_GOLDEN=1 dotnet test tests/Harbor.Tui.RendererTests</c>
-///     and commit the diff — the golden diff then documents the visual change
-///     in review.
+///     <para>
+///         Regenerate goldens after an intentional visual change with
+///         <c>HARBOR_UPDATE_GOLDENS=1 dotnet run --project
+///         tests/Harbor.Tui.RendererTests</c> and commit the diff — the golden
+///         diff then documents the visual change in review.
+///     </para>
+///     <para>
+///         The mechanics — where the root is, how the update flag is spelled,
+///         how line endings are normalised — live in <see cref="Golden" />
+///         since #1776. What stays here is the renderer lane's own: the
+///         fixture directory, the trailing-newline tolerance of the compare,
+///         and the assertion it fails with.
+///     </para>
 /// </remarks>
 public static class GoldenFrames
 {
     /// <summary>
+    ///     The fixture directory the renderer's golden frames live in.
+    /// </summary>
+    private static string FixtureDir => Golden.FixtureDir("renderer-frames");
+
+    /// <summary>
     ///     Compares <paramref name="actual"/> against the committed golden
-    ///     file <c>GoldenFrames/&lt;name&gt;.golden.txt</c>, or regenerates the
-    ///     golden when <c>HARBOR_UPDATE_GOLDEN=1</c>.
+    ///     file, or regenerates the golden when the run is in update mode.
     /// </summary>
     public static async Task AssertGoldenAsync(string name, string actual)
     {
-        string path = GoldenPath(name);
-        string expected = Normalize(actual);
+        string path = Golden.BaselinePath(FixtureDir, name);
+        string expected = Golden.Normalize(actual);
 
-        if (Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDEN") == "1")
+        if (Golden.IsUpdateMode)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, expected + Environment.NewLine);
+            Golden.WriteBaseline(path, expected + "\n");
             return;
         }
 
         await Assert.That(File.Exists(path)).IsTrue()
-            .Because($"golden frame '{name}' is missing at {path} — run with HARBOR_UPDATE_GOLDEN=1 to create it");
-        string committed = Normalize(await File.ReadAllTextAsync(path));
+            .Because($"golden frame '{name}' is missing at {path} — run with {Golden.UpdateEnvironmentVariable}=1 to create it");
+        string committed = Golden.Normalize(await File.ReadAllTextAsync(path));
         await Assert.That(expected.TrimEnd('\n')).IsEqualTo(committed.TrimEnd('\n'))
             .Because(
                 $"renderer output for '{name}' drifted from the committed golden frame. "
-                + "If the visual change is intentional, regenerate with HARBOR_UPDATE_GOLDEN=1 "
+                + "If the visual change is intentional, regenerate with " + Golden.UpdateEnvironmentVariable + "=1 "
                 + "and review the golden diff in the PR.");
-    }
-
-    /// <summary>
-    ///     Walks up from the test host base directory to locate the test
-    ///     project directory (by its .csproj marker), then the
-    ///     <c>GoldenFrames</c> folder inside it.
-    /// </summary>
-    private static string GoldenPath(string name)
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null && Directory.GetFiles(dir.FullName, "*.csproj").Length == 0)
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException(
-                "Test project directory not found — cannot resolve the GoldenFrames location.");
-        }
-
-        return Path.Combine(dir.FullName, "GoldenFrames", $"{name}.golden.txt");
     }
 
     /// <summary>
     ///     Normalizes environment-dependent line endings so goldens are stable
     ///     across Windows/Linux test hosts.
     /// </summary>
-    public static string Normalize(string frame) =>
-        frame.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+    public static string Normalize(string frame) => Golden.Normalize(frame);
 }

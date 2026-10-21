@@ -39,7 +39,7 @@ public sealed class PresentationCapabilityInstrumentationTests
         var tracker = new TypeDefinition(
             "Microsoft.CodeCoverage.Instrumentation.Static.Tracker",
             "StaticManagedTrackerTemplate_3be3a47c-e6fc-41f6-9a1e-6d0f0b2c9d31",
-            TypeAttributes.Class | TypeAttributes.NestedPublic);
+            Mono.Cecil.TypeAttributes.Class | Mono.Cecil.TypeAttributes.NestedPublic);
 
         await Assert.That(IlCapabilityProbe.IsInstrumentationInjected(tracker)).IsTrue();
     }
@@ -50,7 +50,7 @@ public sealed class PresentationCapabilityInstrumentationTests
         var product = new TypeDefinition(
             "Harbor.Tui.CellForge.Panels",
             "CellForgeFileTreePanel",
-            TypeAttributes.Class | TypeAttributes.Public);
+            Mono.Cecil.TypeAttributes.Class | Mono.Cecil.TypeAttributes.Public);
 
         await Assert.That(IlCapabilityProbe.IsInstrumentationInjected(product)).IsFalse();
     }
@@ -64,7 +64,7 @@ public sealed class PresentationCapabilityInstrumentationTests
         var product = new TypeDefinition(
             "Harbor.Tui.CellForge.Panels",
             "CellForgeFileTreePanel",
-            TypeAttributes.Class | TypeAttributes.Public);
+            Mono.Cecil.TypeAttributes.Class | Mono.Cecil.TypeAttributes.Public);
 
         await Assert.That(IlCapabilityProbe.IsInstrumentationInjected(product)).IsFalse();
         await Assert.That(product.Namespace).IsEqualTo("Harbor.Tui.CellForge.Panels");

@@ -47,7 +47,7 @@ public class GoldenStatusSegmentBarTests
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("ce3-status-widths", back, backend);
-        string expected = Golden.Verify("ce3-status-widths", doc, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("ce3-status-widths", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng)).IsTrue();
     }
