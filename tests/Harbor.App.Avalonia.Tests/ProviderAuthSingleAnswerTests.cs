@@ -17,12 +17,16 @@
 //   * EmptyApiKeyConfigStore — a config with an EMPTY ApiKeys map, so anything
 //     that reads the config to decide auth is guaranteed to say "no key", and
 //
-//   * EnvOnlyAuthResolver — the truth about the same provider, with the key
+//   * AllowListAuthResolver — the truth about the same provider, with the key
 //     living only in the environment.
 //
 // so the two possible answers provably differ. A test that only asserted
 // "Authenticated" could be satisfied by a surface that always says
-// Authenticated; NoKeysAnywhereAuthResolver is the control that rules that out.
+// Authenticated; FailingAuthResolver is the control that rules that out.
+//
+// Both resolvers are the shared kit's (#1825): the allow-list one and the
+// failing one. What stays in this project is the empty config store, whose
+// interface lives in the desktop stack.
 //
 // The remaining tests pin the conflation the row made after the fix: reachability
 // is not identity. A model count, an empty catalogue, a failed /models call and
@@ -32,6 +36,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using Harbor.Abstractions.Providers;
 using Harbor.Desktop.ViewModels;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.App.Avalonia.Tests;
@@ -53,7 +58,7 @@ public class ProviderAuthSingleAnswerTests
     [Test]
     public async Task EnvAuthorizedProvider_LooksTheSameInThePickerAndInSettings()
     {
-        var auth = new EnvOnlyAuthResolver(EnvOnly);
+        var auth = new AllowListAuthResolver(EnvOnly);
 
         ProviderGroupViewModel picker = await LoadPickerRowAsync(auth, EnvOnly);
         ProviderConfigViewModel row = CreateRow(auth, EnvOnly, requiresApiKey: true, isAuthenticated: false);
@@ -77,7 +82,7 @@ public class ProviderAuthSingleAnswerTests
         // The control for the test above. If this failed while the other passed,
         // "both surfaces agree" would mean "both surfaces always say No key" —
         // which is agreement, but not the agreement anyone wants.
-        var auth = new NoKeysAnywhereAuthResolver();
+        var auth = new FailingAuthResolver();
 
         ProviderGroupViewModel picker = await LoadPickerRowAsync(auth, EnvOnly);
         ProviderConfigViewModel row = CreateRow(auth, EnvOnly, requiresApiKey: true, isAuthenticated: false);
@@ -100,12 +105,12 @@ public class ProviderAuthSingleAnswerTests
         // CommonConfig.ApiKeys, a config-dictionary reader answers "no key".
         // This asserts the resolver was actually consulted, so a future
         // "optimisation" that inlines the dictionary read cannot pass silently.
-        var auth = new EnvOnlyAuthResolver(EnvOnly);
+        var auth = new AllowListAuthResolver(EnvOnly);
 
         ProviderGroupViewModel picker = await LoadPickerRowAsync(auth, EnvOnly);
 
         await Assert.That(picker.IsAuthenticated).IsTrue();
-        await Assert.That(auth.Asked).Contains(EnvOnly);
+        await Assert.That(auth.Requested).Contains(EnvOnly);
     }
 
     [Test]
@@ -115,7 +120,7 @@ public class ProviderAuthSingleAnswerTests
         // picker could have drifted into: /models answers fine, so a reader that
         // inferred auth from reachability would say "Authenticated" — while the
         // resolver, the only thing entitled to an opinion, refuses.
-        var auth = new NoKeysAnywhereAuthResolver();
+        var auth = new FailingAuthResolver();
 
         ProviderGroupViewModel picker = await LoadPickerRowAsync(auth, EnvOnly);
 
@@ -132,7 +137,7 @@ public class ProviderAuthSingleAnswerTests
         // The model-count regression, exactly as it shipped:
         // `row.IsAuthenticated = count > 0 || !row.RequiresApiKey`.
         // A provider with a working key and an empty catalogue reported "No key".
-        var auth = new EnvOnlyAuthResolver(EnvOnly);
+        var auth = new AllowListAuthResolver(EnvOnly);
         var row = CreateRow(
             auth, EnvOnly, requiresApiKey: true, isAuthenticated: true,
             registry: StaticModelRegistry.ServingNothing(EnvOnly));
@@ -149,7 +154,7 @@ public class ProviderAuthSingleAnswerTests
     {
         // The other half of the same line: `else { row.IsAuthenticated = false; }`.
         // A network blip reported "No key" for a provider whose key was fine.
-        var auth = new EnvOnlyAuthResolver(EnvOnly);
+        var auth = new AllowListAuthResolver(EnvOnly);
         var row = CreateRow(
             auth, EnvOnly, requiresApiKey: true, isAuthenticated: true,
             registry: StaticModelRegistry.Unreachable(EnvOnly));
@@ -167,7 +172,7 @@ public class ProviderAuthSingleAnswerTests
         // `row.IsAuthenticated = !string.IsNullOrWhiteSpace(row.ApiKey)`.
         // The field is empty here BECAUSE the key came from the environment —
         // so reading the field de-authorized a working provider.
-        var auth = new EnvOnlyAuthResolver(EnvOnly);
+        var auth = new AllowListAuthResolver(EnvOnly);
         var row = CreateRow(auth, EnvOnly, requiresApiKey: true, isAuthenticated: true, apiKey: string.Empty);
 
         await row.SaveKeyCommand.ExecuteAsync(null);
@@ -183,7 +188,7 @@ public class ProviderAuthSingleAnswerTests
         // questions. This asserts the row kept them apart: a healthy catalogue
         // must not manufacture a verdict the resolver never gave, so start from
         // a provider the resolver refuses and let /models succeed.
-        var auth = new NoKeysAnywhereAuthResolver();
+        var auth = new FailingAuthResolver();
         var row = CreateRow(auth, Keyless, requiresApiKey: true, isAuthenticated: false);
 
         await row.TestConnectionCommand.ExecuteAsync(null);

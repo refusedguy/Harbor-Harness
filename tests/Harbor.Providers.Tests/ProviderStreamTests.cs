@@ -52,7 +52,7 @@ public class ProviderStreamTests
             new HttpClient(handler),
             new OpenAiCompatible.ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
     [Test]
@@ -149,7 +149,7 @@ public class ProviderStreamTests
             new HttpClient(handler),
             config,
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatible.OpenAiCompatibleLlmClient>.Instance);
 
         var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest(

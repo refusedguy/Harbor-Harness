@@ -13,7 +13,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Logging.Abstractions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;

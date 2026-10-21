@@ -15,8 +15,8 @@ using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Threading.Channels;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
-using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
+using FakeSessionStore = Harbor.TestKit.FakeSessionStore;
 
 using FakeToolBase = Harbor.TestKit.Generated.FakeTool; // #1769: generated double
 

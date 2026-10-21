@@ -9,6 +9,7 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
 {
     private readonly List<AgentMessage> _messages = [];
     private readonly List<SessionMetadata> _updatedStats = [];
+    private readonly List<Session> _updated = [];
     private readonly object _lock = new();
     private TaskCompletionSource? _gatedAppend;
     private int _appends;
@@ -16,6 +17,26 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
     public int Appends => Volatile.Read(ref _appends);
 
     public string? LastCreatedDirectory { get; private set; }
+
+    /// <summary>
+    ///     Every session passed to <see cref="UpdateAsync" />, in call order.
+    /// </summary>
+    /// <remarks>
+    ///     A test that asserts on what the core WROTE — the session status it
+    ///     stamped, the kind it recorded — reads this. The store itself answers
+    ///     <c>GetStatsAsync</c> with <see cref="SessionMetadata.Empty" />, so it
+    ///     models a store with no aggregate of its own.
+    /// </remarks>
+    public IReadOnlyList<Session> UpdatedSessions
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _updated];
+            }
+        }
+    }
 
     public void GateNextAppend(TaskCompletionSource gate)
     {
@@ -77,7 +98,14 @@ public sealed class FakeSessionStore(Session? session = null) : ISessionStore
         => Task.FromResult(Result.Success());
 
     public Task<Result> UpdateAsync(Session session, CancellationToken ct = default)
-        => Task.FromResult(Result.Success());
+    {
+        lock (_lock)
+        {
+            _updated.Add(session);
+        }
+
+        return Task.FromResult(Result.Success());
+    }
 
     public Task<Result<SessionMetadata>> GetStatsAsync(string sessionId, CancellationToken ct = default)
         => Task.FromResult(Result.Success(SessionMetadata.Empty));

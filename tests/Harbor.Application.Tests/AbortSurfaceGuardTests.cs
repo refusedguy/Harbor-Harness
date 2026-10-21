@@ -69,7 +69,7 @@ public class AbortSurfaceGuardTests
         // Behavioral half: the coordinated ingress actually drives the observed token.
         var session = Session.Create("/tmp/harbor-abort-surface-guard-tests", "code", "test", "test-model");
         var agent = new DefaultAgent(
-            new Fakes.FakeSessionStore(session),
+            new Harbor.TestKit.FakeSessionStore(session),
             new NoopLoop(),
             new FakeEventBus(),
             NullLogger<DefaultAgent>.Instance);

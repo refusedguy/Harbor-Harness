@@ -232,35 +232,4 @@ public class ReplMaxStepsBudgetTests
         public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
     }
-
-    /// <summary>A token tracker that never compacts and never counts.</summary>
-    private sealed class FakeTokenTracker : ITokenTracker
-    {
-        public void RecordTurnUsage(Usage usage)
-        {
-        }
-
-        public int Estimate(string text) => 0;
-
-        public int EstimateMessage(AgentMessage message) => 0;
-
-        public int EstimateTokens(IReadOnlyList<AgentMessage> messages) => 0;
-
-        public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => false;
-
-        public TokenStats GetStats() => new(0, 0, null, null, null);
-    }
-
-    /// <summary>A compaction service this test never exercises.</summary>
-    private sealed class FakeCompactionService : ICompactionService
-    {
-        public bool ShouldCompact(IReadOnlyList<AgentMessage> messages, ModelInfo model) => false;
-
-        public Task<Result<CompactionResult>> CompactAsync(
-            string sessionId,
-            IReadOnlyList<AgentMessage> messages,
-            ModelInfo model,
-            CancellationToken ct = default) =>
-            Task.FromResult(Result.Failure<CompactionResult>("compaction is not exercised by this test"));
-    }
 }

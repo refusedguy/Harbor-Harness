@@ -37,7 +37,7 @@ public class LlmClientAuthFailureTests
             new HttpClient(handler),
             new ProviderConfig { Id = "stub", BaseUrl = "http://stub" },
             new FailingAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
         var events = await StreamCollector.CollectAsync(client.StreamAsync(new LlmRequest("m", [LlmUserMessage.Text("hi")], "", [])));

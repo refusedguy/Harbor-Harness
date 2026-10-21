@@ -2,7 +2,7 @@ using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using TUnit.Assertions;
 
 namespace Harbor.Application.Tests;

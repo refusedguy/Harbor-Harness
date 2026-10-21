@@ -60,7 +60,7 @@ public class LlmClientProviderIdTests
             new HttpClient(),
             config,
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("kilocode");
@@ -81,7 +81,7 @@ public class LlmClientProviderIdTests
             new HttpClient(),
             config,
             new TestAuthResolver(),
-            StubModelCatalog.Instance,
+            FakeModelCatalog.Instance,
             NullLogger<OpenAiCompatibleLlmClient>.Instance);
 
         await Assert.That(client.ProviderId.Value).IsEqualTo("myprovider");

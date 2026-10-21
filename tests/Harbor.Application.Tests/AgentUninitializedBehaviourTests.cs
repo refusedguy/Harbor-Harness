@@ -37,7 +37,7 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using FakeEventBus = Harbor.TestKit.FakeEventBus;
-using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
+using FakeSessionStore = Harbor.TestKit.FakeSessionStore;
 
 namespace Harbor.Application.Tests;
 

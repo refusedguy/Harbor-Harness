@@ -127,6 +127,22 @@ public sealed class TestKitCompositionRules
     internal const string GeneratorPart = "Harbor.TestKit.Generators";
 
     /// <summary>
+    ///     The support part (#1772/#1773, widened by #1825): the shared
+    ///     helpers and the shared interface doubles that need no product
+    ///     assembly beyond the two contract assemblies.
+    /// </summary>
+    /// <remarks>
+    ///     #1825 is what made this part the canonical home of the shared
+    ///     doubles: the compaction service, the token tracker, the rate-limited
+    ///     LLM client, the provider registry and the auth resolvers all moved
+    ///     here from project-local sets. The property that made that possible
+    ///     — and that keeps it possible — is this part's closure being exactly
+    ///     the two contract assemblies: a double may only be added here if it
+    ///     needs nothing else.
+    /// </remarks>
+    internal const string SupportPart = "Harbor.TestKit.Support";
+
+    /// <summary>
     ///     The projects the core is judged against. The list is EXACT names,
     ///     not prefixes: a part is a different project with a different
     ///     composition, and judging it by the core's rule would forbid the
@@ -453,6 +469,67 @@ public sealed class TestKitCompositionRules
                 + "runtime one. A runtime edge from the core to the generator would put a Roslyn "
                 + "component in the core's closure. Core references: "
                 + string.Join(", ", coreReferences));
+    }
+
+    // ---- #1825: the support part ---------------------------------------------
+
+    /// <summary>
+    ///     The support part's closure is exactly the two contract assemblies.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the property that lets the shared doubles live in ONE
+    ///         place. The support part is the part every test project can take
+    ///         without gaining a product assembly, so a double that sits here
+    ///         is reachable by everybody — and a double that needs a product
+    ///         assembly cannot sit here, because that would put the assembly
+    ///         into the closure of every project that takes the part.
+    ///     </para>
+    ///     <para>
+    ///         #1825 widened this part with the doubles that were merged out of
+    ///         five project-local sets. The closure did not move: the part is
+    ///         still itself plus the two contract assemblies, and the core kit
+    ///         is still four projects wide.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task The_Support_Part_Reaches_Only_The_Two_Contract_Assemblies()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph = LiveProjectGraph();
+
+        await Assert.That(graph.ContainsKey(SupportPart)).IsTrue()
+            .Because($"{SupportPart} must exist — it is where the shared doubles live since #1825.");
+
+        List<string> closure = [.. ClosureOf(SupportPart, graph)];
+
+        await Assert.That(closure).IsEquivalentTo(new[]
+        {
+            SupportPart, "Harbor.Abstractions", "Harbor.Abstractions.Contracts",
+        }).Because(
+            "The support part is supposed to be exactly three projects wide — itself and the "
+            + "two contract assemblies every consumer already has. A wider closure means a "
+            + "shared double started depending on a product assembly, and every project that "
+            + "takes the part now pays for it. Found: " + string.Join(", ", closure));
+    }
+
+    /// <summary>
+    ///     The support part reaches no UI, Desktop, Terminal-Abstractions or
+    ///     Application project, and the core kit reaches no product assembly
+    ///     beyond the two contract ones through it.
+    /// </summary>
+    [Test]
+    public async Task The_Support_Part_Reaches_No_Ui_Desktop_Or_Application_Project()
+    {
+        IReadOnlyDictionary<string, IReadOnlyList<string>> graph = LiveProjectGraph();
+
+        IReadOnlyList<string> forbidden = ForbiddenPathsFrom(SupportPart, graph);
+
+        await Assert.That(forbidden).IsEmpty()
+            .Because(
+                "The support part is the part EVERY test project can take without gaining a "
+                + "product assembly. A double that reached the UI stack would give that stack "
+                + "to all of them. Offending paths: "
+                + (forbidden.Count == 0 ? "(none)" : string.Join("; ", forbidden)));
     }
 
     // ---- the machinery ------------------------------------------------------

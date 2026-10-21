@@ -34,7 +34,7 @@ public class CancelProtocolGenerationTests
         var session = Session.Create("/tmp/harbor-cancel-protocol-tests", "code", "test", "test-model");
         var gate = new TaskCompletionSource<Result>(TaskCreationOptions.RunContinuationsAsynchronously);
         var agent = new DefaultAgent(
-            new Harbor.Application.Tests.Fakes.FakeSessionStore(session),
+            new Harbor.TestKit.FakeSessionStore(session),
             new BlockingLoop(gate),
             new FakeEventBus(),
             NullLogger<DefaultAgent>.Instance);

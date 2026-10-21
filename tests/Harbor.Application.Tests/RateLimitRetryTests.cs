@@ -6,11 +6,11 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Resilience;
 using Harbor.Application.Tests.Fakes;
-using FakeSessionStore = Harbor.Application.Tests.Fakes.FakeSessionStore;
+using FakeSessionStore = Harbor.TestKit.FakeSessionStore;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
