@@ -411,6 +411,7 @@ A minimal manifest:
 | `harbor` | The minimum Harbor version the plugin needs — the same floor `IPlugin.RequiredHarborVersion` declares, checked by the same gate. |
 | `capabilities` | The capabilities the plugin asks for. Optional. When present it REPLACES the `// harbor:capabilities` directive. |
 | `axes` | The extension axes the plugin contributes, named as `PluginAxisRegistry` names them (`IToolPlugin`, `IProviderPlugin`, …). Optional. When present it must equal the axes the plugin implements. |
+| `config` | The plugin's own settings: their names, their types, their defaults and their ranges. Optional. When absent the plugin has no settings of its own. |
 
 Every field is optional. A manifest that declares nothing is a valid manifest,
 and a plugin with no manifest at all is a plugin the host knows nothing extra
@@ -490,6 +491,93 @@ and trust decisions keep working.
 dependencies) and they are a runtime concern: the host resolves a dependency
 name against what is loaded and what it publishes, so a name in a file would be
 a second spelling of a name the host owns.
+
+## The plugin's own settings (#1734)
+
+A plugin may declare the settings it wants. The declaration is the manifest's
+`config` object, and it is read with the rest of the manifest: as data, before
+the plugin is compiled.
+
+```json
+{
+  "name": "web-search",
+  "config": {
+    "endpoint": { "type": "string", "default": "https://api.example.com" },
+    "maxResults": { "type": "integer", "default": 5, "minimum": 1, "maximum": 50,
+                    "description": "How many results a search returns." },
+    "apiKey": { "type": "string", "secret": true }
+  }
+}
+```
+
+The user writes the values under the plugin's own section of the host
+configuration, `plugins.<plugin-id>`, and nowhere else:
+
+```json
+{
+  "plugins": {
+    "web-search": { "maxResults": 10 }
+  }
+}
+```
+
+### What a setting may declare
+
+| Key | Meaning |
+|---|---|
+| `type` | `string`, `integer`, `number`, `boolean` or `stringList`. Absent means `string`. |
+| `default` | The value the setting takes when the user sets nothing. Absent means the setting is REQUIRED: the user has to give it a value. |
+| `description` | One line shown next to the setting in the settings form. |
+| `minimum`, `maximum` | The bounds of a numeric setting. |
+| `allowed` | The values a setting accepts, when it accepts a fixed set. |
+| `secret` | Whether the setting holds a secret. A secret is never shown in clear. |
+
+### What the host does with it
+
+**The section is checked before the plugin starts.** The registrar resolves the
+section against the schema in front of `IPlugin.Initialize`, so a plugin whose
+settings the configuration does not satisfy never runs. Every refusal names the
+setting that is wrong:
+
+> plugins.web-search.prot: unknown setting 'prot'. The plugin declares: endpoint, maxResults, apiKey.
+
+> plugins.web-search.maxResults: 100 is above the highest allowed value 50.
+
+**A setting the user did not set takes the default the schema published.** The
+values a plugin receives are the values the user wrote, completed with the
+defaults, and nothing else. A plugin reads a value and never has to know
+whether the user set it:
+
+```csharp
+public void Initialize(PluginContext context)
+{
+    int maxResults = (int)context.Config["maxResults"].AsInteger();
+}
+```
+
+**A plugin that declares no schema has no section.** A configuration that
+carries one anyway is refused, with the names of the settings that were
+dropped, because the host cannot know what the user meant.
+
+**The section is stored as the user wrote it.** What a section means is the
+plugin's schema, and the schema travels with the plugin, so the host stores
+the section and the plugin pipeline interprets it. A section for a plugin this
+build does not have survives a round trip of the configuration file: it is
+still the user's setting.
+
+### The settings form
+
+`harbor plugin config <name>` prints what the plugin declared, so the user
+does not have to guess the shape of the section:
+
+```
+Settings of 'web-search' (write them under plugins.web-search):
+  endpoint  string  default: https://api.example.com  current: https://api.example.com
+  maxResults  integer  range: 1..50  default: 5  current: 10
+  apiKey  string  default: (required)  current: (secret)
+```
+
+`harbor plugin config` without a name lists the plugins that declare settings.
 
 ## Minimal example — a hello tool
 
