@@ -63,6 +63,18 @@ public static class TestToolContext
     public static PermissionResponse AllowWithoutPersist() => new(PermissionAction.Allow, false);
 
     /// <summary>
+    ///     The other answer the tree spells out: deny the call, do not persist
+    ///     the decision.
+    /// </summary>
+    /// <remarks>
+    ///     The plugin suites use it to give a sandboxed tool a context whose
+    ///     permission callback refuses the call. The persist flag is
+    ///     <see langword="false" /> because none of those tests writes a
+    ///     decision back to a ruleset — the answer is a fixture, not a policy.
+    /// </remarks>
+    public static PermissionResponse DenyWithoutPersist() => new(PermissionAction.Deny, false);
+
+    /// <summary>
     ///     Builds a <see cref="ToolContext" /> for a test.
     /// </summary>
     /// <param name="sessionId">Session the tool call belongs to.</param>
