@@ -102,3 +102,39 @@ jobs:
         run: tools/build-gates.sh --verify
       - name: The binary must run
         run: tools/bin/harbor-gates-linux-x64 --list
+
+  # The gate over the Go sources of the gates themselves.
+  #
+  # WHY HERE AND NOT IN docs.yml
+  #
+  # Two of its rules need the Go toolchain -- `go vet` and `go build` -- and
+  # this is the only workflow in the repository that installs one
+  # (actions/setup-go, with the version pinned by tools/gates/go.mod). The
+  # gate says so when the toolchain is missing: it exits 2, "the gate could
+  # not run", and never reports a clean tree it did not check.
+  #
+  # The formatting rule does NOT need the toolchain: go/format is the code
+  # gofmt is built on, so the gate formats the file itself and compares the
+  # bytes. That is why the self-test of the gate runs in docs.yml too, where
+  # there is no Go at all.
+  #
+  # The job runs on the pull request AND on the push, because the tree it
+  # reads is the tree that is about to land.
+  go-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/gates/go.mod
+          cache: false
+      - name: The gate sources are formatted, vet-clean and registered
+        run: tools/bin/harbor-gates-linux-x64 go-quality --min-files 58 --min-packages 21
+      # The self-test runs here as well as in docs.yml, because this is the
+      # only place the Go toolchain exists: the fixture that needs it -- a
+      # printf `go vet` must reject -- can only run here.
+      - name: Go-quality gate fails on an unformatted file and a diverged registry
+        run: tools/bin/harbor-gates-linux-x64 go-quality --self-test
