@@ -4,7 +4,9 @@ Tests for **Harbor.Storage.Jsonl**.
 
 ## What's covered
 
-JSONL session persistence, append-only writes, compaction round-trip, concurrency
+JSONL session persistence, append-only writes, compaction round-trip, concurrency, and
+the session archive (#1750): round-trip, shadowed records, content-addressed
+attachments and the absence of credentials.
 
 ## Run
 
