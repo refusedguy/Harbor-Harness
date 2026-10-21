@@ -1717,17 +1717,18 @@ Machine: Linux x64, .NET 10 Release JIT, in-process (no tty, no render loop).
 
 ### 6.1 Per-project results — CI, Release ✅ measured
 
-**Source: CI run [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758)**
-(push to `dev`, sha `07769e7e`, 2026-10-20 13:51 UTC), the four `test` shards of
-`.github/workflows/ci.yml` on `ubuntu-24.04`, .NET SDK 10.0.402, Release binaries
-built by the same run's `build` job.
+**Source: CI run [39648943782](https://github.com/refusedguy/Harbor-Harness/actions/runs/39648943782)**
+(pull request #2143, sha `64f9825b`, 2026-10-21 18:01 UTC), the five `test` shards of
+`.github/workflows/ci.yml` on `ubuntu-24.04-arm`, .NET SDK 10.0.402, Release
+binaries built by the same run's `build` job.
 
-This is the first `dev` push whose shards ran on the current tree. The `dev`
-pushes before it (2026-10-20 09:17 to 13:25) failed in the `build` job, on an
-analyzer diagnostic (`Proj0040`, then `Proj0037` and a duplicate local in
-`tests/Harbor.Tools.Builtin.Tests/McpOAuthTests.cs`) that the
-`dotnet-project-file-analyzers` package upgrade brought in; `07769e7e` fixed
-those three, and this is the run after the fix.
+This is the first run of the `ci` lane since #2115 broke the workflow FILE
+itself: the arm64 reporting steps had lost their list marker, so `ci.yml` was
+not a workflow and every run of it created no jobs at all, on `dev` and on
+every branch alike (#2146 fixed it). The run before it on the same tree
+(39643565186) failed in the `core` shard on
+`ParentCancel_StopsBackgroundChildren`; the re-run of that job passed, and
+this run is green end to end.
 
 Every number below is **MEASURED**, and none of it is a projection:
 
@@ -1740,56 +1741,57 @@ Every number below is **MEASURED**, and none of it is a projection:
 
 | Test project | shard | Discovered | Passed | Failed | Skipped | Duration |
 |---|---|---:|---:|---:|---:|---:|
-| `Harbor.Architecture.Tests` | core | 1 032 | 1 032 | 0 | 0 | 78.75 s |
-| `Harbor.Application.Tests` | core | 578 | 578 | 0 | 0 | 16.09 s |
-| `Harbor.Abstractions.Tests` | core | 257 | 257 | 0 | 0 | 18.24 s |
-| `Harbor.Core.Tests` | core | 239 | 238 | 0 | 1 | 6.40 s |
-| `Harbor.ChangeTracking.Tests` | core | 126 | 126 | 0 | 0 | 4.64 s |
-| `Harbor.Hosting.Tests` | core | 112 | 112 | 0 | 0 | 0.80 s |
-| `Harbor.Config.Tests` | core | 105 | 105 | 0 | 0 | 0.50 s |
-| `Harbor.Registries.Tests` | core | 104 | 104 | 0 | 0 | 1.46 s |
-| `Harbor.TestKit.Tests` | core | 55 | 55 | 0 | 0 | 0.44 s |
-| `Harbor.Domain.Tests` | core | 51 | 51 | 0 | 0 | 3.03 s |
-| `Harbor.Lsp.Tests` | core | 35 | 35 | 0 | 0 | 1.05 s |
-| `Harbor.Telemetry.Tests` | core | 25 | 25 | 0 | 0 | 0.53 s |
-| `Harbor.Terminal.Pty.Tests` | core | 14 | 14 | 0 | 0 | 0.44 s |
-| `Harbor.TestKit.Generators.Tests` | core | 4 | 4 | 0 | 0 | 1.06 s |
-| `Harbor.Tui.CellForge.Tests` | ui | 2 425 | 2 425 | 0 | 0 | 8.05 s |
-| `Harbor.Ui.Framework.Tests` | ui | 627 | 627 | 0 | 0 | 23.94 s |
-| `Harbor.App.Avalonia.Tests` | ui | 356 | 349 | 0 | 7 | 2.25 s |
-| `Harbor.Tui.Tests` | ui | 244 | 244 | 0 | 0 | 0.74 s |
-| `Harbor.Tui.CellForge.PtyTests` | ui | 61 | 61 | 0 | 0 | 35.42 s |
-| `Harbor.Terminal.Abstractions.Tests` | ui | 76 | 76 | 0 | 0 | 0.87 s |
-| `Harbor.DesignSystem.Tests` | ui | 53 | 53 | 0 | 0 | 0.82 s |
-| `Harbor.Tui.RendererTests` | ui | 37 | 37 | 0 | 0 | 0.75 s |
-| `Harbor.Tools.Builtin.Tests` | platform | 469 | 467 | 0 | 2 | 5.16 s |
-| `Harbor.Storage.Tests` | platform | 147 | 147 | 0 | 0 | 3.29 s |
-| `Harbor.Providers.Tests` | platform | 144 | 144 | 0 | 0 | 3.68 s |
-| `Harbor.Storage.Jsonl.Tests` | platform | 130 | 130 | 0 | 0 | 7.49 s |
-| `Harbor.Plugins.Runtime.Tests` | platform | 105 | 105 | 0 | 0 | 3.84 s |
-| `Harbor.Ipc.Tests` | platform | 132 | 128 | 0 | 4 | 4.48 s |
-| `Harbor.Transport.Remote.Tests` | platform | 17 | 17 | 0 | 0 | 0.54 s |
-| `Harbor.Plugins.Abstractions.Tests` | platform | 17 | 17 | 0 | 0 | 0.40 s |
-| `Harbor.Plugins.Host.Tests` | platform | 14 | 14 | 0 | 0 | 0.43 s |
-| `Harbor.App.Cli.Tests` | e2e | 361 | 361 | 0 | 0 | 1.48 s |
-| `Harbor.E2E.App.Avalonia` | e2e | 107 | 86 | 1 | 20 | 25.86 s |
-| `Harbor.Tui.E2E.Tests` | e2e | 30 | 29 | 0 | 1 | 0.54 s |
-| `Harbor.E2E.Framework.Tests` | e2e | 26 | 26 | 0 | 0 | 0.52 s |
-| `Harbor.LoadTests` | e2e | 16 | 16 | 0 | 0 | 1.24 s |
-| `Harbor.E2E.Cli` | e2e | 11 | 11 | 0 | 0 | 3.72 s |
-| **Total (37 projects, 4 shards)** | | **8 342** | **8 306** | **1** | **35** | **268.9 s** |
+| `Harbor.Application.Tests` | core | 671 | 671 | 0 | 0 | 7.36 s |
+| `Harbor.Core.Tests` | core | 285 | 285 | 0 | 0 | 9.66 s |
+| `Harbor.Abstractions.Tests` | core | 280 | 280 | 0 | 0 | 2.59 s |
+| `Harbor.ChangeTracking.Tests` | core | 126 | 126 | 0 | 0 | 5.19 s |
+| `Harbor.Registries.Tests` | core | 124 | 124 | 0 | 0 | 1.90 s |
+| `Harbor.Config.Tests` | core | 122 | 122 | 0 | 0 | 1.99 s |
+| `Harbor.TestKit.Tests` | core | 121 | 121 | 0 | 0 | 0.79 s |
+| `Harbor.Hosting.Tests` | core | 118 | 118 | 0 | 0 | 1.40 s |
+| `Harbor.Domain.Tests` | core | 58 | 58 | 0 | 0 | 2.26 s |
+| `Harbor.Lsp.Tests` | core | 35 | 35 | 0 | 0 | 1.29 s |
+| `Harbor.Telemetry.Tests` | core | 25 | 25 | 0 | 0 | 0.76 s |
+| `Harbor.Terminal.Pty.Tests` | core | 14 | 14 | 0 | 0 | 0.60 s |
+| `Harbor.CodeGen.Tests` | core | 9 | 9 | 0 | 0 | 1.56 s |
+| `Harbor.TestKit.Generators.Tests` | core | 4 | 4 | 0 | 0 | 1.80 s |
+| `Harbor.Tools.Builtin.Tests` | platform | 533 | 531 | 0 | 2 | 4.86 s |
+| `Harbor.Storage.Jsonl.Tests` | platform | 211 | 211 | 0 | 0 | 4.91 s |
+| `Harbor.Plugins.Runtime.Tests` | platform | 196 | 196 | 0 | 0 | 5.00 s |
+| `Harbor.Storage.Tests` | platform | 157 | 157 | 0 | 0 | 3.71 s |
+| `Harbor.Providers.Tests` | platform | 154 | 154 | 0 | 0 | 2.45 s |
+| `Harbor.Ipc.Tests` | platform | 133 | 129 | 0 | 4 | 4.89 s |
+| `Harbor.Plugins.Abstractions.Tests` | platform | 33 | 33 | 0 | 0 | 0.54 s |
+| `Harbor.Plugins.Host.Tests` | platform | 19 | 19 | 0 | 0 | 0.57 s |
+| `Harbor.Transport.Remote.Tests` | platform | 17 | 17 | 0 | 0 | 0.80 s |
+| `Harbor.Tui.CellForge.Tests` | ui | 2 480 | 2 480 | 0 | 0 | 6.75 s |
+| `Harbor.Ui.Framework.Tests` | ui | 637 | 637 | 0 | 0 | 5.38 s |
+| `Harbor.App.Avalonia.Tests` | ui | 377 | 370 | 0 | 7 | 2.05 s |
+| `Harbor.Tui.Tests` | ui | 248 | 248 | 0 | 0 | 0.64 s |
+| `Harbor.Terminal.Abstractions.Tests` | ui | 76 | 76 | 0 | 0 | 0.80 s |
+| `Harbor.Tui.CellForge.PtyTests` | ui | 64 | 64 | 0 | 0 | 34.30 s |
+| `Harbor.DesignSystem.Tests` | ui | 53 | 53 | 0 | 0 | 0.78 s |
+| `Harbor.Tui.RendererTests` | ui | 37 | 37 | 0 | 0 | 0.53 s |
+| `Harbor.App.Cli.Tests` | e2e | 370 | 370 | 0 | 0 | 1.48 s |
+| `Harbor.Tui.E2E.Tests` | e2e | 30 | 29 | 0 | 1 | 0.55 s |
+| `Harbor.E2E.Framework.Tests` | e2e | 30 | 30 | 0 | 0 | 0.51 s |
+| `Harbor.LoadTests` | e2e | 16 | 16 | 0 | 0 | 1.41 s |
+| `Harbor.E2E.Cli` | e2e | 11 | 11 | 0 | 0 | 3.78 s |
+| `Harbor.E2E.App.Avalonia` | e2e | 107 | 100 | 0 | 7 | 15.30 s † |
+| `Harbor.Architecture.Tests` | arch | 1 118 | 1 118 | 0 | 0 | 97.46 s |
+| **Total (38 projects, 5 shards)** | | **9 099** | **9 078** | **0** | **21** | **238.6 s** |
 
-**Shard walls, same run** (`Run shard <shard>` step): `core` **140 s**, `ui`
-**78 s**, `platform` **36 s**, `e2e` **37 s**. The PR wall is the maximum
-shard, not the sum, so `core` is the binding shard on this run.
+† `Harbor.E2E.App.Avalonia` runs as three processes
+(`tests/Harbor.E2E.App.Avalonia/e2e-shards.json`), so its row is the CRITICAL
+PATH of those processes (15.3 s of 12.4 / 15.3 / 4.9 s), not a sum.
+**Shard walls, same run** (`Run shard <shard>` step): `arch` **99 s**, `core`
+**48 s**, `ui` **56 s**, `platform` **33 s**, `e2e` **27 s**. The PR wall is the
+maximum shard, not the sum, so `arch` is the binding shard on this run — it
+has been since the architecture suite got a shard of its own (#1781).
 
-**One test failed in the baseline run**: `Harbor.E2E.App.Avalonia`'s
-`Chat_ShowToolCallCard` ("expected rendered 'read', but the visible tree never
-showed it"), which is why the `e2e` shard is red on it and that run's
-conclusion is `failure`. It does not change any count above (the test was
-discovered and it failed, which is what the Failed column says), and it is why
-the run is quoted as a measurement rather than as a green one. The same test
-passed on run 39438762137, so the flake is one flake and not a broken suite.
+**The `e2e` shard costs 27 s**, and the E2E framework's own project is 0.51 s
+of it (`Harbor.E2E.Framework.Tests`, 30 tests): the framework is not the
+shard's cost, the Avalonia app is (15.3 s of the 27 s, as three processes).
 
 **How to reproduce the table.** The counts and the per-assembly durations are in
 the run's job log (the "Test run summary" block per project). They are also in
@@ -1797,19 +1799,19 @@ the TRX files, and the compiled `test-census` gate turns those into exactly this
 per project and per test:
 
 ```bash
-gh run download 39438762137 --name test-results-core --dir TestResults/core
-python3 tools/test-census.py TestResults/core          # the table above
-python3 tools/test-census.py TestResults/core --format csv > census.csv
+gh run download 39648943782 --name test-results-core --dir TestResults/core
+tools/bin/harbor-gates-linux-x64 test-census TestResults/core          # the table above
+tools/bin/harbor-gates-linux-x64 test-census TestResults/core --format csv > census.csv
 ```
 
 The census reads every result the runner produced, including the ~99% of tests
 that printed nothing, so its `discovered` column is the number of tests the
 suite has, and its `wall` column is the runner's per-assembly duration read
-from the TRX `<Times>` window. On run 39438762137 the census and the job log
-agree to the test: 8 342 discovered, 8 307 passed, 35 skipped, 0 failed, in the
-same 37 projects.
+from the TRX `<Times>` window. On run 39648943782 the census and the job log
+agree to the test: 9 099 discovered, 9 078 passed, 21 skipped, 0 failed, in the
+same 38 projects.
 the compiled `test-measurements` gate cannot do this: it renders only the tests that
-printed a measurement, which on a full run is 88 rows out of 8 342.
+printed a measurement, which on a full run is 88 rows out of 9 099.
 
 > **The TRX artifacts came back in this PR.** They were gone from every run
 > between 2026-10-20 11:17 and this one. The TUnit 1.75 upgrade (`b6fcc333`)
@@ -1845,8 +1847,8 @@ printed a measurement, which on a full run is 88 rows out of 8 342.
 > | `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
 > | **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
 >
-> The suite grew from ~493 to 8 342 discovered tests (17x) and the architecture
-> suite from 45 to 1 032 (23x) between that measurement and this one. A number
+> The suite grew from ~493 to 9 099 discovered tests (18x) and the architecture
+> suite from 45 to 1 118 (25x) between that measurement and this one. A number
 > measured on a tree that no longer exists cannot be a baseline: a spike has
 > nothing to compare against, and a diff against 45 says nothing about 1 032.
 
@@ -1860,17 +1862,19 @@ different runner loads:
 | [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, `2435d26d`, 09:17) | before #1791 | 977 | 977 | 95.47 s | 992 |
 | [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352) (dev, `86b52adc`, 12:23) | with #1868 | 998 | 998 | 122.10 s | 1 013 |
 | [39423289101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39423289101) (PR #1939 branch, `27114126`, 12:34) | with #1789 | 1 002 | 1 002 | 119.20 s | 1 018 |
-| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | the baseline row of §6.1 | **1 032** | **1 032** | **78.75 s** | 1 053 |
+| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | the §6.1 baseline run before this one | **1 032** | **1 032** | **78.75 s** | 1 053 |
 | [39450959681](https://github.com/refusedguy/Harbor-Harness/actions/runs/39450959681) (PR branch, `f2491032`, 15:5x) | after #1791's shared tree snapshot | 1 068 | 1 068 | 89.43 s | 1 089 |
+| [39648943782](https://github.com/refusedguy/Harbor-Harness/actions/runs/39648943782) (PR #2143, `64f9825b`, 18:01) | the §6.1 baseline run now | **1 118** | **1 118** | **97.46 s** | 1 143 |
 
 The last column is the source-level `[Test]` count in
-`tests/Harbor.Architecture.Tests/`, which runs 15-21 above the discovered
+`tests/Harbor.Architecture.Tests/`, which runs 15-25 above the discovered
 count on every one of those trees (the difference is `[Test]` occurrences that
 the runner does not discover). It is a check on the measurement, not a
 substitute for it.
 
 **Read the count, not the wall.** The runs above discovered 966, 977, 998,
-1 002, 1 032 and 1 068 tests, and the wall ranged from 65.88 s to 122.10 s for
+1 002, 1 032, 1 068 and 1 118 tests, and the wall ranged from 65.88 s to
+122.10 s for
 nearly the same suite. The wall moved by 2x between runs on trees that differ
 by 4 % in test count, because a shared runner's load moves it and because the
 architecture suite's wall is set by a handful of long tests (§ below). The
@@ -3158,16 +3162,16 @@ carries five shards with 347 s of service time, and it is the pool the
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that
 > section's provenance — §3/§4 (§1 environment, 2026-07-18) for binary size, RSS and cold start;
-> §6.1 (CI run 39434075758, dev, 2026-10-20) for the test rows.
+> §6.1 (CI run 39648943782, PR #2143, 2026-10-21) for the test rows.
 
 | Metric | Old claim | Reality (this doc) | Why differed |
 |---|---:|---:|---|
 | Binary size | 5 MB | 109 MB (publish folder) | Old was Debug DLL alone, not publish folder |
 | RSS idle | 28 MB | ~80-120 MB (estimated) | Old was Debug `--version` exit, not real session |
 | Cold start | 38 ms | 966 ms | Old was Debug incremental, not Release from cold cache |
-| Test count | 242 | **8 342 discovered** (§6.1, run 39434075758) | Old was outdated; suite grew with new features |
-| Test duration | 12 s | **268.9 s** of test time, `core` shard 140 s (§6.1) | Old was after warm build, 12 projects, Debug, no-build; the suite is now 37 projects and runs in four Release shards in parallel |
-| Architecture suite | 45 tests / 2.19 s (local Debug, 2026-07-18) | **1 032 discovered / 78.75 s** (CI, Release, §6.1) | Same: the old row measured a tree 23x smaller, in Debug, without the CI gate |
+| Test count | 242 | **9 099 discovered** (§6.1, run 39648943782) | Old was outdated; suite grew with new features |
+| Test duration | 12 s | **238.6 s** of test time, `arch` shard 99 s (§6.1) | Old was after warm build, 12 projects, Debug, no-build; the suite is now 38 projects and runs in five Release shards in parallel |
+| Architecture suite | 45 tests / 2.19 s (local Debug, 2026-07-18) | **1 118 discovered / 97.46 s** (CI, Release, §6.1) | Same: the old row measured a tree 25x smaller, in Debug, without the CI gate |
 
 ## 8. Per-app assessment
 
@@ -3176,7 +3180,7 @@ carries five shards with 347 s of service time, and it is the pool the
 | Aspect | Status | Notes |
 |---|---|---|
 | Build | ✅ green | 0 warnings, 0 errors |
-| Tests | ✅ 8 306 passed of 8 342 discovered | CI, Release, four shards (§6.1); 35 skipped, 1 failed (an E2E Avalonia test, §6.1) |
+| Tests | ✅ 9 078 passed of 9 099 discovered | CI, Release, five shards (§6.1); 21 skipped, 0 failed |
 | Binary | 109 MB publish | Roslyn + Spectre dominate |
 | AOT | ✅ publishes (`fulltree`) | 29 MB self-contained binary, §4.4 |
 | Cold start | 18 ms AOT / 138 ms JIT (`--version`) | Measured §4.4 |
@@ -3219,7 +3223,7 @@ carries five shards with 347 s of service time, and it is the pool the
 ### What's actually fast
 
 - **Microbenchmarks**: hot paths (`ProviderRegistry.GetClient`, `ToolRegistry.ResolveTools`, `PermissionRuleset.Evaluate`, `UiStore.Dispatch`) are sub-microsecond with zero allocations — the `ArrayPool`/`StringBuilderPool`/`FrozenDictionary`/`StringPool` strategy works.
-- **Test suite**: 8 342 discovered tests, 268.9 s of test time, `core` shard 140 s (§6.1). TUnit source-gen is fast, and the four shards run in parallel.
+- **Test suite**: 9 099 discovered tests, 238.6 s of test time, `arch` shard 99 s (§6.1). TUnit source-gen is fast, and the four shards run in parallel.
 - **Lock-free `UiStore.Dispatch`**: 0.15 µs via CAS loop, no contention.
 
 ### What's actually slow / bloated
