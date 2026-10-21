@@ -238,7 +238,7 @@ jobs:
               # silences the gate would also be the edit that stops the gate
               # from running — unvalidated, which is the #618 defect again with
               # a different payload. Editing the tool has the same problem.
-              - 'tools/aot-publish-gate.py'
+              - 'tools/gates/aot-publish-gate/**'
               - '.github/aot-warning-baseline.txt'
               # The TUnit analyzer gate's instrument (#1836). The same #618
               # argument as the lines above: editing the tool that proves the
@@ -512,7 +512,7 @@ jobs:
   #                                           does not reach the test tree
   #                                           as a diagnostic either.
   #   tools/check-abstractions-contract.py     four src/ projects.
-  #   tools/aot-publish-gate.py                src/ + apps/.
+  #   harbor-gates aot-publish-gate            src/ + apps/.
   #   AGENTS.md §"What NOT to do" #2           prose.
   #
   # So a TRANSITIVE dependency could put a banned package into any test
@@ -2342,15 +2342,6 @@ jobs:
           summary="$GITHUB_STEP_SUMMARY"
           echo "| project | result | duration |" >> "$summary"
           echo "|---|---|---|" >> "$summary"
-          # The compiled gates ship one binary per architecture, and the
-          # shards run on the ARM64 pool (issue #1919). The binary has to
-          # match the runner, or the shell says "cannot execute binary
-          # file" and the shard is red for a reason that has nothing to do
-          # with the tests.
-          gate_bin="tools/bin/harbor-gates-linux-x64"
-          if [ "$(uname -m)" = "aarch64" ]; then
-            gate_bin="tools/bin/harbor-gates-linux-arm64"
-          fi
           rc=0
           for p in ${{ matrix.projects }}; do
             echo "::group::dotnet exec $p"
@@ -2370,12 +2361,30 @@ jobs:
               # fails loudly when a shard's filter drops a class (a filter that
               # silently drops tests is worse than the serialisation this
               # removes).
-              if "$gate_bin" run-e2e-avalonia-shards \
-                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
-                status="pass"
+              # The compiled gates ship one binary per architecture, and the
+              # test shards run on the ARM64 pool (issue #1919). The binary
+              # has to match the runner: the x64 one on an x64 runner and the
+              # arm64 one on an arm64 one, or the shell says "cannot execute
+              # binary file" and the shard is red for a reason that has
+              # nothing to do with the tests. Both commands are written out,
+              # because the runner is chosen by the shard's label and not by
+              # the pool the whole job happens to be in.
+              if [ "$(uname -m)" = "aarch64" ]; then
+                if tools/bin/harbor-gates-linux-arm64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               else
-                status="FAIL"
-                rc=1
+                if tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               fi
             elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
@@ -2548,7 +2557,7 @@ jobs:
   #   1. The publish's OUTCOME and its trim/AOT diagnostics match
   #      `.github/aot-warning-baseline.txt` exactly — same recorded outcome, no
   #      new id, no changed count, no new first-party site, and no row left
-  #      behind for a warning that stopped. tools/aot-publish-gate.py owns that
+  #      behind for a warning that stopped. harbor-gates aot-publish-gate owns that
   #      comparison and prints the id list, the occurrence count and the
   #      error-severity total on every run, so "found 0" can never be a bare,
   #      unreadable number.
@@ -2683,7 +2692,7 @@ jobs:
     # of runner time on a red pull request.
     needs: [changes]
     # The CHECK is unchanged (same recipe, same committed inventory, same
-    # "the published binary must run" half, same aot-publish-gate.py
+    # "the published binary must run" half, same aot-publish-gate
     # comparison). What changed is WHEN the job is allowed to spend a
     # runner:
     #   * on a PUSH to dev/master it ALWAYS runs — the release guarantee, and
@@ -2732,7 +2741,7 @@ jobs:
       # truncated log, absent log), so a matcher that matches nothing cannot
       # pass them. No publish, no network, ~1s.
       - name: Self-test the gate tool (synthetic, guaranteed-hit fixtures)
-        run: python3 tools/aot-publish-gate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 aot-publish-gate --selftest
 
       - name: Publish Harbor.App.Cli (NativeAOT, linux-x64, full tree)
         id: publish
@@ -2899,7 +2908,7 @@ jobs:
 
       - name: Compare the publish against the committed record
         run: |
-          python3 tools/aot-publish-gate.py \
+          tools/bin/harbor-gates-linux-x64 aot-publish-gate \
             --log publish/aot-publish.log \
             --baseline .github/aot-warning-baseline.txt \
             --expect-rid linux-x64 \

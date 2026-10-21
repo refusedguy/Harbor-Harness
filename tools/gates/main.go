@@ -42,6 +42,7 @@ import (
 	"sort"
 	"strings"
 
+	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
@@ -69,6 +70,11 @@ type registered struct {
 }
 
 var registry = []registered{
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
+	},
 	{
 		name:    "changelog-assemble",
 		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",

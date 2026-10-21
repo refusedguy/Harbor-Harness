@@ -592,7 +592,7 @@ bans `N:Newtonsoft.Json`, but that file is an RS0030 analyzer input: it covers
 source code only, and RS0030 is switched off for `tests/` and `samples/` in
 `Directory.Build.props`, so a *transitive* dependency could put Newtonsoft into
 a test project's `bin/` with no rule noticing. `tools/check-abstractions-contract.py`
-covers four `src/` projects, `tools/aot-publish-gate.py` covers `src/` and
+covers four `src/` projects, `harbor-gates aot-publish-gate` covers `src/` and
 `apps/`, and the rule in `AGENTS.md` is prose.
 
 ```bash
