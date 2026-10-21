@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `766b397f`, plus the gate this
+Measured on this branch (one commit on `dev` at `6f197b60`, plus the gate this
 branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 41 files, 34 405 lines |
-| of them, the `check-*.py` family | 21 files, 21 776 lines |
-| workflows that run a python tool | 6: `ci.yml`, `demo.yml`, `docs.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
-| gates that block a build | 25 |
+| python tools in `tools/` | 49 files, 38 909 lines |
+| of them, the `check-*.py` family | 24 files, 23 377 lines |
+| workflows that run a python tool | 7: `ci.yml`, `demo.yml`, `docs.yml`, `meas-analyzer-cost.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
+| gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 7 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 32 |
-| tools with a ratchet | 17 |
-| tools with a floor | 21 |
+| reporters, helpers, libraries | 9 reporters, 6 helpers, 3 libraries |
+| tools with a self-test | 37 |
+| tools with a ratchet | 21 |
+| tools with a floor | 26 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -215,12 +215,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (40 files). 35 of them are run by a workflow; the
-other five are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
-`string-switch-rewrites.py`, which are loaded by other tools rather than run,
-`measure-project-graph.py`, which a human runs to read the project graph, and
-`codemod-test-events.py`, which rewrites the hand-built test events and test
-messages. All 40 are listed, because a tool that is not listed is a tool nobody
+Every python tool in `tools/` (49 files). 42 of them are run by a workflow; the
+other seven are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
+`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
+other tools rather than run, `measure-project-graph.py`, which a human runs to
+read the project graph, `codemod-test-events.py` and `codemod-tool-schemas.py`,
+which rewrite hand-built sources. All 49 are listed, because a tool that is not
+listed is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where it runs, whether it blocks a build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
@@ -281,7 +282,7 @@ The modes are:
 | `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 | `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
-| `tools/check-arch-suite-once.py` | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `core` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
+| `tools/check-arch-suite-once.py` | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/check-shard-balance.py` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/gen-seam-graph.py` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
@@ -289,6 +290,7 @@ The modes are:
 | `tools/aggregate-analyzer-cost.py` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
 | `tools/coverage_report.py` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
 | `tools/check-coverage-registry.py` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
+| `tools/gen-plugin-inventory.py` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

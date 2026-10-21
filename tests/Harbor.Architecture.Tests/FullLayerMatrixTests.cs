@@ -286,12 +286,29 @@ public class FullLayerMatrixTests
         [
             new DocumentedException(
                 "Harbor.Terminal.Abstractions",
-                "ITuiPlugin is TUI vocabulary; the registrar registers TUI plugins, and the #1758 recorder forwards the same doors.",
-                ["PluginRegistrar.cs", "RecordingPluginLoadHost.cs"]),
+                "ITuiPlugin is TUI vocabulary; the registrar registers TUI plugins, the #1758 recorder forwards the same doors, and the #1722 marker table names the marker the registrar dispatches.",
+                ["PluginAxisMarkers.cs", "PluginRegistrar.cs", "RecordingPluginLoadHost.cs"]),
             new DocumentedException(
                 "Harbor.Ui.Framework.State",
-                "Registered TUI plugins carry view-model/state payloads; the #1758 recorder forwards the panel door.",
-                ["PanelRegistryPluginAdapter.cs", "PluginRegistrar.cs", "RecordingPluginLoadHost.cs"]),
+                "Registered TUI plugins carry view-model/state payloads; the #1758 recorder forwards the panel door, and the #1722 marker table names the panel marker.",
+                ["PanelRegistryPluginAdapter.cs", "PluginAxisMarkers.cs", "RecordingPluginLoadHost.cs"]),
+        ],
+        // #1722: the inventory decorator IMPLEMENTS the load host, so it has to
+        // forward every door the interface declares — including the TUI, the
+        // renderer and the panel doors, whose payload types live in the
+        // presentation-side assemblies. It is a decorator: it forwards the
+        // host's own Result unchanged, and the recording is what the live
+        // composition is projected from.
+        ["Harbor.Plugins.Hosting"] =
+        [
+            new DocumentedException(
+                "Harbor.Terminal.Abstractions",
+                "The #1722 inventory decorator implements IPluginLoadHost, so it forwards the TUI and the renderer doors; the payload types are TUI vocabulary.",
+                ["PluginInventoryLoadHost.cs"]),
+            new DocumentedException(
+                "Harbor.Ui.Framework.State",
+                "The #1722 inventory decorator implements IPluginLoadHost, so it forwards the panel door; the payload type carries the panel's state projection.",
+                ["PluginInventoryLoadHost.cs"]),
         ],
     };
 
@@ -703,9 +720,26 @@ public class FullLayerMatrixTests
         // Plugins.Abstractions contracts only. That is exactly the "declares 5
         // targets, uses 1" rot #450 was filed for; the four are removed here and
         // their ProjectReferences are tracked as known-vestigial edges.
+        //
+        // #1722: two of those edges are bound again, and for the reasons the
+        // whole family is Infrastructure: the live-composition inventory reads
+        // the ONE marker table the registrar dispatches on, so the snapshot and
+        // the registrar cannot disagree about which axes a plugin carries, and
+        // reading it names the plugin contract's facade (Harbor.Abstractions),
+        // which is Domain and always allowed. The other two edges stay vestigial.
+        //
+        // #1732: Instantiation is permitted again, and the edge is REAL this
+        // time: `PluginRuntimeVersions` states the two versions a plugin is
+        // checked against (the Harbor version the instantiation layer hands
+        // every plugin context, and the manifest schema version the contract
+        // layer declares), so the assembly now binds the type and the IL gate
+        // sees the reference. It is the same edge Registration already carries.
         ["Harbor.Plugins.Hosting"] = new(Layer.Infrastructure,
         [
+            "Harbor.Abstractions",
             "Harbor.Plugins.Abstractions",
+            "Harbor.Plugins.Instantiation",
+            "Harbor.Plugins.Registration",
         ]),
         // ---- CompositionRoot -----------------------------------------------
         ["Harbor.Hosting"] = new(Layer.CompositionRoot,

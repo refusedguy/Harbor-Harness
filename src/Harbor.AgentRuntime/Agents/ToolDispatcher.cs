@@ -1060,10 +1060,15 @@ internal static partial class ToolDispatcherLog
     [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Tool execution end: {ToolName} (call {CallId}) isError={IsError}")]
     public static partial void ToolExecutionEnd(ILogger logger, string toolName, string callId, bool isError);
 
-    [LoggerMessage(EventId = 15, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; no tool body in the batch runs: {Error}")]
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning, Message = "Tool {ToolName} (call {CallId}) promised a deferred context that did not arrive; the result stands on its own")]
+    public static partial void ToolDeferredContextMissing(ILogger logger, string toolName, string callId);
+
+    // #1765: the two ids below continue after #1763's 15, so the id dev
+    // already shipped for the deferred-context warning keeps its number.
+    [LoggerMessage(EventId = 16, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; no tool body in the batch runs: {Error}")]
     public static partial void DurabilityCheckpointFailed(ILogger logger, string sessionId, string error);
 
-    [LoggerMessage(EventId = 16, Level = LogLevel.Information, Message = "{Count} tool call(s) aborted after the durability checkpoint and before dispatch")]
+    [LoggerMessage(EventId = 17, Level = LogLevel.Information, Message = "{Count} tool call(s) aborted after the durability checkpoint and before dispatch")]
     public static partial void ToolAbortedBeforeDispatch(ILogger logger, int count);
 
 }

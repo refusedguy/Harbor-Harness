@@ -238,7 +238,7 @@ internal sealed class TurnRunner(
         // CompactionBehavior owns threshold check, summarization,
         // events/metrics and the fallback decision (§3.5).
         CompactionOutcome compactionOutcome = await compactionBehavior
-            .BeforeTurnAsync(session, turnMessages, model, truncationFallback, ct)
+            .BeforeTurnAsync(session, turnMessages, model, truncationFallback, ct, turn)
             .ConfigureAwait(false);
         turnMessages = compactionOutcome.TurnMessages;
         truncationFallback = compactionOutcome.TruncationFallback;

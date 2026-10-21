@@ -29,10 +29,10 @@ namespace Harbor.Storage.Jsonl;
 
 // The base list is the store's WHOLE set of seams, and it is repeated here
 // verbatim because a partial declaration may not name a different one:
-// ISessionFeedbackStore (#1746) joined it in JsonlSessionStore.cs, and a
-// partial type whose parts disagree about their base interfaces does not
-// compile.
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore
+// ISessionFeedbackStore (#1746) joined it in JsonlSessionStore.cs, and
+// ICompactionEventStore (#1767) joined it after that; a partial type whose
+// parts disagree about their base interfaces does not compile.
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ICompactionEventStore
 {
     /// <summary>
     ///     Originator capture (<b>#1551 Memento</b>): find the anchor in this

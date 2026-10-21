@@ -84,9 +84,10 @@ src/Harbor.Ui.Framework{,.Abstractions,.State,.ViewModels,.Rendering,.Projection
 src/Harbor.Desktop.{Abstractions,ViewModels,Shared,Animations} — desktop app support
 src/Harbor.Storage.{Jsonl,Memory,Sqlite}/ — session stores (HARBOR_STORAGE=jsonl|memory|sqlite); Harbor.Storage.Shared/ is linked-source (no .csproj, compiled into Jsonl+Sqlite)
 src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients; Harbor.Providers.Shared/ is linked-source (no .csproj, compiled into each provider)
-src/Harbor.Tools.Builtin/             — 20 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
+src/Harbor.Tools.Builtin/             — 21 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
                                         ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
-                                        read_mcp_resource/mcp_prompt/session_read/session_steer)
+                                        read_mcp_resource/mcp_prompt/session_read/session_steer/
+                                        harbor_inspect)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
@@ -123,17 +124,17 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 80 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 81 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
-tests/                                — 46 test/bench projects, one directory each
+tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
                                         and Harbor.TestKit.Generated parts)
                                         and Harbor.Benchmarks
                                         and the TUnit analyzer canary (a compile fixture, not a
                                         suite: it is not in Harbor.slnx — see #1836)
-                                        (`tests/` holds 48 directories: the 46 projects plus
+                                        (`tests/` holds 50 directories: the 48 projects plus
                                         `fixtures/` and `Plugins/`, which are data and have no .csproj — so a
-                                        plain `ls -d tests/*/ | wc -l` reads 48, two more than the
+                                        plain `ls -d tests/*/ | wc -l` reads 50, two more than the
                                         project count, and is the wrong number to quote)
 ```
 
