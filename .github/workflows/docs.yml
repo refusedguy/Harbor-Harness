@@ -95,6 +95,12 @@ on:
       # self-test, or the edit lands unvalidated.
       - 'tools/guard-triage.py'
       - 'tools/guard-triage-classes.json'
+      # #1722. The plugin-inventory gate reads the two plugin registries, the
+      # sample plugins and the product's own JSON writer, and compares the
+      # result with the committed snapshot. A PR that edits any of them has to
+      # run it, or the snapshot drifts from the tree it describes.
+      - 'tools/gen-plugin-inventory.py'
+      - 'docs/PLUGIN_INVENTORY.json'
       # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
@@ -546,6 +552,15 @@ jobs:
       # pin did not. The gate MUST fail on it, or the pin protects nothing.
       - name: Tool-schema pin gate fails on a planted divergence
         run: python3 tools/check-tool-schema-pin.py --selftest
+      # #1722. The plugin-inventory gate compares the committed snapshot with
+      # the tree it describes, so its failure path has to be tested here for
+      # the same reason as the others: a gate edited until it matches nothing
+      # is indistinguishable from a gate that found nothing. The load-bearing
+      # fixture is a stale snapshot AND a product writer that renamed a
+      # member - the gate MUST fail on both, and MUST stay quiet on a tree
+      # that matches.
+      - name: Plugin-inventory gate fails on a stale snapshot
+        run: python3 tools/gen-plugin-inventory.py --self-test
 
   links:
     name: internal links
@@ -1325,6 +1340,44 @@ jobs:
   # re-signing pairing, which is about a commit and not about a tree — and
   # it runs in the ci.yml `public-api` job together with the compile gate's
   # non-vacuity proof.
+
+  # #1722. The only question here that is about the PLUGIN composition:
+  # does the committed snapshot still describe the tree it was generated from?
+  #
+  # The plugin composition was spread over three places — the axis registry,
+  # the route registry and the host's log lines — and none of them could be
+  # read by a program. `docs/PLUGIN_INVENTORY.json` is the one document that
+  # can: the axes, the per-route verdicts, and the plugins the repository
+  # ships, in the same schema the product writes at runtime for the LIVE
+  # composition.
+  #
+  # The gate is stdlib python with no SDK, so it lives here with the other
+  # document gates. It reads the two registries, the sample plugins and the
+  # product's own writer as FILES.
+  #
+  # It checks three things: that the committed document matches the tree, that
+  # the floors are met (a scan that stopped covering the tree would produce a
+  # document that agrees with itself and says nothing), and that the two
+  # producers agree on the SCHEMA — a member the product renamed is a member
+  # a consumer of the document would not find any more.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a stale document
+  # fails, a fresh one passes, a renamed member fails), run in the `selftest`
+  # job above.
+  plugininventory:
+    name: plugin inventory snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # The floors are set AT the measured counts rather than below them: a
+      # floor with slack cannot tell "the tree got smaller" from "the matcher
+      # stopped matching". Measured on this tree: 7 axes, 7 route verdicts,
+      # 6 shipped plugins.
+      - name: Check the committed plugin inventory against the tree
+        run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #

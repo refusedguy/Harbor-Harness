@@ -281,6 +281,23 @@ internal static class IlCapabilityProbe
         IReadOnlyList<CapabilityRule> rules,
         Dictionary<(string, string), SortedSet<string>> members)
     {
+        // The code-coverage instrumentation INJECTS a tracker into every assembly
+        // it instruments: a generated `Microsoft.CodeCoverage.Instrumentation.Static.Tracker.*`
+        // class whose whole job is to record which lines ran, which it does by writing
+        // files. The nightly coverage lane therefore hands this probe an assembly whose
+        // IL contains filesystem I/O that the product never wrote, and the rule fires on
+        // the instrumenter instead of on the Presentation layer. The rule is about
+        // human-authored product code, so the instrumenter's own types are skipped.
+        //
+        // The product's CALLS INTO the tracker are still read: the tracker is not a
+        // System.IO type, so a call to it never matches a rule prefix. What is skipped
+        // is the instrumenter's own body, which is absent from an uninstrumented build
+        // and says nothing about the architecture.
+        if (IsInstrumentationInjected(type))
+        {
+            return;
+        }
+
         // 1. Type-level references: base class, interfaces, field types and the
         //    types in every method signature. A capability reached only through
         //    a field or a return type is still a capability.
@@ -373,6 +390,20 @@ internal static class IlCapabilityProbe
                 break;
             }
         }
+    }
+
+    /// <summary>
+    ///     True for the types the code-coverage instrumentation injects into an
+    ///     instrumented assembly: the generated tracker that records which lines ran.
+    ///     They belong to the instrumenter, they are absent from an uninstrumented
+    ///     build, and they touch the filesystem to do their job — which is not the
+    ///     product doing I/O.
+    /// </summary>
+    internal static bool IsInstrumentationInjected(TypeDefinition type)
+    {
+        string? ns = type.Namespace;
+        return ns is not null
+               && ns.StartsWith("Microsoft.CodeCoverage", StringComparison.Ordinal);
     }
 
     /// <summary>
