@@ -31,7 +31,7 @@ public class GoldenGridDumpTests
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("empty-screen", back, backend);
-        string expected = Golden.Verify("empty-screen", doc, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("empty-screen", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         // The dropped empty frame is the point of this scenario: zero bytes out.
         await Assert.That(backend.Writes.Count).IsEqualTo(0);
@@ -61,7 +61,7 @@ public class GoldenGridDumpTests
         await session.FlushFrameAsync();
 
         string doc = GoldenDoc.Build("border-panel", session.PaintBuffer, backend);
-        string expected = Golden.Verify("border-panel", doc, GridDump.ToSvg(session.PaintBuffer));
+        string expected = CelldiffGoldens.Verify("border-panel", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
     }
@@ -100,7 +100,7 @@ public class GoldenGridDumpTests
         await writer.EndFrameAsync();
 
         string doc = GoldenDoc.Build("wide-char-boundary", back, backend);
-        string expected = Golden.Verify("wide-char-boundary", doc, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("wide-char-boundary", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng2)).IsTrue();
 
@@ -128,7 +128,7 @@ public class GoldenGridDumpTests
         await session.FlushFrameAsync();
 
         string doc = GoldenDoc.Build("resize-shrink", session.PaintBuffer, backend);
-        string expected = Golden.Verify("resize-shrink", doc, GridDump.ToSvg(session.PaintBuffer));
+        string expected = CelldiffGoldens.Verify("resize-shrink", doc, GridDump.ToSvg(session.PaintBuffer));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(session.Engine.FrontMatches(session.Back)).IsTrue();
 
@@ -150,7 +150,7 @@ public class GoldenGridDumpTests
         string doc = "# golden: sync-wrapper\n"
             + "## sync off\n" + GridDump.Frames(bareBackend)
             + "## sync on\n" + GridDump.Frames(syncBackend);
-        string expected = Golden.Verify("sync-wrapper", doc);
+        string expected = CelldiffGoldens.Verify("sync-wrapper", doc);
         await Assert.That(doc).IsEqualTo(expected);
     }
 
@@ -191,7 +191,7 @@ public class GoldenGridDumpTests
         long secondBytes = backend.TotalBytes - firstBytes;
 
         string doc = GoldenDoc.Build("sgr-minimization", back, backend);
-        string expected = Golden.Verify("sgr-minimization", doc, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("sgr-minimization", doc, GridDump.ToSvg(back));
         await Assert.That(doc).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng2)).IsTrue();
 
