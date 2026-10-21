@@ -330,14 +330,17 @@ public sealed partial record ToolResult
 
     /// <summary>
     ///     Private constructor used by MemoryPack (excludes <see cref="Metadata" /> to
-    ///     keep the binary payload type-safe).
+    ///     keep the binary payload type-safe). <see cref="ErrorInfo" /> IS part of the
+    ///     binary payload (#1760): it holds primitives only, so the structured code
+    ///     survives a round-trip the way <see cref="Metadata" /> never could.
     /// </summary>
     [MemoryPackConstructor]
-    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments)
+    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, ToolErrorInfo? ErrorInfo)
     {
         this.Output = Output;
         this.IsError = IsError;
         this.Attachments = Attachments;
+        this.ErrorInfo = ErrorInfo;
     }
 
     /// <summary>
@@ -367,6 +370,29 @@ public sealed partial record ToolResult
     public object? Metadata { get; init; }
 
     /// <summary>
+    ///     The structured error of a failed call (#1760): a stable code, a
+    ///     class-like name and an optional reason. Null on a success.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is a SIBLING of <see cref="Output" />, not a replacement for
+    ///         it: <see cref="Output" /> is the message the model reads, this is
+    ///         the fact a policy branches on. A failure that carries no code is
+    ///         a failure nobody classified — the tool reported it without saying
+    ///         why, and inventing a code here would be a guess dressed as a fact.
+    ///     </para>
+    ///     <para>
+    ///         It is a separate typed field rather than a slot in
+    ///         <see cref="Metadata" /> because <see cref="Metadata" /> is
+    ///         <c>object?</c>-typed, is excluded from MemoryPack, and is dropped
+    ///         by both storage backends (#51) — a code parked there would not
+    ///         survive a restart.
+    ///     </para>
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ToolErrorInfo? ErrorInfo { get; init; }
+
+    /// <summary>
     ///     Returns a successful tool result with optional metadata.
     /// </summary>
     /// <param name="output">The tool output text.</param>
@@ -383,6 +409,31 @@ public sealed partial record ToolResult
     /// <returns>A <see cref="ToolResult" /> with <see cref="IsError" /> = <see langword="true" />.</returns>
     public static ToolResult Error(string output, object? metadata = null) =>
         new(output, true, metadata);
+
+    /// <summary>
+    ///     Returns an error tool result that carries a structured error code
+    ///     (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A tool that knows WHY it failed says so here, and the code travels
+    ///         with the result into the transcript and into the model's context.
+    ///     </para>
+    ///     <para>
+    ///         The text LEADS with the code (see
+    ///         <see cref="ToolErrorCodes.Format" />), so the model reads a code
+    ///         rather than a prose puzzle — and the transcript says the same
+    ///         thing to whoever reads it later. The detail is the raw message:
+    ///         the code is prepended here, once, so no caller has to remember
+    ///         to do it and no output can end up with two codes in front of it.
+    ///     </para>
+    /// </remarks>
+    /// <param name="detail">The raw error detail, without the code.</param>
+    /// <param name="error">The structured error (code, name, optional reason).</param>
+    /// <param name="metadata">Optional metadata (not serialized).</param>
+    /// <returns>A <see cref="ToolResult" /> with <see cref="IsError" /> = <see langword="true" />.</returns>
+    public static ToolResult Failed(string detail, ToolErrorInfo error, object? metadata = null) =>
+        new(ToolErrorCodes.Format(error.Code, detail), true, metadata) { ErrorInfo = error };
 }
 
 /// <summary>
@@ -394,15 +445,18 @@ public sealed partial record ToolResultEntry
 
     /// <summary>
     ///     Private constructor used by MemoryPack (excludes <see cref="Metadata" /> to
-    ///     keep the binary payload type-safe).
+    ///     keep the binary payload type-safe). <see cref="ErrorInfo" /> IS part of the
+    ///     binary payload (#1760) — the structured code has to survive the round-trip
+    ///     the same way the message does.
     /// </summary>
     [MemoryPackConstructor]
-    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError)
+    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, ToolErrorInfo? ErrorInfo)
     {
         this.ToolCallId = ToolCallId;
         this.ToolName = ToolName;
         this.Output = Output;
         this.IsError = IsError;
+        this.ErrorInfo = ErrorInfo;
     }
 
     /// <summary>
@@ -436,6 +490,21 @@ public sealed partial record ToolResultEntry
     public object? Metadata { get; init; }
 
     /// <summary>
+    ///     The structured error of a failed call (#1760): a stable code, a
+    ///     class-like name and an optional reason. Null on a success, and null
+    ///     on a failure nobody classified.
+    /// </summary>
+    /// <remarks>
+    ///     This is what lets a policy read the outcome of a call without
+    ///     parsing text: "did this time out?", "may this be retried?", "was
+    ///     this ever sent?" are three comparisons against a constant. The
+    ///     field survives both storage backends (it holds primitives), so the
+    ///     code is still there when the session is reloaded.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ToolErrorInfo? ErrorInfo { get; init; }
+
+    /// <summary>
     ///     Build a <see cref="ToolResultEntry" /> from a <see cref="ToolResult" />, attaching the
     ///     call id and tool name from the originating <see cref="ToolCallPart" />.
     /// </summary>
@@ -444,7 +513,7 @@ public sealed partial record ToolResultEntry
     /// <param name="result">The raw tool result.</param>
     /// <returns>A <see cref="ToolResultEntry" /> ready to persist in a <see cref="ToolResultMessage" />.</returns>
     public static ToolResultEntry From(string toolCallId, string toolName, ToolResult result) =>
-        new(toolCallId, toolName, result.Output, result.IsError, result.Metadata);
+        new(toolCallId, toolName, result.Output, result.IsError, result.Metadata) { ErrorInfo = result.ErrorInfo };
 }
 
 /// <summary>
