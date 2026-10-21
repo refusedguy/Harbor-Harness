@@ -182,19 +182,22 @@ public sealed class HttpClientCreationAnalyzer : DiagnosticAnalyzer
     ///     </para>
     ///     <para>
     ///         The second question is the WRITTEN name, and it is asked only
-    ///         when the symbol did not resolve at all. That happens in one
-    ///         place: a compilation that does not carry the project's implicit
-    ///         global usings cannot resolve a type that only those usings
-    ///         bring into scope — and a rule that asks about the TYPE cannot
-    ///         see a type it could not resolve. The written name is then
-    ///         verified against the COMPILATION's own symbols (the type must
-    ///         exist), and a QUALIFIED name is never a fallback: the author
-    ///         named a namespace, and the namespace is the fact.
+    ///         when the symbol did not resolve at all — the semantic model
+    ///         answers with an ERROR type, whose name is the one the source
+    ///         wrote and whose namespace is empty. That happens in one place: a
+    ///         compilation that does not carry the project's implicit global
+    ///         usings cannot resolve a type that only those usings bring into
+    ///         scope — and a rule that asks about the TYPE cannot see a type it
+    ///         could not resolve. The written name is then verified against the
+    ///         COMPILATION's own symbols (the type must exist), and a QUALIFIED
+    ///         name is never a fallback: the author named a namespace, and the
+    ///         namespace is the fact.
     ///     </para>
     /// </remarks>
     private static string CreatedTypeName(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
     {
-        if (context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type is INamedTypeSymbol named)
+        if (context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type is INamedTypeSymbol named
+            && named.TypeKind != TypeKind.Error)
         {
             return named.ToDisplayString();
         }
