@@ -589,6 +589,14 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # #2131. The gate that keeps the benchmark's gate set and the CI's gate
+      # set from drifting apart: the file that lists the gates the benchmark
+      # measures must list every gate a workflow runs, and the gates that are
+      # out of the set must say why. Its failure path is tested here for the
+      # same reason as the others: a gate edited until it matches nothing is
+      # indistinguishable from a gate that found nothing.
+      - name: The gate-bench-set gate fails on a gate the set does not hold
+        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test
       # #2085. The two E2E plan tools. The generator derives the class
       # universe from the source tree, and the runner reads the plan the
       # generator wrote: a generator that stops finding the classes writes a
@@ -1332,6 +1340,31 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
         run: python3 tools/check-gate-policy.py --min-gates 42
+
+  # #2131. The second half of the gate policy: the table in docs/CI_GATES.md
+  # says what the repository's gates ARE; this one says what the BENCHMARK
+  # measures, and it is the instrument that keeps the instrument honest.
+  #
+  # `bench/gates/tools.tsv` is the set the benchmark times, and
+  # docs/BENCHMARKS.md §10.2 quotes what that set costs. A gate added to a
+  # workflow and not to that file leaves the section quoting a cost for a set
+  # that is smaller than the one a pull request pays, and nothing says so:
+  # the number is still a number, and it is still about the wrong set.
+  #
+  # The gate reads the workflow files, the measured set and the exclusion
+  # list, and fails when a gate CI runs is in neither, when a row names a
+  # gate no workflow runs, when an exclusion carries no reason, and when the
+  # measured row passes arguments CI does not pass.
+  benchset:
+    name: the measured gate set
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the measured gate set against the workflows
+        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 37
 
   # #1558. The chain census, and the ratchet on it.
   #

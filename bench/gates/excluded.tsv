@@ -1,0 +1,38 @@
+# The gates CI runs that the measured set does NOT hold, and why.
+#
+# COLUMN 1: the gate's name. A python gate is the script's file name; a
+#           compiled gate is the subcommand of the binary; a shell gate is
+#           the script's file name.
+# COLUMN 2: the reason it is out. A reason is not a wish: "we did not get
+#           round to it" is not a reason, and the gate
+#           `harbor-gates check-gate-bench-set` fails on a row whose reason
+#           is empty.
+#
+# The set of measured gates is bench/gates/tools.tsv. A gate CI runs is
+# either in that file or in this one, and the gate that checks this says so
+# when it is neither.
+#
+# Three reasons a gate is out, and only three:
+#
+#   1. it needs the .NET SDK, and the measuring machine has none;
+#   2. it needs the network, and the measuring machine has none;
+#   3. CI runs it only as its own self-test, so there is no run of the gate
+#      to measure.
+#
+# The README says the same thing in prose, and the gate checks that every
+# name here is named there too: a reason that lives only in a data file is a
+# reason nobody reads.
+
+# gate	reason
+changelog-assemble	CI runs only its own self-test: the assembler is a release-time tool, and a pull request owns its own fragment
+check-dup-jscpd.py	the gate downloads the jscpd binary from the network on first use, and there is no network and no binary on the measuring machine
+check-tunit-analyzer-gate.py	the control runs the compiler: it builds a throwaway project and reads its output, and the measuring machine has no .NET SDK
+demo_repro.py	the demo is recorded by running Harbor and the gate compares two recordings of it, so it needs the built product and the .NET SDK
+measure-aot-workload.sh	the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK
+measure-build-cpu	the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
+measure-jit-workload.sh	the workload builds the CLI and runs it, so it needs the .NET SDK
+measure-project-graph	CI runs only its own self-test: the project graph is read by a human, not by a build
+msbuild-evaluation-cost	the measurement reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
+public-api-nonvacuity.sh	the proof builds a throwaway project against the public-API analyzer and requires it to fail, so it needs the .NET SDK
+run-e2e-avalonia-shards	the runner starts one `dotnet exec` per shard, so it needs the built product and the .NET SDK
+gen-e2e-shards	CI runs only its own self-test: the shard plan is a generator a human runs before a release, and no build reads it
