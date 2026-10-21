@@ -23,6 +23,13 @@
 //	GO-VET               `go vet ./...` finds nothing
 //	GO-BUILD             `go build ./...` succeeds
 //
+// "EVERY GATE PACKAGE" IS A QUESTION ABOUT THE POLICY TABLE
+//
+// A package under tools/gates/ is not automatically a gate: the Mode column
+// of the table in docs/CI_GATES.md says what it is, and a row that says
+// "helper" is a one-shot codemod a human runs, which owes the repository no
+// self-test. The gate reads that column, so the policy stays in one place.
+//
 // # THE TOOLCHAIN, AND WHAT HAPPENS WITHOUT IT
 //
 // The formatting rule needs NO toolchain: go/format is the same code gofmt
@@ -237,12 +244,25 @@ func checkSources(t tree) ([]finding, int, int, error) {
 	}
 
 	packages := gatePackages(t.gatesDir)
+	modes, err := tableModes(t.root)
+	if err != nil {
+		return nil, 0, 0, err
+	}
 	for _, pkg := range packages {
-		if !fileExists(filepath.Join(pkg.dir, "selftest.go")) {
+		mode, documented := modes[pkg.name]
+		if !documented {
+			// The table does not name this package. That is the policy
+			// checker's finding (POLICY-GATE-UNDOCUMENTED), and it is not
+			// this gate's question: the table says what a package IS, and
+			// until it says, this gate has nothing to ask about it.
+			continue
+		}
+		if needsSelfTest(mode) && !fileExists(filepath.Join(pkg.dir, "selftest.go")) {
 			findings = append(findings, finding{
 				path: relPath(t.root, pkg.dir),
 				rule: ruleNoSelf,
-				msg:  "the gate package has no selftest.go, so nothing proves that it can fail",
+				msg: fmt.Sprintf("the table calls %q a %s, and it has no selftest.go, so nothing proves that it can fail",
+					pkg.name, mode),
 			})
 		}
 	}
@@ -519,6 +539,107 @@ func gatePackages(dir string) []packageDir {
 	}
 	sort.Slice(packages, func(i, j int) bool { return packages[i].name < packages[j].name })
 	return packages
+}
+
+// needsSelfTest tells whether the mode of a table row demands a self-test.
+//
+// The table is the policy, and its Mode column says what a package IS. A
+// row that says "helper" is a one-shot codemod a human runs, and a helper
+// owes the repository nothing. Every other mode -- gate, advisory, control,
+// reporter -- is a check, and a check that cannot say no is a check that
+// enforces nothing.
+func needsSelfTest(mode string) bool {
+	switch mode {
+	case "helper", "library":
+		return false
+	}
+	return true
+}
+
+// tableModes reads the mode docs/CI_GATES.md gives every compiled gate.
+//
+// The table is markdown, and its header is pinned: the policy checker reads
+// the same one. A table that cannot be read is an ERROR, not an empty map:
+// a gate that could not find the table must not report that the packages and
+// the table agree.
+func tableModes(root string) (map[string]string, error) {
+	path := filepath.Join(root, "docs", "CI_GATES.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read docs/CI_GATES.md: %w", err)
+	}
+	lines := strings.Split(string(data), "\n")
+
+	header := -1
+	var headerCells []string
+	for i, line := range lines {
+		cells := tableCells(line)
+		if cells == nil {
+			continue
+		}
+		if indexOfCell(cells, "Implementation") >= 0 && indexOfCell(cells, "Mode") >= 0 {
+			header = i
+			headerCells = cells
+			break
+		}
+	}
+	if header < 0 {
+		return nil, fmt.Errorf("docs/CI_GATES.md has no table with an Implementation and a Mode column")
+	}
+	implementation := indexOfCell(headerCells, "Implementation")
+	mode := indexOfCell(headerCells, "Mode")
+
+	const prefix = "compiled: tools/gates/"
+	modes := map[string]string{}
+	for _, line := range lines[header+1:] {
+		cells := tableCells(line)
+		if cells == nil {
+			break // the table ended
+		}
+		if implementation >= len(cells) || mode >= len(cells) {
+			continue
+		}
+		source := unquoteCell(cells[implementation])
+		if !strings.HasPrefix(source, prefix) {
+			continue
+		}
+		modes[strings.TrimPrefix(source, prefix)] = unquoteCell(cells[mode])
+	}
+	return modes, nil
+}
+
+// tableCells splits a markdown table row, or returns nil for a line that is
+// not a table row.
+func tableCells(line string) []string {
+	text := strings.TrimSpace(line)
+	if !strings.HasPrefix(text, "|") {
+		return nil
+	}
+	parts := strings.Split(text, "|")
+	if len(parts) < 2 {
+		return nil
+	}
+	parts = parts[1 : len(parts)-1]
+	cells := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cells = append(cells, strings.TrimSpace(part))
+	}
+	return cells
+}
+
+// indexOfCell is the position of a column, or -1.
+func indexOfCell(cells []string, name string) int {
+	for i, cell := range cells {
+		if unquoteCell(cell) == name {
+			return i
+		}
+	}
+	return -1
+}
+
+// unquoteCell strips the backticks a table cell wraps its code in.
+func unquoteCell(cell string) string {
+	return strings.ReplaceAll(cell, "`", "")
 }
 
 // registryNames reads the gate table out of the sources of the module.

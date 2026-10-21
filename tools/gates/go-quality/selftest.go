@@ -136,6 +136,40 @@ const (
 		"\treturn 0\n" +
 		"}\n"
 
+	// The policy table. The Mode column is what says whether a package is a
+	// gate (and owes a self-test) or a helper (and owes nothing).
+	fixtureTable = "| Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |\n" +
+		"|---|---|---|---|---|---|---|---|---|\n" +
+		"| `tools/bin/harbor-gates-linux-x64 alpha` | compiled: `tools/gates/alpha` | the alpha gate | docs.yml | selftest | gate | `--self-test` | — | — |\n"
+
+	// The same table with a second row: a helper, which owes no self-test.
+	fixtureTableHelper = "| Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |\n" +
+		"|---|---|---|---|---|---|---|---|---|\n" +
+		"| `tools/bin/harbor-gates-linux-x64 alpha` | compiled: `tools/gates/alpha` | the alpha gate | docs.yml | selftest | gate | `--self-test` | — | — |\n" +
+		"| `tools/bin/harbor-gates-linux-x64 beta` | compiled: `tools/gates/beta` | the one-shot codemod a human runs | — | — | helper | — | — | — |\n"
+
+	// The registry with two gates: alpha and beta.
+	fixtureRegistryTwo = "package main\n" +
+		"\n" +
+		"import \"fmt\"\n" +
+		"\n" +
+		"type registered struct {\n" +
+		"\tname string\n" +
+		"}\n" +
+		"\n" +
+		"var registry = []registered{\n" +
+		"\t{\n" +
+		"\t\tname: \"alpha\",\n" +
+		"\t},\n" +
+		"\t{\n" +
+		"\t\tname: \"beta\",\n" +
+		"\t},\n" +
+		"}\n" +
+		"\n" +
+		"func main() {\n" +
+		"\tfmt.Println(len(registry))\n" +
+		"}\n"
+
 	// A module with a printf that vet must reject.
 	fixtureVetGoMod = "module harbor.local/goqualityfixture\n" +
 		"\n" +
@@ -190,14 +224,30 @@ func selfTestRun() int {
 		{
 			name: "a package without a self-test is caught",
 			files: map[string]string{
+				"docs/CI_GATES.md":          fixtureTable,
 				"tools/gates/main.go":       fixtureRegistry,
 				"tools/gates/alpha/main.go": fixtureAlphaMain,
 			},
 			want: ruleNoSelf,
 		},
 		{
+			// The other side of the same rule: a HELPER owes no self-test,
+			// and a gate that reported one would cry wolf at the one-shot
+			// codemods the tree carries.
+			name: "a helper without a self-test is not a finding",
+			files: map[string]string{
+				"docs/CI_GATES.md":              fixtureTableHelper,
+				"tools/gates/main.go":           fixtureRegistryTwo,
+				"tools/gates/alpha/main.go":     fixtureAlphaMain,
+				"tools/gates/alpha/selftest.go": fixtureAlphaSelf,
+				"tools/gates/beta/main.go":      fixtureBetaMain,
+			},
+			want: "",
+		},
+		{
 			name: "a registry row without a package is caught",
 			files: map[string]string{
+				"docs/CI_GATES.md":              fixtureTable,
 				"tools/gates/main.go":           fixtureRegistryStale,
 				"tools/gates/alpha/main.go":     fixtureAlphaMain,
 				"tools/gates/alpha/selftest.go": fixtureAlphaSelf,
@@ -207,6 +257,7 @@ func selfTestRun() int {
 		{
 			name: "a gate named twice in the registry is caught",
 			files: map[string]string{
+				"docs/CI_GATES.md":              fixtureTable,
 				"tools/gates/main.go":           fixtureRegistryTwice,
 				"tools/gates/alpha/main.go":     fixtureAlphaMain,
 				"tools/gates/alpha/selftest.go": fixtureAlphaSelf,
@@ -260,9 +311,10 @@ func selfTestRun() int {
 }
 
 // cleanTree is the tree every fixture starts from: one registered gate,
-// formatted, with a self-test.
+// formatted, with a self-test, and a policy table that calls it a gate.
 func cleanTree() map[string]string {
 	return map[string]string{
+		"docs/CI_GATES.md":              fixtureTable,
 		"tools/gates/main.go":           fixtureRegistry,
 		"tools/gates/alpha/main.go":     fixtureAlphaMain,
 		"tools/gates/alpha/selftest.go": fixtureAlphaSelf,
