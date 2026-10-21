@@ -169,6 +169,8 @@ public sealed class DeferredSessionStore : ISessionStore, ISessionGoalStore
         return current is not null
             ? current.PurgeMessagesAfterAsync(sessionId, messageId, ct)
             : Task.FromResult(Result.Failure<int>(NotReady));
+    }
+
     /// <summary>
     ///     The goal of the session, forwarded to the real store when it keeps
     ///     goals (#1761).
