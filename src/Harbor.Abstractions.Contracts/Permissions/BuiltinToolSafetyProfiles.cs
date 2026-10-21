@@ -102,6 +102,22 @@ public static class BuiltinToolSafetyProfiles
         new("session_broadcast", ToolSafetyProfile.Opaque),
         new("session_inbox", ToolSafetyProfile.Opaque),
 
+        // #1738: the agent-facing plugin management tool. Opaque, and the
+        // reason is in the tool's own documentation: its arguments are an
+        // action name, a plugin FILE NAME and — for an install — the path of
+        // a reviewed source that is READ. Permission rules match it against
+        // "*", so no glob pattern can match a path and none can be tricked
+        // into authorising one; the traversal the path guard protects
+        // against is closed by the inventory, which resolves a plugin only by
+        // its plain file name inside the two plugin roots and never writes
+        // outside them.
+        //
+        // It carries NO category on purpose, like the two session-IPC tools
+        // above: a category would make a class rule ("write" * Ask) fire
+        // against it and change the verdict for a tool whose own gate already
+        // asks about every change.
+        new("plugin_manager", ToolSafetyProfile.Opaque),
+
         // #1748: the way back to a tool output that was spilled to a file. The
         // ARGUMENT is a path, and the row still says Opaque on purpose: a
         // path-taking declaration would put the tool under the workspace
@@ -110,7 +126,7 @@ public static class BuiltinToolSafetyProfiles
         // definition, so every re-read would ask the user, and a headless run
         // would be denied. The confinement this tool needs is the store's: it
         // refuses any path outside the CURRENT session's spill directory.
-        new("spill_read", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        new("spill_read", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read }
     ];
 
     /// <summary>

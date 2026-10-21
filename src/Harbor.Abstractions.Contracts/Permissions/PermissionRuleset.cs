@@ -176,6 +176,15 @@ public sealed record PermissionRuleset
         new("session_steer", "*", PermissionAction.Ask),
         new("session_broadcast", "*", PermissionAction.Allow),
         new("session_inbox", "*", PermissionAction.Allow),
+        // #1738: the agent-facing plugin management tool. ALLOW here does NOT
+        // mean "the agent may install plugins on its own" — the tool asks the
+        // user about every change it proposes, and the answer covers that one
+        // call only. The row exists so the DISPATCHER does not ask a second
+        // time about the same call: the tool's own question is the one that
+        // names the file, the scope and the effect. A user who does not want
+        // an agent touching plugins writes new("plugin_manager", "*", Deny)
+        // and the tool never starts.
+        new("plugin_manager", "*", PermissionAction.Allow),
         // #1748: reading back a tool output that was spilled to a file. The
         // tool is confined to the CURRENT session's spill directory by the
         // store, so it needs no prompt: the file it can reach holds the output

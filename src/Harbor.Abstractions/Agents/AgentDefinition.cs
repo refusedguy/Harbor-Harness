@@ -136,7 +136,13 @@ public sealed record AgentDefinition(
             new("bash", "git log *", PermissionAction.Allow),
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny)
+            new("write", "*", PermissionAction.Deny),
+            // #1738: the agent-facing plugin management tool is REFUSED to the
+            // read-only agents, exactly as write / edit / bash are. The tool
+            // asks the user about every change it proposes, so allowing it
+            // here would hand a design-only agent a way to start a change;
+            // denying it keeps the posture these rulesets state.
+            new("plugin_manager", "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in PLAN mode. You can read and explore but cannot modify files. Produce a detailed plan for the user to approve.");
@@ -167,6 +173,12 @@ public sealed record AgentDefinition(
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
             new("write", "*", PermissionAction.Deny),
+            // #1738: the agent-facing plugin management tool is REFUSED to the
+            // read-only agents, exactly as write / edit / bash are. The tool
+            // asks the user about every change it proposes, so allowing it
+            // here would hand a design-only agent a way to start a change;
+            // denying it keeps the posture these rulesets state.
+            new("plugin_manager", "*", PermissionAction.Deny),
             new("webfetch", "*", PermissionAction.Allow)
         }),
         20,
@@ -227,7 +239,13 @@ public sealed record AgentDefinition(
             new("bash", "git log *", PermissionAction.Allow),
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny)
+            new("write", "*", PermissionAction.Deny),
+            // #1738: the agent-facing plugin management tool is REFUSED to the
+            // read-only agents, exactly as write / edit / bash are. The tool
+            // asks the user about every change it proposes, so allowing it
+            // here would hand a design-only agent a way to start a change;
+            // denying it keeps the posture these rulesets state.
+            new("plugin_manager", "*", PermissionAction.Deny)
         }),
         50,
         SystemPromptAppend: "You are in ASK mode. Answer questions and explain code. Do not implement changes, do not modify files. When asked to change something, explain how instead.");
@@ -273,7 +291,13 @@ public sealed record AgentDefinition(
             new("bash", "git log *", PermissionAction.Allow),
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny)
+            new("write", "*", PermissionAction.Deny),
+            // #1738: the agent-facing plugin management tool is REFUSED to the
+            // read-only agents, exactly as write / edit / bash are. The tool
+            // asks the user about every change it proposes, so allowing it
+            // here would hand a design-only agent a way to start a change;
+            // denying it keeps the posture these rulesets state.
+            new("plugin_manager", "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in ARCHITECT mode. Design before code: explore the codebase, weigh trade-offs, and produce a concrete implementation plan for approval. Do not modify files.");
@@ -325,7 +349,12 @@ public sealed record AgentDefinition(
             new("bash", "sudo *", PermissionAction.Deny),
             new("bash", "*", PermissionAction.Ask),
             new("edit", "*", PermissionAction.Ask),
-            new("write", "*", PermissionAction.Ask)
+            new("write", "*", PermissionAction.Ask),
+            // #1738: the agent-facing plugin management tool. Allow does not
+            // mean "without asking": the tool asks the user about every
+            // change it proposes, and the answer covers that call only — the
+            // same posture as this agent's write / edit rules.
+            new("plugin_manager", "*", PermissionAction.Allow)
         }),
         50,
         SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
@@ -369,7 +398,13 @@ public sealed record AgentDefinition(
             new("bash", "git log *", PermissionAction.Allow),
             new("bash", "*", PermissionAction.Deny),
             new("edit", "*", PermissionAction.Deny),
-            new("write", "*", PermissionAction.Deny)
+            new("write", "*", PermissionAction.Deny),
+            // #1738: the agent-facing plugin management tool is REFUSED to the
+            // read-only agents, exactly as write / edit / bash are. The tool
+            // asks the user about every change it proposes, so allowing it
+            // here would hand a design-only agent a way to start a change;
+            // denying it keeps the posture these rulesets state.
+            new("plugin_manager", "*", PermissionAction.Deny)
         }),
         100,
         SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");

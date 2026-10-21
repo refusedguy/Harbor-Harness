@@ -104,7 +104,7 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 │  - Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI /     │
 │    Ollama (+ Shared — linked-source, без .csproj)               │
 │  - Harbor.Tools.Builtin — все builtin tools в одном проекте,    │
-│    каталог Tools/ (22 tools — см. docs/TOOLS_CATALOG.md;        │
+│    каталог Tools/ (23 tools — см. docs/TOOLS_CATALOG.md;        │
 │    MCP-клиент в подкаталоге Mcp/)                               │
 │  - Harbor.Ipc.{Client, InProcess, Server} — RPC endpoints       │
 │    (MessagePack over named pipes / in-process)                  │
@@ -383,7 +383,7 @@ flowchart TB
     subgraph Infra["Infrastructure (adapters)"]
         Storage["Harbor.Storage.Jsonl / Memory / Sqlite"]
         Providers["Harbor.Providers.OpenAiCompatible / Anthropic / OpenAI / Ollama<br/>(+ Shared linked-source, no csproj)"]
-        Tools["Harbor.Tools.Builtin<br/>(22 tools incl. MCP client)"]
+        Tools["Harbor.Tools.Builtin<br/>(23 tools incl. MCP client)"]
     end
 
     subgraph Domain["Domain / Abstractions (hexagon core)"]

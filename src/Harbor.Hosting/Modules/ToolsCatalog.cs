@@ -3,6 +3,7 @@ using Harbor.Application.Configuration;
 using Harbor.Tools.Builtin;
 using Harbor.Tools.Mcp;
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -168,7 +169,8 @@ internal static class ToolsCatalog
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
         ISessionStore? sessionStore = null,
         ISkillRegistry? skillRegistry = null,
-        IToolOutputSpillStore? spillStore = null)
+        IToolOutputSpillStore? spillStore = null,
+        IInstalledPluginInventory? pluginInventory = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -256,6 +258,17 @@ internal static class ToolsCatalog
         {
             tb.AddTool(new LspTool(lspService, ctx.LoggerFactory.CreateLogger<LspTool>()));
         }
+#if HARBOR_WITH_PLUGINS
+        // #1738: the agent-facing plugin management tool. It is registered
+        // only where the plugin runtime is compiled in, only in the full
+        // preset (the desktop subset has no plugin route), and only when an
+        // inventory exists — the tool without one could neither read what is
+        // installed nor change it.
+        if (full && pluginInventory is not null)
+        {
+            tb.AddTool(lf => new PluginManagerTool(pluginInventory, lf.CreateLogger<PluginManagerTool>()));
+        }
+#endif
         if (full)
         {
             tb.AddTool(lf => new McpToolTool(mcpRegistry, lf.CreateLogger<McpToolTool>()));

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
@@ -7,20 +8,20 @@ using Harbor.TestKit;
 namespace Harbor.Storage.Jsonl.Tests;
 
 /// <summary>
-///     <b>#1798:</b> an update keeps its record at its position in the file.
-///     The file order IS the insertion order — the rewind
-///     (<c>DeleteMessagesAfterAsync</c>) anchors on a record's position in the
-///     file — so an edit that relocates its record to the tail of the file
-///     moves the message in the history without a trace, and a rewind anchored
-///     on it removes nothing (the anchor is the last record, so nothing
-///     follows it).
+///     <b>#1798, kept — in the form the append-only log gives it (#1752).</b>
+///     An edit used to rewrite the record in place, and the record's place in
+///     the FILE was the thing #1798 pinned: the rewind anchors on a record's
+///     position in the file, so an edit that moved its record to the tail of
+///     the file moved the message in the history without a trace.
+///     <para>
+///         The log is append-only now, so the edit writes a NEW VERSION at the
+///         end of the file and the old record stays where it was. The place a
+///         message holds is therefore the place it was written FIRST — the
+///         same rule the fold and the reader apply — and these tests pin that
+///         the edit does not move the message, and that the rewind still cuts
+///         at the right place.
+///     </para>
 /// </summary>
-/// <remarks>
-///     The guard is deliberately about the FILE, not about the read order: the
-///     reader sorts by <c>CreatedAt</c> when the file is not append-linear in
-///     time, so a moved record often still reads back in the right order — the
-///     damage is in the file, where the rewind and the log fold look.
-/// </remarks>
 public class JsonlSessionStoreUpdatePositionTests
 {
     private static readonly DateTimeOffset Epoch = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -88,7 +89,7 @@ public class JsonlSessionStoreUpdatePositionTests
     }
 
     [Test]
-    public async Task UpdateMessage_KeepsTheRecordAtItsPositionInTheFile()
+    public async Task UpdateMessage_KeepsTheMessageInItsPlaceInTheHistory()
     {
         var (store, sessionId, path) = await SeedAsync();
         try
@@ -98,7 +99,7 @@ public class JsonlSessionStoreUpdatePositionTests
             await Assert.That(beforeIndexes.Count).IsEqualTo(4);
 
             // The edit changes the body and nothing else — the same message id,
-            // the same instant. This is what an edit IS: the same record, with
+            // the same instant. This is what an edit IS: the same message, with
             // a different payload.
             var edited = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(1), model: "claude-opus-4"));
             await Assert.That(edited.IsSuccess).IsTrue();
@@ -106,24 +107,15 @@ public class JsonlSessionStoreUpdatePositionTests
             string[] after = await File.ReadAllLinesAsync(path);
             Dictionary<string, int> afterIndexes = MessageLineIndexes(after);
 
-            // The record count is unchanged: an update REPLACES, it does not
-            // append (and it does not drop the record it replaced).
-            await Assert.That(after.Length).IsEqualTo(before.Length);
-            await Assert.That(afterIndexes.Count).IsEqualTo(beforeIndexes.Count);
-
-            // The edited record is on the line it was on...
-            await Assert.That(afterIndexes["m1"]).IsEqualTo(beforeIndexes["m1"]);
-
-            // ...and so is every other record: the edit moved nothing.
-            await Assert.That(afterIndexes["m0"]).IsEqualTo(beforeIndexes["m0"]);
-            await Assert.That(afterIndexes["m2"]).IsEqualTo(beforeIndexes["m2"]);
-            await Assert.That(afterIndexes["m3"]).IsEqualTo(beforeIndexes["m3"]);
-
-            // The record that stayed put is the edited one, with the new body.
+            // The old record is still there — that is the point of an
+            // append-only log — and the new version was appended.
+            await Assert.That(afterIndexes.Count).IsEqualTo(4);
+            await Assert.That(after.Length).IsEqualTo(before.Length + 1);
             await Assert.That(MessageIdOn(after, afterIndexes["m1"])).IsEqualTo("m1");
-            await Assert.That(after[afterIndexes["m1"]].Contains("edited body", StringComparison.Ordinal)).IsTrue();
+            await Assert.That(after[afterIndexes["m1"]].Contains("body 1", StringComparison.Ordinal)).IsTrue();
 
-            // And the history still reads in insertion order.
+            // The history still reads in insertion order: the edit changed
+            // what was said, not when it was said.
             var messages = await store.GetMessagesAsync(sessionId);
             await Assert.That(messages.IsSuccess).IsTrue();
             await Assert.That(messages.Value.Count).IsEqualTo(4);
@@ -132,6 +124,17 @@ public class JsonlSessionStoreUpdatePositionTests
             await Assert.That(messages.Value[2].Id).IsEqualTo("m2");
             await Assert.That(messages.Value[3].Id).IsEqualTo("m3");
             await Assert.That(((UserMessage)messages.Value[1]).Content).IsEqualTo("edited body");
+
+            // And the version that was replaced is still in the log, as a
+            // shadowed record — nothing was overwritten.
+            var log = await store.GetSessionLogAsync(sessionId);
+            await Assert.That(log.IsSuccess).IsTrue();
+            var bodies = log.Value
+                .Where(e => e.Kind == SessionLogEntryKind.Message)
+                .Select(e => ((UserMessage)e.Message!).Content)
+                .ToList();
+            await Assert.That(bodies.Contains("body 1")).IsTrue();
+            await Assert.That(bodies.Contains("edited body")).IsTrue();
         }
         finally
         {
@@ -143,11 +146,12 @@ public class JsonlSessionStoreUpdatePositionTests
     [Test]
     public async Task UpdateMessage_ThenRewindToIt_DropsTheMessagesThatFollowIt()
     {
-        // The consequence of the position, and the reason the position is
-        // worth an invariant: the rewind anchors on a record's place in the
-        // FILE. A record that an edit moved to the tail is the last record, so
-        // a rewind anchored on it drops nothing — the tail of the history
-        // survives a rewind that was asked to remove it.
+        // The consequence of the place a message holds, and the reason the
+        // place is worth an invariant: the rewind cuts at the anchor's place
+        // in the conversation. A message that an edit moved to the tail of the
+        // history would be the last message, and a rewind anchored on it would
+        // drop nothing — the tail of the history would survive a rewind that
+        // was asked to remove it.
         var (store, sessionId, path) = await SeedAsync();
         try
         {
@@ -157,15 +161,19 @@ public class JsonlSessionStoreUpdatePositionTests
             var rewind = await store.DeleteMessagesAfterAsync(sessionId, "m1");
             await Assert.That(rewind.IsSuccess).IsTrue();
 
-            // m2 and m3 follow m1 in the file, so they are what the rewind
-            // removes.
+            // m2 and m3 follow m1 in the conversation, so they are what the
+            // rewind removes.
             await Assert.That(rewind.Value).IsEqualTo(2);
 
-            string[] after = await File.ReadAllLinesAsync(path);
-            Dictionary<string, int> afterIndexes = MessageLineIndexes(after);
-            await Assert.That(afterIndexes.Count).IsEqualTo(2);
-            await Assert.That(MessageIdOn(after, afterIndexes["m0"])).IsEqualTo("m0");
-            await Assert.That(MessageIdOn(after, afterIndexes["m1"])).IsEqualTo("m1");
+            // The surface is the prefix...
+            var messages = await store.GetMessagesAsync(sessionId);
+            await Assert.That(messages.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1" });
+
+            // ...and the records are still in the file: the rewind is an event,
+            // not a rewrite.
+            var log = await store.GetSessionLogAsync(sessionId);
+            await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Message)).IsEqualTo(5);
+            await Assert.That(log.Value.Count(e => e.Kind == SessionLogEntryKind.Rewind)).IsEqualTo(1);
         }
         finally
         {

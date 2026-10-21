@@ -60,11 +60,11 @@ Second render path for the interactive REPL (`src/Harbor.Tui.CellForge/`, opt-in
 - **Live REPL wire-up** (CE-4): select via `HARBOR_TUI=cellforge` or `tui: "cellforge"` (+ kill-switch `ui.consoleEx.enabled`), `CellForgeModule` DI graph, event pump keeps all timeline mutation on the frame thread, Ctrl+C = abort turn → second press quits, event-driven frames + 80 ms spinner heartbeat, golden E2E smoke (`tests/fixtures/celldiff/ce4-consoleex-repl.golden.txt`). See [README](../src/Harbor.Tui.CellForge/README.md).
 - **PTY hardening** (CE-5): `PtyHarness` runs the real process in a pseudo-terminal (`tests/Harbor.Tui.CellForge.PtyTests/`, 8 scenarios — launch/submit/kitty/mouse/paste/resize/Ctrl+C/termios); fixed Termios struct size 49→60 bytes (kernel wrote past struct → stack corruption in raw-mode Enter, commit 1749841).
 
-### ✅ Completed — Tools (22 builtin)
+### ✅ Completed — Tools (23 builtin)
 
 `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`,
 `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
-`harbor_inspect`, `spill_read`
+`harbor_inspect`, `plugin_manager`, `spill_read`
 — full reference in [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)
 
 ### ✅ Completed — Plugin System (R30 fix) + Plugin Host Decomposition (F-sprints)
@@ -140,6 +140,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 - [x] Plugin trust prompt for project-local plugins — `IPluginTrustPolicy` + `TrustingPluginSource` fail-closed gate, `FileTrustPolicy` persist store path+sha256 (`~/.harbor/plugins/trust.json`, re-approval after edit), interactive y/N at startup; global scope implicitly trusted
 - [x] Hot-reload via `FileSystemWatcher` — `DebouncedPluginWatcher` (generational debounce, last-event-wins) → `PluginReloadService` re-runs the startup pipeline into live registries; `/plugins reload` in REPL + auto-reload gated by `tooling.autoReloadPlugins`; edited/removed plugins still need a restart to fully rebind (unregister tracking is follow-up)
 - [x] `harbor plugin install/list/uninstall` CLI commands
+- [x] Agent-facing plugin management with a per-change approval gate (#1738) — the `plugin_manager` tool reads the plugin inventory (one `IPluginInventory` shared with the `/plugins` panel) and PROPOSES install/uninstall/enable/disable; the change happens only after the user approves that one call, and the approval never changes the session's permission mode
 - [x] Build flag default: plain `dotnet build` now defines `HarborWithPlugins=true` (root `Directory.Build.props`) — previously the whole pipeline was dead code outside NUKE builds ("Feature flags: plugins=False")
 
 **Sub-agent execution** *(частично: TaskTool валидирует sub-agent, но не запускает его — `src/Harbor.Tools.Builtin/Tools/Task/TaskTool.cs`: «does NOT run it yet… execution fails with an explicit "not implemented" error»)*
@@ -367,7 +368,7 @@ Moved platform-agnostic logic out of `Harbor.App.Avalonia` into `Harbor.Ui.Frame
 | Test projects (`tests/`, csproj dirs) | 37 (incl. benchmarks + E2E harnesses) |
 | Unit tests passing | ~1350 (см. [PROJECT_STATUS.md](./PROJECT_STATUS.md)) |
 | E2E tests passing | 12 + CellForge PTY suite |
-| Builtin tools | 22 (`HarborToolSetKind.Full14` — enum name predates the count) |
+| Builtin tools | 23 (`HarborToolSetKind.Full14` — enum name predates the count) |
 | Sample plugins | 4 CS-source + 4 DLL legacy |
 | TUI renderers | 7 projects in src/ (Terminal.Abstractions, Tui.AnsiPlain, Tui.CellForge, Tui.CellForge.Engine, Tui.CellForge.Syntax, Tui.CellForge.Prompts, Tui.Notifications) → 3 registered backends (`plain`, `ansi`, `cellforge` (alias `consoleex`)) + 8 in contrib/tui |
 | Desktop platforms | Avalonia (`apps/`); WPF / MAUI (`contrib/apps/`) |

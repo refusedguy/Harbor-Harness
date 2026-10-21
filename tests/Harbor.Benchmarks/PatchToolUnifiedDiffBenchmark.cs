@@ -1,7 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using Harbor.Abstractions.Models;
-using Harbor.Abstractions.Permissions;
-using Harbor.Abstractions.Tools;
 using Harbor.Tools.Builtin;
 using Microsoft.Extensions.Logging.Abstractions;
 using Harbor.TestKit;
@@ -77,15 +74,7 @@ public class PatchToolUnifiedDiffBenchmark
         var args = System.Text.Json.JsonDocument.Parse(
             System.Text.Json.JsonSerializer.Serialize(
                 new ToolPathPatchArgs(_tempFilePath, _patch), TestJsonContext.Default.ToolPathPatchArgs)).RootElement.Clone();
-        var ctx = new ToolContext(
-            SessionId: "session-1",
-            MessageId: "msg-1",
-            CallId: null,
-            Agent: "code",
-            Abort: CancellationToken.None,
-            Messages: Array.Empty<AgentMessage>(),
-            ReportProgress: (_, __) => Task.CompletedTask,
-            Ask: (_, __) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+        var ctx = TestToolContext.Create(sessionId: "session-1", messageId: "msg-1", callId: null);
         var result = await _tool.ExecuteAsync(args, ctx).ConfigureAwait(false);
         return result.Output;
     }

@@ -130,6 +130,47 @@ public sealed class DeferredSessionStore : ISessionStore
             : Task.FromResult(Result.Failure<int>(NotReady));
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Forwarded, not inherited: the interface's default answer for a
+    ///     store that has not been migrated is a loud failure, and this
+    ///     forwarder must not turn a store that CAN rewind into one that
+    ///     cannot (#1752).
+    /// </remarks>
+    public Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(string sessionId, CancellationToken ct = default)
+    {
+        var current = Current;
+        return current is not null
+            ? current.GetSessionLogAsync(sessionId, ct)
+            : Task.FromResult(Result.Failure<IReadOnlyList<SessionLogEntry>>(NotReady));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Forwarded, not inherited — see
+    ///     <see cref="GetSessionLogAsync" />.
+    /// </remarks>
+    public Task<Result<int>> RewindMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        var current = Current;
+        return current is not null
+            ? current.RewindMessagesAfterAsync(sessionId, messageId, ct)
+            : Task.FromResult(Result.Failure<int>(NotReady));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Forwarded, not inherited — see
+    ///     <see cref="GetSessionLogAsync" />.
+    /// </remarks>
+    public Task<Result<int>> PurgeMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+    {
+        var current = Current;
+        return current is not null
+            ? current.PurgeMessagesAfterAsync(sessionId, messageId, ct)
+            : Task.FromResult(Result.Failure<int>(NotReady));
+    }
+
     private const string NotReady =
         "Session runtime is not initialized yet (host composition incomplete).";
 }

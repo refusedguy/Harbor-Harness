@@ -618,3 +618,36 @@ closure).
 
 - Full text, the per-option costs, the before/after table and the open questions:
   [ADR-021](ADR-021-desktop-abstractions-split.md).
+
+## ADR-022: append-only журнал сессии: log, surface, rewind-событие и явный prune
+
+Issue [#1784](https://github.com/refusedguy/Harbor-Harness/issues/1784) asked for the
+plan behind #1752: a session log that is append-only, with a surface (what the model
+and the UI see) folded out of it, shadowed records that stay in the log, a rewind that
+writes an event instead of rewriting the file, and a prune that only happens when a
+person asks for it.
+
+The plan was written on 2026-10-20 and rewritten on 2026-10-21 against the tree as it
+stands, because eight things changed in between. The contract, the shared fold and the
+guard are already in the tree (PR-1 of the plan, #1806). The message edit no longer
+moves a record, it rewrites it in place (#1798, #1907), so the stage that made the
+edit append-only is gone and the invariant survives on the fingerprint, which does not
+digest `Usage`. The export is one snapshot (#1785, #1811), the checkpoint axis is out
+of the store (#1513), so the old "after #1513" block is gone. Compaction moved to
+`Harbor.SessionContext`, the feedback records (#1746) are the precedent for a
+record that is not a message, the torn tail is already reported (#1744), and the
+query service (#1743) is already there, so no new search service is needed. The
+session file is versioned too (#1749, #2066), so the rewind record is now a question
+about the file's generation: by the catalog's own rule it stays in the current one,
+and the price of that (an older build reads the file and shows the surface from
+before the rewind) is named as an open question for the owner.
+
+Decided and recorded: the rewind is a record of its own (`"type":"rewind"`), the edit
+stays an in-place rewrite, prune is explicit only, `ISessionStore` grows default
+members instead of a new extension axis, and the log is the message records plus the
+rewind events. Six stages, each with a verifiable acceptance criterion and a
+non-vacuity control that is red on the parent commit and aimed at the destructive path
+that really exists in the repository.
+
+- Full text, the six stages, the guard's scope and the open questions for the owner:
+  [ADR-022](ADR-022-session-log-append-only.md).

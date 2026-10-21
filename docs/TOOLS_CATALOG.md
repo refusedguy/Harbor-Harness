@@ -37,6 +37,7 @@
    - [session_read](#session_read)
    - [session_steer](#session_steer)
    - [harbor_inspect](#harbor_inspect)
+   - [plugin_manager](#plugin_manager)
    - [spill_read](#spill_read)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
@@ -51,20 +52,22 @@
 
 ## 1. Inventory
 
-Harbor ships **22 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **23 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 22 tools
+> (the CLI default — the enum name predates the tool count) registers all 23 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer` + `harbor_inspect` + `spill_read`); `Standard10` (name likewise
-> predates the count — 14 members today) omits the eight heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
+> `session_steer` + `harbor_inspect` + `plugin_manager` + `spill_read`); `Standard10`
+> (name likewise predates the count — 14 members today) omits the nine heavier ones
+> (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`,
+> `session_read`, `session_steer`, `plugin_manager`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 20.
+> catalog registers 21. `plugin_manager` requires the plugin runtime to be compiled in
+> (`HarborWithPlugins=true`, the default).
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -89,7 +92,8 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
 | 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
-| 22 | `spill_read` | Parallel | Allow | Read back a tool output that was too large to fit the context |
+| 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
+| 23 | `spill_read` | Parallel | Allow | Read back a tool output that was too large to fit the context |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1143,6 +1147,15 @@ side effect the user has not explicitly requested.
 
 ---
 
+### `plugin_manager`
+
+**Description.** The agent's window onto the plugin inventory. It reads what is
+installed in the two CS-source plugin scopes (`~/.harbor/plugins` and
+`<cwd>/.harbor/plugins`), and it PROPOSES a change — install, uninstall, enable,
+disable. The proposal is a question: the tool asks the user, through the same
+approval channel the permission service uses, and the change happens only if the
+user approves that one call. A denial, a cancellation or an unavailable approval
+channel ends the call with nothing changed (#1738).
 ### `harbor_inspect`
 
 **Description.** A read-only catalog of what THIS runtime offers: the tools it has
@@ -1166,6 +1179,12 @@ reasons from `PluginRouteAxisRegistry` (#1723), the providers from `ProviderPres
 {
   "type": "object",
   "properties": {
+    "action": { "type": "string", "description": "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'" },
+    "name":   { "type": "string", "description": "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable" },
+    "source": { "type": "string", "description": "Path of the reviewed '.cs' plugin source to install — required for install" },
+    "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
+  },
+  "required": ["action"]
     "section": { "type": "string", "description": "Which part of the runtime to describe: overview (default), tools, agents, providers, skills, plugins, versions, limits" },
     "name":    { "type": "string", "description": "One entry of that section, by its exact name (tool, agent, provider id, skill, plugin axis). Omit to list the whole section." }
   }
@@ -1175,6 +1194,42 @@ reasons from `PluginRouteAxisRegistry` (#1723), the providers from `ProviderPres
 **Examples.**
 
 ```jsonc
+// 1. What is installed?
+{"action": "list"}
+
+// 2. Add a reviewed plugin to the user's own scope
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs"}
+
+// 3. Add it to the project instead
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs", "scope": "project"}
+
+// 4. Take a plugin out
+{"action": "uninstall", "name": "TodoWrite.cs"}
+
+// 5. Keep it on disk but stop the host from serving it
+{"action": "disable", "name": "TodoWrite.cs"}
+```
+
+**Permissions.** `PermissionRuleset.Default` allows the tool (`plugin_manager *`)
+— that is NOT "the agent may install plugins on its own". The tool asks the user
+about every change it proposes, and the answer covers that one call: it is never
+written back to a ruleset, so the session's permission mode never changes. A
+user who does not want an agent touching plugins writes
+`new("plugin_manager", "*", Deny)` and the tool never starts. The read-only
+agents (`plan`, `explore`, `ask`, `architect`, `orchestrator`) deny it outright.
+
+**Mode.** `Sequential` (it changes files).
+
+**Tips.**
+- Call `action: "list"` first: it reports the exact file names the other
+  actions take, and an error says so ("call list and use the exact file name").
+- An install copies the reviewed source AND the manifest it ships next to it
+  (`<Name>.harbor-plugin.json`); the manifest is the plugin's declaration, and
+  the host refuses a plugin whose declaration it cannot apply.
+- A plugin that declares a Harbor floor above the running one is refused with
+  that reason — the host would refuse it at load time anyway.
+- CS plugins are served by the separate `harbor-plugins-host` process: a change
+  takes effect after that host restarts. Nothing is compiled in the CLI process.
 // 1. What does this runtime have? (one screen)
 {}
 
@@ -1296,6 +1351,8 @@ definition.
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
 | Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
 | Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
+| See what plugins are installed | `plugin_manager` (`action: "list"`) | `ls ~/.harbor/plugins` | One inventory for the agent and the `/plugins` panel |
+| Add or remove a plugin | `plugin_manager` | `bash cp` | The change is proposed and the user approves it |
 | Find out what this runtime offers | `harbor_inspect` | reading the docs | Reads the live registries, so it cannot describe a runtime that is not the one running |
 | Read a tool output that was too big for the context | `spill_read` | `read` | The path is outside the workspace; `read` would ask for permission on every window |
 

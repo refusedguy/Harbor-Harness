@@ -84,8 +84,8 @@ Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
 Fourteen tools are registered in every preset (`read`, `write`, `edit`, `bash`, `glob`,
 `grep`, `ls`, `skill`, `patch`, `notebook`, `tree`, `lsp`, `harbor_inspect`,
 `spill_read`); `task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`,
-`mcp_prompt`, `session_read` and `session_steer` join when the host selects
-`HarborToolSetKind.Full14` (22 tools total). `tools.freeze()` runs after
+`mcp_prompt`, `session_read`, `session_steer` and `plugin_manager` join when the host
+selects `HarborToolSetKind.Full14` (23 tools total). `tools.freeze()` runs after
 registration, and the CLI's `DisabledTools` config list can keep specific tools out at
 startup (`apps/Harbor.App.Cli/Configuration/CliConfig.cs:67-70`).
 
