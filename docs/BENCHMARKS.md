@@ -1162,7 +1162,7 @@ the probe was supposed to normalize was UNCHANGED:
 | 39609285153 | 0.000041 | 0.0816 | **1990.3** (budget 700) | red |
 | 39619582982 | 0.000041 | — | — | red (patch split only) |
 | 39639468264 (healthy) | 0.000350 | 0.0827 | 236.5 | green |
-| 39650243527 (healthy) | 0.000347 | 0.0823 | 237.2 | green |
+| 39654104203 (healthy, this branch) | 0.000348 | 0.0814 | 234.1 | green |
 
 The numerator's spread was 1.01x in the red run — "reproducible" — so the
 helper trusted the measurement and the ratio it asserted was 8.5x the cost the
@@ -1186,8 +1186,8 @@ nothing.
 The warm-up of the patch split grew from 3 to 32 iterations at the same time:
 the call-counting threshold is 30 calls, the measured window drives 8 splits
 per round, and the short warm-up left the first measured rounds running tier-0
-code. The measurement of run 39650243527 therefore reads **415.7** probe units
-per split (0.1441 ms/unit against a probe of 0.000347 ms/unit) where the old
+code. The measurement of run 39654104203 therefore reads **397.1** probe units
+per split (0.1379 ms/unit against a probe of 0.000347 ms/unit) where the old
 warm-up read 505.2 — the same code, measured honestly.
 
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
