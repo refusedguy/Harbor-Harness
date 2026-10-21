@@ -343,16 +343,25 @@
   </ItemGroup>
 
   <!--
-    RS0030 policy: production code (src/, apps/, contrib/tui, contrib/apps,
-    samples/plugins) enforces banned-API violations as errors via the global
+    RS0030 policy: production code (src/, apps/, contrib/tui, contrib/apps)
+    enforces banned-API violations as errors via the global
     TreatWarningsAsErrors above; accepted legacy exemptions live as pragmas at
-    their call sites and are catalogued in BannedSymbols.txt itself.
+    their call sites and are catalogued in BannedSymbols.txt itself. The
+    exemption below is matched on the PROJECT PATH, so it also reaches
+    `samples/` (samples/plugins included) and every project under a directory
+    named `tests`: those projects are not in the error set today.
 
     Test, benchmark and E2E-driver projects are exempted centrally below:
     benchmark GlobalSetup/IterationSetup, Avalonia-headless marshaling helpers
     and IPC test fixtures block on async setup by design (their lifecycles are
     synchronous), and failing CI on those would train people to ignore the
-    analyzer. The rules stay visible there as diagnostics for new code review.
+    analyzer. `NoWarn` hides the diagnostic COMPLETELY: the rules are NOT
+    visible as warnings in those builds, so review is the only backstop for a
+    banned call in test code. The package edge of the same ban (a package that
+    drags a banned assembly into a test project's bin/) is a different gate:
+    tools/check-test-packages.py, with named exceptions in
+    tools/test-package-exceptions.txt. AGENTS.md §"What NOT to do" #2 states
+    the scope of the ban.
   -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('tests')) or $(MSBuildProjectDirectory.Contains('samples'))">
     <NoWarn>$(NoWarn);RS0030</NoWarn>

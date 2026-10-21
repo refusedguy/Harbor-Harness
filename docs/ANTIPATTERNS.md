@@ -1068,6 +1068,8 @@ var json = JsonSerializer.Serialize(obj, MyJsonContext.Default.Foo);
 var obj  = JsonSerializer.Deserialize(json, MyJsonContext.Default.Foo);
 ```
 
+The ban is on **our** use of Newtonsoft: our `using`, our direct reference, and any package we add that drags it in. A foreign library's transitive Newtonsoft that we do not use is not a violation of it, but the decision to keep that package has to be explicit: see `AGENTS.md` §"What NOT to do" #2 and `tools/test-package-exceptions.txt`.
+
 ### 34. EF Core
 
 **What.** Entity Framework Core for data access.

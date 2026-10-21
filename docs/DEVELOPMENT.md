@@ -590,11 +590,12 @@ itself and pins 0.11.6 since #1865), and does not bring Newtonsoft — and if
 it ever did, the layering rules have a zero-dependency reflection fallback
 already
 (`tests/Harbor.Architecture.Tests/LayerDependencyTests.cs`).
-`TngTech.ArchUnitNET` 0.13.4, proposed in #1841, *does* declare
-`Newtonsoft.Json` 13.0.4; if that proposal is accepted with the package, this
-gate goes red and the answer is either to not take the package or to record,
-in the exception file, why a test-only Newtonsoft is worth having. What must
-not happen is the package arriving quietly.
+`TngTech.ArchUnitNET` 0.13.4, proposed in #1841 and **rejected at that
+version** (#1870, #1871; the verdict table in `docs/ANALYZERS.md`), *does*
+declare `Newtonsoft.Json` 13.0.4; had it been taken, this gate would have gone
+red, and the answer would have been either to not take the package or to
+record, in the exception file, why a test-only Newtonsoft is worth having.
+What must not happen is the package arriving quietly.
 
 **In CI.** Two places, because the question has two answers:
 
