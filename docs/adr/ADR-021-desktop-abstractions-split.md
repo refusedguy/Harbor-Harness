@@ -1,4 +1,4 @@
-# ADR-020: `Harbor.Desktop.Abstractions` is split, and the hub gets an honest name
+# ADR-021: `Harbor.Desktop.Abstractions` is split, and the hub gets an honest name
 
 > **Status (2026-10-20):** dated record, not normative. This file records the
 > measurement that the decision rests on and the decision itself. The parts that
@@ -7,6 +7,32 @@
 > guard in
 > `tests/Harbor.Architecture.Tests/DesktopAbstractionsLeafTakesNoIoRules.cs`, and
 > the assembly's own `README.md`.
+>
+> **Update (2026-10-21), after the rebase onto the newer `dev`.** Three facts
+> moved under the record, and the record is dated, so the deltas are written
+> down here rather than edited into the measurement:
+>
+> 1. **The number is ADR-021, not ADR-020.** `dev` took ADR-020 for the
+>    per-turn change oracle, so the split's record took the next free number.
+>    The file, the title, the row in `DECISIONS.md` and every citation to it
+>    moved with it.
+> 2. **The `#188` edge now points at `Harbor.PolicyConfig`, not
+>    `Harbor.Application`.** #1625 moved the configuration family — the
+>    `ProviderPresets` catalogue among it — out of `Harbor.Application` into
+>    `Harbor.PolicyConfig`. The catalogue's NAMESPACE stayed
+>    `Harbor.Application.Configuration`, so the two view-models that read it
+>    kept their `using` directives and only the project reference moved. The
+>    measurement below was taken before that move, so it names
+>    `Harbor.Application` where the tree now says `Harbor.PolicyConfig`.
+> 3. **The namespace-ownership rule is now a build-time analyzer.** HARCH002
+>    (`src/Harbor.Arch.Analyzers/NamespaceOwnershipAnalyzer.cs`) decides which
+>    project owns which namespace root, and the split is consistent with it by
+>    construction: the new root `Harbor.Desktop.ViewModels` is declared by the
+>    new project of the same name, and the leaf keeps
+>    `Harbor.Desktop.Abstractions` for the types it still holds. The text rule
+>    (`AbstractionsNamespaceOwnershipRules`, R3) attributes every declaration in
+>    the product tree to an assembly, and the new root is attributed to the new
+>    project.
 
 ## Status
 
@@ -71,7 +97,7 @@ The 46 public types divide by their dependency, not by taste:
 | half | types | Harbor types it binds | where it lives | closure after |
 |---|---:|---|---|---:|
 | contracts, models, enums | 12 | `SessionStatus`, `AgentName.Fallback` (both in `Harbor.Abstractions.Contracts`) | the leaf | **2** |
-| concrete view-models | 34 | `Harbor.Abstractions` (`IProviderHealthCheck`), `Harbor.Application` (`ProviderPresets`), five `Harbor.Ui.Framework.*` modules | the hub | 15 |
+| concrete view-models | 34 | `Harbor.Abstractions` (`IProviderHealthCheck`), `Harbor.Application` (`ProviderPresets` — the catalogue's assembly at the time of the measurement; #1625 moved it to `Harbor.PolicyConfig`, see the update above), five `Harbor.Ui.Framework.*` modules | the hub | 15 |
 
 The 12 are the config schema (`IAppConfigStore<T>`, `ICommonConfigStore`,
 `AppConfigBase`, `CommonConfig`, `CompositeConfig<T>`), the cross-view-model
@@ -87,7 +113,7 @@ A consumer that wants `ICommonConfigStore` or `ThemeKind` and nothing else:
 | | before | after |
 |---|---:|---:|
 | assemblies pulled in | **18** | **2** |
-| …of which `Harbor.Application` | yes | no |
+| …of which the preset catalogue's assembly (`Harbor.Application` at the time of the measurement, `Harbor.PolicyConfig` since #1625) | yes | no |
 | …of which the `Ui.Framework` family | all five modules | no |
 
 That is the whole of the issue's second complaint, and it is a real number: the
@@ -187,10 +213,11 @@ directly is what makes the closure 2 rather than 3.
 
 ### What the split does NOT do
 
-- **It does not take `Harbor.Application` out of `Harbor.TestKit`'s closure.**
-  TestKit derives its two stubs from `ChatViewModelBase` and
-  `DiffViewModelBase`, which now live in the hub, and the hub carries the
-  `#188` edge. Moving those two bases down to `Harbor.Ui.Framework.ViewModels`
+- **It does not take the preset catalogue out of `Harbor.TestKit`'s closure.**
+  The stubs that derive from `ChatViewModelBase` and `DiffViewModelBase` now
+  live in the hub, and the hub carries the `#188` edge to the catalogue
+  (`Harbor.Application` at the time of the measurement, `Harbor.PolicyConfig`
+  since #1625). Moving those two bases down to `Harbor.Ui.Framework.ViewModels`
   is what would shrink that closure, and that is #1875's job, not this issue's.
   The `DiffViewModelBase` reservation row in
   `PublicAbstractBaseLivenessRules` now names its new home and still points at
@@ -212,7 +239,7 @@ directly is what makes the closure 2 rather than 3.
   forward-looking commitment.
 - `Harbor.Ui.Framework.Tests` and `Harbor.TestKit.Tui` reference the hub
   instead of the leaf; the core `Harbor.TestKit` references neither, because
-  #1889 made it core-only. The `#188` edge that drags `Harbor.Application` in
+  #1889 made it core-only. The `#188` edge that drags the preset catalogue in
   travelled with the view-models, so the part that still pays for it pays for
   it in the same place as before.
 - The Avalonia app references both halves; the CLI, `Harbor.Hosting` and
@@ -243,7 +270,7 @@ directly is what makes the closure 2 rather than 3.
   `tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs`.
 - The guard whose premise the split makes true:
   `tests/Harbor.Architecture.Tests/DesktopAbstractionsLeafTakesNoIoRules.cs`.
-- The bases that would still move `Harbor.Application` out of the TestKit
+- The bases that would still move the preset catalogue out of the TestKit
   closure: [#1875](https://github.com/refusedguy/Harbor-Harness/issues/1875).
 - The related decision on the narrow config reader:
   [ADR-009](DECISIONS.md).

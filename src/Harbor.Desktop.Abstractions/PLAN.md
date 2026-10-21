@@ -21,11 +21,11 @@ concrete desktop view-models live in `Harbor.Desktop.ViewModels` since #1899.
 
 ## Known issues
 
-- The assembly is `IsPackable` (`PackageId Harbor.Desktop.Abstractions`) and nothing has ever been published to a feed, so the package identity is a forward-looking commitment rather than a live contract. The versioning decision for it belongs to the owner (ADR-020).
+- The assembly is `IsPackable` (`PackageId Harbor.Desktop.Abstractions`) and nothing has ever been published to a feed, so the package identity is a forward-looking commitment rather than a live contract. The versioning decision for it belongs to the owner (ADR-021).
 
 ## See also
 
 - [README.md](README.md)
-- [ADR-020](../../docs/adr/ADR-020-desktop-abstractions-split.md)
+- [ADR-021](../../docs/adr/ADR-021-desktop-abstractions-split.md)
 - [../../docs/CONFIGURATION.md](../../docs/CONFIGURATION.md)
 - [../../docs/ARCHITECTURE_LAYERS.md](../../docs/ARCHITECTURE_LAYERS.md)

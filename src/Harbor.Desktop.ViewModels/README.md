@@ -20,7 +20,7 @@ In #1899 the assembly was split at the measured dependency seam:
 | `Harbor.Desktop.ViewModels` | this: the concrete view-models and their abstract bases | 8 | 15 |
 
 The decision, the measured cost of each option and the open questions are in
-[ADR-020](../../docs/adr/ADR-020-desktop-abstractions-split.md).
+[ADR-021](../../docs/adr/ADR-021-desktop-abstractions-split.md).
 
 ## Public API
 
@@ -79,9 +79,12 @@ public sealed partial class ChatViewModel : ChatViewModelBase
 - `Harbor.Ui.Framework.ViewModels` / `.State` / `.Services` / `.Sessions` /
   `.Rendering` — the TEA state, the dispatcher/theme services, the session
   factory and the diff engine.
-- `Harbor.Application` — the `ProviderPresets` catalogue, a documented
+- `Harbor.PolicyConfig` — the `ProviderPresets` catalogue, a documented
   Presentation → Application exception (#188/#96) that the two onboarding
-  view-models read. It is scoped to those two files.
+  view-models read. It is scoped to those two files. The catalogue moved
+  out of `Harbor.Application` into `Harbor.PolicyConfig` in #1625 and the
+  exception followed it there; the namespace it is declared in is still
+  `Harbor.Application.Configuration`.
 - Referenced by: `apps/Harbor.App.Avalonia`, `tests/Harbor.TestKit`,
   `tests/Harbor.Ui.Framework.Tests`, `tests/Harbor.Architecture.Tests`,
   `contrib/apps/Harbor.App.Wpf`.
@@ -90,16 +93,18 @@ public sealed partial class ChatViewModel : ChatViewModelBase
 
 - `DiffViewModelBase` has no shipped implementor; only a test double derives
   from it (#1875 tracks moving it down to `Harbor.Ui.Framework.ViewModels`).
-- The `#188` edge to `Harbor.Application` is still open. It is the reason
-  `Harbor.Application` is still in `Harbor.TestKit`'s transitive closure, and
-  the fix is a separate move of the preset catalogue.
+- The `#188` edge to the preset catalogue is still open. It points at
+  `Harbor.PolicyConfig` since #1625 moved the catalogue out of
+  `Harbor.Application`, and it is the reason `Harbor.Application` is still in
+  `Harbor.TestKit`'s transitive closure. The fix is a separate move of the
+  catalogue to Domain.
 - The assembly is `IsPackable` (`PackageId Harbor.Desktop.ViewModels`) but no
   Harbor package has been published to a feed yet, so the package identity is a
   forward-looking commitment, not a live contract.
 
 ## See also
 
-- [ADR-020](../../docs/adr/ADR-020-desktop-abstractions-split.md) — the
+- [ADR-021](../../docs/adr/ADR-021-desktop-abstractions-split.md) — the
   decision record.
 - [`Harbor.Desktop.Abstractions`](../Harbor.Desktop.Abstractions/README.md) —
   the config-schema leaf.

@@ -10,7 +10,7 @@
     The split put the concrete view-models in `Harbor.Desktop.ViewModels`,
     and what is left here is the part the name always described: the config
     SCHEMA and its PORTS, the cross-view-model messages, and the shared
-    models/enums. See docs/adr/ADR-020-desktop-abstractions-split.md.
+    models/enums. See docs/adr/ADR-021-desktop-abstractions-split.md.
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
       ✅ Harbor.Abstractions.Contracts — ONE reference, and it is the innermost

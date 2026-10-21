@@ -146,11 +146,12 @@
 // `Harbor.Application`, which has nothing to do with config persistence.
 //
 // #1899 moved those two view-models OUT of this leaf, into
-// `Harbor.Desktop.ViewModels`, and the edge moved with them: the documented
-// exception is now `Harbor.Desktop.ViewModels -> Harbor.Application`, and this
-// leaf has NO `Harbor.Application` edge at all. So the prediction came true, four
-// issues later, by a different route: the view-models left, and the exception
-// stayed scoped to the two files that read the catalogue.
+// `Harbor.Desktop.ViewModels`, and the edge moved with them. Since #1625 the
+// catalogue itself lives in `Harbor.PolicyConfig`, so the documented exception
+// is now `Harbor.Desktop.ViewModels -> Harbor.PolicyConfig`, and this leaf has
+// NO edge to either assembly at all. So the prediction came true, four issues
+// later, by a different route: the view-models left, and the exception stayed
+// scoped to the two files that read the catalogue.
 
 // MECHANISM (#1086, step 2, conveyor)
 // -----------------------------------

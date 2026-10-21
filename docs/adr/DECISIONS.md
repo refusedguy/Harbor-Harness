@@ -571,7 +571,7 @@ would cost the frozen `ISessionStore` contract).
 - Full text, the four decisions, the rejected alternatives and where the code is:
   [ADR-020](ADR-020-turn-change-oracle.md).
 
-## ADR-020: `Harbor.Desktop.Abstractions` is split, and the hub gets an honest name
+## ADR-021: `Harbor.Desktop.Abstractions` is split, and the hub gets an honest name
 
 Issue [#1899](https://github.com/refusedguy/Harbor-Harness/issues/1899) read a packable
 assembly whose name promised a contract layer and found a hub wearing that name: 9
@@ -581,11 +581,13 @@ project references and an 18-assembly dependency closure under the description
 Re-measured on `dev` = `283a9dbe` (the issue's own numbers had moved: 30 `.cs` files
 and 46 public types, not 39 and 55), the assembly divides by DEPENDENCE into two
 halves: 12 contract/model/enum types that bind two Harbor types, both in the
-innermost assembly, and 34 concrete view-models that bind `Harbor.Application`
-(the `#188` `ProviderPresets` edge) and five `Harbor.Ui.Framework.*` modules. Two of
-the nine references bound no type at all (`Harbor.Terminal.Abstractions`,
-`Harbor.Ui.Framework`), and both were already recorded as vestigial edges with
-"remove the reference" written next to them.
+innermost assembly, and 34 concrete view-models that bind the preset catalogue
+(the `#188` `ProviderPresets` edge — `Harbor.Application` at the time of the
+measurement, `Harbor.PolicyConfig` since #1625 moved the configuration family
+out) and five `Harbor.Ui.Framework.*` modules. Two of the nine references bound
+no type at all (`Harbor.Terminal.Abstractions`, `Harbor.Ui.Framework`), and both
+were already recorded as vestigial edges with "remove the reference" written
+next to them.
 
 Decided: **split at that seam** rather than rename the whole assembly. The leaf keeps
 the name `Harbor.Desktop.Abstractions` and drops to one Harbor reference
@@ -593,7 +595,7 @@ the name `Harbor.Desktop.Abstractions` and drops to one Harbor reference
 actually live); the view-models move to `Harbor.Desktop.ViewModels`, and the `#188`
 exception moves with them. A consumer that wants only `ICommonConfigStore` or
 `ThemeKind` now pulls **2** assemblies instead of **18**, and no longer drags
-`Harbor.Application` in.
+the preset catalogue's assembly in.
 
 Two cost claims in the issue were corrected by measurement: there is **no**
 public-API baseline for this assembly to re-sign (the public-API freeze covers
@@ -611,7 +613,8 @@ found (`ThemeKind`, and a `ToastKind` that duplicates the one in
 `Harbor.Ui.Framework.Services`), and whether the leaf should be renamed
 `Harbor.Desktop.Contracts`. The split does not touch `Harbor.Abstractions.Contracts`,
 and does not move the three abstract bases down to `Harbor.Ui.Framework.ViewModels`
-(#1875, which is what would take `Harbor.Application` out of the TestKit closure).
+(#1875, which is what would take the preset catalogue out of the TestKit
+closure).
 
 - Full text, the per-option costs, the before/after table and the open questions:
-  [ADR-020](ADR-020-desktop-abstractions-split.md).
+  [ADR-021](ADR-021-desktop-abstractions-split.md).

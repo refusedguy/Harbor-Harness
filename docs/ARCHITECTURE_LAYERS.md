@@ -163,9 +163,11 @@ inner layer, never the other way around. The innermost layer (Domain/Abstraction
 > concrete view-models moved to `Harbor.Desktop.ViewModels`. The leaf's closure
 > is now two assemblies (itself + `Harbor.Abstractions.Contracts`) instead of
 > eighteen, and the `#188` Presentation → Application edge moved with the
-> view-models that read the preset catalogue. The decision and the per-option
+> view-models that read the preset catalogue (the edge points at
+> `Harbor.PolicyConfig` since #1625 moved the catalogue out of
+> `Harbor.Application`). The decision and the per-option
 > costs are in
-> [ADR-020](adr/ADR-020-desktop-abstractions-split.md).
+> [ADR-021](adr/ADR-021-desktop-abstractions-split.md).
 >
 > **Update 2026-10-20: the PRESENTATION box lost a renderer.**
 > `Harbor.Tui.NickConsoleEx` (the SharpConsoleUI wrapper) and the vendored

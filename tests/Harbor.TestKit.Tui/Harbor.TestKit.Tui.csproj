@@ -42,7 +42,8 @@
       #1835 owns moving `ChatViewModelBase` / `DiffViewModelBase` out of
       `Harbor.Desktop.ViewModels` into `Harbor.Ui.Framework.ViewModels`; when
       that lands, the `Harbor.Desktop.ViewModels` edge below goes away with it,
-      and this part stops reaching `Harbor.Application` transitively.
+      and this part stops reaching the preset catalogue's assembly
+      (`Harbor.PolicyConfig` since #1625) transitively.
     -->
     <RootNamespace>Harbor.TestKit</RootNamespace>
     <!--

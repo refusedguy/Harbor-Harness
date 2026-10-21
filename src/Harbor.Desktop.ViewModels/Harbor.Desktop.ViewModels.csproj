@@ -9,7 +9,7 @@
     measured dependency seam: the contracts, models and enums stayed in
     `Harbor.Desktop.Abstractions` (now a real leaf — one Harbor reference),
     and the concrete view-models moved here, under a name that says what they
-    are. See docs/adr/ADR-020-desktop-abstractions-split.md.
+    are. See docs/adr/ADR-021-desktop-abstractions-split.md.
 
     Dependency rule (enforced by Harbor.Architecture.Tests):
       ✅ Harbor.Abstractions
@@ -17,10 +17,12 @@
          this layer's view-models bind (CommonConfig, ICommonConfigStore,
          SessionDotState, …)
       ✅ Harbor.Ui.Framework.{ViewModels,State,Services,Sessions,Rendering}
-      ✅ Harbor.Application — documented exception (#188, part of #96):
+      ✅ Harbor.PolicyConfig — documented exception (#188, part of #96):
          ProviderPresets catalog used by ProviderModelPickerViewModel /
-         OnboardingViewModel (Presentation → Application tech debt;
-         future fix: move preset catalog to Domain Harbor.Abstractions)
+         OnboardingViewModel (Presentation → Application tech debt; the
+         catalog itself moved to Harbor.PolicyConfig in #1625 and the
+         exception followed it there; future fix: move the preset catalog to
+         Domain Harbor.Abstractions)
       ❌ NO Avalonia / WPF / MAUI / Blazor / WindowsBase / System.Drawing
       ❌ NO Harbor.Providers.* / Harbor.Storage.* / Harbor.Tools.* (Infrastructure)
 
@@ -62,7 +64,13 @@
          reference) and this layer is the one that carries the Presentation
          dependency surface. -->
     <ProjectReference Include="..\Harbor.Desktop.Abstractions\Harbor.Desktop.Abstractions.csproj"/>
-    <ProjectReference Include="..\Harbor.Application\Harbor.Application.csproj"/>
+    <!-- #1899 + #1625: the ProviderPresets catalogue is the only reason this
+         layer reaches past the Domain face. It moved with the view-models that
+         read it, and #1625 moved the catalogue itself out of Harbor.Application
+         into Harbor.PolicyConfig, so that is the assembly this edge names
+         now. The namespace stayed Harbor.Application.Configuration, so the
+         using directives in the two view-models that read it did not move. -->
+    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.ViewModels\Harbor.Ui.Framework.ViewModels.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
     <ProjectReference Include="..\Harbor.Ui.Framework.Services\Harbor.Ui.Framework.Services.csproj"/>

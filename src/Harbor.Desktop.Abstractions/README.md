@@ -105,7 +105,7 @@ public sealed record CliConfig : AppConfigBase
 
 ## See also
 
-- [ADR-020](../../docs/adr/ADR-020-desktop-abstractions-split.md) — the
+- [ADR-021](../../docs/adr/ADR-021-desktop-abstractions-split.md) — the
   decision record for the split.
 - [`Harbor.Desktop.ViewModels`](../Harbor.Desktop.ViewModels/README.md) — the
   view-model layer that used to live here.

@@ -609,7 +609,7 @@ public sealed class PublicAbstractBaseLivenessRules
             + "WPF/MAUI/Blazor apps are not built by CI. Its only implementor in the tree "
             + "is the Harbor.TestKit stub, and the base stays published because moving it "
             + "down to Harbor.Ui.Framework.ViewModels — which would take "
-            + "Harbor.Desktop.ViewModels, and with it Harbor.Application, out of the "
+            + "Harbor.Desktop.ViewModels, and with it Harbor.PolicyConfig, out of the "
             + "TestKit closure — is a separate move (#1875). #1899 moved the base here "
             + "with the rest of the view-models; it did not move it down.",
             "https://github.com/refusedguy/Harbor-Harness/issues/1875"),

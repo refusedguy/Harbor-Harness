@@ -28,20 +28,23 @@
           types (ITracer/IMetrics/correlation) and TestKit names none of them.
 
       Every remaining reference is load-bearing and is declared explicitly,
-      not leaned on transitively. Note that Harbor.Application is STILL in
+      not leaned on transitively. Note that the preset catalogue is STILL in
       TestKit's transitive closure — via Harbor.Desktop.ViewModels, which
-      needs Harbor.Application.Configuration.ProviderPresets for the onboarding
-      view-models (the documented #188 Presentation->Application exception).
-      Removing the direct edge therefore does NOT shrink the closure; do not
-      re-add it "for symmetry" — the honest fix for the remaining path is a
-      separate move of ProviderPresets, tracked outside #1809.
+      needs ProviderPresets for the onboarding view-models (the documented #188
+      Presentation->Application exception). Removing the direct edge therefore
+      does NOT shrink the closure; do not re-add it "for symmetry" — the
+      honest fix for the remaining path is a separate move of ProviderPresets,
+      tracked outside #1809.
 
       #1899 renamed that one reference: the two view-model bases moved out of
       Harbor.Desktop.Abstractions (which is now the config-schema leaf) into
-      Harbor.Desktop.ViewModels. The #188 edge moved with them, so the
-      assembly that drags Harbor.Application in is the one the bases live in
-      now — and since #1889 that assembly is reached from the sibling
-      `Harbor.TestKit.Tui`, not from this core.
+      Harbor.Desktop.ViewModels, and the #188 edge moved with them, so the
+      assembly that drags the catalogue in is the one the bases live in now —
+      and since #1889 that assembly is reached from the sibling
+      `Harbor.TestKit.Tui`, not from this core. Since #1625 the catalogue
+      itself lives in Harbor.PolicyConfig, so that edge is
+      Harbor.Desktop.ViewModels -> Harbor.PolicyConfig; the namespace it is
+      declared in is still Harbor.Application.Configuration.
     -->
     <!--
       #1889: the four UI references are GONE, and with them the closure

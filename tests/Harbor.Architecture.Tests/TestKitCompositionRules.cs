@@ -147,10 +147,12 @@ public sealed class TestKitCompositionRules
     ///         bases, the animation library and the desktop shell),
     ///         <c>Harbor.Terminal.Abstractions</c> (the terminal contracts), and
     ///         <c>Harbor.Application</c> (which
-    ///         <c>Harbor.Desktop.ViewModels</c> pulls in for
-    ///         <c>ProviderPresets</c>; since #1899 the desktop view-models live
-    ///         there and not in <c>Harbor.Desktop.Abstractions</c>, which is the
-    ///         config-schema leaf).
+    ///         <c>Harbor.Desktop.ViewModels</c> reached for
+    ///         <c>ProviderPresets</c> until #1625 moved the catalogue to
+    ///         <c>Harbor.PolicyConfig</c>; since #1899 the desktop view-models
+    ///         live in <c>Harbor.Desktop.ViewModels</c> and not in
+    ///         <c>Harbor.Desktop.Abstractions</c>, which is the config-schema
+    ///         leaf).
     ///     </para>
     ///     <para>
     ///         The two prefix families are matched as PREFIXES on purpose: the
