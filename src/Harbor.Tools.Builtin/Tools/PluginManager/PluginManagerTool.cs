@@ -445,7 +445,7 @@ internal static partial class PluginManagerToolLog
     [LoggerMessage(EventId = 5, Level = LogLevel.Information, Message = "plugin_manager: {Action} on '{Name}' was approved by the user")]
     public static partial void Approved(ILogger logger, string action, string name);
 
-    [LoggerMessage(EventId = 6, Level = LogLevel.Inarning, Message = "plugin_manager: {Action} on '{Name}' was NOT approved; nothing changed")]
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "plugin_manager: {Action} on '{Name}' was NOT approved; nothing changed")]
     public static partial void NotApproved(ILogger logger, string action, string name);
 
     [LoggerMessage(EventId = 7, Level = LogLevel.Information, Message = "plugin_manager applied {Action} on '{Name}' → {Path}")]

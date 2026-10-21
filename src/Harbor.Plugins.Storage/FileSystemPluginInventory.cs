@@ -241,7 +241,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         try
         {
             Directory.CreateDirectory(RootOf(change.Scope));
-            await File.CopyAsync(source!, target, overwrite: false, ct).ConfigureAwait(false);
+            await CopyFileAsync(source!, target, overwrite: false, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -258,7 +258,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             string targetManifest = PluginManifestReader.PathFor(target);
             try
             {
-                await File.CopyAsync(sourceManifest, targetManifest, overwrite: true, ct).ConfigureAwait(false);
+                await CopyFileAsync(sourceManifest, targetManifest, overwrite: true, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -274,6 +274,31 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             change.Name,
             target,
             $"Installed '{change.Name}' into the {ScopeText(change.Scope)} scope ({target})."));
+    }
+
+    /// <summary>
+    ///     Copy one file to another, asynchronously.
+    /// </summary>
+    /// <remarks>
+    ///     The BCL has no <c>File.CopyAsync</c>, so the copy is what it always
+    ///     was under the hood: a read stream and a write stream, copied
+    ///     through. <see cref="FileMode.CreateNew" /> is what makes the
+    ///     "overwrite: false" case atomic — the target is created or the copy
+    ///     fails, never both.
+    /// </remarks>
+    private static async Task CopyFileAsync(
+        string source,
+        string target,
+        bool overwrite,
+        CancellationToken ct)
+    {
+        await using FileStream from = File.OpenRead(source);
+        await using FileStream to = new FileStream(
+            target,
+            overwrite ? FileMode.Create : FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None);
+        await from.CopyToAsync(to, ct).ConfigureAwait(false);
     }
 
     /// <summary>
