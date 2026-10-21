@@ -98,7 +98,7 @@ from dataclasses import dataclass, field
 # The product roots. A file under any other root is not product code: the
 # test tree is measured too (the coverage report says so), but it is never
 # in the registry, because a test file that no test runs is a different
-# problem with a different gate (`tools/check-test-projects.py`).
+# problem with a different gate (`harbor-gates check-test-projects`).
 PRODUCT_ROOTS = ("src", "apps")
 
 # The registry file. The name follows the two files that already have this

@@ -2,7 +2,7 @@
 """Gate: does the tree carry a reference the compiler never uses?
 
 Stdlib only — no pip, no network, no dotnet. It lives in `tools/` next to
-check-abstractions-contract.py / check-test-packages.py / check-test-projects.py /
+check-abstractions-contract.py / check-test-packages.py / check-test-projects /
 check-test-dup.py / aot-publish-gate.py and it asks the question none of them
 asks about the WHOLE tree:
 
@@ -13,7 +13,7 @@ asks about the WHOLE tree:
                                  src/Harbor.PolicyConfig)
   check-test-packages.py          may a test/sample project pull a BANNED
                                  package in, directly or transitively?
-  check-test-projects.py          does every test project actually run in CI?
+  check-test-projects              does every test project actually run in CI?
   THIS ONE                       does any project in the tree reference a
                                  package or a sibling project that the
                                  compiler never uses?

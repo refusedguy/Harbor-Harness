@@ -120,12 +120,14 @@ on:
       # the tree it measures. The gate is compiled now; its sources are under
       # `tools/gates/`, which the trigger below already covers.
       - 'tools/test-json-reflection-exceptions.txt'
-      # #1823. `check-test-projects.py` reads the test projects, the solution
+      # #1823. The completeness gate reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
       # touches any of the three has to run it: a new test project (its
       # .csproj and the solution entry that goes with it), a change to a CI
       # list, a change to the gate or to its baseline, and the NUKE `Test`
-      # target whose exclusions the census reads.
+      # target whose exclusions the census reads. The gate is compiled now;
+      # its sources are under `tools/gates/`, which the trigger below
+      # already covers.
       - 'tests/**/*.csproj'
       - 'Harbor.slnx'
       # #1780. The tool-schema pin is read by a gate and by the compiler
@@ -137,7 +139,6 @@ on:
       - 'src/Harbor.Tools.Builtin/Schemas/*.json'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
       # #1575. The string-switch gate reads `src/` and `apps/`, and compares
@@ -266,12 +267,12 @@ on:
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
-      # the three must run it.
+      # the three must run it. The gate is compiled now; its sources are
+      # under `tools/gates/`, which the trigger below already covers.
       - 'tests/**/*.csproj'
       - 'Harbor.slnx'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
       # #1575. Same trigger as above: the string-switch gate reads `src/` and
@@ -447,7 +448,7 @@ jobs:
       # list entry, a project claimed only behind a condition, and a
       # baseline row that no longer matches anything.
       - name: Test-project completeness gate fails on a project left out of CI
-        run: python3 tools/check-test-projects.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-projects --self-test
       # #1884. The last two are REPORTERS, not gates: they read the TRX
       # artifacts a CI run produced and print what they find (the per-test
       # measurements, the per-project wall census). They never fail a build,
@@ -1154,7 +1155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every test project is discovered by a CI run
-        run: python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+        run: tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 
   # #1781. Twelfth question, and the only one about the LAYOUT of the test
   # shards rather than about the tests in them: are the shards balanced by

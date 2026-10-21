@@ -47,6 +47,7 @@ import (
 	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	testpackages "harbor.local/gates/check-test-packages"
+	testprojects "harbor.local/gates/check-test-projects"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
 	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
@@ -91,6 +92,11 @@ var registry = []registered{
 		name:    "check-test-packages",
 		summary: "which packages a test or sample project may reference, and whether a banned one is among them",
 		run:     testpackages.Run,
+	},
+	{
+		name:    "check-test-projects",
+		summary: "every test project in the solution is discovered by a CI run",
+		run:     testprojects.Run,
 	},
 	{
 		name:    "check-tool-schema-pin",
