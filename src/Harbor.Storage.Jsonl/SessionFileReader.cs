@@ -161,6 +161,21 @@ internal static class SessionFileReader
         IsMessageRatingLine(line) || IsSessionRemarkLine(line);
 
     /// <summary>
+    ///     True when the line is a goal record (<c>"type":"goal"</c>).
+    ///     Same argument as <see cref="IsMessageRatingLine" />.
+    /// </summary>
+    /// <remarks>
+    ///     The probe names the WHOLE type field, not the bare word: "goal" is
+    ///     an ordinary English word and a free-text field (a checkpoint label,
+    ///     a title) can contain it, while the structural
+    ///     <c>"type":"goal"</c> can only be the record's own discriminator. The
+    ///     message check behind it keeps a message whose payload carries the
+    ///     same literal out of the goal axis.
+    /// </remarks>
+    internal static bool IsGoalLine(ReadOnlySpan<byte> line) =>
+        line.IndexOf("\"type\":\"goal\""u8) >= 0 && !IsAnyMessageEntry(line);
+
+    /// <summary>
     ///     Whether the line carries the given "type" value and is not itself
     ///     a message record.
     /// </summary>
@@ -561,6 +576,14 @@ internal static class SessionFileReader
         // lock marker. The records themselves stay in the file: they are read
         // by the compaction axis, which asks for them by name.
         if (IsCompactionLine(record))
+        // #1761: the goal lines are metadata too — what the HARNESS tracks
+        // about the work, never part of the work itself. They are dropped
+        // here, before the message parser sees them, so the history the model
+        // context is built from cannot carry a goal record.
+        //
+        // `true`, like the header, the checkpoint markers and the feedback
+        // lines: the record decoded fine and is deliberately not a message.
+        if (IsGoalLine(record))
         {
             return true;
         }
