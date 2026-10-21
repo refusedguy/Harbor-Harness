@@ -101,6 +101,14 @@ internal sealed class TurnRunner(
         RateLimitBaseDelay: TimeSpan.FromSeconds(5),
         MaxRetryAfter: TimeSpan.FromMinutes(5));
 
+    /// <summary>
+    ///     The boundary the durability checkpoint protects, in the words the
+    ///     failure carries (#1765). The model request is the point where the
+    ///     run's history becomes an answer, and an answer nobody can read
+    ///     back is not worth the tokens.
+    /// </summary>
+    internal const string ModelRequestCheckpointReason = "before the model request";
+
     // #1755: the reactive overflow recovery's retry budget lives on the
     // compaction behavior (the policy owner) — the number is stated in ONE
     // place so the runtime and the tests cannot drift on it.
@@ -304,6 +312,32 @@ internal sealed class TurnRunner(
         }
 
         var request = BuildRequest(turnMessages);
+
+        // #1765: the durability checkpoint before the model request. The
+        // request carries everything the run has committed so far: the
+        // user's prompt, the previous turn's tool results, a steering
+        // message drained at the last boundary. If none of that survives a
+        // crash, the answer the model is about to produce is an answer to a
+        // history nobody can read back, and the run's own transcript is a
+        // fiction. The checkpoint is fail-closed: a failure ends the turn
+        // BEFORE the adapter is dispatched.
+        //
+        // This is also the "before the next agent step" boundary: in Harbor
+        // an agent step IS a model request, so the two are one checkpoint.
+        // Everything the preceding step committed, including the tool
+        // results, is covered by it.
+        Result checkpoint = await session.CheckpointAsync(ModelRequestCheckpointReason, ct).ConfigureAwait(false);
+        if (checkpoint.IsFailure)
+        {
+            // The error is the run's terminal fact: the user has to know the
+            // session log is not durable, because that is why the run stopped.
+            // Published with None: a terminal record must not depend on the
+            // run token.
+            await eventBus.PublishAsync(
+                new AgentErrorEvent(checkpoint.Error), CancellationToken.None).ConfigureAwait(false);
+            TurnRunnerLog.DurabilityCheckpointFailed(logger, session.Session.Id, checkpoint.Error);
+            return new TurnStepResult(truncationFallback, EndRun: true, RunFailure: checkpoint.Error);
+        }
 
         // 6. Stream LLM — wrapped in the retry policy (C7): transient provider
         //    failures (HTTP 429/5xx, network errors, timeouts) restart the
@@ -1235,5 +1269,13 @@ internal static partial class TurnRunnerLog
     // id in one class is one event stream wearing two names.
     [LoggerMessage(EventId = 18, Level = LogLevel.Information, Message = "Tool {ToolName} repeated with identical arguments {Count} times in a row; the model was told to change its approach")]
     public static partial void RepeatedToolCall(ILogger logger, string toolName, int count);
+
+    // #1765: the id is 19 and not 18. Dev's #1756 shipped the repeat
+    // reminder as 18, and the shipped number wins — the same rule the
+    // overflow recovery's 16 and 17 set: two messages sharing an id in one
+    // class is one event stream wearing two names. The checkpoint's failure
+    // takes the next free id.
+    [LoggerMessage(EventId = 19, Level = LogLevel.Error, Message = "Durability checkpoint failed for session {SessionId}; the model request was not dispatched: {Error}")]
+    public static partial void DurabilityCheckpointFailed(ILogger logger, string sessionId, string error);
 
 }

@@ -408,6 +408,51 @@ public interface ISessionContext
     public Task AppendMessageAsync(AgentMessage message, CancellationToken ct = default);
 
     /// <summary>
+    ///     Make the session's state durable and report whether it is.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>The durability checkpoint (#1765), fail-closed.</b> A
+    ///         checkpoint answers one question: "does the session's state
+    ///         survive a crash?". When the answer is no, the work that depends
+    ///         on that state must NOT start: a tool body with a side effect, a
+    ///         model request whose answer would be lost, the next agent step.
+    ///     </para>
+    ///     <para>
+    ///         The context is the right place for the answer because it is the
+    ///         only thing that knows the half that matters: whether the records
+    ///         it appended actually reached the store. A context that wrote a
+    ///         record to memory and lost it on disk has a state that survives
+    ///         nothing, and no caller can see that from the outside.
+    ///     </para>
+    ///     <para>
+    ///         <b>Default implementation:</b> a FAILURE, loudly. A context
+    ///         that cannot say whether its state survives a crash must not
+    ///         report that it does, because the caller would start work that the log
+    ///         cannot record, which is the exact gap this member closes. The
+    ///         omission is visible: the run stops and names the reason, which
+    ///         is the direction the repository's default-member convention
+    ///         requires (see <c>docs/PATTERNS.md</c> §"Default interface
+    ///         members").
+    ///     </para>
+    /// </remarks>
+    /// <param name="reason">
+    ///     What the checkpoint protects, for example "before the model request", "before
+    ///     the tool body". It rides the failure text, so a reader of the log
+    ///     learns which boundary was closed.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    ///     Success when the session's state is durable; failure naming the
+    ///     reason when it is not, and the dependent work must not start.
+    /// </returns>
+    public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default)
+    {
+        return Task.FromResult(Result.Failure(
+            $"Session context '{GetType().Name}' does not expose a durability checkpoint (#1765)."));
+    }
+
+    /// <summary>
     ///     Add the usage from one LLM call to the session's aggregated stats,
     ///     priced with that call's model rates, and publish the new total as a
     ///     <see cref="Events.SessionStatsEvent" />.

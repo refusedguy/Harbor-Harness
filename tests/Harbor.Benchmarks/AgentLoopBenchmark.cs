@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
 using BenchmarkDotNet.Attributes;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
@@ -418,4 +419,12 @@ internal sealed class BenchSessionContext : ISessionContext
     }
 
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
+    ///     #1765: the durability checkpoint. This double keeps every record in
+    ///     memory and loses none of them, so its state survives as far as the
+    ///     double is concerned. That is the answer a test double owes the loop.
+    /// </summary>
+    public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default)
+        => Task.FromResult(Result.Success());
 }
