@@ -24,6 +24,29 @@ namespace Harbor.TestKit;
 ///         PERSISTING. Every argument that ever varied between the copies is a
 ///         parameter, so no copy loses information by moving here.
 ///     </para>
+///     <para>
+///         WHY THIS FILE IS IN THE SUPPORT PART, NOT IN THE CORE
+///         ------------------------------------------------------
+///         A <see cref="ToolContext" /> needs <c>Harbor.Abstractions</c> (the
+///         record itself and <see cref="ToolProgressUpdate" />) and
+///         <c>Harbor.Abstractions.Contracts</c> (<see cref="AgentMessage" />,
+///         <see cref="PermissionRequest" />, <see cref="PermissionResponse" />,
+///         <see cref="PermissionAction" />). Both are contract assemblies every
+///         test project already has, and both are already in this part's
+///         closure — so the factory here adds no product assembly to anybody.
+///     </para>
+///     <para>
+///         That is what the two projects that still build a
+///         <see cref="ToolContext" /> by hand and do NOT reference the core kit
+///         need. The core kit is a superset of this part, so a factory left in
+///         the core would have cost each of them a reference the part does not
+///         need, and the core's own closure on top. The third hand-built site
+///         lives in a project that references BOTH parts, so it reaches the
+///         factory either way. The move is source-compatible for the nineteen
+///         files that were already migrated: the core references this part,
+///         the namespace is <c>Harbor.TestKit</c> in both, and the type name
+///         did not change, so <c>using Harbor.TestKit;</c> still finds it.
+///     </para>
 /// </remarks>
 public static class TestToolContext
 {
