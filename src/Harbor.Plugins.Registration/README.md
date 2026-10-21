@@ -24,6 +24,22 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
   `RequiredHarborVersion` is a floor, not a pin: a newer Harbor still satisfies
   an older declaration.
 - `SafePluginRegistrar` — try/catch decorator over any `IPluginRegistrar` (one bad plugin doesn't kill the pipeline)
+
+The registrar also holds the LEDGER and the RUN (#1737):
+
+- the LEDGER (`RecordingPluginLoadHost`) remembers every registration the host
+  ACCEPTED, together with the way to take it back. A registration the host
+  REFUSED was never recorded, so there is nothing to undo for it.
+- the RUN (`PluginRun`, the `IPluginRun` the registrar hands back) owns that
+  ledger. Stopping it takes back exactly the registrations it made, in reverse
+  order, and then shuts the plugin down (`IPlugin.ShutdownAsync`, which the
+  host used to declare and never call).
+
+A FAILED registration leaves nothing behind: whatever landed before the refusal
+is taken back, so a half-wired plugin does not become a dead tool in the
+registry. The rollback needs a host that implements `IReversiblePluginLoadHost`;
+a host that does not is told so, in the failure text, rather than being
+pretended away.
 - `PanelRegistryPluginAdapter` — internal adapter for `ITuiPanelPlugin` -> `IPluginLoadHost.RegisterPanelProvider`
 
 The registrar also holds the manifest gate (#1739): a plugin that ships a

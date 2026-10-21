@@ -246,6 +246,10 @@ public sealed class HostingLayerTests
     {
         private readonly string _pluginRoot;
         public InlineRegistrar(string pluginRoot) { _pluginRoot = pluginRoot; }
-        public Result Register(LoadedPlugin plugin, IPluginLoadHost host) => Result.Success();
+        public Result<IPluginRun> Register(
+            LoadedPlugin plugin,
+            IPluginLoadHost host,
+            PluginRunMode mode = PluginRunMode.Run)
+            => Result.Success<IPluginRun>(new FakePluginRun(plugin, mode));
     }
 }
