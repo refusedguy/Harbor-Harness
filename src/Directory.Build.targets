@@ -11,7 +11,8 @@
 
     - PackageReadmeFile + the None/Pack item embedding the per-project
       README.md (every src/ project directory has one;
-      tools/pack-validate.py asserts the README lands in each packable
+      the pack-validate gate (tools/gates/pack-validate) asserts the README
+      lands in each packable
       .nupkg). The relative Include matches the SDK default-glob None
       item, so this only adds Pack metadata — never a duplicate entry.
 
