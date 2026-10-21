@@ -172,8 +172,11 @@ public class PluginsCommandTests : IDisposable
     [Test]
     public async Task Inventory_PrintsThePublishedSnapshot()
     {
+        // The document is printed as the host wrote it, so the fixture is the
+        // host's own shape: the schema version, and the space the writer puts
+        // after the colon.
         string path = Path.Combine(_homeRoot, "inventory.json");
-        await File.WriteAllTextAsync(path, "{\"schemaVersion\":1,\"plugins\":[]}\n");
+        await File.WriteAllTextAsync(path, "{\n  \"schemaVersion\": 1,\n  \"plugins\": []\n}\n");
 
         int exit = await CreateCommand().ExecuteAsync(["inventory"]);
 
