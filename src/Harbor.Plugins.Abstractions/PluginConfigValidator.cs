@@ -94,19 +94,16 @@ public static class PluginConfigValidator
                         + $"The plugin declares: {Declared(schema)}.");
                 }
 
-                Result<PluginConfigValue> parsed = ParseValue(field, property.Value, $"{path}.{property.Name}");
-                if (parsed.IsFailure)
+                Result<PluginConfigValue> checkedValue = ParseValue(field, property.Value, $"{path}.{property.Name}")
+                    .Bind(value => CheckRange(field, value, $"{path}.{property.Name}"));
+                if (checkedValue.IsSuccess)
                 {
-                    return parsed.ConvertFailure<IReadOnlyDictionary<string, PluginConfigValue>>();
+                    values[property.Name] = checkedValue.Value;
                 }
-
-                Result<PluginConfigValue> ranged = CheckRange(field, parsed.Value, $"{path}.{property.Name}");
-                if (ranged.IsFailure)
+                else
                 {
-                    return ranged.ConvertFailure<IReadOnlyDictionary<string, PluginConfigValue>>();
+                    return checkedValue.ConvertFailure<IReadOnlyDictionary<string, PluginConfigValue>>();
                 }
-
-                values[property.Name] = ranged.Value;
             }
         }
 

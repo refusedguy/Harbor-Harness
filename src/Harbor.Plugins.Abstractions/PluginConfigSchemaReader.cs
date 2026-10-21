@@ -80,12 +80,14 @@ public static class PluginConfigSchemaReader
             }
 
             Result<PluginConfigField> field = ReadField(property.Name, property.Value, origin);
-            if (field.IsFailure)
+            if (field.IsSuccess)
+            {
+                fields.Add(field.Value);
+            }
+            else
             {
                 return field.ConvertFailure<PluginConfigSchema>();
             }
-
-            fields.Add(field.Value);
         }
 
         return Result.Success(new PluginConfigSchema { Fields = fields });
@@ -141,12 +143,14 @@ public static class PluginConfigSchemaReader
                 type,
                 defaultElement,
                 $"The plugin manifest '{origin}' declares the default of the setting '{name}'");
-            if (read.IsFailure)
+            if (read.IsSuccess)
+            {
+                defaultValue = read.Value;
+            }
+            else
             {
                 return read.ConvertFailure<PluginConfigField>();
             }
-
-            defaultValue = read.Value;
         }
 
         string? description = null;
