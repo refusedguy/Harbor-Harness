@@ -298,7 +298,7 @@ public sealed partial class PluginManagerTool : ITool
             // file, and its name is that file's name. A 'name' the model sent
             // along is not what lands on disk — the proposal and the copy have
             // to name the same path.
-            return _inventory.DescribeSource(source, scope).Map(entry =>
+            return _inventory.DescribeSource(source, scope).Map<Proposal>(entry =>
             {
                 string installText = $"{spec.Verb} plugin '{entry.Name}' in the {ScopeText(scope)} scope "
                                      + $"({entry.FullPath}), from {source}. {spec.Effect}";
@@ -317,8 +317,8 @@ public sealed partial class PluginManagerTool : ITool
         }
 
         return _inventory.List()
-            .Bind(listed => FindByName(listed, name))
-            .Map(found =>
+            .Bind<PluginInventoryEntry>(listed => FindByName(listed, name))
+            .Map<Proposal>(found =>
             {
                 string text = $"{spec.Verb} plugin '{found.Name}' in the {ScopeText(found.Scope)} scope "
                               + $"({found.FullPath}). {spec.Effect}";

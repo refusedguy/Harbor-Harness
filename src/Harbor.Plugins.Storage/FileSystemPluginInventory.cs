@@ -12,13 +12,12 @@ namespace Harbor.Plugins.Storage;
 /// </summary>
 /// <remarks>
 ///     <para>
-///         <b>One implementation, three callers.</b> The agent-facing
-///         <c>plugin_manager</c> tool, the <c>/plugins</c> panel and the
-///         CLI's <c>harbor plugin</c> verbs all need the same answer to "what
-///         is installed". This class is that answer; a helper each of them
-///         called would be three implementations that drift, and the drift
-///         would show up as an agent proposing to uninstall a plugin the panel
-///         does not list.
+///         <b>One implementation, two callers.</b> The agent-facing
+///         <c>plugin_manager</c> tool and the <c>/plugins</c> panel both need
+///         the same answer to "what is installed". This class is that answer;
+///         a helper each of them called would be two implementations that
+///         drift, and the drift would show up as an agent proposing to
+///         uninstall a plugin the panel does not list.
 ///     </para>
 ///     <para>
 ///         <b>What it reads.</b> A plugin in Harbor is ONE <c>.cs</c> file, and
@@ -241,7 +240,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         try
         {
             Directory.CreateDirectory(RootOf(change.Scope));
-            await CopyFileAsync(source!, target, overwrite: false, ct).ConfigureAwait(false);
+            await CopyFileAsync(source!, target, overwrite: false, ct: ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -258,7 +257,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
             string targetManifest = PluginManifestReader.PathFor(target);
             try
             {
-                await CopyFileAsync(sourceManifest, targetManifest, overwrite: true, ct).ConfigureAwait(false);
+                await CopyFileAsync(sourceManifest, targetManifest, overwrite: true, ct: ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -302,6 +301,22 @@ public sealed class FileSystemPluginInventory : IPluginInventory
     }
 
     /// <summary>
+    ///     The manifest that belongs to a plugin file.
+    /// </summary>
+    /// <remarks>
+    ///     The manifest is named after the ENABLED file: <c>Alpha.cs</c> ships
+    ///     <c>Alpha.harbor-plugin.json</c>, and a disabled
+    ///     <c>Alpha.cs.disabled</c> keeps the manifest it was installed with.
+    ///     <c>PathFor</c> strips only the LAST extension, so the disabled form
+    ///     has to be normalised here first.
+    /// </remarks>
+    private static string ManifestPathFor(string pluginPath) =>
+        PluginManifestReader.PathFor(
+            pluginPath.EndsWith(DisabledSuffix, StringComparison.OrdinalIgnoreCase)
+                ? pluginPath[..^DisabledSuffix.Length]
+                : pluginPath);
+
+    /// <summary>
     ///     Remove an installed plugin — its source and, when it ships one, its
     ///     manifest.
     /// </summary>
@@ -318,7 +333,7 @@ public sealed class FileSystemPluginInventory : IPluginInventory
         try
         {
             File.Delete(path);
-            string manifest = PluginManifestReader.PathFor(path);
+            string manifest = ManifestPathFor(path);
             if (File.Exists(manifest))
                 File.Delete(manifest);
         }
