@@ -167,6 +167,12 @@ public sealed record PermissionRuleset
         new(WellKnownTools.Patch, "*", PermissionAction.Ask),
         new(WellKnownTools.Task, "*", PermissionAction.Allow),
         new(WellKnownTools.Skill, "*", PermissionAction.Allow),
+        // #1761: the goal axis. The agent's verdict on the session's own
+        // goal is not a workspace mutation and needs no approval — asking
+        // the user "did you finish?" on every round would be noise. The
+        // read-only modes do not carry this rule, so their goal tool is
+        // asked about, not allowed.
+        new("goal", "*", PermissionAction.Allow),
         // #1732: the runtime catalog is read-only, so it is allowed outright.
         // The other agents allow it through the Read class their rulesets
         // already name — `new("read", "*", Allow)` matches every tool the Read
@@ -186,12 +192,6 @@ public sealed record PermissionRuleset
         // an agent touching plugins writes new("plugin_manager", "*", Deny)
         // and the tool never starts.
         new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
-        // #1761: the goal axis. The agent's verdict on the session's own
-        // goal is not a workspace mutation and needs no approval — asking
-        // the user "did you finish?" on every round would be noise. The
-        // read-only modes do not carry this rule, so their goal tool is
-        // asked about, not allowed.
-        new("goal", "*", PermissionAction.Allow)
     });
 
     /// <summary>

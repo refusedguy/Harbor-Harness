@@ -315,6 +315,10 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1761: the goal axis. The agent's verdict on the session's own
+            // goal is a report, not a workspace mutation, so it needs no
+            // approval.
+            new("goal", "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -346,10 +350,6 @@ public sealed record AgentDefinition(
             // change it proposes, and the answer covers that call only — the
             // same posture as this agent's write / edit rules.
             new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
-            // #1761: the goal axis. The agent's verdict on the session's own
-            // goal is a report, not a workspace mutation, so it needs no
-            // approval.
-            new("goal", "*", PermissionAction.Allow)
         }),
         50,
         SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
@@ -377,6 +377,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new(WellKnownTools.Read, "*", PermissionAction.Allow),
+            // #1761: the goal axis. The agent's verdict on the session's own
+            // goal is a report, not a workspace mutation, so it needs no
+            // approval — and the orchestrator is the agent that most needs to
+            // be able to say "the legs are done".
+            new("goal", "*", PermissionAction.Allow),
             new(WellKnownTools.Glob, "*", PermissionAction.Allow),
             new(WellKnownTools.Grep, "*", PermissionAction.Allow),
             new(WellKnownTools.Ls, "*", PermissionAction.Allow),
@@ -399,11 +404,6 @@ public sealed record AgentDefinition(
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
-            // #1761: the goal axis. The agent's verdict on the session's own
-            // goal is a report, not a workspace mutation, so it needs no
-            // approval — and the orchestrator is the agent that most needs to
-            // be able to say "the legs are done".
-            new("goal", "*", PermissionAction.Allow)
         }),
         100,
         SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");
