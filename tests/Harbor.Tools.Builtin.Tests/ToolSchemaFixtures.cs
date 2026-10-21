@@ -58,6 +58,7 @@ internal static class ToolSchemaFixtures
         ("McpToolTool", () => new McpToolTool(NullLogger<McpToolTool>.Instance)),
         ("NotebookTool", () => new NotebookTool(NullLogger<NotebookTool>.Instance, NotebookRoot)),
         ("PatchTool", () => new PatchTool(NullLogger<PatchTool>.Instance)),
+        ("PluginManagerTool", () => new PluginManagerTool(new FakePluginInventory(), NullLogger<PluginManagerTool>.Instance)),
         ("ReadTool", () => new ReadTool(NullLogger<ReadTool>.Instance)),
         ("RipGrepTool", () => new RipGrepTool(NullLogger<RipGrepTool>.Instance)),
         ("SessionReadTool", () => new SessionReadTool(new DeferredSessionStore(), NullLogger<SessionReadTool>.Instance)),
