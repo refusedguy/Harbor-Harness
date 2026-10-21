@@ -96,11 +96,10 @@ public class JsonlSessionStoreAtomicityTests
             await store.AppendMessageAsync(session.Id, TestMessages.User("second", id: "msg-2", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-1), model: "claude"));
 
             // All three atomic-rewrite paths (#83.1). The edit comes FIRST:
-            // an updated message keeps its position in the file (#1798), so a
-            // truncate anchored on it still removes the messages that follow
-            // it. Before #1798 the edit moved the record to the END of the
-            // file, so the truncate had to come first — the "known hole" this
-            // test used to document.
+            // a message keeps its place in the conversation (#1798 — the place
+            // it holds is where it was written FIRST), so a rewind anchored on
+            // it still removes the messages that follow it. The rewind itself
+            // is an event now (#1752), so it appends instead of rewriting.
             var edit = await store.UpdateMessageAsync(session.Id, TestMessages.User("edited", id: "msg-1", sessionId: session.Id, createdAt: DateTimeOffset.UtcNow.AddSeconds(-2), model: "claude"));
             await Assert.That(edit.IsSuccess).IsTrue();
 

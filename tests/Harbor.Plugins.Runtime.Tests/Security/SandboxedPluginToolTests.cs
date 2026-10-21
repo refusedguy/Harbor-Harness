@@ -23,15 +23,10 @@ namespace Harbor.Plugins.Runtime.Tests.Security;
 /// </summary>
 public sealed class SandboxedPluginToolTests
 {
-    private static readonly ToolContext Ctx = new(
-        SessionId: "session-1",
-        MessageId: "msg-1",
-        CallId: "call-1",
-        Agent: "code",
-        Abort: CancellationToken.None,
-        Messages: Array.Empty<AgentMessage>(),
-        ReportProgress: (_, _) => Task.CompletedTask,
-        Ask: (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+    private static readonly ToolContext Ctx = TestToolContext.Create(
+        sessionId: "session-1",
+        messageId: "msg-1",
+        callId: "call-1");
 
     private static SandboxedPluginTool Wrap(
         ITool inner,

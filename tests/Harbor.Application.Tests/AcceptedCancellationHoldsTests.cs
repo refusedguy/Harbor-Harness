@@ -261,15 +261,11 @@ public class AcceptedCancellationHoldsTests
         // a tool executed directly under this same token runs anyway, which is
         // exactly what the dispatch loop used to do.
         var tool = new TokenIgnoringTool();
-        ToolContext context = new(
-            "s1",
-            "m1",
-            "c1",
-            "code",
-            cts.Token,
-            [],
-            static (_, _) => Task.CompletedTask,
-            static (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Allow, false)));
+        ToolContext context = TestToolContext.Create(
+            sessionId: "s1",
+            messageId: "m1",
+            callId: "c1",
+            abort: cts.Token);
         await tool.ExecuteAsync(EmptyArgs, context, cts.Token);
         await Assert.That(tool.Calls).IsEqualTo(1);
     }

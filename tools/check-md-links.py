@@ -230,7 +230,11 @@ def main() -> int:
             unreadable.append(rel)
             continue
         text = strip_code(raw)
-        base = os.path.dirname(rel)
+        # A changelog fragment is assembled INTO the root-level CHANGELOG.md, so
+        # its relative links are written against the repository root: the link
+        # has to work in the document the fragment ends up in, not in the folder
+        # the fragment waits in.
+        base = "" if rel.startswith("changelog/fragments/") else os.path.dirname(rel)
 
         hits = [(m.group(1), m.start()) for m in INLINE_LINK.finditer(text)]
         hits += [(m.group(1), m.start()) for m in REF_DEF.finditer(text)]

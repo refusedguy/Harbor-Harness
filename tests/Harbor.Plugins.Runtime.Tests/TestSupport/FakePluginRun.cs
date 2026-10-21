@@ -1,3 +1,4 @@
+using CSharpFunctionalExtensions;
 using Harbor.Plugins.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.TestSupport;

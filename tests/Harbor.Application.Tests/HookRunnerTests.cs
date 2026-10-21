@@ -33,8 +33,8 @@ public class HookRunnerTests
     {
         public AllowPermissions()
         {
-            CheckAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Allow, false));
-            AskUserAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Deny, false));
+            CheckAsyncResult = Result.Success(TestToolContext.AllowWithoutPersist());
+            AskUserAsyncResult = Result.Success(TestToolContext.DenyWithoutPersist());
             GetRulesetValue = PermissionRuleset.Empty;
             SaveAsyncResult = Result.Success();
         }
