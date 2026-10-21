@@ -37,7 +37,11 @@ WHAT IS EXTRACTED, AND HOW
     the interface is only reached through a base class.
   * CONSUMERS - files under src/, apps/, tests/ and samples/ that NAME the
     interface. A file that only puts the name in a base list is an
-    implementation, not a consumer, and is counted as such.
+    implementation, not a consumer, and is counted as such. The build
+    output (`bin/`, `obj/`) is not part of the tree and is not read: a
+    working tree that still holds a build would otherwise count the
+    GENERATED sources as sources, and the document would say something
+    the tree does not say.
   * REGISTRATION - the `AddSingleton<IFoo, Foo>()` / `AddSingleton<IFoo>()`
     calls in src/ and apps/. This is the container side of the graph.
   * BYPASSES - `new Concrete(...)`, and a parameter or field typed as the
@@ -400,6 +404,22 @@ NON_EFFECT_CALLS = {
 }
 
 
+# The build output. A source file under `bin/` or `obj/` is not a source of
+# the tree: it is what a BUILD of the tree left there, and the generator is
+# supposed to describe the tree. Every other tree-scanning tool in this
+# directory skips the same two names for the same reason.
+BUILD_OUTPUT_DIRS = ("bin", "obj")
+
+
+def is_build_output(path: Path, repo: Path) -> bool:
+    """Is this path inside the build output rather than in the tree?"""
+    try:
+        parts = path.relative_to(repo).parts
+    except ValueError:
+        return False
+    return any(part in BUILD_OUTPUT_DIRS for part in parts)
+
+
 def find_project_roots(repo: Path) -> dict[Path, str]:
     """Map every directory that owns a .csproj to that project's name."""
     roots: dict[Path, str] = {}
@@ -408,6 +428,8 @@ def find_project_roots(repo: Path) -> dict[Path, str]:
         if not base.is_dir():
             continue
         for csproj in base.rglob("*.csproj"):
+            if is_build_output(csproj, repo):
+                continue
             roots[csproj.parent] = csproj.stem
     return roots
 
@@ -440,6 +462,8 @@ def collect_sources(repo: Path, trees: tuple[str, ...]) -> list[SourceFile]:
         if not base.is_dir():
             continue
         for path in sorted(base.rglob("*.cs")):
+            if is_build_output(path, repo):
+                continue
             try:
                 raw = path.read_text(encoding="utf-8", errors="replace")
             except OSError:

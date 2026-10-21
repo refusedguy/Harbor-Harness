@@ -114,6 +114,8 @@
   href: ROADMAP.md
 - name: Rop Api Inventory
   href: ROP-API-INVENTORY.md
+- name: Scopes
+  href: SCOPES.md
 - name: Seam Graph
   href: SEAM_GRAPH.md
 - name: Scripting
