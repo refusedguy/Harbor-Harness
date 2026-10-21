@@ -1,6 +1,7 @@
 using System.Text;
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Harbor.Plugins.Hosting;
