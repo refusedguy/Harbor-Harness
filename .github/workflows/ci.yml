@@ -1177,6 +1177,65 @@ jobs:
           fi
           exit "$rc"
 
+      # ── DIAGNOSTIC (issue #2100): what does the restored tree look like? ──
+      #
+      # The compile is a full 112-project rebuild on every run even when the
+      # cache is restored and only ONE file changed. MSBuild decides that with
+      # one rule: a target is up to date when every output is newer than every
+      # input. So the question is a fact about the disk, and the disk is
+      # printed here: which of the files MSBuild compares exists, and what
+      # are their mtimes.
+      #
+      # The CoreCompile target's OUTPUTS (SDK: Roslyn/Microsoft.CSharp.Core.targets):
+      #   @(DocFileItem)              bin/Release/net10.0/<T>.xml
+      #   @(IntermediateAssembly)      obj/Release/net10.0/<T>.dll
+      #   @(IntermediateRefAssembly)  obj/Release/net10.0/refint/<T>.dll
+      #   @(_DebugSymbolsIntermediatePath)  obj/Release/net10.0/<T>.pdb
+      # and its INPUTS of interest:
+      #   $(MSBuildAllProjects)        every imported .props/.targets, among them
+      #                                obj/<T>.csproj.nuget.g.props
+      #   @(Compile)                   the sources
+      #   @(Analyzer)                  the analyzer assemblies in the NuGet folder
+      #   @(ReferencePathWithRefAssemblies)  the references, the project ones in bin/
+      - name: "DIAGNOSTIC: the restored tree, file by file"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== the pdb files under obj/ and bin/ (count) ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "all pdb count:      $(find . -name '*.pdb' | wc -l)"
+          echo "=== the CoreCompile OUTPUTS of $p ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.pdb" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the CoreCompile INPUTS of $p ==="
+          for f in \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.props" \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.targets" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.CoreCompileInputs.cache" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.GeneratedMSBuildEditorConfig.editorconfig" \
+            "$p/Harbor.Abstractions.Contracts.csproj" \
+            "$p/Permissions/PermissionRuleset.cs" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the analyzers (an INPUT of every CoreCompile) ==="
+          ls -1 /home/runner/.nuget/packages/roslynator.analyzers/*/analyzers/dotnet/cs/*.dll 2>/dev/null | head -2 | while read -r f; do stat -c '%y  %s  %n' "$f"; done
+          ls -1 /home/runner/.nuget/packages/microsoft.codeanalysis.publicapianalyzers/*/analyzers/dotnet/cs/*.dll 2>/dev/null | head -2 | while read -r f; do stat -c '%y  %s  %n' "$f"; done
+          echo "=== the newest file under obj/ and bin/ (the newest OUTPUT) ==="
+          find . -path '*/obj/*' -o -path '*/bin/*' | xargs -r stat -c '%Y %y %n' 2>/dev/null | sort -rn | head -5
+          echo "=== the newest ANALYZER in the NuGet folder ==="
+          find /home/runner/.nuget/packages -name '*.dll' -path '*analyzers*' -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | head -3
+          echo "=== now ==="
+          date -u +%s
+
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also COMPILES the 47-rule architecture gate embedded in
       # Directory.Build.props (HarborArchGate); the gate's EXECUTION is
