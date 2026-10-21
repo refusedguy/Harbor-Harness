@@ -14,4 +14,17 @@
     <ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj"/>
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      #1749: the session-format CORPUS — one committed fixture per
+      generation of the session format. The files are copied next to the test
+      binary so the corpus is read as the on-disk artifact it is: a session
+      file, not a string in a test.
+
+      `Update`, not `Include`: the SDK already globs these files in as `None`
+      items, and an `Include` of the same files is a duplicate-item error.
+    -->
+    <None Update="fixtures/**/*.jsonl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

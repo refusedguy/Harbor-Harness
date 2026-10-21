@@ -152,6 +152,16 @@ internal sealed class JsonlCheckpointStore : ISessionCheckpointStore
                 SessionStoreErrors.SessionNotFound(sessionId)));
         }
 
+        // #1749: a session file is read as a whole or not at all. A file in
+        // a format generation this build does not read is refused HERE,
+        // before the scan, rather than scanned for the checkpoint records of
+        // a format this build does not know.
+        var generation = SessionFileReader.ReadFormatGeneration(sessionFile, sessionId);
+        if (generation.IsFailure)
+        {
+            return Task.FromResult(generation.ConvertFailure<IReadOnlyList<SessionCheckpoint>>());
+        }
+
         return Result.Try(async () =>
         {
             ct.ThrowIfCancellationRequested();
