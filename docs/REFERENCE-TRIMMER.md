@@ -282,7 +282,7 @@ without the analyzer in seven.
 
 That job WAS a second full compile of the solution: `dotnet restore
 Harbor.slnx -p:HarborReferenceTrimmer=true` and then `dotnet build
-Harbor.slnx -c Release --no-restore` over all 117 projects, while the `build`
+Harbor.slnx -c Release --no-restore` over all 115 projects, while the `build`
 job compiled the same tree again. On run 39556560488 the job's wall clock
 was **260 s**, **22 %** of the pull-request lane's 19.4 runner-minutes — the
 lane paying a whole tree compile for one gate.
@@ -294,6 +294,13 @@ Since #2108 the analyzer runs inside the `build` job's ONE compile:
   agree on the package graph), and
 - `HARBOR_WARNING_LOG` names the file MSBuild's file logger writes the
   compiler's warnings to, which is the file the gate reads.
+
+Both arguments reach MSBuild as raw switches (`SetProcessAdditionalArguments`
+in `build/_build/Targets/CompileTarget.cs`): `-p:GenerateDocumentationFile=true`
+and `-flp:logfile=<path>;warningsonly`. NUKE's own `Loggers` setting was
+tried first and does not work — it renders `/logger:{value}`, and MSBuild
+reads a single word there as an ASSEMBLY name ("MSB1021: Cannot create an
+instance of the logger flp").
 
 The gate, its baseline, the coverage floor (100 projects) and the artifact
 are unchanged; they moved from the deleted job into the `build` job. Two
@@ -308,12 +315,58 @@ in the workflow:
   empty log and called it clean;
 - the **doc file** is turned on with the analyzer (the tool says so itself
   in RT0000: without the doc file its "used references" answer is less
-  accurate), as a global property, because fourteen test projects turn the
-  doc file off in their own `.csproj`. The doc warnings that come with it
-  (CS1573, RCS1139) are muted in the test tree, which never had the doc
-  gate; `src/` and `apps/` keep theirs.
+  accurate), as a GLOBAL property, because fourteen test projects turn the
+  doc file off in their own `.csproj` and MSBuild ignores a project-level
+  assignment of a global property. The doc warnings that come with it
+  (CS1573, RCS1139) land in the test tree, which sets
+  `TreatWarningsAsErrors=false` on purpose and therefore carries them as
+  warnings; `src/` and `apps/` had the doc file on already and keep their
+  own (empty) warning list.
 
-The measured before/after is in the pull request for #2108.
+#### The measurement
+
+Two lanes of the same shape — a pull request against `dev` — with and
+without the merged analyzer. The lane's cost is the sum of the wall clocks of
+the jobs it ran; the "before" lane is run 39627632987, the "after" lane is
+run 39653438149, both of them run twice:
+
+| | before | after |
+|---|---:|---:|
+| the lane, runner-minutes | 18.95 / 18.98 | **16.77 / 16.30** |
+| `unused references (ReferenceTrimmer)` | 261 s | — (the job is gone) |
+| `build` (the compile that now carries the analyzer) | 358 s / 329 s | 386 s / 376 s |
+
+The issue's own baseline (run 39556560488) was 19.43 runner-minutes with
+the same 260 s job.
+
+The 261 s job is gone and the compile that carries the analyzer now costs
+18-28 s more. The rest of the difference between the two lanes is NOT this
+change: the lane that carries this change also runs the `test/sample package
+set` job (49-57 s), because `Directory.Build.props` is one of the files that
+job's path filter watches, and this change edits that file. The same lane
+without that one-off job is 15.3-15.8 runner-minutes, which is the -17 % to
+-19 % the issue asked for; with it, the lane reads 16.30-16.77.
+
+The answer the gate reads did not change:
+
+| | before | after |
+|---|---:|---:|
+| findings (RT0001/RT0002/RT0003) | 51 | 51 |
+| the set of (rule, subject) pairs | identical | identical |
+| projects the analyzer ran in | 115 | 115 |
+| RT0000 / RT9999 (the answer's own quality) | 0 | 0 |
+
+#### What stays red-able
+
+The gate is green and it is green for the same reason it was green before:
+the analyzer answered on the WHOLE tree. That is now a property of the
+compile rather than of a job of its own — and the compile is incremental. If
+the build-output cache (#2107) starts firing in the pull-request lane, a
+project that is not recompiled produces no findings, and the gate goes red
+on two counts: the coverage floor (`RT-SCAN-BLIND`) and the baseline rows
+the tree no longer produces. That is the gate behaving as it is designed to
+behave, and it is the one thing in this change that can turn the lane red
+on a tree that has not changed.
 
 ---
 

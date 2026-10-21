@@ -36,7 +36,7 @@
     "  scopes        the trees the package actually runs in",
     "  mode          'scope' = the scope properties decide;",
     "                'job'   = the package has its own switch and its own scope",
-    "                (ReferenceTrimmer runs in one CI job, not in the build)",
+    "                (ReferenceTrimmer's scope is one CI step's switch, not the tree's)",
     "  reason        WHY the scope is what it is. A row without a reason is a",
     "                transcription, not a decision."
   ],
@@ -245,7 +245,7 @@
       ],
       "scopes": [],
       "mode": "job",
-      "reason": "The unused-reference detector. It is OFF by default and ON in exactly one place: the 'reference-trimmer' job, which sets the HarborReferenceTrimmer property. It runs there with TreatWarningsAsErrors off, because its findings are warnings and this repository promotes warnings to errors."
+      "reason": "The unused-reference detector. It is OFF by default and ON in exactly one place: the 'build' job's compile step, which sets the HarborReferenceTrimmer property. It runs there with its own codes demoted back to warnings (WarningsNotAsErrors), because its findings are warnings and this repository promotes warnings to errors. Since #2108 that compile is the lane's only compile of the tree; the job that used to compile it a second time is gone."
     }
   ]
 }
