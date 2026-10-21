@@ -16,20 +16,21 @@ into a table that describes a repository which no longer exists.
 ## The measured picture
 
 Measured on this branch (one commit on `dev` at `10c4bf6a`), the tree the
-table was last reconciled against:
+table was last reconciled against, and re-counted after the guard triage
+reporter (issue #1726) landed:
 
 | | |
 |---|---|
-| python tools in `tools/` | 37 files, 29 282 lines |
-| of them, the `check-*.py` family | 19 files, 20 306 lines |
+| python tools in `tools/` | 38 files, 30 482 lines |
+| of them, the `check-*.py` family | 19 files, 20 304 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
 | gates that block a build | 22 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 28 |
-| tools with a ratchet | 14 |
-| tools with a floor | 17 |
+| reporters, helpers, libraries | 7 reporters, 5 helpers, 2 libraries |
+| tools with a self-test | 29 |
+| tools with a ratchet | 15 |
+| tools with a floor | 18 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -279,6 +280,7 @@ The modes are:
 | `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
 | `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
+| `tools/guard-triage.py` | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

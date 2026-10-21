@@ -195,6 +195,14 @@ jobs:
               # validated by the same commit.
               - 'tools/msbuild-evaluation-cost.py'
               - '.github/workflows/evaluation-cost.yml'
+              # #1726. The guard triage reads the TRX of the `test` job and
+              # writes the classified firings of that shard, and its
+              # self-test runs in the same job. Same #618 argument: editing
+              # the tool, or the registry that says what a firing MEANT,
+              # must run the job that executes them, or the edit lands
+              # unvalidated.
+              - 'tools/guard-triage.py'
+              - 'tools/guard-triage-classes.json'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
               # the BASELINE is the ordinary way to answer a red AOT job, and
@@ -2078,6 +2086,57 @@ jobs:
         run: |
           python3 tools/test-skips.py "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
+
+      # Issue #1726 — the guard firings of this shard, CLASSIFIED.
+      #
+      # The measurement half of the guard audit: a guard that fires has to say
+      # what the firing MEANT (defect / style / noise), otherwise "which
+      # guards are worth keeping" is a guess. The classification lives in
+      # tools/guard-triage-classes.json, next to the rule it is about, and the
+      # report is a machine-readable JSON artifact plus a table in the job
+      # summary.
+      #
+      # REPORT-ONLY, never a gate: the tool exits 0 on a missing TRX set, the
+      # way tools/test-measurements.py does, so a shard that found nothing
+      # reads as "nothing fired" and not as a failure. The old output of the
+      # guards is untouched: the step adds a table to the job summary and a
+      # JSON file to the artifacts, and changes nothing a human reads in the
+      # log.
+      #
+      # The TRX path is spelled twice because the test host has written it in
+      # two places across runs: next to the assembly
+      # (tests/<project>/bin/Release/net10.0/TestResults/<shard>/) and at the
+      # workspace root (TestResults/<shard>/). The upload step above only
+      # covers the second, which is why the TRX artifact is often empty.
+      #
+      # `--min-guard-files` is the floor: a renamed guard project would make
+      # the tool index zero files and report an empty tree, which reads as
+      # "no guard fired". The floor turns that into a red job.
+      - name: Triage the guard firings (issue #1726)
+        if: always() && matrix.shard == 'core'
+        shell: bash
+        run: |
+          python3 tools/guard-triage.py \
+            --trx "TestResults/${{ matrix.shard }}/*.trx" \
+            --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+            --project Harbor.Architecture.Tests \
+            --repo-root . \
+            --min-guard-files 100 \
+            --out "guard-firings-${{ matrix.shard }}.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # The tool's own failure path runs in `docs.yml`'s selftest job, with
+      # the other python tools: a rule edited until it matches nothing is
+      # indistinguishable from a rule that found nothing.
+
+      - name: Upload the classified guard firings (issue #1726)
+        if: always() && matrix.shard == 'core'
+        uses: actions/upload-artifact@v7
+        with:
+          name: guard-firings-${{ matrix.shard }}
+          path: "guard-firings-${{ matrix.shard }}.json"
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Publish Test Results
         if: always()

@@ -1,0 +1,380 @@
+{
+  "schema": "harbor.guard-triage/registry/1",
+  "comment": [
+    "The human half of tools/guard-triage.py: which class a guard firing belongs to.",
+    "",
+    "CLASSES",
+    "  defect   the rule caught something that is genuinely broken: the code it",
+    "           named violates an invariant the repository states, and the code",
+    "           was wrong.",
+    "  style    the rule is bound to the FORM of the tree rather than to its",
+    "           meaning - a count, a name, a README section, a text anchor on a",
+    "           declaration. A firing is a chore or a preference, not a bug.",
+    "  noise    the rule fired on code the repository EXPLICITLY ALLOWS, or on",
+    "           the rule's own table: a stale ledger row, a stale exemption, a",
+    "           measured baseline that moved, a control whose hard-coded",
+    "           expectation no longer matches reality.",
+    "  unknown  no decision yet. This is the worklist, not a verdict.",
+    "",
+    "RATCHET",
+    "  keep           the rule is right and the code was wrong. Keep it.",
+    "  fix-the-rule   the rule's intent is right but it is bound to form. The",
+    "                 fix is to derive the value or anchor on a symbol, so a",
+    "                 legitimate change stops producing a firing.",
+    "  ledger-edit    the rule IS a ledger. The row has to change, and the",
+    "                 change carries a reason, the way ScanBaseline rows and",
+    "                 tools/test-package-exceptions.txt do.",
+    "  retire-the-rule the rule measures and enforces nothing. Tier C candidate.",
+    "",
+    "HOW AN ENTRY WAS DECIDED",
+    "  Every entry names the firings it was decided from: a run id, the guard",
+    "  file and line, and the place the rule pointed at. The decision is a",
+    "  reading of those firings, not a prior about the rule.",
+    "",
+    "ALLOWANCE FILES",
+    "  A rule entry may name `allowance_files`: the files that record what",
+    "  THAT rule allows. A firing whose evidence names a path listed in one",
+    "  of them is noise: the code is allowed, so the rule told us nothing new.",
+    "  The ledger-retirement detector reads the guard's own source for the",
+    "  same reason, which covers the ledgers that live inside the rule file."
+  ],
+  "rules": [
+    {
+      "rule": "AcceptedStopCensusRule.TerminalToolEndEvents_StillRideTerminalToken",
+      "class": "defect",
+      "reason": "The rule pins a FLOOR of seven terminal ToolExecutionEndEvent publishes; the firings read 5, so the dispatcher's terminal surface lost two publishes. That is the regression the rule exists to catch, not a bookkeeping chore.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 38864383040 (branch refactor-1507-tooldispatcher-retrypolicy) — 'Expected to be greater than or equal to 7 ... but received 5'",
+        "guard: tests/Harbor.Architecture.Tests/AcceptedStopCensusRule.cs:91"
+      ]
+    },
+    {
+      "rule": "CellForgeEngineAbsenceAxisTests.NoMaybeMemberIsReadWithAStructUnawareForm",
+      "class": "defect",
+      "reason": "A Maybe member is read through a form that does not compile for a struct; the read is a real absence bug, not a shape preference.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/CellForgeEngineAbsenceAxisTests.cs:236"
+      ]
+    },
+    {
+      "rule": "CellForgeWidgetAxisRules.PerimeterSettlesAgainstTheFilesThatNameTheSeam",
+      "class": "defect",
+      "reason": "A document that names the view seam is in neither the teaching nor the describing list, so the guard would be green over a document that teaches a dead seam. The rule names the missing file (CHANGELOG.md).",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:1200 — 'Unclassified: CHANGELOG.md'"
+      ]
+    },
+    {
+      "rule": "CellForgeWidgetAxisRules.WidgetAxis_TheShippedLayoutTreeHasNoSecondHome",
+      "class": "defect",
+      "reason": "A `new LayoutTree(` outside the recorded builder set is a second home for the chrome; the rule names the offending file and line.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 38357908793 — 'Offenders: src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs:102'",
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:751"
+      ]
+    },
+    {
+      "rule": "CellForgeWidgetStateRules.ClassifiedProperties_StillExistAndAreStillNullableReferences",
+      "class": "noise",
+      "reason": "The rule fired on its own exemption table: an entry whose property was renamed or removed has to be deleted with it. Nothing in the product is wrong.",
+      "ratchet": "ledger-edit",
+      "evidence": [
+        "run 39391713493 — 'stale: [SessionTabStripPanel.Dispatch]'",
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:179"
+      ]
+    },
+    {
+      "rule": "CellForgeWidgetStateRules.EveryNullablePublicWidgetProperty_IsClassified",
+      "class": "defect",
+      "reason": "A nullable public widget property is neither widget state nor a classified hook; the rule names the property and the file:line it sits on.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:149 — 'the.Dispatch (src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs:240)'"
+      ]
+    },
+    {
+      "rule": "ContribBoundaryNameRule.CrossBoundaryNames_MatchTheMeasuredBaseline",
+      "class": "noise",
+      "reason": "The file says it is 'a MEASUREMENT, not a prohibition'. The firing says the measured set of names declared on both sides of the contrib/ boundary moved; contrib/ is not compiled by CI, so nothing that ships can break.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ContribBoundaryNameRule.cs:368"
+      ]
+    },
+    {
+      "rule": "DefaultAgentSingleSourceTests.CoreFallbackConstant_IsDerivedFromTheOneAgentNameConstant",
+      "class": "style",
+      "reason": "The rule finds the declaration by a text anchor ('class AgentName' at that commit) and reads the value with a regex. The refactor that turned AgentName into a record moved the declaration out of the anchor's reach, so the rule reported a missing declaration that was present at src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs:529.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "run 38860059916 (branch rec1-1559-identifiers-records, merge b215b840) — 'No `AgentName.Fallback = \"…\"` declaration was found in src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs'",
+        "truth at the tested tree: `public sealed record AgentName` at Identifiers.cs:506 and `public const string Fallback = \"code\";` at Identifiers.cs:529",
+        "guard at that commit: tests/Harbor.Architecture.Tests/DefaultAgentSingleSourceTests.cs:479 — text.IndexOf(\"class AgentName\")"
+      ]
+    },
+    {
+      "rule": "EnforcerIntegrityTests.DocumentedExceptions_AreScopedToNamedFiles",
+      "class": "defect",
+      "reason": "A file reaches into a layer that only a named file may reach; the rule names the file and the two layers. The exception list was scoped to files and the scope was broken.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/EnforcerIntegrityTests.cs:461 — 'src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs: reaches into Harbor.Terminal.Abstractions, which is only legal in [PluginRegistrar.cs]'"
+      ]
+    },
+    {
+      "rule": "EnforcerIntegrityTests.Matrix_AllowedEntries_AreLive",
+      "class": "noise",
+      "reason": "The rule fired on the matrix's own allowed set: a permitted edge the assembly does not have. The allowance is the legal permission, and the firing says the permission is stale.",
+      "ratchet": "ledger-edit",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/EnforcerIntegrityTests.cs:278 — 'Harbor.Hooks -> Harbor.Abstractions: permitted by the matrix but the assembly does not reference it - stale allowed-set entry, remove it'"
+      ]
+    },
+    {
+      "rule": "FullLayerMatrixTests.EverySrcAssembly_ReferenceSet_MatchesMatrix",
+      "class": "defect",
+      "reason": "A src assembly with no matrix row is an assembly no layer rule constrains - unbounded reach. The rule names the assembly.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:755 — 'Harbor.Registries: no matrix row'"
+      ]
+    },
+    {
+      "rule": "FullLayerMatrixTests.Matrix_CoversExactlyTheSrcInventory",
+      "class": "defect",
+      "reason": "The same hole from the other side: the src inventory has an assembly the matrix does not cover, so that assembly is unconstrained.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:886 — 'missingRows: [Harbor.Registries]'"
+      ]
+    },
+    {
+      "rule": "KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree",
+      "class": "defect",
+      "reason": "A site that routes keys is absent from the family table, so it has not declared its family - the exact shape the rule was written for (QuestionFormView shipping with the command predicate).",
+      "ratchet": "keep",
+      "evidence": [
+        "run 38264879229 — 'src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs'",
+        "guard: tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs:741"
+      ]
+    },
+    {
+      "rule": "MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaNullableOutParameter",
+      "class": "defect",
+      "reason": "A nullable out-parameter is the banned way to declare absence; the rule names the site and the project.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/MaybeAbsenceTests.cs:225"
+      ]
+    },
+    {
+      "rule": "McpHttpClientOwnershipRules.Assert_TheClientHasExactlyOneOwnerAndItIsNotPublic",
+      "class": "defect",
+      "reason": "Two owners of the remote-MCP HttpClient is the duplication #1567 removed coming back; the rule names both owners.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/McpHttpClientOwnershipRules.cs:160 — 'Owners: Harbor.Tools.Mcp.McpHttpClientFactory, Harbor.Tools.Mcp.McpOAuthHandler+<>c'"
+      ]
+    },
+    {
+      "rule": "ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed",
+      "class": "defect",
+      "reason": "A new hand-rolled read of a slash-separated string appeared in product code, with the file and line named. A second parser of the same concept is a real drift source.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:419 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
+      ]
+    },
+    {
+      "rule": "ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts",
+      "class": "noise",
+      "reason": "The rule fired on its own inventory: an entry names a file that no longer contains an ad-hoc cut, so the exception is stale. The rule asks for the row to be deleted.",
+      "ratchet": "ledger-edit",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:442 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
+      ]
+    },
+    {
+      "rule": "PilotRoslynAnalyzerTests.Pilot_Harch001_Reports_Every_Planted_Dynamic_Code_Capability",
+      "class": "defect",
+      "reason": "The analyzer did not report a planted capability, so the ban has a hole the text rule cannot see. The control exists to make that hole loud.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/PilotRoslynAnalyzerTests.cs:184"
+      ]
+    },
+    {
+      "rule": "ReadmeCoverageTests.Assert_NoNewProjectLacksAReadme",
+      "class": "style",
+      "reason": "A new src project without a README.md is a documentation chore against a template, not a broken product. The firings all name one project (Harbor.Hooks, from the #1613 extraction).",
+      "ratchet": "keep",
+      "evidence": [
+        "run 38866609300 (branch refactor/1613-hookrunner-extract) — 'Missing: Harbor.Hooks'",
+        "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:114"
+      ]
+    },
+    {
+      "rule": "ReadmeCoverageTests.Assert_PackableReadmesHaveRequiredSections",
+      "class": "style",
+      "reason": "A packable README that misses a template section is a documentation chore; the rule names the project and the missing section.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 39002438978 (branch refactor/1613-hookrunner-extract) — 'Harbor.Hooks: missing limits'",
+        "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:136"
+      ]
+    },
+    {
+      "rule": "ReflectionConventionRule.NonVacuity_The_Compiler_Bans_A_Synthetic_Violation",
+      "class": "defect",
+      "reason": "The compiler ban did not report a planted violation, so the ban file does not cover a capability the convention names. The rule names the missing symbol.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 39395794130 (branch refactor/1844-banned-api-rule) — 'missing: System.Reflection.Assembly.Load'",
+        "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:347"
+      ]
+    },
+    {
+      "rule": "ReflectionConventionRule.The_Ban_File_Covers_Every_Public_Assembly_Load_Overload",
+      "class": "noise",
+      "reason": "The rule fired on its own instrument: the reflection read of the framework's public Assembly.Load surface came back empty, so the comparison below would have been vacuous. Nothing in the product is wrong, and the migration to the compiler ban is what emptied the read.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "run 39395794130 (branch refactor/1844-banned-api-rule) — 'but received empty collection'",
+        "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:314"
+      ]
+    },
+    {
+      "rule": "ReleaseBuildConfigurationRule.EveryProjectTheReleaseBuildPullsIn_IsBuiltInTheSolutionConfiguration",
+      "class": "defect",
+      "reason": "A referenced project that is not a row of Harbor.slnx falls back to Debug in the Release build. The rule names the edges.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:528"
+      ]
+    },
+    {
+      "rule": "ReleaseBuildConfigurationRule.NoReleaseOutput_HoldsACopyOfADebugBuild",
+      "class": "defect",
+      "reason": "A file in a bin/Release directory is byte-identical to the project's own Debug output: the #1921 defect, measured.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:804"
+      ]
+    },
+    {
+      "rule": "ResultFailureConversionTests.GuardedTrees_DoNotHandRollFailureConversion",
+      "class": "defect",
+      "reason": "A hand-rolled `Result.Failure<K>(other.Error)` throws InvalidOperationException on a success, so the code named by the rule is broken, not differently shaped.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 38862719862 (branch fix/1546-webfetch-ssrf-result-railway) — 'src/Harbor.Tools.Builtin/Tools/WebFetch/WebFetchTool.cs:334 - hand-rolled failure r...'",
+        "guard: tests/Harbor.Architecture.Tests/ResultFailureConversionTests.cs:156"
+      ]
+    },
+    {
+      "rule": "ResultMaybeSignatureTests.Assert_NoResultOfNullableValueTypeUnderSrc",
+      "class": "defect",
+      "reason": "`Result<T?>` under src/ hides absence inside success; the rule names the file and line of the banned shape.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/ResultMaybeSignatureTests.cs:86 — 'src/Harbor.Tools.Builtin/Tools/Mcp/McpSseParser.cs:88: Result<JsonElement?> frame'"
+      ]
+    },
+    {
+      "rule": "ResultTryAdoptionTests.HandRolledTryCatchToResult_UsesResultTry",
+      "class": "defect",
+      "reason": "A hand-rolled catch-to-Result is a second implementation of a library member and will drift; the rule names the site and the line.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 36534957325 (branch dev) — 'src/Harbor.Lsp/LspManager.cs:307 - catch(Exception) builds Result.Failure by hand; use Result.Try'",
+        "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:151"
+      ]
+    },
+    {
+      "rule": "ResultTryAdoptionTests.KnownExemptSites_AreStillAccurate",
+      "class": "noise",
+      "reason": "The rule fired on its own exemption table: the recorded reason no longer matches the site, so the exemption is stale and the row has to go. The site itself is fine.",
+      "ratchet": "ledger-edit",
+      "evidence": [
+        "run 36536630732 — 'src/Harbor.Lsp/LspManager.cs:240 - catch no longer constructs Result.Failure ... - needs a control-flow refactor'",
+        "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:177"
+      ]
+    },
+    {
+      "rule": "ScanUniverseRule.BlindProjects_MatchTheMeasuredBaseline",
+      "class": "noise",
+      "reason": "The file says it is 'a MEASUREMENT, not a fix'. Every firing is the measured count of non-product projects that reference src/ moving by one, because a test project was added. The product graph did not change.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "run 39117642149 — 'apps=2 | contrib=14 | samples=5 | tests=32 | tools=1'",
+        "run 39365793623 — '... | tests=33 | tools=1'",
+        "run 39380697456 — '... | tests=34 | tools=1'",
+        "run 39416159291 — '... | tests=36 | tools=1'",
+        "guard: tests/Harbor.Architecture.Tests/ScanUniverseRule.cs:577"
+      ]
+    },
+    {
+      "rule": "SharedSourceLinkRules.The_Link_Inventory_Is_Not_Empty",
+      "class": "noise",
+      "reason": "The rule pins a hard-coded count of `<Compile Include>` link items, so every added or removed shared-source link fires it. The rule's own message says the guard would then judge a set that is not the build's.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "run 38516394743 (branch perf/1102-requestbuild-args) — 'Expected to be 14'",
+        "run 38854377103 (branch nightshift/1563-utf8jsonreader-helpers) — 'Expected to be 16'",
+        "guard: tests/Harbor.Architecture.Tests/SharedSourceLinkRules.cs:207"
+      ]
+    },
+    {
+      "rule": "TestShardZeroTestGuardRules.TheGuardFlagIsActuallyReadByTheRunStep",
+      "class": "defect",
+      "reason": "The CI run step had lost MTP's strict zero-tests policy, so a shard in which every test was skipped would have read as green. The rule named the missing flag.",
+      "ratchet": "keep",
+      "evidence": [
+        "run 39436392533 — 'Expected to contain \"--zero-tests-policy strict\"'",
+        "guard: tests/Harbor.Architecture.Tests/TestShardZeroTestGuardRules.cs:170"
+      ]
+    },
+    {
+      "rule": "TokenTrackingRatchet.Control_TheSplitLandingIsReportedAsProgressNotAsARegression",
+      "class": "noise",
+      "reason": "A control test whose expectation is a hard-coded list of seven member names: the aggregate now declares eight, so the control's list is stale. The ratchet itself did not rot; the control's table did.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "run 38695392450 — 'all seven must show up as improvements ... but collection has 8 items but expected 7'",
+        "guard: tests/Harbor.Architecture.Tests/TokenTrackingRatchet.cs:709"
+      ]
+    },
+    {
+      "rule": "TuiReadLineContractRules.RendererTrees_AllExist",
+      "class": "noise",
+      "reason": "The rule pins a hard-coded count of renderer families, so moving a family out of the product (NickConsoleEx to contrib/) fires it. The rule's own message says a new family must raise the number in the same commit - the count is the rule's table, not the product.",
+      "ratchet": "fix-the-rule",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/TuiReadLineContractRules.cs:267 — 'Expected to be 6 ... but found 5'"
+      ]
+    },
+    {
+      "rule": "UnguardedResultReadAnalyzerTests.Analyzer_Stays_Silent_On_The_Planted_Guarded_Reads",
+      "class": "defect",
+      "reason": "The analyzer reported a Result read that a dominating IsSuccess/IsFailure check protects: a false positive in the guard, which the rule's own message calls a noise machine.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:358"
+      ]
+    },
+    {
+      "rule": "UnguardedResultReadAnalyzerTests.The_Analyzer_Sees_Every_Site_The_Text_Rule_Sees",
+      "class": "defect",
+      "reason": "The analyzer flagged a file that neither the text rule nor a documented exemption knows about, so the migration would go red on a site nobody reviewed. The rule names the file.",
+      "ratchet": "keep",
+      "evidence": [
+        "guard: tests/Harbor.Architecture.Tests/Roslyn/UnguardedResultReadAnalyzerTests.cs:376 — 'Files: src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs'"
+      ]
+    }
+  ],
+  "firings": []
+}

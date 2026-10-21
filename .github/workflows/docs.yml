@@ -89,6 +89,12 @@ on:
       # exceptions file, so a PR that edits the gate itself has to run it.
       - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
+      # #1726. The guard triage reads the TRX of the `test` job, and its
+      # self-test runs here with the other python tools. A PR that edits the
+      # tool, or the registry that says what a firing MEANT, must run the
+      # self-test, or the edit lands unvalidated.
+      - 'tools/guard-triage.py'
+      - 'tools/guard-triage-classes.json'
       # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
@@ -203,6 +209,12 @@ on:
       # exceptions file, so a PR that edits the gate itself has to run it.
       - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
+      # #1726. The guard triage reads the TRX of the `test` job, and its
+      # self-test runs here with the other python tools. A PR that edits the
+      # tool, or the registry that says what a firing MEANT, must run the
+      # self-test, or the edit lands unvalidated.
+      - 'tools/guard-triage.py'
+      - 'tools/guard-triage-classes.json'
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
       # baseline, so a PR that edits the tree it measures — or the gate, or
@@ -397,6 +409,16 @@ jobs:
         run: python3 tools/test-measurements.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
+      # #1726. The third REPORTER: it reads what a CI run produced (a TRX or
+      # a job log) and writes down what each guard firing MEANT - a defect, a
+      # style rule, or noise on code the repository allows. Its failure path
+      # is tested here for the same reason as the two above: a reporter that
+      # stops reading a failure is green on every run and reports nothing, and
+      # a reporter that GUESSES a class is worse than one that says
+      # "unknown". The load-bearing fixtures are both: a failure it must
+      # find, and a firing it must refuse to classify.
+      - name: Guard triage finds a failure and refuses to guess its class
+        run: python3 tools/guard-triage.py --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a
