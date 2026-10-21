@@ -37,12 +37,12 @@ measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 | `Microsoft.CodeAnalysis.NetAnalyzers` | solution-wide | CA0xxx |
 | **`AsyncFixer`** | **`src/` + `apps/`** | AsyncFixer01–05 |
 | `ReflectionAnalyzers` | solution-wide | REFL001–REFL046 |
-| **`Microsoft.CodeAnalysis.BannedApiAnalyzers`** | **`src/` + `apps/`** | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | solution-wide | RS0030 (config in [`BannedSymbols.txt`](../BannedSymbols.txt)) |
 | **`Microsoft.CodeAnalysis.PublicApiAnalyzers`** | **two frozen assemblies** | **RS0016, RS0017, RS0022, RS0024–RS0027, RS0036, RS0037, RS0041, RS0048, RS0050** |
 | `Meziantou.Analyzer` | solution-wide | MA0xxx |
 | **`DotNetProjectFile.Analyzers`** | **solution-wide** | **Proj0xxx** (severity table in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig), not here — see §Project-file rules) |
 | **`DependencyInjection.Lifetime.Analyzers`** | **`src/` + `apps/`** | **DI001–DI037** |
-| **`CSharpFunctionalExtensions.Analyzers`** | **`src/` + `apps/`** | **CFE0001** (see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs)) |
+| `CSharpFunctionalExtensions.Analyzers` | solution-wide | CFE0001 (see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs)) |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
 | **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
@@ -148,9 +148,18 @@ so "0 findings" in the product tree means "the gate has never fired", not
 |--------|-----|-----|-----|
 | `SonarAnalyzer.CSharp` | everywhere | `tests/` | 204.1 s, the most expensive family in the tree, and all 324 of its findings are under `tests/`. The product tree has produced none since the licence decision (#2030 measured the same split a month earlier). |
 | `DependencyInjection.Lifetime.Analyzers` | everywhere | `src/` + `apps/` | The DI rules are the **composition root's** gate: DI003, DI013, DI015, DI017 and DI019 are errors, and the registrations they are about live in `src/Harbor.Hosting/Modules` and the two `apps/` roots. A test project has no registration of its own to be wrong about. |
-| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | everywhere | `src/` + `apps/` | RS0030 is `NoWarn`ed under any project whose path contains `tests` or `samples`, so it produced **nothing** there. The dynamic-code ban and the "What NOT to do" list stay enforced exactly where they are enforced today. |
-| `CSharpFunctionalExtensions.Analyzers` | everywhere | `src/` + `apps/` | CFE0001 is `NoWarn`ed under any project whose path contains `tests` or `samples` — 174 sites, every one of them suppressed. The ROP-001 guard (a `.Value` on a failed `Result<T>`) stays where `Result<T>` is used in shipped code. |
 | `AsyncFixer` | everywhere | `src/` + `apps/` | All five of its rules are at `suggestion`, which `TreatWarningsAsErrors` does not promote: the package **cannot fail a build in any tree**, and it produced no finding in any of them. It is kept where the shipped code is. |
+
+#### Two families that looked narrowable and are not
+
+Both of them look narrowable by the rule above, and both of them turned out
+to be coupled to something that reads them from the build. Narrowing them
+was measured, checked, and **not** taken.
+
+| family | why not | what it costs |
+|--------|---------|---------------|
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | `tests/Harbor.Architecture.Tests/BannedApiProbe.cs` runs the **real** RS0030 analyzer in-process against a synthetic violation, and it finds the analyzer through the package path NuGet publishes for this package (the csproj's `PackageReference Update` + `GeneratePathProperty` pair). Narrowing the package out of the test tree would turn that `Update` into a no-op and move the control from "the analyzer the build uses" to "the newest version in the NuGet cache". | 5.2 s |
+| `CSharpFunctionalExtensions.Analyzers` | The positive control (`analyzers/CfeControl`, deliberately outside `tests/` and outside `Harbor.slnx`) inherits this root file and needs the analyzer there — it exists so that a test can compile a known-bad snippet and require CFE0001 to fire. | 0.2 s |
 
 Nothing else moved. `Roslynator.Analyzers`,
 `Microsoft.CodeAnalysis.NetAnalyzers`, `Meziantou.Analyzer`,

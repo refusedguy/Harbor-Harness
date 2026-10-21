@@ -421,10 +421,10 @@
     <HarborAnalyzerNetAnalyzers Condition="'$(HarborAnalyzerNetAnalyzers)' == ''">on</HarborAnalyzerNetAnalyzers>
     <HarborAnalyzerAsyncFixer Condition="'$(HarborAnalyzerAsyncFixer)' == ''">off</HarborAnalyzerAsyncFixer>
     <HarborAnalyzerReflection Condition="'$(HarborAnalyzerReflection)' == ''">on</HarborAnalyzerReflection>
-    <HarborAnalyzerBannedApi Condition="'$(HarborAnalyzerBannedApi)' == ''">off</HarborAnalyzerBannedApi>
+    <HarborAnalyzerBannedApi Condition="'$(HarborAnalyzerBannedApi)' == ''">on</HarborAnalyzerBannedApi>
     <HarborAnalyzerMeziantou Condition="'$(HarborAnalyzerMeziantou)' == ''">on</HarborAnalyzerMeziantou>
     <HarborAnalyzerDiLifetime Condition="'$(HarborAnalyzerDiLifetime)' == ''">off</HarborAnalyzerDiLifetime>
-    <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">off</HarborAnalyzerCfe>
+    <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">on</HarborAnalyzerCfe>
     <HarborAnalyzerProjectFile Condition="'$(HarborAnalyzerProjectFile)' == ''">on</HarborAnalyzerProjectFile>
     <HarborAnalyzerVsThreading Condition="'$(HarborAnalyzerVsThreading)' == ''">on</HarborAnalyzerVsThreading>
     <HarborAnalyzerExcubo Condition="'$(HarborAnalyzerExcubo)' == ''">on</HarborAnalyzerExcubo>

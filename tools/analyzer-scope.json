@@ -107,7 +107,7 @@
         "apps"
       ],
       "mode": "scope",
-      "reason": "Five rules, all at 'suggestion'. A suggestion is not promoted by TreatWarningsAsErrors, so this package cannot fail a build in ANY tree, and it produced no finding in any of them. It is kept where the shipped code is (src/, apps/) and dropped from the test tree."
+      "reason": "Five rules, all at 'suggestion'. A suggestion is not promoted by TreatWarningsAsErrors, so this package cannot fail a build in ANY tree, and it produced no finding in any of them. It is kept where the shipped code is (src/, apps/) and dropped from the test tree and from the root scope."
     },
     {
       "id": "ReflectionAnalyzers",
@@ -131,11 +131,13 @@
         "Directory.Build.props"
       ],
       "scopes": [
+        "root",
         "src",
-        "apps"
+        "apps",
+        "tests"
       ],
       "mode": "scope",
-      "reason": "RS0030 over BannedSymbols.txt and BannedSymbols.DynamicCode.txt. The root props NoWarn it under any project whose path contains 'tests' or 'samples', so it produced nothing there; the ban is enforced exactly where it is enforced today."
+      "reason": "RS0030 over BannedSymbols.txt and BannedSymbols.DynamicCode.txt. NOT narrowed, and the reason is a coupling: tests/Harbor.Architecture.Tests/BannedApiProbe.cs runs the REAL analyzer in-process against a synthetic violation, and it finds the analyzer through the package path NuGet publishes for this package (the csproj's PackageReference Update + GeneratePathProperty). Narrowing the package out of the test tree would turn that Update into a no-op and move the control from 'the analyzer the build uses' to 'the newest version in the NuGet cache'. The family costs 5.2 s."
     },
     {
       "id": "Meziantou.Analyzer",
@@ -172,11 +174,13 @@
         "Directory.Build.props"
       ],
       "scopes": [
+        "root",
         "src",
-        "apps"
+        "apps",
+        "tests"
       ],
       "mode": "scope",
-      "reason": "CFE0001 is the mechanical guard for the ROP-001 crash class (a .Value on a failed Result<T>). The root props NoWarn it under any project whose path contains 'tests' or 'samples' — 174 sites, every one of them suppressed — so it produced nothing there; the guard stays where Result<T> is used in shipped code."
+      "reason": "CFE0001 is the mechanical guard for the ROP-001 crash class (a .Value on a failed Result<T>). NOT narrowed: the positive control (analyzers/CfeControl, deliberately outside tests/ and outside Harbor.slnx) inherits this root file and needs the analyzer there, and the family costs 0.2 s. The root props NoWarn the diagnostic under tests/ and samples/ anyway, so it produced nothing in the test tree either."
     },
     {
       "id": "DotNetProjectFile.Analyzers",

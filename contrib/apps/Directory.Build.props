@@ -27,9 +27,7 @@
   -->
   <PropertyGroup>
     <HarborAnalyzerAsyncFixer>on</HarborAnalyzerAsyncFixer>
-    <HarborAnalyzerBannedApi>on</HarborAnalyzerBannedApi>
     <HarborAnalyzerDiLifetime>on</HarborAnalyzerDiLifetime>
-    <HarborAnalyzerCfe>on</HarborAnalyzerCfe>
   </PropertyGroup>
 
   <!--

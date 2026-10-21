@@ -83,9 +83,7 @@
   -->
   <PropertyGroup>
     <HarborAnalyzerAsyncFixer>on</HarborAnalyzerAsyncFixer>
-    <HarborAnalyzerBannedApi>on</HarborAnalyzerBannedApi>
     <HarborAnalyzerDiLifetime>on</HarborAnalyzerDiLifetime>
-    <HarborAnalyzerCfe>on</HarborAnalyzerCfe>
   </PropertyGroup>
 
   <!-- Imported by RELATIVE path, not by the GetPathOfFileAbove function: the
