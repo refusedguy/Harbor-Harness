@@ -57,6 +57,12 @@ namespace Harbor.Abstractions.Models.Identifiers;
 /// </remarks>
 public static class WellKnownTools
 {
+    /// <summary>
+    ///     The <c>ask_user_question</c> tool — asks the human a structured
+    ///     question and reads the answer back (#1759).
+    /// </summary>
+    public static readonly ToolName AskUserQuestion = ToolName.Create("ask_user_question");
+
     /// <summary>The <c>bash</c> tool — runs a shell command.</summary>
     public static readonly ToolName Bash = ToolName.Create("bash");
 
