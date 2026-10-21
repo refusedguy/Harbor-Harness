@@ -691,7 +691,14 @@ public class FullLayerMatrixTests
         // Infrastructure → Application edge that was pure dead permission.
         ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
+        // #1734: the manifest reader reads the configuration schema a plugin
+        // declares (PluginConfigSchema, PluginConfigField, PluginConfigValue).
+        // That vocabulary is contract vocabulary, and the sibling plugin layers
+        // (Compilation, Instantiation, Registration) already reference it: the
+        // storage layer was the only one of the family that did not, because
+        // until now it had nothing of its own to read.
+        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure,
+            ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Compilation"] = new(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Instantiation"] = new(Layer.Infrastructure,

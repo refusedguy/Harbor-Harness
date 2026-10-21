@@ -297,8 +297,12 @@ public sealed class PluginConfigTests
         Result<IReadOnlyDictionary<string, PluginConfigValue>> resolved =
             PluginConfigValidator.Validate(
                 schema,
-                Section("""{ "maxResults": 10 }"""),
+                Section("""{ "maxResults": 10, "apiKey": "secret" }"""),
                 "plugins.web-search");
+
+        await Assert.That(resolved.IsSuccess).IsTrue()
+            .Because("the section satisfies the schema: every setting has a value, and the one with no default "
+                + "was given one");
 
         IReadOnlyList<PluginConfigFormRow> rows = PluginConfigForm.Build(schema, resolved.Value);
 
