@@ -57,6 +57,12 @@
 //                  `PluginAxisRegistry` names them (`IToolPlugin`,
 //                  `IProviderPlugin`, ...). Optional; when present it is
 //                  checked against the axes the plugin actually implements.
+//   config         the configuration schema the plugin declares: the settings
+//                  it has, their types, their defaults and their ranges
+//                  (#1734). Optional; when absent the plugin has no settings
+//                  of its own.
+
+using Harbor.Abstractions.Plugins;
 
 namespace Harbor.Plugins.Abstractions;
 
@@ -128,6 +134,27 @@ public sealed record PluginManifest
     ///     the manifest does not declare them.
     /// </summary>
     public IReadOnlyList<string>? Axes { get; init; }
+
+    /// <summary>
+    ///     The configuration schema the plugin declares: the settings it has,
+    ///     their types, their defaults and their ranges. <c>null</c> when the
+    ///     manifest declares no schema, which means the plugin has no settings
+    ///     of its own (#1734).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The schema is read as data, before the plugin is compiled, so
+    ///         the host can tell the user what a plugin wants before the
+    ///         plugin runs, and it can refuse a plugin whose settings the
+    ///         user's configuration does not satisfy.
+    ///     </para>
+    ///     <para>
+    ///         A plugin with no schema has no section: a configuration file
+    ///         that carries one is a configuration the host cannot interpret,
+    ///         and the host says so rather than dropping it.
+    ///     </para>
+    /// </remarks>
+    public PluginConfigSchema? Config { get; init; }
 
     /// <summary>
     ///     The SHA-256 of the manifest file's raw bytes, as lowercase hex.
