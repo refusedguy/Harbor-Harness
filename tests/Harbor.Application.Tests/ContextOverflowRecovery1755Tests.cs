@@ -5,6 +5,7 @@ using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents.Pipeline;
 using Harbor.Application.Sessions;
+using Harbor.Application.Tests.Fakes;
 using Harbor.TestKit;
 using TUnit.Assertions;
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
