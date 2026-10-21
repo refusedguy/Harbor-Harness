@@ -352,7 +352,7 @@ public class HttpClientReuseRules
     /// <summary>One client creation, as the analyzer found it.</summary>
     /// <param name="File">Repo-relative path, forward slashes.</param>
     /// <param name="Line">1-based line of the construction.</param>
-    internal readonly record struct ClientCreation(string File, int Line);
+    internal readonly record struct ClientCreationSite(string File, int Line);
 
     /// <summary>
     ///     What the analyzer found in the product tree: the creations, the ones
@@ -362,8 +362,8 @@ public class HttpClientReuseRules
     /// <param name="InDelegate">The creations that sit inside a delegate.</param>
     /// <param name="ScopeFiles">The repo-relative files the analyzer's scope covers.</param>
     internal sealed record ClientCreationCensus(
-        IReadOnlyList<ClientCreation> Creations,
-        IReadOnlyList<ClientCreation> InDelegate,
+        IReadOnlyList<ClientCreationSite> Creations,
+        IReadOnlyList<ClientCreationSite> InDelegate,
         IReadOnlyList<string> ScopeFiles);
 
     /// <summary>
@@ -378,8 +378,8 @@ public class HttpClientReuseRules
     /// </summary>
     private static async Task<ClientCreationCensus> BuildCensus()
     {
-        var creations = new List<ClientCreation>();
-        var inDelegate = new List<ClientCreation>();
+        var creations = new List<ClientCreationSite>();
+        var inDelegate = new List<ClientCreationSite>();
         var scopeFiles = new List<string>();
 
         foreach ((_, CSharpCompilation compilation) in ArchAnalyzerPromotionTests.LiveCompilations.Value)
@@ -402,7 +402,7 @@ public class HttpClientReuseRules
                     continue;
                 }
 
-                var creation = new ClientCreation(
+                var creation = new ClientCreationSite(
                     SourceScan.Relative(path),
                     diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1);
 
@@ -483,7 +483,7 @@ public class HttpClientReuseRules
     {
         ClientCreationCensus census = await LazyCensus.Value;
 
-        List<ClientCreation> violations =
+        List<ClientCreationSite> violations =
         [
             .. census.Creations.Where(static c => AllowedCreators.All(row => row.Path != c.File))
         ];
