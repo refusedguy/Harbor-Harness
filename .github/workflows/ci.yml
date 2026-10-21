@@ -99,17 +99,6 @@ on:
   push:
     branches: [dev, master]
     paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
-  # NO workflow-level path filter on pull_request. #1804: a required status
-  # check is satisfied only if a check run with that exact name exists on the
-  # head commit. With `paths-ignore` here, a docs-only PR produced NO ci.yml
-  # check run at all, so every ci.yml check name ("gate", "build",
-  # "aot-publish", "public-api freeze", ...) would have been reported as
-  # "Expected - waiting for status to be reported" and the PR would have been
-  # unmergeable forever. The job-level `changes` filter below already decides
-  # which jobs run, so removing the workflow-level filter costs a checkout and
-  # a path-filter evaluation on a docs-only PR and changes nothing else: the
-  # heavy jobs still skip themselves, they just report "skipped" (which
-  # GitHub counts as a successful check), and the `gate` job still reports.
   pull_request:
   workflow_dispatch:
 
@@ -1401,6 +1390,10 @@ jobs:
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
             tests/Harbor.TestKit.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
+            tests/Harbor.CodeGen.Tests/bin/Release/net10.0/*.*
+            tests/Harbor.CodeGen.Tests/bin/Release/net10.0/runtimes/linux-x64/native/*
+            tests/Harbor.CodeGen.Tests/bin/Release/net10.0/runtimes/linux-arm64/native/*
+            tests/Harbor.CodeGen.Tests/bin/Release/net10.0/*/Harbor.*.resources.dll
             !**/*.pdb
             !**/*.xml
           retention-days: 1
@@ -1962,6 +1955,7 @@ jobs:
               Harbor.Telemetry.Tests
               Harbor.TestKit.Generators.Tests
               Harbor.TestKit.Tests
+              Harbor.CodeGen.Tests
           - shard: platform
             runner: ubuntu-24.04-arm
             guard: true

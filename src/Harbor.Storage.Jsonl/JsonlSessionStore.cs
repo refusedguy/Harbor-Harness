@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ICompactionEventStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.
@@ -209,6 +209,7 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 var header = new SessionHeaderEntry(
                     "session",
                     1,
+                    SessionFormatCatalog.Current,
                     session.Id,
                     session.ProjectId,
                     session.Directory,
@@ -316,7 +317,15 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 string sessionId = Path.GetFileNameWithoutExtension(file);
                 var headerResult = await SessionFileReader.TryReadHeaderAsync(file, sessionId, ct).ConfigureAwait(false);
                 if (headerResult.IsFailure)
+                {
+                    // #1749: a file this build cannot read is not skipped in
+                    // silence. The reason travels into the log — a session in
+                    // a format generation this build does not read is exactly
+                    // the case a reader must be told about, not the case a
+                    // reader may forget.
+                    JsonlSessionStoreLog.SessionHeaderUnreadable(_logger, sessionId, headerResult.Error);
                     continue;
+                }
 #pragma warning disable CFE0001
                 // CFE0001: false positive — the IsFailure guard above continues,
                 // a control-flow shape the analyzer does not model.
@@ -921,9 +930,16 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
                 // #199: an empty file is a Result outcome, not a throw — the
                 // Bind below maps it to a failure naming the session + path.
                 // The plan reports it by never seeing a record to replace.
+                //
+                // #1749: the rewritten header states the CURRENT format
+                // generation, so a legacy file is upgraded on disk by the
+                // first header rewrite. The writer always writes the current
+                // generation — that is what makes the generation a contract
+                // rather than a description.
                 var header = new SessionHeaderEntry(
                     "session",
                     1,
+                    SessionFormatCatalog.Current,
                     session.Id,
                     session.ProjectId,
                     session.Directory,
@@ -1024,4 +1040,12 @@ internal static partial class JsonlSessionStoreLog
 
     [LoggerMessage(EventId = 19, Level = LogLevel.Error, Message = "Failed to read the feedback of session {SessionId}: {Error}")]
     public static partial void ReadFeedbackFailed(ILogger logger, string sessionId, string error);
+
+    /// <summary>
+    ///     #1749: a session file this build cannot read is reported, not
+    ///     skipped in silence. The reason names the format generation when
+    ///     that is what refused the file.
+    /// </summary>
+    [LoggerMessage(EventId = 20, Level = LogLevel.Warning, Message = "Skipping session {SessionId}: its header could not be read ({Reason}).")]
+    public static partial void SessionHeaderUnreadable(ILogger logger, string sessionId, string reason);
 }

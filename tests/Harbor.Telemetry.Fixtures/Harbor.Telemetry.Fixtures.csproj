@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Harbor.Telemetry.Fixtures — the seams the [Observed] generator is proved
+    against (issue #1797, PR-2).
+
+    This assembly is a FIXTURE, not a product: it carries the marked seams the
+    generator decorates, and it carries one UNMARKED seam that the generator
+    must leave alone. The generator runs over THIS project (the analyzer edge
+    below), so the decorators it emits are compiled here and reach the guard
+    (tests/Harbor.CodeGen.Tests) as ordinary types.
+
+    It is not a test project: it declares no [Test] method and nothing runs it.
+    IsTestProject=false says so to tools/check-test-projects.py, which reads
+    that declaration to tell a helper library from a hole in the CI lists.
+
+    The closure is three assemblies: itself, Harbor.Abstractions.Contracts (the
+    [Observed] marker) and Harbor.Diagnostics.Abstractions (the ITracer and
+    IMetrics contracts the generated decorator is written against).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <RootNamespace>Harbor.Telemetry.Fixtures</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The marker attribute, and the Result the seams return. -->
+    <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
+    <!-- The contracts the generated decorator is written against: ITracer and
+         IMetrics. The generator emits them by name, so the compilation that
+         runs the generator must be able to resolve them. -->
+    <ProjectReference Include="..\..\src\Harbor.Diagnostics.Abstractions\Harbor.Diagnostics.Abstractions.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The generator runs over THIS project as an analyzer. It is build-time
+      only: the generator assembly is not referenced (ReferenceOutputAssembly=
+      false) and nothing of it reaches a consumer.
+
+      `OutputItemType` is written in the CHILD-ELEMENT form every other
+      analyzer reference in this repository uses (src/Harbor.Tui.CellForge,
+      src/Harbor.Terminal.Abstractions, tests/Harbor.Terminal.Abstractions.Tests,
+      tests/Harbor.TestKit.Generated). The attribute form is legal MSBuild, but
+      the repository's own reference reader — RepoPaths.ReadProjectReferences,
+      which the layering rules and the #1889 composition guard both walk —
+      recognises only the child element.
+    -->
+    <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"
+                      ReferenceOutputAssembly="false">
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
