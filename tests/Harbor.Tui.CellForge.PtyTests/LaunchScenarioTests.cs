@@ -1,3 +1,4 @@
+using Harbor.TestKit;
 using TUnit.Assertions;
 
 namespace Harbor.Tui.CellForge.PtyTests;
@@ -49,7 +50,7 @@ public sealed class LaunchScenarioTests : CellForgePtyScenarioBase
         // Optional golden: update with HARBOR_UPDATE_GOLDENS=1, but don't enforce strict equality
         if (Environment.GetEnvironmentVariable("HARBOR_ENFORCE_GOLDEN") == "1")
         {
-            string expected = PtyGolden.Verify("launch-100x30", actual);
+            string expected = Golden.VerifyText(Golden.FixtureDir("consoleex-pty"), "launch-100x30", actual);
             await Assert.That(actual).IsEqualTo(expected);
         }
     }

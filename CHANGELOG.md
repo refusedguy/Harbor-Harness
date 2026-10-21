@@ -1350,6 +1350,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Поведение при ошибке не изменилось.** Сбой хранилища по-прежнему не маскирует исходную ошибку прогона, usage-сумма остаётся нулевой, и отмена по-прежнему пробрасывается, а не превращается в тихий ноль. Изменилось одно наблюдаемое: отказ хранилища теперь логируется (`Warning`, с текстом ошибки), а раньше этот путь проглатывался молча; лог исключения поднят с `Debug` до `Warning`, потому что недособранный usage ребёнка — это недособранные итоги родителя. Покрыто тестами `tests/Harbor.Application.Tests/SubAgentUsageAggregateTests.cs`: успешный агрегат, отказ-значение, исключение на границе, отмена.
 
+### #1776 — один golden-фреймворк: шесть реализаций механики → одна в ките
+
+**Механика «найти корень репозитория, сравнить или перезаписать эталон, нормализовать EOL» больше не размазана по шести файлам — она одна, в ките: `Harbor.TestKit.Golden` (`tests/Harbor.TestKit.Support/Golden.cs`, 189 строк). У каждой линии остался только её собственный кусок: каталог фикстур, форма документа и утверждение, на котором она падает.**
+
+**Что было (измерено на `origin/dev` 39274aa5).** Шесть мест реализовывали одну и ту же механику:
+
+| Файл | строк | что было своим |
+|---|---|---|
+| `tests/Harbor.Tui.CellForge.Tests/GoldenFile.cs` | 89 | celldiff-эталоны + `.svg`-близнец |
+| `tests/Harbor.Tui.RendererTests/Support/GoldenFrames.cs` | 72 | кадры рендереров |
+| `tests/Harbor.E2E.App.Avalonia/ComponentTests/GoldenFrame.cs` | 246 | снимки компонентов Avalonia |
+| `tests/Harbor.Tui.CellForge.PtyTests/PtyGolden.cs` | 54 | эталоны PTY-сценариев |
+| `tests/Harbor.App.Cli.Tests/CellForgeReplSmokeTests.cs` | 39 | копия celldiff-хелпера целиком |
+| `tests/Harbor.Tui.CellForge.Tests/GenericGalleryGoldenTests.cs` | 51 | свой `FixtureDir`, свой `Normalize`, свой `Verify` |
+
+**Что стало.** `Harbor.TestKit.Golden` — единственная реализация: `Root`, `FixtureDir`, `BaselinePath`, `Normalize`, `IsUpdateMode`, `VerifyText`, `WriteBaseline`, `MissingFixtureMessage`, `DescribeDifference`. Пять тонких обёрток зовут её и держат своё: `CelldiffGoldens` (celldiff + `.svg`-близнец), `GoldenFrames` (кадры рендереров), `GoldenFrame` (снимки Avalonia + артефакт `.actual.txt`), плюс прямые вызовы `Golden.VerifyText` в PTY- и generic-layout-линиях. Дубль в `Harbor.App.Cli.Tests` удалён — там остался один вызов.
+
+**Найденный при этом баг (и почему он был невидим).** Рендерер-линия читала флаг `HARBOR_UPDATE_GOLDEN` — **единственное число**, — а воркфлоу `goldens.yml` выставляет `HARBOR_UPDATE_GOLDENS` — **множественное**. То есть кадры рендереров нельзя было перегенерировать воркфлоу: шаг регенерации молча делал ноль, шаг проверки сравнивал старый эталон с новым кодом и был зелёным, а два документа (`docs/BENCHMARKS_RENDERERS.md`, `docs/CODEGEN_BOILERPLATE.md`) учили ставить именно то имя, которое воркфлоу не выставляет. Теперь флаг один на всё дерево — `HARBOR_UPDATE_GOLDENS` — и гейт на это есть: `tests/Harbor.TestKit.Tests/GoldenUpdateModeTests.cs` пинит и обновление, и его отсутствие.
+
+**Контракт записан в `docs/DEVELOPMENT.md` §Golden baselines**: эталон лежит в `tests/fixtures/<suite>/<name>.golden.txt`, сравнение — побайтово после нормализации EOL, обновление — только под `HARBOR_UPDATE_GOLDENS=1`, CI не обновляет ничего, отсутствующий эталон = ошибка с командой, которая его создаёт. Кадры рендереров переехали из `tests/Harbor.Tui.RendererTests/GoldenFrames/` в `tests/fixtures/renderer-frames/` — содержимое файлов не тронуто. Список линий в `.github/workflows/goldens.yml` стал один и перечисляет их все (PTY-линия исключена намеренно: её эталоны включаются флагом `HARBOR_ENFORCE_GOLDEN=1`, а её тесты не носят «Golden» в именах, и фильтр воркфлоу нашёл бы там ноль тестов и уронил проверку).
+
+**Чего НЕ сделано.** Сравнение не «улучшено»: нормализация ровно та же, что и была, иначе разъехались бы 68 закоммиченных эталонов. PNG-эталона нет и не появится: Avalonia-линия сравнивает текстовый снимок дерева, а не растр (растр зависит от Skia и шрифтов, поэтому сравнение на CI всегда было пропущено). Дубликат `FindRepoRoot` в `tests/Harbor.App.Avalonia.Tests/` (8 копий) — это семья #1773/RepoPaths, а не золотая линия; она не тронута.
+
+**Проверено.** Локальная сборка на этой машине запрещена (OOM) — компиляция и тесты только на CI. Гейты, которые ловят markdown и дубли: `tools/check-md-links.py`, `tools/md-lint.py`, `tools/check-doc-cites.py` (цитаты ADR-010 переехали на `CelldiffGoldens.cs`), `tools/check-test-dup.py`.
+
 ## [0.1.0-alpha] - 2026-07-16
 
 Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage, and 65 tests.
