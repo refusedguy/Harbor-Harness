@@ -47,10 +47,10 @@ public class JsonlImageAttachmentTests
             var message = TestMessages.User("what is in this screenshot?", id: "msg-img", sessionId: session.Id, model: "kilo-auto/free", attachments: [new ImageAttachment("/tmp/shot.png", "image/png", 1, 1, png)]);
 
             var appended = await store.AppendMessageAsync(session.Id, message);
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
 
             var reloaded = (UserMessage)messages.Value[0];
@@ -115,7 +115,7 @@ public class JsonlImageAttachmentTests
             File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddSeconds(1));
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
 
             var withImage = messages.Value.OfType<UserMessage>().First(m => m.Id == "msg-broken-2");
@@ -167,7 +167,7 @@ public class JsonlImageAttachmentTests
             File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddSeconds(1));
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
 
             // Select by id, not by index: the store orders messages by
