@@ -145,7 +145,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 "Plugin {DisplayName} has a configuration the host cannot accept: {Reason}",
                 plugin.DisplayName,
                 config.Error);
-            return config.ConvertFailure();
+            return config.ConvertFailure<IPluginRun>();
         }
 
         var context = PluginLifecycle.BuildContext(

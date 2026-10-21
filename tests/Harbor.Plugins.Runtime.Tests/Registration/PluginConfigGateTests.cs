@@ -1,5 +1,4 @@
 using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Registration;
@@ -28,7 +27,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("""{ "maxResults": 10 }"""));
 
-        Result result = registrar.Register(Loaded(plugin, Manifest()), host);
+        var result = registrar.Register(Loaded(plugin, Manifest()), host);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(plugin.Config).IsNotNull();
@@ -46,7 +45,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("{}"));
 
-        Result result = registrar.Register(Loaded(plugin, Manifest()), host);
+        var result = registrar.Register(Loaded(plugin, Manifest()), host);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(plugin.Config!["maxResults"].AsInteger()).IsEqualTo(5L);
@@ -64,7 +63,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("""{ "prot": 8080 }"""));
 
-        Result result = registrar.Register(Loaded(plugin, Manifest()), host);
+        var result = registrar.Register(Loaded(plugin, Manifest()), host);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("plugins.web-search.prot");
@@ -84,7 +83,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("""{ "maxResults": 100 }"""));
 
-        Result result = registrar.Register(Loaded(plugin, Manifest()), host);
+        var result = registrar.Register(Loaded(plugin, Manifest()), host);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("plugins.web-search.maxResults");
@@ -104,7 +103,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("""{ "maxResults": 10 }"""));
 
-        Result result = registrar.Register(Loaded(plugin, new PluginManifest { Name = plugin.Name }), host);
+        var result = registrar.Register(Loaded(plugin, new PluginManifest { Name = plugin.Name }), host);
 
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("plugins.web-search");
@@ -123,7 +122,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(new StubConfigSource("{}"));
 
-        Result result = registrar.Register(Loaded(plugin, new PluginManifest { Name = plugin.Name }), host);
+        var result = registrar.Register(Loaded(plugin, new PluginManifest { Name = plugin.Name }), host);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(plugin.WasInitialized).IsTrue();
@@ -142,7 +141,7 @@ public sealed class PluginConfigGateTests
         var plugin = new ConfigPlugin("web-search");
         var registrar = NewRegistrar(config: null);
 
-        Result result = registrar.Register(Loaded(plugin, Manifest()), host);
+        var result = registrar.Register(Loaded(plugin, Manifest()), host);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(plugin.Config!["maxResults"].AsInteger()).IsEqualTo(5L);
