@@ -108,11 +108,19 @@ jobs:
       proceed: ${{ steps.decide.outputs.proceed }}
       reason: ${{ steps.decide.outputs.reason }}
     steps:
-      - name: Check out dev (the branch the work happens on)
-        if: github.event_name == 'schedule'
+      # The checkout is NOT conditional any more (#1753). Two things need the
+      # tree on disk: the queue-wait action at the end of this job is a LOCAL
+      # action, so the runner has to have the repository before it can run it,
+      # and the schedule path below reads dev's newest commit age from git.
+      # With the checkout limited to scheduled runs, a push run reached the
+      # local action with an empty workspace and the whole lane died in the
+      # GATE job — so the coverage job below never ran at all.
+      - name: Check out the tree (the local action at the end of this job lives in it)
         uses: actions/checkout@v7
         with:
-          ref: dev
+          # A scheduled run checks out dev (the branch the work happens on);
+          # a push or a dispatch run checks out what was pushed.
+          ref: ${{ github.event_name == 'schedule' && 'dev' || github.ref }}
           fetch-depth: 1
 
       - name: Decide whether this run duplicates a push-run
@@ -178,6 +186,14 @@ jobs:
   #     explicitly deferred (legacy areas would fail day one — see #99).
   #   - Per-project test failures are RECORDED, never fatal: the `test` job
   #     stays the gate. Instrumentation must not block PRs on flakes.
+  #
+  # What IS a gate in this job (issue #1753) is the REGISTRY: the list of
+  # the product files the lane is allowed not to cover
+  # (tools/coverage-registry.txt), each with a reason. The gate compares
+  # that list with what the measurement says, in both directions — a file
+  # that stopped being covered, and a row that is no longer needed. It
+  # fails on NO number: the numbers stay report-only, and the pull
+  # request path has no coverage in it at all since #1923.
   # Excluded suites: ui (Avalonia-headless flakes amplify under
   # instrumentation), e2e/load (slow, need display). Scope is stated in the
   # summary so numbers are never misread as whole-repo coverage.
@@ -222,13 +238,28 @@ jobs:
           cache: true
           cache-dependency-path: "Directory.Packages.props"
 
-      - name: Build the tree the coverage runs against
+      - name: Build the tree the coverage runs against (with symbols)
         run: |
           # pipefail is load-bearing: `... | tee build.log` reports tee's
           # exit code, so without it a FAILED build would leave this job
           # green.
           set -o pipefail
-          bash build/build.sh Compile --configuration Release 2>&1 | tee build.log
+          # The symbols are LOAD-BEARING (#1753). Release strips them
+          # (Directory.Build.props sets DebugType=none for Release, so the
+          # packages carry no PDB), and the coverage engine on Linux
+          # instruments the assemblies STATICALLY — the instrumentation maps
+          # IL back to source lines THROUGH the portable PDB next to each
+          # DLL. With no PDB there is nothing to instrument: run 39508517419
+          # produced 20 EMPTY cobertura files and "Total - Line: N/A" in
+          # every suite, and the summary said "No cobertura files produced".
+          # The same build as the NUKE one (dotnet build of Harbor.slnx, the
+          # properties CompileTarget passes) plus the two that keep the PDBs.
+          dotnet build Harbor.slnx -c Release --nologo \
+            -p:DebugType=portable \
+            -p:DebugSymbols=true \
+            -p:ContinuousIntegrationBuild=true \
+            -p:MaxCpuCount=0 \
+            2>&1 | tee build.log
 
       - name: Publish the analyzer inventory of the test projects
         if: always()
@@ -348,6 +379,10 @@ jobs:
       # sweep of TestResults in case the extension places files elsewhere).
       # Pure stdlib python — no ReportGenerator/coverlet dependency.
       # No thresholds here: numbers are informational only (issue #99).
+      #
+      # There is NO TOTAL LINE any more (issue #1753). The per-suite columns
+      # overlap on the shared `src/` assemblies, so their sum was never the
+      # coverage of anything; the per-file report below is the honest form.
       - name: Publish coverage summary (report-only, no thresholds)
         if: always()
         shell: bash
@@ -369,13 +404,14 @@ jobs:
           except OSError:
               pass
 
-          lines = ["## Coverage (report-only, issue #99)", "",
+          lines = ["## Coverage per suite (report-only, issue #99)", "",
                    "_No thresholds — informational only. Scope: core + platform unit",
-                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
-                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
-                   "not whole-repo coverage._", "",
+                   "suites (ui/e2e excluded, see `coverage` job). The columns OVERLAP",
+                   "on the shared `src/` assemblies, so they are NOT a total: the",
+                   "per-file report below is the union, and there is no global",
+                   "percentage anywhere._", "",
                    "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
-          total_valid = total_covered = 0
+          parsed = 0
           for name in sorted(files):
               try:
                   root = ET.parse(files[name]).getroot()
@@ -384,30 +420,70 @@ jobs:
                   rate = float(root.get("line-rate", 0.0)) * 100.0
                   cell = f"{rate:.1f}%"
                   detail = f"{covered}/{valid}"
-                  total_valid += valid
-                  total_covered += covered
+                  parsed += 1
               except Exception as ex:
                   cell = "n/a (unparsable)"
                   detail = str(ex)[:60]
               st = status.get(name.removesuffix(".cobertura.xml"), "?")
               short = name.removesuffix(".cobertura.xml")
               lines.append(f"| {short} | {st} | {cell} | {detail} |")
-          if total_valid:
-              lines += ["",
-                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
-                        f"({total_covered}/{total_valid} lines)**"]
-          else:
-              lines += ["", "**No cobertura files produced — check the collect step log.**"]
+          if not parsed:
+              # The measurement produced NOTHING. That is not a number and
+              # not a zero: it is a broken instrument, and the sentence that
+              # says so is the only honest thing this table can print.
+              lines += ["", "**No cobertura report could be read — check the collect step log.**"]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write("\n".join(lines) + "\n")
           PY
 
-      - name: Upload cobertura reports
+      # The per-file report (issue #1753): the honest form of the number.
+      # There is no global percentage in it — the tables are per project and
+      # per file, the scope is written into the header, and the files the
+      # lane cannot see are listed instead of being averaged away.
+      - name: Publish the per-file coverage report (report-only)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/coverage_report.py \
+            --coverage-dir Coverage \
+            --source-root . \
+            --registry tools/coverage-registry.txt \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --out Coverage/coverage-per-file.md \
+            --uncovered-out Coverage/coverage-uncovered-locations.txt \
+            --min-files 1200
+
+      # The registry against the measurement. This one FAILS the job, and
+      # that is the point: the numbers stay report-only, but the LIST of
+      # accepted holes has to match what the measurement says, in both
+      # directions — a file that stopped being covered, and a row that is
+      # no longer needed.
+      #
+      # The status file is passed so a suite that did not pass makes the
+      # measurement PARTIAL: the stale rows are still compared (that holds
+      # under a partial measurement), the uncovered files are not (a suite
+      # that died reports nothing, and its files would look like holes).
+      - name: The coverage registry against the measurement
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/check-coverage-registry.py \
+            --coverage-dir Coverage \
+            --source-root . \
+            --registry tools/coverage-registry.txt \
+            --status Coverage/status.tsv \
+            --min-files 1200 \
+            --min-covered 400
+
+      - name: Upload the coverage reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-cobertura
-          path: "Coverage/*.cobertura.xml"
+          path: |
+            Coverage/*.cobertura.xml
+            Coverage/coverage-per-file.md
+            Coverage/coverage-uncovered-locations.txt
           if-no-files-found: warn
           retention-days: 30
 
