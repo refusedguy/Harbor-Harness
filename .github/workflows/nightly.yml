@@ -411,6 +411,7 @@ jobs:
                    "per-file report below is the union, and there is no global",
                    "percentage anywhere._", "",
                    "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
+          parsed = 0
           for name in sorted(files):
               try:
                   root = ET.parse(files[name]).getroot()
@@ -419,12 +420,18 @@ jobs:
                   rate = float(root.get("line-rate", 0.0)) * 100.0
                   cell = f"{rate:.1f}%"
                   detail = f"{covered}/{valid}"
+                  parsed += 1
               except Exception as ex:
                   cell = "n/a (unparsable)"
                   detail = str(ex)[:60]
               st = status.get(name.removesuffix(".cobertura.xml"), "?")
               short = name.removesuffix(".cobertura.xml")
               lines.append(f"| {short} | {st} | {cell} | {detail} |")
+          if not parsed:
+              # The measurement produced NOTHING. That is not a number and
+              # not a zero: it is a broken instrument, and the sentence that
+              # says so is the only honest thing this table can print.
+              lines += ["", "**No cobertura report could be read — check the collect step log.**"]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write("\n".join(lines) + "\n")
           PY
