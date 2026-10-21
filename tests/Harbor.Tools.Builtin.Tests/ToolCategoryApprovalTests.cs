@@ -70,12 +70,33 @@ public class ToolCategoryApprovalTests
     ///         question. Two questions about one call is not a policy, it is a
     ///         duplicate, and the tool's own question is the one that names the
     ///         file, the scope and the effect.
+    ///     <para>
+    ///         The two plugin rows — <c>session_broadcast</c> and <c>session_inbox</c> —
+    ///         are declared without a category on purpose and are the only exception.
+    ///         They never register in the builtin host, and classifying them changes a
+    ///         verdict rather than describing one: a category match makes a rule about
+    ///         the class fire against the tool, and CI caught that when
+    ///         <c>session_broadcast</c> was briefly Mcp and an earlier Ask rule then
+    ///         beat its explicit Allow. The exemption is asserted here so that adding a
+    ///         third unclassified tool is a deliberate edit to this list.
+    ///     </para>
+    ///     <para>
+    ///         <b>#1761 — the third row is the <c>goal</c> tool, and it DOES register.</b>
+    ///         It is in no class because it is in none of them: it writes the
+    ///         session's goal record, which is not a workspace file, not a read, not
+    ///         a shell, not the network and not MCP. Calling it Write would be a
+    ///         lie about what it does, and the lie has a price: a user's
+    ///         <c>new("write", "*", Allow)</c> would then authorise the model's
+    ///         verdict on its own work. The fail-closed reading is the right one
+    ///         here — a write-category rule must not decide whether the agent may
+    ///         declare its goal met.
     ///     </para>
     /// </remarks>
     [Test]
     public async Task Every_Builtin_Tool_That_Registers_Declares_A_Category()
     {
         string[] declaredWithoutCategory = ["session_broadcast", "session_inbox", "plugin_manager"];
+        string[] declaredWithoutCategory = ["session_broadcast", "session_inbox", "goal"];
 
         var unclassified = BuiltinToolSafetyProfiles.All
             .Where(d => d.Category is null && !declaredWithoutCategory.Contains(d.ToolName))

@@ -41,6 +41,7 @@ public class RegistrationCompositionTests
 
     [Test]
     public async Task AddHarbor_Full14_RegistersExactlyTheTwentyTwoBuiltinTools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
@@ -51,6 +52,9 @@ public class RegistrationCompositionTests
         // + session_read/session_steer (registered when a session store is composed)
         // + plugin_manager (registered when the plugin runtime is compiled in — #1738)
         // = 22.
+        // + goal (#1761, the goal axis — registered whatever the store is, so the
+        //   round prompt never names a tool the turn was not offered)
+        // = 21.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -66,6 +70,7 @@ public class RegistrationCompositionTests
             "mcp", "read_mcp_resource", "mcp_prompt",
             "harbor_inspect",
             "plugin_manager",
+            "harbor_inspect", "goal",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
@@ -89,9 +94,11 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        // 10 classic tools + lsp + skill + harbor_inspect.
-        await Assert.That(names.Count).IsEqualTo(13);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect" })
+        // 10 classic tools + lsp + skill + harbor_inspect + goal (#1761 — the
+        // goal axis is registered whatever the store is, so a round prompt
+        // never names a tool the turn was not offered).
+        await Assert.That(names.Count).IsEqualTo(14);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect", "goal" })
         {
             await Assert.That(names).Contains(safe);
         }
