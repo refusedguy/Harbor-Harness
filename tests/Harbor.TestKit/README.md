@@ -12,7 +12,6 @@ project that needs a double for something Harbor owns; never shipped.
 | Path | What lives there |
 |------|------------------|
 | `Fakes/<IInterface>.cs` | One file per interface: the double that implements it. The file is named after the interface, so "where do I put my double" has exactly one answer. |
-| `TestToolContext.cs` | The one place a `ToolContext` is built (#1775). |
 | `TestAgents.cs`, `TestTempDirs.cs`, `TestScalingGate.cs`, `AllocationProbe.cs` | Named entry points other suites share. |
 
 The source-generated doubles are NOT here (#1875): the opt-in marker, the
@@ -32,10 +31,21 @@ The shared event and message builders are in neither part: they live in
 contract assemblies. A test project that publishes an event or builds a
 message therefore reaches the builders without gaining a product assembly it
 did not already have (#1821, #1816). The message builders moved here from
-this core in #1816: the core reaches 20 test projects and this part reaches
-33, and the three message-heavy projects that reference only this part
+this core in #1816: the core reaches nineteen test projects and this part
+reaches 33, and the three message-heavy projects that reference only this part
 (`Harbor.Benchmarks`, `Harbor.Storage.Tests`, `Harbor.Tui.Tests`) reach the
 builders with no csproj edit at all.
+
+`TestToolContext` moved here for the same reason (#1775). A `ToolContext`
+needs `Harbor.Abstractions` and `Harbor.Abstractions.Contracts` and nothing
+else, so the factory belongs to the part whose closure is those two
+assemblies. The three projects that build a `ToolContext` by hand —
+`Harbor.Abstractions.Tests`, `Harbor.Plugins.Runtime.Tests` and
+`Harbor.Benchmarks` — already reference this part, so the move cost none of
+them a csproj edit; reaching the factory through the core instead would have
+cost two of them a reference the part does not need. The namespace did not
+change: the type is still `Harbor.TestKit.TestToolContext`, so a consumer of
+the core sees it exactly as before.
 
 ## Naming
 

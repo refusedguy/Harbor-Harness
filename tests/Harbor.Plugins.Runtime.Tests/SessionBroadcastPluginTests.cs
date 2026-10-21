@@ -164,13 +164,9 @@ public sealed class SessionBroadcastPluginTests
     ///     Build a <see cref="ToolContext" /> mirroring production: the agent loop passes
     ///     <c>Services=null</c>, so the tools under test must never touch it.
     /// </summary>
-    private static ToolContext MakeContext(string sessionId) => new(
-        sessionId,
-        Guid.NewGuid().ToString("N"),
-        Guid.NewGuid().ToString("N"),
-        "code",
-        CancellationToken.None,
-        Array.Empty<AgentMessage>(),
-        (_, _) => Task.CompletedTask,
-        (_, _) => Task.FromResult(new PermissionResponse(PermissionAction.Deny, false)));
+    private static ToolContext MakeContext(string sessionId) => TestToolContext.Create(
+        sessionId: sessionId,
+        messageId: Guid.NewGuid().ToString("N"),
+        callId: Guid.NewGuid().ToString("N"),
+        ask: (_, _) => Task.FromResult(TestToolContext.DenyWithoutPersist()));
 }
