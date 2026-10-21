@@ -19,6 +19,12 @@ namespace Harbor.Application.Configuration;
 [JsonSerializable(typeof(Dictionary<string, List<PermissionRule>>))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(PermissionRule))]
+// #1734: the per-plugin configuration sections. A section is a plugin's own
+// settings, and what it means is the plugin's schema, so the host stores it
+// as it was written rather than binding it to a type of its own. The
+// JsonElement is the whole section, and it is written back unchanged.
+[JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(Dictionary<string, JsonElement>))]
 internal sealed partial class ConfigJsonContext : JsonSerializerContext
 {
 }
