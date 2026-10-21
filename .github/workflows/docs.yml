@@ -472,6 +472,12 @@ jobs:
       # second.
       - name: Pack validator still fails on a package without its metadata
         run: python3 tools/pack-validate.py --selftest
+      # #1795. The third reporter: the SKIPPED tests of a run, with the reason
+      # each one declared. Same argument as the two above — a reporter that
+      # stops reporting is green on every run and tells nobody anything. Its
+      # self-test carries the two shapes that matter: a skip WITH a reason
+      # (the reason must survive, marker stripped) and a skip WITHOUT one
+      # (the report must say so instead of inventing a reason).
       - name: Skip reporter still finds a skipped test
         run: python3 tools/test-skips.py TestResults --self-test
       - name: Mtime normaliser still tells a changed file from an unchanged one

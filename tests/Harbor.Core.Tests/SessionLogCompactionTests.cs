@@ -46,7 +46,7 @@ public class SessionLogCompactionTests
     ///     it: an assistant message flagged as a summary, carrying the id of
     ///     the first message kept verbatim.
     /// </summary>
-    private static async Task<(JsonlSessionStore Store, string SessionId, AssistantMessage Summary)>
+    private static async Task<(JsonlSessionStore Store, string Root, string SessionId, AssistantMessage Summary)>
         SeedAsync()
     {
         string root = Path.Combine(Path.GetTempPath(), $"harbor-test-1752-compact-{Guid.NewGuid():N}");
@@ -76,7 +76,7 @@ public class SessionLogCompactionTests
             isSummary: true,
             summaryFirstKeptId: "m2");
 
-        return (store, session.Id, summary);
+        return (store, root, session.Id, summary);
     }
 
     /// <summary>
@@ -87,7 +87,7 @@ public class SessionLogCompactionTests
     [Test]
     public async Task Compaction_KeepsTheFoldedText_AndWritesTheSummary()
     {
-        var (store, sessionId, summary) = await SeedAsync();
+        var (store, root, sessionId, summary) = await SeedAsync();
         try
         {
             var before = await store.GetSessionLogAsync(sessionId);
@@ -126,8 +126,8 @@ public class SessionLogCompactionTests
         }
         finally
         {
-            if (Directory.Exists(store.GetRootDirectory()))
-                Directory.Delete(store.GetRootDirectory(), true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
         }
     }
 
@@ -139,7 +139,7 @@ public class SessionLogCompactionTests
     [Test]
     public async Task Compaction_HidesTheFoldedMessagesFromTheModel_NotFromTheLog()
     {
-        var (store, sessionId, summary) = await SeedAsync();
+        var (store, root, sessionId, summary) = await SeedAsync();
         try
         {
             var appended = await store.AppendMessageAsync(sessionId, summary);
@@ -167,8 +167,8 @@ public class SessionLogCompactionTests
         }
         finally
         {
-            if (Directory.Exists(store.GetRootDirectory()))
-                Directory.Delete(store.GetRootDirectory(), true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
         }
     }
 }

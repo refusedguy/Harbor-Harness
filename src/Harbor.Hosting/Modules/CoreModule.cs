@@ -9,6 +9,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
 using Harbor.Diagnostics;
+using Harbor.Registries.Scopes;
 using Harbor.Telemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -91,6 +92,23 @@ internal static class CoreModule
             sp.GetRequiredService<ILogger<LoggingBehavior>>()));
         services.AddSingleton<IPipelineBehavior>(sp => new PermissionCheckBehavior(
             sp.GetRequiredService<ILogger<PermissionCheckBehavior>>()));
+        // #1736: the scope-aware provider resolver — the seam that lets one
+        // agent run in a scope with its own LLM client while every other agent
+        // keeps the process-wide one.
+        //
+        // The two tables it holds start EMPTY: no agent is bound to a scope and
+        // no scope declares a client, so every lookup falls through to the
+        // process-wide provider registry and the product's behaviour is exactly
+        // what it was before scopes existed. A host, a plugin or a test declares
+        // what it needs by binding into this resolver — the loop reads the scope
+        // the running agent is declared in.
+        //
+        // Registered as the concrete type FIRST and forwarded to the interface
+        // second, so a binder can resolve the concrete resolver and bind into
+        // the very instance the loop reads.
+        services.AddSingleton<ScopedProviderResolver>(sp => new ScopedProviderResolver(
+            sp.GetRequiredService<IProviderRegistry>()));
+        services.AddSingleton<IScopedProviderResolver>(sp => sp.GetRequiredService<ScopedProviderResolver>());
         services.AddSingleton<IAgentLoop, AgentLoop>();
         services.AddSingleton<DefaultAgent>();
         // sprint3-C C1: IAgent consumers get the tracing proxy (agent.turn span,

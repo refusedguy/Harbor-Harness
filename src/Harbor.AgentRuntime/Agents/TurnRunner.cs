@@ -75,7 +75,13 @@ internal sealed class TurnRunner(
     // model may see and which it may call. Optional so every
     // direct-construction caller keeps compiling unchanged; null keeps the
     // workspace discovery and no policy.
-    ISkillRegistry? skillRegistry = null)
+    ISkillRegistry? skillRegistry = null,
+    // #1736: the scope-aware provider resolver — the seam that lets an agent
+    // run in a scope with its own LLM client. Optional so every
+    // direct-construction caller keeps compiling unchanged; null keeps the
+    // process-wide provider registry, which is what the product resolved
+    // before scopes existed.
+    IScopedProviderResolver? scopedProviders = null)
 {
     // #1735: the registry the model-facing catalog comes from. Null keeps the
     // pre-registry behaviour (every discovered skill is offered), which is
@@ -131,8 +137,8 @@ internal sealed class TurnRunner(
         // ifs, no IsFailure + .Value double-inspection.
         Result<(ILlmClient Client, IReadOnlyList<ModelInfo> Catalog)> provider =
             await ProviderId.TryCreate(agent.ProviderId)
-                .Bind(id => providers.GetClient(id).Map(client => (id, client)))
-                .Bind(async t => (await providers.GetModelsCachedAsync(t.id, ct).ConfigureAwait(false))
+                .Bind(id => ResolveClient(agent, id).Map(client => (id, client)))
+                .Bind(async t => (await ResolveCatalog(agent, t.id, ct).ConfigureAwait(false))
                     .Map(models => (t.client, models)))
                 .ConfigureAwait(false);
 
@@ -141,6 +147,52 @@ internal sealed class TurnRunner(
                 .ToResult($"Model '{agent.Model}' not found in provider '{agent.ProviderId}'.")
                 .Map(m => (Client: catalog.Client, Model: m)),
             error => Result.Failure<(ILlmClient Client, ModelInfo Model)>(error));
+    }
+
+    /// <summary>
+    ///     Resolve the LLM client a run sees (#1736).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         With a scoped resolver present, the client is the one the scope
+    ///         the agent runs in declares; without one, it is the client the
+    ///         process-wide registry holds — the behaviour every run had before
+    ///         scopes existed.
+    ///     </para>
+    /// </remarks>
+    private Result<ILlmClient> ResolveClient(AgentDefinition agent, ProviderId providerId)
+    {
+        if (scopedProviders is null)
+        {
+            return providers.GetClient(providerId);
+        }
+
+        ServiceScope scope = scopedProviders.ScopeFor(agent.Name);
+        return scopedProviders.GetClient(scope, providerId);
+    }
+
+    /// <summary>
+    ///     Resolve the model catalog a run reads (#1736).
+    /// </summary>
+    /// <remarks>
+    ///     The catalog comes from the same place the client does — the scoped
+    ///     client's own list when the scope declares one, the process-wide
+    ///     cached catalog otherwise. A run that read one provider's catalog and
+    ///     called another provider's client would fail on a model that is
+    ///     perfectly available.
+    /// </remarks>
+    private Task<Result<IReadOnlyList<ModelInfo>>> ResolveCatalog(
+        AgentDefinition agent,
+        ProviderId providerId,
+        CancellationToken ct)
+    {
+        if (scopedProviders is null)
+        {
+            return providers.GetModelsCachedAsync(providerId, ct);
+        }
+
+        ServiceScope scope = scopedProviders.ScopeFor(agent.Name);
+        return scopedProviders.GetModelsAsync(scope, providerId, ct);
     }
 
     /// <summary>
