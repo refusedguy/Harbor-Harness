@@ -4,7 +4,7 @@ Issue #1853. This document is the measured report for the unused-reference
 sweep over the whole solution, and the reference for the gate that keeps the
 sweep from drifting.
 
-The gate itself is [`tools/check-reference-trimmer.py`](../tools/check-reference-trimmer.py)
+The gate itself is [the compiled `check-reference-trimmer` gate](../tools/gates/check-reference-trimmer/main.go)
 and its baseline is
 [`tools/reference-trimmer-baseline.txt`](../tools/reference-trimmer-baseline.txt).
 The CI job that produces the answer is the `reference-trimmer` job in
@@ -224,7 +224,7 @@ row for it is written here, and nothing in this PR touches those 16 files.
 
 ## 5. The gate
 
-`tools/check-reference-trimmer.py` reads the analyzer's log and compares it
+the compiled `check-reference-trimmer` gate reads the analyzer's log and compares it
 with the baseline. It is stdlib python, no dotnet, no network, in the same
 family as `check-test-projects.py` and `check-test-dup.py`.
 

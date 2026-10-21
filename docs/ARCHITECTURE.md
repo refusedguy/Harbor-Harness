@@ -61,7 +61,7 @@ Harbor.slnx                          (.sln не существует; есть �
 Harbor follows **Clean / Hexagonal / Onion Architecture** — dependency direction is
 inward only. The innermost layer (Domain) references no other Harbor assembly —
 only BCL plus a gated set of 7 NuGet packages (см. `Harbor.Abstractions` ниже и
-`tools/check-abstractions-contract.py`).
+the compiled `check-abstractions-contract` gate).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -186,7 +186,7 @@ audit trail of violations found and fixed.
 `Harbor.Abstractions` has no Harbor dependencies except `Harbor.Abstractions.Contracts`,
 plus a gated set of 7 NuGet packages (`CSharpFunctionalExtensions`, `MemoryPack`,
 `ZLinq` + `ZLinq.DropInGenerator`, three `Microsoft.Extensions.*.Abstractions`;
-gate: `tools/check-abstractions-contract.py`). All interfaces, models, events live here. Plugins and external code can reference just this package.
+gate: the compiled `check-abstractions-contract` gate). All interfaces, models, events live here. Plugins and external code can reference just this package.
 
 ### 2. Event bus decoupling
 
