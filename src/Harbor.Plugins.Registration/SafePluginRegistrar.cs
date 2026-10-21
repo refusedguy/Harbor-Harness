@@ -25,7 +25,10 @@ public sealed class SafePluginRegistrar : IPluginRegistrar
     }
 
     /// <inheritdoc />
-    public Result Register(LoadedPlugin plugin, IPluginLoadHost host)
+    public Result<IPluginRun> Register(
+        LoadedPlugin plugin,
+        IPluginLoadHost host,
+        PluginRunMode mode = PluginRunMode.Run)
     {
         if (plugin is null)
             throw new ArgumentNullException(nameof(plugin));
@@ -34,12 +37,12 @@ public sealed class SafePluginRegistrar : IPluginRegistrar
 
         try
         {
-            return _inner.Register(plugin, host);
+            return _inner.Register(plugin, host, mode);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Plugin registration threw for {DisplayName}", plugin.DisplayName);
-            return Result.Failure($"Plugin registration threw for '{plugin.DisplayName}': {ex.Message}");
+            return Result.Failure<IPluginRun>($"Plugin registration threw for '{plugin.DisplayName}': {ex.Message}");
         }
     }
 }

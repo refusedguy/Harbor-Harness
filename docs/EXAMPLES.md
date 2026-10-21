@@ -189,6 +189,59 @@ Tools с `ExecutionMode.Parallel` запускаются одновременн�
 public ExecutionMode ExecutionMode => ExecutionMode.Parallel;
 ```
 
+### 8a. Отдать модели контекст вместе с результатом тула (#1763)
+
+У тула два выхода. Первый — обычный результат. Второй — **отложенный контекст**:
+кусок контекста, который тул отдал рядом с результатом, и цикл вставил в историю
+ПОСЛЕ этого результата. Это не слова юзера: у контекста свой источник, и модель
+читает его как наблюдение, а не как реплику человека.
+
+```csharp
+public async Task<ToolResult> ExecuteAsync(JsonElement args, ToolContext ctx, CancellationToken ct)
+{
+    var report = await RunDiagnosticsAsync(ct).ConfigureAwait(false);
+
+    return ToolResult.Success("3 files checked") with
+    {
+        DeferredContexts = new[]
+        {
+            new DeferredToolContext(
+                Content: "file a.cs: 3 warnings; file b.cs: 1 warning",
+                Source: "linter",
+                Metadata: new[] { new DeferredContextMetadata("kind", "diagnostics") })
+        }
+    };
+}
+```
+
+**Что видит модель.** `MessageConverter` разворачивает сообщение с результатами в
+`результат(и)`, а затем ОДНО пользовательское сообщение с отложенными контекстами:
+
+```
+[tool-context] source=linter kind=diagnostics
+file a.cs: 3 warnings; file b.cs: 1 warning
+```
+
+Порядок — контракт: контекст описывает, что увидел тул, поэтому модель обязана
+прочитать результат раньше. Между двумя результатами контекст стоять не может —
+это ломает парность `tool_call`/`tool_result` (#1751).
+
+**Три состояния поля `DeferredContexts`** (у `ToolResult` и у `ToolResultEntry`):
+
+| Значение | Что означает | Что делает цикл |
+|---|---|---|
+| `null` | у тула не было контекста | не вставляет ничего; обычный результат — вся история |
+| пустой список | тул **пообещал** контекст и не отдал его | пишет Warning в лог; результат остаётся; прогон продолжается |
+| непустой список | контекст пришёл | вставляет его в историю сразу после результата |
+
+Пустой список — это «обещание, которое не выполнено»: продюсер контекста упал,
+сработал таймаут или пришлось отмениться. Отличать его от «обещания не было»
+важно: без этого промах был бы не виден.
+
+> **Gotcha**: контекст едет в типизированном поле, а не в `Metadata` — `Metadata`
+> исключён из MemoryPack, и маркер в нём потерялся бы при первом сохранении
+> сессии.
+
 ---
 
 ## Providers
