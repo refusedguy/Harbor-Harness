@@ -26,15 +26,12 @@ public static class CompileTarget
     ///         the pull-request lane's runner-minutes, for one gate.
     ///     </para>
     ///     <para>
-    ///         The logger is MSBuild's own file logger. The
-    ///         <c>-logger:</c> switch does NOT take the <c>flp</c> alias
-    ///         (that alias belongs to the <c>-flp:</c> switch, and
-    ///         <c>-logger:flp</c> fails with "MSB1021: Cannot create an
-    ///         instance of the logger flp"); it takes a logger CLASS and an
-    ///         ASSEMBLY. The file logger is
-    ///         <c>Microsoft.Build.Logging.FileLogger</c> in
-    ///         <c>Microsoft.Build</c>, and its parameters are the file
-    ///         logger's own: <c>LogFile</c> and <c>WarningOnly</c>.
+    ///         The logger is MSBuild's own file logger, spelled the way the
+    ///         deleted job spelled it: <c>-flp:logfile=&lt;path&gt;;warningsonly</c>.
+    ///         It writes the compiler's warnings in the canonical
+    ///         <c>…: warning RT0002: … [project]</c> shape the gate reads, and
+    ///         it writes them whether or not the build fails — which is what
+    ///         lets the gate report an answer it did not get.
     ///     </para>
     ///     <para>
     ///         The doc file is turned on with it, and for the same reason:
@@ -59,16 +56,19 @@ public static class CompileTarget
         var solutionPath = solution.Path.ToString();
         var warningLog = Environment.GetEnvironmentVariable(WarningLogVariable);
         var scan = !string.IsNullOrWhiteSpace(warningLog);
+        var extraArgs = scan
+            ? new[]
+            {
+                "-p:GenerateDocumentationFile=true",
+                $"-flp:logfile={warningLog};warningsonly"
+            }
+            : Array.Empty<string>();
         var argv = new List<string>
         {
             "dotnet", "build", solutionPath, "-c", configuration, "--no-restore",
             "-p:MaxCpuCount=0", "-p:ContinuousIntegrationBuild=true"
         };
-        if (scan)
-        {
-            argv.Add("-p:GenerateDocumentationFile=true");
-            argv.Add($"/logger:Microsoft.Build.Logging.FileLogger,Microsoft.Build;LogFile={warningLog};WarningOnly");
-        }
+        argv.AddRange(extraArgs);
         output.Cmd("Compile", argv);
         if (output.IsDryRun)
         {
@@ -76,18 +76,17 @@ public static class CompileTarget
         }
         DotNetTasks.DotNetBuild(s =>
         {
-            s.SetProjectFile(solution)
-             .SetConfiguration(configuration)
-             .EnableNoRestore()
-             // Same deterministic-build property the ci.yml build job passes,
-             // so ./build.sh Compile and CI compile the identical graph.
-             .SetProperty("ContinuousIntegrationBuild", "true")
-             .SetProperty("MaxCpuCount", "0"); // 0 = use all CPUs (parallel build)
-            if (scan)
-            {
-                s.SetProperty("GenerateDocumentationFile", "true")
-                 .AddLoggers($"Microsoft.Build.Logging.FileLogger,Microsoft.Build;LogFile={warningLog};WarningOnly");
-            }
+            var configured = s
+                .SetProjectFile(solution)
+                .SetConfiguration(configuration)
+                .EnableNoRestore()
+                // Same deterministic-build property the ci.yml build job passes,
+                // so ./build.sh Compile and CI compile the identical graph.
+                .SetProperty("ContinuousIntegrationBuild", "true")
+                .SetProperty("MaxCpuCount", "0"); // 0 = use all CPUs (parallel build)
+            return scan
+                ? configured.SetProcessAdditionalArguments(extraArgs)
+                : configured;
         });
     }
 }

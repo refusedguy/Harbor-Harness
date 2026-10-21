@@ -7,8 +7,11 @@ sweep from drifting.
 The gate itself is [the compiled `check-reference-trimmer` gate](../tools/gates/check-reference-trimmer/main.go)
 and its baseline is
 [`tools/reference-trimmer-baseline.txt`](../tools/reference-trimmer-baseline.txt).
-The CI job that produces the answer is the `reference-trimmer` job in
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+The CI job that produces the answer is the `build` job in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml): the analyzer runs
+inside that job's one compile, and the gate reads the findings out of the
+compile's warning log. It used to be a job of its own, which compiled the
+whole tree a second time — see [§6](#6-cost).
 
 ---
 
@@ -273,8 +276,44 @@ The issue asked for a measurement before the tool goes into a gate, on the
 theory that `GetUsedAssemblyReferences` would cost more than 10 % of the
 build. The measured cost of the whole job, including a full Release build of
 the solution, is four minutes on a runner that builds the same solution
-without the analyzer in seven. The tool does not go into the ordinary build
-path, so it costs nothing on the other jobs.
+without the analyzer in seven.
+
+### The second compile is gone (#2108)
+
+That job WAS a second full compile of the solution: `dotnet restore
+Harbor.slnx -p:HarborReferenceTrimmer=true` and then `dotnet build
+Harbor.slnx -c Release --no-restore` over all 117 projects, while the `build`
+job compiled the same tree again. On run 39556560488 the job's wall clock
+was **260 s**, **22 %** of the pull-request lane's 19.4 runner-minutes — the
+lane paying a whole tree compile for one gate.
+
+Since #2108 the analyzer runs inside the `build` job's ONE compile:
+
+- the compile step sets `HarborReferenceTrimmer=true` (an environment
+  variable, which MSBuild reads as a property, so the restore and the build
+  agree on the package graph), and
+- `HARBOR_WARNING_LOG` names the file MSBuild's file logger writes the
+  compiler's warnings to, which is the file the gate reads.
+
+The gate, its baseline, the coverage floor (100 projects) and the artifact
+are unchanged; they moved from the deleted job into the `build` job. Two
+properties make the merge safe, and both are in the props files rather than
+in the workflow:
+
+- the RT codes are **demoted** back to warnings when the analyzer is on
+  (`WarningsNotAsErrors`), because this repository sets
+  `TreatWarningsAsErrors=true` and a finding the baseline carries is not a
+  defect the build should refuse. `NoWarn` would have hidden the findings
+  from the compiler's output altogether, and the gate would have read an
+  empty log and called it clean;
+- the **doc file** is turned on with the analyzer (the tool says so itself
+  in RT0000: without the doc file its "used references" answer is less
+  accurate), as a global property, because fourteen test projects turn the
+  doc file off in their own `.csproj`. The doc warnings that come with it
+  (CS1573, RCS1139) are muted in the test tree, which never had the doc
+  gate; `src/` and `apps/` keep theirs.
+
+The measured before/after is in the pull request for #2108.
 
 ---
 

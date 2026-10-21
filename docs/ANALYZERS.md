@@ -1484,16 +1484,33 @@ references that none of them reach:
 | `RT0002` | a `<ProjectReference>` the compiler never uses |
 | `RT0003` | a `<PackageReference>` the compiler never uses |
 
-It is **off by default and on in exactly one place**: the `reference-trimmer`
-job in `.github/workflows/ci.yml` sets the `HarborReferenceTrimmer` property,
-which is what makes `Directory.Build.props` add the `<PackageReference>`. The
-ordinary build is untouched.
+It is **off by default and on in exactly one place**: the `build` job in
+`.github/workflows/ci.yml`, whose compile step sets the `HarborReferenceTrimmer`
+property, which is what makes `Directory.Build.props` add the
+`<PackageReference>`. The ordinary local build is untouched — the property is
+not set there, and the analyzer package is not restored.
 
-It is a separate job rather than a build step for three reasons: the analysis
-costs a semantic pass over every compilation; its findings are warnings, and
-this repository sets `TreatWarningsAsErrors=true`, so the package would break
-the build the day it was added; and the tool sees source only, so it cannot
-see reflection, DI registration by convention or a plugin loaded by name.
+Since #2108 it runs **inside** that compile rather than in a job of its own.
+It used to have a separate job, and that job compiled the whole tree a second
+time (`dotnet restore` + `dotnet build Harbor.slnx -c Release`): 260 s, 22 % of
+the pull-request lane's runner-minutes, for one answer. The analyzer now runs
+in the compile the lane already pays for, and the gate reads the findings out
+of that compile's warning log.
+
+Two things keep the merge safe. The findings are warnings, and this
+repository sets `TreatWarningsAsErrors=true`, so the RT codes are demoted back
+to warnings when the analyzer is on — `NoWarn` would have been wrong, because
+it would hide the findings from the compiler's output and the gate would read
+an empty log and call it clean. And the analyzer needs the XML documentation
+file (it says so itself, in RT0000: without the doc file its "used
+references" answer is less accurate, because a reference used only from a
+`<see cref="…"/>` is bound only when the documentation is generated), so the
+compile turns the doc file on — as a global property, because fourteen test
+projects turn it off in their own `.csproj`.
+
+The tool sees source only, so it cannot see reflection, DI registration by
+convention or a plugin loaded by name: every finding is a CANDIDATE that a
+human reads, and the baseline is where that read is recorded.
 
 The gate is [the compiled `check-reference-trimmer` gate](../tools/gates/check-reference-trimmer/main.go)
 and its ratchet is
