@@ -33,8 +33,8 @@
 | `Harbor.E2E.App.Avalonia` | **Avalonia UI E2E**: MainViewModel-driven component tests (settings, command palette, toasts, sidebar, diff, history) |
 | `Harbor.E2E.App.Blazor` | Blazor E2E |
 | `Harbor.E2E.Cli` | CLI E2E (mock LLM server round-trip) |
-| `Harbor.E2E.Framework` | E2E test framework (StateTestRunner, mock LLM server, PTY driver) |
-| `Harbor.E2E.Framework.Tests` | Unit tests for the E2E framework's own state helpers |
+| `Harbor.E2E.Framework` | E2E test framework (mock LLM server, PTY driver, terminal emulator) |
+| `Harbor.E2E.Framework.Tests` | Unit tests for the E2E framework's own helpers (ANSI scrubber, terminal emulator) |
 | `Harbor.E2E.Tui.RazorConsole` | RazorConsole E2E |
 | `Harbor.E2E.Tui.SpectreTui` | **SpectreTUI PTY E2E**: streaming, tool-call, error, compaction, panels, scroll, input history, autocomplete |
 | `Harbor.E2E.Tui.Termina` | Termina E2E |
@@ -89,19 +89,21 @@
 
 **Files:**
 - `tests/Harbor.Tui.Tests/PanelRegistryTests.cs` — `TeaComplianceTests`
-- `tests/Harbor.E2E.Framework/StateTestRunner.cs` — factory helpers
-- `tests/Harbor.E2E.Framework.Tests/StateTestRunnerTests.cs` — the tests for
-  those factory helpers (they live in their own project because TUnit runs the
-  test classes of a referenced test project inside every project that
-  references it — a test method in the shared framework would run once per
-  consumer)
+- `tests/Harbor.E2E.Framework.Tests/AnsiStripperTests.cs` — the ANSI scrubber
+  the TUI driver reads the screen through
+- `tests/Harbor.E2E.Framework.Tests/AnsiTerminalBufferTests.cs` — the 2D
+  terminal emulator every PTY scenario asserts on
+
+The framework's own tests live in their own project because TUnit runs the test
+classes of a referenced test project inside every project that references it —
+a test method in the shared framework would run once per consumer.
 
 ### Covered scenarios
 | Scenario | Assertion |
 |---|---|
 | `UiState` has `ScrollOffset`, `ViewportLines`, `TotalLines`, `WasRunning`, `IsAgentRunning` properties | Reflection-based existence checks |
 | `UiState` has `PanelStates`, `PanelSizes`, `FocusedPanelId`, `RegisteredPanelIds` | Used implicitly in panel tests |
-| E2E framework builds `UiState` snapshots for all states | `StreamingState`, `ThinkingState`, `ToolCallState`, `ToolResultState`, `ErrorState`, `CompactionState`, `AgentRunningState`, `AgentIdleState`, `PanelFocusedState`, `ScrolledState`, `HistoryNavigatedState`, `SlashAutocompleteState`, `UserMessageState`, `AssistantMessageState` |
+| The E2E framework's screen reading path: ANSI escapes are stripped, the cursor moves, cells are overwritten, the grid scrolls into the scrollback, the HTML renderer sees the colours | `AnsiStripperTests`, `AnsiTerminalBufferTests` |
 
 ### Missing
 - No direct unit tests for `UiState` immutability / `with` expressions.
