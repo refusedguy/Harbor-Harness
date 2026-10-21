@@ -38,7 +38,8 @@
         "Harbor.Terminal.Pty.Tests",
         "Harbor.Telemetry.Tests",
         "Harbor.TestKit.Generators.Tests",
-        "Harbor.TestKit.Tests"
+        "Harbor.TestKit.Tests",
+        "Harbor.CodeGen.Tests"
       ],
       "cli": false
     },
@@ -101,6 +102,10 @@
       {
         "project": "Harbor.TestKit.Generators.Tests",
         "note": "the suite exercises a Roslyn source generator, which runs at compile time, not in the measured process"
+      },
+      {
+        "project": "Harbor.CodeGen.Tests",
+        "note": "the suite drives the [Observed] source generator in process, so the code it measures is the generator's, not the product's"
       },
       {
         "project": "Harbor.TestKit.Tests",

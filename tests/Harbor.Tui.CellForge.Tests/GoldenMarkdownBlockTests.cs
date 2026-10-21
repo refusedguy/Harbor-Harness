@@ -44,7 +44,7 @@ public class GoldenMarkdownBlockTests
         await writer.EndFrameAsync();
 
         string doc2 = GoldenDoc.Build("ce3-markdown-block", back, backend);
-        string expected = Golden.Verify("ce3-markdown-block", doc2, GridDump.ToSvg(back));
+        string expected = CelldiffGoldens.Verify("ce3-markdown-block", doc2, GridDump.ToSvg(back));
         await Assert.That(doc2).IsEqualTo(expected);
         await Assert.That(engine.FrontMatches(eng)).IsTrue();
 

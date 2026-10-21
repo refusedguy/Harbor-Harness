@@ -37,6 +37,10 @@ namespace Harbor.Tools.Builtin;
         "message shares context, redirect changes its task, restart re-runs it",
         "never steer your own supervisor (the session that steered you)"
     })]
+[ToolSchema]
+[ToolParam("id", "string", Description = "Id of the peer session to steer", Required = true)]
+[ToolParam("instruction", "string", Description = "The directive for the peer session", Required = true)]
+[ToolParam("operation", "string", Enum = new[] { "message", "redirect", "restart" }, Description = "Peer operation (default message)")]
 public sealed partial class SessionSteerTool : ITool
 {
     private readonly ISessionStore _sessions;
@@ -50,35 +54,6 @@ public sealed partial class SessionSteerTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "id": {
-                                                                            "type": "string",
-                                                                            "description": "Id of the peer session to steer"
-                                                                          },
-                                                                          "instruction": {
-                                                                            "type": "string",
-                                                                            "description": "The directive for the peer session"
-                                                                          },
-                                                                          "operation": {
-                                                                            "type": "string",
-                                                                            "enum": ["message", "redirect", "restart"],
-                                                                            "description": "Peer operation (default message)"
-                                                                          }
-                                                                        },
-                                                                        "required": ["id", "instruction"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {

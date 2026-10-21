@@ -20,7 +20,7 @@ namespace Harbor.Plugins.Runtime.Tests.TestSupport;
 ///     In-memory <see cref="IPluginLoadHost" /> for tests. Captures all Register* calls
 ///     so tests can assert on them. Thread-safe via ConcurrentDictionary / locks.
 /// </summary>
-public sealed class FakePluginLoadHost : IPluginLoadHost
+public sealed class FakePluginLoadHost : IPluginLoadHost, IReversiblePluginLoadHost
 {
     private readonly ConcurrentDictionary<AgentName, AgentDefinition> _agents = new();
     private readonly List<IPanelProvider> _panelProviders = new();
@@ -139,4 +139,73 @@ public sealed class FakePluginLoadHost : IPluginLoadHost
 
     /// <summary>Backend ids registered via <see cref="RegisterTuiBackend" />.</summary>
     public IReadOnlyList<string> RegisteredTuiBackends => _tuiBackends.Keys.ToArray();
+
+    // ── The undo half (#1737) ───────────────────────────────────────────────────
+    //
+    // The fake host can take a registration back, so a test can assert that a
+    // stop removed EXACTLY what the plugin registered.
+
+    /// <inheritdoc />
+    public Result UnregisterTool(ToolName name)
+    {
+        return _tools.TryRemove(name.Value, out _)
+            ? Result.Success()
+            : Result.Failure($"Tool '{name.Value}' is not registered.");
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterProvider(ProviderId providerId)
+    {
+        return _providers.TryRemove(providerId, out _)
+            ? Result.Success()
+            : Result.Failure($"Provider '{providerId.Value}' is not registered.");
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterAgent(AgentName name)
+    {
+        return _agents.TryRemove(name, out _)
+            ? Result.Success()
+            : Result.Failure($"Agent '{name.Value}' is not registered.");
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterTuiPlugin(string name)
+    {
+        lock (_tuiPlugins)
+        {
+            int removed = _tuiPlugins.RemoveAll(plugin => string.Equals(plugin.Name, name, StringComparison.Ordinal));
+            return removed == 0
+                ? Result.Failure($"TUI plugin '{name}' is not registered.")
+                : Result.Success();
+        }
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterPanelProvider(string panelId)
+    {
+        lock (_panelProviders)
+        {
+            int removed = _panelProviders.RemoveAll(panel => string.Equals(panel.Id, panelId, StringComparison.Ordinal));
+            return removed == 0
+                ? Result.Failure($"Panel '{panelId}' is not registered.")
+                : Result.Success();
+        }
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterSessionStore(string backendId)
+    {
+        return _sessionStores.TryRemove(backendId, out _)
+            ? Result.Success()
+            : Result.Failure($"Session store '{backendId}' is not registered.");
+    }
+
+    /// <inheritdoc />
+    public Result UnregisterTuiBackend(string backendId)
+    {
+        return _tuiBackends.TryRemove(backendId, out _)
+            ? Result.Success()
+            : Result.Failure($"TUI backend '{backendId}' is not registered.");
+    }
 }

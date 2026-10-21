@@ -259,7 +259,10 @@ public sealed class RegistrationLayerTests
 
     private sealed class ThrowingRegistrar : IPluginRegistrar
     {
-        public Result Register(LoadedPlugin plugin, IPluginLoadHost host)
+        public Result<IPluginRun> Register(
+            LoadedPlugin plugin,
+            IPluginLoadHost host,
+            PluginRunMode mode = PluginRunMode.Run)
             => throw new InvalidOperationException("registrar exploded");
     }
 }

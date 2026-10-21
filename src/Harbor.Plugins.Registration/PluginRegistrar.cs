@@ -7,8 +7,6 @@ using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Instantiation;
 using Harbor.Terminal.Abstractions;
-using Harbor.Terminal.Abstractions.Plugins;
-using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 namespace Harbor.Plugins.Registration;
@@ -25,6 +23,9 @@ namespace Harbor.Plugins.Registration;
 ///     <b>#1739:</b> a plugin that ships a manifest is checked against it — the name, the
 ///     version and the extension axes it declares must be the ones the plugin reports and
 ///     implements, or the plugin is refused with the reason.
+///     <b>#1737:</b> a successful registration hands back the live
+///     <see cref="IPluginRun" /> it created, and a FAILED one leaves nothing behind —
+///     whatever landed before the refusal is taken back.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -78,7 +79,10 @@ public sealed class PluginRegistrar : IPluginRegistrar
     }
 
     /// <inheritdoc />
-    public Result Register(LoadedPlugin plugin, IPluginLoadHost host)
+    public Result<IPluginRun> Register(
+        LoadedPlugin plugin,
+        IPluginLoadHost host,
+        PluginRunMode mode = PluginRunMode.Run)
     {
         if (plugin is null)
             throw new ArgumentNullException(nameof(plugin));
@@ -109,7 +113,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 "Plugin {DisplayName} is not compatible with this Harbor: {Reason}",
                 plugin.DisplayName,
                 compatibility.Error);
-            return compatibility;
+            return compatibility.ConvertFailure<IPluginRun>();
         }
 
         // #1739: the manifest is the plugin's own declaration, and it is checked
@@ -117,7 +121,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
         // the manifest says what it CLAIMS, and a claim that does not match the
         // code is refused — a plugin that ships two different names, or two
         // different sets of axes, is a plugin the host cannot describe.
-        var markers = PluginMarkers.Of(plugin.Instance);
+        var markers = PluginAxisMarkers.Of(plugin.Instance);
         var manifestRefusal = CheckManifest(plugin, markers);
         if (manifestRefusal is not null)
         {
@@ -125,7 +129,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 "Plugin {DisplayName} does not match its manifest: {Reason}",
                 plugin.DisplayName,
                 manifestRefusal);
-            return Result.Failure(manifestRefusal);
+            return Result.Failure<IPluginRun>(manifestRefusal);
         }
 
         // #1734: the plugin's own configuration section, checked against the
@@ -153,7 +157,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
 
         var initResult = PluginLifecycle.Initialize(plugin.Instance, context);
         if (initResult.IsFailure)
-            return initResult;
+            return initResult.ConvertFailure<IPluginRun>();
 
         var recorder = new RecordingPluginLoadHost(host);
         // Result.Try (CSharpFunctionalExtensions 3.7.0) wraps a throwing call in a
@@ -242,12 +246,50 @@ public sealed class PluginRegistrar : IPluginRegistrar
             ex => $"Register threw: {ex.Message}");
 
         if (outcome.IsFailure)
-            return outcome;
+        {
+            // #1737: the plugin threw halfway through its own registration, so
+            // some of its registrations may already have landed. A failed run
+            // never lingers: they are taken back here, for the same reason the
+            // refusal path below takes its own back.
+            RollBackAfterFailure(recorder, plugin);
+            return outcome.ConvertFailure<IPluginRun>();
+        }
 
         // #1758: a door that refused a registration did not register anything, so
         // the plugin did not arrive wired. Reporting Success here is what made
         // "accepted" and "silently dropped" the same answer to the caller.
-        return recorder.ToResult();
+        //
+        // #1737: a successful registration hands back the RUN it created, and a
+        // failed one leaves nothing behind — whatever landed before the refusal
+        // is taken back, so a half-wired plugin does not become a dead tool in
+        // the registry. The rollback needs a host that can undo; a host that
+        // cannot says so, and the failure says it too.
+        Result verdict = recorder.ToResult();
+        if (verdict.IsFailure)
+        {
+            RollBackAfterFailure(recorder, plugin);
+            return verdict.ConvertFailure<IPluginRun>();
+        }
+
+        return Result.Success<IPluginRun>(new PluginRun(plugin, recorder, _logger, mode));
+    }
+
+    /// <summary>
+    ///     Take back what a failed registration had already landed, and say so
+    ///     when the host could not (#1737).
+    /// </summary>
+    /// <param name="recorder">The ledger of what the host accepted.</param>
+    /// <param name="plugin">The plugin whose registration failed.</param>
+    private void RollBackAfterFailure(RecordingPluginLoadHost recorder, LoadedPlugin plugin)
+    {
+        Result rollback = recorder.Rollback();
+        if (rollback.IsFailure)
+        {
+            _logger.LogWarning(
+                "Plugin {DisplayName} was refused, and the host could not take back what it had already registered: {Error}",
+                plugin.DisplayName,
+                rollback.Error);
+        }
     }
 
     // ── The plugin's own configuration (#1734) ─────────────────────────────────
@@ -391,7 +433,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
     /// <param name="plugin">The loaded plugin.</param>
     /// <param name="markers">The extension axes the plugin implements.</param>
     /// <returns>The reason to refuse the plugin, or <c>null</c>.</returns>
-    private string? CheckManifest(LoadedPlugin plugin, PluginMarkers markers)
+    private string? CheckManifest(LoadedPlugin plugin, PluginAxisMarkers markers)
     {
         PluginManifest? manifest = plugin.Manifest;
         if (manifest is null)
@@ -434,112 +476,6 @@ public sealed class PluginRegistrar : IPluginRegistrar
         }
 
         return null;
-    }
-
-    /// <summary>
-    ///     The extension-axis markers a plugin implements.
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         This is the ONE list of markers the registrar knows. The dispatch
-    ///         below reads it, and the manifest check above reads it, so an axis
-    ///         cannot be dispatched without being declared, or declared in a
-    ///         manifest without being dispatched.
-    ///     </para>
-    ///     <para>
-    ///         The axis NAMES are the type names — the same spelling
-    ///         <c>PluginAxisRegistry</c> uses, and the spelling a manifest writes
-    ///         down.
-    ///     </para>
-    /// </remarks>
-    /// <param name="Names">The names of the axes the plugin implements.</param>
-    /// <param name="Tool">The tool axis, when the plugin implements it.</param>
-    /// <param name="Provider">The provider axis, when the plugin implements it.</param>
-    /// <param name="Agent">The agent axis, when the plugin implements it.</param>
-    /// <param name="Tui">The TUI-plugin axis, when the plugin implements it.</param>
-    /// <param name="Panel">The panel axis, when the plugin implements it.</param>
-    /// <param name="SessionStore">The session-store axis, when the plugin implements it.</param>
-    /// <param name="TuiBackend">The TUI-backend axis, when the plugin implements it.</param>
-    private sealed record PluginMarkers(
-        IReadOnlyList<string> Names,
-        IToolPlugin? Tool,
-        IProviderPlugin? Provider,
-        IAgentPlugin? Agent,
-        ITuiPlugin? Tui,
-        ITuiPanelPlugin? Panel,
-        ISessionStorePlugin? SessionStore,
-        ITuiBackendPlugin? TuiBackend)
-    {
-        /// <summary>
-        ///     Read the markers off a plugin instance.
-        /// </summary>
-        /// <remarks>
-        ///     <para>
-        ///         The <c>is</c> checks below ARE the axis table: each one names a
-        ///         marker the registrar dispatches. The dispatch reads the result,
-        ///         and the manifest check compares the manifest against it, so the
-        ///         list of axes has one home and cannot drift from what is
-        ///         dispatched.
-        ///     </para>
-        ///     <para>
-        ///         The checks are written in the <c>is</c> form on purpose: the
-        ///         architecture rule that grades the axes finds a dispatched
-        ///         marker by that shape
-        ///         (<c>tests/Harbor.Architecture.Tests/ExtensionAxisRegistrationRule.cs</c>).
-        ///     </para>
-        /// </remarks>
-        /// <param name="instance">The live plugin.</param>
-        /// <returns>The markers it implements.</returns>
-        public static PluginMarkers Of(IPlugin instance)
-        {
-            ArgumentNullException.ThrowIfNull(instance);
-
-            IToolPlugin? tool = instance is IToolPlugin typedTool ? typedTool : null;
-            IProviderPlugin? provider = instance is IProviderPlugin typedProvider ? typedProvider : null;
-            IAgentPlugin? agent = instance is IAgentPlugin typedAgent ? typedAgent : null;
-            ITuiPlugin? tui = instance is ITuiPlugin typedTui ? typedTui : null;
-            ITuiPanelPlugin? panel = instance is ITuiPanelPlugin typedPanel ? typedPanel : null;
-            ISessionStorePlugin? sessionStore =
-                instance is ISessionStorePlugin typedStore ? typedStore : null;
-            ITuiBackendPlugin? tuiBackend =
-                instance is ITuiBackendPlugin typedBackend ? typedBackend : null;
-
-            var names = new List<string>(7);
-            AddMarker(tool, names);
-            AddMarker(provider, names);
-            AddMarker(agent, names);
-            AddMarker(tui, names);
-            AddMarker(panel, names);
-            AddMarker(sessionStore, names);
-            AddMarker(tuiBackend, names);
-
-            return new PluginMarkers(
-                names,
-                tool,
-                provider,
-                agent,
-                tui,
-                panel,
-                sessionStore,
-                tuiBackend);
-        }
-
-        /// <summary>
-        ///     Add the axis name of a marker the plugin implements.
-        /// </summary>
-        /// <remarks>
-        ///     The name is the type's simple name, which is the spelling
-        ///     <c>PluginAxisRegistry</c> uses and the spelling a manifest writes.
-        /// </remarks>
-        /// <typeparam name="T">The marker interface.</typeparam>
-        /// <param name="marker">The marker, or <c>null</c> when the plugin does not implement it.</param>
-        /// <param name="names">The list to add to.</param>
-        private static void AddMarker<T>(T? marker, List<string> names)
-            where T : class
-        {
-            if (marker is not null)
-                names.Add(typeof(T).Name);
-        }
     }
 
     // ── Backend registrar adapters ───────────────────────────────────────────────

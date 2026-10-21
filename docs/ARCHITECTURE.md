@@ -38,7 +38,7 @@ Harbor.slnx                          (.sln не существует; есть �
 │   ├── Harbor.Ipc.{Abstractions,Client,Server,InProcess}/
 │   ├── Harbor.Terminal.Abstractions/ (контракты TUI: ITuiRenderer, UiState, AppReducer, ViewRegistry, IPanels, …)
 │   ├── Harbor.Tui.{AnsiPlain,CellForge(+.Engine),CellForge.Syntax,CellForge.Prompts,Notifications}/
-│   ├── Harbor.Tools.Builtin/        (20 builtin tools в Tools/)
+│   ├── Harbor.Tools.Builtin/        (21 builtin tools в Tools/)
 │   └── … (Telemetry.*, Logging, Extensions, Hosting, CodeGen и др.)
 ├── contrib/                         (optional components: tui/, apps/, scripting/, tests/;
 │                                     + the vendored ConsoleEx tree, moved out of the

@@ -4,13 +4,16 @@ using System.Text.Json;
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Application.Configuration;
+#if HARBOR_WITH_PLUGINS
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Hosting;
 using Harbor.Plugins.Storage;
+#endif
 
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
-///     <c>harbor plugin list|install|uninstall|config</c> — manage CS-source plugins.
+///     <c>harbor plugin list|inventory|install|uninstall|config</c> — manage CS-source plugins.
 ///     Scope follows the loader split (<see cref="Harbor.Plugins.Storage.FileSystemPluginSource" />):
 ///     global plugins live in <c>~/.harbor/plugins</c>, project-local ones in
 ///     <c>&lt;cwd&gt;/.harbor/plugins</c>. Install copies a reviewed <c>.cs</c> file
@@ -42,6 +45,7 @@ public sealed partial class PluginsCommand : ICommand
         return sub switch
         {
             "list" => ListAsync(),
+            "inventory" => InventoryAsync(),
             "install" => InstallAsync(args.Skip(1).ToArray()),
             "uninstall" or "remove" or "rm" => UninstallAsync(args.Skip(1).ToArray()),
             "config" or "settings" => ConfigAsync(args.Skip(1).ToArray()),
@@ -66,6 +70,66 @@ public sealed partial class PluginsCommand : ICommand
             return "(none)";
 
         return string.Join(", ", files.Select(Path.GetFileName)!);
+    }
+
+#if HARBOR_WITH_PLUGINS
+    /// <summary>
+    ///     Print the live plugin composition the plugin host published (#1722).
+    /// </summary>
+    /// <remarks>
+    ///     The document is printed as it was written: it IS the snapshot, and a
+    ///     reader that reformats it would be reading something the host did not
+    ///     say. The host rewrites the file whenever the composition changes, so
+    ///     the file is the state of the last load — the MCP method
+    ///     <c>harbor/plugins/inventory</c> answers with the same document, live.
+    /// </remarks>
+    private async Task<int> ReadInventoryAsync()
+    {
+        string path = Path.Combine(_globalRoot, PluginInventory.FileName);
+
+        string content;
+        try
+        {
+            content = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+        }
+        catch (FileNotFoundException)
+        {
+            await _error.WriteLineAsync(
+                $"No plugin inventory has been published: '{path}' does not exist. The plugin host publishes one when it loads plugins.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            await _error.WriteLineAsync(
+                $"No plugin inventory has been published: '{path}' does not exist. The plugin host publishes one when it loads plugins.")
+                .ConfigureAwait(false);
+            return 1;
+        }
+        catch (IOException ex)
+        {
+            await _error.WriteLineAsync(
+                $"The plugin inventory at '{path}' could not be read: {ex.Message}").ConfigureAwait(false);
+            return 1;
+        }
+
+        await _output.WriteLineAsync(content.TrimEnd('\r', '\n')).ConfigureAwait(false);
+        return 0;
+    }
+#endif
+
+    /// <summary>
+    ///     The <c>harbor plugin inventory</c> verb: the machine-readable
+    ///     snapshot of the live plugin composition (#1722).
+    /// </summary>
+    private Task<int> InventoryAsync()
+    {
+#if HARBOR_WITH_PLUGINS
+        return ReadInventoryAsync();
+#else
+        _error.WriteLine("The plugin inventory is not available in this build: this binary was built without the plugin host.");
+        return Task.FromResult(2);
+#endif
     }
 
     private async Task<int> InstallAsync(string[] args)
@@ -149,6 +213,21 @@ public sealed partial class PluginsCommand : ICommand
         return 1;
     }
 
+    /// <summary>
+    ///     The <c>harbor plugin config</c> verb: the settings form a plugin's
+    ///     schema generates (#1734).
+    /// </summary>
+    private Task<int> ConfigAsync(string[] args)
+    {
+#if HARBOR_WITH_PLUGINS
+        return ReadConfigAsync(args);
+#else
+        _error.WriteLine("The plugin settings form is not available in this build: this binary was built without the plugin host.");
+        return Task.FromResult(2);
+#endif
+    }
+
+#if HARBOR_WITH_PLUGINS
     // ── The settings form a plugin's schema generates (#1734) ─────────────────
 
     /// <summary>
@@ -171,7 +250,7 @@ public sealed partial class PluginsCommand : ICommand
     /// </remarks>
     /// <param name="args">The command arguments: the plugin id, or nothing.</param>
     /// <returns>The exit code.</returns>
-    private async Task<int> ConfigAsync(string[] args)
+    private async Task<int> ReadConfigAsync(string[] args)
     {
         string? nameArg = args.FirstOrDefault(a => !a.StartsWith('-'));
         IReadOnlyList<(string Name, PluginManifest Manifest)> manifests = await ReadManifestsAsync().ConfigureAwait(false);
@@ -374,12 +453,14 @@ public sealed partial class PluginsCommand : ICommand
 
         return loaded.Value.Plugins.TryGetValue(pluginName, out JsonElement section) ? section : null;
     }
+#endif
 
     private Task<int> PrintUsage()
     {
         _error.WriteLine("""
-                         Usage: harbor plugin [list|install|uninstall|config]
+                         Usage: harbor plugin [list|inventory|install|uninstall|config]
                            plugin list                       show global + project plugins
+                           plugin inventory                  the live plugin composition, as JSON (#1722)
                            plugin install <file.cs>          copy into ~/.harbor/plugins (--project targets <cwd>/.harbor/plugins)
                            plugin uninstall <name>           remove from either scope
                            plugin config [<name>]            show a plugin's settings form

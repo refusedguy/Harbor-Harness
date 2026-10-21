@@ -20,6 +20,10 @@ namespace Harbor.Tools.Builtin;
         "args is a JSON object — for tools/call include `name` and `arguments`",
         "Result is the server's JSON response serialized to a string"
     })]
+[ToolSchema]
+[ToolParam("server", "string", Description = "Registered MCP server name", Required = true)]
+[ToolParam("method", "string", Description = "JSON-RPC method (e.g. 'tools/list', 'tools/call')", Required = true)]
+[ToolParam("args", "object", Description = "Arguments object (e.g. {\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp\"}})")]
 public sealed partial class McpToolTool : ITool
 {
     private readonly ILogger<McpToolTool> _logger;
@@ -74,25 +78,6 @@ public sealed partial class McpToolTool : ITool
     ///     </para>
     /// </remarks>
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "server":  { "type": "string", "description": "Registered MCP server name" },
-                                                                          "method":  { "type": "string", "description": "JSON-RPC method (e.g. 'tools/list', 'tools/call')" },
-                                                                          "args":    { "type": "object", "description": "Arguments object (e.g. {\"name\":\"read_file\",\"arguments\":{\"path\":\"/tmp\"}})" }
-                                                                        },
-                                                                        "required": ["server", "method"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

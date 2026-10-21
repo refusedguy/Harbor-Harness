@@ -87,6 +87,10 @@ public static class Program
                 // before it is compiled).
                 o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
                 o.Dependencies = dependencies;
+                // #1722: the route this process is on, so the live inventory says
+                // which route the composition it reports belongs to. The id comes
+                // from the route registry — the one place that declares it.
+                o.RouteId = PluginRouteAxisRegistry.McpStdioRouteId;
             })
             .Build(loggerFactory.CreateLogger<PluginHost>());
 
@@ -95,6 +99,10 @@ public static class Program
         if (loadResult.IsFailure)
             ProgramLog.PluginLoadFailed(logger, loadResult.Error);
         ProgramLog.ExposedTools(logger, loadHost.Tools.Count);
+
+        // #1722: publish the composition the load produced, so a reader without
+        // an MCP session can see what was loaded, what was refused and why.
+        PluginInventoryPublisher.Publish(host, parsed.PluginRoot, logger);
 
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -106,7 +114,17 @@ public static class Program
         var server = new McpStdioServer(
             loadHost,
             loggerFactory.CreateLogger<McpStdioServer>(),
-            () => host.ActivatePending(loadHost));
+            () =>
+            {
+                // #1733: the handshake is what makes the "mcp-session" capability
+                // true, so the plugins that were waiting for it come up here.
+                host.ActivatePending(loadHost);
+                // #1722: the composition changed, so the published snapshot changes
+                // with it. A snapshot that says "pending" after the plugins are up
+                // would be a lie about the live state.
+                PluginInventoryPublisher.Publish(host, parsed.PluginRoot, logger);
+            },
+            host);
         try
         {
             await server.RunAsync(cts.Token).ConfigureAwait(false);

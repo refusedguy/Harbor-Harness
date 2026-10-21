@@ -25,6 +25,12 @@ namespace Harbor.Tools.Builtin;
         "Use `ls` for one-level directory listing with sizes and mtimes"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("path", "string", Description = "Directory to tree (default: cwd)")]
+[ToolParam("maxDepth", "integer", Description = "Max depth (default: 3, max: 10)")]
+[ToolParam("includeHidden", "boolean", Description = "Include hidden files (default: false)")]
+[ToolParam("gitignore", "boolean", Description = "Respect .gitignore via git ls-files (default: true)")]
+[ToolParam("maxEntries", "integer", Description = "Max entries (default: 1000, max: 10000)")]
 public sealed partial class TreeTool : ITool
 {
     private const int DefaultMaxDepth = 3;
@@ -45,26 +51,6 @@ public sealed partial class TreeTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":           { "type": "string",  "description": "Directory to tree (default: cwd)" },
-                                                                          "maxDepth":       { "type": "integer", "description": "Max depth (default: 3, max: 10)" },
-                                                                          "includeHidden":  { "type": "boolean", "description": "Include hidden files (default: false)" },
-                                                                          "gitignore":      { "type": "boolean", "description": "Respect .gitignore via git ls-files (default: true)" },
-                                                                          "maxEntries":     { "type": "integer", "description": "Max entries (default: 1000, max: 10000)" }
-                                                                        }
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

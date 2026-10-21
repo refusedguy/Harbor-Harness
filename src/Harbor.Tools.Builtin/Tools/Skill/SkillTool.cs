@@ -23,6 +23,9 @@ namespace Harbor.Tools.Builtin;
         "Project skills shadow same-named global skills",
         "The result is Markdown — follow its steps, do not paste it back verbatim",
     })]
+[ToolSchema]
+[ToolParam("name", "string", Description = "Skill name as listed in <available_skills> (e.g. 'code-review')", Required = true)]
+[ToolParam("scope", "string", Description = "Where to look: 'project', 'global', or 'any' (default)")]
 public sealed partial class SkillTool : ITool
 {
     /// <summary>Skills directory name under the project and harbor-home roots.</summary>
@@ -114,24 +117,6 @@ public sealed partial class SkillTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "name":  { "type": "string", "description": "Skill name as listed in <available_skills> (e.g. 'code-review')" },
-                                                                          "scope": { "type": "string", "description": "Where to look: 'project', 'global', or 'any' (default)" }
-                                                                        },
-                                                                        "required": ["name"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
