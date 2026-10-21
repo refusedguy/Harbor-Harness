@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Harbor.TestKit;
 
 namespace Harbor.E2E.App.Avalonia.ComponentTests;
 
@@ -41,17 +41,18 @@ namespace Harbor.E2E.App.Avalonia.ComponentTests;
 ///         iteration budget the capture throws — a nondeterministic frame can
 ///         never pass a golden compare.
 ///     </para>
+///
+///     <para>
+///         The mechanics — where the root is, how the update flag is spelled,
+///         how line endings are normalised, what a missing baseline says, how
+///         the first difference is reported — live in <see cref="Golden" />
+///         since #1776. What stays here is the Avalonia lane's own: the
+///         repo-relative baseline paths, the <c>.actual.txt</c> artifact and
+///         the mismatch message.
+///     </para>
 /// </summary>
 internal static class GoldenFrame
 {
-    private static readonly Lazy<string> RepoRootLazy = new(ResolveRepoRoot);
-
-    /// <summary>Absolute path of the repository root.</summary>
-    public static string RepoRoot => RepoRootLazy.Value;
-
-    private static bool UpdateMode =>
-        string.Equals(Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS"), "1", StringComparison.Ordinal);
-
     /// <summary>
     ///     Render <paramref name="window" /> in the headless compositor and
     ///     snapshot its content once the frame has settled (two consecutive
@@ -153,24 +154,21 @@ internal static class GoldenFrame
     /// <param name="actual">The snapshot the frame just produced.</param>
     public static void VerifySnapshot(string relativePath, string actual)
     {
-        string path = Path.Combine(RepoRoot, relativePath);
+        string path = Path.Combine(Golden.Root, relativePath);
 
-        if (UpdateMode)
+        if (Golden.IsUpdateMode)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, actual);
+            Golden.WriteBaseline(path, actual);
             return;
         }
 
         if (!File.Exists(path))
         {
-            throw new InvalidOperationException(
-                $"golden baseline missing: {relativePath}. " +
-                "Regenerate it with HARBOR_UPDATE_GOLDENS=1 (or the `goldens` workflow) and commit it in the same change.");
+            throw new InvalidOperationException(Golden.MissingFixtureMessage(path));
         }
 
-        string expected = Normalize(File.ReadAllText(path));
-        string got = Normalize(actual);
+        string expected = Golden.Normalize(File.ReadAllText(path));
+        string got = Golden.Normalize(actual);
         if (string.Equals(expected, got, StringComparison.Ordinal))
         {
             return;
@@ -184,63 +182,9 @@ internal static class GoldenFrame
 
         throw new InvalidOperationException(
             $"golden frame MISMATCH for {relativePath}: the rendered content differs from the baseline.\n" +
-            $"{DescribeDifference(expected, got)}\n" +
+            $"{Golden.DescribeDifference(expected, got)}\n" +
             $"  the captured snapshot was written to: {actualPath}\n" +
             "  If the change is INTENDED, regenerate the baseline (HARBOR_UPDATE_GOLDENS=1 locally, " +
             "or the `goldens` workflow on this branch) and commit it in the SAME change.");
-    }
-
-    /// <summary>
-    ///     The first difference between two snapshots, with a little context —
-    ///     the same shape of report the public-API snapshot gate prints.
-    /// </summary>
-    private static string DescribeDifference(string expected, string got)
-    {
-        string[] expectedLines = expected.Split('\n');
-        string[] gotLines = got.Split('\n');
-        int count = Math.Max(expectedLines.Length, gotLines.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            string expectedLine = i < expectedLines.Length ? expectedLines[i] : "<missing>";
-            string gotLine = i < gotLines.Length ? gotLines[i] : "<missing>";
-            if (string.Equals(expectedLine, gotLine, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var sb = new StringBuilder();
-            sb.Append("  first difference at line ").Append(i + 1).Append(":\n");
-            sb.Append("    baseline: ").Append(expectedLine.TrimEnd('\r')).Append('\n');
-            sb.Append("    actual:  ").Append(gotLine.TrimEnd('\r')).Append('\n');
-            sb.Append("  (baseline ").Append(expectedLines.Length)
-              .Append(" lines, actual ").Append(gotLines.Length).Append(" lines)");
-            return sb.ToString();
-        }
-
-        return "  the snapshots differ only in their line endings.";
-    }
-
-    /// <summary>
-    ///     Normalize line endings so a baseline written on Windows (CRLF) and
-    ///     a snapshot produced on Linux (LF) compare equal.
-    /// </summary>
-    private static string Normalize(string text) =>
-        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
-
-    private static string ResolveRepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "Harbor.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException("repo root (Harbor.slnx) not found from " + AppContext.BaseDirectory);
-        }
-
-        return dir.FullName;
     }
 }

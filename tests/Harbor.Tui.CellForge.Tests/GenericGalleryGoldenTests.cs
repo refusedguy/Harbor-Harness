@@ -11,7 +11,7 @@ namespace Harbor.Tui.CellForge.Tests;
 // tests); what the goldens pin is COMPOSITION — splits, titles, focus
 // markers, scripted state.
 //
-// Regeneration contract (mirrors Golden): run once with
+// Regeneration contract (mirrors the shared Golden helper): run once with
 // HARBOR_UPDATE_GOLDENS=1 to (re)write fixtures; CI never regenerates.
 // Fixtures carry no trailing spaces, so an editorconfig trim cannot drift them.
 //
@@ -23,11 +23,7 @@ namespace Harbor.Tui.CellForge.Tests;
 public class GenericGalleryGoldenTests
 {
     /// <summary>Shared fixture directory (generic-layout goldens).</summary>
-    private static string FixtureDir() =>
-        Path.Combine(RepoPaths.Root, "tests", "fixtures", "generic-layout");
-
-    private static string Normalize(string s) =>
-        s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+    private static string FixtureDir() => Golden.FixtureDir("generic-layout");
 
     private static string[] ArtLines(ScreenBuffer buffer)
     {
@@ -67,21 +63,10 @@ public class GenericGalleryGoldenTests
     {
         string[] actual = PaintLines(entry, script);
         string header = $"# golden: {entry.Name} ({entry.Cols}x{entry.Rows})";
-        string path = Path.Combine(FixtureDir(), entry.Name + ".golden.txt");
-        if (Environment.GetEnvironmentVariable("HARBOR_UPDATE_GOLDENS") == "1")
-        {
-            Directory.CreateDirectory(FixtureDir());
-            File.WriteAllText(path, header + "\n" + string.Join("\n", actual) + "\n");
-            return;
-        }
+        string expectedText = Golden.VerifyText(
+            FixtureDir(), entry.Name, header + "\n" + string.Join("\n", actual) + "\n");
 
-        if (!File.Exists(path))
-        {
-            throw new InvalidOperationException(
-                $"golden fixture missing: {path} (run once with HARBOR_UPDATE_GOLDENS=1 to seed it)");
-        }
-
-        string[] parts = Normalize(File.ReadAllText(path)).Split('\n');
+        string[] parts = expectedText.Split('\n');
         if (parts.Length > 0 && parts[^1] == string.Empty)
         {
             Array.Resize(ref parts, parts.Length - 1);

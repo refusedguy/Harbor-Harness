@@ -250,10 +250,10 @@ dotnet run --project tests/Harbor.Tui.Tests -c Release --no-build -- --minimum-e
 
 ## 7. Golden-frame regression
 
-Renderer output is pinned against committed golden frames in `tests/Harbor.Tui.RendererTests/GoldenFrames/`. Regenerate after intentional visual changes:
+Renderer output is pinned against committed golden frames in `tests/fixtures/renderer-frames/`. Regenerate after intentional visual changes:
 
 ```bash
-HARBOR_UPDATE_GOLDEN=1 dotnet run --project tests/Harbor.Tui.RendererTests -c Release --no-build
+HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.Tui.RendererTests -c Release --no-build
 ```
 
 Golden files:

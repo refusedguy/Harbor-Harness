@@ -158,4 +158,43 @@ public class PluginsCommandTests : IDisposable
         await Assert.That(exit).IsEqualTo(1);
         await Assert.That(File.Exists(outsideFile)).IsTrue();
     }
+
+    /// <summary>
+    ///     The inventory verb prints the snapshot the plugin host published
+    ///     (#1722), as it was written — the document IS the answer, and a reader
+    ///     that reformatted it would be reading something the host did not say.
+    /// </summary>
+    /// <remarks>
+    ///     The file name is spelled out here on purpose: it is the contract
+    ///     between the host that writes the snapshot and the CLI that reads it,
+    ///     and a rename has to break a test rather than pass quietly.
+    /// </remarks>
+    [Test]
+    public async Task Inventory_PrintsThePublishedSnapshot()
+    {
+        // The document is printed as the host wrote it, so the fixture is the
+        // host's own shape: the schema version, and the space the writer puts
+        // after the colon.
+        string path = Path.Combine(_homeRoot, "inventory.json");
+        await File.WriteAllTextAsync(path, "{\n  \"schemaVersion\": 1,\n  \"plugins\": []\n}\n");
+
+        int exit = await CreateCommand().ExecuteAsync(["inventory"]);
+
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(_out.ToString()).Contains("\"schemaVersion\": 1");
+    }
+
+    /// <summary>
+    ///     No published snapshot is a fact the command has to report, not an empty
+    ///     answer: a reader that got an empty document would conclude that there
+    ///     are no plugins, when the truth is that nobody has published one.
+    /// </summary>
+    [Test]
+    public async Task Inventory_WithoutAPublishedSnapshot_SaysSoAndFails()
+    {
+        int exit = await CreateCommand().ExecuteAsync(["inventory"]);
+
+        await Assert.That(exit).IsEqualTo(1);
+        await Assert.That(_err.ToString()).Contains("No plugin inventory");
+    }
 }

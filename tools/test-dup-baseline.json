@@ -9,25 +9,25 @@
     "normalisation": "comments dropped; string literals -> S; char literals -> C; numeric literals -> N; identifiers -> I; whitespace collapsed"
   },
   "census": {
-    "files": 1044,
-    "lines": 209083,
-    "methods": 10653,
-    "test_methods": 6830
+    "files": 1092,
+    "lines": 218771,
+    "methods": 11107,
+    "test_methods": 7092
   },
   "metrics": {
-    "groups": 183,
-    "intra_file_groups": 104,
+    "groups": 182,
+    "intra_file_groups": 103,
     "cross_file_groups": 79,
-    "exact_groups": 98,
-    "duplicate_lines": 2663,
-    "group_lines": 4629,
+    "exact_groups": 97,
+    "duplicate_lines": 2656,
+    "group_lines": 4613,
     "shape_coincidences": 0,
-    "files": 1044,
-    "lines": 209083,
-    "methods": 10653,
-    "test_methods": 6830
+    "files": 1092,
+    "lines": 218771,
+    "methods": 11107,
+    "test_methods": 7092
   },
-  "blocking_duplicate_lines": 2405,
+  "blocking_duplicate_lines": 2381,
   "groups": {
     "00c25fe277a33905527cc4696dd798419f502485": {
       "members": [
@@ -142,7 +142,7 @@
       "lines": 8,
       "files": 2,
       "exact": 0,
-      "shape": "52797dc44efdcbf35f0344f8dd4549bd0fca4a04"
+      "shape": "89c987872d7d539f806cf43b9c0d6a985135a76d"
     },
     "0b32e5feae3b480145faa0fd0753a2e69e503510": {
       "members": [
@@ -164,7 +164,7 @@
       "lines": 6,
       "files": 2,
       "exact": 2,
-      "shape": "4c835a22a3bfde48438b056fa08b78d1456b8e38"
+      "shape": "1fb3a6f928b6b4e030f70f38f1c5dee2d6d974d9"
     },
     "0db764a36a42be09dca211fbf72d15d44c94d5d8": {
       "members": [
@@ -198,7 +198,7 @@
       "lines": 8,
       "files": 1,
       "exact": 0,
-      "shape": "37572369c2eb549bb82532a3f8cee7bda5714697"
+      "shape": "9885b39c388edd18150b9d2cbe279605469d36d4"
     },
     "0e1dd26ea1b6ba96ba33be5fbbd2eea0027cfb48": {
       "members": [
@@ -398,7 +398,7 @@
       "lines": 8,
       "files": 1,
       "exact": 0,
-      "shape": "4d99aa740155c69155274d781667d07f638255a3"
+      "shape": "8e0b630126fb17dc1c480a720d0e90298f7f403e"
     },
     "1aaa10e3a48705b506d6676e991e85b334b1e034": {
       "members": [
@@ -488,7 +488,7 @@
       "lines": 10,
       "files": 2,
       "exact": 0,
-      "shape": "c61836ca0bab8a1dad0aaff4e2a8b7e455c51fec"
+      "shape": "28816011fef3c4dbfe68dbf184dc7d895d1dbdfd"
     },
     "2045d76f12a44388479f3ce2d317b20482e7711f": {
       "members": [
@@ -598,10 +598,10 @@
         "tests/Harbor.Application.Tests/DefaultAgentBoundStateResultTests.cs::PromptAsync_PreBuiltMessage_BeforeInitialize_ReturnsFailure_AndDoesNotThrow#0"
       ],
       "count": 2,
-      "lines": 9,
+      "lines": 8,
       "files": 2,
       "exact": 2,
-      "shape": "2389e25803d590d5c7027d1d20616652437dc0fa"
+      "shape": "35c5483e21e89d43a4508e8446b12aa355b9b189"
     },
     "2d6655d79eceb903772b0e41bba456feea016a9f": {
       "members": [
@@ -635,17 +635,6 @@
       "exact": 8,
       "shape": "463b9305abfec2ef47b4a208f807715085dca094"
     },
-    "32501d8e4a5775adbd0f4d17cc592aa0bbe4f4e8": {
-      "members": [
-        "tests/Harbor.Application.Tests/RunLimitStampingTests.cs::AlwaysCallsATool#0",
-        "tests/Harbor.Application.Tests/RunWallClockLimitTests.cs::AlwaysCallsATool#0"
-      ],
-      "count": 2,
-      "lines": 9,
-      "files": 2,
-      "exact": 2,
-      "shape": "c238105d5b4e43b7190a732d9b29527425bc8194"
-    },
     "341269109fd65f8c95d23bf93634212bd7c8f329": {
       "members": [
         "tests/Harbor.Tools.Builtin.Tests/ToolTests.cs::ExecuteAsync_NotFound_ReturnsError#0",
@@ -656,6 +645,19 @@
       "files": 1,
       "exact": 0,
       "shape": "b44cfdf151e5b1a48c73a815b1a69d56a4b439cc"
+    },
+    "358f7057365455f8964f2ec0f3ea471008e3f3ea": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlCheckpointsTests.cs::Msg#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlDeleteMessagesAfterTests.cs::Msg#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlSessionFeedbackTests.cs::Msg#0",
+        "tests/Harbor.Storage.Tests/SqliteAppendCostGate.cs::NewMessage#0"
+      ],
+      "count": 4,
+      "lines": 7,
+      "files": 4,
+      "exact": 3,
+      "shape": "e945d7070f4859e62e70903b46da63418e54a67a"
     },
     "35fbca90a9bd4d0af8a29bf67fc850c704c05308": {
       "members": [
@@ -836,6 +838,17 @@
       "exact": 2,
       "shape": "72c31397e29c5a8913ec8654cc9bead3990c4ad8"
     },
+    "544517616a03a9f6ea762f97ddaabc648c544659": {
+      "members": [
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlSnapshotIntegrityTests.cs::UserLine#0",
+        "tests/Harbor.Storage.Jsonl.Tests/JsonlTranscriptIntegrityTests.cs::UserLine#0"
+      ],
+      "count": 2,
+      "lines": 9,
+      "files": 2,
+      "exact": 2,
+      "shape": "4734488668bc79ec8d64c6e6707a4274ee72acbd"
+    },
     "577ee4c01234bc96b86523c0ef18af341dfd434b": {
       "members": [
         "tests/Harbor.Tui.CellForge.Tests/CommandPaletteNavStateTests.cs::Palette_MismatchedState_FallsBackToLegacy#0",
@@ -845,7 +858,7 @@
       "lines": 9,
       "files": 2,
       "exact": 0,
-      "shape": "44cf0b09c516cd94bfc36b6fa1aab9bde35e92b2"
+      "shape": "0bde1c983521f5a3ee4dd0ee70ed3dedf50c6ad1"
     },
     "5e4891943383aec466a0d75769e52351e4f4a577": {
       "members": [
@@ -970,6 +983,19 @@
       "files": 1,
       "exact": 3,
       "shape": "9697ca6921d828e969a5722e0fdcc0281a80c357"
+    },
+    "71d27922e55942b2d6176d7e05c6a830f247d298": {
+      "members": [
+        "tests/Harbor.App.Avalonia.Tests/SessionNullRailwayTests.cs::TestUserMessage#0",
+        "tests/Harbor.Application.Tests/SteeringCrossSessionTests.cs::SteerFor#0",
+        "tests/Harbor.Application.Tests/TokenTrackerTests.cs::Msg#1",
+        "tests/Harbor.Tools.Builtin.Tests/SessionSupervisionToolTests.cs::User#0"
+      ],
+      "count": 4,
+      "lines": 7,
+      "files": 4,
+      "exact": 4,
+      "shape": "de764c519bd6aabe01624011beec88d06e792876"
     },
     "73b992ac4b56daa5beaafc535e4b48b982a3d6ca": {
       "members": [
@@ -1191,7 +1217,7 @@
       "lines": 10,
       "files": 2,
       "exact": 0,
-      "shape": "30d6d8a1097336b4c63550e9393b609f49096a89"
+      "shape": "6aae34eee9275ca4c10e4cccecbbc98194297ad8"
     },
     "93590e486a43f51a3bfb6eb529ead0118fce070a": {
       "members": [
@@ -1246,7 +1272,7 @@
       "lines": 11,
       "files": 2,
       "exact": 0,
-      "shape": "646fdb15ed33970f5b9db6420ae6a86f98d3d721"
+      "shape": "16a0cc7adf980775be753ce493eafa662362de20"
     },
     "9cbddaa230dd6bee17bcf8ab9f8f888b57886ae1": {
       "members": [
@@ -1315,7 +1341,7 @@
       "lines": 7,
       "files": 3,
       "exact": 3,
-      "shape": "d0212af24dd724e3c71f11272dc70f2df3ad7d25"
+      "shape": "3e8b66a692dbe98451fe85adad7a30e3034b9184"
     },
     "a8b5744eb66492401a6278959a9e7d1750292968": {
       "members": [
@@ -1406,7 +1432,7 @@
       "lines": 10,
       "files": 2,
       "exact": 0,
-      "shape": "7aad958fa30707db84076790184bf5354a5ab36f"
+      "shape": "2ebf657123e2df3b3766cf4cd8639d4bccb82048"
     },
     "ac0df135f7499964f2bf9e2fbc57f110bd863f0c": {
       "members": [
@@ -1439,7 +1465,7 @@
       "lines": 8,
       "files": 1,
       "exact": 0,
-      "shape": "8b62eadd93b965933089a05d4ff9fbd8707d9380"
+      "shape": "52c2f3bf2629a3f10362607a056e4af2c77f32d6"
     },
     "adafb46fbc74e4f8de1b6c43acedad1e2cfc8fb8": {
       "members": [
@@ -1496,7 +1522,7 @@
       "lines": 8,
       "files": 2,
       "exact": 0,
-      "shape": "a6a38fc1855dc7c5bf420b366212cce03a79041a"
+      "shape": "1a1752a6ce440f8696023afdc3c257ca27669aa4"
     },
     "b75a2174d482c95017feaba4988b814604c9254e": {
       "members": [
@@ -1573,7 +1599,7 @@
       "lines": 9,
       "files": 1,
       "exact": 2,
-      "shape": "26de38096601490be6e7813c486dfbadabe8f655"
+      "shape": "4545e6b83e7cc107319d936699cf78db43ab02c6"
     },
     "c374ff0b85e7fa722226d1ebbb91a080a6b8f094": {
       "members": [
@@ -1664,18 +1690,6 @@
       "files": 2,
       "exact": 2,
       "shape": "ab1f5fae195bf012522b9dbe1fc17372b8b52167"
-    },
-    "cdd2af7f09aff2d6de952e3cafbf8183a4e0294e": {
-      "members": [
-        "tests/Harbor.Storage.Jsonl.Tests/JsonlCheckpointsTests.cs::Msg#0",
-        "tests/Harbor.Storage.Jsonl.Tests/JsonlDeleteMessagesAfterTests.cs::Msg#0",
-        "tests/Harbor.Storage.Tests/SqliteAppendCostGate.cs::NewMessage#0"
-      ],
-      "count": 3,
-      "lines": 7,
-      "files": 3,
-      "exact": 2,
-      "shape": "e945d7070f4859e62e70903b46da63418e54a67a"
     },
     "d109bce049cd06aab706b3b0b6c3dd6df9a2103c": {
       "members": [
@@ -1821,7 +1835,7 @@
       "lines": 10,
       "files": 1,
       "exact": 0,
-      "shape": "a97da14de23a477ef0fce4af4e97fc452d20cc7e"
+      "shape": "0610a88124cf1d77544153fa6c2b265ccb4b0413"
     },
     "dab6a33a784eb66563a13ec47b2cf0e53c65b2c2": {
       "members": [
@@ -1857,20 +1871,6 @@
       "files": 2,
       "exact": 2,
       "shape": "2e6aea1d874ff90ba6553fc2a18a3f36d263e188"
-    },
-    "df95d42ac630a4eb2a5b16bf7e7ec2d1c37cc9c3": {
-      "members": [
-        "tests/Harbor.App.Avalonia.Tests/SessionNullRailwayTests.cs::TestUserMessage#0",
-        "tests/Harbor.Application.Tests/SteeringCrossSessionTests.cs::SteerFor#0",
-        "tests/Harbor.Application.Tests/TokenTrackerTests.cs::Msg#1",
-        "tests/Harbor.TestKit/Builders/Messages.cs::User#0",
-        "tests/Harbor.Tools.Builtin.Tests/SessionSupervisionToolTests.cs::User#0"
-      ],
-      "count": 5,
-      "lines": 7,
-      "files": 5,
-      "exact": 5,
-      "shape": "de764c519bd6aabe01624011beec88d06e792876"
     },
     "e0c45467814d5de60a93073f8fa0f729919003ea": {
       "members": [
@@ -2020,17 +2020,6 @@
       "exact": 2,
       "shape": "fb626370512677e837571e889621e5ac768abb06"
     },
-    "f5c1ca3ad2a775f06a608ff1356938cb4783d49c": {
-      "members": [
-        "tests/Harbor.Plugins.Runtime.Tests/Registration/RequiredHarborVersionGateTests.cs::Registrar_RequiredVersionEqualsRuntime_LoadsThePlugin#0",
-        "tests/Harbor.Plugins.Runtime.Tests/Registration/RequiredHarborVersionGateTests.cs::Registrar_RequiredVersionOlderThanRuntime_LoadsThePlugin#0"
-      ],
-      "count": 2,
-      "lines": 7,
-      "files": 1,
-      "exact": 2,
-      "shape": "97318a82298140b649a48fbedd028b7bf6b8c814"
-    },
     "f6e891c1d0cd1a3ca3f4a4ce939959452b7b49a8": {
       "members": [
         "tests/Harbor.Ui.Framework.Tests/PanelExtractorsTests.cs::ExtractRecentChanges_ToolTextWithTrailingWhitespace_ParsesPath#0",
@@ -2109,7 +2098,7 @@
       "lines": 26,
       "files": 1,
       "exact": 0,
-      "shape": "67d8c8bde9ffe53131ae55450e05be31c2a2d271"
+      "shape": "60467c17a9ea752fc0c04b511af907a2f8bceef5"
     }
   },
   "exemptions": [
