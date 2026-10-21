@@ -34,7 +34,21 @@ public enum ProviderErrorKind
     Malformed,
 
     /// <summary>Caller cancellation surfaced through the stream — never retried.</summary>
-    Cancelled
+    Cancelled,
+
+    /// <summary>
+    ///     The request did not fit the model's context window (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Not transient in the transport sense: the SAME request fails the
+    ///         same way, so the retry policy must not spend its budget on it.
+    ///         What the agent loop does with it is a different decision — it
+    ///         compacts the history and retries the request from the compacted
+    ///         view (the reactive branch of compaction).
+    ///     </para>
+    /// </remarks>
+    ContextOverflow = 8
 }
 
 /// <summary>
@@ -44,10 +58,116 @@ public enum ProviderErrorKind
 /// </summary>
 public static class ProviderErrors
 {
+    /// <summary>
+    ///     The canonical overflow markers, one per provider shape (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     The scan is over the whole body, so a marker may sit in a nested
+    ///     field; the list is kept tight on purpose — a marker that also
+    ///     describes a NON-overflow refusal (an output-token limit, say) would
+    ///     send the harness down a compaction it does not need.
+    /// </remarks>
+    private static readonly string[] ContextOverflowMarkers =
+    [
+        // OpenAI and the gateways that copy its error shape.
+        "context_length_exceeded",
+        "maximum_context_length_exceeded",
+        "model_context_length_exceeded",
+        // Anthropic: "prompt is too long: 250000 tokens > 200000 maximum" and
+        // "input length and `max_tokens` exceed context limit: 250000 > 200000".
+        "prompt is too long",
+        "exceed context limit",
+        // Ollama / llama.cpp / vLLM: "the input length exceeds the context window".
+        "context length exceeded",
+        "context window exceeded",
+        "exceeds the context window",
+        "exceed the context window",
+        "context_window_exceeded",
+        // Gateways that report the refusal under a code of their own.
+        "input_too_long",
+        // OpenAI's prose form: "This model's maximum context length is 8192 tokens."
+        "maximum context length",
+    ];
+
     /// <summary>Retry verdict for a transport error kind.</summary>
     public static bool IsTransient(ProviderErrorKind kind) =>
         kind is ProviderErrorKind.RateLimit or ProviderErrorKind.Timeout
             or ProviderErrorKind.Network or ProviderErrorKind.ServerError;
+
+    /// <summary>
+    ///     Whether the failure is a context-window overflow (#1755) — the one
+    ///     provider failure the agent loop answers by compacting and retrying
+    ///     rather than by giving up.
+    /// </summary>
+    /// <param name="kind">The classification to read.</param>
+    /// <returns><see langword="true" /> for a context overflow.</returns>
+    public static bool IsContextOverflow(ProviderErrorKind kind) =>
+        kind == ProviderErrorKind.ContextOverflow;
+
+    /// <summary>
+    ///     Classify a non-success HTTP response, reading the provider's error
+    ///     body for the canonical context-overflow markers (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     The overflow is not a status code: OpenAI answers 400 with a
+    ///     <c>context_length_exceeded</c> body, Anthropic answers 400 with
+    ///     "prompt is too long", Ollama answers 400 with "the input length
+    ///     exceeds the context window", and some gateways answer 413 or 422.
+    ///     The body is therefore the only place the refusal names itself.
+    /// </remarks>
+    /// <param name="status">The HTTP status the provider answered with.</param>
+    /// <param name="errorBody">The provider's error body, verbatim.</param>
+    /// <returns>
+    ///     <see cref="ProviderErrorKind.ContextOverflow" /> when the body
+    ///     carries a canonical overflow marker; otherwise the plain status
+    ///     classification (<see cref="FromStatus" />).
+    /// </returns>
+    public static ProviderErrorKind ClassifyResponse(
+        System.Net.HttpStatusCode status,
+        string? errorBody) =>
+        IsContextOverflowBody(errorBody) ? ProviderErrorKind.ContextOverflow : FromStatus(status);
+
+    /// <summary>
+    ///     Whether the provider's error body carries a canonical context-overflow
+    ///     marker (#1755).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The markers are the shapes the providers actually send, not a
+    ///         guess: OpenAI's <c>"code": "context_length_exceeded"</c>,
+    ///         Anthropic's <c>"prompt is too long: 250000 tokens &gt; 200000
+    ///         maximum"</c>, and Ollama's <c>"the input length exceeds the
+    ///         context window"</c>, plus the code names the OpenAI-compatible
+    ///         gateways copy. The check is a substring scan and not a JSON
+    ///         parse because the marker travels in three different shapes — a
+    ///         <c>code</c> field, an <c>error</c> string, or free prose — and
+    ///         a parse would have to know all three.
+    ///     </para>
+    ///     <para>
+    ///         A false positive costs one compaction, never a wrong answer:
+    ///         the retry is granted only when the compacted view is measurably
+    ///         smaller, and the original refusal is preserved otherwise.
+    ///     </para>
+    /// </remarks>
+    /// <param name="body">The provider's error body.</param>
+    /// <returns><see langword="true" /> when the body names an overflow.</returns>
+    public static bool IsContextOverflowBody(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < ContextOverflowMarkers.Length; i++)
+        {
+            if (body.Contains(ContextOverflowMarkers[i], StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>Classify an HTTP status code returned by a provider endpoint.</summary>
     public static ProviderErrorKind FromStatus(System.Net.HttpStatusCode status)
