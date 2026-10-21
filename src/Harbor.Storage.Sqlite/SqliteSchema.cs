@@ -1,4 +1,13 @@
 // Database schema for the SQLite store; split from SqliteSessionStore (#184).
+//
+// The schema holds the sessions, the messages, the checkpoints (#1247) and the
+// compaction records (#1767) — the last two being the durable, session-scoped
+// axes that are not messages: a checkpoint marks where a rewind cut, a
+// compaction record marks the bracket of a compaction operation.
+//
+// The DDL is additive and idempotent (`CREATE TABLE IF NOT EXISTS`), so a
+// database written before the compaction table existed gains it on the next
+// open, with no migration step and no rewrite of the rows already there.
 
 using Microsoft.Data.Sqlite;
 
@@ -6,8 +15,9 @@ namespace Harbor.Storage.Sqlite;
 
 /// <summary>
 ///     SQLite DDL for session storage: session/message tables, ordering
-///     indexes, the checkpoint table (#1247), and the migration from the
-///     pre-#85 layout (global message PK, missing integer ordering stamp).
+///     indexes, the checkpoint table (#1247), the compaction-record table
+///     (#1767), and the migration from the pre-#85 layout (global message PK,
+///     missing integer ordering stamp).
 /// </summary>
 internal static class SqliteSchema
 {
@@ -59,6 +69,20 @@ internal static class SqliteSchema
                                        FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
                                    );
                                    CREATE INDEX IF NOT EXISTS idx_checkpoints_session ON checkpoints(session_id);
+
+                                   CREATE TABLE IF NOT EXISTS compaction_events (
+                                       id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                       session_id TEXT NOT NULL,
+                                       kind TEXT NOT NULL,
+                                       turn INTEGER,
+                                       error TEXT,
+                                       pruned INTEGER NOT NULL DEFAULT 0,
+                                       tokens_saved INTEGER NOT NULL DEFAULT 0,
+                                       occurred_at TEXT NOT NULL,
+                                       orphaned_turn INTEGER,
+                                       FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                                   );
+                                   CREATE INDEX IF NOT EXISTS idx_compaction_events_session ON compaction_events(session_id);
                                    """;
 
     /// <summary>

@@ -56,7 +56,7 @@ public sealed class ReadTool : ITool
 
 MCP is wired as three cooperating pieces plus an adapter, all driven by `mcp.json`
 (`~/.harbor/mcp.json`, `<project>/.harbor/mcp.json`, or `HARBOR_MCP_CONFIG`) loaded by
-`Harbor.Hosting` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:60-72`):
+`Harbor.Hosting` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:68-80`):
 
 - `McpRegistry` (`IMcpRegistry`) — server definitions from config; the agent-facing registry.
 - `McpProcessClient` — spawns and talks JSON-RPC stdio to an MCP server process.
@@ -65,7 +65,7 @@ MCP is wired as three cooperating pieces plus an adapter, all driven by `mcp.jso
 
 ### Sub-agent definitions
 
-Agent definitions live in `Harbor.Abstractions` (`src/Harbor.Abstractions/Agents/AgentDefinition.cs:65-108`):
+Agent definitions live in `Harbor.Abstractions` (`src/Harbor.Abstractions/Agents/AgentDefinition.cs:93-136`):
 
 - `code` — focused code generation, can call any tool
 - `plan` — produces a plan only (read-only)
@@ -80,7 +80,7 @@ model never to call it.
 ## Usage
 
 Registration happens via DI in `Harbor.Hosting` (`CreateToolRegistry`,
-`src/Harbor.Hosting/Modules/ToolsCatalog.cs:74-108`), not via a registration facade here.
+`src/Harbor.Hosting/Modules/ToolsCatalog.cs:82-116`), not via a registration facade here.
 Ten tools are always registered; `task`, `webfetch`, `ripgrep`, and `mcp` join when the
 host selects `HarborToolSetKind.Full14` (14 tools total). `tools.freeze()` runs after
 registration, and the CLI's `DisabledTools` config list can keep specific tools out at
