@@ -165,7 +165,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
             ObservedStatement statement = ReadPolicy(policy);
             string ns = NamespaceOf(type);
 
-            if (namespacePolicies.TryGetValue(ns, out ObservedStatement existing))
+            if (namespacePolicies.TryGetValue(ns, out ObservedStatement? existing) && existing is not null)
             {
                 if (!existing.SameAs(statement))
                 {
@@ -593,7 +593,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
             return (null, true);
         }
 
-        if (property.SetMethod is { IsInit: true })
+        if (property.SetMethod is { IsInitOnly: true })
         {
             request.Diagnostics.Add(Diagnostic.Create(
                 ObservedDiagnostics.UnsupportedShape,
@@ -1677,13 +1677,13 @@ public sealed class ObservedGenerator : IIncrementalGenerator
         /// <summary>Do two policies say the same thing?</summary>
         public bool SameAs(ObservedStatement other) =>
             string.Equals(SpanPrefix, other.SpanPrefix, StringComparison.Ordinal)
-            && ObservedScope == other.Scope
+            && Scope == other.Scope
             && CaptureArguments == other.CaptureArguments;
 
         /// <summary>The statement as a reader would write it down.</summary>
         public string Describe() =>
             "prefix=" + (SpanPrefix ?? "(none)")
-            + ", scope=" + ObservedScope
+            + ", scope=" + Scope
             + ", captureArguments=" + CaptureArguments;
     }
 }
