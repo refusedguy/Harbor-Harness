@@ -23,6 +23,12 @@ namespace Harbor.Tools.Builtin;
         "Use `include` to limit search (e.g. '*.cs' or '*.{cs,ts}')"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("pattern", "string", Description = "Regular expression pattern", Required = true)]
+[ToolParam("path", "string", Description = "Base directory or file (default: cwd)")]
+[ToolParam("include", "string", Description = "File name glob (e.g. '*.cs')")]
+[ToolParam("ignoreCase", "boolean", Description = "Case-insensitive (default: false)")]
+[ToolParam("maxResults", "integer", Description = "Max matches (default: 100)")]
 public sealed partial class GrepTool : ITool
 {
 
@@ -51,27 +57,6 @@ public sealed partial class GrepTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "pattern":    { "type": "string",  "description": "Regular expression pattern" },
-                                                                          "path":       { "type": "string",  "description": "Base directory or file (default: cwd)" },
-                                                                          "include":    { "type": "string",  "description": "File name glob (e.g. '*.cs')" },
-                                                                          "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default: false)" },
-                                                                          "maxResults": { "type": "integer", "description": "Max matches (default: 100)" }
-                                                                        },
-                                                                        "required": ["pattern"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <summary>
     ///     Single regex compilation point (ROP-A Z1 п.5) backed by the

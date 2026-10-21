@@ -19,6 +19,11 @@ namespace Harbor.Tools.Builtin;
         "Specify `timeout` for long-running commands (default: 30s)"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("command", "string", Description = "Shell command to execute", Required = true)]
+[ToolParam("cwd", "string", Description = "Working directory (default: current)")]
+[ToolParam("timeout", "integer", Description = "Timeout in seconds (default: 30, max: 600)")]
+[ToolParam("env", "object", Description = "Additional environment variables")]
 public sealed partial class BashTool : ITool
 {
     // #1590 (Proxy): the tool no longer touches `System.Diagnostics.Process`
@@ -31,26 +36,6 @@ public sealed partial class BashTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Command();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "command": { "type": "string", "description": "Shell command to execute" },
-                                                                          "cwd": { "type": "string", "description": "Working directory (default: current)" },
-                                                                          "timeout": { "type": "integer", "description": "Timeout in seconds (default: 30, max: 600)" },
-                                                                          "env": { "type": "object", "description": "Additional environment variables" }
-                                                                        },
-                                                                        "required": ["command"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args) =>
         JsonArgValidator.RequiredNonBlankString(

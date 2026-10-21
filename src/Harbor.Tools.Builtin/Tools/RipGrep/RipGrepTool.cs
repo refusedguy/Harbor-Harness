@@ -22,6 +22,13 @@ namespace Harbor.Tools.Builtin;
         "Respects .gitignore automatically (use the `grep` tool for raw searches)"
     })]
 [AutoConstruct]
+[ToolSchema]
+[ToolParam("pattern", "string", Description = "Search pattern (regex by default)", Required = true)]
+[ToolParam("path", "string", Description = "Base directory or file (default: cwd)")]
+[ToolParam("glob", "string", Description = "File name glob (e.g. '*.cs' or '*.{cs,ts}')")]
+[ToolParam("ignoreCase", "boolean", Description = "Case-insensitive (default: false)")]
+[ToolParam("regex", "boolean", Description = "Treat pattern as regex (default: true). false = fixed-string")]
+[ToolParam("maxResults", "integer", Description = "Max matches (default: 100, max: 10000)")]
 public sealed partial class RipGrepTool : ITool
 {
     private const int DefaultMaxResults = 100;
@@ -35,28 +42,6 @@ public sealed partial class RipGrepTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "pattern":    { "type": "string",  "description": "Search pattern (regex by default)" },
-                                                                          "path":       { "type": "string",  "description": "Base directory or file (default: cwd)" },
-                                                                          "glob":       { "type": "string",  "description": "File name glob (e.g. '*.cs' or '*.{cs,ts}')" },
-                                                                          "ignoreCase": { "type": "boolean", "description": "Case-insensitive (default: false)" },
-                                                                          "regex":      { "type": "boolean", "description": "Treat pattern as regex (default: true). false = fixed-string" },
-                                                                          "maxResults": { "type": "integer", "description": "Max matches (default: 100, max: 10000)" }
-                                                                        },
-                                                                        "required": ["pattern"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args) =>

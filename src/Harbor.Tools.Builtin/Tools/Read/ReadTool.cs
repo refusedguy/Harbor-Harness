@@ -23,6 +23,10 @@ namespace Harbor.Tools.Builtin;
         "offset is 1-indexed line number",
         "Binary non-image files are rejected"
     })]
+[ToolSchema]
+[ToolParam("path", "string", Description = "Absolute or relative file path", Required = true)]
+[ToolParam("offset", "integer", Description = "1-based start line (optional)")]
+[ToolParam("limit", "integer", Description = "Max lines to return (optional)")]
 public sealed partial class ReadTool : ITool
 {
 
@@ -52,25 +56,6 @@ public sealed partial class ReadTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Path();
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "path":   { "type": "string",  "description": "Absolute or relative file path" },
-                                                                          "offset": { "type": "integer", "description": "1-based start line (optional)" },
-                                                                          "limit":  { "type": "integer", "description": "Max lines to return (optional)" }
-                                                                        },
-                                                                        "required": ["path"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {

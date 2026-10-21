@@ -25,6 +25,10 @@ namespace Harbor.Tools.Builtin;
         "reads are point-in-time snapshots — re-read a working session before acting",
         "verdict first (ok/stuck/failed), steer only when needed"
     })]
+[ToolSchema]
+[ToolParam("id", "string", Description = "Id of the peer session to inspect", Required = true)]
+[ToolParam("limit", "integer", Description = "Max transcript messages to return (default 20, max 50)")]
+[ToolParam("include_transcript", "boolean", Description = "Include the recent transcript (default true)")]
 public sealed partial class SessionReadTool : ITool
 {
     private readonly ISessionStore _sessions;
@@ -38,34 +42,6 @@ public sealed partial class SessionReadTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "id": {
-                                                                            "type": "string",
-                                                                            "description": "Id of the peer session to inspect"
-                                                                          },
-                                                                          "limit": {
-                                                                            "type": "integer",
-                                                                            "description": "Max transcript messages to return (default 20, max 50)"
-                                                                          },
-                                                                          "include_transcript": {
-                                                                            "type": "boolean",
-                                                                            "description": "Include the recent transcript (default true)"
-                                                                          }
-                                                                        },
-                                                                        "required": ["id"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     public Result ValidateArguments(JsonElement args)
     {
