@@ -243,9 +243,9 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (41 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (40 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 34 tools are run by a workflow; the other seven are
+tree. 33 tools are run by a workflow; the other seven are
 `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
 `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
 other tools rather than run, `measure-project-graph.py`, which a human runs to
@@ -281,7 +281,6 @@ The modes are:
 | `tools/check-dup-jscpd.py` | python | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/bin/harbor-gates-linux-x64 check-doc-facts` | compiled: `tools/gates/check-doc-facts` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
 | `tools/check-gate-policy.py` | python | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
-| `tools/check-local-merge-loss.py` | python | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | python | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | python | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | python | a change to the frozen surface is re-signed in the same commit, no row of a frozen baseline is written twice, and a baseline edit that only removes a row is a correction rather than a re-signing | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
@@ -324,6 +323,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 check-coverage-registry` | compiled: `tools/gates/check-coverage-registry` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
 | `tools/bin/harbor-gates-linux-x64 gen-e2e-shards` | compiled: `tools/gates/gen-e2e-shards` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
+| `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It

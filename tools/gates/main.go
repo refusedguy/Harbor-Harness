@@ -45,6 +45,7 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
@@ -77,6 +78,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
 	},
 	{
 		name:    "check-shard-balance",

@@ -36,56 +36,44 @@ func SplitNL(s string) []string {
 
 // SplitLines splits like python's str.splitlines(): no trailing empty
 // element, and the other line boundaries python recognises (\r, \v, \f,
-// \x1c-\x1e, \x85, U+2028, U+2029) are honoured.
+// \x1c-\x1e, U+0085, U+2028, U+2029) are honoured.
 //
 // python's splitlines() on "" returns [], not [""]. That matters: a file that
 // is empty has no lines, and a gate that counts them must count zero.
+//
+// The boundaries are matched on RUNES, not on bytes. A UTF-8 file holds
+// continuation bytes that happen to be 0x85, and a byte-wise reader would
+// split a line in the middle of a character: the exceptions file of the
+// merge-loss gate holds one, and the gate read 109 lines where python reads
+// 107.
 func SplitLines(s string) []string {
 	if s == "" {
 		return nil
 	}
 	var out []string
 	var start int
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\n' {
-			out = append(out, s[start:i])
-			start = i + 1
+	for index, r := range s {
+		if !isLineBoundary(r) {
 			continue
 		}
-		if c == '\r' {
-			out = append(out, s[start:i])
-			if i+1 < len(s) && s[i+1] == '\n' {
-				i++
-			}
-			start = i + 1
-			continue
+		out = append(out, s[start:index])
+		if r == '\r' && index+1 < len(s) && s[index+1] == '\n' {
+			index++
 		}
-		if c == '\v' || c == '\f' {
-			out = append(out, s[start:i])
-			start = i + 1
-			continue
-		}
-		if c == 0x1c || c == 0x1d || c == 0x1e {
-			out = append(out, s[start:i])
-			start = i + 1
-			continue
-		}
-		if c == 0x85 {
-			out = append(out, s[start:i])
-			start = i + 1
-			continue
-		}
-		// U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR.
-		if c == 0xe2 && i+2 < len(s) && s[i+1] == 0x80 && (s[i+2] == 0xa8 || s[i+2] == 0xa9) {
-			out = append(out, s[start:i])
-			i += 2
-			start = i + 1
-			continue
-		}
+		start = index + 1
 	}
 	out = append(out, s[start:])
 	return out
+}
+
+// isLineBoundary reports whether the rune ends a line, the way python's
+// str.splitlines() sees it.
+func isLineBoundary(r rune) bool {
+	switch r {
+	case '\n', '\r', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
+		return true
+	}
+	return false
 }
 
 // PathLess compares two paths the way python's pathlib compares them: by
