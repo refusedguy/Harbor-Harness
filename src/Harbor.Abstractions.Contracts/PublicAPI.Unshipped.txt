@@ -160,6 +160,9 @@ static Harbor.Abstractions.Models.ToolResult.Failed(string! detail, Harbor.Abstr
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.get -> Harbor.Abstractions.Models.ToolErrorInfo?
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.init -> void
 static Harbor.Abstractions.Models.ToolCallLink.IsAbandoned(Harbor.Abstractions.Models.ToolResultEntry! entry) -> bool
+
+Harbor.Abstractions.Permissions.ToolCategory.Interaction = 5 -> Harbor.Abstractions.Permissions.ToolCategory
+static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.AskUserQuestion -> Harbor.Abstractions.Models.Identifiers.ToolName!
 Harbor.Abstractions.Models.Identifiers.WellKnownTools
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Bash -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Edit -> Harbor.Abstractions.Models.Identifiers.ToolName!

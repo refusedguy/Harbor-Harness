@@ -1,6 +1,6 @@
 # Harbor.Tools.Builtin
 
-The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`.
+The builtin tool set for Harbor — the tools that ship out of the box and are always available to the agent loop. Consolidated facade assembly (S2 merge of 14 leaf tool projects) implementing `ITool` from `Harbor.Abstractions` for the 24 builtin tools: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `ls`, `task`, `webfetch`, `patch`, `notebook`, `ripgrep`, `tree`, `mcp`, `skill`, `lsp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`, `harbor_inspect`, `plugin_manager`, `goal`, `ask_user_question`.
 
 > Plugins can add more tools via `IToolPlugin` — see [`docs/PLUGIN_SYSTEM.md`](../../docs/PLUGIN_SYSTEM.md). The full tool reference with examples and the "when to use X vs Y" matrix lives in [`docs/TOOLS_CATALOG.md`](../../docs/TOOLS_CATALOG.md).
 

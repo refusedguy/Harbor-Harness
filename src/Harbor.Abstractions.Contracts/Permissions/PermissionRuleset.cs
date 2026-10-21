@@ -175,6 +175,12 @@ public sealed record PermissionRuleset
         new(WellKnownTools.HarborInspect, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionSteer, "*", PermissionAction.Ask),
+        // #1759: asking the human a question is not an action on the machine.
+        // Nothing is written, nothing is executed, and the question channel is
+        // what the human's answer gates, not the permission system. Allow it,
+        // so the model may ask without a second prompt on top of the question
+        // itself.
+        new(WellKnownTools.AskUserQuestion, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionBroadcast, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionInbox, "*", PermissionAction.Allow),
         // #1738: the agent-facing plugin management tool. ALLOW here does NOT
@@ -185,13 +191,13 @@ public sealed record PermissionRuleset
         // names the file, the scope and the effect. A user who does not want
         // an agent touching plugins writes new("plugin_manager", "*", Deny)
         // and the tool never starts.
-        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
+        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow),
         // #1761: the goal axis. The agent's verdict on the session's own
         // goal is not a workspace mutation and needs no approval — asking
         // the user "did you finish?" on every round would be noise. The
         // read-only modes do not carry this rule, so their goal tool is
         // asked about, not allowed.
-        new("goal", "*", PermissionAction.Allow)
+        new(WellKnownTools.Goal, "*", PermissionAction.Allow)
     });
 
     /// <summary>

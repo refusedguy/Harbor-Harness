@@ -57,6 +57,12 @@ namespace Harbor.Abstractions.Models.Identifiers;
 /// </remarks>
 public static class WellKnownTools
 {
+    /// <summary>
+    ///     The <c>ask_user_question</c> tool — asks the human a structured
+    ///     question and reads the answer back (#1759).
+    /// </summary>
+    public static readonly ToolName AskUserQuestion = ToolName.Create("ask_user_question");
+
     /// <summary>The <c>bash</c> tool — runs a shell command.</summary>
     public static readonly ToolName Bash = ToolName.Create("bash");
 
@@ -92,6 +98,8 @@ public static class WellKnownTools
 
     /// <summary>The <c>plugin_manager</c> tool — lists the installed plugins and proposes a change to one.</summary>
     public static readonly ToolName PluginManager = ToolName.Create("plugin_manager");
+    /// <summary>The goal axis: the agent's verdict on the session's own goal (#1761).</summary>
+    public static readonly ToolName Goal = ToolName.Create("goal");
 
     /// <summary>The <c>read</c> tool — reads a file.</summary>
     public static readonly ToolName Read = ToolName.Create("read");
