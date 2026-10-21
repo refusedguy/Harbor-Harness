@@ -57,7 +57,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- #1812: the reference to Harbor.Abstractions is gone with StateTestRunner.
+         That file was the framework's only binder of a type from that assembly
+         (ChatRole and ChatLine), so the edge bound nothing and the
+         reference-trimmer gate named it. Harbor.Abstractions is still in the
+         closure - Harbor.Ui.Framework.State, which this project references,
+         binds it - so the consumers that need it are unaffected. -->
     <ProjectReference Include="..\..\src\Harbor.Application\Harbor.Application.csproj"/>
     <ProjectReference Include="..\..\src\Harbor.Ui.Framework\Harbor.Ui.Framework.csproj"/>
   </ItemGroup>
