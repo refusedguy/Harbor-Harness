@@ -14,11 +14,27 @@
 //      This is what makes an in-place EDIT non-destructive: the edited message
 //      is appended as a new version and the previous one stays in the log.
 //   2. REWIND. A rewind event at position R anchored at message A hides every
-//      message record whose position lies in (pos(A), R). Records written
-//      AFTER the event are untouched — that is what makes "rewind and carry
-//      on" work: a message written after the rewind is current again.
+//      message whose PLACE IN THE CONVERSATION lies in (pos(A), R). Records
+//      written AFTER the event are untouched — that is what makes "rewind and
+//      carry on" work: a message written after the rewind is current again.
 //   3. LOG-ONLY. A record that was never a message (a rewind event) is
 //      log-only. It is in the log and in no surface, ever.
+//
+// THE PLACE OF A MESSAGE IS WHERE IT WAS WRITTEN FIRST
+// ---------------------------------------------------
+// A message that is edited keeps the place it was written at: the edit is a
+// NEW VERSION appended to the log, and the conversation still shows the
+// message where it was said. So a message's place is the position of its
+// FIRST record, and the surface is ordered by that place — the same rule the
+// JSONL reader has always applied to the messages it hands back ("latest id
+// wins, the first-occurrence position counts"). The fold and the reader must
+// not disagree about where a message sits, or the same session would read
+// differently depending on which of the two produced it.
+//
+// It also settles what a rewind to an EDITED anchor means. The anchor's place
+// is where it was first written, so the cut is made there: everything said
+// after that place leaves the surface, and the anchor itself — in its current
+// version — stays.
 //
 // WHY THE FOLD LIVES HERE AND NOT IN A BACKEND
 // ---------------------------------------------
@@ -68,8 +84,14 @@ public sealed record SessionSurface
 
     /// <summary>
     ///     The messages in the surface — the current version of every message
-    ///     the log still shows.
+    ///     the log still shows, in the order the conversation had them.
     /// </summary>
+    /// <remarks>
+    ///     A message keeps the place it was written at even when a later
+    ///     version of it was appended: the edit is a new record, not a move.
+    ///     The list is chronological when the log was written out of time
+    ///     order — the same rule the JSONL reader applies.
+    /// </remarks>
     public required IReadOnlyList<AgentMessage> Current { get; init; }
 
     /// <summary>
@@ -117,10 +139,11 @@ public static class SessionLogFold
         ArgumentNullException.ThrowIfNull(log);
 
         var warnings = new List<string>();
-        var positionsById = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        var firstPositionById = new Dictionary<string, int>(StringComparer.Ordinal);
         var lastPositionById = new Dictionary<string, int>(StringComparer.Ordinal);
         var rewindEvents = new List<RewindEvent>();
-        var messagePositions = new List<int>();
+        var messageIds = new List<string>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
         int previousPosition = int.MinValue;
 
         for (int i = 0; i < log.Count; i++)
@@ -150,23 +173,33 @@ public static class SessionLogFold
                 continue;
             }
 
-            if (!positionsById.TryGetValue(entry.Id, out List<int>? positions))
+            // The place of a message is where it was written FIRST; the version
+            // that is current is the one written LAST.
+            if (seenIds.Add(entry.Id))
             {
-                positions = new List<int>();
-                positionsById[entry.Id] = positions;
+                messageIds.Add(entry.Id);
+                firstPositionById[entry.Id] = entry.Position;
             }
 
-            positions.Add(entry.Position);
             lastPositionById[entry.Id] = entry.Position;
-            messagePositions.Add(entry.Position);
         }
 
         // The rewind events are resolved in log order, and each is judged against
         // the surface as it was when the event was written: an event whose
         // anchor an earlier rewind already removed hides nothing (fail-open).
+        //
+        // The hidden set holds the PLACES of the messages that left the
+        // surface — the position of each message's first record. A version
+        // appended after a message was cut out does not bring the message
+        // back: the message is out of the surface as a whole.
         var hidden = new HashSet<int>();
-        var sortedPositions = new List<int>(messagePositions);
-        sortedPositions.Sort();
+        var firstPositions = new List<int>(messageIds.Count);
+        for (int i = 0; i < messageIds.Count; i++)
+        {
+            firstPositions.Add(firstPositionById[messageIds[i]]);
+        }
+
+        firstPositions.Sort();
 
         foreach (RewindEvent rewind in rewindEvents)
         {
@@ -177,7 +210,7 @@ public static class SessionLogFold
                 continue;
             }
 
-            if (!TryFindAnchor(positionsById, rewind.AnchorId, rewind.Position, out int anchorPosition))
+            if (!firstPositionById.TryGetValue(rewind.AnchorId, out int anchorPosition))
             {
                 warnings.Add(
                     $"Rewind event '{rewind.EventId}' anchors on unknown message '{rewind.AnchorId}'; it "
@@ -193,13 +226,13 @@ public static class SessionLogFold
                 continue;
             }
 
-            AddRange(sortedPositions, anchorPosition, rewind.Position, hidden);
+            AddRange(firstPositions, anchorPosition, rewind.Position, hidden);
         }
 
         var entries = new List<SessionLogEntry>(log.Count);
-        var current = new List<AgentMessage>();
         var shadowed = new List<SessionLogEntry>();
         var logOnly = new List<SessionLogEntry>();
+        var currentById = new Dictionary<string, AgentMessage>(StringComparer.Ordinal);
 
         for (int i = 0; i < log.Count; i++)
         {
@@ -213,7 +246,9 @@ public static class SessionLogFold
                 continue;
             }
 
-            if (entry.Message is null)
+            AgentMessage? message = entry.Message;
+
+            if (message is null)
             {
                 SessionLogEntry classified = entry with { State = SessionLogEntryState.Shadowed };
                 entries.Add(classified);
@@ -222,7 +257,7 @@ public static class SessionLogFold
             }
 
             bool isCurrent = lastPositionById[entry.Id] == entry.Position
-                             && !hidden.Contains(entry.Position);
+                             && !hidden.Contains(firstPositionById[entry.Id]);
 
             SessionLogEntry state = entry with
             {
@@ -233,7 +268,7 @@ public static class SessionLogFold
 
             if (isCurrent)
             {
-                current.Add(entry.Message);
+                currentById[entry.Id] = message;
             }
             else
             {
@@ -241,10 +276,21 @@ public static class SessionLogFold
             }
         }
 
+        // The surface keeps the order the conversation had: a message keeps the
+        // place it was written at, even when a later version of it was appended.
+        var current = new List<AgentMessage>(messageIds.Count);
+        for (int i = 0; i < messageIds.Count; i++)
+        {
+            if (currentById.TryGetValue(messageIds[i], out AgentMessage? found) && found is not null)
+            {
+                current.Add(found);
+            }
+        }
+
         return new SessionSurface
         {
             Entries = entries,
-            Current = current,
+            Current = SortChronologically(current),
             Shadowed = shadowed,
             LogOnly = logOnly,
             Warnings = warnings,
@@ -252,43 +298,37 @@ public static class SessionLogFold
     }
 
     /// <summary>
-    ///     The position of the anchor as it was when the rewind was written: the
-    ///     latest version of the anchor id that precedes the event.
+    ///     The surface's order: the order the messages were written — unless the
+    ///     log was written out of time order, in which case the chronological
+    ///     order wins.
     /// </summary>
-    /// <param name="positionsById">Every message position, grouped by message id.</param>
-    /// <param name="anchorId">The anchor message id.</param>
-    /// <param name="rewindPosition">The position of the rewind event.</param>
-    /// <param name="anchorPosition">The anchor's position, when it was found.</param>
-    /// <returns>True when the anchor existed before the event.</returns>
-    private static bool TryFindAnchor(
-        Dictionary<string, List<int>> positionsById,
-        string anchorId,
-        int rewindPosition,
-        out int anchorPosition)
+    /// <remarks>
+    ///     This is the same rule the JSONL reader has always applied to the
+    ///     messages it returns, and it has to stay the same: a session written
+    ///     out of time order must read the same way whether the reader or the
+    ///     fold produced the list. The sort is stable, so two messages with the
+    ///     same instant keep the order they were written in.
+    /// </remarks>
+    /// <param name="messages">The surface's messages, in write order.</param>
+    /// <returns>The same list, or its chronological order.</returns>
+    private static List<AgentMessage> SortChronologically(List<AgentMessage> messages)
     {
-        anchorPosition = -1;
-
-        if (!positionsById.TryGetValue(anchorId, out List<int>? positions))
+        for (int i = 1; i < messages.Count; i++)
         {
-            return false;
-        }
-
-        foreach (int position in positions)
-        {
-            if (position < rewindPosition && position > anchorPosition)
+            if (messages[i - 1].CreatedAt > messages[i].CreatedAt)
             {
-                anchorPosition = position;
+                return messages.OrderBy(m => m.CreatedAt).ToList();
             }
         }
 
-        return anchorPosition >= 0;
+        return messages;
     }
 
     /// <summary>
-    ///     Hide every position strictly between the anchor and the event.
+    ///     Hide every place strictly between the anchor and the event.
     /// </summary>
-    /// <param name="sortedPositions">Every message position, ascending.</param>
-    /// <param name="low">The anchor's position (exclusive).</param>
+    /// <param name="sortedPositions">Every message's place, ascending.</param>
+    /// <param name="low">The anchor's place (exclusive).</param>
     /// <param name="high">The event's position (exclusive).</param>
     /// <param name="hidden">The set to add to.</param>
     private static void AddRange(

@@ -57,12 +57,17 @@ namespace Harbor.Abstractions.Sessions;
 ///         records are in the log before and after it.
 ///     </para>
 ///     <para>
-///         <b>What is guaranteed where.</b> The invariant is guaranteed by the
-///         backends that implement <see cref="GetSessionLogAsync" /> and
-///         <see cref="RewindMessagesAfterAsync" />. For a store that has not
-///         been migrated, the members below fail loudly rather than deleting
-///         anything, and the legacy destructive behaviour stays reachable only
-///         through the explicitly deprecated
+///         <b>What is guaranteed where (#1752).</b> The invariant is guaranteed
+///         by the backends that implement <see cref="GetSessionLogAsync" /> and
+///         <see cref="RewindMessagesAfterAsync" />: the JSONL store and the
+///         in-memory store both keep a LOG, append a rewind event instead of
+///         rewriting the file, and append a new version of a message instead
+///         of replacing the record. The SQLite store has not been migrated
+///         yet, and says so by failing the append-only members loudly rather
+///         than by quietly destroying records behind the caller's back. For a
+///         store that has not been migrated, the members below fail loudly
+///         rather than deleting anything, and the legacy destructive behaviour
+///         stays reachable only through the explicitly deprecated
 ///         <see cref="DeleteMessagesAfterAsync" />.
 ///     </para>
 /// </remarks>
@@ -105,10 +110,27 @@ public interface ISessionStore
     public Task<Result> AppendMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default);
 
     /// <summary>
-    ///     Update an existing message in place (e.g. for compaction summaries).
+    ///     Append a NEW VERSION of an existing message (e.g. an edit, or a
+    ///     compaction summary that replaces what came before it).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>The record is immutable (#1752).</b> The version that was
+    ///         written before stays in the log: an append-only log cannot
+    ///         rewrite what it has already said, so the earlier version
+    ///         becomes a shadowed record and the surface shows the new one.
+    ///         The message keeps its place in the conversation — what changed
+    ///         is what was said, not when it was said.
+    ///     </para>
+    ///     <para>
+    ///         A store that has not been migrated may still rewrite the record
+    ///         in place: the member's default is not "append a version" but
+    ///         "do what this store does", and the honest answer for a store
+    ///         that cannot keep the old version is the one it gives.
+    ///     </para>
+    /// </remarks>
     /// <param name="sessionId">The session id.</param>
-    /// <param name="message">The message to update (matched by id).</param>
+    /// <param name="message">The message to append (matched by id).</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Success, or failure if the session or message does not exist.</returns>
     public Task<Result> UpdateMessageAsync(string sessionId, AgentMessage message, CancellationToken ct = default);

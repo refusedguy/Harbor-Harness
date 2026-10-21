@@ -32,6 +32,7 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(SessionHeaderEntry))]
 [JsonSerializable(typeof(MessageEntry))]
 [JsonSerializable(typeof(CheckpointEntry))]
+[JsonSerializable(typeof(SessionRewindEntry))]
 [JsonSerializable(typeof(MessageRatingEntry))]
 [JsonSerializable(typeof(SessionRemarkEntry))]
 [JsonSerializable(typeof(SessionCompactionEntry))]
