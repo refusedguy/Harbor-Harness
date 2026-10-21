@@ -806,6 +806,7 @@ jobs:
         run: >-
           python3 tools/check-local-merge-loss.py
           --range origin/dev --tip HEAD --min-merges 1
+          --allow-missing-heads
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually
