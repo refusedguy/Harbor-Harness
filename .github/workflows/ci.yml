@@ -1074,9 +1074,20 @@ jobs:
           # evicted within minutes of being written, because the NuGet caches
           # already fill the budget. The debug symbols go for the same
           # reason: the artifacts do not carry them either.
+          # `tools/bin` is EXCLUDED, and the exclusion is in BOTH the restore
+          # and the save, because the path input IS the cache's version:
+          # the two blocks must stay byte-for-byte identical.
+          #
+          # WHY: `tools/bin/harbor-gates-linux-x64` is a COMMITTED artifact,
+          # not a build output, and `**/bin` matched it. The restore then
+          # put the base commit's binary over the one the pull request
+          # committed, and the gate the workflow ran was the base commit's:
+          # "unknown gate: normalize-mtimes" — the cache decided which code
+          # runs (the shape of issue #2107).
           path: |
             **/obj
             **/bin
+            !tools/bin
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
@@ -1763,9 +1774,20 @@ jobs:
           || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
+          # `tools/bin` is EXCLUDED, and the exclusion is in BOTH the restore
+          # and the save, because the path input IS the cache's version:
+          # the two blocks must stay byte-for-byte identical.
+          #
+          # WHY: `tools/bin/harbor-gates-linux-x64` is a COMMITTED artifact,
+          # not a build output, and `**/bin` matched it. The restore then
+          # put the base commit's binary over the one the pull request
+          # committed, and the gate the workflow ran was the base commit's:
+          # "unknown gate: normalize-mtimes" — the cache decided which code
+          # runs (the shape of issue #2107).
           path: |
             **/obj
             **/bin
+            !tools/bin
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
