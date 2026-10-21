@@ -51,6 +51,9 @@
 // block comments' lengths alone).
 
 using System.Diagnostics;
+using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace Harbor.Architecture.Tests;
 
@@ -142,6 +145,160 @@ public sealed class ParseCostMeasurement
     }
 
     /// <summary>
+    ///     The text-scan layer of ONE representative rule, and the cost of the
+    ///     two things it is made of: the pattern style, and the parser the
+    ///     alternative (Roslyn) would use instead.
+    /// </summary>
+    /// <remarks>
+    ///     The rule is the "single home" rule for a session's token cell
+    ///     (<c>TokenCellSingleHomeRules</c>). It is representative: it walks the
+    ///     product tree, strips the comments, splits into lines, and asks a
+    ///     shape per line.
+    ///     <para>
+    ///         Two numbers come out of it. The first is the rule's own cost,
+    ///         through the rule's own matcher. The second is the cost of the
+    ///         PATTERN STYLE: the rule's patterns are conjunctions of lookahead
+    ///         assertions (<c>(?=[^\n]*X)</c>), and each lookahead is tried at
+    ///         every position of the line, which makes the match quadratic in
+    ///         the line's length. The same three checks, asked independently,
+    ///         are linear — and the Go prototype of this rule uses the
+    ///         independent form, because Go's regexp cannot express a lookahead
+    ///         at all.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task Measure_The_Text_Scan_Of_One_Rule_And_The_Cost_Of_Roslyn()
+    {
+        await Assert.That(RepoPaths.RepoRoot).IsNotNull()
+            .Because("the measurement reads the repository's own source; with no root it measures nothing.");
+
+        // (1) The rule's own scan, through the rule's own matcher.
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        var watch = Stopwatch.StartNew();
+        IReadOnlyList<string> hits = TokenCellSingleHomeRules.LiveHits();
+        watch.Stop();
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        Console.WriteLine(
+            $"[arch-cost] rule token-cell live hits={hits.Count} ms={watch.ElapsedMilliseconds} "
+            + $"alloc-mb={(after - before) / 1024.0 / 1024.0:F1}");
+
+        foreach (string hit in hits)
+        {
+            Console.WriteLine($"[arch-count] rule token-cell live hit {hit}");
+        }
+
+        // (2) The pattern style: the lookahead conjunction against the same
+        //     three checks asked independently.
+        Regex lookahead = new(
+            @"(?=[^\n]*/\s*1_?000(?:_000)?(?:\.0)?\s*[,)])(?=[^\n]*\.ToString\(\s*\x22\s*(?:[Ff][0-9]|0\.#))(?=[^\n]*[KkMm]\b)",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        Regex scaled = new(@"/\s*1_?000(?:_000)?(?:\.0)?\s*[,)]", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        Regex toString = new(@"\.ToString\(\s*\x22\s*(?:[Ff][0-9]|0\.#)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        Regex suffix = new(@"[KkMm]\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+        long lookaheadTicks = 0;
+        long splitTicks = 0;
+        long lines = 0;
+        long lookaheadMatches = 0;
+        long splitMatches = 0;
+
+        foreach (string file in EnumerateCsFiles("src").Concat(EnumerateCsFiles("apps")))
+        {
+            string text = File.ReadAllText(file);
+            foreach (string line in SourceScan.StripComments(text).Split('\n'))
+            {
+                lines++;
+
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool a = lookahead.IsMatch(line);
+                long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool b = scaled.IsMatch(line) && toString.IsMatch(line) && suffix.IsMatch(line);
+                long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
+
+                lookaheadTicks += t1 - t0;
+                splitTicks += t2 - t1;
+
+                if (a)
+                {
+                    lookaheadMatches++;
+                }
+
+                if (b)
+                {
+                    splitMatches++;
+                }
+            }
+        }
+
+        double toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        Console.WriteLine(
+            $"[arch-cost] rule token-cell pattern lines={lines} lookahead-ms={lookaheadTicks * toMs:F0} "
+            + $"split-ms={splitTicks * toMs:F0} lookahead-matches={lookaheadMatches} split-matches={splitMatches}");
+
+        // (3) The parser the ALTERNATIVE would use: Roslyn over the same tree.
+        var options = new CSharpParseOptions(LanguageVersion.Preview);
+        long parseBytes = 0;
+        long parseTicks = 0;
+        long parseFiles = 0;
+        long parseChars = 0;
+
+        foreach (string file in EnumerateCsFiles("src").Concat(EnumerateCsFiles("apps")))
+        {
+            string text = File.ReadAllText(file);
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(text, options, path: file);
+            long t1 = System.Diagnostics.Stopwatch.GetTimestamp();
+
+            parseBytes += tree.GetText().Length;
+            parseTicks += t1 - t0;
+            parseFiles++;
+            parseChars += text.Length;
+        }
+
+        Console.WriteLine(
+            $"[arch-cost] roslyn parse files={parseFiles} chars={parseChars} "
+            + $"ms={parseTicks * toMs:F0}");
+
+        // The controls: the corpus a second implementation must reproduce.
+        foreach (ScanControl control in TokenCellSingleHomeRules.ControlCorpus())
+        {
+            string stripped = control.File.EndsWith(".axaml", StringComparison.Ordinal)
+                ? SourceScan.StripMarkupComments(control.Source)
+                : SourceScan.StripComments(control.Source);
+
+            var reported = new List<string>();
+            foreach (string line in stripped.Split('\n'))
+            {
+                if (control.File.EndsWith(".axaml", StringComparison.Ordinal))
+                {
+                    if (Regex.IsMatch(line, @"(?=[^\n]*StringFormat=)(?=[^\n]*\{0:N\d)(?=[^\n]*\{Binding\s+[A-Za-z0-9_]*[Tt]oken)", RegexOptions.CultureInvariant))
+                    {
+                        reported.Add("TOKEN-CELL-HAND-SPELLED-IN-XAML");
+                    }
+                }
+                else if (Regex.IsMatch(line, @"(?=[^\n]*/\s*1_?000(?:_000)?(?:\.0)?\s*[,)])(?=[^\n]*\.ToString\(\s*\x22\s*(?:[Ff][0-9]|0\.#))(?=[^\n]*[KkMm]\b)", RegexOptions.CultureInvariant))
+                {
+                    reported.Add("TOKEN-CELL-SCALED-AND-SUFFIXED-BY-HAND");
+                }
+                else if (Regex.IsMatch(line, @"(?=[^\n]*\b[A-Za-z0-9_]*[Tt]oken[A-Za-z0-9_]*\b)(?=[^\n]*[\u2191\u2193])", RegexOptions.CultureInvariant))
+                {
+                    reported.Add("TOKEN-CELL-ASSEMBLED-BY-HAND");
+                }
+                else if (Regex.IsMatch(line, @"\bFormat[A-Za-z0-9_]*[Tt]okens?[A-Za-z0-9_]*\s*\([^)]*Span<char>", RegexOptions.CultureInvariant))
+                {
+                    reported.Add("TOKEN-CELL-HAND-ROLLED-INTO-A-SPAN");
+                }
+            }
+
+            Console.WriteLine(
+                $"[arch-count] rule token-cell control file={control.File} "
+                + $"reported={(reported.Count == 0 ? "NONE" : string.Join("|", reported))} "
+                + $"expected={(control.ExpectSubId ?? "NONE")}");
+        }
+    }
+
+    /// <summary>
     ///     One measured call: how many bytes it allocated and how long it took.
     /// </summary>
     /// <param name="text">The text to measure over.</param>
@@ -187,7 +344,9 @@ public sealed class ParseCostMeasurement
                 .EnumerateFiles(path, "*.cs", SearchOption.AllDirectories)
                 .Where(p =>
                     !p.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                    && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                    && !p.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !p.Contains($"{Path.DirectorySeparatorChar}contrib{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !p.Contains($"{Path.DirectorySeparatorChar}tests{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
                 .OrderBy(p => p, StringComparer.Ordinal)
         ];
     }
