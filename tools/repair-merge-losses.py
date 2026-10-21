@@ -56,7 +56,13 @@ def main() -> int:
             if not parent:
                 continue
             parent_lines = parent.split("\n")
-            current = git("show", f"origin/dev:{path}").split("\n")
+            # текущее состояние файла — накопленное за проход, а не заново
+            # прочитанное с удалённого dev (иначе каждая следующая вставка
+            # затирает предыдущую)
+            if path in pending:
+                current = pending[path]
+            else:
+                current = git("show", f"origin/dev:{path}").split("\n")
             if not current:
                 continue
             cur_set = set(current)

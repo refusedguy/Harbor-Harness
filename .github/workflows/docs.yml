@@ -506,6 +506,13 @@ jobs:
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
         run: python3 tools/check-shard-balance.py --self-test
+      # #1753. The coverage tools. The reporter reads the cobertura files
+      # the nightly lane produced and prints the per-file tables; the gate
+      # compares the registry of accepted holes against the measurement, in
+      # both directions. Their failure paths are tested here for the same
+      # reason as the others: a reader edited until it matches nothing is
+      # indistinguishable from a reader that found nothing. The load-bearing
+      # fixtures are the three states a file can be in — covered, a hole,
       # and a file with no code to cover — and the two defects the gate
       # exists for: a file that stopped being covered, and a row that is no
       # longer needed.
