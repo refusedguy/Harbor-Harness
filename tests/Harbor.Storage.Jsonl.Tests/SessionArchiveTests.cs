@@ -157,16 +157,30 @@ public class SessionArchiveTests
     }
 
     [Test]
-    public async Task Export_SaysSurfaceWhenTheStoreHasNoLog()
+    public async Task Export_SaysLogWhenTheStoreHasOne()
     {
         var store = CreateStore();
         var session = (await store.CreateAsync("/work", "code", "kilocode", "kilo-auto/free")).Value;
 
         var written = await WriteAsync(store, session.Id);
 
-        // The store does not expose an append-only log yet (#1784), so the
-        // archive holds the surface — and says so rather than letting a
-        // reader infer it.
+        // The JSONL backend exposes its append-only log (#1784), so the
+        // archive holds the WHOLE log — and says so, so a reader is never
+        // left to infer which of the two it is holding.
+        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written.Value.LogSource).IsEqualTo("log");
+    }
+
+    [Test]
+    public async Task Export_SaysSurfaceWhenTheStoreHasNoLog()
+    {
+        var session = Session.Create("/work", "code", "kilocode", "kilo-auto/free");
+        var store = new LogStore(session, log: null);
+
+        var written = await WriteAsync(store, session.Id);
+
+        // A store that cannot hand back a log offers the surface, and the
+        // manifest says so rather than letting a reader infer it.
         await Assert.That(written.IsSuccess).IsTrue();
         await Assert.That(written.Value.LogSource).IsEqualTo("surface");
     }
@@ -416,12 +430,12 @@ public class SessionArchiveTests
     ];
 
     /// <summary>
-    ///     A store that exposes an append-only log, so the archive's shadowed
-    ///     path is exercised against a store that has one. The JSONL backend
-    ///     has not been migrated to the log model yet (#1784), so the log path
-    ///     needs a store that offers it.
+    ///     A store whose log the test decides: it hands one back, or it has
+    ///     none at all (and the archive falls back to the surface). The JSONL
+    ///     backend exposes its own log now (#1784), so the "no log" case needs
+    ///     a store that says so.
     /// </summary>
-    private sealed class LogStore(Session session, IReadOnlyList<SessionLogEntry> log) : ISessionStore
+    private sealed class LogStore(Session session, IReadOnlyList<SessionLogEntry>? log) : ISessionStore
     {
         public Task<Result<Session>> CreateAsync(
             string directory, string agentName, string providerId, string modelId, CancellationToken ct = default) =>
@@ -447,11 +461,16 @@ public class SessionArchiveTests
         public Task<Result<IReadOnlyList<AgentMessage>>> GetMessagesAsync(
             string sessionId, CancellationToken ct = default) =>
             Task.FromResult(Result.Success<IReadOnlyList<AgentMessage>>(
-                [.. log.Where(e => e.Message is not null).Select(e => e.Message!)]));
+                log is null
+                    ? []
+                    : [.. log.Where(e => e.Message is not null).Select(e => e.Message!)]));
 
         public Task<Result<IReadOnlyList<SessionLogEntry>>> GetSessionLogAsync(
             string sessionId, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success(log));
+            Task.FromResult(log is null
+                ? Result.Failure<IReadOnlyList<SessionLogEntry>>(
+                    "this store keeps no append-only log (#1784).")
+                : Result.Success(log));
 
         public Task<Result> DeleteAsync(string sessionId, CancellationToken ct = default) =>
             Task.FromResult(Result.Success());
