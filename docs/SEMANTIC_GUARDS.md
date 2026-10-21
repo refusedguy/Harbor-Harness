@@ -124,6 +124,12 @@ three deliberate "observe the task" shapes in the product tree (`ToolDispatcher.
 projection from reading the three sites, not a measured number: the measurement is the next slice's
 job.
 
+**And the analyzer does not stand on the harness alone.** A rule that asks about the TYPE cannot
+see a type it could not resolve, so the analyzer asks the written name as well — and verifies it
+against the COMPILATION's own symbols, so the fact "there is a type called `HttpClient` in
+`System.Net.Http`" is still a fact about the compiler's symbol table and not about a spelling. A
+QUALIFIED name is never a fallback: the author named a namespace, and the namespace is the fact.
+
 **The rule's own lines GREW by 202, and the honest conclusion is that this route does not pay for
 itself in lines.** The reason is visible in the table above and it is not a detail: this rule
 already sits on the shared `ScanRule` engine (#1086), so its text machinery was three regexes and

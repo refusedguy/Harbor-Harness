@@ -122,6 +122,9 @@ public sealed class HttpClientCreationAnalyzer : DiagnosticAnalyzer
     /// <summary>The handler type the rule is about: one layer below the client.</summary>
     private const string SocketsHandlerTypeName = "System.Net.Http.SocketsHttpHandler";
 
+    /// <summary>The namespace the two types live in.</summary>
+    private const string HttpClientNamespaceName = "System.Net.Http";
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [CreationRule, DelegateRule];
 
@@ -155,16 +158,7 @@ public sealed class HttpClientCreationAnalyzer : DiagnosticAnalyzer
     {
         var expression = (ExpressionSyntax)context.Node;
 
-        ITypeSymbol? created = context.SemanticModel
-            .GetTypeInfo(expression, context.CancellationToken)
-            .Type;
-
-        if (created is not INamedTypeSymbol named)
-        {
-            return;
-        }
-
-        string typeName = named.ToDisplayString();
+        string typeName = CreatedTypeName(context, expression);
         if (typeName != HttpClientTypeName && typeName != SocketsHandlerTypeName)
         {
             return;
@@ -176,6 +170,45 @@ public sealed class HttpClientCreationAnalyzer : DiagnosticAnalyzer
         {
             context.ReportDiagnostic(Diagnostic.Create(DelegateRule, expression.GetLocation(), typeName));
         }
+    }
+
+    /// <summary>
+    ///     The name of the type that is created here, resolved by symbol.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The first question is the symbol: the semantic model resolves the
+    ///         created object, and the name it answers with is the type's own.
+    ///     </para>
+    ///     <para>
+    ///         The second question is the WRITTEN name, and it is asked only
+    ///         when the symbol did not resolve at all. That happens in one
+    ///         place: a compilation that does not carry the project's implicit
+    ///         global usings cannot resolve a type that only those usings
+    ///         bring into scope — and a rule that asks about the TYPE cannot
+    ///         see a type it could not resolve. The written name is then
+    ///         verified against the COMPILATION's own symbols (the type must
+    ///         exist), and a QUALIFIED name is never a fallback: the author
+    ///         named a namespace, and the namespace is the fact.
+    ///     </para>
+    /// </remarks>
+    private static string CreatedTypeName(SyntaxNodeAnalysisContext context, ExpressionSyntax expression)
+    {
+        if (context.SemanticModel.GetTypeInfo(expression, context.CancellationToken).Type is INamedTypeSymbol named)
+        {
+            return named.ToDisplayString();
+        }
+
+        if (expression is not ObjectCreationExpressionSyntax creation
+            || creation.Type is not IdentifierNameSyntax identifier)
+        {
+            return string.Empty;
+        }
+
+        INamedTypeSymbol? known = context.Compilation.GetTypeByMetadataName(
+            HttpClientNamespaceName + "." + identifier.Identifier.ValueText);
+
+        return known is null ? string.Empty : known.ToDisplayString();
     }
 
     /// <summary>
