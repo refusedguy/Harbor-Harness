@@ -15,19 +15,19 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (one commit on `dev` at `6f197b60`, plus the gate this
-branch adds), the tree the table was last reconciled against:
+Measured on this branch (the merge with `dev` at `00d53a67`, plus the gate and
+the row this branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 49 files, 38 909 lines |
+| python tools in `tools/` | 50 files, 39 068 lines |
 | of them, the `check-*.py` family | 24 files, 23 377 lines |
 | workflows that run a python tool | 7: `ci.yml`, `demo.yml`, `docs.yml`, `meas-analyzer-cost.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 9 reporters, 6 helpers, 3 libraries |
-| tools with a self-test | 37 |
+| reporters, helpers, libraries | 9 reporters, 7 helpers, 3 libraries |
+| tools with a self-test | 38 |
 | tools with a ratchet | 21 |
 | tools with a floor | 26 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
@@ -244,6 +244,7 @@ The modes are:
 |---|---|---|---|---|---|---|---|
 | `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
 | `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
+| `tools/changelog-assemble.py` | glues the per-pull-request fragments under `changelog/fragments/` into the `[Unreleased]` section of `CHANGELOG.md` at release time, and `--check` fails when the committed file diverged from the fragments. CI runs its failure path; a human runs the assembler | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/check-abstractions-contract.py` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
 | `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
