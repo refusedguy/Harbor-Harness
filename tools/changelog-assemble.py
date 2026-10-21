@@ -52,8 +52,19 @@ def assembled(already: str = "") -> str:
     второй запуск сборщика дописал бы его второй раз.
     """
     parts = []
-    for _, text in fragments():
+    for key, text in fragments():
         body = text.strip("\n")
+        if not body:
+            continue
+        # фрагмент НЕ может нести заголовок секции: после склейки такая
+        # строка выглядела бы как начало другой секции и обрывала бы
+        # [Unreleased] ровно посередине
+        kept = []
+        for line in body.split("\n"):
+            if line.startswith("## ["):
+                continue
+            kept.append(line)
+        body = "\n".join(kept).strip("\n")
         if not body:
             continue
         heading = next((l.strip() for l in body.split("\n") if l.startswith("### ")), None)

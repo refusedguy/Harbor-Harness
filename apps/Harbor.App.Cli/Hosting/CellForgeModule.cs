@@ -124,6 +124,13 @@ internal static class CellForgeModule
                 sp.GetRequiredService<IApprovalCoordinator>()));
             services.AddSingleton(sp => new Repl.PlainPermissionAsker(
                 sp.GetRequiredService<ITuiRenderer>()));
+            // #1759: the console surface for the model-facing question channel.
+            // It sits next to the permission askers because it answers the same
+            // kind of question to the same kind of person. The host attaches it
+            // (rather than the module registering it as the presenter) because
+            // only the host knows whether the fullscreen frame loop owns stdin.
+            services.AddSingleton(sp => new Repl.PlainUserQuestionAsker(
+                sp.GetRequiredService<ITuiRenderer>()));
             services.AddSingleton<IPermissionService>(sp => CreatePermissionService(sp));
         }
 

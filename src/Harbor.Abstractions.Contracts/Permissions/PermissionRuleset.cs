@@ -175,6 +175,12 @@ public sealed record PermissionRuleset
         new(WellKnownTools.HarborInspect, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionSteer, "*", PermissionAction.Ask),
+        // #1759: asking the human a question is not an action on the machine.
+        // Nothing is written, nothing is executed, and the question channel is
+        // what the human's answer gates, not the permission system. Allow it,
+        // so the model may ask without a second prompt on top of the question
+        // itself.
+        new(WellKnownTools.AskUserQuestion, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionBroadcast, "*", PermissionAction.Allow),
         new(WellKnownTools.SessionInbox, "*", PermissionAction.Allow),
         // #1738: the agent-facing plugin management tool. ALLOW here does NOT

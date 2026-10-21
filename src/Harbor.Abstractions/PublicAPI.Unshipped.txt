@@ -220,6 +220,105 @@ Harbor.Abstractions.Plugins.IInstalledPluginInventory
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.ApplyAsync(Harbor.Abstractions.Plugins.PluginInventoryChange! change, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.PluginInventoryChangeResult!>>!
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.DescribeSource(string! sourcePath, Harbor.Abstractions.Plugins.PluginScope scope) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.InstalledPluginEntry!>
 Harbor.Abstractions.Plugins.IInstalledPluginInventory.List() -> CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Plugins.InstalledPluginEntry!>!>
+
+Harbor.Abstractions.Interaction.IUserQuestionService
+Harbor.Abstractions.Interaction.IUserQuestionService.AskAsync(Harbor.Abstractions.Interaction.UserQuestionRequest! request, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<Harbor.Abstractions.Interaction.UserQuestionOutcome!>!
+Harbor.Abstractions.Interaction.UserQuestion
+Harbor.Abstractions.Interaction.UserQuestion.<Clone>$() -> Harbor.Abstractions.Interaction.UserQuestion!
+Harbor.Abstractions.Interaction.UserQuestion.Deconstruct(out string! Id, out string! Question, out string? Header, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionOption!>? Options, out bool MultiSelect) -> void
+Harbor.Abstractions.Interaction.UserQuestion.Equals(Harbor.Abstractions.Interaction.UserQuestion? other) -> bool
+Harbor.Abstractions.Interaction.UserQuestion.Header.get -> string?
+Harbor.Abstractions.Interaction.UserQuestion.Header.init -> void
+Harbor.Abstractions.Interaction.UserQuestion.Id.get -> string!
+Harbor.Abstractions.Interaction.UserQuestion.Id.init -> void
+Harbor.Abstractions.Interaction.UserQuestion.MultiSelect.get -> bool
+Harbor.Abstractions.Interaction.UserQuestion.MultiSelect.init -> void
+Harbor.Abstractions.Interaction.UserQuestion.Options.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionOption!>?
+Harbor.Abstractions.Interaction.UserQuestion.Options.init -> void
+Harbor.Abstractions.Interaction.UserQuestion.Question.get -> string!
+Harbor.Abstractions.Interaction.UserQuestion.Question.init -> void
+Harbor.Abstractions.Interaction.UserQuestion.UserQuestion(string! Id, string! Question, string? Header = null, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionOption!>? Options = null, bool MultiSelect = false) -> void
+Harbor.Abstractions.Interaction.UserQuestionAnswer
+Harbor.Abstractions.Interaction.UserQuestionAnswer.<Clone>$() -> Harbor.Abstractions.Interaction.UserQuestionAnswer!
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Custom.get -> string?
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Custom.init -> void
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Deconstruct(out string! Id, out System.Collections.Generic.IReadOnlyList<string!>! Selected, out string? Custom) -> void
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Equals(Harbor.Abstractions.Interaction.UserQuestionAnswer? other) -> bool
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Id.get -> string!
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Id.init -> void
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Selected.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Interaction.UserQuestionAnswer.Selected.init -> void
+Harbor.Abstractions.Interaction.UserQuestionAnswer.UserQuestionAnswer(string! Id, System.Collections.Generic.IReadOnlyList<string!>! Selected, string? Custom = null) -> void
+Harbor.Abstractions.Interaction.UserQuestionCodes
+const Harbor.Abstractions.Interaction.UserQuestionCodes.Aborted = "ASK_ABORTED" -> string!
+const Harbor.Abstractions.Interaction.UserQuestionCodes.Answered = "ASK_ANSWERED" -> string!
+const Harbor.Abstractions.Interaction.UserQuestionCodes.NoChannel = "ASK_NO_CHANNEL" -> string!
+const Harbor.Abstractions.Interaction.UserQuestionCodes.Pending = "ASK_PENDING" -> string!
+Harbor.Abstractions.Interaction.UserQuestionOption
+Harbor.Abstractions.Interaction.UserQuestionOption.<Clone>$() -> Harbor.Abstractions.Interaction.UserQuestionOption!
+Harbor.Abstractions.Interaction.UserQuestionOption.Description.get -> string?
+Harbor.Abstractions.Interaction.UserQuestionOption.Description.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOption.Deconstruct(out string! Label, out string? Description) -> void
+Harbor.Abstractions.Interaction.UserQuestionOption.Equals(Harbor.Abstractions.Interaction.UserQuestionOption? other) -> bool
+Harbor.Abstractions.Interaction.UserQuestionOption.Label.get -> string!
+Harbor.Abstractions.Interaction.UserQuestionOption.Label.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOption.UserQuestionOption(string! Label, string? Description = null) -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome
+Harbor.Abstractions.Interaction.UserQuestionOutcome.<Clone>$() -> Harbor.Abstractions.Interaction.UserQuestionOutcome!
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Answers.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionAnswer!>!
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Answers.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Code.get -> string?
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Code.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Deconstruct(out Harbor.Abstractions.Interaction.UserQuestionStatus Status, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionAnswer!>! Answers, out string? Code, out string? Reason) -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Equals(Harbor.Abstractions.Interaction.UserQuestionOutcome? other) -> bool
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Reason.get -> string?
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Reason.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Status.get -> Harbor.Abstractions.Interaction.UserQuestionStatus
+Harbor.Abstractions.Interaction.UserQuestionOutcome.Status.init -> void
+Harbor.Abstractions.Interaction.UserQuestionOutcome.UserQuestionOutcome(Harbor.Abstractions.Interaction.UserQuestionStatus Status, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionAnswer!>! Answers, string? Code = null, string? Reason = null) -> void
+Harbor.Abstractions.Interaction.UserQuestionRequest
+Harbor.Abstractions.Interaction.UserQuestionRequest.<Clone>$() -> Harbor.Abstractions.Interaction.UserQuestionRequest!
+Harbor.Abstractions.Interaction.UserQuestionRequest.Deconstruct(out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestion!>! Questions, out System.TimeSpan? Timeout) -> void
+Harbor.Abstractions.Interaction.UserQuestionRequest.Equals(Harbor.Abstractions.Interaction.UserQuestionRequest? other) -> bool
+Harbor.Abstractions.Interaction.UserQuestionRequest.Questions.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestion!>!
+Harbor.Abstractions.Interaction.UserQuestionRequest.Questions.init -> void
+Harbor.Abstractions.Interaction.UserQuestionRequest.Timeout.get -> System.TimeSpan?
+Harbor.Abstractions.Interaction.UserQuestionRequest.Timeout.init -> void
+Harbor.Abstractions.Interaction.UserQuestionRequest.UserQuestionRequest(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestion!>! Questions, System.TimeSpan? Timeout = null) -> void
+Harbor.Abstractions.Interaction.UserQuestionStatus
+Harbor.Abstractions.Interaction.UserQuestionStatus.Aborted = 2 -> Harbor.Abstractions.Interaction.UserQuestionStatus
+Harbor.Abstractions.Interaction.UserQuestionStatus.Answered = 0 -> Harbor.Abstractions.Interaction.UserQuestionStatus
+Harbor.Abstractions.Interaction.UserQuestionStatus.Pending = 1 -> Harbor.Abstractions.Interaction.UserQuestionStatus
+Harbor.Abstractions.Interaction.UserQuestionStatus.Unavailable = 3 -> Harbor.Abstractions.Interaction.UserQuestionStatus
+override Harbor.Abstractions.Interaction.UserQuestion.Equals(object? obj) -> bool
+override Harbor.Abstractions.Interaction.UserQuestion.GetHashCode() -> int
+override Harbor.Abstractions.Interaction.UserQuestion.ToString() -> string!
+override Harbor.Abstractions.Interaction.UserQuestionAnswer.Equals(object? obj) -> bool
+override Harbor.Abstractions.Interaction.UserQuestionAnswer.GetHashCode() -> int
+override Harbor.Abstractions.Interaction.UserQuestionAnswer.ToString() -> string!
+override Harbor.Abstractions.Interaction.UserQuestionOption.Equals(object? obj) -> bool
+override Harbor.Abstractions.Interaction.UserQuestionOption.GetHashCode() -> int
+override Harbor.Abstractions.Interaction.UserQuestionOption.ToString() -> string!
+override Harbor.Abstractions.Interaction.UserQuestionOutcome.Equals(object? obj) -> bool
+override Harbor.Abstractions.Interaction.UserQuestionOutcome.GetHashCode() -> int
+override Harbor.Abstractions.Interaction.UserQuestionOutcome.ToString() -> string!
+override Harbor.Abstractions.Interaction.UserQuestionRequest.Equals(object? obj) -> bool
+override Harbor.Abstractions.Interaction.UserQuestionRequest.GetHashCode() -> int
+override Harbor.Abstractions.Interaction.UserQuestionRequest.ToString() -> string!
+static Harbor.Abstractions.Interaction.UserQuestion.operator !=(Harbor.Abstractions.Interaction.UserQuestion? left, Harbor.Abstractions.Interaction.UserQuestion? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestion.operator ==(Harbor.Abstractions.Interaction.UserQuestion? left, Harbor.Abstractions.Interaction.UserQuestion? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionAnswer.operator !=(Harbor.Abstractions.Interaction.UserQuestionAnswer? left, Harbor.Abstractions.Interaction.UserQuestionAnswer? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionAnswer.operator ==(Harbor.Abstractions.Interaction.UserQuestionAnswer? left, Harbor.Abstractions.Interaction.UserQuestionAnswer? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionOption.operator !=(Harbor.Abstractions.Interaction.UserQuestionOption? left, Harbor.Abstractions.Interaction.UserQuestionOption? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionOption.operator ==(Harbor.Abstractions.Interaction.UserQuestionOption? left, Harbor.Abstractions.Interaction.UserQuestionOption? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.Aborted(string! reason) -> Harbor.Abstractions.Interaction.UserQuestionOutcome!
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.Answered(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Interaction.UserQuestionAnswer!>! answers) -> Harbor.Abstractions.Interaction.UserQuestionOutcome!
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.Pending(string! reason) -> Harbor.Abstractions.Interaction.UserQuestionOutcome!
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.Unavailable(string! reason) -> Harbor.Abstractions.Interaction.UserQuestionOutcome!
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.operator !=(Harbor.Abstractions.Interaction.UserQuestionOutcome? left, Harbor.Abstractions.Interaction.UserQuestionOutcome? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionOutcome.operator ==(Harbor.Abstractions.Interaction.UserQuestionOutcome? left, Harbor.Abstractions.Interaction.UserQuestionOutcome? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionRequest.operator !=(Harbor.Abstractions.Interaction.UserQuestionRequest? left, Harbor.Abstractions.Interaction.UserQuestionRequest? right) -> bool
+static Harbor.Abstractions.Interaction.UserQuestionRequest.operator ==(Harbor.Abstractions.Interaction.UserQuestionRequest? left, Harbor.Abstractions.Interaction.UserQuestionRequest? right) -> bool
 Harbor.Abstractions.Sessions.Goal
 Harbor.Abstractions.Sessions.Goal.<Clone>$() -> Harbor.Abstractions.Sessions.Goal!
 Harbor.Abstractions.Sessions.Goal.BlockedCode.get -> Harbor.Abstractions.Sessions.GoalBlockCode?

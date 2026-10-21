@@ -161,14 +161,30 @@ public class SessionArchiveTests
     {
         var store = CreateStore();
         var session = (await store.CreateAsync("/work", "code", "kilocode", "kilo-auto/free")).Value;
+        await store.AppendMessageAsync(session.Id, TestMessages.User(
+            "hello", id: "m1", sessionId: session.Id));
 
         var written = await WriteAsync(store, session.Id);
 
-        // The JSONL backend exposes its append-only log (#1784), so the
+        // The JSONL backend exposes its append-only log (#1752), so the
         // archive holds the WHOLE log — and says so, so a reader is never
         // left to infer which of the two it is holding.
         await Assert.That(written.IsSuccess).IsTrue();
         await Assert.That(written.Value.LogSource).IsEqualTo("log");
+    }
+
+    [Test]
+    public async Task Export_SaysSurfaceWhenTheLogIsEmpty()
+    {
+        var store = CreateStore();
+        var session = (await store.CreateAsync("/work", "code", "kilocode", "kilo-auto/free")).Value;
+
+        var written = await WriteAsync(store, session.Id);
+
+        // A store that has the log API but no entries yet holds no log: the
+        // manifest must not claim one the archive does not hold.
+        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written.Value.LogSource).IsEqualTo("surface");
     }
 
     [Test]

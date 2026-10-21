@@ -52,7 +52,8 @@ public class RegistrationCompositionTests
         // + plugin_manager (registered when the plugin runtime is compiled in — #1738)
         // + goal (#1761, the goal axis — registered whatever the store is, so the
         //   round prompt never names a tool the turn was not offered)
-        // = 23.
+        // + ask_user_question (#1759, the model-facing question channel)
+        // = 24.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -67,6 +68,7 @@ public class RegistrationCompositionTests
             "patch", "notebook", "ripgrep", "tree", "lsp",
             "mcp", "read_mcp_resource", "mcp_prompt",
             "harbor_inspect", "plugin_manager", "goal",
+            "ask_user_question",
         };
 
         await Assert.That(names.Count).IsEqualTo(expectedFull.Length)
@@ -99,7 +101,7 @@ public class RegistrationCompositionTests
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "plugin_manager", "ask_user_question" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }
