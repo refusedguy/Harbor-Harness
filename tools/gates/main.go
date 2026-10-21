@@ -42,6 +42,7 @@ import (
 	"sort"
 	"strings"
 
+	archanchors "harbor.local/gates/check-arch-anchors"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -60,6 +61,11 @@ type registered struct {
 }
 
 var registry = []registered{
+	{
+		name:    "check-arch-anchors",
+		summary: "may an architecture rule anchor on a line number",
+		run:     archanchors.Run,
+	},
 	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",

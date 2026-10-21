@@ -86,7 +86,6 @@ on:
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
       # #1726. The guard triage reads the TRX of the `test` job, and its
       # self-test runs here with the other python tools. A PR that edits the
@@ -235,7 +234,6 @@ on:
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
       # #1726. The guard triage reads the TRX of the `test` job, and its
       # self-test runs here with the other python tools. A PR that edits the
@@ -361,7 +359,7 @@ jobs:
       # is tested here for the same reason as the others: a rule edited until it
       # matches nothing is indistinguishable from a rule that found nothing.
       - name: Architecture-anchor gate fails on a planted line-number anchor
-        run: python3 tools/check-arch-anchors.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-arch-anchors --self-test
       # #933. The fourth gate is the only one that asks whether a COUNT the
       # onboarding documents state still equals the count of tracked files.
       # Its failure path is tested for the same reason as the other three: the
@@ -677,7 +675,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that no architecture rule anchors on a line number
-        run: python3 tools/check-arch-anchors.py --min-files 40
+        run: tools/bin/harbor-gates-linux-x64 check-arch-anchors --min-files 40
 
   lint:
     name: markdown lint
