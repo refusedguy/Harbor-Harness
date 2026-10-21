@@ -98,7 +98,12 @@ public static class WellKnownTools
 
     /// <summary>The <c>plugin_manager</c> tool — lists the installed plugins and proposes a change to one.</summary>
     public static readonly ToolName PluginManager = ToolName.Create("plugin_manager");
-    /// <summary>The goal axis: the agent's verdict on the session's own goal (#1761).</summary>
+    /// <summary>
+    ///     The goal axis (#1761): the agent's own verdict on what the session is
+    ///     for. The name lives here for the same reason every other one does —
+    ///     the permission rule, the safety declaration and the tool's own
+    ///     attribute must not be able to disagree about it.
+    /// </summary>
     public static readonly ToolName Goal = ToolName.Create("goal");
 
     /// <summary>The <c>read</c> tool — reads a file.</summary>
