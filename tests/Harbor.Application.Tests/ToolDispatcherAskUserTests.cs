@@ -29,7 +29,7 @@ public class ToolDispatcherAskUserTests
     {
         public AllowCheckFailAskPermissions()
         {
-            CheckAsyncResult = Result.Success(new PermissionResponse(PermissionAction.Allow, false));
+            CheckAsyncResult = Result.Success(TestToolContext.AllowWithoutPersist());
             AskUserAsyncResult = Result.Failure<PermissionResponse>("ask subsystem down");
             GetRulesetValue = PermissionRuleset.Empty;
             SaveAsyncResult = Result.Success();
