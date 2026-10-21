@@ -91,6 +91,27 @@ public enum RunLimitKind
 
     /// <summary>The output-size budget (<c>RunBudgetCaps.MaxOutputBytes</c>) was consumed (#404).</summary>
     MaxOutputBytes,
+
+    /// <summary>
+    ///     The goal's round budget (<c>Goal.MaxRounds</c>) was consumed (#1761).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A goal is not a second run contour: when its rounds run out, the
+    ///         RUN ends, and it ends the way every other bounded run ends — with
+    ///         a limit on the terminal event. A run that stopped because the
+    ///         goal's budget was spent did not malfunction and nobody pressed
+    ///         stop; the work is INCOMPLETE, which is what
+    ///         <see cref="RunStopReason.LimitExceeded" /> says.
+    ///     </para>
+    ///     <para>
+    ///         The goal's own record carries the same fact with more detail: its
+    ///         phase is <c>Blocked</c> and its block code is
+    ///         <c>RoundLimit</c>. This member says the RUN stopped; the goal
+    ///         says why the WORK stopped.
+    ///     </para>
+    /// </remarks>
+    MaxGoalRounds,
 }
 
 /// <summary>

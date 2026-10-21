@@ -25,12 +25,15 @@ were written.
 {"type":"checkpoint","id":"…","messageId":"…","messageIndex":0,"createdAt":"…","label":null,"rewindOf":null,"removed":0}
 {"type":"messageRating","id":"…","messageId":"…","rating":"Helpful","category":"TaskResult","createdAt":"…","note":null}
 {"type":"sessionRemark","id":"…","text":"…","createdAt":"…"}
+{"type":"goal","objective":"…","phase":"Active","maxRounds":3,"roundsStarted":1,"revision":2,"createdAt":"…","updatedAt":"…","blockedReason":null,"blockedCode":null}
 ```
 
-There are four record kinds. A `message` is what the model reads. The other
-three are not history: a `checkpoint` is a rewind marker (#1247), a
-`messageRating` is the user's rating of one message, and a `sessionRemark` is
-free text about the session (#1746). The message read path skips all three,
+There are five record kinds. A `message` is what the model reads. The other
+four are not history: a `checkpoint` is a rewind marker (#1247), a
+`messageRating` is the user's rating of one message, a `sessionRemark` is
+free text about the session (#1746), and a `goal` is a snapshot of the
+session's durable goal — the phase, the round budget and the counter of the
+work the session is doing (#1761). The message read path skips all four,
 which is what makes "the feedback never reaches the model" a property of the
 format rather than a promise.
 
@@ -63,6 +66,11 @@ was additive:
   already existed;
 - the transcript contract (#1806) added a reader's view, derived in memory
   rather than stored.
+
+The goal records (#1761) are the fourth such growth, and the same shape: a
+record kind of their own, no record that already existed changed. A file
+written before the goal axis existed is still a V1 file — it simply has no
+goal line, and their absence is not a malformed line.
 
 An extension that had needed a retroactive migration would have shown up as a
 second generation, with a migration step and a fixture of its own. None did,
