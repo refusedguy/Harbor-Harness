@@ -58,6 +58,7 @@ public class ParameterSchemaCachingTests
         ("mcp_prompt", () => new McpPromptTool(NullLogger<McpPromptTool>.Instance)),
         ("notebook", () => new NotebookTool(NullLogger<NotebookTool>.Instance, NotebookRoot)),
         ("patch", () => new PatchTool(NullLogger<PatchTool>.Instance)),
+        ("plugin_manager", () => new PluginManagerTool(new FakePluginInventory(), NullLogger<PluginManagerTool>.Instance)),
         ("read", () => new ReadTool(NullLogger<ReadTool>.Instance)),
         ("read_mcp_resource", () => new McpResourceTool(NullLogger<McpResourceTool>.Instance)),
         ("ripgrep", () => new RipGrepTool(NullLogger<RipGrepTool>.Instance)),

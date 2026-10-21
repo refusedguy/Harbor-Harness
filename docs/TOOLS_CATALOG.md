@@ -30,6 +30,7 @@
    - [ripgrep](#ripgrep)
    - [tree](#tree)
    - [mcp](#mcp)
+   - [plugin_manager](#plugin_manager)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
 5. [Building your own tool — WebFetchTool walkthrough](#5-building-your-own-tool--webfetchtool-walkthrough)
@@ -43,20 +44,21 @@
 
 ## 1. Inventory
 
-Harbor ships **20 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **21 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 20 tools
+> (the CLI default — the enum name predates the tool count) registers all 21 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer`); `Standard10` (name likewise predates the count — 12 members today)
+> `session_steer` + `plugin_manager`); `Standard10` (name likewise predates the count — 12 members today)
 > omits the eight heavier ones (`task`, `webfetch`,
 > `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 18.
+> catalog registers 18. `plugin_manager` requires the plugin runtime to be compiled in
+> (`HarborWithPlugins=true`, the default).
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -80,6 +82,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
+| 21 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1082,6 +1085,73 @@ side effect the user has not explicitly requested.
 
 ---
 
+### `plugin_manager`
+
+**Description.** The agent's window onto the plugin inventory. It reads what is
+installed in the two CS-source plugin scopes (`~/.harbor/plugins` and
+`<cwd>/.harbor/plugins`), and it PROPOSES a change — install, uninstall, enable,
+disable. The proposal is a question: the tool asks the user, through the same
+approval channel the permission service uses, and the change happens only if the
+user approves that one call. A denial, a cancellation or an unavailable approval
+channel ends the call with nothing changed (#1738).
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "action": { "type": "string", "description": "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'" },
+    "name":   { "type": "string", "description": "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable" },
+    "source": { "type": "string", "description": "Path of the reviewed '.cs' plugin source to install — required for install" },
+    "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
+  },
+  "required": ["action"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. What is installed?
+{"action": "list"}
+
+// 2. Add a reviewed plugin to the user's own scope
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs"}
+
+// 3. Add it to the project instead
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs", "scope": "project"}
+
+// 4. Take a plugin out
+{"action": "uninstall", "name": "TodoWrite.cs"}
+
+// 5. Keep it on disk but stop the host from serving it
+{"action": "disable", "name": "TodoWrite.cs"}
+```
+
+**Permissions.** `PermissionRuleset.Default` allows the tool (`plugin_manager *`)
+— that is NOT "the agent may install plugins on its own". The tool asks the user
+about every change it proposes, and the answer covers that one call: it is never
+written back to a ruleset, so the session's permission mode never changes. A
+user who does not want an agent touching plugins writes
+`new("plugin_manager", "*", Deny)` and the tool never starts. The read-only
+agents (`plan`, `explore`, `ask`, `architect`, `orchestrator`) deny it outright.
+
+**Mode.** `Sequential` (it changes files).
+
+**Tips.**
+- Call `action: "list"` first: it reports the exact file names the other
+  actions take, and an error says so ("call list and use the exact file name").
+- An install copies the reviewed source AND the manifest it ships next to it
+  (`<Name>.harbor-plugin.json`); the manifest is the plugin's declaration, and
+  the host refuses a plugin whose declaration it cannot apply.
+- A plugin that declares a Harbor floor above the running one is refused with
+  that reason — the host would refuse it at load time anyway.
+- CS plugins are served by the separate `harbor-plugins-host` process: a change
+  takes effect after that host restarts. Nothing is compiled in the CLI process.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1102,6 +1172,8 @@ side effect the user has not explicitly requested.
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
 | Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
 | Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
+| See what plugins are installed | `plugin_manager` (`action: "list"`) | `ls ~/.harbor/plugins` | One inventory for the agent and the `/plugins` panel |
+| Add or remove a plugin | `plugin_manager` | `bash cp` | The change is proposed and the user approves it |
 
 ---
 

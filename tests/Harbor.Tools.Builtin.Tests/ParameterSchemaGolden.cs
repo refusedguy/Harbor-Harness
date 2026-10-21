@@ -184,6 +184,20 @@ internal static class ParameterSchemaGolden
                 }
                 """,
 
+            ["plugin_manager"] =
+                """
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": { "type": "string", "description": "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'" },
+                    "name":   { "type": "string", "description": "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable" },
+                    "source": { "type": "string", "description": "Path of the reviewed '.cs' plugin source to install — required for install" },
+                    "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
+                  },
+                  "required": ["action"]
+                }
+                """,
+
             ["read"] =
                 """
                 {

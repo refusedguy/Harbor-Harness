@@ -660,7 +660,12 @@ public class FullLayerMatrixTests
         // Infrastructure → Application edge that was pure dead permission.
         ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
+        // #1738: the plugin INVENTORY. FileSystemPluginInventory implements the
+        // Domain port Harbor.Abstractions.Plugins.IPluginInventory, so this
+        // assembly names Domain types directly. The reference is real (the
+        // inventory's signatures are Domain types), so the IL gate would
+        // redden if this permission were dropped.
+        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Compilation"] = new(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Instantiation"] = new(Layer.Infrastructure,
@@ -720,6 +725,15 @@ public class FullLayerMatrixTests
             // in-process compile pipeline; the composition root binds none of
             // them any more, so only the Hosting edge below stays.
             "Harbor.Plugins.Hosting",
+            // #1738: the plugin INVENTORY. The composition root builds the
+            // one FileSystemPluginInventory the agent-facing plugin_manager
+            // tool and the /plugins panel both read. The implementation lives
+            // in Harbor.Plugins.Storage because that is the layer that knows
+            // where plugin files come from (and where the manifest reader
+            // lives). The reference is real (RegistryFacade.Compose names
+            // FileSystemPluginInventory), so the IL gate would redden if this
+            // permission were dropped.
+            "Harbor.Plugins.Storage",
             // LoadedPlugin handle (StartupPluginLoad/PluginReloadService):
             "Harbor.Plugins.Abstractions",
         ]),

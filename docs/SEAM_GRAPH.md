@@ -18,13 +18,13 @@ The axes of plugin extension, read out of [`src/Harbor.Plugins.Abstractions/Plug
 
 | Axis | Marker | Door | In-tree implementers | Out-of-tree implementers | Marker dispatched at | Door called at |
 |---|---|---|---|---|---|---|
-| IToolPlugin | `IToolPlugin` | `RegisterTool` | none | `HelloWorldPlugin`, `SessionBroadcastPlugin`, `FileTreePlugin`, `GitToolsPlugin`, `TodoWritePlugin`, `WebSearchPlugin` (+10 more) | src/Harbor.Plugins.Registration/PluginRegistrar.cs:118 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:287, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:69 |
-| IProviderPlugin | `IProviderPlugin` | `RegisterProvider` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:128 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:328, src/Harbor.Plugins.Registration/PluginRegistrar.cs:339 (+2 more) |
-| IAgentPlugin | `IAgentPlugin` | `RegisterAgent` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:132 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:376, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:77 |
-| ITuiPlugin | `ITuiPlugin` | `RegisterTuiPlugin` | none | `ProbeTuiPlugin` | src/Harbor.Plugins.Registration/PluginRegistrar.cs:136 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:138, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:81 |
-| ITuiPanelPlugin | `ITuiPanelPlugin` | `RegisterPanelProvider` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:142 | src/Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs:41, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:85 |
-| ISessionStorePlugin | `ISessionStorePlugin` | `RegisterSessionStore` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:163 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:222, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:89 |
-| ITuiBackendPlugin | `ITuiBackendPlugin` | `RegisterTuiBackend` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:174 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:241, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:93 |
+| IToolPlugin | `IToolPlugin` | `RegisterTool` | none | `HelloWorldPlugin`, `SessionBroadcastPlugin`, `FileTreePlugin`, `GitToolsPlugin`, `TodoWritePlugin`, `WebSearchPlugin` (+11 more) | src/Harbor.Plugins.Registration/PluginRegistrar.cs:368 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:506, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:69 |
+| IProviderPlugin | `IProviderPlugin` | `RegisterProvider` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:369 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:547, src/Harbor.Plugins.Registration/PluginRegistrar.cs:558 (+2 more) |
+| IAgentPlugin | `IAgentPlugin` | `RegisterAgent` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:370 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:595, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:77 |
+| ITuiPlugin | `ITuiPlugin` | `RegisterTuiPlugin` | none | `ProbeTuiPlugin` | src/Harbor.Plugins.Registration/PluginRegistrar.cs:371 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:163, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:81 |
+| ITuiPanelPlugin | `ITuiPanelPlugin` | `RegisterPanelProvider` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:372 | src/Harbor.Plugins.Registration/PanelRegistryPluginAdapter.cs:41, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:85 |
+| ISessionStorePlugin | `ISessionStorePlugin` | `RegisterSessionStore` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:374 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:441, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:89 |
+| ITuiBackendPlugin | `ITuiBackendPlugin` | `RegisterTuiBackend` | none | none | src/Harbor.Plugins.Registration/PluginRegistrar.cs:376 | src/Harbor.Plugins.Registration/PluginRegistrar.cs:460, src/Harbor.Plugins.Registration/RecordingPluginLoadHost.cs:93 |
 
 Two facts a reader would otherwise have to dig for. First, **no in-tree class implements any axis marker**. The markers are extension points, so the only implementers are out-of-tree plugins, the samples and the test doubles. Second, **every door is called on a receiver** inside the product, which is the half the architecture rule grades.
 
@@ -87,15 +87,15 @@ graph LR
 
 Every interface declared under `src/`, ranked by how much of the product touches it. **Implementations** counts the classes that implement it, directly or through a base class; the in-tree ones come first and the out-of-tree ones (doubles, samples) after a `/`. **Consumers** counts the files that name it, excluding the files that only put it in a base list. **Registered** is the container registration, if the seam is resolved from the DI graph. **Bypasses** counts the places that name the concrete type where the interface was the contract.
 
-The table shows the 40 seams with the most in-tree implementations and consumers, out of 191 interfaces declared under `src/`. The rest are in `--report`.
+The table shows the 40 seams with the most in-tree implementations and consumers, out of 192 interfaces declared under `src/`. The rest are in `--report`.
 
 | Seam | Declared in | Implementations | Consumer files | Registered as | Bypasses |
 |---|---|---|---|---|---|
 | `ISessionStore` | [`src/Harbor.Abstractions/Sessions/ISessionStore.cs`](../src/Harbor.Abstractions/Sessions/ISessionStore.cs) | `JsonlSessionStore`, `MemorySessionStore`, `SqliteSessionStore`, `DeferredSessionStore` / `StoreDouble`, `TestSessionStore`, `ControllableStore` (+14 more) | 79 | a factory | 9 |
-| `ITool` | [`src/Harbor.Abstractions/Tools/ITool.cs`](../src/Harbor.Abstractions/Tools/ITool.cs) | `SandboxedPluginTool`, `TelemetryToolDecorator`, `BashTool`, `EditTool`, `GlobTool` (+19 more) / `HelloTool (plugins-cs)`, `SessionBroadcastTool`, `SessionInboxTool` (+37 more) | 49 | none | 28 |
+| `ITool` | [`src/Harbor.Abstractions/Tools/ITool.cs`](../src/Harbor.Abstractions/Tools/ITool.cs) | `SandboxedPluginTool`, `TelemetryToolDecorator`, `BashTool`, `EditTool`, `GlobTool` (+20 more) / `HelloTool (plugins-cs)`, `SessionBroadcastTool`, `SessionInboxTool` (+39 more) | 51 | none | 29 |
 | `IEventBus` | [`src/Harbor.Abstractions/Events/IEventBus.cs`](../src/Harbor.Abstractions/Events/IEventBus.cs) | `NullEventBus`, `InMemoryEventBus` / `CancelHonoringBus`, `CancelOnTurnStartBus`, `ThrowingUpdateBus` (+3 more) | 61 | none | 3 |
 | `IProviderRegistry` | [`src/Harbor.Abstractions/Providers/IProviderRegistry.cs`](../src/Harbor.Abstractions/Providers/IProviderRegistry.cs) | `ProviderRegistry (Harbor.Registries)`, `InstrumentedProviderRegistry` / `EmptyProviderRegistry`, `PricedModelRegistry`, `FakeRegistry (Harbor.App.Avalonia.Tests)` (+10 more) | 60 | a factory | 6 |
-| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RetryLlmClientDecorator`, `AnthropicLlmClient`, `OllamaLlmClient`, `OpenAILlmClient`, `OpenAiCompatibleLlmClient` (+1 more) / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 47 | none | 7 |
+| `ILlmClient` | [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs) | `RecordedSessionLlmClient`, `RetryLlmClientDecorator`, `AnthropicLlmClient`, `OllamaLlmClient`, `OpenAILlmClient` (+2 more) / `FakeClient (Harbor.App.Avalonia.Tests)`, `HangingLlmClient (Harbor.Application.Tests)`, `TokenCapturingLlmClient` (+12 more) | 48 | none | 7 |
 | `IAgentRegistry` | [`src/Harbor.Abstractions/Agents/AgentDefinition.cs`](../src/Harbor.Abstractions/Agents/AgentDefinition.cs) | `AgentRegistry` / `FakeAgentRegistry (Harbor.App.Avalonia.Tests)`, `FixedRegistry`, `FixedOrderAgentRegistry` (+3 more) | 50 | a factory | 4 |
 | `IAgent` | [`src/Harbor.Abstractions/Agents/IAgent.cs`](../src/Harbor.Abstractions/Agents/IAgent.cs) | `DefaultAgent`, `TracingAgentProxy` / `FakeAgent (Harbor.App.Avalonia.Tests)`, `FakeAgent (Harbor.App.Cli.Tests)`, `ScriptedAgent` (+5 more) | 45 | a factory | 1 |
 | `IToolRegistry` | [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abstractions/Tools/IToolRegistry.cs) | `CompositeToolRegistry`, `ToolRegistry`, `InstrumentedToolRegistry` / `CountingRegistry`, `StableToolRegistry`, `BenchToolRegistry` (+2 more) | 39 | a factory | 5 |
@@ -105,17 +105,17 @@ The table shows the 40 seams with the most in-tree implementations and consumers
 | `ITuiRenderContext` | [`src/Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs`](../src/Harbor.Terminal.Abstractions/Renderers/ITuiRenderContext.cs) | `CaptureRenderContext`, `AnsiPlainRenderContext`, `CellForgeRenderContext`, `NotificationRenderContext` / `NullRenderContext` | 28 | none | 4 |
 | `ITokenTracker` | [`src/Harbor.Abstractions/Sessions/ITokenTracker.cs`](../src/Harbor.Abstractions/Sessions/ITokenTracker.cs) | `TokenTracker` / `FakeTokenTracker (Harbor.App.Cli.Tests)`, `FakeTokenTracker (Harbor.Application.Tests)`, `RecordingTokenTracker` (+1 more) | 26 | `TokenTracker` | 0 |
 | `IApprovalCoordinator` | [`src/Harbor.Abstractions/Permissions/IApprovalCoordinator.cs`](../src/Harbor.Abstractions/Permissions/IApprovalCoordinator.cs) | `ApprovalCoordinator` | 25 | a factory | 1 |
+| `IToolRegistryBuilder` | [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abstractions/Tools/IToolRegistry.cs) | `ToolRegistryBuilderAdapter`, `ToolRegistryBuilder` | 22 | none | 2 |
 | `IPermissionService` | [`src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs`](../src/Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs) | `PermissionService` / `FixedVerdictPermissions`, `GatedPermissions`, `BenchPermissionService` | 22 | a factory, a factory (+2 more) | 5 |
-| `IToolRegistryBuilder` | [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abstractions/Tools/IToolRegistry.cs) | `ToolRegistryBuilderAdapter`, `ToolRegistryBuilder` | 21 | none | 2 |
 | `IArgSafetyPolicy` | [`src/Harbor.Abstractions.Contracts/Permissions/IArgSafetyPolicy.cs`](../src/Harbor.Abstractions.Contracts/Permissions/IArgSafetyPolicy.cs) | `BashSafetyPolicy`, `PathGuardSafetyPolicy` / `DenyMyToolPolicy` | 20 | none | 4 |
 | `IToastService` | [`src/Harbor.Ui.Framework.Services/Services/IToastService.cs`](../src/Harbor.Ui.Framework.Services/Services/IToastService.cs) | `ToastService` / `FakeToastService`, `StubToastService`, `SilentToastService` | 21 | a factory | 0 |
 | `IPanelProvider` | [`src/Harbor.Ui.Framework.State/Panels/IPanelProvider.cs`](../src/Harbor.Ui.Framework.State/Panels/IPanelProvider.cs) | `CellForgeJumpPalettePanel`, `CellForgePanelBase`, `CellForgeSkillFreshnessPanel`, `CellForgeSubagentsPanel` / `GitStatusPanel`, `TodoListPanel`, `ContainerFieldPanel` (+5 more) | 17 | none | 4 |
+| `IPlugin` | [`src/Harbor.Abstractions/Plugins/IPlugin.cs`](../src/Harbor.Abstractions/Plugins/IPlugin.cs) | `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ISessionStorePlugin`, `ITuiBackendPlugin` (+1 more) / `ITelemetryPlugin`, `StubPlugin`, `FakePlugin` (+2 more) | 15 | none | 0 |
 | `IPluginLoadHost` | [`src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs`](../src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs) | `McpPluginLoadHost`, `RecordingPluginLoadHost` / `FakePluginLoadHost (CsPluginLoaderTests.cs)`, `FakePluginLoadHost (FakePluginLoadHost.cs)`, `RefusingPluginLoadHost` | 19 | none | 4 |
 | `IProviderHealthCheck` | [`src/Harbor.Abstractions/Providers/IProviderHealthCheck.cs`](../src/Harbor.Abstractions/Providers/IProviderHealthCheck.cs) | `ProviderHealthCheck` / `FakeHealthCheck`, `StubHealthCheck` | 19 | none | 0 |
 | `IChatBlock` | [`src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs`](../src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs) | `ColumnsBlock`, `ImageBlock`, `StreamingMarkdownBlock`, `ApprovalGateView`, `ICollapsibleChatBlock` (+5 more) / `WidthBlock`, `FixedBlock`, `StoreBlock` (+3 more) | 9 | none | 20 |
 | `IDispatcherAdapter` | [`src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs`](../src/Harbor.Ui.Framework.Services/Services/IDispatcherAdapter.cs) | `AvaloniaDispatcherAdapter` / `TestDispatcherAdapter` | 18 | `AvaloniaDispatcherAdapter` | 0 |
 | `IPanelRegistry` | [`src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs`](../src/Harbor.Ui.Framework.State/Panels/IPanelRegistry.cs) | `PanelRegistryPluginAdapter`, `PanelRegistry` | 17 | a factory | 12 |
-| `IPlugin` | [`src/Harbor.Abstractions/Plugins/IPlugin.cs`](../src/Harbor.Abstractions/Plugins/IPlugin.cs) | `IToolPlugin`, `IProviderPlugin`, `IAgentPlugin`, `ISessionStorePlugin`, `ITuiBackendPlugin` (+1 more) / `ITelemetryPlugin`, `StubPlugin`, `FakePlugin` (+2 more) | 13 | none | 0 |
 | `IRendererPipeline` | [`src/Harbor.Hosting/Rendering/IRendererPipeline.cs`](../src/Harbor.Hosting/Rendering/IRendererPipeline.cs) | `RendererPipeline` | 18 | a factory | 1 |
 | `ICommonConfigStore` | [`src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs`](../src/Harbor.Desktop.Abstractions/Configuration/ICommonConfigStore.cs) | `JsonCommonConfigStore` / `StubCommonConfigStore`, `TokenWatchingConfigStore`, `RecordingCommonStore` (+2 more) | 17 | a factory, a factory | 4 |
 | `IMcpRegistry` | [`src/Harbor.Abstractions/Tools/IMcpRegistry.cs`](../src/Harbor.Abstractions/Tools/IMcpRegistry.cs) | `InMemoryMcpRegistry`, `McpRegistry` / `ScriptedMcpRegistry` | 16 | a factory | 3 |
@@ -153,17 +153,18 @@ Declared in [`src/Harbor.Abstractions/Tools/IToolRegistry.cs`](../src/Harbor.Abs
 - **Named by** 39 file(s) in 16 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia, Harbor.App.Avalonia.Tests, Harbor.App.Cli, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Hosting, Harbor.Hosting.Tests
 - **Registered in the container**: `IToolRegistry` → a factory (Singleton, [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs))
 - **Bypassed**: 2 direct construction(s) of the concrete type, 3 signature(s) naming the concrete type where the interface was the contract:
-  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):133
-  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):161
+  - `InstrumentedToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/RegistryFacade.cs`](../src/Harbor.Hosting/Modules/RegistryFacade.cs):155
+  - `ToolRegistry` instead of `IToolRegistry`, construction at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):163
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):188
   - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/HarborCompositionContext.cs`](../src/Harbor.Hosting/HarborCompositionContext.cs):200
-  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):153
+  - `ToolRegistry` instead of `IToolRegistry`, signature at [`src/Harbor.Hosting/Modules/ToolsCatalog.cs`](../src/Harbor.Hosting/Modules/ToolsCatalog.cs):154
 
 ### `ILlmClient`
 
 Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Abstractions/Providers/ILlmClient.cs).
 
-- **In-tree implementations** (6):
+- **In-tree implementations** (7):
+  - `RecordedSessionLlmClient`, [`src/Harbor.AgentRuntime/Agents/RecordedSessionLlmClient.cs`](../src/Harbor.AgentRuntime/Agents/RecordedSessionLlmClient.cs)
   - `RetryLlmClientDecorator`, [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs)
   - `AnthropicLlmClient`, [`src/Harbor.Providers.Anthropic/AnthropicLlmClient.cs`](../src/Harbor.Providers.Anthropic/AnthropicLlmClient.cs)
   - `OllamaLlmClient`, [`src/Harbor.Providers.Ollama/OllamaLlmClient.cs`](../src/Harbor.Providers.Ollama/OllamaLlmClient.cs)
@@ -186,7 +187,7 @@ Declared in [`src/Harbor.Abstractions/Providers/ILlmClient.cs`](../src/Harbor.Ab
   - `CatalogSource`, [`tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs`](../tests/Harbor.Registries.Tests/ProviderRegistryCatalogCacheTtlTests.cs)
   - `ScriptedLlmClient (Harbor.TestKit)`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
   - `ThrowingLlmClient`, [`tests/Harbor.TestKit/Fakes/ILlmClient.cs`](../tests/Harbor.TestKit/Fakes/ILlmClient.cs)
-- **Named by** 47 file(s) in 22 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests, Harbor.Hosting
+- **Named by** 48 file(s) in 22 project(s): Harbor.Abstractions, Harbor.AgentRuntime, Harbor.App.Avalonia.Tests, Harbor.App.Cli.Tests, Harbor.Application.Tests, Harbor.Architecture.Tests, Harbor.Benchmarks, Harbor.Config.Tests, Harbor.Core.Tests, Harbor.Hosting
 - **Registered in the container**: **no DI registration**
 - **Bypassed**: 7 direct construction(s) of the concrete type, 0 signature(s) naming the concrete type where the interface was the contract:
   - `RetryLlmClientDecorator` instead of `ILlmClient`, construction at [`src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs`](../src/Harbor.AgentRuntime/Resilience/RetryLlmClientDecorator.cs):265

@@ -9,8 +9,14 @@
       - CompositePluginSource         (fan-in over multiple sources)
       - EmbeddedResourcePluginSource  (reads .cs from assembly resources)
 
-    Depends only on Harbor.Plugins.Abstractions. Knows nothing about
-    compilation, instantiation, registration, or hosting.
+    Also the plugin INVENTORY (#1738): FileSystemPluginInventory — what is
+    installed across the two scopes, and the one way to change it. It
+    implements the Domain port Harbor.Abstractions.Plugins.IPluginInventory,
+    which is why this project references Harbor.Abstractions directly (#1738):
+    the port lives in the Domain because the agent-facing tool that consumes
+    it (Harbor.Tools.Builtin) may not bind the plugin layers.
+
+    Knows nothing about compilation, instantiation, registration, or hosting.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
+    <!-- #1738: the IPluginInventory port and its records live in the Domain. -->
+    <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
   </ItemGroup>
 
   <ItemGroup>

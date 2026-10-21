@@ -12,7 +12,14 @@ public static class PluginLifecycle
     ///     The current Harbor version reported to plugins via
     ///     <see cref="PluginContext.HarborVersion" />. Bumped with each Harbor release.
     /// </summary>
-    public static readonly Version CurrentHarborVersion = new(0, 4, 0);
+    /// <remarks>
+    ///     #1738: the number now lives in
+    ///     <see cref="HarborRuntimeVersion.Current" />, in the contract layer
+    ///     BOTH this assembly and the agent-facing plugin inventory may bind.
+    ///     It used to be a literal here, which left the inventory either
+    ///     repeating it or unable to answer whether a plugin will load.
+    /// </remarks>
+    public static readonly Version CurrentHarborVersion = HarborRuntimeVersion.Current;
 
     /// <summary>
     ///     Build a <see cref="PluginContext" /> for the supplied plugin, deriving

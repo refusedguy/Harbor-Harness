@@ -90,3 +90,80 @@ Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.init -> void
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.init -> void
+
+Harbor.Abstractions.Plugins.PluginScope
+Harbor.Abstractions.Plugins.PluginScope.Global = 0 -> Harbor.Abstractions.Plugins.PluginScope
+Harbor.Abstractions.Plugins.PluginScope.Project = 1 -> Harbor.Abstractions.Plugins.PluginScope
+Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryAction.Disable = 3 -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryAction.Enable = 2 -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryAction.Install = 0 -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryAction.Uninstall = 1 -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryEntry
+Harbor.Abstractions.Plugins.PluginInventoryEntry.<Clone>$() -> Harbor.Abstractions.Plugins.PluginInventoryEntry!
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Compatible.get -> bool
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Compatible.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Deconstruct(out string! Name, out Harbor.Abstractions.Plugins.PluginScope Scope, out string! FullPath, out bool Enabled, out string? DeclaredVersion, out System.Collections.Generic.IReadOnlyList<string!>! DeclaredAxes, out string? RequiredHarborVersion, out bool Compatible) -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.DeclaredAxes.get -> System.Collections.Generic.IReadOnlyList<string!>!
+Harbor.Abstractions.Plugins.PluginInventoryEntry.DeclaredAxes.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.DeclaredVersion.get -> string?
+Harbor.Abstractions.Plugins.PluginInventoryEntry.DeclaredVersion.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Enabled.get -> bool
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Enabled.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Equals(Harbor.Abstractions.Plugins.PluginInventoryEntry? other) -> bool
+Harbor.Abstractions.Plugins.PluginInventoryEntry.FullPath.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryEntry.FullPath.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.ManifestError.get -> string?
+Harbor.Abstractions.Plugins.PluginInventoryEntry.ManifestError.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Name.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Name.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.PluginInventoryEntry(string! Name, Harbor.Abstractions.Plugins.PluginScope Scope, string! FullPath, bool Enabled, string? DeclaredVersion, System.Collections.Generic.IReadOnlyList<string!>! DeclaredAxes, string? RequiredHarborVersion, bool Compatible) -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.RequiredHarborVersion.get -> string?
+Harbor.Abstractions.Plugins.PluginInventoryEntry.RequiredHarborVersion.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Scope.get -> Harbor.Abstractions.Plugins.PluginScope
+Harbor.Abstractions.Plugins.PluginInventoryEntry.Scope.init -> void
+override Harbor.Abstractions.Plugins.PluginInventoryEntry.Equals(object? obj) -> bool
+override Harbor.Abstractions.Plugins.PluginInventoryEntry.GetHashCode() -> int
+override Harbor.Abstractions.Plugins.PluginInventoryEntry.ToString() -> string!
+static Harbor.Abstractions.Plugins.PluginInventoryEntry.operator !=(Harbor.Abstractions.Plugins.PluginInventoryEntry? left, Harbor.Abstractions.Plugins.PluginInventoryEntry? right) -> bool
+static Harbor.Abstractions.Plugins.PluginInventoryEntry.operator ==(Harbor.Abstractions.Plugins.PluginInventoryEntry? left, Harbor.Abstractions.Plugins.PluginInventoryEntry? right) -> bool
+Harbor.Abstractions.Plugins.PluginInventoryChange
+Harbor.Abstractions.Plugins.PluginInventoryChange.<Clone>$() -> Harbor.Abstractions.Plugins.PluginInventoryChange!
+Harbor.Abstractions.Plugins.PluginInventoryChange.Action.get -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryChange.Action.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChange.Deconstruct(out Harbor.Abstractions.Plugins.PluginInventoryAction Action, out string! Name, out string? SourcePath, out Harbor.Abstractions.Plugins.PluginScope Scope) -> void
+Harbor.Abstractions.Plugins.PluginInventoryChange.Equals(Harbor.Abstractions.Plugins.PluginInventoryChange? other) -> bool
+Harbor.Abstractions.Plugins.PluginInventoryChange.Name.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryChange.Name.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChange.PluginInventoryChange(Harbor.Abstractions.Plugins.PluginInventoryAction Action, string! Name, string? SourcePath = null, Harbor.Abstractions.Plugins.PluginScope Scope = Harbor.Abstractions.Plugins.PluginScope.Global) -> void
+Harbor.Abstractions.Plugins.PluginInventoryChange.Scope.get -> Harbor.Abstractions.Plugins.PluginScope
+Harbor.Abstractions.Plugins.PluginInventoryChange.Scope.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChange.SourcePath.get -> string?
+Harbor.Abstractions.Plugins.PluginInventoryChange.SourcePath.init -> void
+override Harbor.Abstractions.Plugins.PluginInventoryChange.Equals(object? obj) -> bool
+override Harbor.Abstractions.Plugins.PluginInventoryChange.GetHashCode() -> int
+override Harbor.Abstractions.Plugins.PluginInventoryChange.ToString() -> string!
+static Harbor.Abstractions.Plugins.PluginInventoryChange.operator !=(Harbor.Abstractions.Plugins.PluginInventoryChange? left, Harbor.Abstractions.Plugins.PluginInventoryChange? right) -> bool
+static Harbor.Abstractions.Plugins.PluginInventoryChange.operator ==(Harbor.Abstractions.Plugins.PluginInventoryChange? left, Harbor.Abstractions.Plugins.PluginInventoryChange? right) -> bool
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.<Clone>$() -> Harbor.Abstractions.Plugins.PluginInventoryChangeResult!
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Action.get -> Harbor.Abstractions.Plugins.PluginInventoryAction
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Action.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Deconstruct(out Harbor.Abstractions.Plugins.PluginInventoryAction Action, out string! Name, out string! FullPath, out string! Summary) -> void
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Equals(Harbor.Abstractions.Plugins.PluginInventoryChangeResult? other) -> bool
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.FullPath.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.FullPath.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Name.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Name.init -> void
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.PluginInventoryChangeResult(Harbor.Abstractions.Plugins.PluginInventoryAction Action, string! Name, string! FullPath, string! Summary) -> void
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Summary.get -> string!
+Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Summary.init -> void
+override Harbor.Abstractions.Plugins.PluginInventoryChangeResult.Equals(object? obj) -> bool
+override Harbor.Abstractions.Plugins.PluginInventoryChangeResult.GetHashCode() -> int
+override Harbor.Abstractions.Plugins.PluginInventoryChangeResult.ToString() -> string!
+static Harbor.Abstractions.Plugins.PluginInventoryChangeResult.operator !=(Harbor.Abstractions.Plugins.PluginInventoryChangeResult? left, Harbor.Abstractions.Plugins.PluginInventoryChangeResult? right) -> bool
+static Harbor.Abstractions.Plugins.PluginInventoryChangeResult.operator ==(Harbor.Abstractions.Plugins.PluginInventoryChangeResult? left, Harbor.Abstractions.Plugins.PluginInventoryChangeResult? right) -> bool
+Harbor.Abstractions.Plugins.IPluginInventory
+Harbor.Abstractions.Plugins.IPluginInventory.ApplyAsync(Harbor.Abstractions.Plugins.PluginInventoryChange! change, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.PluginInventoryChangeResult!>>!
+Harbor.Abstractions.Plugins.IPluginInventory.DescribeSource(string! sourcePath, Harbor.Abstractions.Plugins.PluginScope scope) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Plugins.PluginInventoryEntry!>
+Harbor.Abstractions.Plugins.IPluginInventory.List() -> CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Plugins.PluginInventoryEntry!>!>
