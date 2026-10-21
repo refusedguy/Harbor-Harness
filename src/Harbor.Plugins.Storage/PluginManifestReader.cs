@@ -259,7 +259,7 @@ public static class PluginManifestReader
             }
             else
             {
-                return Result.Failure<PluginManifest>(read.Error);
+                return read.ConvertFailure<PluginManifest>();
             }
         }
 
@@ -273,7 +273,7 @@ public static class PluginManifestReader
             }
             else
             {
-                return Result.Failure<PluginManifest>(read.Error);
+                return read.ConvertFailure<PluginManifest>();
             }
         }
 
@@ -287,7 +287,7 @@ public static class PluginManifestReader
             }
             else
             {
-                return Result.Failure<PluginManifest>(read.Error);
+                return read.ConvertFailure<PluginManifest>();
             }
         }
 
@@ -301,7 +301,7 @@ public static class PluginManifestReader
             }
             else
             {
-                return Result.Failure<PluginManifest>(read.Error);
+                return read.ConvertFailure<PluginManifest>();
             }
         }
 
@@ -377,9 +377,8 @@ public static class PluginManifestReader
             return Result.Success(parsed.Value);
         }
 
-        return Result.Failure<IReadOnlySet<PluginCapability>>(
-            $"The plugin manifest '{origin}' declares a capability this Harbor does not know: "
-            + $"{parsed.Error}");
+        return parsed.MapError(error =>
+            $"The plugin manifest '{origin}' declares a capability this Harbor does not know: {error}");
     }
 
     /// <summary>

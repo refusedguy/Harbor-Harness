@@ -189,6 +189,9 @@ public sealed class PluginManifestHostTests
             {
                 o.PluginRoot = fixture.PluginsDir;
                 o.ContinueOnError = continueOnError;
+                // The composition root injects the running version; the host does
+                // not read it from anywhere itself (#1739).
+                o.HarborVersion = PluginLifecycle.CurrentHarborVersion;
             })
             .Build(NullLogger<PluginHost>.Instance);
     }

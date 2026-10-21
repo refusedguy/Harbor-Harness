@@ -1,5 +1,4 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Instantiation;
 
 namespace Harbor.Plugins.Hosting;
 /// <summary>
@@ -49,13 +48,18 @@ public sealed class PluginHostOptions
     /// </summary>
     /// <remarks>
     ///     <para>
-    ///         The host checks a plugin's manifest BEFORE it compiles the plugin, and
-    ///         that check needs the running version. The default is
-    ///         <see cref="PluginLifecycle.CurrentHarborVersion" /> — the same version
-    ///         the plugin is handed in <c>PluginContext.HarborVersion</c> and the same
-    ///         one the registrar checks the in-code floor against, so the two gates
-    ///         speak about the same Harbor.
+    ///         The host checks a plugin's manifest BEFORE it compiles the plugin
+    ///         (#1739), and that check needs the running version. The version is
+    ///         injected by the composition root — the host does not read it from
+    ///         anywhere itself, because the layer that owns the running version is
+    ///         a lower plugin layer the host may not bind.
+    ///     </para>
+    ///     <para>
+    ///         Null — the default — means the host does not know the running
+    ///         version, so the early check is skipped and the registration gate
+    ///         stays the authoritative one: an incompatible plugin is still
+    ///         refused, just after it was compiled.
     ///     </para>
     /// </remarks>
-    public Version HarborVersion { get; set; } = PluginLifecycle.CurrentHarborVersion;
+    public Version? HarborVersion { get; set; }
 }

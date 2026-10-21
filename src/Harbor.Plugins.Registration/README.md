@@ -18,10 +18,11 @@ Infrastructure — plugin pipeline layer. Depends on `Harbor.Plugins.Abstraction
   A door that REFUSES a registration fails the plugin's registration (#1758): the
   registrar used to log the refusal and answer `Success`, so the caller could not
   tell a fully-wired plugin from one whose provider/agent/panel/store was dropped.
-- `PluginCompatibility`: the #1721 compatibility gate. A plugin that declares a
-  `RequiredHarborVersion` newer than the running Harbor is refused BEFORE it is
-  initialized, so it contributes nothing to the host. `RequiredHarborVersion` is a
-  floor, not a pin: a newer Harbor still satisfies an older declaration.
+- the #1721 compatibility gate (`Harbor.Plugins.Abstractions.PluginCompatibility`):
+  a plugin that declares a `RequiredHarborVersion` newer than the running Harbor
+  is refused BEFORE it is initialized, so it contributes nothing to the host.
+  `RequiredHarborVersion` is a floor, not a pin: a newer Harbor still satisfies
+  an older declaration.
 - `SafePluginRegistrar` — try/catch decorator over any `IPluginRegistrar` (one bad plugin doesn't kill the pipeline)
 - `PanelRegistryPluginAdapter` — internal adapter for `ITuiPanelPlugin` -> `IPluginLoadHost.RegisterPanelProvider`
 

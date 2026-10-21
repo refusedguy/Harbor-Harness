@@ -1,5 +1,4 @@
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Registration;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Hosting;
 /// <summary>
@@ -360,8 +359,16 @@ public sealed class PluginHost
         if (floor is null)
             return null;
 
+        // The host does not read the running version from anywhere itself: the
+        // composition root injects it, because the layer that owns it is a lower
+        // plugin layer the host may not bind. Without it the early check is
+        // skipped, and the registration gate remains the authoritative one.
+        Version? runtime = _options.HarborVersion;
+        if (runtime is null)
+            return null;
+
         string name = manifest.Name ?? Path.GetFileName(script.Path);
-        var compatibility = PluginCompatibility.Check(name, floor, _options.HarborVersion);
+        var compatibility = PluginCompatibility.Check(name, floor, runtime);
         if (compatibility.IsFailure)
             return compatibility.Error;
 

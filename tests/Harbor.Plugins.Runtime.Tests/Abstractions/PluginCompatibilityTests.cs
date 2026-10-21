@@ -1,6 +1,6 @@
-using Harbor.Plugins.Registration;
+using Harbor.Plugins.Abstractions;
 
-namespace Harbor.Plugins.Runtime.Tests.Registration;
+namespace Harbor.Plugins.Runtime.Tests.Abstractions;
 
 /// <summary>
 ///     Tests for the #1721 compatibility rule: whether a plugin that declares a

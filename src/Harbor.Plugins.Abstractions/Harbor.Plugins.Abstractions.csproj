@@ -11,6 +11,10 @@
       - IPluginRegistrar         (registration contract)
       - IPluginLoadHost          (host-side sink called by the registrar)
       - PluginAxisRegistry       (the single registry of plugin extension axes)
+      - PluginCompatibility      (the compatibility rule: may a plugin that
+                                  declares a Harbor floor run against the Harbor
+                                  that is running — #1721, applied to the
+                                  manifest's floor by #1739)
       - IPluginDependencyResolver (is a declared dependency ready right now — #1733)
       - PendingPlugin            (a plugin that is loaded but not activated — #1733)
       - PluginScript             (immutable wrapper around a single .cs source file)

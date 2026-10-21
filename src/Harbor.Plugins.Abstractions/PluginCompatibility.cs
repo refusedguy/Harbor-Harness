@@ -1,6 +1,6 @@
 using Harbor.Abstractions.Plugins;
 
-namespace Harbor.Plugins.Registration;
+namespace Harbor.Plugins.Abstractions;
 
 /// <summary>
 ///     The compatibility gate for <see cref="IPlugin.RequiredHarborVersion" />. A
@@ -8,6 +8,18 @@ namespace Harbor.Plugins.Registration;
 ///     may this plugin run against the Harbor that is running right now?
 /// </summary>
 /// <remarks>
+///     <para>
+///         <b>Why this rule lives in the contract layer (#1739).</b> It used to live
+///         in the registration layer, where the one caller was. It has two callers
+///         now: the registrar, which refuses an incompatible plugin before it is
+///         initialized, and the plugin host, which refuses one before it is
+///         COMPILED when the plugin's manifest declares a floor (#1739's manifest).
+///         The host may not bind the registration layer — the layer matrix gives it
+///         <c>Harbor.Plugins.Abstractions</c> and nothing else — so a rule two
+///         layers apply has to live where both of them can see it. One rule, one
+///         home, and the manifest's floor and the in-code floor cannot mean
+///         different things.
+///     </para>
 ///     <para>The policy, in full:</para>
 ///     <list type="bullet">
 ///         <item>

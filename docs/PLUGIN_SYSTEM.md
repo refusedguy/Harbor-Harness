@@ -307,7 +307,7 @@ load fails with that reason. Under the default `ContinueOnError=true` the
 incompatible plugin is skipped and the other plugins still load. Either way the
 plugin does not appear in the loaded-plugins list, because it did not load.
 
-The gate lives in `src/Harbor.Plugins.Registration/PluginCompatibility.cs` and is
+The gate lives in `src/Harbor.Plugins.Abstractions/PluginCompatibility.cs` and is
 called from `PluginRegistrar.Register`, the one seam both load routes pass
 through: the out-of-process `harbor-plugins-host` and the legacy in-process
 `CsPluginLoader`.
