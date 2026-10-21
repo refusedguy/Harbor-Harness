@@ -1080,6 +1080,14 @@ jobs:
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
+            # `tools/bin/` holds the COMPILED GATE BINARY, and it is not a
+            # build output: it is committed to the repository, and the
+            # gates-binary workflow rebuilds it from the sources. A cache
+            # entry that carried it would restore the OLD binary over the
+            # NEW one, and a gate that moved into the binary would then run
+            # a build that does not know it. The first compiled gate to run
+            # in this job is what found it.
+            !tools/bin/**
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
           # then the prefix.
@@ -1769,6 +1777,14 @@ jobs:
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
+            # `tools/bin/` holds the COMPILED GATE BINARY, and it is not a
+            # build output: it is committed to the repository, and the
+            # gates-binary workflow rebuilds it from the sources. A cache
+            # entry that carried it would restore the OLD binary over the
+            # NEW one, and a gate that moved into the binary would then run
+            # a build that does not know it. The first compiled gate to run
+            # in this job is what found it.
+            !tools/bin/**
           key: ${{ steps.cache-key.outputs.key }}
 
   # ── pack ───────────────────────────────────────────────────────────────────
