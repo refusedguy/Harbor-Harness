@@ -347,7 +347,7 @@ same span and instrument names.
   Since #1845 that baseline is the compiler's own — `PublicApiAnalyzers`
   reports the missing row as `RS0016` and the build fails without it — and the
   re-signing rule is enforced per commit by
-  `tools/check-public-api-resign.py`.
+  the compiled `check-public-api-resign` gate.
   The attribute is not an extension point: it is a marker for our own generator,
   and it registers no axis, opens no door, and changes no plugin contract.
 - **The telemetry boundary.** `Harbor.Telemetry.Core` implements the contracts in

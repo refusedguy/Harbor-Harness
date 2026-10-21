@@ -150,7 +150,7 @@ with the firings it was derived from.
 The `test` job of `.github/workflows/ci.yml` runs the triage over the shard's
 TRX after the shard, writes `guard-firings-core.json`, and uploads it as a
 30-day artifact. The step is report-only: the tool exits 0 on a missing TRX
-set, the way `tools/test-measurements.py` does, so a shard that found nothing
+set, the way the compiled `test-measurements` gate does, so a shard that found nothing
 reads as "nothing fired" and not as a failure. The floor
 (`--min-guard-files 100`) is the one thing that can make the step red, and it
 is there so that a renamed guard project cannot make the tool report an empty
