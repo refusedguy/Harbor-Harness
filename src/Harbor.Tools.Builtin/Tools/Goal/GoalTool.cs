@@ -43,6 +43,9 @@ namespace Harbor.Tools.Builtin;
         "the goal's phase is durable — say what is true, not what would look good"
     },
     ExecutionMode = ExecutionMode.Sequential)]
+[ToolSchema]
+[ToolParam("operation", "string", Description = "complete - the objective was met; block - it cannot be reached from here", Enum = new[] { "complete", "block" }, Required = true)]
+[ToolParam("reason", "string", Description = "Why the goal is blocked (required for operation 'block')")]
 public sealed partial class GoalTool : ITool
 {
     /// <summary>
@@ -81,32 +84,6 @@ public sealed partial class GoalTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "operation": {
-                                                                            "type": "string",
-                                                                            "enum": ["complete", "block"],
-                                                                            "description": "complete — the objective was met; block — it cannot be reached from here"
-                                                                          },
-                                                                          "reason": {
-                                                                            "type": "string",
-                                                                            "description": "Why the goal is blocked (required for operation \"block\")"
-                                                                          }
-                                                                        },
-                                                                        "required": ["operation"]
-                                                                      }
-                                                                      """);
-
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

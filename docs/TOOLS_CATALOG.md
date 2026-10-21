@@ -1152,6 +1152,8 @@ run is readable by anyone who opens the session.
   }
     "operation": { "type": "string", "enum": ["complete", "block"], "description": "complete — the objective was met; block — it cannot be reached from here" },
     "reason":    { "type": "string", "description": "Why the goal is blocked (required for operation \"block\")" }
+    "operation": { "type": "string", "enum": ["complete", "block"], "description": "complete - the objective was met; block - it cannot be reached from here" },
+    "reason":    { "type": "string", "description": "Why the goal is blocked (required for operation 'block')" }
   },
   "required": ["operation"]
 }
