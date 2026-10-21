@@ -14,7 +14,7 @@
 - [x] `notebook` scratchpad tool (session-scoped notes)
 - [x] `ripgrep` binary-backed fast search
 - [x] `tree` directory renderer
-- [x] Permission integration (defaults in `PermissionRuleset.Default`, `Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:96-124`)
+- [x] Permission integration (defaults in `PermissionRuleset.Default`, `Harbor.Abstractions.Contracts/Permissions/PermissionRuleset.cs:135-188`)
 - [x] Cancellation token propagation
 - [x] Result<T> for all error paths (no exceptions for expected failures)
 - [x] Glob matching via `Microsoft.Extensions.FileSystemGlobbing`
