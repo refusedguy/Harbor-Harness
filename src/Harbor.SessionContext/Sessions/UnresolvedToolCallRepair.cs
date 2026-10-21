@@ -78,6 +78,11 @@ public static class UnresolvedToolCallRepair
     ///     Build the tool results that answer the calls an assistant message
     ///     opened and the turn never closed.
     /// </summary>
+    /// <remarks>
+    ///     #1760: every entry carries the structured code, so a policy reads
+    ///     the code instead of the text. The text already leads with it (see
+    ///     <see cref="UnresolvedToolCall" />), so the two say the same thing.
+    /// </remarks>
     /// <param name="assistant">The assistant message whose calls went unanswered.</param>
     /// <param name="code">One of the <see cref="UnresolvedToolCall" /> codes.</param>
     /// <returns>
@@ -96,7 +101,10 @@ public static class UnresolvedToolCallRepair
             }
 
             results ??= new List<ToolResultEntry>();
-            results.Add(new ToolResultEntry(call.Id, call.ToolName, TextFor(code, call.ToolName), true));
+            results.Add(new ToolResultEntry(call.Id, call.ToolName, TextFor(code, call.ToolName), true)
+            {
+                ErrorInfo = ToolErrorCodes.Create(code),
+            });
         }
 
         if (results is null)

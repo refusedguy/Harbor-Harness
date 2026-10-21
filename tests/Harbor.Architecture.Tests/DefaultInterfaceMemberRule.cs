@@ -416,6 +416,18 @@ public sealed class DefaultInterfaceMemberRule
             ""),
         new(
             "Harbor.Abstractions.Tools.ITool",
+            "TimeoutMs",
+            DimDirection.Conservative,
+            "Returns null — 'no opinion'. The call then inherits the agent's common default "
+            + "(AgentDefinition.ToolTimeoutSeconds), or runs unbounded when there is none either, "
+            + "which is exactly what every tool did before #1760. Nothing is accepted, nothing is "
+            + "swallowed, and the omission is visible: a tool with a budget of its own names it, and "
+            + "a tool without one is not cut short by a deadline it never asked for. A required "
+            + "member would have meant editing every tool, plugin and test double for a field most "
+            + "of them have no opinion about.",
+            ""),
+        new(
+            "Harbor.Abstractions.Tools.ITool",
             "ValidateArguments",
             DimDirection.Permissive,
             "Returns Result, so the only sane default is Success — i.e. accept any argument shape. "

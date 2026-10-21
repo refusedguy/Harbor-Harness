@@ -372,14 +372,24 @@ public sealed class ToolDispatcher(
     ///     Deliberately publishes <b>no</b> <see cref="ToolExecutionStartEvent" />:
     ///     nothing started, so there is no start to report and no end to pair it
     ///     with. The entry text is the honest record of the outcome.
+    ///     <para>
+    ///         The code is <see cref="ToolErrorCodes.AbortedBeforeDispatch" />
+    ///         (#1760): the call was never sent to the tool, so it had no effect
+    ///         and a retry is safe. That is a fact a policy can act on, and it
+    ///         used to be reachable only by reading the text.
+    ///     </para>
     /// </remarks>
     private ToolResultEntry NotStartedBecauseStopped(ToolCallPart toolCall)
     {
         ToolDispatcherLog.ToolNotStartedStopAccepted(logger, toolCall.ToolName, toolCall.Id);
+        string reason = "Tool execution was cancelled before start.";
+        var notStarted = ToolResult.Failed(
+            reason,
+            ToolErrorCodes.Create(ToolErrorCodes.AbortedBeforeDispatch));
         return ToolResultEntry.From(
             toolCall.Id,
             toolCall.ToolName,
-            ToolResult.Error("Tool execution was cancelled before start."));
+            notStarted);
     }
 
     /// <summary>
@@ -542,6 +552,12 @@ public sealed class ToolDispatcher(
     ///     card must stop spinning). The late task gets a fault observer, so its
     ///     exception is logged, never unobserved (§FP-003).
     /// </summary>
+    /// <remarks>
+    ///     The code is <see cref="ToolErrorCodes.Abandoned" /> (#1760). The
+    ///     marker substring stays in the text on purpose: it is how a session
+    ///     file written BEFORE the structured code existed still reads as
+    ///     abandoned (see <see cref="ToolCallLink.AbandonedOutputMarker" />).
+    /// </remarks>
     private async Task<ToolResultEntry> AbandonLeftoverAsync(Task pending, ToolCallPart toolCall)
     {
         _ = pending.ContinueWith(
@@ -550,10 +566,12 @@ public sealed class ToolDispatcher(
             TaskContinuationOptions.OnlyOnFaulted,
             TaskScheduler.Default);
 
-        string output =
+        string detail =
             $"Tool '{toolCall.ToolName}' did not finish within {_abandonGrace.TotalMilliseconds:0}ms of grace " +
             $"after the accepted stop ({AcceptedStopReason}); call {ToolCallLink.AbandonedOutputMarker}.";
-        var abandoned = ToolResult.Error(output);
+        var abandoned = ToolResult.Failed(
+            detail,
+            ToolErrorCodes.Create(ToolErrorCodes.Abandoned, AcceptedStopReason));
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, abandoned, true), TerminalEventToken).ConfigureAwait(false);
         return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, abandoned);
@@ -583,10 +601,21 @@ public sealed class ToolDispatcher(
         // построению (L5) — текст приехал из ResolveTool в ExecuteAsync.
         if (resolved.IsFailure)
         {
-            return new ToolResultEntry(toolCall.Id, toolCall.ToolName, resolved.Error, true);
+            // #1760: "there is no such tool" is a fact a policy can read. It
+            // used to be reachable only by matching the diagnostic text.
+            var unknown = ToolResult.Failed(
+                resolved.Error,
+                ToolErrorCodes.Create(ToolErrorCodes.NotFound, toolCall.ToolName));
+            return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, unknown);
         }
 
         ITool tool = resolved.Value;
+
+        // #1760: the tool's own budget wins over the agent's common default
+        // (ToolTimeouts.Resolve). The agent's number is a default; the tool's
+        // is a fact about the tool — a network fetch takes seconds, a
+        // directory listing takes milliseconds.
+        TimeSpan? deadline = ToolTimeouts.Resolve(tool.TimeoutMs, toolExecutionTimeout);
 
         // The tool's own Glyph rides the event (#680): every renderer draws the
         // icon from this field instead of keeping a tool-name-keyed table of its
@@ -600,10 +629,10 @@ public sealed class ToolDispatcher(
         // passed to permission check AND execution so a hanging tool's awaits
         // observe the cancel and the dispatcher can synthesize an error entry.
         CancellationTokenSource? timeoutCts = null;
-        if (toolExecutionTimeout is { } deadline)
+        if (deadline is { } budget)
         {
             timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeoutCts.CancelAfter(deadline);
+            timeoutCts.CancelAfter(budget);
         }
 
         using (timeoutCts)
@@ -615,15 +644,16 @@ public sealed class ToolDispatcher(
             try
             {
             // Validate → permission on one railway (#1515): each gate returns
-            // UnitResult<string> (success = pass, failure carries the entry
-            // text); the terminal publish already rode the failure branch
-            // inside the gate, so the fold below only materializes the entry.
+            // UnitResult<ToolResult> (success = pass, failure carries the
+            // finished error result — text AND structured code, #1760); the
+            // terminal publish already rode the failure branch inside the
+            // gate, so the fold below only materializes the entry.
             // #49 PR2: the commit scope opens BEFORE the permission check so
             // a cancel landing anywhere in approve→commit invalidates it.
             // Scopes are epoch-scoped (parallel calls share fate), not
             // once-only.
             long commitScope = 0;
-            UnitResult<string> gates = await ValidateArgumentsAsync(tool, toolCall, activity, ct)
+            UnitResult<ToolResult> gates = await ValidateArgumentsAsync(tool, toolCall, activity, ct)
                 .Bind(() =>
                 {
                     commitScope = coordinator?.BeginApprovalScope() ?? 0;
@@ -632,7 +662,7 @@ public sealed class ToolDispatcher(
                 .ConfigureAwait(false);
             if (gates.IsFailure)
             {
-                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, ToolResult.Error(gates.Error));
+                return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, gates.Error);
             }
 
             // PX4: user PreToolUse hooks run after the policy gate — they can
@@ -655,11 +685,11 @@ public sealed class ToolDispatcher(
                 // A hook edited the args: re-validate the edited payload the
                 // same way the original was validated above (start event is
                 // already published, so the failure entry pairs correctly).
-                UnitResult<string> editedValid = await ValidateArgumentsAsync(
+                UnitResult<ToolResult> editedValid = await ValidateArgumentsAsync(
                     tool, effectiveCall, activity, ct).ConfigureAwait(false);
                 if (editedValid.IsFailure)
                 {
-                    return ToolResultEntry.From(effectiveCall.Id, effectiveCall.ToolName, ToolResult.Error(editedValid.Error));
+                    return ToolResultEntry.From(effectiveCall.Id, effectiveCall.ToolName, editedValid.Error);
                 }
             }
 
@@ -684,7 +714,11 @@ public sealed class ToolDispatcher(
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            var cancelled = ToolResult.Error("Tool execution was cancelled.");
+            // #1760: the run was cancelled while the call was in flight. The
+            // code says what the text always said, and a policy can read it.
+            var cancelled = ToolResult.Failed(
+                "Tool execution was cancelled.",
+                ToolErrorCodes.Create(ToolErrorCodes.Cancelled));
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, cancelled, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelled);
@@ -694,11 +728,16 @@ public sealed class ToolDispatcher(
             // A9: the per-call deadline fired (outer token NOT cancelled) —
             // synthesize an error entry so the loop keeps going.
             activity?.SetStatus(ActivityStatusCode.Error, "tool timed out");
-            string message = toolExecutionTimeout is { } t
+            // #1760: the deadline is the tool's OWN budget when it declared
+            // one and the agent's common default otherwise (ToolTimeouts.Resolve).
+            string detail = deadline is { } t
                 ? $"Tool '{toolCall.ToolName}' timed out after {t.TotalSeconds:0.#}s."
                 : "Tool execution was cancelled.";
             ToolDispatcherLog.ToolExecutionDeadlineHit(logger, oce, toolCall.ToolName, toolCall.Id);
-            var timeout = ToolResult.Error(message);
+            string? budgetNote = deadline is { } d ? $"deadline {d.TotalMilliseconds:0}ms" : null;
+            var timeout = ToolResult.Failed(
+                detail,
+                ToolErrorCodes.Create(ToolErrorCodes.Timeout, budgetNote));
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, timeout, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, timeout);
@@ -713,7 +752,9 @@ public sealed class ToolDispatcher(
             string errorMessage = attempts.Value > 1
                 ? $"Tool execution failed after {attempts.Value} attempts: {ex.Message}"
                 : $"Tool execution failed: {ex.Message}";
-            var errored = ToolResult.Error(errorMessage);
+            var errored = ToolResult.Failed(
+                errorMessage,
+                ToolErrorCodes.Create(ToolErrorCodes.ExecutionFailed, ex.Message));
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, errored, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, errored);
@@ -725,7 +766,7 @@ public sealed class ToolDispatcher(
     ///     Validate tool arguments on the Result railway (#1515).
     ///     Forwarder over <see cref="ToolRetryPolicy" /> (#1507, #95 slice: verbatim move).
     /// </summary>
-    private Task<UnitResult<string>> ValidateArgumentsAsync(
+    private Task<UnitResult<ToolResult>> ValidateArgumentsAsync(
         ITool tool,
         ToolCallPart toolCall,
         Activity? activity,
@@ -736,7 +777,7 @@ public sealed class ToolDispatcher(
     ///     Check permission for one tool call on the Result railway (#1515).
     ///     Forwarder over <see cref="ToolRetryPolicy" /> (#1507, #95 slice: verbatim move).
     /// </summary>
-    private Task<UnitResult<string>> CheckPermissionAsync(
+    private Task<UnitResult<ToolResult>> CheckPermissionAsync(
         ToolCallPart toolCall,
         AgentDefinition agent,
         CancellationToken effectiveCt,
@@ -837,11 +878,19 @@ public sealed class ToolDispatcher(
     ///     Build the refusal entry for a denied/declined hook verdict, with its
     ///     terminal end event (mirrors the permission-deny path above).
     /// </summary>
+    /// <remarks>
+    ///     #1760: a hook refusal is its own code
+    ///     (<see cref="ToolErrorCodes.HookDenied" />) and not the permission
+    ///     policy's — the two are decided by different parties and a user
+    ///     reacts to them differently.
+    /// </remarks>
     private async Task<HookGate> RefuseHook(ToolCallPart toolCall, string reason, Activity? activity)
     {
         activity?.SetStatus(ActivityStatusCode.Error, "Hook denied");
         ToolDispatcherLog.ToolRefusedByHook(logger, toolCall.ToolName, toolCall.Id, reason);
-        var refused = ToolResult.Error(reason);
+        var refused = ToolResult.Failed(
+            reason,
+            ToolErrorCodes.Create(ToolErrorCodes.HookDenied, reason));
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, refused, true), TerminalEventToken).ConfigureAwait(false);
         return new HookGate(toolCall, ToolResultEntry.From(toolCall.Id, toolCall.ToolName, refused));
