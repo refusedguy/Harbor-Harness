@@ -78,7 +78,7 @@ namespace Harbor.Architecture.Tests;
 public class ProviderAuthSingleAnswerRules
 {
     /// <summary>The project whose view-models render provider auth verdicts.</summary>
-    private const string ProjectDir = "Harbor.Desktop.Abstractions";
+    private const string ProjectDir = "Harbor.Desktop.ViewModels";
 
     /// <summary>The picker row: its verdict is what the user reads as "✗ No API key".</summary>
     private const string PickerFile = "ProviderModelPickerViewModel.cs";
