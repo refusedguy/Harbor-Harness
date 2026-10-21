@@ -56,11 +56,18 @@ func ReadGraph(solution string) (*Graph, error) {
 	}
 	for _, project := range projects {
 		absolute := filepath.Join(root, project)
+		seen := map[string]bool{}
 		var references []string
 		for _, reference := range readProjectReferences(absolute) {
 			candidate := filepath.Clean(filepath.Join(filepath.Dir(project), reference))
 			candidate = strings.ReplaceAll(candidate, "\\", "/")
-			if contains(graph.Projects, candidate) {
+			// A project that references the same project twice (in two
+			// ItemGroups, or under two conditions) has ONE edge, not
+			// two: the edge is a fact about the graph, and counting it
+			// twice would say the project has two consumers where it
+			// has one.
+			if contains(graph.Projects, candidate) && !seen[candidate] {
+				seen[candidate] = true
 				references = append(references, candidate)
 			}
 		}

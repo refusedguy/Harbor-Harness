@@ -137,6 +137,59 @@ func selfTestRun() int {
 		fmt.Sprintf("C's radius costs 4 + 2 + 1 + 8 = 15, got %.1f", cRow.Seconds))
 	check(cRow.Priced, "the radius of a priced graph says it is priced")
 
+	// A project that references the same project TWICE has one consumer,
+	// not two. The tree has two such rows today (Harbor.App.Cli names
+	// Harbor.Tui.CellForge.Engine twice, and Harbor.Hosting.Tests names
+	// Harbor.Abstractions.Contracts twice), and a graph that counts them
+	// twice says a project has a consumer it does not have.
+	duplicateDirectory, err := os.MkdirTemp("", "project-graph-duplicate")
+	if err != nil {
+		fmt.Printf("  SELF-TEST FAIL: cannot make a temporary directory: %v\n", err)
+		return gate.Red
+	}
+	defer os.RemoveAll(duplicateDirectory)
+	write := func(path, content string) {
+		full := filepath.Join(duplicateDirectory, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			problems = append(problems, fmt.Sprintf("cannot make %s: %v", path, err))
+			return
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			problems = append(problems, fmt.Sprintf("cannot write %s: %v", path, err))
+		}
+	}
+	write("dup.slnx", `<Solution>
+    <Project Path="src/One/One.csproj"/>
+    <Project Path="src/Two/Two.csproj"/>
+</Solution>
+`)
+	write("src/One/One.csproj", `<Project Sdk="Microsoft.NET.Sdk">
+</Project>
+`)
+	write("src/Two/Two.csproj", `<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../One/One.csproj"/>
+  </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <ProjectReference Include="..\One\One.csproj"/>
+  </ItemGroup>
+</Project>
+`)
+	duplicateGraph, err := buildcost.ReadGraph(filepath.Join(duplicateDirectory, "dup.slnx"))
+	if err != nil {
+		fmt.Printf("  SELF-TEST FAIL: the duplicate-reference graph does not read: %v\n", err)
+		return gate.Red
+	}
+	duplicateEdges := 0
+	for _, references := range duplicateGraph.References {
+		duplicateEdges += len(references)
+	}
+	check(duplicateEdges == 1,
+		fmt.Sprintf("a project that references another one twice has 1 edge, got %d", duplicateEdges))
+	check(len(duplicateGraph.Consumers["src/One/One.csproj"]) == 1,
+		fmt.Sprintf("the referenced project has 1 consumer, got %d",
+			len(duplicateGraph.Consumers["src/One/One.csproj"])))
+
 	for _, problem := range problems {
 		fmt.Printf("  SELF-TEST FAIL: %s\n", problem)
 	}
