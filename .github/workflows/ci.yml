@@ -862,6 +862,48 @@ jobs:
       # the key, so a runner that moves the folder gets a cold build
       # instead of a wrong one.
       NUGET_PACKAGES: /home/runner/.nuget/packages
+      # ── MEASURE (issue #2100): the CI compile emits NO separate debug-symbol file ──
+      #
+      # WHY THIS EXISTS. The build-output cache (#1927) restores obj/ and bin/,
+      # and its path list excludes `!**/*.pdb` — so the restored tree has NO
+      # obj/Release/net10.0/<Target>.pdb. That file is NOT a decoration: it is
+      # `@(_DebugSymbolsIntermediatePath)`, and that item is one of the OUTPUTS
+      # of the `CoreCompile` target
+      # (SDK: Roslyn/Microsoft.CSharp.Core.targets, CoreCompile's Outputs list;
+      # the item itself is created in Microsoft.Common.CurrentVersion.targets,
+      # `_DebugSymbolsIntermediatePath Include="$(IntermediateOutputPath)$(TargetName).pdb"`).
+      #
+      # MSBuild's up-to-date check treats a MISSING OUTPUT as "must build"
+      # (dotnet/msbuild, src/Build/BackEnd/Components/RequestBuilder/
+      # TargetUpToDateChecker.cs: "First output is missing: we must build the
+      # target" / "An output is missing: we must build the target"). So with
+      # the pdb absent from the restored tree, CoreCompile is out of date for
+      # EVERY project on EVERY run, whatever the mtimes say: the compile is
+      # always the full 112-project rebuild. That is the measured reason the
+      # wall did not fall after #2047 (the cache fires, the compile is still
+      # full) — not the analyzer-extraction order the PR named.
+      #
+      # WHAT THIS MEASURE DOES. `DebugType=none` makes `_DebugSymbolsProduced`
+      # false (Microsoft.Common.CurrentVersion.targets:
+      # `<_DebugSymbolsProduced Condition="'$(DebugType)'=='none'">false`), and
+      # the item group that creates `_DebugSymbolsIntermediatePath` is
+      # conditioned on it — so the pdb leaves CoreCompile's OUTPUTS entirely
+      # and the missing file stops being a reason to rebuild.
+      #
+      # WHY AN ENV VAR. An environment variable of the same name IS an MSBuild
+      # property (the same mechanism as HarborArchGate above): it reaches the
+      # `dotnet build` that NUKE runs without touching build/_build, and a
+      # global property wins over the `<DebugType>portable</DebugType>` that
+      # Directory.Build.props sets.
+      #
+      # WHAT IT COSTS. The CI binaries carry no debug directory, so a stack
+      # trace from a failed test names the method and not the line. The CI
+      # artifacts did not carry the .pdb files anyway (they are excluded from
+      # every upload), so only the line numbers are lost. The alternative fix
+      # — keep the .pdb files IN the build-output cache — needs an entry that
+      # carries them, and the entry the pull-request lane restores predates
+      # that change; it is measured separately.
+      DebugType: none
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
