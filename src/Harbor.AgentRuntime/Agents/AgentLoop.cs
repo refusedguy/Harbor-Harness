@@ -135,7 +135,13 @@ public sealed class AgentLoop : IAgentLoop
         // caller keeps compiling unchanged; null keeps the workspace
         // discovery and no invocation policy. Forwarded to the turn runner
         // below, which is where the model-facing catalog is built.
-        ISkillRegistry? skillRegistry = null)
+        ISkillRegistry? skillRegistry = null,
+        // #1736: the scope-aware provider resolver. Optional so every
+        // direct-construction caller keeps compiling unchanged; null keeps the
+        // process-wide provider registry, which is what the product resolved
+        // before scopes existed. Forwarded to the turn runner below, which
+        // resolves the client a run uses.
+        IScopedProviderResolver? scopedProviders = null)
     {
         _providers = providers;
         _tools = tools;
@@ -193,7 +199,7 @@ public sealed class AgentLoop : IAgentLoop
             providers, tools, _promptBuilder, messageConverter, eventBus, logger,
             _metrics, tokenTracker, retryPolicy, _toolDispatcher, mcpRegistry,
             _compactionBehavior, _steering, _backgroundDrain, view,
-            updateFlushPolicy, _clock, skillRegistry);
+            updateFlushPolicy, _clock, skillRegistry, scopedProviders);
     }
 
     /// <summary>
