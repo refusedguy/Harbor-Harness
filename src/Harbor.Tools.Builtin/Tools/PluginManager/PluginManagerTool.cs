@@ -70,6 +70,11 @@ namespace Harbor.Tools.Builtin;
         "An approval covers that call only — it does not change the session's permission mode",
         "Plugins run in the separate harbor-plugins-host process: a change takes effect after that host restarts",
     })]
+[ToolSchema]
+[ToolParam("action", "string", Description = "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'", Required = true)]
+[ToolParam("name", "string", Description = "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable")]
+[ToolParam("source", "string", Description = "Path of the reviewed '.cs' plugin source to install — required for install")]
+[ToolParam("scope", "string", Description = "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'")]
 public sealed partial class PluginManagerTool : ITool
 {
     private readonly IPluginInventory _inventory;
@@ -88,26 +93,6 @@ public sealed partial class PluginManagerTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the
-    ///     JSON below is a compile-time constant.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "action": { "type": "string", "description": "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'" },
-                                                                          "name":   { "type": "string", "description": "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable" },
-                                                                          "source": { "type": "string", "description": "Path of the reviewed '.cs' plugin source to install — required for install" },
-                                                                          "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
-                                                                        },
-                                                                        "required": ["action"]
-                                                                      }
-                                                                      """);
-
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)
