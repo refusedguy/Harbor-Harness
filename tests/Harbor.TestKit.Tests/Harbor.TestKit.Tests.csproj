@@ -21,7 +21,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../Harbor.TestKit/Harbor.TestKit.csproj"/>
+    <!-- The core kit comes in transitively (the support and tui parts reference
+         it), so naming it here would be a reference the compiler never uses —
+         and the ReferenceTrimmer gate says so. The types these tests exercise
+         live in the parts that are named below. -->
     <ProjectReference Include="../Harbor.TestKit.Support/Harbor.TestKit.Support.csproj"/>
     <ProjectReference Include="../Harbor.TestKit.Tui/Harbor.TestKit.Tui.csproj"/>
   </ItemGroup>
