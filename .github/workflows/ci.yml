@@ -2271,7 +2271,7 @@ jobs:
             # from the same per-project costs), and the skew from 5.96x
             # (measured) to 3.46x (computed).
             #
-            # The gate that keeps it that way is tools/check-shard-balance.py,
+            # The gate that keeps it that way is harbor-gates check-shard-balance,
             # which reads these lists and the recorded costs and fails when the
             # shards drift apart again.
             projects: >-
