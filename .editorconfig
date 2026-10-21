@@ -541,13 +541,21 @@ dotnet_diagnostic.REFL039.severity = suggestion # typeof(T) is the type, without
 dotnet_diagnostic.REFL040.severity = suggestion # IsInstanceOfType answers the same question without a cast
 
 # --- vs-threading (Microsoft.VisualStudio.Threading.Analyzers 18.12.1) ---
-# The package ships 29 rules: VSTHRD001-004, VSTHRD010-013, VSTHRD100-117,
+#
+# THE PACKAGE IS NOT REFERENCED ANY MORE (#2109). These rows are INERT
+# today: nothing loads the analyzer, so none of these severities is read.
+# They are kept because they are the table that would apply if the package
+# came back, and because a bare re-reference WITHOUT them would turn the
+# tree red: four of the package's rules are Error by default. The version
+# this repository last measured is 18.12.1.
+#
+# The package shipped 29 rules: VSTHRD001-004, VSTHRD010-013, VSTHRD100-117,
 # VSTHRD200-202 (VSTHRD201 included; the upstream index documents 28 of them).
-# It is wired to src/ + apps/ only — tests/ has its own async culture and
+# It was wired to src/ + apps/ only — tests/ has its own async culture and
 # already lifts TreatWarningsAsErrors.
 #
-# EXACTLY ONE RULE IS ON. VSTHRD110 ("Observe result of async calls") is the
-# one this repository asks for, and it sits at `suggestion`: it is a guard on
+# EXACTLY ONE RULE WAS ON. VSTHRD110 ("Observe result of async calls") is the
+# one this repository asked for, and it sat at `suggestion`: it is a guard on
 # the future, not a fix of a present defect, and `suggestion` is not promoted
 # by TreatWarningsAsErrors. The two sites it would have flagged are fixed in
 # #1852.
@@ -558,6 +566,15 @@ dotnet_diagnostic.REFL040.severity = suggestion # IsInstanceOfType answers the s
 # into a red build on the day the package is added, and a large part of the
 # family is written against JoinableTaskFactory — a library Harbor does not
 # reference and does not want to.
+#
+# WHY IT WAS REMOVED, IN ONE LINE: the family cost 103.7 analyzer-seconds on
+# the whole build (run 39527271843, `-p:ReportAnalyzer=true`), and 85.8 of
+# those seconds — 83 % — were VSTHRD010, the rule this very table silences.
+# A rule at `severity = none` is silenced; the analyzer that implements it
+# still runs over every compilation. The gate that decides "is this an
+# unobserved Task?" is HARCH003 (a house analyzer that resolves the TYPE,
+# #1852), and it is a Warning, so it fails the build where VSTHRD110 only
+# suggested.
 dotnet_diagnostic.VSTHRD001.severity = none # legacy thread switching; the package's own AdditionalFiles list SynchronizationContext.Post/Send, which the UI shells use
 dotnet_diagnostic.VSTHRD002.severity = none # synchronous waits; Harbor's sync-over-async policy is a source rule of its own (BackgroundTaskSyncResultRule, ToolDispatcherSyncResultRule)
 dotnet_diagnostic.VSTHRD003.severity = none # "awaiting foreign Tasks" is every await in the product

@@ -52,7 +52,7 @@ public class SqliteSessionConcurrencyTests
                     {
                         var msg = TestMessages.User($"message {j}", id: $"msg-{index}-{j}", sessionId: sessionIds[index], model: "claude-opus-4");
                         var appended = await store.AppendMessageAsync(sessionIds[index], msg);
-                        await Assert.That(appended.IsSuccess).IsTrue();
+                        await Assert.That(appended).IsSuccessful();
                     }
                 });
             }
@@ -62,7 +62,7 @@ public class SqliteSessionConcurrencyTests
             foreach (var sid in sessionIds)
             {
                 var messages = await store.GetMessagesAsync(sid);
-                await Assert.That(messages.IsSuccess).IsTrue();
+                await Assert.That(messages).IsSuccessful();
                 await Assert.That(messages.Value.Count).IsEqualTo(messagesPerSession);
             }
         }
@@ -92,7 +92,7 @@ public class SqliteSessionConcurrencyTests
                     {
                         var msg = TestMessages.User($"message {j} from task {index}", id: $"msg-{index}-{j}", sessionId: session.Id, model: "claude-opus-4");
                         var appended = await store.AppendMessageAsync(session.Id, msg);
-                        await Assert.That(appended.IsSuccess).IsTrue();
+                        await Assert.That(appended).IsSuccessful();
                     }
                 });
             }
@@ -100,7 +100,7 @@ public class SqliteSessionConcurrencyTests
             await Task.WhenAll(tasks);
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(taskCount * messagesPerTask);
         }
         finally

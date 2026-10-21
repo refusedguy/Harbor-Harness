@@ -69,6 +69,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	aotpublish "harbor.local/gates/aot-publish-gate"
+	registrygate "harbor.local/gates/check-coverage-registry"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
+
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -228,6 +235,36 @@ var registry = []registered{
 		name:    "check-result-chains",
 		summary: "the chain candidates among the if (x.IsFailure) guard sites",
 		run:     resultchains.Run,
+	},
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
+	},
+	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
 	},
 }
 

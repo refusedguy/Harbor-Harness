@@ -8,15 +8,28 @@ namespace Harbor.Application.Agents;
 
 /// <summary>
 ///     Default <see cref="IBackgroundTaskRegistry" />: detached sub-agent runs
-///     on the thread pool, keyed to the launching session, capped so one
-///     chatty orchestrator cannot fork-bomb the provider bill.
+///     keyed to the launching session, capped so one chatty orchestrator
+///     cannot fork-bomb the provider bill.
 /// </summary>
 /// <remarks>
-///     Each run owns a <see cref="CancellationTokenSource" /> linked to the
-///     launching token (#407): the link preserves the old "abort the parent,
-///     abort the run" behaviour, while <see cref="CancelSession" /> fires the
-///     owned sources directly — so a parent cancel stops children whose launch
-///     token is already gone. Sources are dropped when their run drains.
+///     <para>
+///         Each run owns a <see cref="CancellationTokenSource" /> linked to the
+///         launching token (#407): the link preserves the old "abort the parent,
+///         abort the run" behaviour, while <see cref="CancelSession" /> fires the
+///         owned sources directly — so a parent cancel stops children whose launch
+///         token is already gone. Sources are dropped when their run drains.
+///     </para>
+///     <para>
+///         A detached run gets its OWN thread for its synchronous prologue
+///         (#2093), not a slot on the thread pool. The pool hands a queued work
+///         item to whichever worker picks it up, and a worker that is busy — or
+///         blocked — holds the item until it comes back; the run's first line
+///         then waits for that worker, and on a loaded runner the wait was long
+///         enough for the parent to believe the child never started. The
+///         dedicated thread runs the prologue (up to the run's first await) and
+///         is released the moment the run yields: the run itself stays
+///         asynchronous, and no thread is held for its lifetime.
+///     </para>
 /// </remarks>
 public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
 {
@@ -70,7 +83,20 @@ public sealed class BackgroundTaskRegistry : IBackgroundTaskRegistry
         AsyncFlowControl flow = ExecutionContext.SuppressFlow();
         try
         {
-            task = Task.Run(() => run(cts.Token), CancellationToken.None);
+            // The run starts on a DEDICATED thread (#2093), not on the pool: the
+            // pool's queue is drained by whichever worker comes back first, so
+            // on a loaded runner the run's first line waited for a pool slot
+            // that could take minutes — and a background run that has not
+            // started looks exactly like a background run that never will. The
+            // dedicated thread covers the run's synchronous prologue only; the
+            // run's own awaits still resume on the pool, as before.
+            task = Task.Factory
+                .StartNew<Task<Result<SubAgentRunResult>>>(
+                    () => run(cts.Token),
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+                    TaskScheduler.Default)
+                .Unwrap();
         }
         finally
         {

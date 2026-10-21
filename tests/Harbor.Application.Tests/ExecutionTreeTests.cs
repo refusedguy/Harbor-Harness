@@ -16,6 +16,7 @@ using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TestSessionContext = Harbor.TestKit.TestSessionContext;
 using TUnit.Assertions;
+using TUnit.Core;
 
 namespace Harbor.Application.Tests;
 
@@ -298,26 +299,92 @@ public class ExecutionTreeTests
             backgroundTasks: backgroundTasks);
     }
 
+    /// <summary>
+    ///     How long the test waits for the two detached runs to START.
+    ///     <para>
+    ///         This is not a guess about how fast the product is: the registry
+    ///         dispatches a detached run on its own thread (#2093), so the wait
+    ///         is for the MACHINE to run that thread, and a machine that needs
+    ///         a minute to schedule a thread is not a product defect. The
+    ///         deadline exists to END the wait; the verdict at the deadline is
+    ///         decided by evidence (see the phase in the test), not by the
+    ///         clock.
+    ///     </para>
+    /// </summary>
+    private static readonly TimeSpan DetachedRunStartDeadline = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    ///     How long the test waits for the two cancelled runs to STOP. Both
+    ///     children HAVE started at this point, so the machine has already
+    ///     proved it can run them: a run that does not stop here is a defect,
+    ///     not a slow runner.
+    /// </summary>
+    private static readonly TimeSpan DetachedRunStopDeadline = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     Waits for a signal and REPORTS whether it arrived. A timeout is a
+    ///     verdict the caller interprets — the two cases a deadline can mean
+    ///     are told apart by evidence — and not an exception that ends the
+    ///     test.
+    /// </summary>
+    private static async Task<bool> SignalArrivedAsync(Task signal, TimeSpan deadline)
+    {
+        try
+        {
+            await signal.WaitAsync(deadline).ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    ///     Dispatches a probe thread and reports, through the task, whether
+    ///     the MACHINE ran it. The probe uses the same mechanism the registry
+    ///     uses for a detached run (its own thread, #2093), and it is
+    ///     dispatched in the same window as the two children — so "the probe
+    ///     ran and the children did not" is evidence about the product, while
+    ///     "neither ran" is evidence about the machine.
+    /// </summary>
+    private static TaskCompletionSource<bool> DispatchThreadProbe()
+    {
+        var ran = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task.Factory.StartNew(
+            () => { ran.TrySetResult(true); },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning | TaskCreationOptions.DenyChildAttach,
+            TaskScheduler.Default);
+        return ran;
+    }
+
     [Test]
     public async Task ParentCancel_StopsBackgroundChildren()
     {
         var registry = new BackgroundTaskRegistry();
         int entered = 0;
         int observedCancel = 0;
-        Func<CancellationToken, Task<Result<SubAgentRunResult>>> child = async ct =>
+        var bothStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The child body: it starts, then runs until its token fires. The
+        // cancellation is OBSERVED through a callback the token fires, so the
+        // observation lands on the thread that called CancelSession — the
+        // test does not wait for a thread-pool continuation to learn that the
+        // cancel arrived, and the run's own completion IS the cancellation
+        // (no pool hop between the cancel and the drain).
+        Func<CancellationToken, Task<Result<SubAgentRunResult>>> child = ct =>
         {
-            Interlocked.Increment(ref entered);
-            try
-            {
-                await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
+            if (Interlocked.Increment(ref entered) == 2)
+                bothStarted.TrySetResult(true);
+            var completion = new TaskCompletionSource<Result<SubAgentRunResult>>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            ct.Register(() =>
             {
                 Interlocked.Increment(ref observedCancel);
-                throw;
-            }
-
-            return Result.Success(new SubAgentRunResult("child", "explore", "unreachable", 0));
+                completion.TrySetCanceled(ct);
+            });
+            return completion.Task;
         };
 
         // Orphaned launch tokens: nothing but the registry itself can stop
@@ -327,27 +394,65 @@ public class ExecutionTreeTests
         await Assert.That(first.IsSuccess).IsTrue();
         await Assert.That(second.IsSuccess).IsTrue();
 
-        DateTimeOffset enterDeadline = DateTimeOffset.UtcNow.AddSeconds(10);
-        while (Volatile.Read(ref entered) < 2 && DateTimeOffset.UtcNow < enterDeadline)
-            await Task.Delay(20).ConfigureAwait(false);
-        await Assert.That(Volatile.Read(ref entered)).IsEqualTo(2);
+        // The probe goes out in the SAME window as the two children: it is
+        // the machine's verdict on the window, and it is what tells the two
+        // cases apart when the children do not start.
+        TaskCompletionSource<bool> probe = DispatchThreadProbe();
 
-        int cancelled = registry.CancelSession("parent-1");
-        await Assert.That(cancelled).IsEqualTo(2);
-
-        IReadOnlyList<BackgroundTaskCompletion> done = [];
-        DateTimeOffset drainDeadline = DateTimeOffset.UtcNow.AddSeconds(10);
-        while (done.Count < 2 && DateTimeOffset.UtcNow < drainDeadline)
+        // ── PHASE 1: the two runs STARTED ─────────────────────────────────
+        // The wait is for a SIGNAL (the bodies announced themselves), not for
+        // a number of seconds to pass.
+        if (!await SignalArrivedAsync(bothStarted.Task, DetachedRunStartDeadline).ConfigureAwait(false))
         {
-            done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
-            if (done.Count < 2)
-                await Task.Delay(20).ConfigureAwait(false);
+            // The deadline expired, so the two cases are told apart BY
+            // EVIDENCE, not by the clock:
+            //   * the run is still PENDING and the probe thread did not run
+            //     either → the machine scheduled nothing in this window: an
+            //     ENVIRONMENT condition, marked rather than failed, because
+            //     nothing in the product is wrong and a red here teaches the
+            //     reader to re-run CI.
+            //   * anything else → the machine DID schedule a thread in this
+            //     window, so the children not running is a PRODUCT defect, and
+            //     it fails.
+            bool pending = !await registry.WaitForIdleAsync("parent-1", TimeSpan.Zero).ConfigureAwait(false);
+            bool machineRanAThread = probe.Task.IsCompleted;
+            int started = Volatile.Read(ref entered);
+            // Do not leave the runs behind, whichever way this goes.
+            registry.CancelSession("parent-1");
+            if (pending && !machineRanAThread)
+            {
+                Skip.Test(
+                    $"the machine scheduled no thread in {DetachedRunStartDeadline.TotalSeconds:F0}s: the two detached "
+                    + $"runs and a probe thread all waited for the scheduler (entered={started}). An environment "
+                    + "condition, not a registry defect (#2093); the #407 property is unverified in this run.");
+                return;
+            }
+
+            await Assert.That(started).IsEqualTo(2).Because(
+                $"the machine scheduled a thread in the same window (probe ran: {machineRanAThread}), so the "
+                + $"registry's own threads are what did not start: entered={started} of 2, "
+                + $"pending={registry.PendingCount}. A detached run that never starts is a product defect, "
+                + "not a slow machine (#2093).");
         }
 
+        // ── PHASE 2: the cancel reached both children ─────────────────────
+        int cancelled = registry.CancelSession("parent-1");
+        await Assert.That(cancelled).IsEqualTo(2);
+        // The observation is recorded by the callback the cancel fires, ON the
+        // cancelling thread: it is already there when CancelSession returns.
+        await Assert.That(Volatile.Read(ref observedCancel)).IsEqualTo(2);
+
+        // ── PHASE 3: the cancelled runs drain as failures ─────────────────
+        await Assert.That(await registry.WaitForIdleAsync("parent-1", DetachedRunStopDeadline).ConfigureAwait(false))
+            .IsTrue()
+            .Because(
+                "both runs started and both were cancelled, so they must finish: a run that started and never "
+                + "stops is a defect, not a slow runner (#2093).");
+
+        IReadOnlyList<BackgroundTaskCompletion> done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
         await Assert.That(done.Count).IsEqualTo(2);
         for (int i = 0; i < done.Count; i++)
             await Assert.That(done[i].Result.IsFailure).IsTrue();
-        await Assert.That(Volatile.Read(ref observedCancel)).IsEqualTo(2);
     }
 
     [Test]

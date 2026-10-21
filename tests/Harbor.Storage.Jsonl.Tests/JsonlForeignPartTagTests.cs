@@ -45,7 +45,7 @@ public class JsonlForeignPartTagTests
         var parsed = JsonlLineParser.Parse(
             Encoding.UTF8.GetBytes(AssistantLine(ForeignJson)), "sess-1");
 
-        await Assert.That(parsed.IsFailure).IsTrue();
+        await Assert.That(parsed).IsFailed();
         await Assert.That(parsed.Error).Contains(ForeignTag);
     }
 
@@ -59,7 +59,7 @@ public class JsonlForeignPartTagTests
         string parts = TextPartJson("before") + "," + ForeignJson + "," + TextPartJson("after");
         var parsed = JsonlLineParser.Parse(Encoding.UTF8.GetBytes(AssistantLine(parts)), "sess-1");
 
-        await Assert.That(parsed.IsFailure).IsTrue();
+        await Assert.That(parsed).IsFailed();
         await Assert.That(parsed.Error).Contains(ForeignTag);
     }
 
@@ -69,7 +69,7 @@ public class JsonlForeignPartTagTests
         var parsed = JsonlLineParser.Parse(
             Encoding.UTF8.GetBytes(AssistantLine("""{"text":"no discriminator at all"}""")), "sess-1");
 
-        await Assert.That(parsed.IsFailure).IsTrue();
+        await Assert.That(parsed).IsFailed();
         await Assert.That(parsed.Error).Contains("type");
     }
 
@@ -82,7 +82,7 @@ public class JsonlForeignPartTagTests
         var parsed = JsonlLineParser.Parse(
             Encoding.UTF8.GetBytes(AssistantLine("""{"type":"file","path":"a.png"}""")), "sess-1");
 
-        await Assert.That(parsed.IsFailure).IsTrue();
+        await Assert.That(parsed).IsFailed();
         await Assert.That(parsed.Error).Contains("file");
     }
 
@@ -109,7 +109,7 @@ public class JsonlForeignPartTagTests
             var read = await store.GetMessagesAsync(session.Id);
 
             // Both good messages survive — a refused record is not a lost session.
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "u1", "a1" });
 
             // And the refusal is not silent: the warning carries the offending tag,
@@ -134,7 +134,7 @@ public class JsonlForeignPartTagTests
 
         var decoded = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains(ForeignTag);
     }
 
@@ -148,7 +148,7 @@ public class JsonlForeignPartTagTests
 
         var decoded = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains("file");
     }
 
@@ -167,7 +167,7 @@ public class JsonlForeignPartTagTests
 
             var porter = new JsonlSessionPorter(new CapturingLogger<JsonlSessionPorter>());
             var exported = new StringWriter();
-            await Assert.That((await porter.ExportAsync(store, session.Id, exported)).IsSuccess).IsTrue();
+            await Assert.That((await porter.ExportAsync(store, session.Id, exported))).IsSuccessful();
 
             // Splice a foreign-part line into the exported body, before a good one.
             var spliced = new StringBuilder(exported.ToString());
@@ -179,9 +179,9 @@ public class JsonlForeignPartTagTests
 
             // The import COMPLETES — a refused line is a skipped line, not a failed
             // import — and the messages around it are all there.
-            await Assert.That(import.IsSuccess).IsTrue();
+            await Assert.That(import).IsSuccessful();
             var messages = await target.GetMessagesAsync(import.Value);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Select(m => m.Id))
                 .IsEquivalentTo(new[] { "u1", "a-tail" });
         }
@@ -285,8 +285,8 @@ public class JsonlForeignPartTagTests
         var viaSpan = JsonlLineParser.Parse(
             Encoding.UTF8.GetBytes(AssistantLine(ForeignJson)), "sess-1");
 
-        await Assert.That(viaImport.IsFailure).IsTrue();
-        await Assert.That(viaSpan.IsFailure).IsTrue();
+        await Assert.That(viaImport).IsFailed();
+        await Assert.That(viaSpan).IsFailed();
         await Assert.That(viaImport.Error).Contains(ForeignTag);
         await Assert.That(viaSpan.Error).Contains(ForeignTag);
     }
