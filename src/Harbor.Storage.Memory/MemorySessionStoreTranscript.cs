@@ -29,15 +29,20 @@ public sealed partial class MemorySessionStore
     ///     before the tool results landed — and that is what the integrity
     ///     reports.
     /// </remarks>
+    /// <remarks>
+    ///     The transcript describes the SURFACE (#1752): the messages the log
+    ///     still shows. A rewind took the tail out of it, and a reader gets
+    ///     the surface, so that is what the transcript closes its turns over.
+    /// </remarks>
     public Task<Result<SessionTranscript>> GetTranscriptAsync(string sessionId, CancellationToken ct = default)
     {
-        if (!_messages.TryGetValue(sessionId, out var list))
+        if (!_logs.TryGetValue(sessionId, out var log))
             return Task.FromResult(
                 Result.Failure<SessionTranscript>(SessionStoreErrors.SessionNotFound(sessionId)));
 
-        lock (list)
+        lock (log)
         {
-            var copy = list.OrderBy(m => m.CreatedAt).ToList();
+            var copy = SessionLogFold.Fold(log).Current;
             var unclosed = TranscriptInspector.FindUnclosedToolCalls(copy);
             var integrity = new TranscriptIntegrity(0, false, unclosed);
             var balanced = TranscriptInspector.CloseUnclosedToolCalls(copy);
