@@ -171,6 +171,12 @@ on:
       # and so must a PR that edits the tree it measures (the .cs paths above).
       - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
+      # #1781. The shard-balance gate reads the shard lists in ci.yml and the
+      # recorded cost of every project, so a PR that edits the gate, the
+      # measurement or the workflow's shard lists has to run it — and so must
+      # a PR that edits the tree it measures.
+      - 'tools/check-shard-balance.py'
+      - 'tools/shard-costs.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
       # api/** is the tracked API landing (api/index.md is .md and already
@@ -276,6 +282,12 @@ on:
       # baseline must run it.
       - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
+      # #1781. Same trigger as above: the shard-balance gate reads the shard
+      # lists in ci.yml and the recorded cost of every project, so a PR that
+      # edits the gate, the measurement or the workflow's shard lists must run
+      # it.
+      - 'tools/check-shard-balance.py'
+      - 'tools/shard-costs.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
       - 'docfx.json'
@@ -465,6 +477,14 @@ jobs:
       # switch, the unlisted switch, the stale row and the floor.
       - name: String-switch gate fails on an unlisted string switch
         run: python3 tools/check-string-switch.py --self-test
+      # #1781. The shard-balance gate is the only one that asks whether the CI
+      # TEST SHARDS are laid out by cost. Its failure path is tested here for
+      # the same reason as the others: a rule edited until it matches nothing
+      # is indistinguishable from a rule that found nothing. The load-bearing
+      # fixture is the RUNAWAY SHARD — one project's cost blown up so that the
+      # shards are 20x apart — and the gate MUST fail on it.
+      - name: Shard-balance gate fails on a runaway shard
+        run: python3 tools/check-shard-balance.py --self-test
   links:
     name: internal links
     runs-on: ubuntu-latest
@@ -1033,6 +1053,44 @@ jobs:
       - name: Check every test project is discovered by a CI run
         run: python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 
+  # #1781. Twelfth question, and the only one about the LAYOUT of the test
+  # shards rather than about the tests in them: are the shards balanced by
+  # what their projects cost?
+  #
+  # The shard matrix was laid out by MODULE, and the layout came out 5.96x
+  # skewed: on dev@b9f3c83c (run 39504714459) the `core` shard ran 143 s
+  # against the `e2e` shard's 24 s, and 91 s of the `core` shard was ONE
+  # project (Harbor.Architecture.Tests) next to thirteen that together cost
+  # 37 s. The pull request waits for the MAXIMUM shard (issue #1929 measured
+  # it), so the whole run waited for that one project.
+  #
+  # The gate reads the shard lists out of ci.yml and the recorded cost of
+  # every project out of tools/shard-costs.json, computes what each shard
+  # would cost, and fails when the heaviest and the lightest are more than
+  # --max-skew apart. It does NOT measure time: the house policy says a gate
+  # that measures time is a benchmark, because a threshold on a live wall
+  # clock fails on a slow runner and a gate that fails on a slow runner gets
+  # switched off. What it judges is the LAYOUT, by a recorded measurement.
+  #
+  # The floor is on how many projects the shards run between them: a gate
+  # that read fewer projects than that cannot judge the layout, and a scan
+  # that matches nothing must not report "balanced". Measured on this tree:
+  # 37 projects across 5 shards.
+  #
+  # The non-vacuity proof is the gate's own --self-test (a runaway shard
+  # fails, a duplicated project fails, a stale cost fails), run in the
+  # `selftest` job above.
+  shardbalance:
+    name: shard balance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the CI test shards are balanced by cost
+        run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #
   # `Directory.Build.props` keeps CS1591 in NoWarn, so the compiler never asks
@@ -1098,7 +1156,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
-        run: python3 tools/check-gate-policy.py --min-gates 37
+        run: python3 tools/check-gate-policy.py --min-gates 38
 
   # #1558. The chain census, and the ratchet on it.
   #

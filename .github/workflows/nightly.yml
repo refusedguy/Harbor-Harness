@@ -315,7 +315,6 @@ jobs:
             Harbor.Core.Tests \
             Harbor.Registries.Tests \
             Harbor.Hosting.Tests \
-            Harbor.Architecture.Tests \
             Harbor.Lsp.Tests \
             Harbor.Telemetry.Tests \
             Harbor.Tools.Builtin.Tests \
@@ -326,7 +325,8 @@ jobs:
             Harbor.Plugins.Abstractions.Tests \
             Harbor.Plugins.Runtime.Tests \
             Harbor.Plugins.Host.Tests \
-            Harbor.Ipc.Tests; do
+            Harbor.Ipc.Tests \
+            Harbor.Architecture.Tests; do
             echo "::group::coverage $p"
             dll="tests/$p/bin/Release/net10.0/$p.dll"
             if [ ! -f "$dll" ]; then
