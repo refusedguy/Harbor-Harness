@@ -54,7 +54,6 @@ M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAw
 # Every exemption below carries a matching `#pragma warning disable RS0030`
 # with a reason at its call site. New call sites of banned APIs must either
 # use the non-banned alternative or justify + pragma + extend this catalogue.
-#
 # A ROW IS A FILE AND A REASON. One row per suppression: a file that
 # carries two of them carries two rows, because one row cannot justify two
 # suppressions. The gate that holds this is
@@ -63,7 +62,6 @@ M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAw
 # the tree in BOTH directions: a suppression with no row is unjustified, a
 # row whose file carries no suppression is stale, and a file whose count
 # differs from its row count is a mismatch.
-#
 # NO LINE NUMBER. A line number is a coordinate, and every line inserted
 # above it moves the coordinate — the architecture tree removed its line
 # anchors for exactly that reason (#1728). No gate checks one here, so a
