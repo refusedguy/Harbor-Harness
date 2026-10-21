@@ -13,7 +13,6 @@ using Harbor.Abstractions.Tools;
 using Harbor.Providers.OpenAiCompatible;
 using Harbor.TestKit;
 using Harbor.Ui.Framework.State;
-using Harbor.Abstractions.Models;
 
 namespace Harbor.LoadTests;
 
@@ -143,6 +142,15 @@ public sealed class LoadSessionContext : ISessionContext
     }
 
     public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
+    ///     #1765: the durability checkpoint. This context appends to a REAL
+    ///     store and throws when the append fails, so a record that did not
+    ///     land never reaches the history. The state it reports is durable by
+    ///     construction.
+    /// </summary>
+    public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) =>
+        Task.FromResult(Result.Success());
 
     public void EnqueueSteering(params AgentMessage[] messages)
     {

@@ -15,13 +15,13 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `1cea9397` plus this branch's seven commits),
-the tree the table was last reconciled against:
+Measured on this branch (the merge with `dev` at `ab4638f3`), the tree the
+table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 51 files, 39 667 lines |
-| of them, the `check-*.py` family | 24 files, 23 381 lines |
+| python tools in `tools/` | 51 files, 40 029 lines |
+| of them, the `check-*.py` family | 24 files, 23 743 lines |
 | workflows that run a python tool | 7: `ci.yml`, `demo.yml`, `docs.yml`, `meas-analyzer-cost.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |

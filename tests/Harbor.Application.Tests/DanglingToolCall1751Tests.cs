@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Threading.Channels;
+using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
@@ -73,6 +74,12 @@ public class DanglingToolCall1751Tests
 
         public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) =>
             _inner.UpdateStatsAsync(usage, pricing, ct);
+
+        /// <summary>
+        ///     #1765: the durability checkpoint, forwarded to the inner double.
+        /// </summary>
+        public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) =>
+            _inner.CheckpointAsync(reason, ct);
     }
 
     private static AgentLoop LoopWithClock(
