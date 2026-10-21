@@ -93,9 +93,23 @@ private static bool IsInsideADelegate(SyntaxNode node)
 | | lines | where |
 |---|---|---|
 | the rule, before | 450 | `tests/Harbor.Architecture.Tests/` |
-| the rule, after | 652 | `tests/Harbor.Architecture.Tests/` |
-| the analyzer | 206 | `src/Harbor.Arch.Analyzers/` |
+| the rule, after | 684 | `tests/Harbor.Architecture.Tests/` |
+| the analyzer | 242 | `src/Harbor.Arch.Analyzers/` |
 | the controls and the differential | 256 | `tests/Harbor.Architecture.Tests/Roslyn/` |
+| the harness (the implicit global usings) | +53 | `tests/Harbor.Architecture.Tests/Roslyn/` |
+
+**The rule's own lines GREW by 234, and the honest conclusion is that this route does not pay for
+itself in lines.** The reason is visible in the table above and it is not a detail: this rule
+already sits on the shared `ScanRule` engine (#1086), so its text machinery was three regexes and
+two declarative tables — **the scaffolding was removed from it long ago**. A semantic check needs a
+compilation, a census over every product project, a planted control set and a differential, and
+that is more code than the three regexes it replaces.
+
+What the semantic check buys instead is **exactness**, and it buys it where the text rule was
+blind. A rule that cannot see the block-bodied lambda is not a cheaper rule; it is a rule with a
+hole in the middle of the defect it was written for (#1854's shape, in two of its three
+spellings). And the differential over the live tree says the two implementations name the SAME
+seven sites — five files, seven creations — which is the claim that makes the swap safe.
 
 **And the first run of the semantic rule found a defect in the substrate.** It reported the two
 client creations in `McpHttpClientFactory.cs` and NONE of the other five — and the reason is the
@@ -130,16 +144,11 @@ against the COMPILATION's own symbols, so the fact "there is a type called `Http
 `System.Net.Http`" is still a fact about the compiler's symbol table and not about a spelling. A
 QUALIFIED name is never a fallback: the author named a namespace, and the namespace is the fact.
 
-**The rule's own lines GREW by 202, and the honest conclusion is that this route does not pay for
-itself in lines.** The reason is visible in the table above and it is not a detail: this rule
-already sits on the shared `ScanRule` engine (#1086), so its text machinery was three regexes and
-two declarative tables — **the scaffolding was removed from it long ago**. A semantic check needs a
-compilation, a census over every product project, a planted control set and a differential, and
-that is more code than the three regexes it replaces.
-
 What the semantic check buys instead is **exactness**, and it buys it where the text rule was
 blind. A rule that cannot see the block-bodied lambda is not a cheaper rule; it is a rule with a
-hole in the middle of the defect it was written for (#1854's shape, in two of its three spellings).
+hole in the middle of the defect it was written for (#1854's shape, in two of its three
+spellings). And the differential over the live tree says the two implementations name the SAME
+seven sites — five files, seven creations — which is the claim that makes the swap safe.
 
 ## Rule 2 — `ProcessEnvIsolationRule`: the hand-written parser, and where the lines are
 
