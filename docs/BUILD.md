@@ -308,7 +308,8 @@ not store mtimes. A restored output is older than "now", so every project
 looks stale and MSBuild recompiles the whole solution. The cache would buy
 nothing.
 
-`tools/normalize-mtimes.py` puts the mtimes back where the truth is:
+`tools/bin/harbor-gates-linux-x64 normalize-mtimes` puts the mtimes back where
+the truth is:
 
 - the restored outputs (everything under `obj/` and `bin/`) get the current
   time, so they are newer than the other things MSBuild compares them

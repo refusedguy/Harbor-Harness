@@ -68,7 +68,7 @@ If you find yourself adding any of the above to `Harbor.Abstractions`, **stop** 
 > `System.Security.Cryptography`.
 >
 > The list above is **checked against the files, not against prose** by
-> [`tools/check-abstractions-contract.py`](../../tools/check-abstractions-contract.py),
+> [the compiled `check-abstractions-contract` gate](../../tools/gates/check-abstractions-contract/main.go),
 > which fails when a `<PackageReference>` has no `using` under it or when a
 > non-BCL `using` has no `<PackageReference>` over it. Run it with `--report` to
 > print the derived census rather than reading this table for it — this list is a

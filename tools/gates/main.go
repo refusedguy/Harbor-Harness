@@ -53,6 +53,25 @@ import (
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
+	"harbor.local/gates/aggregate-analyzer-cost"
+	"harbor.local/gates/aggregate-build-vcpu"
+	changelog "harbor.local/gates/changelog-assemble"
+	"harbor.local/gates/check-abstractions-contract"
+	"harbor.local/gates/check-analyzer-scope"
+	"harbor.local/gates/check-no-test-sdk"
+	"harbor.local/gates/check-public-api-resign"
+	"harbor.local/gates/check-reference-trimmer"
+	shardbalance "harbor.local/gates/check-shard-balance"
+	"harbor.local/gates/check-xml-doc-coverage"
+	"harbor.local/gates/measure-build-cpu"
+	"harbor.local/gates/measure-project-graph"
+	"harbor.local/gates/msbuild-evaluation-cost"
+	normalizemtimes "harbor.local/gates/normalize-mtimes"
+	packvalidate "harbor.local/gates/pack-validate"
+	"harbor.local/gates/test-census"
+	"harbor.local/gates/test-measurements"
+	"harbor.local/gates/test-skips"
+
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -117,6 +136,96 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "aggregate-analyzer-cost",
+		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
+		run:     aggregateanalyzercost.Run,
+	},
+	{
+		name:    "aggregate-build-vcpu",
+		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
+		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "changelog-assemble",
+		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
+		run:     changelog.Run,
+	},
+	{
+		name:    "check-abstractions-contract",
+		summary: "every dependency the five guarded src/ projects declare is load-bearing",
+		run:     checkabstractionscontract.Run,
+	},
+	{
+		name:    "check-analyzer-scope",
+		summary: "where each analyzer package is allowed to run",
+		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-no-test-sdk",
+		summary: "no project file declares the VSTest host that stops TUnit's discovery",
+		run:     checknotestsdk.Run,
+	},
+	{
+		name:    "check-public-api-resign",
+		summary: "a change to the frozen surface is re-signed in the same commit",
+		run:     checkpublicapiresign.Run,
+	},
+	{
+		name:    "check-reference-trimmer",
+		summary: "does any project in the tree reference a package the compiler never uses",
+		run:     checkreferencetrimmer.Run,
+	},
+	{
+		name:    "check-shard-balance",
+		summary: "are the CI test shards balanced by what their projects cost",
+		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-xml-doc-coverage",
+		summary: "every public member of the frozen contract assembly carries an XML doc",
+		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "measure-build-cpu",
+		summary: "what a build command costs: the wall time and the CPU utilisation",
+		run:     measurebuildcpu.Run,
+	},
+	{
+		name:    "measure-project-graph",
+		summary: "the shape of the project dependency graph",
+		run:     measureprojectgraph.Run,
+	},
+	{
+		name:    "msbuild-evaluation-cost",
+		summary: "what a Release compile spends on MSBuild project evaluation",
+		run:     msbuildevaluationcost.Run,
+	},
+	{
+		name:    "normalize-mtimes",
+		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
+		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "pack-validate",
+		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
+		run:     packvalidate.Run,
+	},
+	{
+		name:    "test-census",
+		summary: "the per-test and per-project wall census of a CI run",
+		run:     testcensus.Run,
+	},
+	{
+		name:    "test-measurements",
+		summary: "the per-test measurements a CI run printed",
+		run:     testmeasurements.Run,
+	},
+	{
+		name:    "test-skips",
+		summary: "the tests a run skipped, and the reason each declared",
+		run:     testskips.Run,
 	},
 }
 

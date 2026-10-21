@@ -33,7 +33,7 @@ versions of this file conflated into a single wrong explanation:
 - **`Microsoft.NET.Test.Sdk` is not used, and must not be.** It was declared in
   16 test projects and pinned in `Directory.Packages.props`; #1893 removed all
   of them. TUnit's installation docs state that the package must not be used
-  with TUnit because it stops test discovery. `tools/check-no-test-sdk.py`
+  with TUnit because it stops test discovery. The compiled `check-no-test-sdk` gate
   fails the build if it comes back.
 
 Because of the second point the earlier claim that `dotnet test` "discovers zero

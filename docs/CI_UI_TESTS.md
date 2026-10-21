@@ -76,7 +76,7 @@ dotnet run --project tests/Harbor.App.Avalonia.Tests -c Release --no-build -- \
   --report-trx --results-directory artifacts --report-trx-filename avalonia-tests.trx
 ```
 
-`ci.yml` feeds the TRX to `tools/test-measurements.py`, which renders a
+`ci.yml` feeds the TRX to the compiled `test-measurements` gate, which renders a
 `Class.Method -> measurement` table into the job summary.
 
 ## Why not `dotnet test`
@@ -96,7 +96,7 @@ here, and the older "discovers zero tests, exit 5" wording conflated them:
 2. **`Microsoft.NET.Test.Sdk` is not used, and must not be.** It was declared in
    16 test projects and pinned in `Directory.Packages.props`; #1893 removed all
    of them. TUnit's installation docs say that package must not be used with
-   TUnit because it stops test discovery. `tools/check-no-test-sdk.py` fails the
+   TUnit because it stops test discovery. The compiled `check-no-test-sdk` gate fails the
    build if it comes back.
 
 Because of (2) the older blanket claim that `dotnet test` "discovers zero
@@ -185,7 +185,7 @@ structural assertions of the other UI suites.
 
 A skipped test asserts nothing, so the number of them is published on every
 CI run: the `test` job renders the skipped tests of each shard, with the
-reason each one declared, into the job summary (`tools/test-skips.py`).
+reason each one declared, into the job summary (the compiled `test-skips` gate).
 
 ```bash
 # the same view, from a local TRX set

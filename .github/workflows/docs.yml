@@ -83,7 +83,7 @@ on:
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
-      - 'tools/check-abstractions-contract.py'
+      - 'tools/gates/check-abstractions-contract/**'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
       - 'tools/check-arch-anchors.py'
@@ -152,20 +152,20 @@ on:
       # #1884. The two reporters (the measurement table and the wall census)
       # and their self-tests: a PR that edits either must run them, for the
       # same reason the gates above are triggered by their own sources.
-      - 'tools/test-measurements.py'
-      - 'tools/test-census.py'
+      - 'tools/gates/test-measurements/**'
+      - 'tools/gates/test-census/**'
       # #1795. The third reporter (the skipped tests, with their reasons) and
       # its self-test — same trigger as the two above.
-      - 'tools/test-skips.py'
+      - 'tools/gates/test-skips/**'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
-      - 'tools/check-xml-doc-coverage.py'
+      - 'tools/gates/check-xml-doc-coverage/**'
       # #1845. `check-public-api-resign.py` is the surviving half of the
       # public-API freeze: it reads the PR's commit history, so a PR that
       # edits the gate itself must run it. The other half — the freeze
       # itself — is a compile-time gate in the ci.yml build job and needs no
       # trigger here.
-      - 'tools/check-public-api-resign.py'
+      - 'tools/gates/check-public-api-resign/**'
       # The merge-loss gate. A pull request that touches a workflow file is
       # merged LOCALLY (the token has no `workflow` scope), and the local
       # squash-merge dropped content. The gate has to run on every such pull
@@ -187,9 +187,7 @@ on:
       # edits any of them must run the checker, because the checker's
       # verdict about the tree depends on what those files say.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
-      - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
+      - 'tools/gates/test-skips/**'
       # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
@@ -200,7 +198,6 @@ on:
       # recorded cost of every project, so a PR that edits the gate, the
       # measurement or the workflow's shard lists has to run it — and so must
       # a PR that edits the tree it measures.
-      - 'tools/check-shard-balance.py'
       - 'tools/shard-costs.json'
       # #431. docfx.json is the docs-site manifest and docs/toc.yml is its nav:
       # a PR that touches either must run the assembly + link gates below.
@@ -234,7 +231,7 @@ on:
       - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
-      - 'tools/check-abstractions-contract.py'
+      - 'tools/gates/check-abstractions-contract/**'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
       - 'tools/check-arch-anchors.py'
@@ -282,17 +279,17 @@ on:
       - 'tools/string-switch-exceptions.txt'
       - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
-      - 'tools/test-measurements.py'
-      - 'tools/test-census.py'
+      - 'tools/gates/test-measurements/**'
+      - 'tools/gates/test-census/**'
       # #1795. The third reporter (the skipped tests, with their reasons) and
       # its self-test — same trigger as the two above.
-      - 'tools/test-skips.py'
+      - 'tools/gates/test-skips/**'
       # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
       # reads the frozen contract sources, so a PR touching the gate runs it.
-      - 'tools/check-xml-doc-coverage.py'
+      - 'tools/gates/check-xml-doc-coverage/**'
       # #1845. Same trigger as above: the re-signing gate reads the commit
       # history, so a PR that edits the gate runs its self-test.
-      - 'tools/check-public-api-resign.py'
+      - 'tools/gates/check-public-api-resign/**'
       # The merge-loss gate. Same trigger as above: a pull request that
       # touches a workflow file is the one that gets merged LOCALLY, so the
       # gate has to run on it.
@@ -307,9 +304,7 @@ on:
       # #1888. Same trigger as above: the policy checker, and the three tools
       # whose self-test no workflow ran until the policy asked for one.
       - 'tools/check-gate-policy.py'
-      - 'tools/pack-validate.py'
-      - 'tools/test-skips.py'
-      - 'tools/normalize-mtimes.py'
+      - 'tools/gates/test-skips/**'
       # #1558. Same trigger as above: the chain census measures `src/` and
       # `apps/` (the .cs paths above), so a PR that edits the gate or the
       # baseline must run it.
@@ -319,7 +314,6 @@ on:
       # lists in ci.yml and the recorded cost of every project, so a PR that
       # edits the gate, the measurement or the workflow's shard lists must run
       # it.
-      - 'tools/check-shard-balance.py'
       - 'tools/shard-costs.json'
       # #431. Same trigger as above: the site manifest and its nav.
       # api/** mirrors the push block for the same reason.
@@ -352,6 +346,12 @@ jobs:
         run: python3 tools/check-md-links.py --self-test
       - name: Markdown lint fails on a malformed document
         run: python3 tools/md-lint.py --self-test
+      # The changelog assembler glues the per-pull-request fragments into
+      # CHANGELOG.md. Its failure path is tested here for the same reason as
+      # the others: a script edited until it assembles nothing is
+      # indistinguishable from a script that assembles nothing.
+      - name: Changelog assembler fails on a diverged CHANGELOG.md
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #664. The third gate is the only one that asks whether a `file:line`
       # in a normative document still points at a line, and whether a backticked
       # type is constructed by anything. Its failure path is tested here for
@@ -385,7 +385,7 @@ jobs:
       # tried and found NOT reachable by any fixture, and the tool's comments say
       # so rather than implying coverage that is not there.
       - name: Guarded-project dependency gate fails on a phantom package
-        run: python3 tools/check-abstractions-contract.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-abstractions-contract --self-test
       # #431 (slice D3). The sixth gate is the only one that asks whether a
       # public member of the frozen contract assembly carries an XML doc (or
       # an explicit suppression with a reason). Its self-test carries fixtures
@@ -394,7 +394,7 @@ jobs:
       # parameter continuations named "1"/"default" — and the load-bearing
       # non-vacuity proof: one undocumented member fails, naming it.
       - name: XML-doc coverage gate fails on an undocumented member
-        run: python3 tools/check-xml-doc-coverage.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --self-test
       # #428 / #1845. The public-API freeze used to be a python text scan
       # with its own --self-test here. The scan is gone: the freeze is a
       # COMPILE-time gate now (Microsoft.CodeAnalysis.PublicApiAnalyzers,
@@ -407,7 +407,7 @@ jobs:
       # the compiler cannot see because it sees one tree, not a history. Its
       # self-test is here, with the other gates that have one.
       - name: Re-signing gate fails on an unreviewed change
-        run: python3 tools/check-public-api-resign.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-public-api-resign --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
       # body. Its failure path is tested here for the same reason as the
@@ -424,7 +424,7 @@ jobs:
       # does — a tool that quietly stopped noticing a diverged CHANGELOG.md is
       # indistinguishable from one that found nothing.
       - name: Changelog assembler fails on a diverged changelog
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1778. The eighth gate is the only one that reads the TEST tree, and
       # the only one that asks whether a test body is a copy of another test
 
@@ -459,9 +459,9 @@ jobs:
       # fixture: a test that printed NOTHING is still counted, which is the
       # difference between a census and a measurement table.
       - name: Measurement reporter still finds the tests that printed something
-        run: python3 tools/test-measurements.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 test-measurements --self-test
       - name: Test census counts every test, printed or not
-        run: python3 tools/test-census.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 test-census --self-test
       # #1726. The third REPORTER: it reads what a CI run produced (a TRX or
       # a job log) and writes down what each guard firing MEANT - a defect, a
       # style rule, or noise on code the repository allows. Its failure path
@@ -492,7 +492,7 @@ jobs:
       # file and still glues a fragment: a PR that edits the assembler must
       # run it, or the edit lands unvalidated.
       - name: Changelog assembler glues a fragment and notices a diverged file
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
       # #1888. The three tools whose self-test no workflow ran. The policy
       # says every gate and every reporter proves its own failure path in
       # CI, and these three had a self-test that nothing called — a
@@ -501,7 +501,7 @@ jobs:
       # helper's self-tests are offline too, so all three cost about a
       # second.
       - name: Pack validator still fails on a package without its metadata
-        run: python3 tools/pack-validate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 pack-validate --selftest
       # #1795. The third reporter: the SKIPPED tests of a run, with the reason
       # each one declared. Same argument as the two above — a reporter that
       # stops reporting is green on every run and tells nobody anything. Its
@@ -509,9 +509,9 @@ jobs:
       # (the reason must survive, marker stripped) and a skip WITHOUT one
       # (the report must say so instead of inventing a reason).
       - name: Skip reporter still finds a skipped test
-        run: python3 tools/test-skips.py TestResults --self-test
+        run: tools/bin/harbor-gates-linux-x64 test-skips TestResults --self-test
       - name: Mtime normaliser still tells a changed file from an unchanged one
-        run: python3 tools/normalize-mtimes.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 normalize-mtimes --self-test
       # #1558. The chain census. Its failure path is tested here for the same
       # reason as the others: a scanner edited until it matches nothing is
       # indistinguishable from a scanner that found nothing. The load-bearing
@@ -547,7 +547,7 @@ jobs:
       # fixture is the RUNAWAY SHARD — one project's cost blown up so that the
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
-        run: python3 tools/check-shard-balance.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --self-test
       # #1753. The coverage tools. The reporter reads the cobertura files
       # the nightly lane produced and prints the per-file tables; the gate
       # compares the registry of accepted holes against the measurement, in
@@ -586,7 +586,14 @@ jobs:
       # self-test nobody calls, and the table cannot say honestly that it
       # exists.
       - name: Changelog assembler notices a diverged CHANGELOG.md
-        run: python3 tools/changelog-assemble.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
+      # The project-graph measurement: the depth, the level widths and the
+      # critical path of the dependency graph. It is a tool a human runs, and
+      # no workflow runs it — but its self-test is called here for the same
+      # reason as the others: a measurement edited until it measures nothing
+      # is indistinguishable from a measurement of an empty graph.
+      - name: Project-graph measurement still measures a planted graph
+        run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
 
   links:
     name: internal links
@@ -770,7 +777,7 @@ jobs:
       # and again after #1625 moved the configuration family out of it and the
       # new Harbor.PolicyConfig assembly into it (--report: 19 / 7 / 141).
       - name: Check the guarded projects' declared dependencies
-        run: python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
+        run: tools/bin/harbor-gates-linux-x64 check-abstractions-contract --min-packages 19 --min-namespaces 7 --min-files 141
 
   # #1778. Sixth question, and the only one about the TEST tree: not "do the
   # links resolve", not "is the file shaped right", not "does the file:line
@@ -1193,7 +1200,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that the CI test shards are balanced by cost
-        run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+        run: tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 
   # #1780. The parameter schema of a tool is the tool's contract with the
   # model: the JSON the model may send. It is declared once, as [ToolParam]
@@ -1252,7 +1259,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check XML-doc coverage of the frozen contract assembly
-        run: python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
+        run: tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
 
   # #1731. Twelfth question, and the only one that asks whether a GENERATED
   # document still matches the tree it was generated from.
