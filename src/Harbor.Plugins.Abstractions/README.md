@@ -20,11 +20,20 @@ Application — the plugin CONTRACT layer, and the matrix places it in **Applica
 - `IPluginSource` — storage contract (enumerates `PluginScript` records)
 - `IPluginCompiler` — compilation contract (`PluginScript` -> `CompilationResult`)
 - `IPluginInstantiator` — instantiation contract (`CompiledPluginAssembly` -> `LoadedPlugin`)
-- `IPluginRegistrar` — registration contract (`LoadedPlugin` -> wires into host registries)
+- `IPluginRegistrar` — registration contract (`LoadedPlugin` -> wires into host registries).
+  It answers with the live RUN it created (`Result<IPluginRun>`), so the registration
+  can be taken back later (#1737)
 - `IPluginLoadHost` — host-side sink (called by the registrar with new plugins).
   Every `Register*` door reports the OUTCOME: `Success` means the registration
   took effect and is observable, `Failure` means it was not registered and says
   why. A host that does not carry a door MUST refuse it, not accept it (#1758).
+- `IReversiblePluginLoadHost` — the OPTIONAL undo half of the load host: the
+  `Unregister*` methods that take a registration back. A host that implements it
+  can stop a run; a host that does not says so instead of pretending (#1737)
+- `IPluginRun` — the live run of one plugin: how it came to be, and the stop
+  that takes back exactly what it registered and shuts the plugin down (#1737)
+- `PluginRunMode` — `Run` (start the current definition) or `Update` (replace the
+  running one) (#1737)
 - `PluginAxisRegistry` — the single registry of plugin extension axes (marker + host door per axis)
 - `PluginCompatibility` — the compatibility rule: may a plugin that declares a
   Harbor floor run against the Harbor that is running? The registrar applies it

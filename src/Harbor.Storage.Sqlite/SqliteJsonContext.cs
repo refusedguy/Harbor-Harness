@@ -66,6 +66,11 @@ namespace Harbor.Storage.Sqlite;
 [JsonSerializable(typeof(ToolResultMessage))]
 [JsonSerializable(typeof(SessionMetadata))]
 [JsonSerializable(typeof(ToolResultEntry))]
+// #1763: ToolResultEntry.DeferredContexts references DeferredToolContext;
+// source-gen walks the member graph, but registering it explicitly keeps the
+// intent visible and fails loudly at compile time if the member is ever renamed.
+[JsonSerializable(typeof(DeferredToolContext))]
+[JsonSerializable(typeof(DeferredContextMetadata))]
 [JsonSerializable(typeof(Usage))]
 [JsonSerializable(typeof(TextPart))]
 [JsonSerializable(typeof(ThinkingPart))]

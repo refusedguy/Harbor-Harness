@@ -46,7 +46,7 @@ namespace Harbor.Plugins.Host;
 ///         thing to drift.
 ///     </para>
 /// </remarks>
-internal sealed class McpPluginLoadHost : IPluginLoadHost
+internal sealed class McpPluginLoadHost : IPluginLoadHost, IReversiblePluginLoadHost
 {
     private readonly ConcurrentDictionary<string, ITool> _tools = new(StringComparer.Ordinal);
     private readonly IServiceCollection _services = new ServiceCollection();
@@ -146,6 +146,57 @@ internal sealed class McpPluginLoadHost : IPluginLoadHost
             nameof(IPluginLoadHost.RegisterTuiBackend),
             backendId));
     }
+
+    // ── The undo half (#1737) ───────────────────────────────────────────────────
+    //
+    // The route carries tools, so a tool is the one registration that can be
+    // taken back. The other six axes were refused at registration time, so there
+    // is nothing of theirs to take back — and the undo says so with the reason
+    // the route declares, rather than answering `Success` for something that
+    // never happened.
+
+    public Result UnregisterTool(ToolName name)
+    {
+        return _tools.TryRemove(name.Value, out _)
+            ? Result.Success()
+            : Result.Failure($"Tool '{name.Value}' is not registered.");
+    }
+
+    public Result UnregisterProvider(ProviderId providerId) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterProvider),
+            providerId.Value));
+
+    public Result UnregisterAgent(AgentName name) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterAgent),
+            name.Value));
+
+    public Result UnregisterTuiPlugin(string name) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterTuiPlugin),
+            name));
+
+    public Result UnregisterPanelProvider(string panelId) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterPanelProvider),
+            panelId));
+
+    public Result UnregisterSessionStore(string backendId) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterSessionStore),
+            backendId));
+
+    public Result UnregisterTuiBackend(string backendId) => Result.Failure(
+        PluginRouteAxisRegistry.RefusalMessage(
+            PluginRouteAxisRegistry.McpStdioRouteId,
+            nameof(IPluginLoadHost.RegisterTuiBackend),
+            backendId));
 }
 
 /// <summary>
