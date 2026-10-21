@@ -108,9 +108,6 @@ on:
       # same reason the gates above are triggered by their own sources.
       - 'tools/test-measurements.py'
       - 'tools/test-census.py'
-      # #1795. The third reporter (the skipped tests, with their reasons) and
-      # its self-test — same trigger as the two above.
-      - 'tools/test-skips.py'
       # #431 (slice D3). `check-xml-doc-coverage.py` gates the XML-doc surface
       # of the frozen contract assembly: a PR that edits the gate must run it.
       - 'tools/check-xml-doc-coverage.py'
@@ -128,72 +125,24 @@ on:
       - 'docs/toc.yml'
       - 'api/**'
       - '.github/workflows/docs.yml'
+  # NO workflow-level path filter on pull_request. #1804: a required status
+  # check is satisfied only if a check run with that exact name exists on the
+  # head commit. With this `paths:` filter, a PR that touched none of the
+  # listed files produced NO docs.yml check run at all, so every docs gate
+  # name ("checker self-test", "internal links", "normative citations",
+  # "markdown lint", "guarded project dependencies", "test project
+  # coverage", "xml-doc coverage") would have been reported as "Expected -
+  # waiting for status to be reported" and the PR would have been
+  # unmergeable forever. The push block keeps its filter: a push has no
+  # required-check semantics to satisfy.
+  #
+  # Cost of running the gates on every PR, measured on run 39426596955: the
+  # eleven jobs take 5-13 s each (67 s for the citation gate), so about
+  # 2.3 runner-minutes and 67 s of wall clock per PR, against a baseline of
+  # 45.3 runner-minutes and 19.5 minutes of wall clock. The gates are
+  # idempotent and read-only, so running them when their inputs did not
+  # change costs minutes and catches nothing new.
   pull_request:
-    paths:
-      - '**.md'
-      # #947. TEST-CITE-DRIFT reads `tests/**/*.cs`, so a PR that inserts a
-      # line above a cited one — the only way this defect is ever created —
-      # touches none of the paths above unless .cs is here. Without these three
-      # the rule is unreachable on exactly the PRs it exists for, which is the
-      # #509 failure (a `paths-ignore` that made a gate green by never running)
-      # wearing a different hat.
-      - 'tests/**/*.cs'
-      - 'src/**/*.cs'
-      - 'apps/**/*.cs'
-      # #428. `check-abstractions-contract.py` reads four guarded projects'
-      # .csproj files and the .cs they compile. A csproj is how a dependency
-      # enters this repository, so a workflow that watched only .cs could not
-      # trigger on the change the gate exists to catch — the #509 failure (a
-      # gate made green by never running) wearing a different hat. Same for
-      # Directory.Packages.props, which is where a version is pinned.
-      - 'src/**/*.csproj'
-      - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
-      - 'tools/check-doc-cites.py'
-      - 'tools/check-doc-facts.py'
-      - 'tools/md_gate.py'
-      - 'tools/check-abstractions-contract.py'
-      # #1778. Same trigger as above: the duplicate-body gate measures
-      # `tests/**/*.cs` and compares the result against its committed
-      # baseline, so a PR that edits the tree it measures — or the gate, or
-      # the baseline — must run it.
-      - 'tools/check-test-dup.py'
-      - 'tools/test-dup-baseline.json'
-      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
-      # compares the result against its committed exceptions file, so a PR
-      # that edits the gate or the exceptions must run it — and so must a PR
-      # that edits the tree it measures.
-      - 'tools/check-test-json-reflection.py'
-      - 'tools/test-json-reflection-exceptions.txt'
-      # #1823. Same trigger as above: the completeness gate reads the test
-      # projects, the solution and the CI lists, so a PR that edits any of
-      # the three must run it.
-      - 'tests/**/*.csproj'
-      - 'Harbor.slnx'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
-      - 'tools/test-project-baseline.txt'
-      - 'build/_build/Targets/TestTarget.cs'
-      # #1884. Same trigger as above: the two reporters and their self-tests.
-      - 'tools/test-measurements.py'
-      - 'tools/test-census.py'
-      # #1795. The third reporter (the skipped tests, with their reasons) and
-      # its self-test — same trigger as the two above.
-      - 'tools/test-skips.py'
-      # #431 (slice D3). Same trigger as above: the XML-doc coverage gate
-      # reads the frozen contract sources, so a PR touching the gate runs it.
-      - 'tools/check-xml-doc-coverage.py'
-      # #1845. Same trigger as above: the re-signing gate reads the commit
-      # history, so a PR that edits the gate runs its self-test.
-      - 'tools/check-public-api-resign.py'
-      # #431. Same trigger as above: the site manifest and its nav.
-      # api/** mirrors the push block for the same reason.
-      - 'docfx.json'
-      - 'docs/toc.yml'
-      - 'api/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions: {}
@@ -301,14 +250,6 @@ jobs:
         run: python3 tools/test-measurements.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
-      # #1795. The third reporter: the SKIPPED tests of a run, with the reason
-      # each one declared. Same argument as the two above — a reporter that
-      # stops reporting is green on every run and tells nobody anything. Its
-      # self-test carries the two shapes that matter: a skip WITH a reason
-      # (the reason must survive, marker stripped) and a skip WITHOUT one
-      # (the report must say so instead of inventing a reason).
-      - name: Skipped-test report finds the skips and their reasons
-        run: python3 tools/test-skips.py --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a

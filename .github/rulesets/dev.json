@@ -1,0 +1,84 @@
+{
+  "name": "dev",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    },
+    {
+      "actor_id": 40535288,
+      "actor_type": "User",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "refs/heads/dev"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": [
+          "squash",
+          "merge"
+        ],
+        "required_reviewers": []
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "required_status_checks": [
+          {
+            "context": "gate"
+          },
+          {
+            "context": "public-api freeze"
+          },
+          {
+            "context": "checker self-test"
+          },
+          {
+            "context": "internal links"
+          },
+          {
+            "context": "markdown lint"
+          },
+          {
+            "context": "normative citations"
+          },
+          {
+            "context": "guarded project dependencies"
+          },
+          {
+            "context": "test project coverage"
+          },
+          {
+            "context": "xml-doc coverage"
+          }
+        ],
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": true
+      }
+    }
+  ]
+}
