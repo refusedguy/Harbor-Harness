@@ -98,6 +98,8 @@ public static class WellKnownTools
 
     /// <summary>The <c>plugin_manager</c> tool — lists the installed plugins and proposes a change to one.</summary>
     public static readonly ToolName PluginManager = ToolName.Create("plugin_manager");
+    /// <summary>The goal axis: the agent's verdict on the session's own goal (#1761).</summary>
+    public static readonly ToolName Goal = ToolName.Create("goal");
 
     /// <summary>The <c>read</c> tool — reads a file.</summary>
     public static readonly ToolName Read = ToolName.Create("read");
