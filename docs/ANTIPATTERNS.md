@@ -1275,7 +1275,7 @@ Expected to be true but found False
 which answers neither *which* result failed nor *why*. The reader has to go
 back to the test and find the variable the assertion did not name, and then
 find the error the assertion did not carry. Measured on `origin/dev@259d0a5d`,
-this form stood at **1846 sites** across **35 test projects** — it was the
+this form stood at **1888 sites** across **35 test projects** — it was the
 majority spelling, which is why the mistake is invisible: every one of those
 tests passes.
 

@@ -697,7 +697,7 @@ each needs its own pair, and the compiler picks by the receiver's type.
 ### The known trap (#1569): the boolean form reports a `bool`, and the "just add
 the error text" advice is a landmine
 
-Measured on `origin/dev@259d0a5d`, the old form stood at **1846 sites** across
+Measured on `origin/dev@259d0a5d`, the old form stood at **1888 sites** across
 **35 test projects** (`Assert.That(x.IsSuccess).IsTrue()` and its relatives),
 while the chain form was used in **78**. The old form is not wrong — it
 asserts the same thing — but it reports the failure at the `bool`:
@@ -713,6 +713,12 @@ reads:
 ```
 Expected to be successful but it failed with: Session 's1' not found.
 ```
+
+The census is a regex over `tests/**/*.cs`, and it has to be MULTI-LINE
+aware: an assertion that spans three lines
+(`Assert.That((await store.Append(...)).IsSuccess).IsTrue();`) is invisible
+to a line-based scan, and a line-based count of this tree answers 1846
+instead of 1888 — 42 sites short.
 
 The second half of the trap is the advice that used to sit in the helper's own
 doc comment: *put the error text in `.Because(result.Error)`*. `Because` takes
@@ -745,7 +751,7 @@ the result failed.*
 | Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `Resolve` returns `Maybe.None`; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
-| Asserting a result through its boolean | 1846 sites across 35 test projects, measured on `origin/dev@259d0a5d` | Assert the result; the reason goes in the failure message (§9) |
+| Asserting a result through its boolean | 1888 sites across 35 test projects, measured on `origin/dev@259d0a5d` | Assert the result; the reason goes in the failure message (§9) |
 
 ---
 
