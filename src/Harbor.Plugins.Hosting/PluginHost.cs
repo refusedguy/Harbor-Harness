@@ -783,7 +783,7 @@ public sealed class PluginHost
 
             run = live;
             _runs.Remove(name);
-            if (_definitions.TryGetValue(name, out LoadedPlugin found))
+            if (_definitions.TryGetValue(name, out LoadedPlugin? found) && found is not null)
             {
                 definition = found;
             }
