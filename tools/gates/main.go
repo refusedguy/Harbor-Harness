@@ -53,6 +53,7 @@ import (
 	shardbalance "harbor.local/gates/check-shard-balance"
 	"harbor.local/gates/check-xml-doc-coverage"
 	coveragereport "harbor.local/gates/coverage-report"
+	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -162,6 +163,11 @@ var registry = []registered{
 		name:    "coverage-report",
 		summary: "the per-project and per-file coverage report of a run",
 		run:     coveragereport.Run,
+	},
+	{
+		name:    "demo-repro",
+		summary: "the demo GIFs are reproducible, and the baseline manifest is well-formed",
+		run:     demorepro.Run,
 	},
 	{
 		name:    "gen-e2e-shards",
