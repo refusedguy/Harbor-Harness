@@ -2439,22 +2439,17 @@ jobs:
     #
     # Measured on the run that carries the current graph (39543869492, dev,
     # 2026-10-21): the wall after the build was 224 s, and 222 s of it was
-    # this job. It is the only member of the fan-out that is not waiting for
-    # a runner (2 s) — it is waiting for the BUILD.
+    # this job. Its own wait for a runner was 2 s — it was not waiting for a
+    # RUNNER, it was waiting for the BUILD.
     #
     # What changes: the job starts with the build instead of after it, so it
     # overlaps a build that is longer than it is (336-436 s against 222 s),
     # and the post-build burst loses one job and 222 s of service time.
     #
-    # What does NOT change: the CHECK (same recipe, same committed
-    # inventory, same "the published binary must run" half, same
-    # aot-publish-gate.py comparison) and the filter — the `aot` output of
-    # the `changes` job still decides whether the job runs at all.
-    #
     # ONE TRADE-OFF, stated: when the BUILD is red, this job now runs and
     # reports its own verdict instead of being skipped. That verdict is
     # informative (the AOT publish compiles the product tree, not the tests,
-    # so a PR that breaks only a test project still gets a green AOT
+    # so a PR that breaks only a test project must still get a green AOT
     # signal), and the pull request was red either way. The price is 222 s
     # of runner time on a red pull request.
     needs: [changes]
