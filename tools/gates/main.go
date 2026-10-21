@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
@@ -91,6 +92,11 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
 	},
 	{
 		name:    "changelog-assemble",

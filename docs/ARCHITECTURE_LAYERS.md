@@ -1291,7 +1291,7 @@ published with NativeAOT and the SDK is not AOT-shaped. On the pinned versions
   with NativeAOT and its pass criterion is that the publish **SUCCEEDS** — not "zero
   IL2026". Its inventory is a ratchet in **both** directions: a new diagnostic id, a
   changed count, a new first-party site **or** a vanished row is red
-  ([`tools/aot-publish-gate.py`](../tools/aot-publish-gate.py)). So "just add the
+  ([`harbor-gates aot-publish-gate`](../tools/gates/aot-publish-gate)). So "just add the
   package" cannot land unnoticed — but the gate reports *"the inventory moved"*, not
   *"you broke the telemetry boundary"*, and a reader who does not know the boundary
   cannot tell which of the two happened.

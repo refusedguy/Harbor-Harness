@@ -122,7 +122,7 @@ the compiled `check-abstractions-contract` gate).
 │              CSharpFunctionalExtensions, MemoryPack, ZLinq +     │
 │              ZLinq.DropInGenerator, three                       │
 │              Microsoft.Extensions.*.Abstractions; gate:          │
-│              tools/check-abstractions-contract.py)              │
+│              harbor-gates check-abstractions-contract)          │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
