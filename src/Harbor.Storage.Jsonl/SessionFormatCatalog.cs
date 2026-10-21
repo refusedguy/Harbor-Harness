@@ -87,15 +87,4 @@ internal static class SessionFormatCatalog
     ///     chain (every generation below it).
     /// </summary>
     internal static bool IsSupported(int version) => version is >= Legacy and <= Current;
-
-    /// <summary>
-    ///     The catalog's name for a generation, for a message that has to
-    ///     say which generation it is talking about.
-    /// </summary>
-    internal static string Name(int version) => version switch
-    {
-        Legacy => "V0 (legacy)",
-        Current => "V1 (current)",
-        _ => $"V{version} (unknown to this build)",
-    };
 }
