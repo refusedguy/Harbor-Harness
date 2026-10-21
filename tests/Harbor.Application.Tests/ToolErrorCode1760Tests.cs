@@ -313,7 +313,7 @@ public class ToolErrorCode1760Tests
         long started = Environment.TickCount64;
         ToolResultMessage message = await dispatcher.ExecuteAsync(
             [Call("tc1", "hang")], NewSession(), AssistantMessage.Empty("s", "m"),
-            agent, CancellationToken.None).ConfigureAwait(false);
+            agent, CancellationToken.None, AgentBudget(agent)).ConfigureAwait(false);
         long elapsedMs = Environment.TickCount64 - started;
 
         await Assert.That(message.Results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Timeout);
@@ -331,10 +331,19 @@ public class ToolErrorCode1760Tests
 
         ToolResultMessage message = await dispatcher.ExecuteAsync(
             [Call("tc1", "hang")], NewSession(), AssistantMessage.Empty("s", "m"),
-            agent, CancellationToken.None).ConfigureAwait(false);
+            agent, CancellationToken.None, AgentBudget(agent)).ConfigureAwait(false);
 
         await Assert.That(message.Results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Timeout);
     }
+
+    /// <summary>
+    ///     The agent's common default, the way the turn runner hands it to the
+    ///     dispatcher. The dispatcher does not read the agent itself — the
+    ///     budget reaches it as an argument, and a test that forgets to pass
+    ///     it would hang rather than time out.
+    /// </summary>
+    private static TimeSpan? AgentBudget(AgentDefinition agent) =>
+        agent.ToolTimeoutSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null;
 
     [Test]
     public async Task TheModelReadsTheCode_NotTheTrace()

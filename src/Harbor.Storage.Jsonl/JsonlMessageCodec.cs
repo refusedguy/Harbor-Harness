@@ -85,6 +85,47 @@ internal static class JsonlMessageCodec
     }
 
     /// <summary>
+    ///     Project a message into the ARCHIVE payload shape (#1750).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The archive is not a copy of the session file: its attachments
+    ///         are content-addressed, so the bytes live in ONE place in the
+    ///         ZIP and the message line REFERENCES them. That makes the user
+    ///         payload a different shape from the session file's — hence a
+    ///         separate projection rather than a flag on the old one.
+    ///     </para>
+    ///     <para>
+    ///         Every other role keeps the session file's shape, so an archive
+    ///         line and a session line differ only in the user turn's
+    ///         attachments.
+    ///     </para>
+    /// </remarks>
+    /// <param name="message">The message to project.</param>
+    /// <param name="attachments">
+    ///     The references to the archive's content-addressed files, in the
+    ///     order the message carries its attachments. Null for a turn with no
+    ///     attachments.
+    /// </param>
+    /// <returns>The payload object, ready for the archive's line shape.</returns>
+    public static object SerializeArchiveMessagePayload(AgentMessage message, ArchiveAttachmentRef[]? attachments)
+    {
+        return message switch
+        {
+            UserMessage u => new ArchiveUserPayload(u.Content, u.Agent, u.Model, attachments),
+            AssistantMessage a => new AssistantPayload(
+                SerializeParts(a.Parts),
+                StopReasonLower(a.StopReason),
+                a.Usage,
+                a.Model,
+                a.IsSummary,
+                a.SummaryFirstKeptId),
+            ToolResultMessage tr => new ToolResultPayload(SerializeToolResults(tr.Results)),
+            _ => throw Unsupported(message.Role, message.GetType().Name, "message")
+        };
+    }
+
+    /// <summary>
     ///     Project a single <see cref="ContentPart" /> into its JSON shape
     ///     using a named DTO type (AOT-registered). Tag strings come from
     ///     <c>Harbor.Storage.Shared.MessagePartAdapter</c> — the one place the

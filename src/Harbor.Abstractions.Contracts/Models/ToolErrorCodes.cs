@@ -211,6 +211,7 @@ public static class ToolErrorCodes
     /// </returns>
     public static string NameFor(string? code) => code switch
     {
+        Error => "ToolFailedError",
         Timeout => "ToolTimeoutError",
         AbortedBeforeDispatch => "AbortError",
         NotStarted => "ToolNotStartedError",
