@@ -94,7 +94,6 @@ docs/CI_GATES.md | 2034 | re-counted after the guard triage | the measured pictu
 docs/CI_GATES.md | 2034 | reporter \(issue #1726\) landed: | the measured picture was REWRITTEN when the guard-triage reporter landed (see the neighbouring exception)
 docs/CI_GATES.md | 2034 | 38 files, 30 482 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
 docs/CI_GATES.md | 2034 | 19 files, 20 304 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total
-docs/CI_GATES.md | 2034 | 7 reporters, 5 helpers, 2 libraries | the census was RE-COUNTED: the row in the file today carries the newer numbers
 docs/CI_GATES.md | 2037 | , plus the$ | the measured picture was REWRITTEN: the block in the file today is the newer wording of the same census, and the numbers in it were re-counted
 docs/CI_GATES.md | 2037 | shard-balance gate of #1781\) | the measured picture was REWRITTEN (see the neighbouring exception)
 docs/CI_GATES.md | 2037 | 38 files, 29 910 lines | the census was RE-COUNTED: the row in the file today carries the newer count and the newer line total

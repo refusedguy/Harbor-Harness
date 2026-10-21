@@ -20,16 +20,16 @@ branch adds), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 38 files, 30 004 lines |
-| of them, the `check-*.py` family | 20 files, 20 958 lines |
+| python tools in `tools/` | 40 files, 32 048 lines |
+| of them, the `check-*.py` family | 21 files, 21 516 lines |
 | workflows that run a python tool | 6: `ci.yml`, `docs.yml`, `demo.yml`, `nightly.yml`, `test-os.yml`, `meas-build-vcpu.yml` |
-| gates that block a build | 23 |
+| gates that block a build | 24 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 6 reporters, 5 helpers, 2 libraries |
-| tools with a self-test | 28 |
-| tools with a ratchet | 14 |
-| tools with a floor | 17 |
+| reporters, helpers, libraries | 7 reporters, 5 helpers, 2 libraries |
+| tools with a self-test | 31 |
+| tools with a ratchet | 16 |
+| tools with a floor | 20 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `test-skips.py`, `normalize-mtimes.py`) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -215,14 +215,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (37 files). 31 of them are run by a workflow; the
-other six are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
+Every python tool in `tools/` (40 files). 35 of them are run by a workflow; the
+other five are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
 `string-switch-rewrites.py`, which are loaded by other tools rather than run,
-the measurement helper `aggregate-build-vcpu.py`, which a human runs after a
-measurement run, `measure-project-graph.py`, which a human runs to read the
-project graph, and `codemod-test-events.py`, which rewrites the hand-built
-test events and test messages. All 37 are listed, because a tool that is not
-listed is a tool nobody reviews. The table records, for each one, the question
+`measure-project-graph.py`, which a human runs to read the project graph, and
+`codemod-test-events.py`, which rewrites the hand-built test events and test
+messages. All 40 are listed, because a tool that is not listed is a tool nobody
+reviews. The table records, for each one, the question
 it answers, where it runs, whether it blocks a build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
 checked by `tools/check-gate-policy.py`, which fails when it stops describing
