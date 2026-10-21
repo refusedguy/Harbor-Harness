@@ -51,11 +51,68 @@ internal sealed class ToolRetryPolicy(
         $"call {ToolCallLink.AbandonedOutputMarker}.";
 
     /// <summary>
+    ///     Make sure a failed result carries a code, and that its text leads
+    ///     with that code (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A tool that reports a failure without classifying it gets the
+    ///         generic <see cref="ToolErrorCodes.Error" />: the dispatcher does
+    ///         not guess WHY the tool failed — it only says that it did, and
+    ///         the model gets a code instead of a prose puzzle.
+    ///     </para>
+    ///     <para>
+    ///         A tool that DID classify it keeps its own code, and the text is
+    ///         put in front of the detail if the tool did not do it itself.
+    ///         The invariant "a failed tool result's text starts with its
+    ///         code" is what lets a reader (or a model) take the first token
+    ///         as the code, so it is enforced here rather than trusted.
+    ///     </para>
+    /// </remarks>
+    /// <param name="result">The result the tool returned.</param>
+    /// <returns>The result with the invariant applied; a success is returned unchanged.</returns>
+    private static ToolResult NormalizeErrorCode(ToolResult result)
+    {
+        if (!result.IsError)
+        {
+            return result;
+        }
+
+        if (result.ErrorInfo is null)
+        {
+            return new ToolResult(
+                ToolErrorCodes.Format(ToolErrorCodes.Error, result.Output),
+                true,
+                result.Metadata,
+                result.Attachments)
+            {
+                ErrorInfo = ToolErrorCodes.Create(ToolErrorCodes.Error),
+            };
+        }
+
+        string prefix = result.ErrorInfo.Code + ": ";
+        if (result.Output.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return result;
+        }
+
+        return new ToolResult(prefix + result.Output, true, result.Metadata, result.Attachments)
+        {
+            ErrorInfo = result.ErrorInfo,
+        };
+    }
+
+    /// <summary>
     ///     Validate tool arguments on the Result railway (#1515): success
     ///     (no value) when valid; otherwise publishes the end event and
-    ///     returns a failure carrying the entry text.
+    ///     returns a failure carrying the finished error result.
     /// </summary>
-    internal async Task<UnitResult<string>> ValidateArgumentsAsync(
+    /// <remarks>
+    ///     #1760: the failure carries the whole <see cref="ToolResult" /> —
+    ///     text AND the structured code — so the dispatcher never has to
+    ///     re-derive the code from the text it is handed.
+    /// </remarks>
+    internal async Task<UnitResult<ToolResult>> ValidateArgumentsAsync(
         ITool tool,
         ToolCallPart toolCall,
         Activity? activity,
@@ -64,23 +121,33 @@ internal sealed class ToolRetryPolicy(
         Result check = tool.ValidateArguments(toolCall.Args);
         if (check.IsSuccess)
         {
-            return UnitResult.Success<string>();
+            return UnitResult.Success<ToolResult>();
         }
 
         activity?.SetStatus(ActivityStatusCode.Error, check.Error);
-        var invalid = ToolResult.Error(check.Error);
+        var invalid = ToolResult.Failed(
+            check.Error,
+            ToolErrorCodes.Create(ToolErrorCodes.ValidationFailed, check.Error));
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, invalid, true), TerminalEventToken).ConfigureAwait(false);
-        return UnitResult.Failure<string>(check.Error);
+        return UnitResult.Failure<ToolResult>(invalid);
     }
 
     /// <summary>
     ///     Check permission for one tool call on the Result railway (#1515):
     ///     success (no value) when allowed; otherwise publishes the end
-    ///     event and returns a failure carrying the deny text. Fail-closed:
-    ///     any non-success verdict denies (§G3).
+    ///     event and returns a failure carrying the finished error result.
+    ///     Fail-closed: any non-success verdict denies (§G3).
     /// </summary>
-    internal async Task<UnitResult<string>> CheckPermissionAsync(
+    /// <remarks>
+    ///     #1760: the refusals are different facts and now carry different
+    ///     codes — the run was cancelled
+    ///     (<see cref="ToolErrorCodes.AbortedBeforeDispatch" />), the deadline
+    ///     fired (<see cref="ToolErrorCodes.Timeout" />), the policy refused
+    ///     (<see cref="ToolErrorCodes.PermissionDenied" />), or the permission
+    ///     subsystem itself broke (<see cref="ToolErrorCodes.PermissionFailed" />).
+    /// </remarks>
+    internal async Task<UnitResult<ToolResult>> CheckPermissionAsync(
         ToolCallPart toolCall,
         AgentDefinition agent,
         CancellationToken effectiveCt,
@@ -101,7 +168,7 @@ internal sealed class ToolRetryPolicy(
         // returned without approval) is fail-closed, never fail-open.
         if (permResponse.IsSuccess && permResponse.Value.Action == PermissionAction.Allow)
         {
-            return UnitResult.Success<string>();
+            return UnitResult.Success<ToolResult>();
         }
 
         activity?.SetStatus(ActivityStatusCode.Error, "Permission denied");
@@ -115,28 +182,39 @@ internal sealed class ToolRetryPolicy(
         // user cancel.
         bool runCancelled = ct.IsCancellationRequested;
         bool timedOut = !runCancelled && effectiveCt.IsCancellationRequested;
+        string code;
         string reason;
+        string? cause = null;
         if (runCancelled)
         {
             activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
+            code = ToolErrorCodes.AbortedBeforeDispatch;
             reason = "Tool execution was cancelled before start.";
         }
         else if (timedOut)
         {
             activity?.SetStatus(ActivityStatusCode.Error, "tool timed out");
+            code = ToolErrorCodes.Timeout;
             reason = $"Tool '{toolCall.ToolName}' timed out during permission check.";
+        }
+        else if (permResponse.IsFailure)
+        {
+            code = ToolErrorCodes.PermissionFailed;
+            reason = $"Permission check failed: {permResponse.Error}";
+            cause = permResponse.Error;
         }
         else
         {
-            reason = permResponse.IsFailure
-                ? $"Permission check failed: {permResponse.Error}"
-                : "Permission denied";
+            code = ToolErrorCodes.PermissionDenied;
+            reason = "Permission denied";
         }
 
-        var denied = ToolResult.Error(reason);
+        var denied = ToolResult.Failed(
+            reason,
+            ToolErrorCodes.Create(code, cause));
         await eventBus.PublishAsync(new ToolExecutionEndEvent(
             toolCall.Id, denied, true), TerminalEventToken).ConfigureAwait(false);
-        return UnitResult.Failure<string>(reason);
+        return UnitResult.Failure<ToolResult>(denied);
     }
 
     /// <summary>
@@ -175,7 +253,12 @@ internal sealed class ToolRetryPolicy(
                     && !coordinator.TryCommitApproval(commitScope, toolCall.Id, attempts.Value))
                 {
                     activity?.SetStatus(ActivityStatusCode.Error, "cancelled before start");
-                    var cancelledBeforeStart = ToolResult.Error("Tool execution was cancelled before start.");
+                    // #1760: the call was never sent to the tool — it had no
+                    // effect, so a retry is safe. The code says so; the text
+                    // always said so.
+                    var cancelledBeforeStart = ToolResult.Failed(
+                        "Tool execution was cancelled before start.",
+                        ToolErrorCodes.Create(ToolErrorCodes.AbortedBeforeDispatch));
                     await eventBus.PublishAsync(new ToolExecutionEndEvent(
                         toolCall.Id, cancelledBeforeStart, true), TerminalEventToken).ConfigureAwait(false);
                     return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, cancelledBeforeStart);
@@ -185,6 +268,7 @@ internal sealed class ToolRetryPolicy(
                 try
                 {
                     result = await tool.ExecuteAsync(toolCall.Args, ctx, effectiveCt).ConfigureAwait(false);
+                    result = NormalizeErrorCode(result);
                     if (ct.IsCancellationRequested)
                     {
                         // #401 B2: the stop was accepted while this call ran and
@@ -194,7 +278,12 @@ internal sealed class ToolRetryPolicy(
                         // the per-call deadline: a timeout (A9) is a different
                         // fact and keeps its own text.
                         activity?.SetStatus(ActivityStatusCode.Error, ToolCallLink.AbandonedOutputMarker);
-                        var abandonedAfterFinish = ToolResult.Error(AbandonedAfterFinishMessage(toolCall));
+                        // #1760: the code is TOOL_ABANDONED; the marker stays in
+                        // the text so a session file written before the
+                        // structured code existed still reads as abandoned.
+                        var abandonedAfterFinish = ToolResult.Failed(
+                            AbandonedAfterFinishMessage(toolCall),
+                            ToolErrorCodes.Create(ToolErrorCodes.Abandoned, ToolDispatcher.AcceptedStopReason));
                         await eventBus.PublishAsync(new ToolExecutionEndEvent(
                             toolCall.Id, abandonedAfterFinish, true), TerminalEventToken).ConfigureAwait(false);
                         return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, abandonedAfterFinish);

@@ -139,6 +139,29 @@ public sealed record ToolCallLink(
     ///     off it). One literal, owned here, so the writer and the reader cannot drift.
     /// </summary>
     public const string AbandonedOutputMarker = "abandoned after accepted-stop";
+
+    /// <summary>
+    ///     Whether a result belongs to a call that was abandoned at the
+    ///     dispatch boundary (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A result that carries a structured error is classified by its
+    ///         CODE: the code is the fact, and the text beside it is prose
+    ///         that may be reworded at any time.
+    ///     </para>
+    ///     <para>
+    ///         A result WITHOUT a code is classified by the legacy marker
+    ///         instead — that is how a session file written before the
+    ///         structured code existed still reads as abandoned.
+    ///     </para>
+    /// </remarks>
+    /// <param name="entry">The persisted result to classify.</param>
+    /// <returns><see langword="true" /> when the call was abandoned.</returns>
+    public static bool IsAbandoned(ToolResultEntry entry) =>
+        entry.ErrorInfo is { } error
+            ? string.Equals(error.Code, ToolErrorCodes.Abandoned, StringComparison.Ordinal)
+            : entry.Output.Contains(AbandonedOutputMarker, StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -370,10 +393,12 @@ public sealed record RunOutcome(
                         resultByCallId.TryGetValue(call.Id, out ToolResultEntry? entry);
                         bool isError = entry is not null && entry.IsError;
                         // #401 B2: an abandoned call still carries IsError, but
-                        // "failed" would read as malfunction — the marker says
+                        // "failed" would read as malfunction — the code says
                         // the stop outlived the call, not the call the stop.
-                        ToolCallCompletion completion = entry?.Output is { } output
-                            && output.Contains(ToolCallLink.AbandonedOutputMarker, StringComparison.Ordinal)
+                        // #1760: the classification is the structured code; the
+                        // legacy marker is the fallback for a session file
+                        // written before the code existed.
+                        ToolCallCompletion completion = entry is not null && ToolCallLink.IsAbandoned(entry)
                             ? ToolCallCompletion.Abandoned
                             : isError ? ToolCallCompletion.Failed : ToolCallCompletion.Completed;
                         toolCalls.Add(new ToolCallLink(call.Id, call.ToolName, isError, completion));

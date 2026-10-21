@@ -120,3 +120,4 @@ Harbor.Abstractions.Models.ToolResult.ErrorInfo.init -> void
 static Harbor.Abstractions.Models.ToolResult.Failed(string! detail, Harbor.Abstractions.Models.ToolErrorInfo! error, object? metadata = null) -> Harbor.Abstractions.Models.ToolResult!
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.get -> Harbor.Abstractions.Models.ToolErrorInfo?
 Harbor.Abstractions.Models.ToolResultEntry.ErrorInfo.init -> void
+static Harbor.Abstractions.Models.ToolCallLink.IsAbandoned(Harbor.Abstractions.Models.ToolResultEntry! entry) -> bool

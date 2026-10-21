@@ -160,7 +160,13 @@ internal static class JsonlMessageCodec
         for (int i = 0; i < results.Count; i++)
         {
             ToolResultEntry r = results[i];
-            payload[i] = new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError);
+            // #1760: the structured code rides along. It holds primitives
+            // only, so unlike Metadata it survives the round-trip — which is
+            // the whole point of a separate typed field.
+            payload[i] = new ToolResultEntry(r.ToolCallId, r.ToolName, r.Output, r.IsError)
+            {
+                ErrorInfo = r.ErrorInfo,
+            };
         }
 
         return payload;
@@ -431,11 +437,48 @@ internal static class JsonlMessageCodec
             if (tcId is null || tn is null || output is null)
                 return Result.Failure<AgentMessage>($"tool_result message {id}: malformed result entry");
 
-            results.Add(new ToolResultEntry(tcId, tn, output, isError));
+            results.Add(new ToolResultEntry(tcId, tn, output, isError)
+            {
+                ErrorInfo = DecodeErrorInfo(rEl),
+            });
         }
 
         return Result.Success<AgentMessage>(new ToolResultMessage(
             id, sessionId, createdAt, results, parentId));
+    }
+
+    /// <summary>
+    ///     Read the structured error of a persisted result entry (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     An entry written before the structured code existed has no
+    ///     <c>errorInfo</c> member at all, and that is not a defect: the code
+    ///     was added later, and an absent member is the honest reading of a
+    ///     record that never carried one. A member that IS there but has no
+    ///     <c>code</c> is unreadable — the code is the record — and yields no
+    ///     error rather than a half-built one.
+    /// </remarks>
+    private static ToolErrorInfo? DecodeErrorInfo(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("errorInfo", out var error) && !entry.TryGetProperty("ErrorInfo", out error))
+        {
+            return null;
+        }
+
+        if (error.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        string? code = JsonArgs.GetFirstString(error, "code", "Code");
+        if (code is null)
+        {
+            return null;
+        }
+
+        string? name = JsonArgs.GetFirstString(error, "name", "Name");
+        string? reason = JsonArgs.GetFirstString(error, "reason", "Reason");
+        return new ToolErrorInfo(name ?? ToolErrorCodes.NameFor(code), code, reason);
     }
 
     /// <summary>

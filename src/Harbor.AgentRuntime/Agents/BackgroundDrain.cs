@@ -40,7 +40,14 @@ internal sealed class BackgroundDrain(
             var (output, isError) = completion.Result.Match(
                 run => ($"[background sub-agent '{completion.AgentName}' finished — session {run.SessionId}, {run.NewMessages} message(s)]\n\n{run.FinalOutput}", false),
                 err => ($"[background sub-agent '{completion.AgentName}' failed: {err}]", true));
-            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError));
+            // #1760: a failure that reached the model carries a code, so the
+            // model reads one and a policy can branch on it. The background
+            // drain knows only that the sub-agent failed, so the generic code
+            // is the honest label.
+            entries.Add(new ToolResultEntry(completion.Id, "task", output, isError)
+            {
+                ErrorInfo = isError ? ToolErrorCodes.Create(ToolErrorCodes.Error) : null,
+            });
             BackgroundDrainLog.BackgroundTaskDrained(logger, completion.Id, completion.AgentName);
         }
 
