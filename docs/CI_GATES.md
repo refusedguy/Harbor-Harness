@@ -286,6 +286,7 @@ The modes are:
 | `tools/aggregate-analyzer-cost.py` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
 | `tools/coverage_report.py` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
 | `tools/check-coverage-registry.py` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
+| `tools/codemod-tool-names.py` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It
