@@ -2416,22 +2416,14 @@ jobs:
       # `shell: bash` is explicit because the OS matrix (test-os.yml) reuses
       # this step on windows-latest, where the default shell is pwsh and a
       # trailing `\` is a ParserError, not a line continuation.
-      #
-      # THE TWO ARCHITECTURES ARE TWO STEPS, not one step with two `run:`
-      # keys. A YAML mapping keeps the LAST of a duplicated key, so the first
-      # block would be dead code: the step would run the arm64 binary on an
-      # x64 runner and die with "cannot execute binary file: Exec format
-      # error", and the x64 runner would lose the panel instead of getting
-      # it. The gate `tools/check-gate-policy.py` fails on that shape
-      # (POLICY-STEP-DUPLICATE-RUN).
-      - name: Report test measurements (issue #618), x64 runner
+      - name: Report test measurements (issue #618)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
-      - name: Report test measurements (issue #618), arm64 runner
+      - name: Report test measurements (issue #618, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2451,14 +2443,14 @@ jobs:
       #
       # Reporting only, never a gate: the script exits 0 on a missing or
       # corrupt TRX set, and it prints its own one-line summary to the log.
-      - name: Report the test census (issue #1884), x64 runner
+      - name: Report the test census (issue #1884)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
-      - name: Report the test census (issue #1884), arm64 runner
+      - name: Report the test census (issue #1884, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2471,14 +2463,14 @@ jobs:
       # running half its tests stayed green until somebody counted by hand
       # (that is how the 20 skipped Avalonia golden tests were found).
       # Reporting only, never a gate: the script exits 0 on a missing TRX.
-      - name: Report skipped tests (issue #1795), x64 runner
+      - name: Report skipped tests (issue #1795)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
-      - name: Report skipped tests (issue #1795), arm64 runner
+      - name: Report skipped tests (issue #1795, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |

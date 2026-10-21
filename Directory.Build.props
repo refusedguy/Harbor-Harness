@@ -31,6 +31,48 @@
     <SelfContained>false</SelfContained>
 
     <!--
+      The informational version does NOT carry the commit sha (issue #2100).
+
+      WHY, IN ONE PARAGRAPH. The SDK puts `$(Version)+$(SourceRevisionId)` into
+      the AssemblyInformationalVersion attribute, and `SourceRevisionId` is
+      `git rev-parse HEAD` — the commit the tree is checked out at. The SDK
+      then writes that attribute into a GENERATED source file,
+      `obj/Release/net10.0/<Target>.AssemblyInfo.cs`, through two targets:
+
+        CreateGeneratedAssemblyInfoInputsCacheFile   (the hash of the
+          attributes -> <Target>.AssemblyInfoInputs.cache, WriteOnlyWhenDifferent)
+        CoreGenerateAssemblyInfo                     (Inputs: that cache,
+          Outputs: the .cs; WriteCodeFragment writes it unconditionally)
+
+      The commit sha changes on EVERY commit, so the hash changes, so the
+      cache file is rewritten with the CURRENT clock, so CoreGenerateAssemblyInfo
+      sees an input newer than its output and rewrites the .cs with the
+      CURRENT clock — and that .cs is an INPUT of `CoreCompile`. So on every
+      commit, every project's CoreCompile sees a newer input than its outputs
+      and recompiles, whatever the mtime normalisation did.
+
+      MEASURED (PR #2123's diagnostic, run 39617741148), on a tree restored
+      from the cache with ONE file changed:
+
+        Building target "CoreGenerateAssemblyInfo" completely.
+        Input file "obj/.../Harbor.Abstractions.Contracts.AssemblyInfoInputs.cache"
+          is newer than output file "obj/.../Harbor.Abstractions.Contracts.AssemblyInfo.cs".
+        Task "WriteCodeFragment"
+          Emitted specified code into "obj/.../Harbor.Abstractions.Contracts.AssemblyInfo.cs".
+        Building target "CoreCompile" completely.
+        Input file "obj/.../Harbor.Abstractions.Contracts.AssemblyInfo.cs"
+          is newer than output file "obj/.../Harbor.Abstractions.Contracts.xml".
+
+      WHAT IT COSTS. The assemblies' informational version is `0.4.0-alpha`
+      instead of `0.4.0-alpha+<sha>`. Nothing in this repository reads it
+      (no source file mentions InformationalVersion), and a released binary
+      naming a commit it was not built from is a worse property than one that
+      names no commit. The file version (0.4.0.0) and the assembly version
+      (0.4.0.0) are untouched.
+    -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!--
       Every project a Release build touches must be BUILT in Release (#1921).
 
       MSBuild's solution build does not do that on its own, and the reason is
