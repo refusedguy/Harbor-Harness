@@ -121,13 +121,13 @@ public sealed class EventStringShreddingGates
     // work divided by the cost of one unit of the fixed calibration probe,
     // measured on the same runner in the same run. The probe is a FIXED
     // workload, so its cost is a property of the machine — and the machine
-    // has a price: 0.000343-0.000353 ms/unit across the sixteen measured
-    // `test (ui)` runs of the fleet (the oldest, run 39372950798, read
-    // 0.000380).
+    // has a price: 0.000343-0.000353 ms/unit in the nineteen measured
+    // `test (ui)` runs of the fleet that read it (the oldest, run
+    // 39372950798, read 0.000380).
     //
     // Run 39609285153 read 0.000041 ms/unit — 8.5x below — while the workload
     // it was supposed to normalize was UNCHANGED (0.0816 ms/unit against
-    // 0.0803-0.0827 across the same sixteen runs). The ratio was therefore
+    // 0.0803-0.0827 across the same nineteen runs). The ratio was therefore
     // 8.5x off, the numerator's spread was 1.01x, the gate called the
     // measurement "trusted", and three gates failed the build on a number the
     // runner never produced.
@@ -400,7 +400,7 @@ public sealed class EventStringShreddingGates
         // The receipts: run 39633684054 read 0.000041 ms/unit — 8.5x below
         // the fleet's 0.000343-0.000353 — while the workload it was supposed
         // to normalize was UNCHANGED (0.0815 ms/unit against 0.0803-0.0827
-        // across sixteen measured runs). The ratio was 8.5x off, the
+        // across nineteen measured runs). The ratio was 8.5x off, the
         // numerator's spread was 1.01x, the helper called the measurement
         // "trusted", and three gates failed the build on a number the runner
         // never produced. Runs 39609285153 and 39619582982 read the same

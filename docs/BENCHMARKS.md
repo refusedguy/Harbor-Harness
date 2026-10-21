@@ -1149,8 +1149,9 @@ The time branch is in **probe units**, so the runner's speed is supposed to
 cancel: the numerator and the denominator are both measured on the same runner
 in the same run. It cancels only while the yardstick IS the yardstick. The probe
 is a fixed workload, so its cost is a property of the machine — and the machine
-has a price: **0.000343-0.000353 ms/unit** across the sixteen measured
-`test (ui)` runs of the fleet (the oldest, run 39372950798, read 0.000380).
+has a price: **0.000343-0.000353 ms/unit** in the nineteen measured
+`test (ui)` runs of the fleet that read it (the oldest, run 39372950798, read
+0.000380).
 
 Three runs read **0.000041 ms/unit** instead — 8.5x below — while the workload
 the probe was supposed to normalize was UNCHANGED:
@@ -1175,6 +1176,12 @@ the band the time branch **reports and stands down** and the byte branch — the
 machine-independent one, the branch that can be a hard gate — still asserts. The
 budgets are untouched: the byte budgets (8 B / 4 KiB / 128 KiB) are the real
 limits, and the time budgets stay in the currency the fleet is calibrated in.
+
+The band also catches the other direction: run 39599923626 read 0.00072 ms/unit
+in one of its six gates — 2x the fleet's price — and that gate stood down (its
+own spread was 6.25x). A yardstick that reads 2x slow deflates every ratio
+built on it, and a gate that passes because its yardstick was slow measures
+nothing.
 
 The warm-up of the patch split grew from 3 to 32 iterations at the same time:
 the call-counting threshold is 30 calls, the measured window drives 8 splits
