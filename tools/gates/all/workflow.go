@@ -32,6 +32,21 @@ import (
 // The check reads the workflows, not the table in docs/CI_GATES.md: the
 // table is a summary of the workflows, and a summary cannot be the proof of
 // the summary.
+//
+// THE RUNNER RUNS THE LIST
+//
+// A workflow that calls `harbor-gates all` RUNS the gates of the list that
+// are compiled into the binary: that is what the runner is for. A gate that
+// no workflow calls directly is still run, and the check has to know it —
+// otherwise the check calls a gate that runs on every pull request a gate
+// nobody runs, and blocks a pull request that changed nothing.
+//
+// A gate that is still a python script is NOT run by the runner: the binary
+// must not need python. It needs a workflow of its own, and the check says
+// so.
+
+// runnerGate is the name of the subcommand that runs the list.
+const runnerGate = "all"
 
 // artifactTokens name the things a gate needs that the BUILD produces, and
 // the SDK itself.
@@ -205,15 +220,16 @@ func checkList(root string) []string {
 		return append(findings, fmt.Sprintf("cannot read the workflows: %v", err))
 	}
 
-	return append(findings, checkInvocations(treeGates, invs)...)
+	return append(findings, checkInvocations(root, treeGates, invs)...)
 }
 
 // checkInvocations checks the gates of the list against the invocations.
 //
 // The two directions are the two ways the list starts to lie: a gate that
 // needs what the build produces, and a gate nobody runs.
-func checkInvocations(gates []treeGate, invs []invocation) []string {
+func checkInvocations(root string, gates []treeGate, invs []invocation) []string {
 	var findings []string
+	covered := runnerCovers(root, gates, invs)
 	for _, g := range gates {
 		used := false
 		for _, inv := range invs {
@@ -229,6 +245,9 @@ func checkInvocations(gates []treeGate, invs []invocation) []string {
 				}
 			}
 		}
+		if !used && covered[g.name] {
+			used = true
+		}
 		if !used {
 			findings = append(findings, fmt.Sprintf(
 				"%s is in the list of tree gates and no workflow runs it: a gate nobody runs is a gate nobody reviews",
@@ -236,4 +255,31 @@ func checkInvocations(gates []treeGate, invs []invocation) []string {
 		}
 	}
 	return findings
+}
+
+// runnerCovers returns the gates of the list that the tree runner runs.
+//
+// The runner runs a gate that is compiled into the binary, and it runs it
+// in every workflow that calls the runner. A gate that is still a python
+// script is not one of them: the binary must not need python, and the
+// local runner (tools/check-local.sh) runs those with python3.
+func runnerCovers(root string, gates []treeGate, invs []invocation) map[string]bool {
+	covered := map[string]bool{}
+	called := false
+	for _, inv := range invs {
+		if inv.gate == runnerGate && !strings.Contains(inv.args, "--self-test") {
+			called = true
+			break
+		}
+	}
+	if !called {
+		return covered
+	}
+	for _, g := range gates {
+		state, _ := resolve(root, g)
+		if state == stateCompiled {
+			covered[g.name] = true
+		}
+	}
+	return covered
 }

@@ -276,7 +276,7 @@ The modes are:
 | `tools/check-arch-anchors.py` | python | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
 | `tools/check-doc-cites.py` | python | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | python | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
-| `tools/bin/harbor-gates-linux-x64 check-doc-facts` | compiled: `tools/gates/check-doc-facts` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
+| `tools/bin/harbor-gates-linux-x64 check-doc-facts` | compiled: `tools/gates/check-doc-facts` | a count the onboarding documents state still equals the count of tracked files | docs.yml | selftest, tree | gate | `--self-test` | — | `--min-facts 5` |
 | `tools/check-gate-policy.py` | python | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
 | `tools/check-local-merge-loss.py` | python | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-md-links.py` | python | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
@@ -304,24 +304,24 @@ The modes are:
 | `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/check-shard-balance.py` | python | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
-| `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
+| `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | selftest, tree | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/coverage_report.py` | python | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
 | `tools/check-coverage-registry.py` | python | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
 | `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 | `tools/codemod-tool-names.py` | python | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu` | compiled: `tools/gates/aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | `--self-test` | — | — |
-| `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
-| `tools/bin/harbor-gates-linux-x64 check-no-test-sdk` | compiled: `tools/gates/check-no-test-sdk` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
-| `tools/bin/harbor-gates-linux-x64 check-public-api-resign` | compiled: `tools/gates/check-public-api-resign` | a change to the frozen surface is re-signed in the same commit, no row of a frozen baseline is written twice, and a baseline edit that only removes a row is a correction rather than a re-signing | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
+| `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | selftest, tree | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
+| `tools/bin/harbor-gates-linux-x64 check-no-test-sdk` | compiled: `tools/gates/check-no-test-sdk` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml, docs.yml | test-sdk-absent, tree | gate | `--self-test` | — | `--min-files 150` |
+| `tools/bin/harbor-gates-linux-x64 check-public-api-resign` | compiled: `tools/gates/check-public-api-resign` | a change to the frozen surface is re-signed in the same commit, no row of a frozen baseline is written twice, and a baseline edit that only removes a row is a correction rather than a re-signing | ci.yml, docs.yml | public-api, selftest, tree | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
 | `tools/bin/harbor-gates-linux-x64 check-reference-trimmer` | compiled: `tools/gates/check-reference-trimmer` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
-| `tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage` | compiled: `tools/gates/check-xml-doc-coverage` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
+| `tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage` | compiled: `tools/gates/check-xml-doc-coverage` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, tree | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
 | `tools/bin/harbor-gates-linux-x64 measure-build-cpu` | compiled: `tools/gates/measure-build-cpu` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, meas-analyzer-cost.yml, nightly.yml | measure, measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 measure-project-graph` | compiled: `tools/gates/measure-project-graph` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A measurement a human runs; only its self-test is called by CI | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 msbuild-evaluation-cost` | compiled: `tools/gates/msbuild-evaluation-cost` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | nightly.yml | measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 test-census` | compiled: `tools/gates/test-census` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 test-measurements` | compiled: `tools/gates/test-measurements` | the per-test measurements a CI run printed | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 test-skips` | compiled: `tools/gates/test-skips` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
-| `tools/bin/harbor-gates-linux-x64 check-analyzer-scope` | compiled: `tools/gates/check-analyzer-scope` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
+| `tools/bin/harbor-gates-linux-x64 check-analyzer-scope` | compiled: `tools/gates/check-analyzer-scope` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml, docs.yml | analyzer-scope, tree | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
 | `tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost` | compiled: `tools/gates/aggregate-analyzer-cost` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 all` | compiled: `tools/gates/all` | every gate that needs nothing but the tree, in ONE command: the tree gates start in parallel and print one table (gate, exit code, time, first line of the output). The list of them is in `tools/gates/all/gates.go`, and it is checked against the workflows, so a gate that needs what the build produces cannot be in it | docs.yml | tree, selftest | gate | `--self-test` | — | — |
 Two things the table says that are easy to miss:
@@ -345,8 +345,9 @@ Two things the table says that are easy to miss:
 ## The checker
 
 [`tools/check-gate-policy.py`](../tools/check-gate-policy.py) is the rule
-above, in code. It reads three sources - the table, the scripts in `tools/`,
-and the workflow files - and fails when they disagree:
+above, in code. It reads four sources - the table, the scripts in `tools/`,
+the workflow files, and the list of the tree runner - and fails when they
+disagree:
 
 | Rule | What it catches |
 |---|---|
@@ -367,11 +368,66 @@ and the workflow files - and fails when they disagree:
 | `POLICY-SCRIPT-MISSING` | a row naming a script that is not in the tree |
 | `POLICY-DUPLICATE-SCRIPT` | two rows for one script |
 | `POLICY-TABLE-EMPTY` | a table that lost rows |
+| `POLICY-ALL-LIST-UNREADABLE` | the list of the tree runner cannot be read, so the checker cannot tell which gates the runner runs |
+| `POLICY-ALL-GATE-MISSING` | a gate of the list of the tree runner that is in neither `tools/gates/<name>/` nor `tools/<name>.py` |
+| `POLICY-ALL-GATE-UNRUN` | a gate of the list of the tree runner that no workflow runs, neither directly nor through the runner |
+| `POLICY-ALL-FLOORS-WEAKER` | the tree runner runs a gate with fewer floors than the gate's own job passes |
 
 The rules it does not enforce are the ones no file can answer: what a gate
 checks, that its message names the violator, that it has no allow-list, and
 that it does not duplicate another gate. Those are reviewed by a human, and
 the document says so rather than pretending otherwise.
+
+## The tree runner is a runner, and the policy reads its list
+
+`harbor-gates all` runs many gates in ONE command, and a workflow that
+calls it runs every gate of its list that is compiled into the binary. That
+makes the runner a THIRD source of truth about what CI runs, and the
+checker has to read it — otherwise the table above describes a tree that
+does not exist any more the moment a per-gate job is replaced by the runner.
+
+**Where the list comes from.** The list is the Go source of the runner's
+package, [`tools/gates/all/gates.go`](../tools/gates/all/gates.go), and NOT
+the output of `harbor-gates all --list`:
+
+- the committed binaries are LINUX binaries, and the checker has to run on
+  any machine a developer sits at. A verdict that depends on the runner's
+  operating system is a verdict that is green by never running on every
+  machine that is not linux;
+- `--list` prints a HUMAN table ("what each gate needs"). Recovering
+  machine facts out of a human table couples the policy to a presentation
+  format, and the format is the thing most likely to change for a reader's
+  sake.
+
+The source cannot drift from the binary: the binary IS the build of that
+source, the `gates-binary` workflow rebuilds it from the sources in the
+same tree and compares the bytes on every pull request that touches
+`tools/gates/**`, and it rebuilds and commits it on every push to `dev`. A
+pull request that changes the list without rebuilding the binary is red
+there, not green here. And the parse is LOUD: a list that cannot be read is
+a finding (`POLICY-ALL-LIST-UNREADABLE`), never an empty list.
+
+**What the runner really runs.** The binary must not need python, so the
+runner runs the gates of the list that are COMPILED into it. A gate that is
+still a python script is not one of them: it needs a workflow of its own,
+and the local runner ([`tools/check-local.sh`](../tools/check-local.sh))
+runs it with python3.
+
+**The floors travel with the list.** The list carries the flags the
+workflow passes each gate, and the checker compares them with the floors the
+gate's own job passes. A runner that passed FEWER floors than another
+runner would be a runner where the gate can be green because it scanned
+nothing, and that is `POLICY-ALL-FLOORS-WEAKER`. The floors are therefore
+checked BY THE LIST of gates and not by the lines of a workflow: a gate
+whose job is deleted is still a gate with floors, and the runner is what
+passes them now.
+
+**What the table says about it.** For every gate the runner runs, the table
+names the workflow and the job of the runner (`docs.yml`, `tree`) beside the
+job that owns the gate, and the floors cell is the floors the runner passes
+it. The `tree` job of `docs.yml` is the job that runs
+`check-abstractions-contract`, `check-doc-facts`, `check-xml-doc-coverage`
+and `gen-seam-graph`; their own jobs are gone, and the table says so.
 
 Run it:
 
@@ -384,7 +440,9 @@ Its own `--self-test` plants one defect per rule in a synthetic tree and
 asserts that the rule fires, and that the same tree without the defect is
 clean. A rule that cannot fire is indistinguishable from a rule that found
 nothing, which is the failure every gate in this repository is tested
-against.
+against. The tree runner has its own fixtures: a gate of its list that
+nothing runs, a gate it runs without the floors of its own job, and a gate
+of its list that is not in the tree at all.
 
 ## Adding a gate
 

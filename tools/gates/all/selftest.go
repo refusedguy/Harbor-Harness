@@ -148,10 +148,10 @@ func selfTestRun() int {
 	planted := []invocation{
 		{workflow: "ci.yml", job: "test", gate: "check-test-dup", args: "TestResults/core"},
 	}
-	found := checkInvocations([]treeGate{{name: "check-test-dup"}}, planted)
+	found := checkInvocations(root, []treeGate{{name: "check-test-dup"}}, planted)
 	t.check("a gate that reads a TRX is not a tree gate", len(found) == 1,
 		"the check must fire on a gate that a workflow runs with an artifact of the build")
-	unused := checkInvocations([]treeGate{{name: "check-nothing-runs-it"}}, nil)
+	unused := checkInvocations(root, []treeGate{{name: "check-nothing-runs-it"}}, nil)
 	t.check("a gate no workflow runs is not in the list", len(unused) == 1,
 		"a gate nobody runs is a gate nobody reviews")
 
@@ -162,6 +162,30 @@ func selfTestRun() int {
 		return gate.Red
 	}
 	defer os.RemoveAll(fixture)
+
+	// 3b. The runner RUNS the gates of the list that are compiled into the
+	// binary, so a gate that no workflow calls directly is not a gate
+	// nobody runs. Without this, the check would call a gate that the
+	// `tree` job runs on every pull request a gate nobody runs, and would
+	// block a pull request that changed nothing.
+	runnerInvoked := []invocation{
+		{workflow: "docs.yml", job: "tree", gate: runnerGate},
+	}
+	covered := checkInvocations(fixture, []treeGate{{name: treeGates[0].name}}, runnerInvoked)
+	t.check("a gate the tree runner runs is not a gate nobody runs", len(covered) == 0,
+		"the runner runs the gates of the list that are compiled into the binary")
+
+	// 3c. And the runner does NOT run a gate that is still python: the
+	// binary must not need python, and such a gate needs a workflow of its
+	// own.
+	pythonGate := treeGate{name: "still-python"}
+	if err := os.WriteFile(filepath.Join(fixture, "tools", "still-python.py"),
+		[]byte("# a gate that is still python\n"), 0o644); err != nil {
+		t.fail("cannot create the python gate of the fixture: %v", err)
+	}
+	notCovered := checkInvocations(fixture, []treeGate{pythonGate}, runnerInvoked)
+	t.check("a gate that is still python is not run by the runner", len(notCovered) == 1,
+		"the binary must not need python: such a gate needs a workflow of its own")
 
 	opts := options{workers: 4, timeout: defaultTimeout}
 
