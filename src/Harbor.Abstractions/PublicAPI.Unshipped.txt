@@ -90,3 +90,7 @@ Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.init -> void
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.init -> void
+Harbor.Abstractions.Sessions.ICompactionEventStore
+Harbor.Abstractions.Sessions.ICompactionEventStore.AppendCompactionEventAsync(string! sessionId, Harbor.Abstractions.Sessions.SessionCompactionEvent! compactionEvent, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result>!
+Harbor.Abstractions.Sessions.ICompactionEventStore.GetCompactionEventsAsync(string! sessionId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>!>>!
+Harbor.Abstractions.Sessions.ISessionContext.CompactionEvents.get -> Harbor.Abstractions.Sessions.ICompactionEventStore?

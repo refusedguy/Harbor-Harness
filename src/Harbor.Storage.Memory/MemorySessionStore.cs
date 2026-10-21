@@ -13,7 +13,7 @@ namespace Harbor.Storage.Memory;
 ///     Implements Repository pattern (GOF) via ISessionStore.
 ///     All data is lost on process exit. Use for unit tests or one-shot prompts.
 /// </summary>
-public sealed partial class MemorySessionStore : ISessionStore
+public sealed partial class MemorySessionStore : ISessionStore, ICompactionEventStore
 {
     private readonly ConcurrentDictionary<string, List<AgentMessage>> _messages = new();
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
@@ -98,6 +98,9 @@ public sealed partial class MemorySessionStore : ISessionStore
             return Task.FromResult(Result.Failure(SessionStoreErrors.SessionNotFound(sessionId)));
         _sessions.TryRemove(sessionId, out _);
         _messages.TryRemove(sessionId, out _);
+        // #1767: the compaction records are part of the session's log — a
+        // deleted session leaves none of them behind.
+        _compactionEvents.TryRemove(sessionId, out _);
         return Task.FromResult(Result.Success());
     }
 
@@ -159,5 +162,7 @@ public sealed partial class MemorySessionStore : ISessionStore
     {
         _sessions.Clear();
         _messages.Clear();
+        // #1767: the compaction axis is cleared with the rest of the store.
+        _compactionEvents.Clear();
     }
 }

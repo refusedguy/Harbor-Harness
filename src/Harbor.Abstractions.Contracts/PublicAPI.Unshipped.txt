@@ -37,3 +37,33 @@ override Harbor.Abstractions.Sessions.SessionTranscript.ToString() -> string!
 static Harbor.Abstractions.Sessions.SessionTranscript.operator !=(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool
 static Harbor.Abstractions.Sessions.SessionTranscript.operator ==(Harbor.Abstractions.Sessions.SessionTranscript? left, Harbor.Abstractions.Sessions.SessionTranscript? right) -> bool
 const Harbor.Abstractions.Env.HarborEnv.SessionTier = "HARBOR_SESSION_TIER" -> string!
+Harbor.Abstractions.Sessions.SessionCompactionEvent
+Harbor.Abstractions.Sessions.SessionCompactionEvent.<Clone>$() -> Harbor.Abstractions.Sessions.SessionCompactionEvent!
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Equals(Harbor.Abstractions.Sessions.SessionCompactionEvent? other) -> bool
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Error.get -> string?
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Error.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Kind.get -> Harbor.Abstractions.Sessions.SessionCompactionEventKind
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Kind.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.OccurredAt.get -> System.DateTimeOffset
+Harbor.Abstractions.Sessions.SessionCompactionEvent.OccurredAt.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.OrphanedTurn.get -> int?
+Harbor.Abstractions.Sessions.SessionCompactionEvent.OrphanedTurn.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.PrunedMessageCount.get -> int
+Harbor.Abstractions.Sessions.SessionCompactionEvent.PrunedMessageCount.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Sequence.get -> int
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Sequence.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.SessionCompactionEvent() -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.TokensSaved.get -> int
+Harbor.Abstractions.Sessions.SessionCompactionEvent.TokensSaved.init -> void
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Turn.get -> int?
+Harbor.Abstractions.Sessions.SessionCompactionEvent.Turn.init -> void
+override Harbor.Abstractions.Sessions.SessionCompactionEvent.Equals(object? obj) -> bool
+override Harbor.Abstractions.Sessions.SessionCompactionEvent.GetHashCode() -> int
+override Harbor.Abstractions.Sessions.SessionCompactionEvent.ToString() -> string!
+static Harbor.Abstractions.Sessions.SessionCompactionEvent.operator !=(Harbor.Abstractions.Sessions.SessionCompactionEvent? left, Harbor.Abstractions.Sessions.SessionCompactionEvent? right) -> bool
+static Harbor.Abstractions.Sessions.SessionCompactionEvent.operator ==(Harbor.Abstractions.Sessions.SessionCompactionEvent? left, Harbor.Abstractions.Sessions.SessionCompactionEvent? right) -> bool
+Harbor.Abstractions.Sessions.SessionCompactionEventKind
+Harbor.Abstractions.Sessions.SessionCompactionEventKind.End = 1 -> Harbor.Abstractions.Sessions.SessionCompactionEventKind
+Harbor.Abstractions.Sessions.SessionCompactionEventKind.Start = 0 -> Harbor.Abstractions.Sessions.SessionCompactionEventKind
+Harbor.Abstractions.Sessions.CompactionLock
+static Harbor.Abstractions.Sessions.CompactionLock.FindOpenStart(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>! events) -> Harbor.Abstractions.Sessions.SessionCompactionEvent?

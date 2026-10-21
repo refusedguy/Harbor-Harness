@@ -29,7 +29,7 @@ namespace Harbor.Storage.Sqlite;
 ///         still don't (WAL + busy_timeout carry them).
 ///     </para>
 /// </remarks>
-public sealed class SqliteSessionStore : ISessionStore, ISessionCheckpointStore
+public sealed partial class SqliteSessionStore : ISessionStore, ISessionCheckpointStore, ICompactionEventStore
 {
 
     private readonly string _dbPath;
