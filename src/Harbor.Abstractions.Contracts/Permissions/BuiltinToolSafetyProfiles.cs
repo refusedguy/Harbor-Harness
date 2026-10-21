@@ -82,6 +82,15 @@ public static class BuiltinToolSafetyProfiles
             PeerSupervision = PeerSupervisionRole.Direct
         },
 
+        // #1761: the goal axis. The argument is an operation name and a
+        // free-text reason — never a path — so the profile is Opaque. The
+        // category is deliberately NONE: the tool mutates the session's goal
+        // record, not the workspace, and claiming the Write class would make
+        // a category rule ("write: *") authorise it by accident. An
+        // unclassified tool matches no category rule, which is the
+        // fail-closed reading.
+        new("goal", ToolSafetyProfile.Opaque),
+
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See
         // `BuiltinToolSafetyDeclarationsTests`, which is what keeps that honest.

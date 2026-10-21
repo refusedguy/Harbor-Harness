@@ -65,6 +65,12 @@
        the benchmark binds it directly (tests/Harbor.Benchmarks/StreamingCoalescerBenchmark.cs). -->
   <ItemGroup>
     <InternalsVisibleTo Include="Harbor.Benchmarks"/>
+    <!-- #1761: the goal round driver is an internal collaborator of the loop
+         (the same shape as TurnRunner and ToolDispatcher), so the test that
+         pins its decisions has to reach it. The pattern is the repo's: a
+         product assembly opens its internals to the project that tests them
+         (Harbor.Tools.Builtin -> Harbor.Tools.Builtin.Tests, and so on). -->
+    <InternalsVisibleTo Include="Harbor.Application.Tests"/>
   </ItemGroup>
 
 </Project>
