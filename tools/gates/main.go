@@ -54,6 +54,7 @@ import (
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
+	"harbor.local/gates/measure-compile-cost"
 	"harbor.local/gates/measure-project-graph"
 	"harbor.local/gates/msbuild-evaluation-cost"
 	"harbor.local/gates/test-census"
@@ -130,8 +131,13 @@ var registry = []registered{
 		run:     measurebuildcpu.Run,
 	},
 	{
+		name:    "measure-compile-cost",
+		summary: "what every project costs the compiler, and what a change in it costs",
+		run:     measurecompilecost.Run,
+	},
+	{
 		name:    "measure-project-graph",
-		summary: "the shape of the project dependency graph",
+		summary: "the shape of the project dependency graph, and the radius of a change",
 		run:     measureprojectgraph.Run,
 	},
 	{
