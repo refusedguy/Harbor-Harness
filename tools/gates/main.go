@@ -43,6 +43,7 @@ import (
 	"strings"
 
 	docfacts "harbor.local/gates/check-doc-facts"
+	dupjscpd "harbor.local/gates/check-dup-jscpd"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
 	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
@@ -68,6 +69,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-dup-jscpd",
+		summary: "the second duplication detector, against the committed baseline",
+		run:     dupjscpd.Run,
 	},
 	{
 		name:    "check-test-json-reflection",

@@ -177,7 +177,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
-| `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
+| `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
 | `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
@@ -352,15 +352,15 @@ expiry date, and an expired exemption fails the gate.
 
 ## The second duplication detector — issue 1847
 
-`tools/check-dup-jscpd.py` is a **second** detector. It does not replace
+`harbor-gates check-dup-jscpd` is a **second** detector. It does not replace
 `check-test-dup.py`, and it is not a second copy of it: the two engines
 answer different questions, and the answers only partly overlap.
 
 ```bash
-./tools/check-dup-jscpd.py --run                  # download the pinned binary, scan, compare
-./tools/check-dup-jscpd.py --self-test            # prove the gate still fails on an empty scan
-./tools/check-dup-jscpd.py --update               # re-measure the baseline after the tree changes
-./tools/check-dup-jscpd.py --run --baseline-ref origin/dev   # add the new-clone delta
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run                  # download the pinned binary, scan, compare
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --self-test            # prove the gate still fails on an empty scan
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --update               # re-measure the baseline after the tree changes
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --baseline-ref origin/dev   # add the new-clone delta
 ```
 
 **What it is.** jscpd 5.4.1 (MIT, a self-contained Rust binary) matches
@@ -384,7 +384,7 @@ gate scans `tests/` only, so the product code has no duplication gate at all.
 | | files | clones / groups | duplicated lines | wall |
 |---|---|---|---|---|
 | `check-test-dup.py` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
-| `check-dup-jscpd.py` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
+| `check-dup-jscpd` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
 
 Over the test tree the two overlap on 1965 lines: 30.0% of the python gate's
 duplicated lines, 23.3% of jscpd's. 37 of the python gate's 206 groups sit

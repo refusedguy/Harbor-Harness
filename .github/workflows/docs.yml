@@ -106,11 +106,12 @@ on:
       # measures.
       - 'tools/check-test-dup.py'
       - 'tools/test-dup-baseline.json'
-      # #1847. `check-dup-jscpd.py` scans `src/`, `apps/` and `tests/` and
-      # compares the result against its committed baseline, so a PR that
+      # #1847. The second duplication gate scans `src/`, `apps/` and `tests/`
+      # and compares the result against its committed baseline, so a PR that
       # edits the gate, the config or the baseline must run it — and so must
-      # a PR that edits the tree it measures.
-      - 'tools/check-dup-jscpd.py'
+      # a PR that edits the tree it measures. The gate is compiled now; its
+      # sources are under `tools/gates/`, which the trigger below already
+      # covers.
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
       # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
@@ -252,8 +253,9 @@ on:
       # #1847. Same trigger as above: the second duplication gate measures
       # `src/`, `apps/` and `tests/` and compares the result against its
       # committed baseline, so a PR that edits the tree it measures — or the
-      # gate, the config, or the baseline — must run it.
-      - 'tools/check-dup-jscpd.py'
+      # gate, the config, or the baseline — must run it. The gate is compiled
+      # now; its sources are under `tools/gates/`, which the trigger below
+      # already covers.
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
       # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
@@ -435,7 +437,7 @@ jobs:
       # nothing. The second fixture is the growth: a tree that duplicated
       # more than the baseline allows must fail.
       - name: Second duplication gate fails on an empty scan and on growth
-        run: python3 tools/check-dup-jscpd.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-dup-jscpd --self-test
       # #1823. The ninth gate is the only one that asks whether a test
       # project is claimed by a CI list AT ALL. The other gates read the
       # contents of the test tree; this one reads the lists that decide
@@ -872,8 +874,8 @@ jobs:
   # diff, where a reviewer sees it.
   #
   # The binary is downloaded from the release, sha256-pinned per platform
-  # inside `tools/check-dup-jscpd.py`, and it is a build-time tool: it never
-  # reaches the product, and no `PackageReference` is added, so the
+  # inside `tools/gates/check-dup-jscpd`, and it is a build-time tool: it
+  # never reaches the product, and no `PackageReference` is added, so the
   # dependency gate does not see it.
   merge-loss:
     name: local squash-merges dropped nothing
@@ -996,9 +998,9 @@ jobs:
             base="$(git rev-parse HEAD^ 2>/dev/null || true)"
           fi
           if [ -n "$base" ]; then
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json --baseline-ref "$base"
+            tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --report jscpd-report.json --baseline-ref "$base"
           else
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json
+            tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --report jscpd-report.json
           fi
       # The report is the work list: every clone with its file, its line
       # range and its size, which is what the next duplication ticket needs.
