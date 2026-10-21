@@ -55,6 +55,17 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(AssistantPayload))]
 [JsonSerializable(typeof(ToolResultPayload))]
 [JsonSerializable(typeof(JsonElement))]
+// #1750: the session archive. The manifest, its index and the log's line
+// shapes are serialized through this context too, so the archive rides the
+// same AOT-safe path as the session file — no reflection, no second codec.
+[JsonSerializable(typeof(SessionArchiveManifest))]
+[JsonSerializable(typeof(SessionArchiveAttachment))]
+[JsonSerializable(typeof(SessionArchiveIntegrity))]
+[JsonSerializable(typeof(ArchiveSessionLine))]
+[JsonSerializable(typeof(ArchiveMessageLine))]
+[JsonSerializable(typeof(ArchiveRewindLine))]
+[JsonSerializable(typeof(ArchiveUserPayload))]
+[JsonSerializable(typeof(ArchiveAttachmentRef))]
 internal sealed partial class JsonlCodecContext : JsonSerializerContext
 {
     /// <summary>

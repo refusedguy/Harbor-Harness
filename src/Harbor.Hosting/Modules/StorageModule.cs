@@ -52,6 +52,14 @@ internal static class StorageModule
         // Session import/export works over ANY registered backend: the porter reads via
         // ISessionStore and encodes through the shared JSONL message codec (V4-slice).
         services.AddSingleton<ISessionPorter, JsonlSessionPorter>();
+        // #1750: the session ARCHIVE — one zip holding the canonical log, the
+        // attachments and the manifest. It is given the credential values the
+        // process holds for the same reason the keyless tier is: the archive
+        // is the artifact that LEAVES the machine, so it must not carry a
+        // credential even when the log on disk was written in the local tier.
+        services.AddSingleton(sp => new SessionArchiveWriter(
+            sp.GetRequiredService<ILogger<SessionArchiveWriter>>(),
+            SessionLogEnvironment.ReadSecretValues()));
         return services;
     }
 }
