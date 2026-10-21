@@ -2,36 +2,68 @@
 #
 # Autobuild-driven (the repo's zero-warning Release gate is unrelated here —
 # CodeQL builds Debug to observe the compiler). Weekly schedule + pushes to
-# mainline branches + PRs targeting them. Secret scanning itself is a repo
-# setting (enabled in Settings → Code security); push protection covers
+# mainline branches + PRs into the release branch. Secret scanning itself is a
+# repo setting (enabled in Settings → Code security); push protection covers
 # leaks in commits.
 name: codeql
 
-# WHERE THE PR SCAN RUNS, AND WHY ONLY THERE
+# WHERE THE SCAN RUNS, AND WHY ONLY THERE
 #
-# A PR's merge commit and the push to that branch carry the same content,
-# so a PR-lane scan and the branch's push scan see the same code. The only
-# thing the PR lane buys is TIMING: the finding arrives before the merge
-# instead of after it.
+# Three lanes, one job (`analyze`), three purposes:
 #
-# That matters exactly where the merge is a release, so the pull_request
-# trigger is scoped to `master` (the release branch, whose push is what the
-# `publish` job ships from). A PR into `dev` is covered by the push scan of
-# dev, which runs minutes after the merge, and the dev tree is a working
-# branch, not a release.
+#   push on dev        the working line. Every merge that changes the C#
+#                      surface is analysed, and a scan that a newer tree
+#                      supersedes is dropped (see `concurrency` below).
+#   push on master     the release line. Its push is what the `publish` job
+#                      ships from, so the shipped tree is the analysed tree.
+#   pull_request on    the release gate: a PR into master is scanned BEFORE
+#     master            it ships. A PR into dev is covered by the dev push
+#                      scan, minutes after the merge, because dev is a
+#                      working branch and not a release.
+#   schedule (Mondays) the query-base update: the only thing that changes
+#                      without a code change. It analyses the default branch
+#                      (master today).
 #
-# What the unscoped PR lane cost, measured over the last 24 h: 11.5
-# runner-minutes per attempt (mean of 17 runs) and an 11-minute hold on a
-# runner slot, in a pool whose queueing is the actual bottleneck. At 20 open
-# PRs that is 20 slots held for 11 minutes each, for advice rather than a
-# check (no ruleset is enforced on dev/master).
+# THE `paths` FILTER, ON EVERY LANE
 #
-# The `concurrency` group below drops a superseded run of the same branch
-# (PR lane only); pushes are never cancelled, so the mainline scan always
-# runs.
+# The analysis output can only change when the C# surface (`src/`, `apps/`) or
+# this workflow changes. A commit that touches neither has the tree of the last
+# analysed commit, so scanning it re-derives the same answer for another
+# ~11.7 runner-minutes. The filter is the same on the push and the PR trigger,
+# so the lanes agree on what "a change that can move the analysis" is.
+#
+# MEASURED (GitHub API, workflow `codeql`, job `analyze`, 2026-10-20)
+#
+#   PR lane, before it was narrowed to master:
+#     100 runs, 1150.3 runner-minutes, mean 11.5 min per run.
+#   dev push lane, in the 11.6 h after that change:
+#     100 push events, 38 of which changed the C# surface, 37 scans that ran
+#     (63 runs were cancelled while queued and cost nothing), 433.0
+#     runner-minutes spent, 11.7 min per scan, plus 243 minutes of queue
+#     wait.
+#     26 of the 37 scans were superseded by a newer push before they finished,
+#     and the newer tree contains the older one, so those scans answered a
+#     question nobody asked any more.
+#     62 of the 100 dev pushes changed no `src/**`, no `apps/**` and not this
+#     file: 62% of the lane re-analysed a tree that had not changed.
+#
+# THE `concurrency` GROUP
+#
+# A superseded run of the same branch is dropped: the newer tree's scan
+# supersedes the older one's, and the newer scan is the one that matters. Two
+# lanes are never dropped:
+#   - the release lane (push on master): a release scan has to finish;
+#   - the weekly schedule: it is the query-base update, and it is the only
+#     scan that does not depend on a code change.
+# The event name is part of the group, so the weekly schedule and a master push
+# (both on `refs/heads/master`) do not cancel each other.
 on:
   push:
     branches: [master, dev]
+    paths:
+      - "src/**"
+      - "apps/**"
+      - ".github/workflows/codeql.yml"
   pull_request:
     # The release gate: a PR into master is scanned before it ships.
     branches: [master]
@@ -41,16 +73,11 @@ on:
       - ".github/workflows/codeql.yml"
   schedule:
     - cron: "17 3 * * 1" # Mondays 03:17 UTC, off-peak
+  workflow_dispatch: # re-run on demand, e.g. after a CodeQL query-base bump
 
-# The other PR-triggered workflows all carry a `concurrency` group with
-# cancel-in-progress; this one did not, so a superseded CodeQL run kept
-# a runner slot for its full ~11 minutes and none of the 3.7 runs per
-# PR were ever cancelled. The group is per branch, so a push to
-# dev/master still runs unconditionally -- only superseded runs of the
-# same branch are dropped.
 concurrency:
-  group: codeql-${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: codeql-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' }}
 
 permissions: {}
 
