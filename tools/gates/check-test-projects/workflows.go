@@ -464,7 +464,9 @@ func nukeTestTarget(root string) *nukeTarget {
 		return nil
 	}
 	target := &nukeTarget{suffix: "Tests"}
-	if match := regexp.MustCompile(`ExcludedSubstrings\s*=\s*\[(.*?)\]`).FindStringSubmatch(text); match != nil {
+	// The excluded substrings are read out of the source, and the list
+	// spans several lines: the pattern has to match newlines too.
+	if match := regexp.MustCompile(`(?s)ExcludedSubstrings\s*=\s*\[(.*?)\]`).FindStringSubmatch(text); match != nil {
 		for _, name := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(match[1], -1) {
 			target.excluded = append(target.excluded, name[1])
 		}

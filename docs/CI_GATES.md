@@ -15,18 +15,18 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (the merge with `dev` at `ab4638f3`), the tree the
-table was last reconciled against:
+Measured on this branch (the eight gates this port moved into the compiled
+binary), the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 51 files, 40 029 lines |
-| of them, the `check-*.py` family | 24 files, 23 743 lines |
+| python tools in `tools/` | 40 files, 28 883 lines |
+| of them, the `check-*.py` family | 16 files, 15 275 lines |
 | workflows that run a python tool | 7: `ci.yml`, `demo.yml`, `docs.yml`, `meas-analyzer-cost.yml`, `meas-build-vcpu.yml`, `nightly.yml`, `test-os.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`harbor-gates check-test-dup`, `--warn-only` while the removal programme runs) |
-| controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
+| controls for compile-time gates | 1 (`harbor-gates check-tunit-analyzer-gate`) |
+| reporters, helpers, libraries | 9 reporters, 8 helpers, 2 libraries |
 | tools with a self-test | 38 |
 | tools with a ratchet | 21 |
 | tools with a floor | 26 |
@@ -243,14 +243,14 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (48 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (40 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 42 tools are run by a workflow; the other seven are
-`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
-other tools rather than run, `measure-project-graph.py`, which a human runs to
-read the project graph, `codemod-test-events.py` and `codemod-tool-schemas.py`,
-which rewrite hand-built sources. All of them are listed, because a tool that
+tree. 43 tools are run by a workflow; the other seven are
+`gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
+`string-switch-rewrites.py`, which are loaded by other tools rather than
+run, `measure-project-graph.py`, which a human runs to read the project
+graph, `codemod-test-events.py`, `codemod-tool-names.py` and
+`codemod-tool-schemas.py`, which rewrite hand-built sources. All of them are listed, because a tool that
 is not listed is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
