@@ -545,7 +545,7 @@ internal static class SessionFileReader
             return false;
         }
 
-        inbox.AddRewind(entry);
+        inbox.AddRewind(entry!);
         return true;
     }
 
