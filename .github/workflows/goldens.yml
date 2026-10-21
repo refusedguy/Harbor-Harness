@@ -21,6 +21,19 @@
 # a frame that changed without its baseline changing in the same PR fails the
 # build, and a baseline that changed without the frame is where the reviewer
 # looks.
+#
+# THE SUITE LIST (#1776) — one list for every lane, mirroring the table in
+# docs/DEVELOPMENT.md §Golden baselines:
+#
+#   tests/Harbor.Tui.CellForge.Tests   celldiff + generic-layout baselines
+#   tests/Harbor.Tui.RendererTests      renderer frames (tests/fixtures/renderer-frames)
+#   tests/Harbor.E2E.App.Avalonia      Avalonia component + frame snapshots
+#
+# The PTY lane (tests/Harbor.Tui.CellForge.PtyTests) is NOT in the list: its
+# goldens are opt-in (the scenario only compares when HARBOR_ENFORCE_GOLDEN=1)
+# and its test methods do not carry "Golden" in their names, so the filter
+# below would discover nothing there and the verify pass would fail the job
+# on an empty run.
 name: goldens
 
 on:
@@ -57,7 +70,7 @@ jobs:
         run: |
           set -uo pipefail
           if [ -z "${{ inputs.suites }}" ]; then
-            suites="tests/Harbor.Tui.CellForge.Tests"
+            suites="tests/Harbor.Tui.CellForge.Tests tests/Harbor.Tui.RendererTests tests/Harbor.E2E.App.Avalonia"
           else
             suites="${{ inputs.suites }}"
           fi

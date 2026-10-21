@@ -2432,7 +2432,31 @@ jobs:
         with:
           job-name: test (${{ matrix.shard }})
   aot-publish:
-    needs: [changes, build]
+    # The AOT publish does NOT consume the build job's output. It publishes
+    # the tree from source, with its own restore, and it downloads no
+    # artifact of the build's — the job's only inputs are the checkout and
+    # the SDK. `needs: build` was a SEQUENCING choice ("start from a tree
+    # already known to compile"), and it cost every pull request its TAIL:
+    # the job is 222 s of own time (median over 95 runs) — the longest in
+    # the post-build burst — and it sat AFTER the build, so the wall was
+    # `build + aot-publish` instead of `max(build, aot-publish)`.
+    #
+    # Measured on the run that carries the current graph (39543869492, dev,
+    # 2026-10-21): the wall after the build was 224 s, and 222 s of it was
+    # this job. Its own wait for a runner was 2 s — it was not waiting for a
+    # RUNNER, it was waiting for the BUILD.
+    #
+    # What changes: the job starts with the build instead of after it, so it
+    # overlaps a build that is longer than it is (336-436 s against 222 s),
+    # and the post-build burst loses one job and 222 s of service time.
+    #
+    # ONE TRADE-OFF, stated: when the BUILD is red, this job now runs and
+    # reports its own verdict instead of being skipped. That verdict is
+    # informative (the AOT publish compiles the product tree, not the tests,
+    # so a PR that breaks only a test project must still get a green AOT
+    # signal), and the pull request was red either way. The price is 222 s
+    # of runner time on a red pull request.
+    needs: [changes]
     # The CHECK is unchanged (same recipe, same committed inventory, same
     # "the published binary must run" half, same aot-publish-gate.py
     # comparison). What changed is WHEN the job is allowed to spend a
