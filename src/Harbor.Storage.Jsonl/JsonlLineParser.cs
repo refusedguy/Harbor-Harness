@@ -369,6 +369,7 @@ internal static class JsonlLineParser
         string? tn = null;
         string? output = null;
         bool isError = false;
+        ToolErrorInfo? errorInfo = null;
 
         while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
         {
@@ -392,6 +393,9 @@ internal static class JsonlLineParser
                 case ResultEntryProperty.IsError:
                     isError = reader.GetBoolean();
                     break;
+                case ResultEntryProperty.ErrorInfo:
+                    errorInfo = ParseErrorInfo(ref reader);
+                    break;
                 default:
                     reader.Skip();
                     break;
@@ -401,7 +405,70 @@ internal static class JsonlLineParser
         if (tcId is null || tn is null || output is null)
             return Result.Failure<ToolResultEntry>($"tool_result message {messageId}: malformed result entry");
 
-        return Result.Success<ToolResultEntry>(new ToolResultEntry(tcId, tn, output, isError));
+        return Result.Success<ToolResultEntry>(new ToolResultEntry(tcId, tn, output, isError)
+        {
+            ErrorInfo = errorInfo,
+        });
+    }
+
+    /// <summary>
+    ///     Parses the structured error of a result entry (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     The reader must sit on the error object's StartObject; it is left on
+    ///     that object's EndObject. An entry written before the structured code
+    ///     existed carries no such member at all, and an absent member is the
+    ///     honest reading of a record that never had one — not a defect to
+    ///     repair. A member that IS present but carries no code is unreadable
+    ///     (the code is the record) and yields no error rather than half of one.
+    /// </remarks>
+    private static ToolErrorInfo? ParseErrorInfo(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return null;
+        }
+
+        string? name = null;
+        string? code = null;
+        string? reason = null;
+
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+        {
+            if (reader.TokenType != JsonTokenType.PropertyName)
+                continue;
+
+            ReadOnlySpan<byte> prop = reader.ValueSpan;
+            reader.Read();
+
+            if ((prop.SequenceEqual("name"u8) || prop.SequenceEqual("Name"u8))
+                && reader.TokenType == JsonTokenType.String)
+            {
+                name = reader.GetString();
+            }
+            else if ((prop.SequenceEqual("code"u8) || prop.SequenceEqual("Code"u8))
+                && reader.TokenType == JsonTokenType.String)
+            {
+                code = reader.GetString();
+            }
+            else if ((prop.SequenceEqual("reason"u8) || prop.SequenceEqual("Reason"u8))
+                && reader.TokenType == JsonTokenType.String)
+            {
+                reason = reader.GetString();
+            }
+            else
+            {
+                reader.Skip();
+            }
+        }
+
+        if (code is null)
+        {
+            return null;
+        }
+
+        return new ToolErrorInfo(name ?? ToolErrorCodes.NameFor(code), code, reason);
     }
 
     /// <summary>Parses the <c>attachments</c> array of a user payload (#386).</summary>
@@ -616,7 +683,7 @@ internal static class JsonlLineParser
     private enum AttachmentProperty : byte { Other, Path, MimeType, Width, Height, Data }
     private enum AssistantProperty : byte { Other, Parts, StopReason, Usage, Model, IsSummary, SummaryFirstKeptId }
     private enum ToolResultProperty : byte { Other, Results }
-    private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError }
+    private enum ResultEntryProperty : byte { Other, ToolCallId, ToolName, Output, IsError, ErrorInfo }
     private enum PartProperty : byte { Other, Type, Text, Id, ToolName, Args, Path, MimeType, SizeBytes }
 
     private static LineProperty MatchLineProperty(ReadOnlySpan<byte> p) => p switch
@@ -672,6 +739,11 @@ internal static class JsonlLineParser
         var x when x.SequenceEqual("toolName"u8) => ResultEntryProperty.ToolName,
         var x when x.SequenceEqual("output"u8) => ResultEntryProperty.Output,
         var x when x.SequenceEqual("isError"u8) => ResultEntryProperty.IsError,
+        // #1760: the structured error of the entry. Both spellings are
+        // accepted — the camelCase one is what the writer emits, the
+        // PascalCase one costs one comparison and keeps a hand-edited file
+        // readable.
+        var x when x.SequenceEqual("errorInfo"u8) || x.SequenceEqual("ErrorInfo"u8) => ResultEntryProperty.ErrorInfo,
         _ => ResultEntryProperty.Other
     };
 

@@ -95,6 +95,39 @@ public interface ITool
     public ToolSafetyProfile SafetyProfile { get; }
 
     /// <summary>
+    ///     The tool's own execution budget, in milliseconds (#1760).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <see langword="null" /> (the default) means "no opinion": the
+    ///         call inherits the agent's common default
+    ///         (<see cref="Agents.AgentDefinition.ToolTimeoutSeconds" />), or
+    ///         runs unbounded when there is none either.
+    ///     </para>
+    ///     <para>
+    ///         A tool that declares a budget OWNS it: the number is a fact
+    ///         about the tool (a network fetch takes seconds, a directory
+    ///         listing takes milliseconds), and a default that overrode it
+    ///         would make the declaration pointless. See
+    ///         <see cref="ToolTimeouts" /> for the precedence and
+    ///         <see cref="ToolTimeouts.IsValid" /> for what a valid value is.
+    ///     </para>
+    ///     <para>
+    ///         A non-positive value is refused at registration: a zero budget
+    ///         would cancel the call before it started, and a negative one is
+    ///         a typo that would otherwise read as "no deadline".
+    ///     </para>
+    ///     <para>
+    ///         The budget covers the WHOLE call, the permission gate included
+    ///         — the same span the agent's common default has always covered.
+    ///         A tool that has to wait for a permission answer therefore spends
+    ///         its budget on that wait, which is worth knowing before a budget
+    ///         is picked for a tool whose permission is an ASK.
+    ///     </para>
+    /// </remarks>
+    public int? TimeoutMs => null;
+
+    /// <summary>
     ///     Optional one-line snippet injected into the system prompt's "Available Tools" list.
     /// </summary>
     public string? PromptSnippet { get; }

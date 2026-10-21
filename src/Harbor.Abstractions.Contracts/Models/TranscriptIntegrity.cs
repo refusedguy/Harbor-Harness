@@ -239,11 +239,16 @@ public static class TranscriptInspector
             }
 
             results ??= new List<ToolResultEntry>();
+            // #1760: the closure carries the structured code too, so a policy
+            // reads the code and not the text. The text already leads with it.
             results.Add(new ToolResultEntry(
                 call.Id,
                 call.ToolName,
                 UnresolvedToolCall.OutcomeUnknownText(call.ToolName),
-                true));
+                true)
+            {
+                ErrorInfo = ToolErrorCodes.Create(UnresolvedToolCall.OutcomeUnknownCode),
+            });
         }
 
         if (results is null)
