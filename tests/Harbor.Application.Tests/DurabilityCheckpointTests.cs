@@ -43,6 +43,17 @@ public class DurabilityCheckpointTests
     /// <summary>The reason a broken checkpoint reports, in the words the refusal carries.</summary>
     private const string BrokenCheckpoint = "disk full (simulated)";
 
+    /// <summary>
+    ///     The answer a context gives when its state is not durable: the
+    ///     boundary the checkpoint was protecting, and the cause.
+    /// </summary>
+    /// <param name="reason">The boundary the checkpoint protected.</param>
+    /// <returns>The failure the caller refuses the work on.</returns>
+    private static Result NotDurable(string reason) =>
+        Result.Failure(
+            $"Session log durability checkpoint failed ({reason}): {BrokenCheckpoint}. "
+            + "The session log does not survive a crash, so work that depends on it did not start.");
+
     private static Session NewSession() =>
         Session.Create("/tmp/harbor-1765-durability", "code", "test", "test-model");
 
@@ -207,10 +218,10 @@ public class DurabilityCheckpointTests
             if (string.Equals(reason, ToolDispatcher.ToolBodyCheckpointReason, StringComparison.Ordinal))
             {
                 broken = true;
-                return Task.FromResult(Result.Failure(BrokenCheckpoint));
+                return Task.FromResult(NotDurable(reason));
             }
 
-            return Task.FromResult(broken ? Result.Failure(BrokenCheckpoint) : Result.Success());
+            return Task.FromResult(broken ? NotDurable(reason) : Result.Success());
         });
 
         var loop = NewLoop(client, tool, agent);
@@ -264,7 +275,7 @@ public class DurabilityCheckpointTests
         var client = ScriptedClient();
         var session = new CheckpointSessionContext(
             NewSession(),
-            (_, _) => Task.FromResult(Result.Failure(BrokenCheckpoint)));
+            (reason, _) => Task.FromResult(NotDurable(reason)));
 
         var loop = NewLoop(client, tool, agent);
         Result result = await loop.RunAsync(session, agent);
@@ -273,6 +284,9 @@ public class DurabilityCheckpointTests
         await Assert.That(tool.Executions).IsEqualTo(0);
         await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("durability checkpoint");
+        // The boundary the failed checkpoint protected is named in the reason
+        // the user reads: the run stopped before the model request.
+        await Assert.That(result.Error).Contains("before the model request");
         await Assert.That(result.Error).Contains(BrokenCheckpoint);
     }
 
