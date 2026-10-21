@@ -58,8 +58,13 @@ public sealed class ScopedProviderResolver : IScopedProviderResolver
 
         lock (_scopeGate)
         {
-            return _agentScopes.TryGetValue(agent, out ServiceScope scope) ? scope : ServiceScope.Default;
+            if (_agentScopes.TryGetValue(agent, out var scope))
+            {
+                return scope;
+            }
         }
+
+        return ServiceScope.Default;
     }
 
     /// <inheritdoc />

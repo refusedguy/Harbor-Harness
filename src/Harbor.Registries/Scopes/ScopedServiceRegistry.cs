@@ -68,13 +68,13 @@ public sealed class ScopedServiceRegistry<TKey, TService>
 
         lock (_gate)
         {
-            if (_bindings.TryGetValue((scope, key), out TService scoped))
+            if (_bindings.TryGetValue((scope, key), out var scoped))
             {
                 return Result.Success(scoped);
             }
 
             if (scope != ServiceScope.Default
-                && _bindings.TryGetValue((ServiceScope.Default, key), out TService inherited))
+                && _bindings.TryGetValue((ServiceScope.Default, key), out var inherited))
             {
                 return Result.Success(inherited);
             }
