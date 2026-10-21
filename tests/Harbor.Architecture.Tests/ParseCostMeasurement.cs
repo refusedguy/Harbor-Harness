@@ -120,13 +120,13 @@ public sealed class ParseCostMeasurement
                 $"[arch-cost] stripper {cost.Name} files={cost.Files} chars={cost.Chars} "
                 + $"measured-mb={cost.MeasuredBytes / 1024.0 / 1024.0:F1} "
                 + $"projected-mb={cost.ProjectedBytes / 1024.0 / 1024.0:F1} "
-                + $"not-run={cost.NotRun} ms={cost.ElapsedMilliseconds}");
+                + $"not-run={cost.NotRun} ms={ToMilliseconds(cost.ElapsedTicks):F1}");
 
-            foreach ((string file, long bytes, long ms) in cost.Top(5))
+            foreach ((string file, long bytes, long ticks) in cost.Top(5))
             {
                 Console.WriteLine(
                     $"[arch-cost] stripper {cost.Name} worst file={file} "
-                    + $"measured-mb={bytes / 1024.0 / 1024.0:F1} ms={ms}");
+                    + $"measured-mb={bytes / 1024.0 / 1024.0:F1} ms={ToMilliseconds(ticks):F1}");
             }
         }
 
@@ -176,13 +176,13 @@ public sealed class ParseCostMeasurement
 
         // (1) The rule's own scan, through the rule's own matcher.
         long before = GC.GetAllocatedBytesForCurrentThread();
-        var watch = Stopwatch.StartNew();
+        long started = Stopwatch.GetTimestamp();
         IReadOnlyList<string> hits = TokenCellSingleHomeRules.LiveHits();
-        watch.Stop();
+        long finished = Stopwatch.GetTimestamp();
         long after = GC.GetAllocatedBytesForCurrentThread();
 
         Console.WriteLine(
-            $"[arch-cost] rule token-cell live hits={hits.Count} ms={watch.ElapsedMilliseconds} "
+            $"[arch-cost] rule token-cell live hits={hits.Count} ms={ToMilliseconds(finished - started):F1} "
             + $"alloc-mb={(after - before) / 1024.0 / 1024.0:F1}");
 
         foreach (string hit in hits)
@@ -235,8 +235,8 @@ public sealed class ParseCostMeasurement
 
         double toMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
         Console.WriteLine(
-            $"[arch-cost] rule token-cell pattern lines={lines} lookahead-ms={lookaheadTicks * toMs:F0} "
-            + $"split-ms={splitTicks * toMs:F0} lookahead-matches={lookaheadMatches} split-matches={splitMatches}");
+            $"[arch-cost] rule token-cell pattern lines={lines} lookahead-ms={lookaheadTicks * toMs:F1} "
+            + $"split-ms={splitTicks * toMs:F1} lookahead-matches={lookaheadMatches} split-matches={splitMatches}");
 
         // (3) The parser the ALTERNATIVE would use: Roslyn over the same tree.
         var options = new CSharpParseOptions(LanguageVersion.Preview);
@@ -260,7 +260,7 @@ public sealed class ParseCostMeasurement
 
         Console.WriteLine(
             $"[arch-cost] roslyn parse files={parseFiles} chars={parseChars} "
-            + $"ms={parseTicks * toMs:F0}");
+            + $"ms={parseTicks * toMs:F1}");
 
         // The controls: the corpus a second implementation must reproduce.
         foreach (ScanControl control in TokenCellSingleHomeRules.ControlCorpus())
@@ -303,9 +303,14 @@ public sealed class ParseCostMeasurement
     /// <summary>
     ///     One measured call: how many bytes it allocated and how long it took.
     /// </summary>
+    /// <remarks>
+    ///     The time is counted in TICKS, not in milliseconds: the scanner's
+    ///     whole pass over the tree takes less than a millisecond per file,
+    ///     and an integer millisecond per file would report the sum as zero.
+    /// </remarks>
     /// <param name="text">The text to measure over.</param>
     /// <param name="implementation">The implementation to measure.</param>
-    private static (long AllocatedBytes, long ElapsedMilliseconds) Measure(
+    private static (long AllocatedBytes, long Ticks) Measure(
         string text,
         Func<string, string> implementation)
     {
@@ -315,13 +320,18 @@ public sealed class ParseCostMeasurement
         _ = implementation("/* warm */\n// warm\n");
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        var watch = Stopwatch.StartNew();
+        long started = Stopwatch.GetTimestamp();
         _ = implementation(text);
-        watch.Stop();
+        long finished = Stopwatch.GetTimestamp();
         long after = GC.GetAllocatedBytesForCurrentThread();
 
-        return (after - before, watch.ElapsedMilliseconds);
+        return (after - before, finished - started);
     }
+
+    /// <summary>Ticks to milliseconds, with the fraction kept.</summary>
+    /// <param name="ticks">The ticks to convert.</param>
+    private static double ToMilliseconds(long ticks) =>
+        ticks * 1000.0 / Stopwatch.Frequency;
 
     /// <summary>
     ///     Every <c>*.cs</c> file under a directory, build output excluded.
@@ -356,7 +366,7 @@ public sealed class ParseCostMeasurement
     /// <summary>One implementation's cost over the tree, and the files that cost the most.</summary>
     private sealed class TreeCost(string name)
     {
-        private readonly List<(string File, long Bytes, long Ms)> _files = [];
+        private readonly List<(string File, long Bytes, long Ticks)> _files = [];
 
         internal string Name { get; } = name;
 
@@ -373,17 +383,17 @@ public sealed class ParseCostMeasurement
         /// <summary>How many files were not run because they are over the budget.</summary>
         internal int NotRun { get; private set; }
 
-        internal long ElapsedMilliseconds { get; private set; }
+        internal long ElapsedTicks { get; private set; }
 
         internal void Add(
             string file,
             int chars,
             long projected,
-            (long AllocatedBytes, long ElapsedMilliseconds) cost)
+            (long AllocatedBytes, long Ticks) cost)
         {
             Chars += chars;
             ProjectedBytes += projected;
-            ElapsedMilliseconds += cost.ElapsedMilliseconds;
+            ElapsedTicks += cost.Ticks;
 
             if (projected > LegacyBudgetBytes)
             {
@@ -393,10 +403,10 @@ public sealed class ParseCostMeasurement
             }
 
             MeasuredBytes += cost.AllocatedBytes;
-            _files.Add((file, cost.AllocatedBytes, cost.ElapsedMilliseconds));
+            _files.Add((file, cost.AllocatedBytes, cost.Ticks));
         }
 
-        internal IReadOnlyList<(string File, long Bytes, long Ms)> Top(int count) =>
+        internal IReadOnlyList<(string File, long Bytes, long Ticks)> Top(int count) =>
             [.. _files.OrderByDescending(f => f.Bytes).Take(count)];
     }
 }
