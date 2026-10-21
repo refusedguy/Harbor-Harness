@@ -100,6 +100,15 @@ public class CompactionLockTests
 
         public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) =>
             Task.CompletedTask;
+
+        /// <summary>
+        ///     #1765: the durability checkpoint. This double keeps every record
+        ///     in memory and loses none of them, so its state survives as far
+        ///     as the double is concerned. That is the answer a test double
+        ///     owes the loop.
+        /// </summary>
+        public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) =>
+            Task.FromResult(Result.Success());
     }
 
     /// <summary>A session context whose store records no compaction events at all.</summary>
@@ -124,6 +133,15 @@ public class CompactionLockTests
 
         public Task UpdateStatsAsync(Usage usage, Pricing pricing, CancellationToken ct = default) =>
             Task.CompletedTask;
+
+        /// <summary>
+        ///     #1765: the durability checkpoint. This double keeps every record
+        ///     in memory and loses none of them, so its state survives as far
+        ///     as the double is concerned. That is the answer a test double
+        ///     owes the loop.
+        /// </summary>
+        public Task<Result> CheckpointAsync(string reason, CancellationToken ct = default) =>
+            Task.FromResult(Result.Success());
     }
 
     /// <summary>A compaction service whose run is scripted by the test.</summary>
