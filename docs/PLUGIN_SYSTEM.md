@@ -681,6 +681,58 @@ and it Just Works. The layered architecture is purely a contributor concern: it 
 the runtime testable in isolation and lets you swap any layer for an alternative
 implementation (network storage, scripted engine, DI-aware instantiation, etc.).
 
+## The plugin life: define, run, stop, update (#1737)
+
+A plugin has a **definition** and a **run**, and the host keeps the two apart.
+
+| Operation | What it does |
+|---|---|
+| **define** | the host learns a plugin: the immutable package it met — its source, its version, its manifest. A definition outlives the run. |
+| **run** | the definition is started: the plugin is initialized and its contributions are registered. |
+| **stop** | the live run is stopped: what it registered is taken back and the plugin is shut down. The **definition is kept**, so the plugin can be run again. |
+| **update** | the running version is **replaced**: the old run is stopped first, then the new one starts. The two never hold the same name at the same time. |
+| **undefine** | the definition is forgotten. Refused while a run is live. |
+
+Three rules fall out of that model, and each of them answers a question the
+plugin runtime used to leave open:
+
+1. **A failed run never lingers.** If a door refuses a registration, whatever
+   landed before the refusal is taken back — a half-wired plugin does not
+   become a dead tool in the registry. The rollback needs a host that can undo
+   (`IReversiblePluginLoadHost`); a host that cannot says so, in the failure
+   text, instead of pretending.
+2. **A busy name is refused, not collided.** Running a plugin whose name is
+   already running fails with the way out: stop it first.
+3. **An incompatible plugin is refused at start**, and the refusal is visible:
+   the [inventory](#the-plugin-inventory-1722) carries it as a phase and a
+   reason (#1721 for the in-code floor, #1739 for the manifest's floor).
+
+### The states
+
+The inventory's `phase` is where a plugin is, and the lifecycle adds the one
+state a load-only document cannot have: `stopped` — the plugin was running and
+has been stopped. Its registrations are gone; its definition is not.
+
+| Phase | Meaning |
+|---|---|
+| `pending` | loaded, but waiting for a declared dependency (#1733) |
+| `active` | a run is live: initialized, and its contributions are registered |
+| `failed` | the host refused it, or it could not be brought up |
+| `stopped` | it was running and has been stopped; the definition is kept |
+
+### What it means for the route
+
+The out-of-process route carries the tool axis, so a tool is the one
+registration that can be taken back on that route; the other axes were refused
+at registration time, so there is nothing of theirs to take back. The undo
+methods say so with the reason the route declares, rather than answering
+`Success` for something that never happened.
+
+**What has NOT changed:** the CLI still never compiles plugins, and the
+`harbor-plugins-host` process is still the one that owns the plugin runtime.
+In-process reload of a CS plugin is still impossible under AOT (#626) — the
+Roslyn compiler needs a JIT — and this change does not promise it.
+
 ## Caching
 
 Compiled assemblies are written to `~/.harbor/plugins/cache/{sha256}.dll` keyed by the
