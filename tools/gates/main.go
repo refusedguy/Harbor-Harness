@@ -71,6 +71,11 @@ import (
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
 	"harbor.local/gates/test-skips"
+	registrygate "harbor.local/gates/check-coverage-registry"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 
 )
 
@@ -226,6 +231,31 @@ var registry = []registered{
 		name:    "test-skips",
 		summary: "the tests a run skipped, and the reason each declared",
 		run:     testskips.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
+	},
+	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
 	},
 }
 

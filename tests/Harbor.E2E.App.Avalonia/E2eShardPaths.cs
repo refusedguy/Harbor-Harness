@@ -6,7 +6,7 @@ namespace Harbor.E2E.App.Avalonia;
 /// <remarks>
 ///     <para>
 ///         This project runs as SEVERAL PROCESSES (see
-///         <c>e2e-shards.json</c> and <c>tools/run-e2e-avalonia-shards.py</c>):
+///         <c>e2e-shards.json</c> and <c>harbor-gates run-e2e-avalonia-shards</c>):
 ///         the Avalonia <c>Application</c>, the <c>$HOME</c> the driver sets and
 ///         the Harbor home <c>CommonConfig.OverrideHarborHomeForTests</c> pins
 ///         are all process-wide, so a class cannot share a process with another

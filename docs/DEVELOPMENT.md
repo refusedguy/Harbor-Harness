@@ -179,7 +179,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `test duplication` | `harbor-gates check-test-dup --min-files 800 --min-methods 9000` (#1778) |
 | `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
-| `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
+| `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
 | `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
 | `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 
@@ -223,8 +223,8 @@ section) and `.github/workflows/ci.yml` (the absolute `--results-directory` and
 two reporting steps).
 
 ```bash
-./tools/check-local-merge-loss.py            # is anything still missing?
-./tools/check-local-merge-loss.py --self-test # prove the checker still fires
+./tools/bin/harbor-gates-linux-x64 check-local-merge-loss            # is anything still missing?
+./tools/bin/harbor-gates-linux-x64 check-local-merge-loss --self-test # prove the checker still fires
 ```
 
 The gate reads the history and asks, for every local squash-merge, two
