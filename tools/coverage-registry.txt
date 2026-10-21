@@ -84,6 +84,7 @@ src/Harbor.Abstractions.Contracts/ObservedAttribute.cs | NEVER-RAN | Nothing in 
 src/Harbor.Abstractions.Contracts/TerminalEscapeAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions.Contracts/TuiRendererAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions/Ide/IHarborIdeClient.cs | NEVER-RAN | The record is the IDE client's result value; the IDE bridge of the CLI is not started by any suite of the lane, so nothing constructs it. | @refusedguy
+src/Harbor.Abstractions/Sessions/ISessionStore.cs | NEVER-RAN | The contract's DEFAULT member bodies are what the engine reports, and no suite of the lane calls a default implementation. | @refusedguy
 src/Harbor.Abstractions/Terminal/ITerminalPaneLauncher.cs | NEVER-RAN | The terminal pane is launched by the desktop app and the CLI, neither of which a suite of the lane starts. | @refusedguy
 src/Harbor.Abstractions/Tools/ToolInfoAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions/Tui/ITuiRenderer.cs | NEVER-RAN | The record is the key-press value of the renderer contract; the renderers of the UI are not driven by any suite of the lane. | @refusedguy
