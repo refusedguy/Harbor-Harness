@@ -110,7 +110,7 @@ public class SessionFormatCorpusTests
         var (store, _) = CreateStore();
         try
         {
-            await CopyFixture(store, SessionFormatCatalog.Legacy);
+            CopyFixture(store, SessionFormatCatalog.Legacy);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Legacy));
             await Assert.That(read.IsSuccess).IsTrue();
@@ -137,7 +137,7 @@ public class SessionFormatCorpusTests
         var (store, _) = CreateStore();
         try
         {
-            await CopyFixture(store, SessionFormatCatalog.Current);
+            CopyFixture(store, SessionFormatCatalog.Current);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Current));
             await Assert.That(read.IsSuccess).IsTrue();
@@ -161,7 +161,7 @@ public class SessionFormatCorpusTests
         var (store, _) = CreateStore();
         try
         {
-            await CopyFixture(store, SessionFormatCatalog.Legacy);
+            CopyFixture(store, SessionFormatCatalog.Legacy);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Legacy));
             await Assert.That(read.IsSuccess).IsTrue();
@@ -187,7 +187,7 @@ public class SessionFormatCorpusTests
         var (store, _) = CreateStore();
         try
         {
-            await CopyFixture(store, SessionFormatCatalog.Legacy);
+            CopyFixture(store, SessionFormatCatalog.Legacy);
 
             var header = await SessionFileReader.TryReadHeaderAsync(
                 SessionFilePath(store, CorpusSessionId(SessionFormatCatalog.Legacy)),
@@ -431,11 +431,11 @@ public class SessionFormatCorpusTests
     private static string SessionFilePath(JsonlSessionStore store, string sessionId) =>
         Path.Combine(store.GetRootDirectory(), $"{sessionId}.jsonl");
 
-    private static async Task CopyFixture(JsonlSessionStore store, int generation)
+    private static void CopyFixture(JsonlSessionStore store, int generation)
     {
         string source = FixturePath(generation);
         string target = SessionFilePath(store, CorpusSessionId(generation));
-        await File.CopyAsync(source, target, overwrite: true);
+        File.Copy(source, target, overwrite: true);
     }
 
     private static async Task WriteFutureFile(JsonlSessionStore store)
