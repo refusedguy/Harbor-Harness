@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The guard for issue #1797: the [Observed] generator and the decorator it
+    emits.
+
+    Two halves, and both are needed:
+
+      * the DRIVER half drives the generator in-process (Roslyn driver) over a
+        synthetic compilation, and asks it the three questions that matter:
+        does it emit a decorator, does it stay silent for an unmarked seam, and
+        does a contradictory marker fail the build;
+      * the BEHAVIOURAL half runs the decorator the generator REALLY emitted
+        (it is compiled into tests/Harbor.Telemetry.Fixtures) against a plain
+        ActivityListener and MeterListener, and asserts that the span and the
+        metrics arrive.
+
+    The second half is the one that cannot pass vacuously: if the generator
+    emitted nothing, the fixture assembly would have no ObservedFixture type
+    and this project would not compile at all.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The fixture the generator runs over. The decorators it emitted are
+         compiled there and reach this project as ordinary types. -->
+    <ProjectReference Include="..\Harbor.Telemetry.Fixtures\Harbor.Telemetry.Fixtures.csproj"/>
+    <!-- The generator, at RUN time: the driver half runs it in-process. -->
+    <ProjectReference Include="..\..\src\Harbor.CodeGen\Harbor.CodeGen.csproj"/>
+    <!-- The telemetry implementation the behavioural half observes: the
+         ActivityTracer and the MeterMetrics behind the ITracer and IMetrics
+         contracts the generated decorator is written against. -->
+    <ProjectReference Include="..\..\src\Harbor.Telemetry.Core\Harbor.Telemetry.Core.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Roslyn at RUN time: the driver half runs the generator in-process. The
+      generator project keeps its own copy PrivateAssets=all (it is build-time
+      only); this one is a test-time dependency of a test project that ships
+      nothing.
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+  </ItemGroup>
+
+</Project>

@@ -1,10 +1,12 @@
 # Observed instrumentation — the `[Observed]` contract
 
-> **Status (2026-10-20):** the contract behind issue #1797. This document describes
-> the attribute that ships with it and the source generator that consumes it. The
-> generator does not exist yet — it is the next PR — so nothing described here is
-> live behaviour today. The attribute itself is inert: a declaration with no
-> runtime effect.
+> **Status (2026-10-21):** the contract behind issue #1797, and the generator
+> that implements it. The attribute ships in `Harbor.Abstractions.Contracts`,
+> the generator ships in `Harbor.CodeGen`, and the generator reads the attribute
+> and emits a plain C# decorator. No product seam is marked yet, so the
+> product's behaviour has not changed: the mechanism is live, and it covers the
+> seams that ask for it, which today are the fixture seams in
+> `tests/Harbor.Telemetry.Fixtures/`.
 
 ## What `[Observed]` means
 
@@ -28,12 +30,12 @@ public interface ISessionStore
 
 The mechanism has two halves:
 
-- **the attribute** (this PR) — a marker on an interface, a class, or a method.
-  No runtime hook, no reflection, no emit: AOT-safe by construction, and free
+- **the attribute** — a marker on an interface, a class, or a method. No
+  runtime hook, no reflection, no emit: AOT-safe by construction, and free
   until something reads it;
-- **the generator** (the next PR) — a Roslyn source generator that reads the
-  attribute and emits a plain C# decorator that opens a span and records the
-  call's metrics around the seam.
+- **the generator** — a Roslyn source generator that reads the attribute and
+  emits a plain C# decorator that opens a span and records the call's metrics
+  around the seam.
 
 The property that makes the whole thing worth doing is that a decorator built
 around an *interface* covers *every* implementation of it by construction. That
@@ -162,13 +164,29 @@ The rules that make the order checkable rather than a convention:
   without the policy being weakened for its neighbours.
 - **Contradictions are compile errors, not silent resolutions.** A statement that
   says `None` *and* names a span, or two namespace policies that disagree about
-  the same namespace, are generator diagnostics in the next PR — the generator
-  refuses to guess.
+  the same namespace, are generator diagnostics — the generator refuses to
+  guess, and the diagnostic is an error, so the build breaks.
 
 The trade-off of "one statement wins" is that a fine-grained statement restates
 what it wants. That is the point: the alternative — merging fields across
 levels — makes the effective configuration depend on which levels happen to
 exist, and a reader of the source cannot tell what a seam will emit.
+
+### What each level can say
+
+The four levels do not have the same vocabulary, and the difference is the
+whole reason the order is readable:
+
+| Level | The span name | The prefix of the counter and the histogram |
+|-------|---------------|-------------------------------------------|
+| Member | `Span` names it outright | the seam's own name |
+| Type | `Span` is the **prefix** | `Span` when stated, the seam's own name otherwise |
+| Namespace / assembly | — | `SpanPrefix` when stated, the seam's own name otherwise |
+
+A type's `Span` is a prefix and a member's `Span` is a whole name, because one
+span name cannot serve every operation of a type: `[Observed("store")]` on an
+interface yields `store.append_message` and `store.delete_session`, while
+`[Observed("store.append_message")]` on one method yields exactly that.
 
 ## Names
 
@@ -189,10 +207,54 @@ When a name is not stated, the generator derives it:
   (`ISessionStore` ⇒ `session_store`).
 - `<operation>` is the member's name in snake case, without the `Async` suffix
   (`AppendMessageAsync` ⇒ `append_message`).
+- the status the call ended in travels in the tag `<seam>.status`, with the
+  values `ok`, `failure`, `exception` and `cancelled`.
 
 The instruments land on the canonical `Harbor.Telemetry` meter, next to the
 existing hand-written ones, so a `MeterListener` — and the OTLP exporter that
 subscribes to that meter by name — sees them with no extra wiring.
+
+## What the generator emits
+
+For every seam that has at least one observed member, the generator emits one
+file: a sealed class that implements the interface and forwards every member to
+the wrapped instance. The instrumented members open a span through the
+`ITracer` contract, record a counter and a duration histogram through the
+`IMetrics` contract, and mark the span when the call failed.
+
+The emitted code is ordinary C#: no reflection, no emit, no proxy. That is what
+makes the mechanism AOT-safe, and it is why the decorator can live in any
+assembly that reaches `Harbor.Diagnostics.Abstractions`.
+
+Three details of the emitted body are decisions, not accidents:
+
+- a `Result` that comes back failed is a **failure, not an exception**: the span
+  is marked, the status is `failure`, and nothing is thrown;
+- an `OperationCanceledException` is a **cancellation, not an error**: the
+  status is `cancelled`, and the exception is rethrown;
+- every other exception is **re-thrown** after the span is marked, and the
+  status is `exception`.
+
+### What the generator refuses
+
+A generator that guesses is worse than one that stops, so the shapes it cannot
+express are compile errors rather than half-emitted code:
+
+| Shape | What happens |
+|-------|--------------|
+| a generic interface | error: the decorator would need type parameters |
+| a static abstract member | error: a class cannot implement one |
+| a member that returns by reference | error |
+| a pointer parameter | error |
+| an init-only property | error |
+| a member with a `ref`, `out` or `in` parameter | forwarded as it is, with a warning |
+| a member that returns a lazy sequence (`IEnumerable<T>`, `IAsyncEnumerable<T>`) | forwarded as it is, with a warning |
+| a class that carries `[Observed]` | a warning: this slice decorates interfaces |
+
+The two "forwarded as it is" rows are honest limits rather than accidents. A
+span around a `ref` member cannot hold the value the inner call wrote back, and
+a span around a lazy sequence would close before the caller read the sequence —
+the measurement would be of the wrong thing. The warning says so at the build.
 
 ## The switch: observability off
 
@@ -254,8 +316,9 @@ would change the thing it measures, or where the mechanism does not apply.
 
 | PR | What | Ships |
 |----|------|-------|
-| **PR-1** (this one) | The attribute surface, this document, the public-API baseline update. No generator, no annotated seam, no behaviour change. | now |
-| **PR-2** | The generator (`Harbor.CodeGen`), a fixture assembly, and a tripwire with a **negative control**: a marked seam emits a span and its instruments, an unmarked seam emits nothing, and a deliberately contradictory attribute fails the build. No product seam is marked yet. | next |
+| **PR-1** | The attribute surface, this document, the public-API baseline update. No generator, no annotated seam, no behaviour change. | shipped |
+| **PR-2** | The generator (`Harbor.CodeGen`), the fixture assembly (`tests/Harbor.Telemetry.Fixtures`), and the guard with a **negative control** (`tests/Harbor.CodeGen.Tests`): a marked seam emits a span and its instruments, an unmarked seam emits nothing, a contradictory marker breaks the build, and the switch turns the whole mechanism off. No product seam is marked yet. | this PR |
+| **PR-3** | The metrics layer without allocations: the generated code holds the instrument statically and writes through a `TagList` instead of the `params` array the contract's `IMetrics` takes today. | next |
 | **Later** | The seam migrations, in the quality/test-optimisation wave next to epic #1724, one seam family at a time. | after the backlog |
 
 The ordering is the point, and it is the rule of epic #1724 applied literally:
@@ -345,15 +408,22 @@ Two things this choice does **not** decide:
   reviewer sees it. `Harbor.Diagnostics.Abstractions` has no baseline: a public
   type added there would enter the frozen surface without any gate noticing.
 
-## What the next PR needs from this one
+## What the guard proves
 
-- the attribute surface above, unchanged, as its input contract;
-- the naming rules, as the contract the generated instruments and spans keep;
-- the policy order, as the rules the generator implements — including the
-  "exactly one statement wins" rule and the contradictions that must become
-  compile errors rather than silent resolutions;
-- the switch name (`HarborWithObservedInstrumentation`) and the guarantee that
-  "off" means *nothing is emitted*.
+The generator is only as good as the tripwire around it, so PR-2 ships one, in
+`tests/Harbor.CodeGen.Tests`:
+
+| Control | What it proves |
+|---------|----------------|
+| a marked seam emits a decorator, and the compilation that contains it has no errors | the decorator really implements the seam it claims to |
+| the same decorator, run against a real `ActivityListener` and `MeterListener`, opens the span and records the counter and the histogram | the decorator really measures |
+| an unmarked seam emits nothing | the generator decorates what it is told to, not everything it sees |
+| a contradictory marker is reported as an error on the compilation | the planted violator breaks the build |
+| the switch set to `false` emits nothing | "off" means nothing is emitted, not "a decorator that measures nothing" |
+
+The behavioural half cannot pass vacuously: if the generator emitted nothing,
+the fixture assembly would have no `ObservedFixture` type and the guard would
+not compile at all.
 
 ## See also
 
