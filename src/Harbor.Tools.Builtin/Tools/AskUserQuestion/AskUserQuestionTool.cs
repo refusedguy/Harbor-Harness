@@ -147,7 +147,9 @@ public sealed partial class AskUserQuestionTool : ITool
         Result<IReadOnlyList<UserQuestion>> parsed = ParseQuestions(args);
         if (parsed.IsFailure)
         {
-            return Result.Failure(parsed.Error);
+            // ConvertFailure drops the value and keeps the reason. The guard
+            // stays: the member throws on a success.
+            return parsed.ConvertFailure();
         }
 
         return JsonArgValidator.OptionalIntInRange(
