@@ -1,9 +1,9 @@
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Agents;
 using Harbor.Application.Tests.Fakes;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests;
@@ -28,64 +28,10 @@ namespace Harbor.Application.Tests;
 /// </remarks>
 public class GoalRoundDriverTests
 {
-    /// <summary>
-    ///     A goal store that holds one goal per session and refuses a stale
-    ///     revision, exactly as the durable backend does.
-    /// </summary>
-    private sealed class FakeGoalStore : ISessionGoalStore
-    {
-        private readonly Dictionary<string, Goal> _goals = new(StringComparer.Ordinal);
-
-        public Task<Result<Maybe<Goal>>> GetGoalAsync(
-            string sessionId, CancellationToken ct = default)
-        {
-            if (_goals.TryGetValue(sessionId, out Goal? goal))
-            {
-                return Task.FromResult(Result.Success(Maybe<Goal>.From(goal)));
-            }
-
-            return Task.FromResult(Result.Success(Maybe<Goal>.None));
-        }
-
-        public Task<Result<Goal>> AppendGoalAsync(
-            string sessionId, Goal goal, CancellationToken ct = default)
-        {
-            int expected = _goals.TryGetValue(sessionId, out Goal? current) ? current.Revision + 1 : 1;
-            if (goal.Revision != expected)
-            {
-                return Task.FromResult(
-                    Result.Failure<Goal>($"stale revision {goal.Revision}; expected {expected}."));
-            }
-
-            _goals[sessionId] = goal;
-            return Task.FromResult(Result.Success(goal));
-        }
-
-        public void Seed(string sessionId, Goal goal) => _goals[sessionId] = goal;
-
-        public Goal? Peek(string sessionId) =>
-            _goals.TryGetValue(sessionId, out Goal? goal) ? goal : null;
-    }
-
     private static Session NewSession() =>
         Session.Create("/goal-tests", "code", "anthropic", "claude-opus-4");
 
     private static AgentDefinition NewAgent() => AgentDefinition.CodeDefault("claude-opus-4", "anthropic");
-
-    private static Goal NewGoal(
-        string objective = "make the tests pass",
-        GoalPhase phase = GoalPhase.Active,
-        int maxRounds = 3,
-        int roundsStarted = 0,
-        int revision = 1) =>
-        new(
-            objective,
-            phase,
-            maxRounds,
-            roundsStarted,
-            revision,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
 
     private static GoalRoundDriver NewDriver(ISessionGoalStore? goals) =>
         new(goals, NullLogger.Instance);
@@ -121,7 +67,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal("make the tests pass", GoalPhase.Active, maxRounds: 3));
+        store.Seed(session.Id, FakeGoalStore.NewGoal("make the tests pass", GoalPhase.Active, maxRounds: 3));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -153,7 +99,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal(maxRounds: 3));
+        store.Seed(session.Id, FakeGoalStore.NewGoal(maxRounds: 3));
 
         var first = NewDriver(store);
         var firstOutcome = await first.TryReserveRoundAsync(
@@ -178,7 +124,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal(maxRounds: 2, roundsStarted: 2, revision: 3));
+        store.Seed(session.Id, FakeGoalStore.NewGoal(maxRounds: 2, roundsStarted: 2, revision: 3));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -203,7 +149,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal(phase: GoalPhase.Complete));
+        store.Seed(session.Id, FakeGoalStore.NewGoal(phase: GoalPhase.Complete));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -220,7 +166,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal(phase: GoalPhase.Blocked, revision: 2));
+        store.Seed(session.Id, FakeGoalStore.NewGoal(phase: GoalPhase.Blocked, revision: 2));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -239,7 +185,7 @@ public class GoalRoundDriverTests
         // tells the model to call something it cannot call.
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, NewGoal());
+        store.Seed(session.Id, FakeGoalStore.NewGoal());
 
         var working = new TestSessionContext(session);
         await NewDriver(store).TryReserveRoundAsync(

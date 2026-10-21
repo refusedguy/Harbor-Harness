@@ -1,5 +1,4 @@
 using System.Text.Json;
-using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,60 +23,7 @@ namespace Harbor.Tools.Builtin.Tests;
 /// </remarks>
 public class GoalToolTests
 {
-    /// <summary>
-    ///     A goal store that holds one goal per session and refuses a stale
-    ///     revision, exactly as the durable backend does.
-    /// </summary>
-    private sealed class FakeGoalStore : ISessionGoalStore
-    {
-        private readonly Dictionary<string, Goal> _goals = new(StringComparer.Ordinal);
-
-        public Task<Result<Maybe<Goal>>> GetGoalAsync(
-            string sessionId, CancellationToken ct = default)
-        {
-            if (_goals.TryGetValue(sessionId, out Goal? goal))
-            {
-                return Task.FromResult(Result.Success(Maybe<Goal>.From(goal)));
-            }
-
-            return Task.FromResult(Result.Success(Maybe<Goal>.None));
-        }
-
-        public Task<Result<Goal>> AppendGoalAsync(
-            string sessionId, Goal goal, CancellationToken ct = default)
-        {
-            int expected = _goals.TryGetValue(sessionId, out Goal? current) ? current.Revision + 1 : 1;
-            if (goal.Revision != expected)
-            {
-                return Task.FromResult(
-                    Result.Failure<Goal>($"stale revision {goal.Revision}; expected {expected}."));
-            }
-
-            _goals[sessionId] = goal;
-            return Task.FromResult(Result.Success(goal));
-        }
-
-        public void Seed(string sessionId, Goal goal) => _goals[sessionId] = goal;
-
-        public Goal? Peek(string sessionId) =>
-            _goals.TryGetValue(sessionId, out Goal? goal) ? goal : null;
-    }
-
     private const string SessionId = "goal-session";
-
-    private static Goal NewGoal(
-        GoalPhase phase = GoalPhase.Active,
-        int maxRounds = 3,
-        int roundsStarted = 0,
-        int revision = 1) =>
-        new(
-            "make the tests pass",
-            phase,
-            maxRounds,
-            roundsStarted,
-            revision,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
 
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement;
 
@@ -88,7 +34,7 @@ public class GoalToolTests
     public async Task Complete_RecordsTheGoalAsComplete()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal());
+        store.Seed(SessionId, FakeGoalStore.NewGoal());
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(
@@ -108,7 +54,7 @@ public class GoalToolTests
     public async Task Block_RecordsTheGoalAsBlocked_WithTheAgentsOwnReason()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal());
+        store.Seed(SessionId, FakeGoalStore.NewGoal());
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(
@@ -128,7 +74,7 @@ public class GoalToolTests
     public async Task Block_WithoutAReason_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal());
+        store.Seed(SessionId, FakeGoalStore.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("""{"operation":"block"}"""));
@@ -142,7 +88,7 @@ public class GoalToolTests
     public async Task AnUnknownOperation_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal());
+        store.Seed(SessionId, FakeGoalStore.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("""{"operation":"finished"}"""));
@@ -154,7 +100,7 @@ public class GoalToolTests
     public async Task AMissingOperation_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal());
+        store.Seed(SessionId, FakeGoalStore.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("{}"));
@@ -182,7 +128,7 @@ public class GoalToolTests
     public async Task AGoalThatIsAlreadyComplete_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, NewGoal(phase: GoalPhase.Complete));
+        store.Seed(SessionId, FakeGoalStore.NewGoal(phase: GoalPhase.Complete));
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(
