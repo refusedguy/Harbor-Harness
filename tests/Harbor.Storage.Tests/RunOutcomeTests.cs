@@ -62,7 +62,7 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -74,7 +74,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 4, StopReason.Stop));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
@@ -87,7 +87,7 @@ public class RunOutcomeTests
         await Assert.That(outcome.ToolCalls.Count).IsEqualTo(1);
         await Assert.That(outcome.ToolCalls[0].ToolCallId).IsEqualTo(toolCallId);
         await Assert.That(outcome.ToolCalls[0].ToolName).IsEqualTo("read");
-        await Assert.That(outcome.ToolCalls[0].IsError).IsFalse();
+        await Assert.That(outcome.ToolCalls[0]).HasSucceeded();
         // #993: both timestamps are known here — a run that actually happened is
         // dated by its own messages, and the fix must not have made them unknown.
         await Assert.That(outcome.StartedAt).IsNotNull();
@@ -100,7 +100,7 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -111,7 +111,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewToolResult(sessionId, 3, toolCallId, isError: true));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
@@ -121,7 +121,7 @@ public class RunOutcomeTests
         await Assert.That(outcome.StopReason).IsEqualTo(RunStopReason.Failed);
         await Assert.That(outcome.ErrorMessage).IsEqualTo("provider exploded");
         await Assert.That(outcome.ToolCalls.Count).IsEqualTo(1);
-        await Assert.That(outcome.ToolCalls[0].IsError).IsTrue();
+        await Assert.That(outcome.ToolCalls[0]).HasFailed();
         await Assert.That(outcome.MessageIds.Count).IsEqualTo(3);
     }
 
@@ -130,7 +130,7 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -139,7 +139,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Aborted));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
@@ -171,14 +171,14 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
 
         // A session that has never run: no message was ever persisted for it.
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
         await Assert.That(stored.Value.Count).IsEqualTo(0);
 
         var outcome = RunOutcome.Reconstruct(
@@ -202,13 +202,13 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
@@ -229,13 +229,13 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value, true));
@@ -257,13 +257,13 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value,
@@ -283,7 +283,7 @@ public class RunOutcomeTests
     {
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -295,7 +295,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewUser(sessionId, 1));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));
@@ -322,12 +322,12 @@ public class RunOutcomeTests
         // opposite verdicts here, and both must be reachable.
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
 
         var empty = await store.GetMessagesAsync(sessionId);
-        await Assert.That(empty.IsSuccess).IsTrue();
+        await Assert.That(empty).IsSuccessful();
         var noEvidence = RunOutcome.Reconstruct(
             RunId.New(), sessionId, empty.Value, TestEvents.AgentEnd(empty.Value));
 
@@ -335,7 +335,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
 
         var ran = await store.GetMessagesAsync(sessionId);
-        await Assert.That(ran.IsSuccess).IsTrue();
+        await Assert.That(ran).IsSuccessful();
         var succeeded = RunOutcome.Reconstruct(
             RunId.New(), sessionId, ran.Value, TestEvents.AgentEnd(ran.Value));
 
@@ -373,7 +373,7 @@ public class RunOutcomeTests
         // record cannot be rebuilt from `messages` and must be handed over.
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -382,7 +382,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var verification = PassedVerification();
         var outcome = RunOutcome.Reconstruct(
@@ -407,7 +407,7 @@ public class RunOutcomeTests
         // the same Unknown-vs-NotVerified collapse one level up.
         var store = CreateStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         string sessionId = session.Value.Id;
         var runId = RunId.New();
@@ -416,7 +416,7 @@ public class RunOutcomeTests
         await store.AppendMessageAsync(sessionId, NewFinalAssistant(sessionId, 2, StopReason.Stop));
 
         var stored = await store.GetMessagesAsync(sessionId);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
 
         var outcome = RunOutcome.Reconstruct(
             runId, sessionId, stored.Value, TestEvents.AgentEnd(stored.Value));

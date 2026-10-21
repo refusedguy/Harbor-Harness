@@ -2,6 +2,7 @@ using System.Reflection;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -117,7 +118,7 @@ public class SqliteCheckpointStoreImplSiteTests
             var ids = await SeedAsync(store, session.Id, 3);
 
             var marked = await seam.CreateCheckpointAsync(session.Id, ids[1], "before-move");
-            await Assert.That(marked.IsSuccess).IsTrue();
+            await Assert.That(marked).IsSuccessful();
             await Assert.That(marked.Value.MessageId).IsEqualTo(ids[1]);
             await Assert.That(marked.Value.MessageIndex).IsEqualTo(1);
             await Assert.That(marked.Value.Label).IsEqualTo("before-move");
@@ -125,18 +126,18 @@ public class SqliteCheckpointStoreImplSiteTests
 
             // The same call on the concrete store answers the same way.
             var viaStore = await store.CreateCheckpointAsync(session.Id, ids[2], "second");
-            await Assert.That(viaStore.IsSuccess).IsTrue();
+            await Assert.That(viaStore).IsSuccessful();
             await Assert.That(viaStore.Value.MessageIndex).IsEqualTo(2);
 
             var listed = await seam.ListCheckpointsAsync(session.Id);
-            await Assert.That(listed.IsSuccess).IsTrue();
+            await Assert.That(listed).IsSuccessful();
             await Assert.That(listed.Value.Count).IsEqualTo(2);
             await Assert.That(listed.Value[0].Id).IsEqualTo(marked.Value.Id);
             await Assert.That(listed.Value[1].Id).IsEqualTo(viaStore.Value.Id);
 
             // The rewind truncates to the anchor and leaves the honest trail.
             var rewound = await seam.RewindToCheckpointAsync(session.Id, marked.Value.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value.Removed).IsEqualTo(1);
             await Assert.That(rewound.Value.Remaining).IsEqualTo(2);
             await Assert.That(rewound.Value.MessageId).IsEqualTo(ids[1]);
@@ -152,11 +153,11 @@ public class SqliteCheckpointStoreImplSiteTests
 
             // The shared failure texts do not move either.
             var missing = await seam.ListCheckpointsAsync("no-such-session");
-            await Assert.That(missing.IsFailure).IsTrue();
+            await Assert.That(missing).IsFailed();
             await Assert.That(missing.Error).IsEqualTo("Session 'no-such-session' not found.");
 
             var missingCheckpoint = await seam.RewindToCheckpointAsync(session.Id, "no-such-checkpoint");
-            await Assert.That(missingCheckpoint.IsFailure).IsTrue();
+            await Assert.That(missingCheckpoint).IsFailed();
             await Assert.That(missingCheckpoint.Error)
                 .IsEqualTo($"Checkpoint 'no-such-checkpoint' not found in session '{session.Id}'.");
         }
@@ -189,21 +190,21 @@ public class SqliteCheckpointStoreImplSiteTests
 
             // Written through the STORE's forwarder...
             var marked = await store.CreateCheckpointAsync(session.Id, ids[1], "through-store");
-            await Assert.That(marked.IsSuccess).IsTrue();
+            await Assert.That(marked).IsSuccessful();
 
             // ... and read back through the AXIS: the forwarder is not a copy.
             var listedOnAxis = await axis.ListCheckpointsAsync(session.Id);
-            await Assert.That(listedOnAxis.IsSuccess).IsTrue();
+            await Assert.That(listedOnAxis).IsSuccessful();
             await Assert.That(listedOnAxis.Value.Count).IsEqualTo(1);
             await Assert.That(listedOnAxis.Value[0].Id).IsEqualTo(marked.Value.Id);
 
             // Written through the AXIS...
             var markedOnAxis = await axis.CreateCheckpointAsync(session.Id, ids[2], "through-axis");
-            await Assert.That(markedOnAxis.IsSuccess).IsTrue();
+            await Assert.That(markedOnAxis).IsSuccessful();
 
             // ... and read back through the STORE's forwarder.
             var listedOnStore = await store.ListCheckpointsAsync(session.Id);
-            await Assert.That(listedOnStore.IsSuccess).IsTrue();
+            await Assert.That(listedOnStore).IsSuccessful();
             await Assert.That(listedOnStore.Value.Count).IsEqualTo(2);
             await Assert.That(listedOnStore.Value[1].Id).IsEqualTo(markedOnAxis.Value.Id);
         }

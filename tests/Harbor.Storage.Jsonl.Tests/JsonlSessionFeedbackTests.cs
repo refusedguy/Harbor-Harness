@@ -85,7 +85,7 @@ public class JsonlSessionFeedbackTests
                 FeedbackCategory.InstructionFollowing,
                 "it did not do what I asked");
 
-            await Assert.That(recorded.IsSuccess).IsTrue();
+            await Assert.That(recorded).IsSuccessful();
             await Assert.That(recorded.Value.MessageId).IsEqualTo(message.Id);
             await Assert.That(recorded.Value.SessionId).IsEqualTo(session.Id);
             await Assert.That(recorded.Value.Rating).IsEqualTo(FeedbackRating.Unhelpful);
@@ -100,7 +100,7 @@ public class JsonlSessionFeedbackTests
                 NullLogger<JsonlSessionStore>.Instance);
 
             var feedback = await reopened.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
             await Assert.That(feedback.Value.Ratings.Count).IsEqualTo(1);
 
             MessageRating rating = feedback.Value.Ratings[0];
@@ -129,7 +129,7 @@ public class JsonlSessionFeedbackTests
                 session.Id,
                 $"the whole session felt slow ({Marker})");
 
-            await Assert.That(recorded.IsSuccess).IsTrue();
+            await Assert.That(recorded).IsSuccessful();
             await Assert.That(recorded.Value.Text).IsEqualTo($"the whole session felt slow ({Marker})");
             await Assert.That(recorded.Value.SessionId).IsEqualTo(session.Id);
 
@@ -138,7 +138,7 @@ public class JsonlSessionFeedbackTests
                 NullLogger<JsonlSessionStore>.Instance);
 
             var feedback = await reopened.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
             await Assert.That(feedback.Value.Remarks.Count).IsEqualTo(1);
             await Assert.That(feedback.Value.Remarks[0].Text).IsEqualTo($"the whole session felt slow ({Marker})");
             await Assert.That(feedback.Value.Remarks[0].Id).IsEqualTo(recorded.Value.Id);
@@ -165,7 +165,7 @@ public class JsonlSessionFeedbackTests
                 session.Id, rated.Id, FeedbackRating.Neutral, FeedbackCategory.TaskResult);
 
             var feedback = await store.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
 
             // The absence is the answer: no record, not a "Neutral" and not
             // a null row with a rating in it.
@@ -202,7 +202,7 @@ public class JsonlSessionFeedbackTests
             // out, so "the feedback never reaches the model" IS "the
             // messages carry no feedback".
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(3);
             await Assert.That(messages.Value[0].Id).IsEqualTo(first.Id);
             await Assert.That(messages.Value[1].Id).IsEqualTo(second.Id);
@@ -256,13 +256,13 @@ public class JsonlSessionFeedbackTests
                 NullLogger<JsonlSessionStore>.Instance);
 
             var messages = await reopened.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
 
             // A session that never heard of feedback has none — and that is
             // an answer, not a failure.
             var feedback = await reopened.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
             await Assert.That(feedback.Value.Ratings).IsEmpty();
             await Assert.That(feedback.Value.Remarks).IsEmpty();
             await Assert.That(feedback.Value.RatingFor(messages.Value[0].Id)).IsNull();
@@ -289,13 +289,13 @@ public class JsonlSessionFeedbackTests
                 FeedbackRating.Helpful,
                 FeedbackCategory.TaskResult);
 
-            await Assert.That(recorded.IsFailure).IsTrue();
+            await Assert.That(recorded).IsFailed();
             await Assert.That(recorded.Error)
                 .IsEqualTo($"Message 'no-such-message' not found in session '{session.Id}'.");
 
             // Nothing was written: a refused rating leaves no record behind.
             var feedback = await store.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
             await Assert.That(feedback.Value.Ratings).IsEmpty();
         }
         finally
@@ -319,8 +319,8 @@ public class JsonlSessionFeedbackTests
             var second = await store.RecordMessageRatingAsync(
                 session.Id, message.Id, FeedbackRating.Helpful, FeedbackCategory.InstructionFollowing);
 
-            await Assert.That(first.IsSuccess).IsTrue();
-            await Assert.That(second.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
+            await Assert.That(second).IsSuccessful();
 
             // The effective rating is the newer word.
             var feedback = await store.GetFeedbackAsync(session.Id);
@@ -358,7 +358,7 @@ public class JsonlSessionFeedbackTests
             await store.AppendMessageAsync(session.Id, message);
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(messages.Value[0].Id).IsEqualTo(message.Id);
             await Assert.That(logger.Warnings).IsEmpty();
@@ -389,14 +389,14 @@ public class JsonlSessionFeedbackTests
             // what the user said, and the store does not destroy a record
             // that a rewind never claimed to touch.
             var rewound = await store.DeleteMessagesAfterAsync(session.Id, kept.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value).IsEqualTo(1);
 
             var messages = await store.GetMessagesAsync(session.Id);
             await Assert.That(messages.Value.Count).IsEqualTo(1);
 
             var feedback = await store.GetFeedbackAsync(session.Id);
-            await Assert.That(feedback.IsSuccess).IsTrue();
+            await Assert.That(feedback).IsSuccessful();
             await Assert.That(feedback.Value.Ratings.Count).IsEqualTo(1);
             await Assert.That(feedback.Value.RatingFor(kept.Id)).IsNotNull();
             await Assert.That(feedback.Value.Remarks.Count).IsEqualTo(1);
@@ -416,7 +416,7 @@ public class JsonlSessionFeedbackTests
             var session = (await store.CreateAsync("/feedback", "code", "anthropic", "claude-opus-4")).Value;
 
             var recorded = await store.RecordSessionRemarkAsync(session.Id, "   ");
-            await Assert.That(recorded.IsFailure).IsTrue();
+            await Assert.That(recorded).IsFailed();
             await Assert.That(recorded.Error).IsEqualTo($"A session remark in session '{session.Id}' must have text.");
 
             var feedback = await store.GetFeedbackAsync(session.Id);
@@ -443,7 +443,7 @@ public class JsonlSessionFeedbackTests
             var recorded = await store.RecordMessageRatingAsync(
                 session.Id, "   ", FeedbackRating.Helpful, FeedbackCategory.TaskResult);
 
-            await Assert.That(recorded.IsFailure).IsTrue();
+            await Assert.That(recorded).IsFailed();
             await Assert.That(recorded.Error)
                 .IsEqualTo($"A message rating in session '{session.Id}' must name a message.");
 
@@ -464,11 +464,11 @@ public class JsonlSessionFeedbackTests
         try
         {
             var read = await store.GetFeedbackAsync("no-such-session");
-            await Assert.That(read.IsFailure).IsTrue();
+            await Assert.That(read).IsFailed();
             await Assert.That(read.Error).IsEqualTo("Session 'no-such-session' not found.");
 
             var remark = await store.RecordSessionRemarkAsync("no-such-session", "hello");
-            await Assert.That(remark.IsFailure).IsTrue();
+            await Assert.That(remark).IsFailed();
             await Assert.That(remark.Error).IsEqualTo("Session 'no-such-session' not found.");
         }
         finally

@@ -44,13 +44,26 @@ measured in [docs/REFERENCE-TRIMMER.md](./REFERENCE-TRIMMER.md).
 | **`DependencyInjection.Lifetime.Analyzers`** | **`src/` + `apps/`** | **DI001–DI037** |
 | `CSharpFunctionalExtensions.Analyzers` | solution-wide | CFE0001 (see [§Analyzer scope](#analyzer-scope-where-each-family-runs-and-what-it-costs)) |
 | **`Excubo.Analyzers.DependencyInjectionValidation`** | **apps-only** | **EDI01–EDI04, ADP0001** |
-| **`Microsoft.VisualStudio.Threading.Analyzers`** | **src/ + apps/ only** | **VSTHRD001–VSTHRD202 (one enabled)** |
 
 The table above is the set of analyzers this repository runs. It is not the
 set of analyzers that were looked at. The candidates that were checked and not
 taken are in [§Checked and rejected candidates](#checked-and-rejected-candidates),
 so that the next person does not spend a day of NuGet registry reads and
 GitHub API calls rediscovering that a package was abandoned in 2019.
+
+**One analyzer is NOT in the table because the repository does not
+reference it: the SDK's own `ILLink.RoslynAnalyzer`** (the AOT/trim
+analyzer). It used to run in 105 of the tree's compilations anyway, because
+the SDK pulls its package in whenever the single-file analyzer is enabled.
+It is now scoped to the seven projects that declare single-file or AOT
+compatibility, plus the `aot-publish` job — see
+[§The ILLink analyzer](#the-illink-analyzer).
+
+**One analyzer was in the table and is not any more:
+`Microsoft.VisualStudio.Threading.Analyzers`** — 114.4 analyzer-seconds of
+which 93.6 were a single rule this repository had switched off. The
+coverage it bought is HARCH003's, which is stronger. See
+[§The severity table does not switch the cost off](#the-severity-table-does-not-switch-the-cost-off).
 
 ### Analyzer scope: where each family runs, and what it costs
 
@@ -68,49 +81,147 @@ number of **analyzer classes** the package registers times the number of
 
 The compiler can be asked for the number. `-p:ReportAnalyzer=true` makes it
 print, for every compilation, the elapsed time per analyzer assembly; the
-numbers sum over the solution. Measured on `dev` (the Release build of
-`Harbor.slnx`, 113 compilations):
+numbers sum over the solution.
 
-| package | analyzer seconds | share |
-|---------|------------------|-------|
-| `SonarAnalyzer.CSharp` | 204.1 | 34 % |
-| `DependencyInjection.Lifetime.Analyzers` | 75.8 | 13 % |
-| `Microsoft.VisualStudio.Threading.Analyzers` | 58.3 | 10 % |
-| `AsyncFixer` | 33.9 | 6 % |
-| `Meziantou.Analyzer` | 23.2 | 4 % |
-| `Microsoft.CodeAnalysis.NetAnalyzers` | 9.3 | 2 % |
-| `Roslynator.Analyzers` | 7.4 | 1 % |
-| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 5.2 | 1 % |
-| `DotNetProjectFile.Analyzers` | 2.4 | <1 % |
-| `ReflectionAnalyzers` | 2.4 | <1 % |
-| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 2.1 | <1 % |
-| `CSharpFunctionalExtensions.Analyzers` | 0.2 | <1 % |
-| `Excubo.Analyzers.DependencyInjectionValidation` | 0.1 | <1 % |
-| **the thirteen packages together** | **424.4** | **71 %** |
+**The profile, measured on the tree this change lands on** (CI run
+39633295157, the `narrowed-report` arm of the analyzer-cost harness: the
+Release build of `Harbor.slnx`, 117 compilations, the tree as the branch
+declares it; the numbers are the harness's own table,
+`analyzer-cost.md`):
 
-The rest is the SDK's own AOT analyzer (`ILLink.RoslynAnalyzer`, 141.3 s —
-the second largest single cost in the tree, and it is **not** one of the
-packages this repository references), the source generators and TUnit.
+| family | analyzer seconds | share | on by default? | decision |
+|--------|------------------|-------|----------------|----------|
+| `SonarAnalyzer.CSharp` | 249.5 | 48.1 % | `tests/` only | KEPT — the 324 findings are all in the test tree, and they are the reason the package is worth its cost |
+| `DependencyInjection.Lifetime.Analyzers` | 67.8 | 13.1 % | `src/` + `apps/` | KEPT — DI003/DI015/DI017/DI019 are errors on the composition root's registrations |
+| `ILLink.RoslynAnalyzer` (the SDK's own) | 48.2 | 9.3 % | 7 projects | NARROWED — was 302.2 s in 105 projects before this change; see [§The ILLink analyzer](#the-illink-analyzer) |
+| `Meziantou.Analyzer` | 48.0 | 9.3 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 17.0 | 3.3 % | solution-wide | KEPT — the base layer |
+| `Roslynator.Analyzers` | 13.0 | 2.5 % | solution-wide | KEPT |
+| `AsyncFixer` | 11.7 | 2.3 % | `src/` + `apps/` | KEPT — all five rules are `suggestion`, so it cannot fail a build |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 10.7 | 2.1 % | solution-wide | KEPT — RS0030 is a build error over `BannedSymbols.txt` |
+| `Harbor.Arch.Analyzers` (the repository's own) | 8.8 | 1.7 % | `src/` + `apps/` | KEPT — HARCH001/HARCH002, in the build, over every product project |
+| `ReflectionAnalyzers` | 5.9 | 1.1 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 2.7 | 0.5 % | two frozen assemblies | KEPT |
+| `DotNetProjectFile.Analyzers` | 2.1 | 0.4 % | solution-wide | KEPT |
+| `Microsoft.VisualStudio.Threading.Analyzers` | **0** | **0 %** | **REMOVED** | REMOVED — 114.4 s of which 93.6 s was VSTHRD010, a rule at `severity = none`; see [§The severity table does not switch the cost off](#the-severity-table-does-not-switch-the-cost-off) |
+| **everything together** | **518.3** | | | **against 841.6 s on the same tree before this change** |
 
-**The largest single analyzer cost in this tree is the AOT analyzer, not
-one of the nine packages the issue asked about.** It is pulled in by
-`IsAotCompatible=true` on six `src/` projects, and it is the analyzer that
-decides whether the shipped code is trim-safe. It is reported here because
-the measurement is the measurement; it is not touched by this change,
-because it is a declaration about AOT compatibility and not a package
-scope.
+The tree before this change, measured the same way on the same day (CI run
+39633281684, the `narrowed-report` arm, 117 compilations), for the two rows
+this change moves:
+
+| family | before | after | delta |
+|--------|--------|-------|-------|
+| `ILLink.RoslynAnalyzer` | 302.2 s in 105 projects | 48.2 s in 7 projects | **−254.0 s** |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 114.4 s in 60 projects | 0 s | **−114.4 s** |
+| everything together | 841.6 s | 518.3 s | **−323.3 s** |
+
+**The two runs are not on the same machine, and the difference is stated
+rather than hidden.** The analyzer report is CPU time, and the runner's
+speed moves it. The two runs' noise floors are the same (28.0 s and
+28.4 s), but the SECOND run's runner was the slower one: the 22 families
+this change did not touch came out **6.3 % slower** there (the median of
+their per-family ratios; the spread is 0.59x..1.30x). Normalized by that
+factor, the total is 487.4 s, i.e. **−354.2 s (−42.1 %)** against the
+tree before the change, and the ILLink analyzer's own cost is 45.3 s
+against 302.2 s — **−85 %**.
+
+**The wall time cannot resolve any of this, and the harness says so in its
+own output.** The paired arms (the same tree, twice, in one job) put
+every family's marginal wall cost inside the noise floor: in the run on
+the tree before the change, the ILLink analyzer's arm was **+1.4 s** and
+the vs-threading family's **+8.7 s**, against a noise floor of 28.0 s; in
+the run on this tree, the largest arm delta was `no-roslynator` at
+**+46.1 s** — a 13-second family. The controlled number is the compiler's
+own report, and it is what the table above is read from. The full arm
+table is in
+[docs/BENCHMARKS.md §6.7.1](./BENCHMARKS.md#671-the-analyzer-profile-what-each-family-costs-the-compile).
+
+**The largest single analyzer cost in this tree is Sonar, and it is
+deliberate**: it is the only family that produces findings the repository
+reads (324 of them, all in the test tree), and it is narrowed to the tree
+that produces them. The two families this change removed were the two
+that produced nothing the build could act on.
+
+#### The ILLink analyzer
+
+**It is not a package this repository references, and that is exactly why
+it was invisible to the scope table.** The SDK pulls
+`Microsoft.NET.ILLink.Tasks` into a project whenever the single-file
+analyzer is enabled, and the package's `analyzers/` folder reaches every
+compilation that references it — so the cost of the SDK's own AOT/trim
+analyzer was the cost of the WHOLE TREE, with no `HarborAnalyzer*`
+switch to turn it off and no row in
+[`tools/analyzer-scope.json`](../tools/analyzer-scope.json) to write the
+decision down in.
+
+The chain, read out of the SDK on disk
+(`~/.dotnet/sdk/10.0.402/Sdks/Microsoft.NET.Sdk/targets`):
+
+1. `Microsoft.NET.Sdk.Analyzers.targets` infers
+   `EnableSingleFileAnalyzer = true` when `PublishSingleFile` is true.
+2. `Microsoft.NET.Publish.targets` computes `_RequiresILLinkPack`, which is
+   true when `PublishAot`, `IsAotCompatible`, `PublishTrimmed`,
+   `IsTrimmable`, `EnableTrimAnalyzer`, `EnableAotAnalyzer` OR
+   `EnableSingleFileAnalyzer` is true.
+3. `_RequiresILLinkPack` is what makes the SDK add the
+   `Microsoft.NET.ILLink.Tasks` package to the restore.
+4. NuGet hands every file in that package's `analyzers/` folder to the
+   compiler of every project that references it.
+
+**Step 1 was this repository's own line.** The repository-root
+`Directory.Build.props` set `PublishSingleFile=true`, repo-wide, and that
+is what put the SDK's own analyzer into all 105 of the compilations that
+carried it — **302.2 analyzer-seconds, 36 % of every analyzer-second in
+the tree** (CI run 39633281684, the compiler's own report). The property
+now lives where the app that actually ships
+single-file declares it (`apps/Harbor.App.Cli/Harbor.App.Cli.csproj`), and
+the analyzer runs where it has something to say:
+
+| where | what runs | why |
+|-------|-----------|-----|
+| `apps/Harbor.App.Cli` | the single-file analyzer | the app that ships single-file |
+| the six `IsAotCompatible=true` projects | the trim analyzer | the declaration "this code is trim-safe" is a claim, and the analyzer is the check |
+| the `aot-publish` job | the analyzer over the whole publish graph | `-p:EnableSingleFileAnalyzer=true` — the coverage moved here, it did not disappear |
+| the `publish` job | the analyzer over the publish graph | it already passed `-p:PublishSingleFile=true` |
+| every other project | nothing | 105 compilations that carried an analyzer nobody read |
+
+**What the analyzer was buying, measured.** In the ordinary build it
+produced exactly FOUR diagnostics, all of them `IL3000` ("Assembly.Location
+always returns an empty string for assemblies embedded in a single-file
+app"), all of them under `tests/` — and the test tree sets
+`TreatWarningsAsErrors=false`, so not one of them could fail a build:
+
+| site | tree |
+|------|------|
+| `tests/Harbor.CodeGen.Tests/ObservedGeneratorDriverTests.cs:233` | `tests/` |
+| `tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests.cs:364` | `tests/` |
+| `tests/Harbor.Plugins.Runtime.Tests/Security/SandboxAlcTests.cs:92` | `tests/` |
+| `tests/Harbor.TestKit.Generators.Tests/FakeGeneratorDriverTests.cs:164` | `tests/` |
+
+The
+product tree's own `IL3000` sites are three `#pragma warning disable
+IL3000` in `src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs`,
+and those pragmas are still load-bearing: the `aot-publish` job publishes
+the product tree with the analyzer ON, so a new `Assembly.Location` in the
+product tree is a red publish there.
+
+**The switch is `EnableSingleFileAnalyzer`, not `PublishSingleFile`.** The
+first turns the ANALYZER on; the second turns the BUNDLER on, and an AOT
+publish must not ask for the bundler.
 
 #### The severity table does not switch the cost off
 
 This is the fact that decides the shape of the whole thing, and it is
 measured, not assumed.
 
-The compiler's report attributes **45.5 seconds of the build** to
+The compiler's report attributes **93.6 seconds of the build** to
 `Microsoft.VisualStudio.Threading.Analyzers.VSTHRD010MainThreadUsageAnalyzer`
 — and `dotnet_diagnostic.VSTHRD010.severity = none` in `.editorconfig`.
-The rule is switched off and the analyzer runs anyway, in all 62 `src/` and
+The rule is switched off and the analyzer runs anyway, in all 60 `src/` and
 `apps/` projects: Roslyn runs the analyzer and drops the diagnostic
-afterwards, and the work is already paid.
+afterwards, and the work is already paid. It is **82 % of the whole
+family's cost** (93.6 s of 114.4 s).
 
 So `severity = none` is a way of **not hearing** a rule, not a way of
 **not running** it. A rule that is off still costs its analyzer's time, and
@@ -119,6 +230,22 @@ reference the package at all.
 
 That is also why the `.editorconfig` table and the scope table are two
 different things, and why only the second one is a performance lever.
+
+**And the scope lever was used here (#2109).** The family is REMOVED from
+the tree, and the coverage did not go with it:
+
+| rule of the removed family | what it was | where the question is answered now |
+|---------------------------|-------------|-------------------------------------|
+| VSTHRD010 (93.6 s, `severity = none`) | "main-thread member list" | it was OFF: it reported nothing and cost 93.6 s. The rule the repository actually enforces on that question is HARCH001/HARCH002/HARCH003, in `src/Harbor.Arch.Analyzers` and `tests/Harbor.Architecture.Tests` |
+| VSTHRD110 (`suggestion`) | "observe the result of async calls" | HARCH003, a house analyzer that decides it by resolving the TYPE rather than by matching a call's spelling (#1852) — and it is a Warning, so under `TreatWarningsAsErrors=true` it FAILS the build where VSTHRD110 only suggested |
+| the four rules the package ships as Error (VSTHRD004, VSTHRD011, VSTHRD107, VSTHRD109) | `severity = none` here | they were OFF: no rule of this family could fail a build, before or after the removal |
+| everything else | `severity = none` | JoinableTaskFactory rules, over a library this repository does not reference |
+
+The 29 VSTHRD rows stay in `.editorconfig`. They are inert while the
+package is absent, and they are the table that would apply if it came
+back: four of the package's rules ship as Error, so a bare re-reference
+without them would turn the tree red.
+
 
 #### Where the findings are
 
@@ -167,12 +294,18 @@ was measured, checked, and **not** taken.
 
 Nothing else moved. `Roslynator.Analyzers`,
 `Microsoft.CodeAnalysis.NetAnalyzers`, `Meziantou.Analyzer`,
-`ReflectionAnalyzers`, `DotNetProjectFile.Analyzers`,
-`Microsoft.CodeAnalysis.PublicApiAnalyzers` and
-`Microsoft.VisualStudio.Threading.Analyzers` keep the scope they had, and
+`ReflectionAnalyzers`, `DotNetProjectFile.Analyzers` and
+`Microsoft.CodeAnalysis.PublicApiAnalyzers` keep the scope they had, and
 the reasons are in the table above: either the family fires in the product
 tree, or it is the base layer, or its cost is below the noise of the
 measurement.
+
+`Microsoft.VisualStudio.Threading.Analyzers` did NOT keep its scope: it
+was removed from the tree by #2109, on the measurement in
+[§The severity table does not switch the cost off](#the-severity-table-does-not-switch-the-cost-off).
+The SDK's own `ILLink.RoslynAnalyzer` — which is not a package this
+repository references and therefore had no row here — was narrowed by the
+same change; see [§The ILLink analyzer](#the-illink-analyzer).
 
 #### What the narrowing bought
 
@@ -302,7 +435,7 @@ API.
 | `CSharpFunctionalExtensions.Analyzers` | 1.3.0 | none declared in the nuspec | ADOPT, solution-wide | CFE0001 ("check IsSuccess or IsFailure") is the mechanical guard for the §ROP-001 crash class. CFE0002 is Info and stays off. 1.4.1 exists and adds no id, but its rewritten walker crashes the compiler with AD0001 on five production projects — under `TreatWarningsAsErrors` they then fail to compile and emit no CFE0001 at all, so the guard would go blind exactly where the crash class lives. The pin stays at 1.3.0 (`docs/ROP-API-INVENTORY.md` §5.1). |
 | `DotNetProjectFile.Analyzers` | 1.19.1 | MIT | ADOPT, solution-wide | 193 Proj rows in [`/Directory.Build.globalconfig`](../Directory.Build.globalconfig). Three rules are errors, one is `none`, two stay `suggestion` because the lock-file question is the owner's (#1851, #1857). |
 | `Excubo.Analyzers.DependencyInjectionValidation` | 1.0.33 | a `LICENSE` file, no SPDX expression | ADOPT, apps-only | EDI01 to EDI04 plus ADP0001, all demoted to `suggestion` because the analyzer's flow analysis only follows the immediate method body. The real coverage is the DI registration tests (§2). |
-| `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 are `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 18.12.1 | MIT | **REMOVED (#2109)** — it was ADOPT with scope, `src/` and `apps/` only (#1852) | 29 rules, one of them on: VSTHRD110 at `suggestion`. The other 28 were `none` with a reason each, and four of them ship as `error` by default, so landing the package without the demotions would have reddened the tree on the day it arrived. **Removed 2026-10-22**, after the measurement: the family cost **114.4 analyzer-seconds** on the whole build (CI run 39633281684, `-p:ReportAnalyzer=true`), and **93.6 of them — 82 % — were VSTHRD010**, the rule this repository's own severity table silences. A rule at `severity = none` is silenced; the analyzer that implements it still runs over every compilation. The only rule the repository asked for is VSTHRD110, at `suggestion`, which `TreatWarningsAsErrors` does NOT promote — so no rule of this family could fail a build, before or after. The gate that decides "is this an unobserved Task?" is HARCH003, a house analyzer that resolves the TYPE rather than matching a call's spelling (#1852), and it is a Warning, so it fails the build where VSTHRD110 only suggested. The 29 severity rows stay in `.editorconfig`: they are inert while the package is absent, and they are the table that would apply if it came back. |
 | `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 5.6.0 | MIT | ADOPT, staged (PR #1944, issue #1845) | Replaces 1212 lines of python public-API gate with the compiler, on the two frozen projects only. The pull request is open, so this row records the decision, not the merge. |
 | `TheExceptionator.Analyzers` | 1.3.33 | Apache-2.0 | REJECT the package, ADOPT the findings (#1848) | The two findings were real and both are fixed, and the rule that finds them is now a house rule (`InnerExceptionRules.cs`). The package itself is not consumable here: its nuspec declares its Roslyn dependencies with `exclude="Build,Analyzers"`, and every version of the Roslyn packages carries EXACT version constraints (`[3.3.1, 3.3.1]`), so against this repository's central Roslyn pin (5.6.0) the restore fails with NU1608 on every product project, and the same edges leave the compile and runtime assets of `Microsoft.CodeAnalysis.CSharp` in the closure of every project that references the package. The nine analyzer packages this repository already uses declare NO dependencies at all, because the Roslyn assemblies come from the compiler. |
 | `NetArchTest.Rules` | 1.3.2 | MIT | IN the tree, the replacement is open | The layer gate runs on it, and its last release was 2021-05-23. Both candidates for replacing it are decided and both are no: ArchUnitNET was rejected at 0.13.4 (#1841), and aweXpect.Reflection was not adopted (#1864, #2022). |

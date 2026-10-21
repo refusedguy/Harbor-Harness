@@ -90,7 +90,7 @@ public class SessionFormatCorpusTests
         try
         {
             var created = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             string header = await ReadHeaderLine(store, created.Value.Id);
             using JsonDocument document = JsonDocument.Parse(header);
@@ -114,10 +114,10 @@ public class SessionFormatCorpusTests
             CopyFixture(store, SessionFormatCatalog.Legacy);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Legacy));
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
 
             var updated = await store.UpdateAsync(read.Value with { Title = "Renamed legacy session" });
-            await Assert.That(updated.IsSuccess).IsTrue();
+            await Assert.That(updated).IsSuccessful();
 
             string header = await ReadHeaderLine(store, CorpusSessionId(SessionFormatCatalog.Legacy));
             using JsonDocument document = JsonDocument.Parse(header);
@@ -141,13 +141,13 @@ public class SessionFormatCorpusTests
             CopyFixture(store, SessionFormatCatalog.Current);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Current));
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Title).IsEqualTo("Current session");
 
             // The fixture holds two messages, a checkpoint and a rating: the
             // records that are not messages are still not messages.
             var messages = await store.GetMessagesAsync(CorpusSessionId(SessionFormatCatalog.Current));
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
         }
         finally
@@ -165,12 +165,12 @@ public class SessionFormatCorpusTests
             CopyFixture(store, SessionFormatCatalog.Legacy);
 
             var read = await store.GetAsync(CorpusSessionId(SessionFormatCatalog.Legacy));
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Id).IsEqualTo(CorpusSessionId(SessionFormatCatalog.Legacy));
             await Assert.That(read.Value.Title).IsEqualTo("Legacy session");
 
             var messages = await store.GetMessagesAsync(CorpusSessionId(SessionFormatCatalog.Legacy));
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
         }
         finally
@@ -195,7 +195,7 @@ public class SessionFormatCorpusTests
                 CorpusSessionId(SessionFormatCatalog.Legacy),
                 CancellationToken.None);
 
-            await Assert.That(header.IsSuccess).IsTrue();
+            await Assert.That(header).IsSuccessful();
             await Assert.That(header.Value.FormatVersion).IsEqualTo((int?)SessionFormatCatalog.Current);
         }
         finally
@@ -221,7 +221,7 @@ public class SessionFormatCorpusTests
         var migrated = SessionFormatMigrator.MigrateToCurrent(
             oldHeader, stamp, CorpusSessionId(SessionFormatCatalog.Legacy), FixturePath(SessionFormatCatalog.Legacy));
 
-        await Assert.That(migrated.IsSuccess).IsTrue();
+        await Assert.That(migrated).IsSuccessful();
         SessionHeaderEntry current = migrated.Value;
 
         // The NEW record states the generation, and carries the
@@ -245,14 +245,14 @@ public class SessionFormatCorpusTests
 
         var once = SessionFormatMigrator.MigrateToCurrent(
             oldHeader, stamp, CorpusSessionId(SessionFormatCatalog.Legacy), FixturePath(SessionFormatCatalog.Legacy));
-        await Assert.That(once.IsSuccess).IsTrue();
+        await Assert.That(once).IsSuccessful();
 
         // Applying the chain to the result again changes nothing — not even
         // with a different file stamp, because the current header already
         // states one.
         var twice = SessionFormatMigrator.MigrateToCurrent(
             once.Value, stamp.AddYears(1), CorpusSessionId(SessionFormatCatalog.Legacy), FixturePath(SessionFormatCatalog.Legacy));
-        await Assert.That(twice.IsSuccess).IsTrue();
+        await Assert.That(twice).IsSuccessful();
         await Assert.That(twice.Value).IsEqualTo(once.Value);
     }
 
@@ -267,7 +267,7 @@ public class SessionFormatCorpusTests
             futureHeader!, new DateTimeOffset(2026, 5, 6, 7, 8, 9, TimeSpan.Zero),
             FutureSessionId, "/tmp/session-format-v2-future.jsonl");
 
-        await Assert.That(refused.IsFailure).IsTrue();
+        await Assert.That(refused).IsFailed();
         await Assert.That(refused.Error).Contains("session format version 2");
     }
 
@@ -282,7 +282,7 @@ public class SessionFormatCorpusTests
             await WriteFutureFile(store);
 
             var read = await store.GetAsync(FutureSessionId);
-            await Assert.That(read.IsFailure).IsTrue();
+            await Assert.That(read).IsFailed();
             await Assert.That(read.Error).Contains("session format version 2");
             await Assert.That(read.Error).Contains(FutureSessionId);
         }
@@ -304,7 +304,7 @@ public class SessionFormatCorpusTests
             await WriteFutureFile(store);
 
             var messages = await store.GetMessagesAsync(FutureSessionId);
-            await Assert.That(messages.IsFailure).IsTrue();
+            await Assert.That(messages).IsFailed();
             await Assert.That(messages.Error).Contains("session format version 2");
         }
         finally
@@ -324,7 +324,7 @@ public class SessionFormatCorpusTests
             await WriteFutureFile(store);
 
             var list = await store.ListAsync();
-            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list).IsSuccessful();
             await Assert.That(list.Value).IsEmpty();
 
             await Assert.That(logger.Contains("session format version 2")).IsTrue();
@@ -346,7 +346,7 @@ public class SessionFormatCorpusTests
             await WriteFutureFile(store);
 
             var feedback = await store.GetFeedbackAsync(FutureSessionId);
-            await Assert.That(feedback.IsFailure).IsTrue();
+            await Assert.That(feedback).IsFailed();
             await Assert.That(feedback.Error).Contains("session format version 2");
         }
         finally
@@ -365,7 +365,7 @@ public class SessionFormatCorpusTests
             await WriteFutureFile(store);
 
             var checkpoints = await store.ListCheckpointsAsync(FutureSessionId);
-            await Assert.That(checkpoints.IsFailure).IsTrue();
+            await Assert.That(checkpoints).IsFailed();
             await Assert.That(checkpoints.Error).Contains("session format version 2");
         }
         finally

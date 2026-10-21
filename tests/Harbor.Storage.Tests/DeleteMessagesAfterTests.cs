@@ -42,7 +42,7 @@ public class DeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, ids[1]);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsEqualTo(3);
 
         var remaining = await ReadIdsAsync(store, sessionId);
@@ -59,7 +59,7 @@ public class DeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, ids[^1]);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsEqualTo(0);
         var remaining = await ReadIdsAsync(store, sessionId);
         await Assert.That(remaining.Count).IsEqualTo(3);
@@ -73,7 +73,7 @@ public class DeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync(sessionId, "no-such-message");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("not found");
     }
 
@@ -84,7 +84,7 @@ public class DeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync("no-such-session", "whatever");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -97,7 +97,7 @@ public class DeleteMessagesAfterTests
         var fresh = TestMessages.User("fresh", sessionId: sessionId);
         var append = await store.AppendMessageAsync(sessionId, fresh);
 
-        await Assert.That(append.IsSuccess).IsTrue();
+        await Assert.That(append).IsSuccessful();
         var remaining = await ReadIdsAsync(store, sessionId);
         await Assert.That(remaining.Count).IsEqualTo(2); // anchor + fresh
     }
