@@ -19,6 +19,10 @@ using Harbor.Storage.Jsonl;
 using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
+// TUnit.Core ships a TestSessionContext of its own, so the kit's one is
+// named here rather than left to the ambiguity the compiler would report.
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
+
 namespace Harbor.Core.Tests;
 
 /// <summary>
