@@ -248,6 +248,8 @@ jobs:
       # difference between a census and a measurement table.
       - name: Measurement reporter still finds the tests that printed something
         run: python3 tools/test-measurements.py --self-test
+      - name: Skipped-test report finds the skips and their reasons
+        run: python3 tools/test-skips.py --self-test
       - name: Test census counts every test, printed or not
         run: python3 tools/test-census.py --self-test
       # #1822. The tenth gate is the only one that asks whether a test
