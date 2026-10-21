@@ -471,6 +471,7 @@ still exists at `~/.harbor/config.json`. It owns:
 - Enabled plugins
 - Disabled builtin tools
 - Default max steps per agent run
+- Repeat-guard threshold per agent run
 - Cost limit per session
 - Compaction settings
 - The per-plugin configuration sections (`plugins.<plugin-id>`)
@@ -510,6 +511,18 @@ that never touched the key has — 50 is the value every config save writes into
 the file, so honouring it as an override would silently halve the 100-step
 agents for users who never asked for it. Any other value is the budget of the
 run. See issue #1118.
+
+**`repeatToolThreshold` is the repeat guard's threshold.** The value is how
+many CONSECUTIVE identical tool calls (the same tool, the same arguments) may
+happen before the model is told that it is repeating itself. The guard is
+advisory: the call still runs, the run is never ended by it — it only puts a
+reminder in front of the repeated call's result, so the agent gets a chance to
+change its mind before the step budget or the token budget runs out. `0` turns
+the guard off; the default (3) is the value every install runs with, and a
+config that carries it says nothing the agent's own value does not. Like
+`maxSteps`, the value is projected onto the agent the run starts with, so it
+holds for every entry point, and it is read when the process starts. See
+issue #1756.
 
 **Important:** task C1 RE-PURPOSED the `~/.harbor/config.json` path for
 `CommonConfig`. Both `HarborConfig` and `CommonConfig` are now reading/writing

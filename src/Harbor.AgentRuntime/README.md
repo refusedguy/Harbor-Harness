@@ -29,6 +29,7 @@ public sealed class ToolDispatcher : IToolDispatcher;  // Agents/ — permission
 public sealed class DefaultAgent : IAgent;         // Agents/ — the agent record the loop runs
 public sealed class SubAgentRunner;                // Agents/ — task tool sub-agent fan-out
 public sealed class RunBudgetTracker;              // Agents/ — per-run time/token/step budget
+public sealed class RepeatToolGuard;               // Agents/ — #1756: counts consecutive identical tool calls, tells the model
 public sealed class AgentPipeline;                 // Agents/Pipeline/ — ordered IAgentBehavior chain
 public interface IPipelineBehavior { ... }         // Agents/Pipeline/ — run-level cross-cuttings
 // behaviors: LoggingBehavior, PermissionCheckBehavior, MaxStepsBehavior,
@@ -60,6 +61,16 @@ that needs a different granularity passes its own `UpdateFlushPolicy` to
 characters / 100 ms). The merge never drops a delta: the last delta of a turn
 and every terminal event are published, in order, before the event that
 follows them.
+
+`RepeatToolGuard` (#1756) counts CONSECUTIVE identical tool calls — the same
+tool with the same arguments, compared on a canonical form whose object keys
+are sorted — and, once the chain reaches the threshold, puts a reminder in
+front of the repeated call's own result. It is ADVISORY: the call runs exactly
+as it would without the guard, and no run is ever ended by it. The counter is
+per RUN (the loop creates one instance per run, next to the budget ledger and
+for the same reason), and a user message in the history ends the chain —
+repetition across an interjection is not the same loop. The threshold is
+`AgentDefinition.RepeatToolThreshold` (3 by default, 0 turns the guard off).
 
 ## Wiring
 

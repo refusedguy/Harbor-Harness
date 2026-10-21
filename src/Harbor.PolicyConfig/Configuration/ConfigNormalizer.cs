@@ -134,7 +134,9 @@ public static class ConfigNormalizer
     private static void ApplyLimits(HarborConfig config, RawConfigDto raw)
     {
         // ── Run / Cost / Compaction ──
-        config.Run = new RunLimitsConfig(raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps);
+        config.Run = new RunLimitsConfig(
+            raw.MaxSteps ?? RunLimitsConfig.Default.MaxSteps,
+            RepeatToolThreshold: raw.RepeatToolThreshold ?? RunLimitsConfig.Default.RepeatToolThreshold);
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
         if (raw.Compaction is not null) config.Compaction = raw.Compaction;
 
