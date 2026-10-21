@@ -181,7 +181,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
 | `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
-| `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
+| `plugin inventory snapshot` | `harbor-gates gen-plugin-inventory --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 
 Three things make this a real gate rather than decoration:
 

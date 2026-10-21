@@ -243,9 +243,9 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (24 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (23 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 18 tools are run by a workflow; the other six are
+tree. 17 tools are run by a workflow; the other six are
 `md_gate.py`, `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
 other tools rather than run, `codemod-test-events.py`, `codemod-tool-schemas.py`
 and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool that
@@ -295,7 +295,6 @@ The modes are:
 | `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
-| `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 | `tools/codemod-tool-names.py` | python | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu` | compiled: `tools/gates/aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
@@ -322,6 +321,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/bin/harbor-gates-linux-x64 demo-repro` | compiled: `tools/gates/demo-repro` | the demo GIFs are reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | `--self-test` | `assets/demo/baseline.json` | — |
+| `tools/bin/harbor-gates-linux-x64 gen-plugin-inventory` | compiled: `tools/gates/gen-plugin-inventory` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

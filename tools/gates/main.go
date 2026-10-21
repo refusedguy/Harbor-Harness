@@ -55,6 +55,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	genplugininventory "harbor.local/gates/gen-plugin-inventory"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
@@ -175,9 +176,19 @@ var registry = []registered{
 		run:     gene2eshards.Run,
 	},
 	{
+		name:    "gen-plugin-inventory",
+		summary: "the committed plugin inventory snapshot still matches the tree",
+		run:     genplugininventory.Run,
+	},
+	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "gen-plugin-inventory",
+		summary: "the committed plugin inventory snapshot still matches the tree",
+		run:     genplugininventory.Run,
 	},
 	{
 		name:    "gen-seam-graph",
