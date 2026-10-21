@@ -62,6 +62,34 @@ public sealed record AgentDefinition(
     RunBudgetCaps? Budget = null)
 {
     /// <summary>
+    ///     The threshold at which the repeat guard (#1756) tells the MODEL that
+    ///     it is repeating the same tool call with the same arguments.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The count at which the guard speaks up: the third consecutive
+    ///         identical call is the first one the model is told about. Zero
+    ///         turns the guard OFF (the chain is still counted, nothing is ever
+    ///         said about it).
+    ///     </para>
+    ///     <para>
+    ///         This is a REMINDER, not a limit: the call is executed exactly as
+    ///         it would be without the guard, and the guard never ends a run.
+    ///         It sits next to <see cref="MaxSteps" /> and
+    ///         <see cref="Budget" /> as a knob, and it does not duplicate
+    ///         them — they bound a run, this tells the model to stop wasting
+    ///         one.
+    ///     </para>
+    /// </remarks>
+    public int RepeatToolThreshold { get; init; } = DefaultRepeatToolThreshold;
+
+    /// <summary>
+    ///     The threshold the shipped agents run with: the third consecutive
+    ///     identical tool call is the first one the model is told about.
+    /// </summary>
+    public const int DefaultRepeatToolThreshold = 3;
+
+    /// <summary>
     ///     Returns the default <c>code</c> agent — full read/write/edit/bash permissions, 50 steps.
     /// </summary>
     /// <param name="model">Model id (without provider prefix).</param>
@@ -345,11 +373,11 @@ public sealed record AgentDefinition(
             // mean "without asking": the tool asks the user about every
             // change it proposes, and the answer covers that call only — the
             // same posture as this agent's write / edit rules.
-            new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Allow),
             // #1761: the goal axis. The agent's verdict on the session's own
             // goal is a report, not a workspace mutation, so it needs no
             // approval.
-            new("goal", "*", PermissionAction.Allow)
+            new(WellKnownTools.Goal, "*", PermissionAction.Allow)
         }),
         50,
         SystemPromptAppend: "You are in DEBUG mode. Diagnose first: reproduce the failure, isolate the cause, then fix. Run tests to confirm. Broad or destructive changes need explicit user approval.");
@@ -398,12 +426,12 @@ public sealed record AgentDefinition(
             // asks the user about every change it proposes, so allowing it
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
-            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
+            new(WellKnownTools.PluginManager, "*", PermissionAction.Deny),
             // #1761: the goal axis. The agent's verdict on the session's own
             // goal is a report, not a workspace mutation, so it needs no
             // approval — and the orchestrator is the agent that most needs to
             // be able to say "the legs are done".
-            new("goal", "*", PermissionAction.Allow)
+            new(WellKnownTools.Goal, "*", PermissionAction.Allow)
         }),
         100,
         SystemPromptAppend: "You are in ORCHESTRATOR mode. Decompose the goal and delegate through the task tool; do not implement directly. Track each leg to done.");

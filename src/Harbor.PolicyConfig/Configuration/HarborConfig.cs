@@ -294,6 +294,12 @@ public sealed class HarborConfig
         DisabledTools = Tooling.DisabledTools.ToList(),
         AutoReloadPlugins = !Tooling.AutoReloadPlugins, // null when default — keep config.json free of knob noise
         MaxSteps = Run.MaxSteps,
+        // #1756: the repeat-guard threshold is written only when it diverges
+        // from the default — same "no knob noise in config.json" rule the
+        // CellForge section follows.
+        RepeatToolThreshold = Run.RepeatToolThreshold == RunLimitsConfig.Default.RepeatToolThreshold
+            ? null
+            : Run.RepeatToolThreshold,
         CostLimit = Cost.Limit,
         Compaction = Compaction,
         SecondaryModel = SecondaryModel,

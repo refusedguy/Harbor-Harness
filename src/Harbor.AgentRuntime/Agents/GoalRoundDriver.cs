@@ -284,9 +284,10 @@ public sealed class GoalRoundDriver
 
     /// <summary>
     ///     The name of the model-facing tool that records the agent's verdict
-    ///     on the goal.
+    ///     on the goal. It reads the catalog (#1564) rather than a literal, so
+    ///     a rename moves the permission lookup with the tool.
     /// </summary>
-    private const string GoalToolName = "goal";
+    private static readonly string GoalToolName = WellKnownTools.Goal;
 
     /// <summary>
     ///     Render the prompt that starts a round.
