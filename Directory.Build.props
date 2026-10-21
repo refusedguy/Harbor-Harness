@@ -71,6 +71,7 @@
     -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
 
+    <!--
       PublishSingleFile — MOVED OUT OF THIS FILE (#2109).
 
       It used to be `true` here, repo-wide, and that one line is the
