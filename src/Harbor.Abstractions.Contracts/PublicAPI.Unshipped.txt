@@ -119,6 +119,9 @@ Harbor.Abstractions.Models.ToolResult.DeferredContexts.get -> System.Collections
 Harbor.Abstractions.Models.ToolResult.DeferredContexts.init -> void
 Harbor.Abstractions.Models.ToolResultEntry.DeferredContexts.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredToolContext!>?
 Harbor.Abstractions.Models.ToolResultEntry.DeferredContexts.init -> void
+
+Harbor.Abstractions.Permissions.ToolCategory.Interaction = 5 -> Harbor.Abstractions.Permissions.ToolCategory
+static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.AskUserQuestion -> Harbor.Abstractions.Models.Identifiers.ToolName!
 Harbor.Abstractions.Models.Identifiers.WellKnownTools
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Bash -> Harbor.Abstractions.Models.Identifiers.ToolName!
 static readonly Harbor.Abstractions.Models.Identifiers.WellKnownTools.Edit -> Harbor.Abstractions.Models.Identifiers.ToolName!

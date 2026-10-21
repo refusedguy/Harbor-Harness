@@ -28,7 +28,16 @@ public enum ToolCategory
     Exec,
 
     /// <summary>MCP bridge calls.</summary>
-    Mcp
+    Mcp,
+
+    /// <summary>
+    ///     Tools that ask the human a question and read the answer back
+    ///     (#1759). The class is its own because the tool neither inspects
+    ///     nor changes the workspace: what it waits for is a person, and a
+    ///     rule that names this class is the way to say "the model may not
+    ///     interrupt me".
+    /// </summary>
+    Interaction
 }
 
 /// <summary>
