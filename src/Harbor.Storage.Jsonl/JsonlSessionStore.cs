@@ -895,6 +895,25 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
     }
 
     /// <summary>
+    ///     The soft-deprecated name for the rewind (#1752): the same
+    ///     append-only rewind, under the name the contract used before the
+    ///     log had a rewind record of its own.
+    /// </summary>
+    /// <remarks>
+    ///     A forwarder, not a second behaviour: the rewind writes an event and
+    ///     the tail stays in the file. A store that still OVERRIDES this
+    ///     member with the destructive behaviour keeps it — which is how the
+    ///     SQLite backend says "not migrated yet" without failing loudly on
+    ///     every call.
+    /// </remarks>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="messageId">Id of the message to keep as the new tail.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The number of messages that left the surface.</returns>
+    public Task<Result<int>> DeleteMessagesAfterAsync(string sessionId, string messageId, CancellationToken ct = default)
+        => RewindMessagesAfterAsync(sessionId, messageId, ct);
+
+    /// <summary>
     ///     Prune: physically remove the messages after the anchor from the
     ///     file (#1752).
     /// </summary>

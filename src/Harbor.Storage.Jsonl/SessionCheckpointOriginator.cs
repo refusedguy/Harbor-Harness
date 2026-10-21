@@ -140,7 +140,12 @@ public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpoin
         if (memento is null)
             return Result.Failure<SessionRewindOutcome>(SessionStoreErrors.CheckpointNotFound(sessionId, checkpointId));
 
-        var truncated = await DeleteMessagesAfterAsync(sessionId, memento.MessageId, ct).ConfigureAwait(false);
+        // #1752: the restore is an append-only rewind — the tail leaves the
+        // SURFACE and the records stay in the log. The call names the
+        // rewind directly (the class's own member), not the soft-deprecated
+        // forwarder: a default interface member is reached through the
+        // interface, and the store IS the interface.
+        var truncated = await RewindMessagesAfterAsync(sessionId, memento.MessageId, ct).ConfigureAwait(false);
         if (truncated.IsFailure)
             return truncated.ConvertFailure<SessionRewindOutcome>();
 
