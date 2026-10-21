@@ -24,7 +24,7 @@
 
         SessionLockStrip.cs      - a SemaphoreSlim stripe over a ConcurrentDictionary the
                                    store owns as a field. This store takes lock (list) on
-                                   the per-session List<AgentMessage> instead: a different
+                                   the per-session log list instead: a different
                                    primitive, the same exclusion guarantee, and its read
                                    paths (GetAsync, DeleteAsync, GetStatsAsync) take no
                                    lock at all - so there is no strip here to hand out.

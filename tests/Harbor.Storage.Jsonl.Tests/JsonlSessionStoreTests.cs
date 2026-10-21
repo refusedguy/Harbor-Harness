@@ -496,7 +496,7 @@ public class JsonlSessionStoreCancellationTests
     }
 
     [Test]
-    public async Task UpdateMessageAsync_RewritesInPlace_NoDuplicateEntries()
+    public async Task UpdateMessageAsync_AppendsANewVersion_TheOldOneStaysInTheLog()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), $"harbor-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -506,8 +506,9 @@ public class JsonlSessionStoreCancellationTests
             var created = (await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4")).Value;
             string sessionId = created.Id;
 
-            // DDD-audit 25.08 (ROP-C Z3): UpdateMessageAsync used to re-append,
-            // so every edit grew the file with a duplicate id entry.
+            // #1752: an edit appends a NEW VERSION of the record. The version
+            // it replaces stays in the log — that is what "the agent's text
+            // never disappears" means — and the surface shows the new one.
             var original = TestMessages.User("before", id: "msg-1", sessionId: sessionId, agent: "user", model: "claude-opus-4");
             var appendResult = await store.AppendMessageAsync(sessionId, original);
             await Assert.That(appendResult.IsSuccess).IsTrue();
@@ -517,14 +518,14 @@ public class JsonlSessionStoreCancellationTests
 
             string[] lines = await File.ReadAllLinesAsync(Path.Combine(tempDir, $"{sessionId}.jsonl"));
             int occurrences = lines.Count(l => l.Contains("\"msg-1\"", StringComparison.Ordinal));
-            await Assert.That(occurrences).IsEqualTo(1);
+            await Assert.That(occurrences).IsEqualTo(2);
 
             var messages = (await store.GetMessagesAsync(sessionId)).Value;
             await Assert.That(messages.Count).IsEqualTo(1);
             var user = (UserMessage)messages[0];
             await Assert.That(user.Content).IsEqualTo("after");
 
-            // Header survived the rewrite.
+            // Header survived the append.
             await Assert.That(lines[0].Contains("\"type\":\"session\"", StringComparison.Ordinal)).IsTrue();
         }
         finally
