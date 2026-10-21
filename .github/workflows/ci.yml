@@ -2467,7 +2467,19 @@ jobs:
         if: always() && matrix.shard == 'core'
         shell: bash
         run: |
-          tools/bin/harbor-gates-linux-x64 guard-triage \
+          set -euo pipefail
+          # The compiled gate binary is PER-ARCHITECTURE, and the test
+          # shards run on arm64. The python original was architecture-
+          # agnostic; the binary is not, and an x64 binary on an arm runner
+          # is "Exec format error". The repository ships one binary per
+          # platform (tools/bin/harbor-gates-linux-{x64,arm64}), and the
+          # gates-binary workflow rebuilds both.
+          case "$(uname -m)" in
+            x86_64)        gate=tools/bin/harbor-gates-linux-x64 ;;
+            aarch64|arm64) gate=tools/bin/harbor-gates-linux-arm64 ;;
+            *) echo "unknown architecture: $(uname -m)" >&2; exit 2 ;;
+          esac
+          "$gate" guard-triage \
             --trx "TestResults/${{ matrix.shard }}/*.trx" \
             --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
             --project Harbor.Architecture.Tests \
