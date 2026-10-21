@@ -64,10 +64,10 @@ public class JsonlToolErrorRoundTripTests
         await Assert.That(back.IsSuccess).IsTrue();
         var results = ((ToolResultMessage)back.Value).Results;
         await Assert.That(results.Count).IsEqualTo(1);
-        await Assert.That(results[0].ErrorInfo).IsNotNull();
-        await Assert.That(results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Timeout);
-        await Assert.That(results[0].ErrorInfo.Name).IsEqualTo("ToolTimeoutError");
-        await Assert.That(results[0].ErrorInfo.Reason).IsEqualTo("deadline 30000ms");
+        ToolErrorInfo error = results[0].ErrorInfo!;
+        await Assert.That(error.Code).IsEqualTo(ToolErrorCodes.Timeout);
+        await Assert.That(error.Name).IsEqualTo("ToolTimeoutError");
+        await Assert.That(error.Reason).IsEqualTo("deadline 30000ms");
         await Assert.That(results[0].Output).IsEqualTo("TOOL_TIMEOUT: Tool 'webfetch' timed out after 30s.");
     }
 
@@ -98,8 +98,9 @@ public class JsonlToolErrorRoundTripTests
 
         await Assert.That(parsed.IsSuccess).IsTrue();
         var results = ((ToolResultMessage)parsed.Value).Results;
-        await Assert.That(results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.Timeout);
-        await Assert.That(results[0].ErrorInfo.Reason).IsEqualTo("deadline 30000ms");
+        ToolErrorInfo error = results[0].ErrorInfo!;
+        await Assert.That(error.Code).IsEqualTo(ToolErrorCodes.Timeout);
+        await Assert.That(error.Reason).IsEqualTo("deadline 30000ms");
     }
 
     [Test]
@@ -123,9 +124,10 @@ public class JsonlToolErrorRoundTripTests
 
         await Assert.That(back.IsSuccess).IsTrue();
         var entry = ((ToolResultMessage)back.Value).Results[0];
-        await Assert.That(entry.ErrorInfo!.Code).IsEqualTo(unknown);
-        await Assert.That(entry.ErrorInfo.Name).IsEqualTo("PluginQuotaError");
-        await Assert.That(ToolErrorCodes.IsKnown(entry.ErrorInfo.Code)).IsFalse();
+        ToolErrorInfo error = entry.ErrorInfo!;
+        await Assert.That(error.Code).IsEqualTo(unknown);
+        await Assert.That(error.Name).IsEqualTo("PluginQuotaError");
+        await Assert.That(ToolErrorCodes.IsKnown(error.Code)).IsFalse();
     }
 
     [Test]

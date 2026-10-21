@@ -215,10 +215,11 @@ public class ToolErrorCode1760Tests
             TestAgents.AllowAll(), CancellationToken.None).ConfigureAwait(false);
 
         ToolResultEntry entry = message.Results[0];
-        await Assert.That(entry.ErrorInfo!.Code).IsEqualTo(unknown);
-        await Assert.That(entry.ErrorInfo.Name).IsEqualTo("PluginQuotaError");
-        await Assert.That(entry.ErrorInfo.Reason).IsEqualTo("quota");
-        await Assert.That(ToolErrorCodes.IsKnown(unknown)).IsFalse();
+        ToolErrorInfo error = entry.ErrorInfo!;
+        await Assert.That(error.Code).IsEqualTo(unknown);
+        await Assert.That(error.Name).IsEqualTo("PluginQuotaError");
+        await Assert.That(error.Reason).IsEqualTo("quota");
+        await Assert.That(ToolErrorCodes.IsKnown(error.Code)).IsFalse();
         // The text still leads with the code — including one this build does
         // not know.
         await Assert.That(entry.Output).IsEqualTo("PLUGIN_TOOL_QUOTA_EXCEEDED: the plugin's quota is spent");

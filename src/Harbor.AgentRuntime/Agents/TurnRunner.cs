@@ -976,7 +976,7 @@ internal sealed class TurnRunner(
             await eventBus.PublishAsync(
                 new ToolExecutionEndEvent(
                     entry.ToolCallId,
-                    ToolResult.Error(entry.Output) { ErrorInfo = entry.ErrorInfo },
+                    ToolResult.Error(entry.Output) with { ErrorInfo = entry.ErrorInfo },
                     true),
                 CancellationToken.None).ConfigureAwait(false);
         }
