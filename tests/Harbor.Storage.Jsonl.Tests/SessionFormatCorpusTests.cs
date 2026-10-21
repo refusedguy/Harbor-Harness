@@ -29,8 +29,9 @@
 //
 // The file name of a fixture is the session id inside it, so a fixture is
 // copied into a store's directory under the name the store will look it up
-// by. The corpus is read as the on-disk artifact it is, not as a string in a
-// test.
+// by. The corpus is read from the checkout, the way the other test fixtures
+// in this repository are read, so the file under test is the file that is
+// committed.
 
 using System.Text.Json;
 using Harbor.Storage.Jsonl;
@@ -415,10 +416,14 @@ public class SessionFormatCorpusTests
     }
 
     /// <summary>
-    ///     The path of the committed fixture of one generation.
+    ///     The path of the committed fixture of one generation, in the
+    ///     checkout. The fixtures are read where they are committed, the way
+    ///     the other test fixtures in this repository are read
+    ///     (<c>RepoPaths</c> in the shared kit) — a copied fixture is a
+    ///     fixture that can drift from the file it claims to be.
     /// </summary>
     private static string FixturePath(int generation) =>
-        Path.Combine(AppContext.BaseDirectory, "fixtures", Corpus[generation]);
+        RepoPaths.Combine("tests", "Harbor.Storage.Jsonl.Tests", "fixtures", Corpus[generation]);
 
     /// <summary>
     ///     The session id inside the fixture of one generation. The fixture's

@@ -124,8 +124,8 @@ exercises is a migration nobody knows works.
 
 The fixtures live in
 [../tests/Harbor.Storage.Jsonl.Tests/fixtures/](../tests/Harbor.Storage.Jsonl.Tests/fixtures/)
-and are copied next to the test binary, so the corpus is read as the on-disk
-artifact it is. A fixture's file name is the session id inside it, so a
+and are read from the checkout, the way the other test fixtures in this
+repository are read. A fixture's file name is the session id inside it, so a
 fixture copied into a store's directory is found under the name the store
 looks it up by.
 
