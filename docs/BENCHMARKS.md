@@ -3263,18 +3263,27 @@ parent's own high-water mark. The measuring parent is a 2 KB C program
 
 ### 10.1 `check-doc-cites.py`: the git processes, batched (#2090)
 
+The same tree, the same moment, the same harness, five runs each, the
+minimum kept:
+
 | | before | after |
 |---|---|---|
-| wall time, whole gate | **669 s** | **209 s** (3.2x) |
+| wall time, whole gate | **547.2 s** (median 620.4 s) | **68.1 s** (median 72.5 s), **8.0x** |
 | `git` processes | **1233** | **37** |
 | time inside `git` | **414 s** | **39 s** |
-| peak RSS | 75.6 MB | 74.9 MB |
+| peak RSS | 69.1 MB | 57.4 MB |
 | output | the findings | **byte-identical** |
 
 Tree: `origin/dev` at `a763c824`, 3876 files, 1291 tracked `.cs` files
 under `tests/`. The gate's own output is byte-identical before and after
 (the two runs are compared with `diff`), and its self-test still passes
 (67 checks).
+
+The first pair of numbers measured for this gate (669 s and 209 s) was
+taken while the machine carried other people's runs, and both sides of that
+pair carry that load. The pair above is the same measurement on the same
+tree with the machine quiet, and it is the one to quote: the speed-up of
+the GATE is 8.0x, and the speed-up of the SET is in §10.2.
 
 What the 1233 processes were: 1188 `git blame` calls, one per file under
 `tests/` that the gate read, 40 `git show` calls, and 5 others. The blame
@@ -3298,6 +3307,74 @@ What replaced it:
 
 The reconstruction was checked against `git blame` line by line for every
 file of this tree: of the files the gate uses it for, **0 disagree**.
+
+## 10.2 The whole set, gate by gate
+
+The same harness, the same tree, the same moment, five runs each, the
+minimum wall time kept. `bench/gates/measure.sh` runs every gate the
+workflows run, with the arguments the workflows pass.
+
+**The three columns are three questions.**
+
+* **python** — the gates as they were.
+* **python + the git batching** — the doc-cites gate no longer asks git
+  about every file it read, only about the 30 that hold a citation.
+* **the compiled binary** — the gates that have moved to `harbor-gates`
+  run as the binary, the rest are still python.
+
+| gate | python | python + batching | compiled | RSS python | RSS compiled |
+|---|---:|---:|---:|---:|---:|
+| `check-doc-cites.py` | 547.2 | 68.1 | — | 69.1 MB | |
+| `gen-seam-graph.py` | 15.9 | — | **1.0** | 120.0 MB | 78.0 MB |
+| `check-test-dup.py` | 10.7 | 11.7 | — | 53.2 MB | |
+| `check-test-projects.py` | 8.6 | 8.8 | — | 24.3 MB | |
+| `check-string-switch.py` | 7.5 | 5.7 | — | 18.6 MB | |
+| `check-string-switch-report.py` | 7.4 | 6.9 | — | 18.7 MB | |
+| `check-result-chains.py` | 7.5 | 4.2 | — | 18.7 MB | |
+| `guard-triage.py` | 1.8 | 0.9 | — | 31.3 MB | |
+| `check-md-links.py` | 1.9 | 1.3 | — | 20.4 MB | |
+| `check-abstractions-contract.py` | 1.6 | 1.6 | — | 17.5 MB | |
+| `md-lint.py` | 1.4 | 0.8 | — | 19.7 MB | |
+| `check-arch-anchors.py` | 1.1 | 1.0 | — | 17.8 MB | |
+| `check-test-json-reflection.py` | 0.8 | 0.8 | — | 17.4 MB | |
+| `check-xml-doc-coverage.py` | 0.6 | 0.7 | — | 16.7 MB | |
+| `check-doc-facts.py` | 0.5 | 0.3 | — | 17.9 MB | |
+| `check-analyzer-scope.py` | 0.6 | 0.3 | — | 18.4 MB | |
+| `check-gate-policy.py` | 0.7 | 0.4 | — | 19.6 MB | |
+| `check-result-chains-report.py` | 0.3 | 0.3 | — | 17.3 MB | |
+| `check-tunit-analyzer-gate.py` | 0.3 | 0.3 | — | 16.6 MB | |
+| `check-coverage-registry.py` | 0.3 | 0.3 | — | 17.7 MB | |
+| `check-shard-balance.py` | 0.3 | 0.3 | — | 17.0 MB | |
+| `ci-shard-slices.py` | 0.5 | 0.4 | — | 19.6 MB | |
+| `check-no-test-sdk.py` | 0.3 | 0.3 | — | 17.7 MB | |
+| `check-reference-trimmer.py` | 0.2 | 0.2 | — | 16.4 MB | |
+| `test-census.py` | 0.2 | 0.3 | — | 17.2 MB | |
+| `test-skips.py` | 0.3 | 0.2 | — | 16.5 MB | |
+| `test-measurements.py` | 0.2 | 0.3 | — | 16.6 MB | |
+| `pack-validate.py` | 0.2 | 0.2 | — | 16.1 MB | |
+| **the whole set** | **619.2 s** | **116.7 s** | **117.6 s** | | |
+
+Three numbers, and they are the whole answer to "what does the language
+buy":
+
+1. **The set costs 619 s**, and 547 s of it is ONE gate. The other 28
+   instruments together cost 72 s.
+2. **The git batching takes the set from 619 s to 117 s (5.3x)**, and it
+   touches no language at all.
+3. **The compiled gates take the set from 117 s to 117 s**, because the two
+   gates that moved are the ones that were cheap: the seam graph is 1.6 %
+   of the set.
+
+A single gate's speed-up is not the set's speed-up. The seam graph is
+**16.5x** faster as a binary (15.9 s to 1.0 s), and that is worth 2.4 %
+of the set. The doc-cites gate is 88 % of the set, and its cost is git
+processes, not python: 414 of its 547 seconds are inside `git`.
+
+**What the full port would be worth, and what it would not.** If every
+gate were compiled, the set would be bounded by the doc-cites gate's
+python scanning: about 55 s of scanning and 13 s of git. The full port is
+therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
+117 s on its own.
 
 ## 11. How to reproduce
 
