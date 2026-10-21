@@ -61,32 +61,27 @@ public class ScopedProviderResolverTests
         await Assert.That(resolved.Value).IsSameReferenceAs(global);
     }
 
+    /// <summary>
+    ///     A bound client is visible ONLY inside the scope it was bound in; every
+    ///     other scope keeps the process-wide client. Both facts are one test with
+    ///     two arguments: the arrangement is the same and only the scope differs,
+    ///     and two bodies that differ in a single string are the shape the
+    ///     duplication gate exists to catch.
+    /// </summary>
     [Test]
-    public async Task GetClient_InABoundScope_ReturnsTheScopedClient()
+    [Arguments("ci", true)]
+    [Arguments("other", false)]
+    public async Task GetClient_UsesTheBoundClientOnlyInsideItsScope(string scope, bool insideBoundScope)
     {
         var global = new StubLlmClient(GlobalModel);
-        var scoped = new StubLlmClient(ScopedModel);
+        var bound = new StubLlmClient(ScopedModel);
         var resolver = new ScopedProviderResolver(RegistryWith(global));
-        resolver.BindProvider(ServiceScope.Create("ci"), TestProvider, scoped);
+        resolver.BindProvider(ServiceScope.Create("ci"), TestProvider, bound);
 
-        Result<ILlmClient> resolved = resolver.GetClient(ServiceScope.Create("ci"), TestProvider);
+        Result<ILlmClient> resolved = resolver.GetClient(ServiceScope.Create(scope), TestProvider);
 
         await Assert.That(resolved.IsSuccess).IsTrue();
-        await Assert.That(resolved.Value).IsSameReferenceAs(scoped);
-    }
-
-    [Test]
-    public async Task GetClient_InAnotherScope_StillReturnsTheProcessWideClient()
-    {
-        var global = new StubLlmClient(GlobalModel);
-        var scoped = new StubLlmClient(ScopedModel);
-        var resolver = new ScopedProviderResolver(RegistryWith(global));
-        resolver.BindProvider(ServiceScope.Create("ci"), TestProvider, scoped);
-
-        Result<ILlmClient> resolved = resolver.GetClient(ServiceScope.Create("other"), TestProvider);
-
-        await Assert.That(resolved.IsSuccess).IsTrue();
-        await Assert.That(resolved.Value).IsSameReferenceAs(global);
+        await Assert.That(resolved.Value).IsSameReferenceAs(insideBoundScope ? bound : global);
     }
 
     [Test]
