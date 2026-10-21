@@ -1,7 +1,7 @@
 # coverage-registry — the product files the nightly coverage lane does not
 # cover, and why each one is allowed to stay that way.
 #
-# OWNER: issue #1753. Read by tools/check_coverage_registry.py, on every
+# OWNER: issue #1753. Read by tools/check-coverage-registry.py, on every
 # nightly run.
 #
 # THIS IS A RATCHET, NOT A TARGET. The gate passes only when the set of

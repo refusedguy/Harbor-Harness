@@ -66,7 +66,7 @@ WHAT IT DOES NOT DO
 
 USAGE
 
-    check_coverage_registry.py [--coverage-dir DIR] [--registry FILE]
+    check-coverage-registry.py [--coverage-dir DIR] [--registry FILE]
                                [--source-root DIR] [--min-files N]
                                [--min-covered N] [--json] [--self-test]
 
@@ -474,7 +474,7 @@ def self_test() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="check_coverage_registry.py",
+        prog="check-coverage-registry.py",
         description="Check the coverage registry against the measurement.",
     )
     parser.add_argument("--coverage-dir", default="Coverage",

@@ -5,7 +5,7 @@ Stdlib only — no pip, no network, no dotnet. This module is the plumbing
 behind the two coverage tools:
 
     coverage_report.py          the REPORTER: the per-file coverage table
-    check_coverage_registry.py  the GATE: the registry against the measurement
+    check-coverage-registry.py  the GATE: the registry against the measurement
 
 WHY A MODEL AND NOT A SCRIPT
 
