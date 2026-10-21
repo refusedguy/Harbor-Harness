@@ -87,7 +87,7 @@ public static class CompileTarget
         {
             return;
         }
-        var build = s => s
+        DotNetBuildSettings build = s => s
             .SetProjectFile(solution)
             .SetConfiguration(configuration)
             .EnableNoRestore()
