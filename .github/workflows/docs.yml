@@ -2,7 +2,7 @@
 #
 # WHY THIS FILE EXISTS (issue #509)
 #
-#   `tools/check-md-links.py` has been in the repo since #39 hygiene and has
+#   The internal-links gate has been in the repo since #39 hygiene and has
 #   never run in CI. ci.yml lists `**.md` and `docs/**` in `paths-ignore` for
 #   both `push` and `pull_request`, so a docs-only PR never starts a build and
 #   therefore never reached the checker. A gate in a workflow that cannot
@@ -79,10 +79,7 @@ on:
       # Directory.Packages.props, which is where a version is pinned.
       - 'src/**/*.csproj'
       - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
-      - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
@@ -227,10 +224,7 @@ on:
       # Directory.Packages.props, which is where a version is pinned.
       - 'src/**/*.csproj'
       - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
-      - 'tools/md_gate.py'
       - 'tools/check-abstractions-contract.py'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
@@ -344,9 +338,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Link checker fails on a broken link
-        run: python3 tools/check-md-links.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-md-links --self-test
       - name: Markdown lint fails on a malformed document
-        run: python3 tools/md-lint.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 md-lint --self-test
+      # The changelog assembler glues the per-pull-request fragments into
+      # CHANGELOG.md. Its failure path is tested here for the same reason as
+      # the others: a script edited until it assembles nothing is
+      # indistinguishable from a script that assembles nothing.
+      - name: Changelog assembler fails on a diverged CHANGELOG.md
+        run: python3 tools/changelog-assemble.py --self-test
       # #664. The third gate is the only one that asks whether a `file:line`
       # in a normative document still points at a line, and whether a backticked
       # type is constructed by anything. Its failure path is tested here for
@@ -592,7 +592,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every internal link and anchor
-        run: python3 tools/check-md-links.py --min-files 250 --min-refs 600
+        run: tools/bin/harbor-gates-linux-x64 check-md-links --min-files 250 --min-refs 600
 
   # #664. Same reasoning as the two jobs above, third question: not "does the
   # link resolve" and not "is the file shaped right" but "does the `file:line`
@@ -686,7 +686,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check markdown invariants
-        run: python3 tools/md-lint.py --min-files 250 --min-lines 60000
+        run: tools/bin/harbor-gates-linux-x64 md-lint --min-files 250 --min-lines 60000
 
   # #933. Fourth question, and the only one a copy-consistency gate could not
   # answer honestly: not "do the links resolve", not "is the file shaped

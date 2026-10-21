@@ -1,6 +1,22 @@
 #!/usr/bin/env python3
 """Shared plumbing for the markdown gates in tools/ — stdlib only, no dotnet.
 
+WHO READS THIS FILE NOW
+
+  check-doc-cites.py   yes — it still runs in python
+
+  check-md-links.py    no — it moved into the compiled binary
+  md-lint.py           no — it moved into the compiled binary
+
+The two markdown gates moved into `harbor-gates` (tools/gates/), and their
+shared plumbing moved with them: tools/gates/internal/mdgate/ is the Go
+port of this module, and the two compiled gates call it.
+
+This module stays because tools/check-doc-cites.py is still python and
+still needs the tracked-file list, the guard and the fixture harness. It is
+the same module the compiled gates carry in Go, and it is one reader now
+rather than three.
+
 Two gates live next to this file and both are wired by
 .github/workflows/docs.yml (issue #509):
 

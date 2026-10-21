@@ -165,6 +165,69 @@ func ReadText(path string) (string, error) {
 	return text, nil
 }
 
+// SplitLinesKeepEnds splits text into lines the way python's
+// `str.splitlines(keepends=True)` does.
+//
+// The boundaries are python's, not Go's: LF, CR, CRLF (as one), VT, FF,
+// FS, GS, RS, NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR. The line ENDING
+// is kept with the line.
+//
+// Go's `strings.SplitAfter(text, "\n")` knows only LF, and the markdown
+// gates count lines and report them, so the difference is a difference in
+// the verdict.
+func SplitLinesKeepEnds(text string) []string {
+	var out []string
+	start := 0
+	runes := []rune(text)
+	for i := 0; i < len(runes); i++ {
+		width := 1
+		switch runes[i] {
+		case '\r':
+			if i+1 < len(runes) && runes[i+1] == '\n' {
+				width = 2
+			}
+		case '\n', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
+		default:
+			continue
+		}
+		out = append(out, string(runes[start:i+width]))
+		start = i + width
+	}
+	if start < len(runes) {
+		out = append(out, string(runes[start:]))
+	}
+	return out
+}
+
+// SplitLines splits text into lines the way python's `str.splitlines()`
+// does: the same boundaries as SplitLinesKeepEnds, without the endings.
+//
+// A text that ends with a line ending does NOT produce a trailing empty
+// line, which is where this differs from `strings.Split(text, "\n")`.
+func SplitLines(text string) []string {
+	ends := SplitLinesKeepEnds(text)
+	out := make([]string, 0, len(ends))
+	for _, line := range ends {
+		out = append(out, trimLineEnd(line))
+	}
+	return out
+}
+
+// trimLineEnd removes the line ending from a line.
+func trimLineEnd(line string) string {
+	runes := []rune(line)
+	end := len(runes)
+	for end > 0 {
+		switch runes[end-1] {
+		case '\n', '\r', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
+			end--
+			continue
+		}
+		break
+	}
+	return string(runes[:end])
+}
+
 // ScanLines calls fn for every line of a file, with the line number.
 //
 // The line number is 1-based, the way a file:line citation counts.

@@ -44,6 +44,8 @@ import (
 
 	archanchors "harbor.local/gates/check-arch-anchors"
 	archsuiteonce "harbor.local/gates/check-arch-suite-once"
+	mdlinks "harbor.local/gates/check-md-links"
+	mdlint "harbor.local/gates/md-lint"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -73,9 +75,19 @@ var registry = []registered{
 		run:     archsuiteonce.Run,
 	},
 	{
+		name:    "check-md-links",
+		summary: "every internal link, anchor and file:line reference resolves",
+		run:     mdlinks.Run,
+	},
+	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "md-lint",
+		summary: "the tracked markdown obeys the invariants the repository claims",
+		run:     mdlint.Run,
 	},
 	{
 		name:    "gen-seam-graph",

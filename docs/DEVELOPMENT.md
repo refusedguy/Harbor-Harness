@@ -125,14 +125,14 @@ The workflow's default suite list lives in
 
 ## Documentation checks
 
-Two stdlib-only Python 3 gates (no pip install, no network, no dotnet) run on
-every markdown change, in CI and locally:
+Two compiled gates (no SDK, no build, no python) run on every markdown
+change, in CI and locally:
 
 ```bash
-./tools/check-md-links.py          # do internal links + #anchors resolve?
-./tools/md-lint.py                 # do the files obey the markdown invariants?
-./tools/check-md-links.py --self-test   # prove the checker still fails on a bad link
-./tools/md-lint.py --self-test          # prove the lint still fails on bad input
+./tools/bin/harbor-gates-linux-x64 check-md-links          # do internal links + #anchors resolve?
+./tools/bin/harbor-gates-linux-x64 md-lint                 # do the files obey the markdown invariants?
+./tools/bin/harbor-gates-linux-x64 check-md-links --self-test   # prove the checker still fails on a bad link
+./tools/bin/harbor-gates-linux-x64 md-lint --self-test          # prove the lint still fails on bad input
 ```
 
 A third stdlib-only gate asks a different question, about the architecture rule
@@ -144,8 +144,8 @@ condition that makes the site the one being talked about) in #1728, and this
 gate is what keeps it converted.
 
 ```bash
-./tools/check-arch-anchors.py          # may an arch rule point at a line number?
-./tools/check-arch-anchors.py --self-test   # prove the gate still fails on a planted anchor
+./tools/bin/harbor-gates-linux-x64 check-arch-anchors          # may an arch rule point at a line number?
+./tools/bin/harbor-gates-linux-x64 check-arch-anchors --self-test   # prove the gate still fails on a planted anchor
 ```
 
 The anchors it excuses are the ones where the number **is** the checked fact,
@@ -153,10 +153,10 @@ and each one carries a reason in
 [`tools/arch-anchor-exceptions.txt`](../tools/arch-anchor-exceptions.txt) — a
 ratchet in both directions, so an exception the tree no longer produces is red.
 
-`check-md-links.py` resolves every relative link, `#anchor` and
+The `check-md-links` gate resolves every relative link, `#anchor` and
 `path/File.cs:123` reference in the tracked markdown and reports the ones that
 do not exist; external URLs are skipped on purpose (network flakiness is worse
-than no gate). `md-lint.py` checks encoding (LF, no BOM), heading structure
+than no gate). The `md-lint` gate checks encoding (LF, no BOM), heading structure
 and fences; its header lists the rules it enforces **and** the markdownlint
 rules it deliberately does not, each with the measured hit count that ruled it
 out.
@@ -174,8 +174,8 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | Job | What it asserts |
 |---|---|
 | `checker self-test` | both gates still **fail** on fixtures that are known-broken |
-| `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
-| `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
+| `internal links` | `harbor-gates check-md-links --min-files 250 --min-refs 600` |
+| `markdown lint` | `harbor-gates md-lint --min-files 250 --min-lines 60000` |
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
 | `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
@@ -252,13 +252,13 @@ Two gates touch `src/**/README.md`, and they are deliberately disjoint:
 | Gate | Asserts | Runs in |
 |---|---|---|
 | `ReadmeCoverageTests` ([tests/Harbor.Architecture.Tests](../tests/Harbor.Architecture.Tests)) | every `src/**/*.csproj` has a README; packable READMEs carry the six sections of [docs/standards/README-template.md](./standards/README-template.md) | the dotnet build (core shard) |
-| `tools/check-md-links.py` | every link and anchor in those READMEs resolves | `docs.yml` |
-| `tools/md-lint.py` | encoding, heading and fence structure | `docs.yml` |
+| `harbor-gates check-md-links` | every link and anchor in those READMEs resolves | `docs.yml` |
+| `harbor-gates md-lint` | encoding, heading and fence structure | `docs.yml` |
 
-`ReadmeCoverageTests` never parses a link, and neither Python gate looks at the
-template sections — so a failure always names exactly one gate to fix. Keep it
-that way: adding a link check to `ReadmeCoverageTests`, or a section check to
-`md-lint.py`, would give two gates an opinion about the same fact, and two
+`ReadmeCoverageTests` never parses a link, and neither markdown gate looks at
+the template sections — so a failure always names exactly one gate to fix. Keep
+it that way: adding a link check to `ReadmeCoverageTests`, or a section check
+to `md-lint`, would give two gates an opinion about the same fact, and two
 gates that can disagree are worse than one.
 
 ### The gate policy — why the gates are python, and what the compiler takes

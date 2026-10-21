@@ -49,12 +49,12 @@ nowhere else.
 
 Documentation is gated separately from code: `ci.yml` ignores `**.md` and
 `docs/**` on purpose, so a docs-only change runs
-[`tools/check-md-links.py`](tools/check-md-links.py) and
-[`tools/md-lint.py`](tools/md-lint.py) instead. Both must pass:
+`harbor-gates check-md-links` and `harbor-gates md-lint` instead. Both must
+pass:
 
 ```bash
-./tools/check-md-links.py
-./tools/md-lint.py
+./tools/bin/harbor-gates-linux-x64 check-md-links
+./tools/bin/harbor-gates-linux-x64 md-lint
 ```
 
 ## Do not edit generated artifacts

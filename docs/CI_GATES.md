@@ -246,9 +246,9 @@ findings that are not defects.
 Every python tool in `tools/` (48 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
 tree. 42 tools are run by a workflow; the other seven are
-`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
-other tools rather than run, `measure-project-graph.py`, which a human runs to
+`gen-e2e-shards.py`, a generator a human runs, `md_gate.py` and
+`tool_schema_model.py`, which are loaded by other tools rather than run,
+`measure-project-graph.py`, which a human runs to
 read the project graph, `codemod-test-events.py` and `codemod-tool-schemas.py`,
 which rewrite hand-built sources. All of them are listed, because a tool that
 is not listed is a tool nobody
@@ -283,7 +283,8 @@ The modes are:
 | `tools/check-gate-policy.py` | python | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
 | `tools/check-local-merge-loss.py` | python | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | python | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
-| `tools/check-md-links.py` | python | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
+| `tools/md_gate.py` | python | shared plumbing for the markdown gates: the tracked-file list, the floors, the fixture harness. It now serves `tools/check-doc-cites.py` alone — the other two readers moved into the compiled binary, and their Go port of this module is `tools/gates/internal/mdgate/` | — | — | library | — | — | — |
+| `tools/bin/harbor-gates-linux-x64 check-md-links` | compiled: `tools/gates/check-md-links` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
 | `tools/check-public-api-resign.py` | python | a change to the frozen surface is re-signed in the same commit, no row of a frozen baseline is written twice, and a baseline edit that only removes a row is a correction rather than a re-signing | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
 | `tools/check-result-chains.py` | python | the chain candidates among the `if (x.IsFailure)` guard sites in `src/` and `apps/` — the census issue #1558 is measured against, and a ratchet on it | docs.yml | result-chains, selftest | gate | `--self-test` | `tools/result-chains-baseline.json` | — |
 | `tools/check-reference-trimmer.py` | python | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
@@ -301,9 +302,8 @@ The modes are:
 | `tools/codemod-test-events.py` | python | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/codemod-tool-schemas.py` | python | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/demo_repro.py` | python | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
-| `tools/md-lint.py` | python | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
+| `tools/bin/harbor-gates-linux-x64 md-lint` | compiled: `tools/gates/md-lint` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | python | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/md_gate.py` | python | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
 | `tools/measure-build-cpu.py` | python | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, meas-analyzer-cost.yml, nightly.yml | measure, measurement | reporter | — | — | — |
 | `tools/measure-project-graph.py` | python | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/msbuild-evaluation-cost.py` | python | what a Release compile spends on MSBuild project evaluation, read from the performance summary | nightly.yml | measurement | reporter | `--self-test` | — | — |
