@@ -155,7 +155,7 @@ public class UiConfigDefaultsRule
     private static readonly string[] FilesTheIssueNamed =
     [
         "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs",
-        "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs",
+        "src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs",
     ];
 
     /// <summary>The hardcoded-default sub-id: one hit per view-model line that hands a config field a literal.</summary>
@@ -275,7 +275,7 @@ public class UiConfigDefaultsRule
         MustContain =
         [
             "apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs",
-            "src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs",
+            "src/Harbor.Desktop.ViewModels/ViewModels/OnboardingViewModel.cs",
         ],
         CustomParse = ParseViewModelDefaults,
     };
