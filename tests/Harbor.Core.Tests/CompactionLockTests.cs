@@ -229,7 +229,7 @@ public class CompactionLockTests
 
         await Assert.That(outcome.TruncationFallback).IsFalse();
         await Assert.That(string.Join("|", store.Operations))
-            .IsEqualTo("compaction:Start|message:concurrent|message:summary|compaction:End");
+            .IsEqualTo("compaction:Start|message:concurrent|message:summary-1|compaction:End");
     }
 
     /// <summary>
