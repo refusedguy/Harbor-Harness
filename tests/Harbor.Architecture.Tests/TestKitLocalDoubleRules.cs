@@ -165,7 +165,9 @@ public sealed class TestKitLocalDoubleRules
         {
             if (!found.TryGetValue(file, out IReadOnlyList<string>? doubles) || doubles.Count == 0)
             {
-                stale.Add($"{file} is in the exception list but declares no local double any more");
+                stale.Add(
+                    $"{file} is in the exception list but declares no local double any more. "
+                    + $"The reason it was excused ({reason}) no longer applies.");
             }
         }
 
