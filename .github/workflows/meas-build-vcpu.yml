@@ -223,11 +223,22 @@ jobs:
           # ── arm F: the same, plus /graphBuild ─────────────────────────────
           #    The project graph is constructed ONCE, up front, and the
           #    projects are then built in graph order. The question this arm
-          #    answers is not "is graph build faster" but "does graph build
-          #    work on THIS solution at all" — a .slnx with a solution-level
-          #    metaproject is exactly the shape the graph build is known to
-          #    be picky about, and a build that does not run is not a
-          #    measurement.
+          #    answered (run 39634501061, 2026-10-21, three replicates per
+          #    arm, the same runner) had two halves, and both are answered:
+          #
+          #      * DOES IT WORK ON THIS SOLUTION? Yes: 118 compilations,
+          #        exit 0, the same project set. A .slnx with a
+          #        solution-level metaproject is not a shape the graph build
+          #        refuses.
+          #      * WHAT DOES IT COST? 1.3x the wall (412.1 s against
+          #        304.2 s at the median) and 3.2x the compiler's own task
+          #        time (858 s against 266 s). The graph is built once, but
+          #        every project is then evaluated in a graph node and the
+          #        analyzers run again.
+          #
+          #    So the switch is NOT in the NUKE Compile target
+          #    (build/_build/Targets/CompileTarget.cs). The arm stays, so
+          #    the number can be re-read when the tree's shape changes.
           - label: f-graph-r1
             cmd: >-
               dotnet msbuild Harbor.slnx -t:Build
