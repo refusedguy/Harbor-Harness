@@ -346,7 +346,6 @@ public sealed record AgentDefinition(
             // change it proposes, and the answer covers that call only — the
             // same posture as this agent's write / edit rules.
             new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
-            new("plugin_manager", "*", PermissionAction.Allow)
             // #1761: the goal axis. The agent's verdict on the session's own
             // goal is a report, not a workspace mutation, so it needs no
             // approval.
@@ -400,7 +399,6 @@ public sealed record AgentDefinition(
             // here would hand a design-only agent a way to start a change;
             // denying it keeps the posture these rulesets state.
             new(WellKnownTools.PluginManager, "*", PermissionAction.Deny)
-            new("plugin_manager", "*", PermissionAction.Deny)
             // #1761: the goal axis. The agent's verdict on the session's own
             // goal is a report, not a workspace mutation, so it needs no
             // approval — and the orchestrator is the agent that most needs to
