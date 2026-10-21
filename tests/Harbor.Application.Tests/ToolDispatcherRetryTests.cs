@@ -134,7 +134,11 @@ public class ToolDispatcherRetryTests
 
         await Assert.That(tool.Executions).IsEqualTo(1);
         await Assert.That(message.Results[0].IsError).IsTrue();
-        await Assert.That(message.Results[0].Output).IsEqualTo("Tool execution failed: boom");
+        // #1760: the text leads with the stable code, and the legacy message
+        // follows it unchanged (the "log/LLM stability" the attempt-count
+        // branch above protects).
+        await Assert.That(message.Results[0].Output).IsEqualTo("TOOL_EXECUTION_FAILED: Tool execution failed: boom");
+        await Assert.That(message.Results[0].ErrorInfo!.Code).IsEqualTo(ToolErrorCodes.ExecutionFailed);
     }
 
     [Test]

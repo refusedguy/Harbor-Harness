@@ -1839,6 +1839,7 @@ dotnet run --project tests/Harbor.Tools.Builtin.Tests -c Release --no-build -- \
 - [CLAUDE.md](../CLAUDE.md) — code conventions (cross-references this file).
 - [AGENTS.md](../AGENTS.md) — operational guide for AI agents (Add-a-tool quickstart).
 - [docs/PATTERNS.md](./PATTERNS.md) — Strategy / Registry / Command patterns in the tool layer.
+- [docs/TOOL_ERROR_CODES.md](./TOOL_ERROR_CODES.md) — the structured error a failed call carries, and the per-tool budget.
 - [docs/EXAMPLES.md](./EXAMPLES.md) — task-oriented recipes.
 - [docs/PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) — Roslyn `.cs` plugin system for tools that aren't builtins.
 - [docs/SCRIPTING.md](./SCRIPTING.md) — JS/TS script-registered tools (lighter-weight than .cs plugins).
