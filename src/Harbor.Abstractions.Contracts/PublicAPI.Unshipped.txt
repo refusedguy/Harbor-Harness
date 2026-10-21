@@ -50,3 +50,7 @@ static Harbor.Abstractions.Models.ServiceScope.TryCreate(string? value) -> CShar
 static Harbor.Abstractions.Models.ServiceScope.implicit operator string!(Harbor.Abstractions.Models.ServiceScope! scope) -> string!
 static Harbor.Abstractions.Models.ServiceScope.operator !=(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
 static Harbor.Abstractions.Models.ServiceScope.operator ==(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
+Harbor.Abstractions.Events.ProviderErrorKind.ContextOverflow = 8 -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.ClassifyResponse(System.Net.HttpStatusCode status, string? errorBody) -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflow(Harbor.Abstractions.Events.ProviderErrorKind kind) -> bool
+static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflowBody(string? body) -> bool
