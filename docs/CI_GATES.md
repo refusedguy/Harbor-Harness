@@ -59,10 +59,10 @@ as `POLICY-MODE-GATE-NO-RUN`, the other as a python tool that no workflow
 runs. A gate that is not wired cannot fire, and a gate that cannot fire is
 what this policy is about.
 
-## Why the gates are python
+## Why a gate is python or a committed binary
 
-The reason is not speed. All the python gates together take seconds, and
-moving them to C# would add a restore, a build and a publish before each one.
+The reason is not speed. All the gates together take seconds, and moving
+them to C# would add a restore, a build and a publish before each one.
 
 The reason is **where the gate has to run**.
 
@@ -83,10 +83,27 @@ request at all.
 
 So a gate in this repository is a program that runs where Harbor does not
 exist: no CLI, no product assemblies, no product dependencies, no NuGet
-restore. A standard-library python script is the only thing in the tree that
-does that, and `tools/` is where it lives.
+restore.
 
-Three reasons, and only three, put a check in python:
+**A gate is one of two things**, and the difference is where its
+implementation lives, not what it checks:
+
+- a **python script** over files and artifacts: the standard library of a
+  language every runner has, with nothing to build and nothing to install;
+- a **compiled gate** of this repository: one multi-call binary
+  (`harbor-gates <gate> [flags]`), one directory of Go sources per gate
+  under `tools/gates/`, and the binary committed to the tree so that it
+  runs where there is no SDK, no build of Harbor, and no python.
+
+The reason for the second form is the first reason, sharpened: a gate has to
+run where there is no SDK and no build, **and it must not cost the runner
+minutes**. A committed binary satisfies both. The price is that a reviewer
+cannot read a binary, and the answer to that is a machine check: the
+`gates-binary` workflow rebuilds the binary from the sources in the same
+tree and compares the bytes with the committed ones, so "the binary is what
+the sources say" is a fact and not a promise.
+
+Three reasons, and only three, put a check in `tools/` at all:
 
 1. **It must run without the SDK and without a successful build.** The check
    has to work on the pull request that breaks the build.
@@ -197,7 +214,18 @@ findings that are not defects.
    set is invisible at review time, and a gate that cannot fail is
    decoration.
 6. **A header that says why it is python.** One line, near the top, in the
-   form `Stdlib only - no pip, no network, no dotnet.`
+   form `Stdlib only - no pip, no network, no dotnet.` A **compiled** gate
+   says why it is compiled instead, and its sources live under
+   `tools/gates/<gate>/`, one directory per gate, with the standard library
+   only and no external module.
+7. **A compiled gate owes the repository its source, its bytes and its
+   name.** The source is in `tools/gates/<gate>/`, the binaries are in
+   `tools/bin/harbor-gates-linux-x64` and `tools/bin/harbor-gates-linux-arm64`,
+   the hashes are in `tools/bin/SHA256SUMS`, and the name of the subcommand
+   is the name of the directory. A pull request that changes one of them
+   without the others is red, and the message names what to rebuild. There
+   is never a python original and a compiled twin of the same gate in the
+   tree: the twin is how a drifted pair is caught.
 
 ## What a gate must not do
 
@@ -215,15 +243,18 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (49 files). 42 of them are run by a workflow; the
-other seven are `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
+Every python tool in `tools/` (48 files), plus the COMPILED gates, whose
+sources are in `tools/gates/<gate>/` and whose binary is committed to the
+tree. 42 tools are run by a workflow; the other seven are
+`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
 `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
 other tools rather than run, `measure-project-graph.py`, which a human runs to
 read the project graph, `codemod-test-events.py` and `codemod-tool-schemas.py`,
-which rewrite hand-built sources. All 49 are listed, because a tool that is not
-listed is a tool nobody
+which rewrite hand-built sources. All of them are listed, because a tool that
+is not listed is a tool nobody
 reviews. The table records, for each one, the question
-it answers, where it runs, whether it blocks a build, whether it has a
+it answers, where its implementation lives, where it runs, whether it blocks a
+build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
 checked by `tools/check-gate-policy.py`, which fails when it stops describing
 the tree: it names a tool the table does not list, and it names a table row
@@ -240,59 +271,59 @@ The modes are:
 - **helper** - a tool the pipeline uses, not a check of its own.
 - **library** - imported by other tools, run by no workflow.
 
-| Script | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
-|---|---|---|---|---|---|---|---|
-| `tools/aggregate-build-vcpu.py` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
-| `tools/aot-publish-gate.py` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
-| `tools/check-abstractions-contract.py` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
-| `tools/check-arch-anchors.py` | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
-| `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
-| `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
-| `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
-| `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
-| `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
-| `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
-| `tools/check-public-api-resign.py` | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
-| `tools/check-result-chains.py` | the chain candidates among the `if (x.IsFailure)` guard sites in `src/` and `apps/` — the census issue #1558 is measured against, and a ratchet on it | docs.yml | result-chains, selftest | gate | `--self-test` | `tools/result-chains-baseline.json` | — |
-| `tools/check-reference-trimmer.py` | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
-| `tools/check-string-switch.py` | does a `switch` compare a string literal, and is every ladder that is still there named with a reason | docs.yml | selftest, stringswitch | gate | `--self-test` | `tools/string-switch-exceptions.txt` | `--min-labels 280` |
-| `tools/string-switch-rewrites.py` | shared data for the string-switch gate: the reviewed rewrites its `--apply` mode replays, so the change is reproducible and its effect measured rather than asserted | — | — | library | — | — | — |
-| `tools/check-test-dup.py` | a test body is a copy of another test body | docs.yml | selftest, testdup | advisory | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
-| `tools/check-test-json-reflection.py` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
-| `tools/check-test-packages.py` | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 50 --min-packages 1400 --min-output-dirs 40` |
-| `tools/check-test-projects.py` | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
-| `tools/check-tool-schema-pin.py` | the parameter schema of every builtin tool still is the one that was pinned: the schema is the tool's contract with the model, and a schema that moved while the pin did not is a model that may send something the tool does not accept | docs.yml | selftest, tool-schema | gate | `--selftest` | — | `--min-tools 23` |
-| `tools/check-tunit-analyzer-gate.py` | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
-| `tools/check-xml-doc-coverage.py` | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
-| `tools/changelog-assemble.py` | glues the per-pull-request changelog fragments into the `[Unreleased]` section of `CHANGELOG.md` at release time, so two pull requests never edit the same bytes of the changelog. A tool a human runs; its self-test runs in the checker's self-test job | docs.yml | selftest | helper | `--self-test` | — | — |
-| `tools/ci-shard-slices.py` | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
-| `tools/codemod-test-events.py` | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/codemod-tool-schemas.py` | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/demo_repro.py` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
-| `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
-| `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
-| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, meas-analyzer-cost.yml, nightly.yml | measure, measurement | reporter | — | — | — |
-| `tools/measure-project-graph.py` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
-| `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | nightly.yml | measurement | reporter | `--self-test` | — | — |
-| `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
-| `tools/normalize-mtimes.py` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
-| `tools/pack-validate.py` | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | pack, selftest | gate | `--selftest` | — | — |
-| `tools/tool_schema_model.py` | shared data for the tool-schema gates: the one reading of a tool's [ToolParam] declaration, so the pin is written from the same model the gate reads it with | — | — | library | — | — | — |
-| `tools/test-census.py` | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
-| `tools/test-measurements.py` | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
-| `tools/test-skips.py` | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
-| `tools/check-arch-suite-once.py` | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
-| `tools/guard-triage.py` | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
-| `tools/check-shard-balance.py` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
-| `tools/gen-seam-graph.py` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
-| `tools/check-analyzer-scope.py` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
-| `tools/aggregate-analyzer-cost.py` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
-| `tools/coverage_report.py` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
-| `tools/check-coverage-registry.py` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
-| `tools/gen-plugin-inventory.py` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
-| `tools/codemod-tool-names.py` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
+|---|---|---|---|---|---|---|---|---|
+| `tools/aggregate-build-vcpu.py` | python | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | — | — | — |
+| `tools/aot-publish-gate.py` | python | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
+| `tools/check-abstractions-contract.py` | python | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
+| `tools/check-arch-anchors.py` | python | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
+| `tools/check-doc-cites.py` | python | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
+| `tools/check-dup-jscpd.py` | python | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
+| `tools/check-doc-facts.py` | python | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
+| `tools/check-gate-policy.py` | python | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
+| `tools/check-local-merge-loss.py` | python | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
+| `tools/check-no-test-sdk.py` | python | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
+| `tools/check-md-links.py` | python | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
+| `tools/check-public-api-resign.py` | python | a change to the frozen surface is re-signed in the same commit | ci.yml, docs.yml | public-api, selftest | gate | `--self-test` | `src/Harbor.Abstractions.Contracts/PublicAPI.Shipped.txt` | `--min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269` |
+| `tools/check-result-chains.py` | python | the chain candidates among the `if (x.IsFailure)` guard sites in `src/` and `apps/` — the census issue #1558 is measured against, and a ratchet on it | docs.yml | result-chains, selftest | gate | `--self-test` | `tools/result-chains-baseline.json` | — |
+| `tools/check-reference-trimmer.py` | python | does any project in the tree reference a package or a sibling project the compiler never uses | ci.yml | reference-trimmer | gate | `--self-test` | `tools/reference-trimmer-baseline.txt` | `--min-projects 100` |
+| `tools/check-string-switch.py` | python | does a `switch` compare a string literal, and is every ladder that is still there named with a reason | docs.yml | selftest, stringswitch | gate | `--self-test` | `tools/string-switch-exceptions.txt` | `--min-labels 280` |
+| `tools/string-switch-rewrites.py` | python | shared data for the string-switch gate: the reviewed rewrites its `--apply` mode replays, so the change is reproducible and its effect measured rather than asserted | — | — | library | — | — | — |
+| `tools/check-test-dup.py` | python | a test body is a copy of another test body | docs.yml | selftest, testdup | advisory | `--self-test` | `tools/test-dup-baseline.json` | `--min-files 800 --min-methods 9000` |
+| `tools/check-test-json-reflection.py` | python | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
+| `tools/check-test-packages.py` | python | which packages a test or sample project may reference, and whether a banned one is among them | ci.yml | build, test-packages | gate | `--self-test` | `tools/test-package-exceptions.txt` | `--min-projects 43 --min-declared 50 --min-packages 1400 --min-output-dirs 40` |
+| `tools/check-test-projects.py` | python | every test project in the solution is discovered by a CI run | docs.yml | selftest, testprojects | gate | `--self-test` | `tools/test-project-baseline.txt` | `--min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41` |
+| `tools/check-tool-schema-pin.py` | python | the parameter schema of every builtin tool still is the one that was pinned: the schema is the tool's contract with the model, and a schema that moved while the pin did not is a model that may send something the tool does not accept | docs.yml | selftest, tool-schema | gate | `--selftest` | — | `--min-tools 23` |
+| `tools/check-tunit-analyzer-gate.py` | python | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
+| `tools/check-xml-doc-coverage.py` | python | every public member of the frozen contract assembly carries an XML doc | docs.yml | selftest, xmldoc | gate | `--self-test` | — | `--min-members 493 --min-documented 478 --min-coverage 0.96` |
+| `tools/changelog-assemble.py` | python | glues the per-pull-request changelog fragments into the `[Unreleased]` section of `CHANGELOG.md` at release time, so two pull requests never edit the same bytes of the changelog. A tool a human runs; its self-test runs in the checker's self-test job | docs.yml | selftest | helper | `--self-test` | — | — |
+| `tools/ci-shard-slices.py` | python | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
+| `tools/codemod-test-events.py` | python | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/codemod-tool-schemas.py` | python | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/demo_repro.py` | python | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
+| `tools/md-lint.py` | python | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
+| `tools/gen-e2e-shards.py` | python | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/md_gate.py` | python | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
+| `tools/measure-build-cpu.py` | python | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, meas-analyzer-cost.yml, nightly.yml | measure, measurement | reporter | — | — | — |
+| `tools/measure-project-graph.py` | python | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/msbuild-evaluation-cost.py` | python | what a Release compile spends on MSBuild project evaluation, read from the performance summary | nightly.yml | measurement | reporter | `--self-test` | — | — |
+| `tools/run-e2e-avalonia-shards.py` | python | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
+| `tools/normalize-mtimes.py` | python | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
+| `tools/pack-validate.py` | python | every packed `Harbor.*` NuGet package carries its metadata, its README and its lib | ci.yml, docs.yml | pack, selftest | gate | `--selftest` | — | — |
+| `tools/tool_schema_model.py` | python | shared data for the tool-schema gates: the one reading of a tool's [ToolParam] declaration, so the pin is written from the same model the gate reads it with | — | — | library | — | — | — |
+| `tools/test-census.py` | python | the per-test and per-project wall census of a CI run | ci.yml, docs.yml | selftest, test | reporter | `--self-test` | — | — |
+| `tools/test-measurements.py` | python | the per-test measurements a CI run printed | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
+| `tools/test-skips.py` | python | the tests a run skipped, and the reason each declared | ci.yml, docs.yml, test-os.yml | selftest, test, test-os | reporter | `--self-test` | — | — |
+| `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
+| `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
+| `tools/check-shard-balance.py` | python | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
+| `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
+| `tools/check-analyzer-scope.py` | python | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
+| `tools/aggregate-analyzer-cost.py` | python | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
+| `tools/coverage_report.py` | python | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
+| `tools/check-coverage-registry.py` | python | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
+| `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
+| `tools/codemod-tool-names.py` | python | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It
@@ -374,3 +405,27 @@ against.
 7. Add the script to the `paths:` list of `docs.yml`, so that a pull request
    that edits the gate runs it. A gate made green by never running is the
    failure this repository has already paid for three times.
+
+### Adding a COMPILED gate
+
+A gate that costs more than a couple of seconds on every pull request is a
+gate that should be compiled. The steps are the same as above, with the
+implementation living in `tools/gates/<gate>/` instead of in
+`tools/<gate>.py`:
+
+1. The gate's name is the name of its directory and the name of its
+   subcommand: `tools/gates/gen-seam-graph/` is `harbor-gates gen-seam-graph`.
+2. The sources use the standard library only, and there is no `go.sum`: a
+   gate that fetched something at run time could not run on a runner with no
+   network.
+3. The flags and the printed text are the ones the python original had.
+   Compare the output of the two on the same tree BEFORE the original is
+   deleted: the same exit code, the same text, the same verdicts.
+4. `tools/build-gates.sh` builds the binary for both architectures and
+   writes `tools/bin/SHA256SUMS`. Commit the binary with the sources: the
+   binary IS the gate, and the sources without it are not a gate.
+5. Delete the python original in the same pull request. A python original
+   and a compiled twin of the same gate are two implementations of one
+   gate, and they drift.
+6. The workflow runs `tools/bin/harbor-gates-linux-x64 <gate> ...`, and the
+   table row names that command and the source directory.
