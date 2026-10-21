@@ -122,6 +122,13 @@ on:
       # target whose exclusions the census reads.
       - 'tests/**/*.csproj'
       - 'Harbor.slnx'
+      # #1780. The tool-schema pin is read by a gate and by the compiler
+      # (Harbor.CodeGen.ToolSchemaGenerator), so a PR that edits the pin, the
+      # gate or the model it reads has to run it — and so must a PR that edits
+      # the tool declarations the pin describes.
+      - 'tools/check-tool-schema-pin.py'
+      - 'tools/tool_schema_model.py'
+      - 'src/Harbor.Tools.Builtin/Schemas/*.json'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
       - 'tools/check-test-projects.py'
@@ -532,6 +539,14 @@ jobs:
         run: python3 tools/coverage_report.py --self-test
       - name: Coverage registry gate still fires on both sides of the ratchet
         run: python3 tools/check-coverage-registry.py --self-test
+      # #1780. The eleventh gate is the only one that asks whether the
+      # parameter schema of a tool still is the one that was pinned. Its
+      # failure path is tested here for the same reason as the others, and
+      # the fixture is the one that matters: a schema that moved while the
+      # pin did not. The gate MUST fail on it, or the pin protects nothing.
+      - name: Tool-schema pin gate fails on a planted divergence
+        run: python3 tools/check-tool-schema-pin.py --selftest
+
   links:
     name: internal links
     runs-on: ubuntu-latest
@@ -1138,6 +1153,31 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that the CI test shards are balanced by cost
         run: python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0
+
+  # #1780. The parameter schema of a tool is the tool's contract with the
+  # model: the JSON the model may send. It is declared once, as [ToolParam]
+  # attributes on the tool class, and the compiler renders it and compares
+  # the result with the pin in src/Harbor.Tools.Builtin/Schemas/.
+  #
+  # This job asks the same question the compiler asks, in a place that needs
+  # no SDK: the generator refuses to compile a tool whose schema differs
+  # from its pin, and this job checks the same pin without a build — so the
+  # rule has a reader on a pull request that does not compile. The
+  # self-test in the `selftest` job above plants a divergence and requires
+  # the analysis to find it.
+  #
+  # The floor is the number of tools that declare a schema: a scan that
+  # measured fewer than that cannot say the tree is fine.
+  tool-schema:
+    name: tool-schema pin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: The pinned tool schemas agree with the declarations
+        run: python3 tools/check-tool-schema-pin.py --min-tools 21
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

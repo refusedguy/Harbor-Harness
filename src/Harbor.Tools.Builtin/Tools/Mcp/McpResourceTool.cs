@@ -21,6 +21,9 @@ namespace Harbor.Tools.Builtin;
         "Discover URIs with mcp {\"method\":\"resources/list\"} before reading",
         "Binary (base64 blob) resources are rejected — ask for a text view instead",
     })]
+[ToolSchema]
+[ToolParam("server", "string", Description = "Registered MCP server name", Required = true)]
+[ToolParam("uri", "string", Description = "Resource URI from resources/list (e.g. 'file:///docs/api.md')", Required = true)]
 public sealed partial class McpResourceTool : ITool
 {
     private readonly ILogger<McpResourceTool> _logger;
@@ -51,24 +54,6 @@ public sealed partial class McpResourceTool : ITool
 
     /// <inheritdoc />
     public ToolSafetyProfile SafetyProfile => ToolSafetyProfile.Opaque;
-
-    /// <summary>
-    ///     The tool's parameter schema. Parsed once per process (#1574) — the JSON
-    ///     below is a compile-time constant, so re-parsing it for every tool
-    ///     instance was pure allocation churn.
-    /// </summary>
-    private static readonly JsonDocument Schema = JsonDocument.Parse("""
-                                                                      {
-                                                                        "type": "object",
-                                                                        "properties": {
-                                                                          "server": { "type": "string", "description": "Registered MCP server name" },
-                                                                          "uri":    { "type": "string", "description": "Resource URI from resources/list (e.g. 'file:///docs/api.md')" }
-                                                                        },
-                                                                        "required": ["server", "uri"]
-                                                                      }
-                                                                      """);
-    /// <inheritdoc />
-    public JsonDocument ParameterSchema => Schema;
 
     /// <inheritdoc />
     public Result ValidateArguments(JsonElement args)

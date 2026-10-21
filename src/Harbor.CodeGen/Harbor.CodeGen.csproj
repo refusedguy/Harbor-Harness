@@ -47,7 +47,16 @@
   -->
 
   <PropertyGroup>
-    <NoWarn>$(NoWarn);RS1041;S1944</NoWarn>
+    <!--
+      RS2008 asks an analyzer package to carry release-tracking files, which
+      exist so that a PUBLISHED analyzer can say which diagnostics a given
+      release added. This package is never published — IsPackable is false and
+      the generators are consumed by the build of this repository alone — so
+      the files would document a release that does not exist. The same
+      reasoning, with the same reason, is carried by
+      src/Harbor.Arch.Analyzers and by tests/Harbor.Architecture.Tests.
+    -->
+    <NoWarn>$(NoWarn);RS1041;RS2008;S1944</NoWarn>
   </PropertyGroup>
 
 </Project>
