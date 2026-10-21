@@ -180,6 +180,17 @@ internal sealed class DefaultSessionContext : ISessionContext
             gate.Release();
         }
     }
+
+    /// <summary>
+    ///     The compaction-record seam of this session's store, or null when
+    ///     the store records no compaction events (#1767).
+    /// </summary>
+    /// <remarks>
+    ///     The store is asked, not assumed: a backend that does not implement
+    ///     <see cref="ICompactionEventStore" /> has no marker vocabulary, and
+    ///     the compaction path has to know that before it writes anything.
+    /// </remarks>
+    public ICompactionEventStore? CompactionEvents => _store as ICompactionEventStore;
 }
 
 /// <summary>

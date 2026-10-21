@@ -45,6 +45,14 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
+    <!--
+      #1776: the one golden helper (Harbor.TestKit.Golden) — where the
+      baseline lives, how it is compared, how it is regenerated. The part
+      references Harbor.Abstractions and Harbor.Abstractions.Contracts only,
+      both of which this project already has through Harbor.E2E.Framework, so
+      the edge adds no product assembly to the closure.
+    -->
+    <ProjectReference Include="..\Harbor.TestKit.Support\Harbor.TestKit.Support.csproj"/>
   </ItemGroup>
 
 </Project>
