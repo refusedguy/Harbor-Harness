@@ -613,6 +613,54 @@ jobs:
       - name: Check that no project file declares Microsoft.NET.Test.Sdk
         run: python3 tools/check-no-test-sdk.py --min-files 150
 
+      # The runner-wait measurement, in the job summary (#1782 step 4): how
+      # long this job waited for a runner after `build` finished. It is the
+      # number that decides whether any of this lane's job-graph work
+      # matters — the sum of the jobs' own durations is not the wall.
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: no VSTest SDK in the tree
+
+  # #1801. Where each analyzer package is allowed to run.
+  #
+  # An analyzer package is a Roslyn (or MSBuild) analyzer: it runs inside the
+  # compiler of EVERY project that references it, and the cost of that is the
+  # number of ANALYZER CLASSES the package registers times the number of
+  # COMPILATIONS it is referenced by. A severity table cannot switch it off —
+  # `dotnet_diagnostic.X.severity = none` silences a RULE while the analyzer
+  # that implements it keeps running — so the SCOPE is the only lever, and a
+  # scope that is written down nowhere drifts back to solution-wide.
+  #
+  # Nothing in the build would complain when it does: the build stays green,
+  # the findings stay the same, and only the wall time grows. That is what
+  # this gate is for: tools/analyzer-scope.json is the one source of truth
+  # for the scope of every analyzer family, and this job fails when the tree
+  # says anything else — a family declared in a file the table does not name,
+  # a family whose scope drifted, a family without the switch, an analyzer
+  # package that is not in the table at all, a missing version pin, a switch
+  # no family owns, a table row with no declaration.
+  analyzer-scope:
+    name: analyzer scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: The analyzer-scope gate fails on a drifted scope
+        run: python3 tools/check-analyzer-scope.py --self-test
+      - name: Check that every analyzer package runs where the table says
+        run: python3 tools/check-analyzer-scope.py --min-files 150
+
+      - name: Queue-wait measurement (#1782 step 4)
+        if: always()
+        uses: ./.github/actions/queue-wait
+        with:
+          job-name: analyzer scope
+
   # #1853. Unused-reference detection over the whole solution.
   #
   # ReferenceTrimmer 3.5.13 (MIT) is a build-time analyzer: it asks Roslyn
@@ -653,16 +701,6 @@ jobs:
   #
   # The raw log is uploaded as an artifact so that a reader can check the
   # tool's answer without re-running it.
-
-      # The runner-wait measurement, in the job summary (#1782 step 4): how
-      # long this job waited for a runner after `build` finished. It is the
-      # number that decides whether any of this lane's job-graph work
-      # matters — the sum of the jobs' own durations is not the wall.
-      - name: Queue-wait measurement (#1782 step 4)
-        if: always()
-        uses: ./.github/actions/queue-wait
-        with:
-          job-name: no VSTest SDK in the tree
   reference-trimmer:
     name: unused references (ReferenceTrimmer)
     needs: changes

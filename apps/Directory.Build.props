@@ -18,6 +18,19 @@
   -->
 
   <!--
+    THE ANALYZER SCOPE OF THIS TREE (issue #1801) — the same four families
+    as src/, for the same reasons. BEFORE the import: the root file
+    evaluates every analyzer PackageReference's Condition while it is read,
+    so a property set after the import would come too late. The scope
+    table is tools/analyzer-scope.json; the gate over it is
+    tools/check-analyzer-scope.py.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerAsyncFixer>on</HarborAnalyzerAsyncFixer>
+    <HarborAnalyzerDiLifetime>on</HarborAnalyzerDiLifetime>
+  </PropertyGroup>
+
+  <!--
     Imported by RELATIVE path, not by the GetPathOfFileAbove function: MSBuild
     evaluates both to the same file (this directory's parent), but the
     project-file analyzer (#1857) can only follow an import it can resolve on
@@ -39,7 +52,7 @@
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerExcubo)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): an analyzer package has no runtime assembly. -->
       <PrivateAssets>all</PrivateAssets>
@@ -64,7 +77,7 @@
       HARCH003 in tests/Harbor.Architecture.Tests/Roslyn/ — a type-resolving
       analyzer rather than a spelling match (#1852).
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerVsThreading)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): an analyzer package ships no runtime assembly. -->
       <PrivateAssets>all</PrivateAssets>

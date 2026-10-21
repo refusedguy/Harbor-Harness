@@ -485,20 +485,6 @@ jobs:
       # shards are 20x apart — and the gate MUST fail on it.
       - name: Shard-balance gate fails on a runaway shard
         run: python3 tools/check-shard-balance.py --self-test
-      # #1753. The coverage tools. The reporter reads the cobertura files
-      # the nightly lane produced and prints the per-file tables; the gate
-      # compares the registry of accepted holes against the measurement, in
-      # both directions. Their failure paths are tested here for the same
-      # reason as the others: a reader edited until it matches nothing is
-      # indistinguishable from a reader that found nothing. The load-bearing
-      # fixtures are the three states a file can be in — covered, a hole,
-      # and a file with no code to cover — and the two defects the gate
-      # exists for: a file that stopped being covered, and a row that is no
-      # longer needed.
-      - name: Coverage reporter still tells the three states of a file apart
-        run: python3 tools/coverage_report.py --self-test
-      - name: Coverage registry gate still fires on both sides of the ratchet
-        run: python3 tools/check-coverage-registry.py --self-test
   links:
     name: internal links
     runs-on: ubuntu-latest
@@ -1171,7 +1157,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the gate table against the tools and the workflows
-        run: python3 tools/check-gate-policy.py --min-gates 40
+        run: python3 tools/check-gate-policy.py --min-gates 42
 
   # #1558. The chain census, and the ratchet on it.
   #

@@ -1,0 +1,405 @@
+# The analyzer cost harness (issue #1801).
+#
+# WHAT THIS MEASURES
+# ------------------
+# The cost of each analyzer package in the Release compile of Harbor.slnx,
+# measured rather than guessed.
+#
+# The question the issue asked was "which of the nine analyzer packages
+# costs the most", and the only way to answer it is to build the same tree
+# with and without each one.
+#
+# THE PAIRED DESIGN, AND WHY IT IS THE ONLY ONE THAT WORKS
+# ----------------------------------------------------------
+# Every job builds the SAME tree twice: first the baseline (every analyzer
+# family ON, in every tree), then its own arm. The two builds run back to
+# back on the SAME runner, so the machine's speed cancels out of the
+# difference.
+#
+# The first attempt at this harness did NOT pair them: it ran one arm per
+# job and compared the arms against a baseline from another job. Measured on
+# 2026-10-20, the baseline arms came out at 169.8 s and 202.3 s — a 16 %
+# spread on two builds of the SAME tree — and the arms were worse than the
+# baseline in both directions: "no-roslynator" read 276.3 s against a
+# 186.1 s baseline, i.e. removing an analyzer appeared to make the build
+# 90 s SLOWER. The arms that ran in the first wave of nine concurrent jobs
+# were all slow (202-276 s) and the ones that ran in the second wave were
+# all fast (161-180 s): the wave, not the analyzer, was the variable.
+#
+# So: two builds in one job, and the difference between them is the only
+# number this file reports. The `null-*` arms are the control — they build
+# the same tree twice and their difference is the noise floor.
+#
+# AND THE COMPILER SERVER IS SHUT DOWN BETWEEN THE TWO BUILDS, because a
+# paired measurement is only paired if both halves are in the same state.
+# The shared compiler survives the first build of a job with the analyzer
+# assemblies loaded and JIT-warmed, so the second build pays for the
+# analyzers far less: the null arms came out 55.6 s, 63.8 s and 65.8 s
+# apart, with the compiler's own CPU falling from 455/522/585 s to
+# 256/300/298 s between the halves of the same job. That bias is larger
+# than the effect most of these arms look for. `dotnet build-server
+# shutdown` puts the second build in the state the first one was in, and in
+# the state a CI job's single build is in: nothing warm.
+#
+# THE ARMS
+#   null-<n>        the baseline against itself. The difference is the
+#                   noise, and it is what the other differences are read
+#                   against.
+#   narrowed        the tree as the branch declares it (no switches at all):
+#                   the before/after arm.
+#   no-<family>     the baseline with exactly one family switched off
+#                   everywhere: the marginal cost of that family.
+#   narrowed-report the branch's own tree with the compiler's own
+#                   `-p:ReportAnalyzer=true`, which reports the elapsed time
+#                   per analyzer assembly. That is the per-package cost
+#                   INSIDE one compilation, which a wall-time difference
+#                   alone cannot separate.
+#
+# THE SWITCHES
+# -------------
+# The scope mechanism in Directory.Build.props gives every analyzer family a
+# property (`HarborAnalyzerSonar` and so on). A command-line -p: wins over
+# every props assignment, so one property turns exactly one family off for
+# the whole build and changes nothing else. That is what makes an arm
+# possible without a second copy of the tree.
+#
+# WHY IT IS ITS OWN WORKFLOW FILE
+# -------------------------------
+# ci.yml is a gate. A measurement that runs thirty-four builds must not be
+# wired into it, and it must not be on the PR path. Same shape as
+# meas-build-vcpu.yml and meas-jit-aot.yml: push- or dispatch-triggered,
+# uploads artefacts, gates nothing. The numbers land in docs/ANALYZERS.md.
+#
+# WHY THE `push` TRIGGER
+# -----------------------
+# `workflow_dispatch` only fires for workflows that exist on the DEFAULT
+# branch, and this measurement must not touch default. So it is triggered by
+# pushing the measurement branch, exactly like meas-build-vcpu.yml does for
+# its own branch.
+#
+# THE ARCHITECTURE GATE IS OFF
+# ----------------------------
+# HarborArchitectureGate is a single process running the whole architecture
+# suite: 29..39 % of the wall (79..154 s of a 253..409 s build) and serial
+# in every arm. It would dilute every difference. The nightly lane's
+# measurement job switches it off for the same reason.
+#
+# THE COMPILE IS A COLD ONE
+# -------------------------
+# Every arm starts from a fresh checkout with no obj/, and the tree is
+# cleaned between the two builds of a job, so both of them are from-scratch
+# Release compiles of the whole tree — the shape of a build whose
+# Directory.Build.props changed, which is exactly what a change to the
+# analyzer wiring is.
+
+name: meas-analyzer-cost
+
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "What this dispatch measures (free text)"
+        required: false
+        default: ""
+  push:
+    branches: [ci/1801-trim-analyzers]
+    # Only the harness itself and the files that decide what runs re-run the
+    # matrix. A docs commit must not spend thirty-four build slots.
+    paths:
+      - '.github/workflows/meas-analyzer-cost.yml'
+      - 'Directory.Build.props'
+      - 'src/Directory.Build.props'
+      - 'apps/Directory.Build.props'
+      - 'tests/Directory.Build.props'
+      - 'contrib/apps/Directory.Build.props'
+      - 'contrib/tests/Directory.Build.props'
+      - 'tools/aggregate-analyzer-cost.py'
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: ${{ matrix.label }}
+    # Pinned, not `ubuntu-latest`, for the same reason ci.yml's build job is
+    # pinned: the label moves, and a cost number without the image it was
+    # measured on has no denominator.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 9
+      matrix:
+        label:
+          # the control: the baseline against itself, three times
+          - null-1
+          - null-2
+          - null-3
+          # the tree as the branch declares it
+          - narrowed
+          # the same, with the compiler's own per-analyzer report
+          - narrowed-report
+          # one arm per family: everything ON except this one
+          - no-roslynator
+          - no-sonar
+          - no-net-analyzers
+          - no-asyncfixer
+          - no-reflection
+          - no-bannedapi
+          - no-meziantou
+          - no-di-lifetime
+          - no-cfe
+          - no-projectfile
+          - no-vs-threading
+          - no-excubo
+          - no-publicapi
+
+    env:
+      # The architecture gate is a single process and 29..39 % of the wall.
+      HarborArchGate: 'false'
+      # The switch that turns every family on. A command-line -p: wins over
+      # every props assignment, so this is what makes the baseline the tree
+      # as it was, whatever the branch declares.
+      ALL_ON: >-
+        -p:HarborAnalyzerRoslynator=on
+        -p:HarborAnalyzerSonar=on
+        -p:HarborAnalyzerNetAnalyzers=on
+        -p:HarborAnalyzerAsyncFixer=on
+        -p:HarborAnalyzerReflection=on
+        -p:HarborAnalyzerBannedApi=on
+        -p:HarborAnalyzerMeziantou=on
+        -p:HarborAnalyzerDiLifetime=on
+        -p:HarborAnalyzerCfe=on
+        -p:HarborAnalyzerProjectFile=on
+        -p:HarborAnalyzerVsThreading=on
+        -p:HarborAnalyzerExcubo=on
+        -p:HarborAnalyzerPublicApi=on
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The FULL history, for the same reason ci.yml's build job wants it:
+          # the tree must be the branch's, not a detached head of it.
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # The exact SDK global.json asks for. The SDK's own bundled
+          # analyzer set is part of what is being measured, so the SDK has to
+          # be the one the CI compile uses.
+          dotnet-version: "10.0.402"
+          cache: true
+          cache-dependency-path: "Directory.Packages.props"
+
+      # Restore is timed separately and is NOT part of the compared numbers:
+      # it is identical in every arm and it is not compilation.
+      - name: Restore (timed, excluded from the ratio)
+        env:
+          LABEL: ${{ matrix.label }}
+        run: |
+          set +e
+          start=$(date +%s)
+          dotnet restore Harbor.slnx
+          rc=$?
+          end=$(date +%s)
+          {
+            echo "restore_seconds=$((end - start))"
+            echo "restore_exit=$rc"
+          } > "restore-$LABEL.txt"
+          exit $rc
+
+      - name: Build the baseline, then the arm (both timed, both CPU-sampled)
+        env:
+          LABEL: ${{ matrix.label }}
+          ALL_ON: ${{ env.ALL_ON }}
+        run: |
+          set +e
+          # The switch the arm turns off. The branch's own declaration is the
+          # default, so the "narrowed" arm passes no switch at all, and every
+          # other arm pins every family ON and turns exactly one OFF. The
+          # only difference between the two builds of a job is that one
+          # family.
+          #
+          # NO BLANK LINES IN THIS BLOCK, and that is not a style choice:
+          # tools/check-gate-policy.py reads a step's command up to the first
+          # line that is not indented under its `run:`, and a blank line is
+          # such a line. A blank line here would hide both invocations of
+          # tools/measure-build-cpu.py from the gate that checks which
+          # workflows run which script, and the gate would fail on a file
+          # that does run it.
+          arm_props=""
+          extra=""
+          case "$LABEL" in
+            narrowed|narrowed-report)
+              if [ "$LABEL" = "narrowed-report" ]; then
+                extra="-p:ReportAnalyzer=true -v:d"
+              fi
+              ;;
+            null-*)
+              arm_props="$ALL_ON"
+              ;;
+            no-*)
+              arm_props="$ALL_ON"
+              case "$LABEL" in
+                no-roslynator)    arm_props="$arm_props -p:HarborAnalyzerRoslynator=off" ;;
+                no-sonar)         arm_props="$arm_props -p:HarborAnalyzerSonar=off" ;;
+                no-net-analyzers) arm_props="$arm_props -p:HarborAnalyzerNetAnalyzers=off" ;;
+                no-asyncfixer)    arm_props="$arm_props -p:HarborAnalyzerAsyncFixer=off" ;;
+                no-reflection)    arm_props="$arm_props -p:HarborAnalyzerReflection=off" ;;
+                no-bannedapi)     arm_props="$arm_props -p:HarborAnalyzerBannedApi=off" ;;
+                no-meziantou)     arm_props="$arm_props -p:HarborAnalyzerMeziantou=off" ;;
+                no-di-lifetime)   arm_props="$arm_props -p:HarborAnalyzerDiLifetime=off" ;;
+                no-cfe)           arm_props="$arm_props -p:HarborAnalyzerCfe=off" ;;
+                no-projectfile)   arm_props="$arm_props -p:HarborAnalyzerProjectFile=off" ;;
+                no-vs-threading)  arm_props="$arm_props -p:HarborAnalyzerVsThreading=off" ;;
+                no-excubo)        arm_props="$arm_props -p:HarborAnalyzerExcubo=off" ;;
+                no-publicapi)     arm_props="$arm_props -p:HarborAnalyzerPublicApi=off" ;;
+                *) echo "unknown arm: $LABEL"; exit 2 ;;
+              esac
+              ;;
+            *)
+              echo "unknown arm: $LABEL"
+              exit 2
+              ;;
+          esac
+          base="dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true $ALL_ON -clp:PerformanceSummary"
+          arm="dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true $arm_props $extra -clp:PerformanceSummary"
+          echo "baseline: $base"
+          echo "arm:      $arm"
+          python3 tools/measure-build-cpu.py --label "$LABEL-base" --out-dir meas -- bash -c "$base"
+          base_rc=$?
+          # The tree is cleaned between the two builds, so the second one is a
+          # from-scratch build like the first: an incremental build would
+          # compile nothing and the difference would be meaningless.
+          dotnet build Harbor.slnx -c Release --no-restore -t:Clean > clean.log 2>&1 || true
+          # AND THE COMPILER SERVER IS SHUT DOWN, because otherwise the second
+          # build is not a cold one. The shared compiler (VBCSCompiler) stays
+          # alive between the two builds of a job, and it holds the analyzer
+          # assemblies LOADED and JIT-WARMED — so the second build pays for
+          # the analyzers far less. Measured: the null arms (the baseline
+          # against itself) came out 55.6 s, 63.8 s and 65.8 s apart, and the
+          # compiler's own CPU fell from 455/522/585 s to 256/300/298 s
+          # between the two halves of the same job. That bias is larger than
+          # the effect most of these arms are looking for.
+          #
+          # Shutting the server down puts the second build in the same state
+          # as the first, and the same state a CI job's single build is in:
+          # no compiler server, nothing warm. The null arms are the control
+          # that proves it.
+          dotnet build-server shutdown >> clean.log 2>&1 || true
+          python3 tools/measure-build-cpu.py --label "$LABEL-arm" --out-dir meas -- bash -c "$arm"
+          arm_rc=$?
+          {
+            echo "base_exit=$base_rc"
+            echo "arm_exit=$arm_rc"
+          } >> "restore-$LABEL.txt"
+          [ "$base_rc" -eq 0 ] && [ "$arm_rc" -eq 0 ]
+          exit $?
+
+      # The environment the numbers belong to. The runner image is recorded
+      # because `ubuntu-latest` moves, and a cost number without the image it
+      # was measured on has no denominator.
+      - name: Runner diagnostics
+        if: always()
+        run: |
+          {
+            echo "nproc=$(nproc)"
+            echo "procstat_cpu_lines=$(grep -c '^cpu' /proc/stat)"
+            echo "runner_image=${ImageOS:-unknown}"
+            echo "runner_image_version=${ImageVersion:-unknown}"
+            echo "kernel=$(uname -sr)"
+            echo "os=$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}")"
+            echo "dotnet_sdk=$(dotnet --version 2>/dev/null)"
+            echo "utc=$(date -u +%FT%TZ)"
+          } | tee runner-diag.txt
+
+      - name: Report
+        if: always()
+        env:
+          LABEL: ${{ matrix.label }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          label = os.environ["LABEL"]
+          restore = ""
+          rp = f"restore-{label}.txt"
+          if os.path.exists(rp):
+              restore = open(rp).read().strip().replace("\n", " ")
+          for half in ("base", "arm"):
+              path = f"meas/{label}-{half}.json"
+              if not os.path.exists(path):
+                  print(f"{label}: NO MEASUREMENT FILE for {half} {restore}")
+                  continue
+              d = json.load(open(path))
+              cpu = d["cpu"]
+              csc = d.get("tasks", {}).get("Csc", {})
+              print(f"{label}/{half}: wall={d['wall_seconds']}s exit={d['exit_code']} "
+                    f"avg_cores={cpu.get('avg_busy_cores')} max_cores={cpu.get('max_busy_cores')} "
+                    f"csc={csc.get('calls')}calls/{csc.get('total_ms')}ms {restore}")
+          PY
+
+      - name: Upload measurement
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: analyzer-cost-${{ matrix.label }}
+          path: |
+            meas/${{ matrix.label }}-base.json
+            meas/${{ matrix.label }}-base.log
+            meas/${{ matrix.label }}-arm.json
+            meas/${{ matrix.label }}-arm.log
+            restore-${{ matrix.label }}.txt
+            runner-diag.txt
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ── the table: every arm against ITS OWN baseline ─────────────────────────
+  #
+  # One job, after every arm has finished, that turns the per-arm JSONs into
+  # the table the issue asked for: what each analyzer package costs, in
+  # seconds of wall time and in seconds of analyzer time.
+  aggregate:
+    needs: measure
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download every arm
+        uses: actions/download-artifact@v7
+        with:
+          pattern: analyzer-cost-*
+          merge-multiple: true
+          path: arms
+
+      - name: Aggregate
+        run: |
+          set -uo pipefail
+          mkdir -p meas
+          for f in arms/meas/*.json; do
+            [ -e "$f" ] || continue
+            cp "$f" "meas/$(basename "$f")"
+          done
+          for f in arms/meas/*.log; do
+            [ -e "$f" ] || continue
+            cp "$f" "meas/$(basename "$f")"
+          done
+          ls -la meas || true
+          python3 tools/aggregate-analyzer-cost.py meas \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the table
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: analyzer-cost-table
+          path: |
+            analyzer-cost.json
+            analyzer-cost.md
+          retention-days: 30
+          if-no-files-found: warn

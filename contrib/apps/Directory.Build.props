@@ -18,6 +18,19 @@
   -->
 
   <!--
+    THE ANALYZER SCOPE OF THIS TREE (issue #1801) — the same four families
+    as apps/, for the same reasons. contrib/ mirrors the product, and the
+    gate over the scope (tools/check-analyzer-scope.py) holds the copies of
+    a tree to the same value. BEFORE the import: the root file evaluates
+    every analyzer PackageReference's Condition while it is read, so a
+    property set after the import would come too late.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerAsyncFixer>on</HarborAnalyzerAsyncFixer>
+    <HarborAnalyzerDiLifetime>on</HarborAnalyzerDiLifetime>
+  </PropertyGroup>
+
+  <!--
     Imported by RELATIVE path, not by the GetPathOfFileAbove function: MSBuild
     evaluates both to the same file (this directory's parent), but the
     project-file analyzer (#1857) can only follow an import it can resolve on
@@ -35,7 +48,7 @@
     </PackageReference>
     <!-- Analyzer that validates [Exposes] declarations against actual
          services.AddXxx<T>() registrations in the method body. -->
-    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime">
+    <PackageReference Include="Excubo.Analyzers.DependencyInjectionValidation" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerExcubo)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

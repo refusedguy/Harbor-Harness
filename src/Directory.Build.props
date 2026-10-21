@@ -43,6 +43,49 @@
     implementation; the arch suite's rule is the gate (#1852).
   -->
 
+  <!--
+    THE ANALYZER SCOPE OF THIS TREE (issue #1801). The scope table is
+    tools/analyzer-scope.json and the gate over it is
+    tools/check-analyzer-scope.py; this block is what the gate reads.
+
+    BEFORE the import, not after: the root file declares every analyzer
+    package with a Condition that reads this property, and MSBuild evaluates
+    that Condition while the root file is read. A property set after the
+    import would come too late — the item would already have been created
+    or skipped.
+
+    Only the families that DIFFER from the root default are stated here: a
+    family that is not mentioned inherits the root's value, so the block
+    says what this tree changes and nothing else.
+
+    The four families turned ON here are the ones whose findings are
+    PRODUCT findings, or whose absence would leave a product gate
+    unwatched:
+
+      AsyncFixer      five rules, all at `suggestion`. It cannot fail a
+                      build anywhere, so it is kept where the shipped code
+                      is and dropped from the test tree.
+      BannedApi       RS0030 over BannedSymbols.txt and
+                      BannedSymbols.DynamicCode.txt. The root props
+                      NoWarn it in tests/ and samples/, so it produced
+                      nothing there.
+      DiLifetime      the DI gates (DI003/DI013/DI015/DI017/DI019 at
+                      `error`) are the composition root's gate, and the
+                      registrations live here and under apps/.
+      Cfe             CFE0001 is the ROP-001 guard: a `.Value` on a failed
+                      Result<T>. The root props NoWarn it in tests/ and
+                      samples/, so it produced nothing there.
+
+    Sonar is NOT turned on here: measured on this tree, all 324 of its
+    findings are under tests/ and the product tree produces none. See
+    docs/ANALYZERS.md §Analyzer scope for the measurement and for what the
+    narrowing costs.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerAsyncFixer>on</HarborAnalyzerAsyncFixer>
+    <HarborAnalyzerDiLifetime>on</HarborAnalyzerDiLifetime>
+  </PropertyGroup>
+
   <!-- Imported by RELATIVE path, not by the GetPathOfFileAbove function: the
        project-file analyzer (#1857) can only follow an import it can resolve on
        disk, and a property function is not resolvable to it, so the properties
@@ -55,7 +98,7 @@
       VSTHRD110 — "observe the result of async calls". PrivateAssets=all:
       the analyzer must not flow to anything this repository publishes.
     -->
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerVsThreading)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <!-- Proj0037 (#1857): an analyzer package ships no runtime assembly, so
            the runtime asset is excluded explicitly. The attribute form, not a

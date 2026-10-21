@@ -7,6 +7,18 @@
     keep applying.
   -->
   <!--
+    THE ANALYZER SCOPE OF THIS TREE (issue #1801) — the same as tests/: only
+    Sonar is turned on here. contrib/ mirrors the product, and the gate over
+    the scope (tools/check-analyzer-scope.py) holds the copies of a tree to
+    the same value. BEFORE the import: the root file evaluates every analyzer
+    PackageReference's Condition while it is read, so a property set after
+    the import would come too late.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerSonar>on</HarborAnalyzerSonar>
+  </PropertyGroup>
+
+  <!--
     The solution-wide Directory.Build.props is imported by RELATIVE path, not by
     the GetPathOfFileAbove function. MSBuild evaluates both to the same file
     (this directory's parent's parent), but the project-file analyzer (#1857)

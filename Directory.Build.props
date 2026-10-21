@@ -374,6 +374,63 @@
     <NoWarn>$(NoWarn);CFE0001</NoWarn>
   </PropertyGroup>
 
+  <!--
+    ANALYZER SCOPE (issue #1801).
+
+    Every analyzer package below is declared ONCE, in this file, and every
+    PackageReference carries the condition that turns it off. WHERE a family
+    runs is a separate decision from WHICH family runs, and it is written
+    down in one place: tools/analyzer-scope.json. The gate that keeps this
+    file and that table in step is tools/check-analyzer-scope.py.
+
+    THE THREE SCOPE FILES. A project under src/, apps/ or tests/ imports
+    the NEAREST Directory.Build.props, and each of those three files states
+    the scope of every family it wants to change BEFORE it imports this
+    one. A property assigned in a props file wins over the default below,
+    and a global property (the command line) wins over both — which is what
+    lets the measurement harness turn exactly one family off for a whole
+    build with `-p:HarborAnalyzerSonar=off`, and nothing else.
+
+    THE DEFAULT BELOW IS THE ROOT SCOPE: the projects that import this file
+    and no other — samples/, tools/ and contrib/. A family whose default is
+    `off` runs only where a scope file turns it on.
+
+    WHY THE SCOPE IS A DECISION AND NOT A DETAIL. The nine analyzer
+    packages used to be referenced by every project in the tree. The cost
+    of that was measured rather than guessed (issue #1801; the numbers are
+    in docs/ANALYZERS.md): a family that produces no finding in a tree
+    still runs its analyzers over every compilation in that tree, once per
+    analyzer class in the package.
+
+    AND THE SEVERITY TABLE CANNOT SWITCH THAT COST OFF. That is the
+    measurement that decides the shape of this file: the compiler's own
+    analyzer report (`-p:ReportAnalyzer=true`) attributes 45.5 s of the
+    build to `VSTHRD010MainThreadUsageAnalyzer` — a rule this repository
+    sets to `severity = none`. Roslyn runs the analyzer and drops the
+    diagnostic afterwards; the work is already paid. So `severity = none`
+    is a way of not hearing a rule, not a way of not running it, and the
+    SCOPE is the only lever that removes the cost.
+
+    So the scope is written down or it drifts back: a package declared in
+    this file is declared for EVERY tree. The gate is what keeps that from
+    happening again.
+  -->
+  <PropertyGroup>
+    <HarborAnalyzerRoslynator Condition="'$(HarborAnalyzerRoslynator)' == ''">on</HarborAnalyzerRoslynator>
+    <HarborAnalyzerSonar Condition="'$(HarborAnalyzerSonar)' == ''">off</HarborAnalyzerSonar>
+    <HarborAnalyzerNetAnalyzers Condition="'$(HarborAnalyzerNetAnalyzers)' == ''">on</HarborAnalyzerNetAnalyzers>
+    <HarborAnalyzerAsyncFixer Condition="'$(HarborAnalyzerAsyncFixer)' == ''">off</HarborAnalyzerAsyncFixer>
+    <HarborAnalyzerReflection Condition="'$(HarborAnalyzerReflection)' == ''">on</HarborAnalyzerReflection>
+    <HarborAnalyzerBannedApi Condition="'$(HarborAnalyzerBannedApi)' == ''">on</HarborAnalyzerBannedApi>
+    <HarborAnalyzerMeziantou Condition="'$(HarborAnalyzerMeziantou)' == ''">on</HarborAnalyzerMeziantou>
+    <HarborAnalyzerDiLifetime Condition="'$(HarborAnalyzerDiLifetime)' == ''">off</HarborAnalyzerDiLifetime>
+    <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">on</HarborAnalyzerCfe>
+    <HarborAnalyzerProjectFile Condition="'$(HarborAnalyzerProjectFile)' == ''">on</HarborAnalyzerProjectFile>
+    <HarborAnalyzerVsThreading Condition="'$(HarborAnalyzerVsThreading)' == ''">on</HarborAnalyzerVsThreading>
+    <HarborAnalyzerExcubo Condition="'$(HarborAnalyzerExcubo)' == ''">on</HarborAnalyzerExcubo>
+    <HarborAnalyzerPublicApi Condition="'$(HarborAnalyzerPublicApi)' == ''">on</HarborAnalyzerPublicApi>
+  </PropertyGroup>
+
   <!-- Analyzers: comprehensive static analysis (versions pinned in Directory.Packages.props) -->
   <!--
     Every analyzer package below carries `ExcludeAssets="runtime"` next to
@@ -395,36 +452,36 @@
   -->
   <ItemGroup>
     <!-- Code style + quality -->
-    <PackageReference Include="Roslynator.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Roslynator.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerRoslynator)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="SonarAnalyzer.CSharp" ExcludeAssets="runtime">
+    <PackageReference Include="SonarAnalyzer.CSharp" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerSonar)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Microsoft official analyzers -->
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerNetAnalyzers)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Async best practices -->
-    <PackageReference Include="AsyncFixer" ExcludeAssets="runtime">
+    <PackageReference Include="AsyncFixer" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerAsyncFixer)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Reflection detection (AOT-friendliness) -->
-    <PackageReference Include="ReflectionAnalyzers" ExcludeAssets="runtime">
+    <PackageReference Include="ReflectionAnalyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerReflection)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Banned API analyzer (rules in /BannedSymbols.txt, wired via AdditionalFiles above) -->
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" ExcludeAssets="runtime">
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerBannedApi)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- Performance-focused analyzer -->
-    <PackageReference Include="Meziantou.Analyzer" ExcludeAssets="runtime">
+    <PackageReference Include="Meziantou.Analyzer" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerMeziantou)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -455,7 +512,7 @@
       Microsoft.Extensions.DependencyInjection gets checked. Default severity is
       warning.
     -->
-    <PackageReference Include="DependencyInjection.Lifetime.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="DependencyInjection.Lifetime.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerDiLifetime)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -496,7 +553,7 @@
       would go blind exactly where the crash class lives. The measurement is
       in docs/ROP-API-INVENTORY.md §5.1. The pin stays at 1.3.0.
     -->
-    <PackageReference Include="CSharpFunctionalExtensions.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="CSharpFunctionalExtensions.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerCfe)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -515,7 +572,7 @@
       item above) because the SDK's own discovery of a `.globalconfig` walks up
       from the compiled sources and misses every project that compiles none.
     -->
-    <PackageReference Include="DotNetProjectFile.Analyzers" ExcludeAssets="runtime">
+    <PackageReference Include="DotNetProjectFile.Analyzers" ExcludeAssets="runtime" Condition="'$(HarborAnalyzerProjectFile)' != 'off'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
