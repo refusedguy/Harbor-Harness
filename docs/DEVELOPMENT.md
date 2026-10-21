@@ -134,6 +134,7 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `check-local-merge-loss.py` — no local squash-merge dropped content that is still missing |
+| `seam graph` | `gen-seam-graph.py --check` — the committed seam graph still matches the tree (#1731) |
 
 Three things make this a real gate rather than decoration:
 
@@ -481,6 +482,57 @@ arm with a `when` guard, an arm that assigns two locals). `--apply` replays
 the reviewed rewrites in `tools/string-switch-rewrites.py` and reports the
 census before and after, so the rewrite is reproducible and its effect is
 measured rather than asserted.
+
+## Seam-graph gate — issue 1731
+
+`tools/gen-seam-graph.py` answers four questions about every seam in the
+product, and the answer is a generated document rather than a hand-written
+one: **who implements it**, **who extends what implements it**, **who consumes
+it**, and **who is registered in the container**. It also reports the fifth
+question nobody asks, which is the one that finds bugs: **where the seam is
+bypassed**, the places that name the concrete type where the interface was
+the contract.
+
+```bash
+./tools/gen-seam-graph.py --write    # regenerate docs/SEAM_GRAPH.md
+./tools/gen-seam-graph.py --check    # fail if the committed document is stale
+./tools/gen-seam-graph.py --report   # the numbers, on stdout
+./tools/gen-seam-graph.py --self-test # prove the checker can fail
+```
+
+**Why a generator and not a document.** The repository had exactly one
+machine-readable list of its extension axes,
+`src/Harbor.Plugins.Abstractions/PluginAxisRegistry.cs`, and no map of what
+surrounds them. What each ROUTE does with each axis is declared in
+`src/Harbor.Plugins.Hosting/PluginRouteAxisRegistry.cs` since #1723, and the
+graph reads that file for the verdicts and the reasons. What the graph adds
+is the cross-check: the declared verdict next to what the route's door body
+actually does, side by side, for every axis.
+
+**What it reads.** The C# sources under `src/`, `apps/`, `tests/` and
+`samples/`, and the `.csproj` files for the project each file belongs to.
+Comments and string literals are blanked first, so a type named only in a doc
+comment is not a declaration. `contrib/` is not scanned: it is not compiled by
+CI and the owner marked it unmaintained.
+
+**What it does not read.** The document says so in its own last section,
+because a graph that hides its blind spots is a decoration: DI registrations
+written without a type argument, extension methods, reflection-reached seams,
+and a base list reached only through an alias.
+
+**The gate.** `docs.yml`'s `seam graph` job regenerates the document and fails
+if the committed one differs, with `--min-files 2523 --min-interfaces 191` as
+the anti-vacuity floors. The `--self-test` in the `checker self-test` job
+plants a stale document and requires the check to fail, and separately
+requires the route grader to tell a registering route from a refusing one.
+
+**After changing the tree.** If you add, remove or change a type under
+`src/` or `apps/`, the committed graph is stale and the `seam graph` job will
+say so. Regenerate and commit it in the same change:
+
+```bash
+./tools/gen-seam-graph.py --write
+```
 
 ## Package-set checks (test and sample projects)
 
