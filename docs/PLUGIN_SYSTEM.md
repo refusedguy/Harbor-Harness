@@ -491,6 +491,72 @@ dependencies) and they are a runtime concern: the host resolves a dependency
 name against what is loaded and what it publishes, so a name in a file would be
 a second spelling of a name the host owns.
 
+## The plugin inventory (#1722)
+
+Three questions have three answers in three shapes, and a program cannot ask
+any of them:
+
+- "did my plugin compile?" — a line in the host log;
+- "did it register?" — another line, and sometimes a refusal reason;
+- "is its tool visible to the agent?" — a third line, or nothing at all.
+
+The **plugin inventory** is one document that answers all three. It is a
+projection: the host keeps the ledger as the load proceeds and renders it, so
+the inventory cannot disagree with the host about a plugin's phase.
+
+### What it says
+
+| Member | Meaning |
+|---|---|
+| `schemaVersion` | The format version. A consumer that does not know it reads a document it cannot trust. |
+| `route` | The route this composition is on, or `null` when the host was not told. |
+| `axes` | The extension axes the product declares, read from `PluginAxisRegistry`. |
+| `routes` | What each route does with each axis, and why, read from `PluginRouteAxisRegistry`. |
+| `plugins` | The plugins, in the order the host met them. |
+
+A plugin entry carries its `name`, its `version`, its `source`, its `phase`
+(`pending`, `active` or `failed`), the `axes` it carries, the `dependencies` it
+declared and the ones that are not satisfied yet, whether it ships a
+`manifest`, what each of its `registrations` did in the host, and the
+`failureReason` when the host refused it.
+
+### Where to read it
+
+**Live, over MCP.** The plugin host answers the namespaced method
+`harbor/plugins/inventory` with the document, rendered at the moment it is
+asked. It is read-only: it changes nothing.
+
+```bash
+# any MCP client that speaks to harbor-csharp-plugins
+{"jsonrpc":"2.0","id":1,"method":"harbor/plugins/inventory"}
+```
+
+**From the CLI.** The host also writes the same document into its plugin root
+(`~/.harbor/plugins/inventory.json`) and rewrites it whenever the composition
+changes — after the load, and after every activation pass. `harbor plugin
+inventory` prints it:
+
+```bash
+harbor plugin inventory
+```
+
+A file is a snapshot of the last load, not a live channel: the MCP method is
+the live one. The file exists because `harbor plugin inventory` is a host-free
+verb with no MCP session to ask through.
+
+**The tree's own composition** is committed, in the same schema:
+[`docs/PLUGIN_INVENTORY.json`](./PLUGIN_INVENTORY.json) says what the
+repository declares — the axes, the per-route verdicts, and the plugins the
+samples ship. `tools/gen-plugin-inventory.py --check` fails when that
+document no longer matches the tree, and when the two producers disagree about
+the schema.
+
+### What the snapshot does NOT say
+
+The tree's document says `phase: declared` for every plugin: a plugin in the
+repository is not loaded, so there is no phase to report. The live phases
+belong to the runtime document.
+
 ## Minimal example — a hello tool
 
 Drop this into `~/.harbor/plugins/HelloWorldPlugin.cs`:
