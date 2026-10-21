@@ -42,6 +42,7 @@ import (
 	"sort"
 	"strings"
 
+	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
 )
@@ -59,6 +60,11 @@ type registered struct {
 }
 
 var registry = []registered{
+	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
 	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",

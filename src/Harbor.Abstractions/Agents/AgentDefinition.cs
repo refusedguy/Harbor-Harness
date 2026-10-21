@@ -62,6 +62,34 @@ public sealed record AgentDefinition(
     RunBudgetCaps? Budget = null)
 {
     /// <summary>
+    ///     The threshold at which the repeat guard (#1756) tells the MODEL that
+    ///     it is repeating the same tool call with the same arguments.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The count at which the guard speaks up: the third consecutive
+    ///         identical call is the first one the model is told about. Zero
+    ///         turns the guard OFF (the chain is still counted, nothing is ever
+    ///         said about it).
+    ///     </para>
+    ///     <para>
+    ///         This is a REMINDER, not a limit: the call is executed exactly as
+    ///         it would be without the guard, and the guard never ends a run.
+    ///         It sits next to <see cref="MaxSteps" /> and
+    ///         <see cref="Budget" /> as a knob, and it does not duplicate
+    ///         them — they bound a run, this tells the model to stop wasting
+    ///         one.
+    ///     </para>
+    /// </remarks>
+    public int RepeatToolThreshold { get; init; } = DefaultRepeatToolThreshold;
+
+    /// <summary>
+    ///     The threshold the shipped agents run with: the third consecutive
+    ///     identical tool call is the first one the model is told about.
+    /// </summary>
+    public const int DefaultRepeatToolThreshold = 3;
+
+    /// <summary>
     ///     Returns the default <c>code</c> agent — full read/write/edit/bash permissions, 50 steps.
     /// </summary>
     /// <param name="model">Model id (without provider prefix).</param>
