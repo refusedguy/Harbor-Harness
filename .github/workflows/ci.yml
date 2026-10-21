@@ -1220,21 +1220,69 @@ jobs:
           for f in \
             "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.props" \
             "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.targets" \
-            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.CoreCompileInputs.cache" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" \
             "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.GeneratedMSBuildEditorConfig.editorconfig" \
             "$p/Harbor.Abstractions.Contracts.csproj" \
             "$p/Permissions/PermissionRuleset.cs" ; do
             if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
           done
           echo "=== the analyzers (an INPUT of every CoreCompile) ==="
-          ls -1 /home/runner/.nuget/packages/roslynator.analyzers/*/analyzers/dotnet/cs/*.dll 2>/dev/null | head -2 | while read -r f; do stat -c '%y  %s  %n' "$f"; done
-          ls -1 /home/runner/.nuget/packages/microsoft.codeanalysis.publicapianalyzers/*/analyzers/dotnet/cs/*.dll 2>/dev/null | head -2 | while read -r f; do stat -c '%y  %s  %n' "$f"; done
-          echo "=== the newest file under obj/ and bin/ (the newest OUTPUT) ==="
-          find . -path '*/obj/*' -o -path '*/bin/*' | xargs -r stat -c '%Y %y %n' 2>/dev/null | sort -rn | head -5
-          echo "=== the newest ANALYZER in the NuGet folder ==="
-          find /home/runner/.nuget/packages -name '*.dll' -path '*analyzers*' -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | head -3
+          find /home/runner/.nuget/packages -name '*.dll' -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | head -3 || true
           echo "=== now ==="
           date -u +%s
+          exit 0
+
+      # The same question, asked of the tree the COMPILE leaves behind: does
+      # the compile produce the .pdb that CoreCompile lists as its output, and
+      # what is the newest file under obj/ and bin/ afterwards?
+      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        id: compile
+        run: bash build/build.sh Compile --configuration Release
+
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+
+
+      - name: "DIAGNOSTIC: what the compile produced"
+        if: always() && steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== after the compile ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "obj+bin file count: $(find . -path '*/obj/*' -type f | wc -l)"
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the newest file under obj/ and bin/ ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | head -5 || true
+          echo "=== the oldest OUTPUT of $p (the one MSBuild compares against) ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" ; do
+            if [ -e "$f" ]; then stat -c '%Y %y  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          exit 0
 
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also COMPILES the 47-rule architecture gate embedded in
@@ -1283,27 +1331,6 @@ jobs:
       # configuration, same ContinuousIntegrationBuild property
       # (CompileTarget carries it). The bootstrap also compiles
       # build/_build.csproj, so NUKE build-code edits validate here too.
-      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
-        id: compile
-        run: bash build/build.sh Compile --configuration Release
-
-      # The zero-test guard is only a guard if it can go red (#1795). This
-      # step proves it: it runs one suite with a filter that matches NO test
-      # and requires the runner to exit with one of MTP's "nothing ran"
-      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
-      # Without it, a guard that had been neutered — an option renamed, a
-      # policy that stopped applying, a filter that silently matched nothing
-      # — would keep every job green while checking nothing.
-      #
-      # It lives in the BUILD job, not in the `test` job, for a reason that
-      # is not about runners: the test-project completeness gate reads
-      # "--treenode-filter" as "this list applies a partition to the projects
-      # it runs", and a filter in the `test` job would make it believe that
-      # the Avalonia E2E project's own shard partition is wired — a finding
-      # that is TRUE today (CI runs that project once, without a filter) and
-      # that #1946 closes. The check is a property of the test platform, not
-      # of the image, so proving it here proves it for the test job too.
-
       - name: The zero-test guard can go red (issue #1795)
         shell: bash
         run: |
