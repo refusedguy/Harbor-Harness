@@ -87,7 +87,7 @@ graph LR
 
 Every interface declared under `src/`, ranked by how much of the product touches it. **Implementations** counts the classes that implement it, directly or through a base class; the in-tree ones come first and the out-of-tree ones (doubles, samples) after a `/`. **Consumers** counts the files that name it, excluding the files that only put it in a base list. **Registered** is the container registration, if the seam is resolved from the DI graph. **Bypasses** counts the places that name the concrete type where the interface was the contract.
 
-The table shows the 40 seams with the most in-tree implementations and consumers, out of 192 interfaces declared under `src/`. The rest are in `--report`.
+The table shows the 40 seams with the most in-tree implementations and consumers, out of 193 interfaces declared under `src/`. The rest are in `--report`.
 
 | Seam | Declared in | Implementations | Consumer files | Registered as | Bypasses |
 |---|---|---|---|---|---|
