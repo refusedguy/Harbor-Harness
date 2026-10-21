@@ -1339,16 +1339,32 @@ trim-безопасности. Без этой строки дифференци
 **Не проверено локально.** Сборка и тесты — только на CI: локальный `dotnet build` на этой машине запрещён (OOM). Измерения — тоже CI: стенд `.github/workflows/meas-analyzer-cost.yml` собирает одно и то же дерево дважды в одном джобе (базовая линия и своя ветка), чтобы скорость раннера сократилась из разности; первая версия стенда сравнивала ветки разных джобов и выдавала «убираем анализатор — сборка на 90 с МЕДЛЕННЕЕ», потому что шкала шла волнами по девять параллельных сборок.
 ### #1753 — покрытие по файлам, явный реестр непокрытого, и измерение, которое наконец не пустое
 
-All notable changes to Harbor will be documented in this file.
+### #1899 — `Harbor.Desktop.Abstractions` разделён: лист и честное имя для хаба
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+**Сборка обещала слой контрактов, а была хабом: 9 ссылок и замыкание на 18 сборок под именем, которое читатель использует как карту. Разделение проведено по измеренному шву — зависимости, а не вкус.**
+
+**Переизмерено на `origin/dev` = `283a9dbe`** (цифры самого issue уже устарели: не 39 файлов и 55 типов, а **30 файлов и 46 типов**). Шов, по которому делится сборка, — зависимость, а не тема: **12 типов** (контракты конфига, порты `IAppConfigStore<T>` / `ICommonConfigStore`, DTO `AppConfigBase` / `CommonConfig` / `CompositeConfig<T>`, кросс-VM-сообщения, модели и енамы) связывают **два** типа Harbor, оба в `Harbor.Abstractions.Contracts`; **34 конкретные VM** связывают `Harbor.Application` (доказанное исключение `#188` — каталог `ProviderPresets`) и пять модулей `Harbor.Ui.Framework.*`. Две из девяти ссылок не связывали ни одного типа (`Harbor.Terminal.Abstractions` и пустой мета-проект `Harbor.Ui.Framework`) — обе уже были записаны в `EnforcerIntegrityTests` как vestigial с пометкой «Remove the reference».
+
+**Что сделано.** `Harbor.Desktop.Abstractions` остаётся и теперь действительно лист: **одна** ссылка (`Harbor.Abstractions.Contracts`), замыкание **2 сборки** вместо **18**, ребро `#188` ушло вместе с VM, которые его читают. Конкретные VM переехали в новую `Harbor.Desktop.ViewModels` (`PackageId Harbor.Desktop.ViewModels`), их namespace стал `Harbor.Desktop.ViewModels`. Потребителю, которому нужен только `ICommonConfigStore` или `ThemeKind`, больше не тащатся `Harbor.Application` и всё семейство `Ui.Framework`.
+
+**Что это чинит сверх заявленного.** `DesktopAbstractionsLeafTakesNoIoRules` уже называл эту сборку «config leaf» и рассуждал о её пустом allowed-наборе. После разделения посылка гварда — описание дерева, а не пожелание.
+
+**Две стоимости из оценки issue исправлены измерением.** Во-первых, **переподписывать public-API baseline нечего**: заморозка публичного API накрывает только `Harbor.Abstractions` и `Harbor.Abstractions.Contracts`, а `Harbor.Desktop.Abstractions` в ней никогда не была. Во-вторых, **внешних потребителей нет**: nuget.org отвечает 404 на все Harbor-пакеты (`harbor.desktop.abstractions`, `harbor.abstractions`, `harbor.abstractions.contracts`), а release-воркфлоу публикует только CLI. Ломающее изменение реально по существу и пусто по факту.
+
+**Что остаётся за владельцем** (зафиксировано в [ADR-021](docs/adr/ADR-021-desktop-abstractions-split.md)): идентичность и версионирование двух пакуемых сборок; удаление двух неиспользуемых публичных типов, найденных при измерении (`ThemeKind` — ноль ссылок во всём дереве; `ToastKind` из `Harbor.Desktop.Abstractions.Models` — ноль ссылок и дубль типа из `Harbor.Ui.Framework.Services`); имя листа (`Harbor.Desktop.Abstractions` или `Harbor.Desktop.Contracts`). Разделение **не** трогает замороженную `Harbor.Abstractions.Contracts` и **не** переносит три абстрактные базы в `Harbor.Ui.Framework.ViewModels` — это отдельная работа `#1875`, которая и вытащила бы `Harbor.Application` из замыкания `Harbor.TestKit`.
+
+**BREAKING (для будущих потребителей пакета):** 34 типа сменили assembly-qualified имя и namespace (`Harbor.Desktop.Abstractions.ViewModels.*` → `Harbor.Desktop.ViewModels.*`); новая пакуемая сборка `Harbor.Desktop.ViewModels`. Типы 12-типовой половины (контракты, модели, енамы) сохранили и сборку, и namespace.
 
 ### #1555 — агрегат usage-сабагента едет по рельсе Result, деградацию в ноль решает вызывающий
 
 `SubAgentRunner.TryAggregateChildUsageAsync` больше не ловит исключение вокруг чтения истории. Чтение едет по канонической связке `Result.Try` + `ResultErrors.Message` (библия §4.5) и отдаёт `Result<Usage>`; что делать с отказом, решает вызывающий — сейчас это терминальный `Match` на месте вызова, который деградирует в нулевой usage.
 
 **Поведение при ошибке не изменилось.** Сбой хранилища по-прежнему не маскирует исходную ошибку прогона, usage-сумма остаётся нулевой, и отмена по-прежнему пробрасывается, а не превращается в тихий ноль. Изменилось одно наблюдаемое: отказ хранилища теперь логируется (`Warning`, с текстом ошибки), а раньше этот путь проглатывался молча; лог исключения поднят с `Debug` до `Warning`, потому что недособранный usage ребёнка — это недособранные итоги родителя. Покрыто тестами `tests/Harbor.Application.Tests/SubAgentUsageAggregateTests.cs`: успешный агрегат, отказ-значение, исключение на границе, отмена.
+
+All notable changes to Harbor will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### #1736 — изоляция реализации сервиса по scope: свой провайдер для конкретного агента
 
@@ -1367,7 +1383,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Где живёт и что проверяет.** Механизм описан в `docs/SCOPES.md`; тесты — `tests/Harbor.Registries.Tests/ScopedServiceRegistryTests.cs` (порядок разрешения), `tests/Harbor.Registries.Tests/ScopedProviderResolverTests.cs` (две таблицы и откат к общепроцессному клиенту) и `tests/Harbor.Core.Tests/ScopedProviderIsolationTests.cs` (цикл агента: агент со scope'ом получает scope'ового клиента, агент без scope'а — общепроцессного, цикл без резолвера не меняется вовсе).
 
 **Не проверено локально.** Сборка и тесты — только на CI: локальный `dotnet build` на этой машине запрещён (OOM). Python-гейты прогнаны локально: `check-abstractions-contract.py`, `check-doc-facts.py`, `md-lint.py`, `check-md-links.py` — зелёные.
-
 ## [0.1.0-alpha] - 2026-07-16
 
 Initial release with core agent loop, 13 JSON providers, 7 tools, JSONL storage, and 65 tests.
