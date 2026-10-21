@@ -4,7 +4,7 @@
     "sha": "b9f3c83c",
     "date": "2026-10-20",
     "runner": "ubuntu-24.04-arm",
-    "method": "The runner's own per-assembly duration, from the 'Test run summary' block of each project's step in the shard job log. Harbor.E2E.App.Avalonia is the one exception: it runs as one process per shard (tools/run-e2e-avalonia-shards.py), so its cost is the CRITICAL PATH of those processes, which is what the plan's own report prints (14.7 s of 12.1 / 14.7 / 4.7 s).",
+    "method": "The runner's own per-assembly duration, from the 'Test run summary' block of each project's step in the shard job log. Harbor.E2E.App.Avalonia is the one exception: it runs as one process per shard (harbor-gates run-e2e-avalonia-shards), so its cost is the CRITICAL PATH of those processes, which is what the plan's own report prints (14.7 s of 12.1 / 14.7 / 4.7 s).",
     "note": "The shard WALLS of the same run, for the reader who wants the raw numbers: core 143 s, ui 62 s, platform 35 s, e2e 24 s. The gate computes the walls from the costs below plus the overhead model; the difference between a computed wall and a measured one is the model."
   },
   "overhead": {

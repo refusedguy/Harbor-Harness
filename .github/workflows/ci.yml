@@ -2271,7 +2271,7 @@ jobs:
             # from the same per-project costs), and the skew from 5.96x
             # (measured) to 3.46x (computed).
             #
-            # The gate that keeps it that way is tools/check-shard-balance.py,
+            # The gate that keeps it that way is harbor-gates check-shard-balance,
             # which reads these lists and the recorded costs and fails when the
             # shards drift apart again.
             projects: >-
@@ -2371,12 +2371,30 @@ jobs:
               # fails loudly when a shard's filter drops a class (a filter that
               # silently drops tests is worse than the serialisation this
               # removes).
-              if python3 tools/run-e2e-avalonia-shards.py \
-                  --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
-                status="pass"
+              # The compiled gates ship one binary per architecture, and the
+              # test shards run on the ARM64 pool (issue #1919). The binary
+              # has to match the runner: the x64 one on an x64 runner and the
+              # arm64 one on an arm64 one, or the shell says "cannot execute
+              # binary file" and the shard is red for a reason that has
+              # nothing to do with the tests. Both commands are written out,
+              # because the runner is chosen by the shard's label and not by
+              # the pool the whole job happens to be in.
+              if [ "$RUNNER_ARCH" = "ARM64" ]; then
+                if tools/bin/harbor-gates-linux-arm64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               else
-                status="FAIL"
-                rc=1
+                if tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards \
+                    --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
+                  status="pass"
+                else
+                  status="FAIL"
+                  rc=1
+                fi
               fi
             elif dotnet exec "$dll" $guard --zero-tests-policy strict --report-trx --results-directory "$trx_dir" --report-trx-filename "$p.trx"; then
               status="pass"
