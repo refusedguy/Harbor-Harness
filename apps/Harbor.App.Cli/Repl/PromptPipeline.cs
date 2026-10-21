@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Events;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
@@ -219,7 +220,7 @@ internal sealed class PromptPipeline(
     /// </summary>
     public Task SubmitImageTurnAsync(string text, IReadOnlyList<ImageAttachment> images, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(images);
+        Ensure.NotNull(images);
         if (string.IsNullOrWhiteSpace(text) || images.Count == 0)
         {
             return Task.CompletedTask;
