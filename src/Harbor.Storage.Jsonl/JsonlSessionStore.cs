@@ -26,7 +26,7 @@ namespace Harbor.Storage.Jsonl;
 ///         during the write itself, not just before it.
 ///     </para>
 /// </remarks>
-public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore
+public sealed partial class JsonlSessionStore : ISessionStore, ISessionCheckpointStore, ISessionFeedbackStore, ICompactionEventStore
 {
     // JSONL codec context provides AOT-safe serialization via JsonTypeInfo.
     // See JsonlCodecContext.cs for the registered types.

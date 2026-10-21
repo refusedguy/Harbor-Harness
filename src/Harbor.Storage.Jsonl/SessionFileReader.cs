@@ -102,6 +102,19 @@ internal static class SessionFileReader
         CarriesTypeValue(line, "\"sessionRemark\""u8);
 
     /// <summary>
+    ///     True when the line is a compaction record (<c>"type":"compaction"</c>).
+    /// </summary>
+    /// <remarks>
+    ///     The compaction records are the lock and the audit trail of a
+    ///     compaction operation — what happened to the SESSION, never what
+    ///     the model said (#1767). The message read path drops these lines the
+    ///     way it drops the feedback ones, so the history the model context
+    ///     is built from cannot carry a lock marker.
+    /// </remarks>
+    internal static bool IsCompactionLine(ReadOnlySpan<byte> line) =>
+        CarriesTypeValue(line, "\"compaction\""u8);
+
+    /// <summary>
     ///     True when the line carries feedback — a rating or a remark. The
     ///     feedback is what the USER said about the agent's work, and it is
     ///     not history: the message read path drops these lines here, so the
@@ -489,6 +502,17 @@ internal static class SessionFileReader
         // "this record is a truncated tail" (#1744), which a feedback line
         // never is.
         if (IsFeedbackLine(record))
+        {
+            return true;
+        }
+
+        // #1767: the compaction records are the lock and the audit trail of a
+        // compaction operation — what happened to the SESSION, not what the
+        // model said. They are dropped here, before the message parser sees
+        // them, so the history the model context is built from carries no
+        // lock marker. The records themselves stay in the file: they are read
+        // by the compaction axis, which asks for them by name.
+        if (IsCompactionLine(record))
         {
             return true;
         }
