@@ -1232,6 +1232,37 @@ jobs:
           date -u +%s
           exit 0
 
+      # ── DIAGNOSTIC (issue #2100): MSBuild's own verdict ──
+      #
+      # Everything on the disk says the projects are up to date: every output
+      # of CoreCompile exists and carries the stamping timestamp, every input
+      # is older. And yet every project is rebuilt. So ask MSBuild: it says
+      # why, at DETAILED verbosity:
+      #
+      #   "Building target \"CoreCompile\" partially, because some output files
+      #    are out of date with respect to their input files."   (normal)
+      #   "[CoreCompile: Input=..., Output=...] Output file does not exist."  (detailed)
+      #   "[CoreCompile: Input=..., Output=...] Input file is newer than
+      #    output file."                                                (detailed)
+      #
+      # ONE project, and with BuildProjectReferences=false so that the
+      # references are used as they are and not rebuilt first (a rebuild would
+      # make their outputs newer and change the question).
+      - name: "DIAGNOSTIC: MSBuild's own verdict for one project"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          dotnet build src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj \
+            -c Release --no-restore -v:detailed -m:1 -nologo \
+            -p:BuildProjectReferences=false 2>&1 \
+            | grep -E 'Building target|Output file does not exist|Input file is newer than output file|Input file does not exist|does not exist' \
+            | head -40 || true
+          echo "=== the DebugType the build actually saw ==="
+          dotnet msbuild src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj \
+            -c Release -getProperty:DebugType -getProperty:DebugSymbols -getProperty:_DebugSymbolsProduced -getProperty:ProduceReferenceAssembly -nologo 2>&1 | tail -20 || true
+          exit 0
+
       # The same question, asked of the tree the COMPILE leaves behind: does
       # the compile produce the .pdb that CoreCompile lists as its output, and
       # what is the newest file under obj/ and bin/ afterwards?
