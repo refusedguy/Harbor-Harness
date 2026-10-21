@@ -171,24 +171,24 @@ public sealed class FakePluginLoadHost : IPluginLoadHost, IReversiblePluginLoadH
 
     /// <inheritdoc />
     public Result UnregisterTuiPlugin(string name)
-    {
-        lock (_tuiPlugins)
-        {
-            int removed = _tuiPlugins.RemoveAll(plugin => string.Equals(plugin.Name, name, StringComparison.Ordinal));
-            return removed == 0
-                ? Result.Failure($"TUI plugin '{name}' is not registered.")
-                : Result.Success();
-        }
-    }
+        => RemoveAndReport(_tuiPlugins, plugin => plugin.Name, name, "TUI plugin");
 
     /// <inheritdoc />
     public Result UnregisterPanelProvider(string panelId)
+        => RemoveAndReport(_panelProviders, panel => panel.Id, panelId, "Panel");
+
+    /// <summary>
+    ///     Take the registration out and say whether it was there. The two
+    ///     registrations a plugin can hold are the same rule over two lists, and
+    ///     two copies of one rule are two places to fix the same bug.
+    /// </summary>
+    private static Result RemoveAndReport<T>(List<T> items, Func<T, string> keyOf, string key, string kind)
     {
-        lock (_panelProviders)
+        lock (items)
         {
-            int removed = _panelProviders.RemoveAll(panel => string.Equals(panel.Id, panelId, StringComparison.Ordinal));
+            int removed = items.RemoveAll(item => string.Equals(keyOf(item), key, StringComparison.Ordinal));
             return removed == 0
-                ? Result.Failure($"Panel '{panelId}' is not registered.")
+                ? Result.Failure($"{kind} '{key}' is not registered.")
                 : Result.Success();
         }
     }

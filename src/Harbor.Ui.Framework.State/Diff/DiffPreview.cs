@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Tools;
 
 namespace Harbor.Ui.Framework.State;
@@ -69,7 +70,7 @@ public static class DiffPreview
     public static (bool IsDiffTool, string? FilePath, string? Preview, string? FullDiff) ExtractDiff(
         string toolName, string argsJson)
     {
-        if (toolName != "edit" && toolName != "write" && toolName != "patch")
+        if (toolName != WellKnownTools.Edit && toolName != WellKnownTools.Write && toolName != WellKnownTools.Patch)
         {
             return (false, null, null, null);
         }
@@ -107,7 +108,7 @@ public static class DiffPreview
             return (false, null, null, null);
         }
 
-        if (toolName == "edit")
+        if (toolName == WellKnownTools.Edit)
         {
             if (!string.IsNullOrEmpty(oldString) && newString != null)
             {
@@ -128,7 +129,7 @@ public static class DiffPreview
                     GenerateContextDiff(oldString, newString, MaxFullDiffLines));
             }
         }
-        else if (toolName == "write")
+        else if (toolName == WellKnownTools.Write)
         {
             if (!string.IsNullOrEmpty(content))
             {

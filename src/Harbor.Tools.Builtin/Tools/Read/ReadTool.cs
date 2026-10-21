@@ -245,7 +245,7 @@ public sealed partial class ReadTool : ITool
         catch (Exception ex)
         {
             // ROP-A П.13: boundary message policy lives in one handler.
-            return ToolResult.Error(ToolErrors.Handler("read", cancellationToken, failurePrefix: "Failed to read: ")(ex));
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Read, cancellationToken, failurePrefix: "Failed to read: ")(ex));
         }
 
         if (taken == 0 && skip > 0)

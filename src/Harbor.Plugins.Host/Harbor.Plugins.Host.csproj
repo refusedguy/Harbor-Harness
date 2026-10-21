@@ -29,6 +29,11 @@
     <ProjectReference Include="..\Harbor.Plugins.Instantiation\Harbor.Plugins.Instantiation.csproj"/>
     <ProjectReference Include="..\Harbor.Plugins.Abstractions\Harbor.Plugins.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Terminal.Abstractions\Harbor.Terminal.Abstractions.csproj"/>
+    <!-- #1734: the plugin's own configuration section comes from
+         ~/.harbor/config.json, and this host is the process that reads it: it
+         is the one on the plugin side of the process boundary, and the plugin
+         pipeline may not reach into the configuration family itself. -->
+    <ProjectReference Include="..\Harbor.PolicyConfig\Harbor.PolicyConfig.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
     <ProjectReference Include="..\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
   </ItemGroup>

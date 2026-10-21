@@ -127,7 +127,7 @@ public sealed partial class PatchTool : ITool
         {
             TryDelete(tempPath);
             // ROP-A П.13: boundary message policy lives in one handler.
-            return ToolResult.Error(ToolErrors.Handler("patch", cancellationToken, failurePrefix: "Failed to write: ")(ex));
+            return ToolResult.Error(ToolErrors.Handler(WellKnownTools.Patch, cancellationToken, failurePrefix: "Failed to write: ")(ex));
         }
 
         PatchToolLog.Patched(_logger, path, hunks.Count);
