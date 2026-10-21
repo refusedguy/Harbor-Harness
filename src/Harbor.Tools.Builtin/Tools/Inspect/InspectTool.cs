@@ -592,22 +592,20 @@ public sealed partial class InspectTool : ITool
         foreach (ToolDescriptor descriptor in descriptors)
         {
             Result<ITool> resolved = _tools.GetTool(descriptor.Name);
-            if (!resolved.IsSuccess)
+            if (resolved.IsSuccess)
             {
-                continue;
-            }
-
-            switch (resolved.Value.SafetyProfile.ArgKind)
-            {
-                case ToolArgKind.Path:
-                    path++;
-                    break;
-                case ToolArgKind.Command:
-                    command++;
-                    break;
-                default:
-                    opaque++;
-                    break;
+                switch (resolved.Value.SafetyProfile.ArgKind)
+                {
+                    case ToolArgKind.Path:
+                        path++;
+                        break;
+                    case ToolArgKind.Command:
+                        command++;
+                        break;
+                    default:
+                        opaque++;
+                        break;
+                }
             }
         }
 
