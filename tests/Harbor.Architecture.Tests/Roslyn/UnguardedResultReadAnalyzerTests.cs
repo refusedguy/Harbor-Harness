@@ -487,7 +487,7 @@ public sealed class UnguardedResultReadAnalyzerTests
     {
         var sites = new List<string>();
 
-        foreach ((_, CSharpCompilation compilation) in PilotRoslynAnalyzerTests.LiveCompilations.Value)
+        foreach ((_, CSharpCompilation compilation) in ArchAnalyzerPromotionTests.LiveCompilations.Value)
         {
             foreach (Diagnostic diagnostic in await RunAsync(compilation, new UnguardedResultReadAnalyzer()))
             {

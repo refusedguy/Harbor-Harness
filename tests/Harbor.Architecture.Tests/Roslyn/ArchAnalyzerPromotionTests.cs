@@ -1,12 +1,13 @@
-// PilotRoslynAnalyzerTests.cs — PILOT for issue #1729: does a Roslyn analyzer
-// express our architecture rules better than a regex text scan?
+// ArchAnalyzerPromotionTests.cs — the two architecture rules that moved to a
+// build-time analyzer project (#1842), and the evidence that the move kept
+// their verdicts.
 //
 // WHAT THESE TESTS ARE
 // --------------------
-// The pilot's two rules live in `Roslyn/HarborArchAnalyzers.cs`; the harness
-// that gives them a compilation lives in `Roslyn/RoslynProjectCompilation.cs`.
-// These tests are the MEASUREMENT, and they are the four things a migration
-// has to answer:
+// The rules live in `src/Harbor.Arch.Analyzers/`; the harness that gives them
+// a compilation lives in `Roslyn/RoslynProjectCompilation.cs`. These tests
+// are the MEASUREMENT, and they are the four things a migration has to
+// answer:
 //
 //   1. Can the analyzer be made to FAIL?   (planted offenders)
 //   2. Does it stay SILENT where the text rule is silent? (planted near-misses)
@@ -16,14 +17,14 @@
 //      measured 738 s of the repository's 1 128 s of test time inside this
 //      project, because every rule reads the tree with its own `Lazy`.)
 //
-// ONE THING THE PILOT FOUND THAT A TEXT RULE CANNOT
-// -------------------------------------------------
+// ONE THING THE ANALYZER SEES THAT A TEXT RULE CANNOT
+// ----------------------------------------------------
 // The text rule bans the token `AppDomain.DefineDynamicAssembly`. That API
 // DOES NOT EXIST in .NET Core, .NET 9 or .NET 10 — the .NET way to manufacture
 // an assembly at run time is `System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly`.
 // So one of the text rule's nine branches bans something that cannot appear in
 // compiling code at all: it can only ever match a comment or a string literal.
-// The analyzer sees this by resolving the symbol, and the pilot's control uses
+// The analyzer sees this by resolving the symbol, and the control below uses
 // the API that actually exists.
 //
 // THE PLANTED CONTROLS ARE THE POINT
@@ -36,16 +37,16 @@
 // a comment stripper to keep its near-misses from being offenders, and the
 // analyzer does not, because a syntax tree keeps comments in trivia.
 //
-// NOTHING HERE IS A PRODUCTION GATE YET
-// ------------------------------------
-// The pilot asserts the analyzers' behaviour; it does not replace
-// `ReflectionConventionRule` or `AbstractionsNamespaceOwnershipRules`. The
-// text rules keep running, and the differential test below is what proves the
-// two agree. Replacing a rule is a separate decision (see the PR body and
-// #1729), and it is made on the strength of the whole 110-rule audit, not on
-// the strength of two.
+// WHAT THE PROMOTION DID AND DID NOT CHANGE
+// ------------------------------------------
+// The rules now run as build-time analyzers over every product project, and
+// the text rules keep running: `ReflectionConventionRule` and
+// `AbstractionsNamespaceOwnershipRules` are the ORACLE here, and the
+// differential below is what proves the two agree. The text rule is the
+// non-gating oracle, exactly as the other two analyzers hosted here are.
 
 using System.Collections.Immutable;
+using Harbor.Arch.Analyzers;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -53,14 +54,14 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Harbor.Architecture.Tests;
 
 /// <summary>
-///     The pilot's own tests: the planted controls, the differential against the
-///     text rule, and the cost measurement.
+///     The promoted rules' own tests: the planted controls, the differential
+///     against the text rule, and the cost measurement.
 /// </summary>
-public sealed class PilotRoslynAnalyzerTests
+public sealed class ArchAnalyzerPromotionTests
 {
     /// <summary>
     ///     Every product project, compiled once. The compilations are the
-    ///     expensive part of the pilot, and three tests want them.
+    ///     expensive part of these tests, and three of them want them.
     /// </summary>
     /// <remarks>
     ///     Internal rather than private because issue #1868's differential
@@ -82,7 +83,7 @@ public sealed class PilotRoslynAnalyzerTests
         using System.Reflection.Emit;
         using System.Runtime.Loader;
 
-        namespace Pilot
+        namespace Promotion
         {
             public sealed class Offenders
             {
@@ -124,7 +125,7 @@ public sealed class PilotRoslynAnalyzerTests
         using System.Reflection;
         using System.Text.Json;
 
-        namespace Pilot
+        namespace Promotion
         {
             public sealed class Benign
             {
@@ -181,7 +182,7 @@ public sealed class PilotRoslynAnalyzerTests
     ///     symbol nobody planted would fail too.
     /// </summary>
     [Test]
-    public async Task Pilot_Harch001_Reports_Every_Planted_Dynamic_Code_Capability()
+    public async Task Harch001_Reports_Every_Planted_Dynamic_Code_Capability()
     {
         CSharpCompilation compilation = Compile(OffendersSource, "Harbor.Application");
         List<Diagnostic> diagnostics = await RunAsync(compilation, new NoDynamicCodeAnalyzer());
@@ -233,7 +234,7 @@ public sealed class PilotRoslynAnalyzerTests
     ///     place where the analyzer is knowingly narrower than the rule.
     /// </remarks>
     [Test]
-    public async Task Pilot_Harch001_Stays_Silent_On_The_Planted_Near_Misses()
+    public async Task Harch001_Stays_Silent_On_The_Planted_Near_Misses()
     {
         CSharpCompilation compilation = Compile(NearMissesSource, "Harbor.Application");
         List<Diagnostic> diagnostics = await RunAsync(compilation, new NoDynamicCodeAnalyzer());
@@ -258,7 +259,7 @@ public sealed class PilotRoslynAnalyzerTests
     ///     one compilation is one assembly.
     /// </remarks>
     [Test]
-    public async Task Pilot_Harch002_Reports_The_Foreign_Owner_And_Spares_The_Real_One()
+    public async Task Harch002_Reports_The_Foreign_Owner_And_Spares_The_Real_One()
     {
         CSharpCompilation foreign = Compile(ForeignNamespaceSource, "Harbor.Registries");
         List<Diagnostic> foreignReports = await RunAsync(foreign, new NamespaceOwnershipAnalyzer());
@@ -279,9 +280,69 @@ public sealed class PilotRoslynAnalyzerTests
                 + "here would forbid the contract trio from existing.");
     }
 
+    /// <summary>
+    ///     The ownership table the namespace rule reads is not empty.
+    /// </summary>
+    /// <remarks>
+    ///     The live-tree test below asserts that the namespace rule finds
+    ///     nothing, and an empty table would make that assertion true for a
+    ///     reason that has nothing to do with the tree being clean. The table
+    ///     is the rule's only input that no compiler can supply, so its being
+    ///     populated is the difference between a rule that is holding the line
+    ///     and a rule that is not looking.
+    /// </remarks>
+    [Test]
+    public async Task The_Ownership_Table_The_Namespace_Rule_Reads_Is_Not_Empty()
+    {
+        var roots = NamespaceOwnershipAnalyzer.OwnedRoots;
+
+        await Assert.That(roots.Length).IsGreaterThan(0)
+            .Because(
+                "the namespace rule decides ownership from this table, and a table with no rows "
+                + "makes every declaration legal — including the one the planted control above "
+                + "proves the rule can catch.");
+
+        foreach ((string root, string[] owners) in roots)
+        {
+            await Assert.That(root.Length).IsGreaterThan(0)
+                .Because("a row without a root names nothing");
+
+            await Assert.That(owners.Length).IsGreaterThan(0)
+                .Because("a root with no owner is a root nobody may declare under, which is a "
+                         + "different rule than the one this analyzer states");
+        }
+    }
+
     // =====================================================================
     // 2. The live tree: the analyzer agrees with the text rule, and costs less.
     // =====================================================================
+
+    /// <summary>
+    ///     The places where the text rule and the analyzer are allowed to
+    ///     answer differently, each with the reason.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The text rule matches a SPELLING; the analyzer resolves a SYMBOL.
+    ///         The two answers differ in exactly one shape: a banned name inside
+    ///         a string literal. A literal is data the matcher compares against,
+    ///         not a call the code makes — and the compiler-side ban says the
+    ///         same, because RS0030 sees symbols and a string is not one.
+    ///     </para>
+    ///     <para>
+    ///         The one entry: the analyzer that ENFORCES the ban has to hold the
+    ///         banned names to match them, so they live in that project as
+    ///         string constants. A prefix, not a file name, so that a file
+    ///         added to the project later is covered by the same reasoning.
+    ///     </para>
+    /// </remarks>
+    private static readonly (string Prefix, string Reason)[] NamesWithoutCalls =
+    [
+        (
+            "src/Harbor.Arch.Analyzers/",
+            "the analyzer that enforces the ban holds the banned names as string constants, and a name "
+            + "in a string literal is not a call: the compiler-side ban (RS0030) says the same"),
+    ];
 
     /// <summary>
     ///     The differential. Every file the TEXT rule flags is a file the
@@ -295,18 +356,40 @@ public sealed class PilotRoslynAnalyzerTests
     ///     invents no finding of its own on the live tree.
     /// </remarks>
     [Test]
-    public async Task Pilot_The_Analyzer_Sees_Every_File_The_Text_Rule_Sees()
+    public async Task The_Analyzer_Sees_Every_File_The_Text_Rule_Sees()
     {
         List<string> textRuleFiles = TextRuleFiles();
         List<string> analyzerFiles = await AnalyzerFilesAsync();
 
         var missed = textRuleFiles.Where(f => !analyzerFiles.Contains(f, StringComparer.Ordinal)).ToList();
 
-        await Assert.That(missed.Count).IsEqualTo(0)
+        // Every file the text rule flags and the analyzer does not must fall
+        // under a NAMED difference. The text rule matches a SPELLING; the
+        // analyzer resolves a SYMBOL, and the one place those two answers
+        // differ is a name inside a string literal — which is data, not a call.
+        var unnamed = missed
+            .Where(f => !NamesWithoutCalls.Any(e => f.StartsWith(e.Prefix, StringComparison.Ordinal)))
+            .ToList();
+
+        await Assert.That(unnamed.Count).IsEqualTo(0)
             .Because(
                 "the text rule strips comments before it matches and the analyzer never looks at trivia, "
-                + "so the analyzer must see a SUPERSET of the text rule's files. Files the text rule flags "
-                + "and the analyzer does not: " + string.Join(" | ", missed));
+                + "so the analyzer must see a SUPERSET of the text rule's files — except where the "
+                + "difference is NAMED, because the text rule matches a spelling and the analyzer "
+                + "resolves a symbol. Files the text rule flags and the analyzer does not, and no named "
+                + "difference covers them: " + string.Join(" | ", unnamed)
+                + " | named differences: "
+                + string.Join(" | ", NamesWithoutCalls.Select(static e => e.Prefix + " — " + e.Reason)));
+
+        foreach ((string prefix, string _) in NamesWithoutCalls)
+        {
+            await Assert.That(textRuleFiles.Count(f => f.StartsWith(prefix, StringComparison.Ordinal)))
+                .IsGreaterThan(0)
+                .Because(
+                    "a named difference that matches nothing is a permission with no violation behind "
+                    + "it: either the shape it names is gone (delete the row) or the row names a path "
+                    + "nothing lives under. Prefix: " + prefix);
+        }
 
         var outside = analyzerFiles
             .Where(f => !f.StartsWith("src/Harbor.Plugins.", StringComparison.Ordinal))
@@ -331,7 +414,7 @@ public sealed class PilotRoslynAnalyzerTests
     ///     is paid once and shared by every rule that uses the compilation.
     /// </remarks>
     [Test]
-    public async Task Pilot_The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap()
+    public async Task The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap()
     {
         var started = System.Diagnostics.Stopwatch.StartNew();
         List<string> analyzerFiles = await AnalyzerFilesAsync();
@@ -348,7 +431,7 @@ public sealed class PilotRoslynAnalyzerTests
         }
 
         Console.WriteLine(
-            "[pilot] HARCH001+HARCH002 over " + LiveCompilations.Value.Count + " product compilations: "
+            "[arch-analyzer] HARCH001+HARCH002 over " + LiveCompilations.Value.Count + " product compilations: "
             + elapsedMs + " ms; files flagged by HARCH001: " + string.Join(" | ", analyzerFiles));
 
         await Assert.That(namespaceFindings.Count).IsEqualTo(0)

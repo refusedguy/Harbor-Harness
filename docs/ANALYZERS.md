@@ -864,6 +864,49 @@ the architecture test read the same fact.
 The dynamic-code rule has no pragma form: its exemption is the plugin family,
 and it is expressed by leaving the ban file out of that family's projects.
 
+### The repository's own rules (`src/Harbor.Arch.Analyzers`)
+
+Two of the rules this repository grades on itself are written as Roslyn
+analyzers and live in
+[`src/Harbor.Arch.Analyzers`](../src/Harbor.Arch.Analyzers/README.md). The
+compiler loads them and runs them over every product project, so a violation
+fails the build where it is written instead of in a test run afterwards. The
+package is `Microsoft.CodeAnalysis.CSharp` at the central pin: **no new
+package** and **no new entry** in `Directory.Packages.props`.
+
+| ID | What it catches | Why the severity is what it is |
+|---|---|---|
+| `HARCH001` | the dynamic-code family of [#626](https://github.com/refusedguy/Harbor-Harness/issues/626): an assembly loaded at run time, a load context, or a type of the emit namespace. It resolves the TYPE, so a type derived from a banned one is a hit, and a comment or a string literal that names one is not. | `warning`, so `TreatWarningsAsErrors` makes it a build error. The tree is clean against it: the text rule that remains as the oracle reads 100 % of the source text, and the analyzer's differential over the live tree agrees with it. |
+| `HARCH002` | a namespace root declared by a project that does not own it, which is the invariant of [#452](https://github.com/refusedguy/Harbor-Harness/issues/452). A file walk cannot state it, because the shared source folders are compiled into several assemblies at once. | `warning`, for the same reason. The ownership table is the one fact no compiler can supply, and the live tree is clean against it. |
+
+**The exception belongs to the caller.** The plugin family is exempt from
+`HARCH001` **by id**, in `src/Directory.Build.props`, with the same predicate
+the ban file above uses:
+
+```xml
+<PropertyGroup Condition="$(MSBuildProjectName.StartsWith('$(HarborDynamicCodeBanExemptProjectNamePrefix)'))">
+  <NoWarn>$(NoWarn);HARCH001</NoWarn>
+</PropertyGroup>
+```
+
+One id, so that the other rule the analyzer carries still applies to those
+projects: a rule that cannot be switched off without its neighbour gets
+switched off together with it. `HARCH002` has no exception to make.
+
+**The wiring.** `src/Directory.Build.props` and `apps/Directory.Build.props` add
+the project with `<OutputItemType>Analyzer</OutputItemType>` and
+`<ReferenceOutputAssembly>false</ReferenceOutputAssembly>`: the compiler loads
+the assembly, and it never becomes a runtime reference of the consuming
+project. Nothing about it reaches a shipped binary, so the NativeAOT rule
+(#626, which governs shipped code) is not engaged.
+
+**The controls.** The planted offender the analyzer must report, the planted
+near-miss it must not, the differential against the text rule over the live
+tree in both directions, and a wiring test that reads the two props files the
+build reads and fails if the analyzer is not handed to the compiler. The
+procedure these follow is in
+[ANALYZERS_AUTHORING.md](./ANALYZERS_AUTHORING.md).
+
 ### Excubo DI validation rules (Excubo.Analyzers.DependencyInjectionValidation 1.0.33)
 
 Validates `[Exposes(typeof(T))]` attribute declarations on composition root

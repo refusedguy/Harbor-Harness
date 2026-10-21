@@ -739,7 +739,9 @@ src assemblies in `Harbor.slnx` minus the `Harbor.Plugins.Host` exe, which is
    in the test csproj) fails loudly instead of silently skipping.
 
 Out of scope by design: `Harbor.CodeGen` (source-generator project, consumed via
-`OutputItemType=Analyzer`), `Harbor.Plugins.Host` (OutputType=Exe out-of-process
+`OutputItemType=Analyzer`), `Harbor.Arch.Analyzers` (the repository's own
+architecture rules as build-time analyzers, consumed the same way — #1842),
+`Harbor.Plugins.Host` (OutputType=Exe out-of-process
 MCP server — an app), and `apps/*` composition roots. Every one of these lives in
 `OutOfScopeAssemblies` with a reason, and `EnforcerIntegrityTests.SrcProjects_AreAllClassified`
 fails when a new `src/` project is in neither list.
@@ -1022,6 +1024,17 @@ rather than a baseline a scanner subtracts, which a reader has to believe. The p
 depend on how a checkout spells a path separator), and the prefix lives in one property,
 `HarborDynamicCodeBanExemptProjectNamePrefix`, in `Directory.Build.props`.
 
+**One more place the banned NAMES appear: the analyzer that enforces the ban.**
+`src/Harbor.Arch.Analyzers/` holds the rules the compiler now runs over the product tree
+(#1842), and one of them is this ban. A rule that matches a name has to hold the name, so
+the banned spellings live in that project as string constants — the matcher's operand, not
+a call the code makes. The compiler-side ban does not fire there (RS0030 sees symbols, and
+a string is not one), and neither does the analyzer. A text scan cannot tell the two apart,
+so the text rule's baseline carries a row for that project with the reason in the row; the
+row lives in the rule that needs it, not in the plugin allowance the trim-safety rules
+read. The differential between the two rules names the same difference — a name in a
+string literal is data, not a call — and fails when a difference is not named.
+
 **What is deliberately NOT banned.** `GetMethod("Name")` / `GetProperty("Name")` /
 `GetField("Name")` looks like the same thing and is not. Over `src/` and `apps/` the
 overwhelming majority of that shape is `JsonElement.GetProperty` / `TryGetProperty` — a
@@ -1084,7 +1097,7 @@ the product tree is not).
 
 **What is left of the text rule, and why.** The matcher, its baseline and its ten planted
 controls survive in `ReflectionConventionRule.Rule` — as the **oracle of the #1729 pilot**
-(`PilotRoslynAnalyzerTests`), which measures a Roslyn analyzer against a text rule and
+(`Roslyn/ArchAnalyzerPromotionTests.cs`), which measures a Roslyn analyzer against a text rule and
 therefore needs both implementations. It gates nothing: the compiler decides, on every
 build, for every product project, and it decides on the SYMBOL rather than on the
 spelling. The two tests that keep the oracle honest

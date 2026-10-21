@@ -1895,7 +1895,7 @@ time in a 95.39 s window, a parallelism factor of 11.62, and a floor set by
 79 s tests. The shape is the same on both; the tree grew by 5.5 %.
 
 **The closest thing to the spike's own question, already measured.**
-`PilotRoslynAnalyzerTests` runs a Roslyn analyzer over the live tree, which is
+`ArchAnalyzerPromotionTests` runs a Roslyn analyzer over the live tree, which is
 what an ArchUnitNET-style spike would do. On run 39438762137 it printed:
 
 ```
@@ -2386,7 +2386,7 @@ change), 2026-10-20:
 |---|---:|---:|---|
 | `PanelKeyRouteReachabilityRule` | 72.9 s | 502.8 s | a text scan of the product trees, and then — for every hand-off it looks up — a re-split of every file it walks past |
 | `ProcessEnvIsolationRule` | 67.9 s | 632.2 s | a text scan of the whole test tree, re-derived once per test — nine times over |
-| `PilotRoslynAnalyzerTests` | 66.2 s | 169.6 s | **52 Roslyn COMPILATIONS** (1 236 files parsed) — not a text scan |
+| `ArchAnalyzerPromotionTests` | 66.2 s | 169.6 s | **52 Roslyn COMPILATIONS** (1 236 files parsed) — not a text scan |
 | `TokenCellSingleHomeRules` | 28.8 s | 28.9 s | a text scan of the product trees against three regexes — one test, so the class's parallelism is 1.00 by construction |
 | `ApprovalGateWaiterRaceRules` | 19.1 s | 38.5 s | a text scan of the whole test tree, twice |
 
@@ -2397,7 +2397,7 @@ and 39421786081.
 |---|---:|---:|---:|---:|
 | `PanelKeyRouteReachabilityRule` | 72.9 s | 58.6 / 58.9 s | 502.8 s | 235.2 / 237.4 s |
 | `ProcessEnvIsolationRule` | 67.9 s | **1.9 / 1.4 s** | 632.2 s | **11.4 / 7.7 s** |
-| `PilotRoslynAnalyzerTests` | 66.2 s | 51.4 / 55.4 s | 169.6 s | 94.2 / 110.4 s |
+| `ArchAnalyzerPromotionTests` | 66.2 s | 51.4 / 55.4 s | 169.6 s | 94.2 / 110.4 s |
 | `TokenCellSingleHomeRules` | 28.8 s | 42.2 / 39.5 s | 28.9 s | 42.2 / 39.7 s |
 | `ApprovalGateWaiterRaceRules` | 19.1 s | 12.6 / 15.1 s | 38.5 s | 25.2 / 30.4 s |
 | `SharedSourceTreeSnapshotTests` (new) | — | 41.1 / 44.1 s | — | 41.5 / 44.1 s |

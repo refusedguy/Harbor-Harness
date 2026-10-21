@@ -105,7 +105,7 @@
 //
 // THE TEXT MATCHER IS THE PILOT'S ORACLE, NOT A RULE
 // --------------------------------------------------
-// `PilotRoslynAnalyzerTests` measures a Roslyn analyzer against a text rule: a
+// `Roslyn/ArchAnalyzerPromotionTests.cs` measures a Roslyn analyzer against a text rule: a
 // differential needs BOTH implementations, and a copy of the pattern would be a
 // second implementation rather than a comparison. That is why `Rule` below — the
 // matcher, its baseline and its controls — is still here after the enforcement
@@ -706,7 +706,7 @@ public sealed class ReflectionConventionRule
 
     private const string RuleId = "REFLECTION-DYNAMIC-CODE";
 
-    /// <summary>The rule as data: one shape, one prefix baseline, ten controls, a floor.</summary>
+    /// <summary>The rule as data: one shape, two prefix baselines, ten controls, a floor.</summary>
     /// <remarks>
     ///     internal since the #1729 pilot: the pilot's differential test compares THIS
     ///     rule's matcher against the Roslyn analyzer, and a differential needs the old
@@ -720,6 +720,14 @@ public sealed class ReflectionConventionRule
     ///         two tests above keep it from rotting. When the pilot is retired, this
     ///         goes with it.
     ///     </para>
+    ///     <para>
+    ///         The second baseline row is #1842's: the analyzer that ENFORCES the
+    ///         ban lives in the product tree, and it has to name the banned APIs to
+    ///         match them. A call is the capability; a string constant is the
+    ///         matcher's operand. The compiler-side rule and the analyzer both say
+    ///         that file is clean, and only a scan that cannot tell a constant from
+    ///         a call says otherwise.
+    ///     </para>
     /// </remarks>
     internal static readonly ScanRule Rule = new()
     {
@@ -731,8 +739,9 @@ public sealed class ReflectionConventionRule
                 RuleId,
                 ForbiddenConstruct,
                 "loading code at run time is invisible to NativeAOT and to every ProjectReference rule — "
-                + "unless this file genuinely needs it, say so by adding an explained row to "
-                + "PluginAllowance.AllowedProjectPrefixes, and be ready to justify it in review."),
+                + "unless this file genuinely needs it, say so by adding an explained row to this rule's "
+                + "baseline (the plugin family's row lives in PluginAllowance.AllowedProjectPrefixes, "
+                + "which the trim-safety rules read too), and be ready to justify it in review."),
         ],
         Baseline =
         [
@@ -741,6 +750,21 @@ public sealed class ReflectionConventionRule
                 IsPrefix: true,
                 a.Allowance.Reason,
                 a.Allowance.TrackedBy)),
+
+            // #1842: the analyzer that enforces the ban lives in the product tree
+            // and names the banned APIs as DATA — the string constants its matcher
+            // compares against. A call is the capability; a constant is the
+            // matcher's operand, and the compiler-side ban (RS0030) and the
+            // analyzer that replaced this scan both say the file is clean.
+            new ScanBaseline(
+                "src/Harbor.Arch.Analyzers",
+                IsPrefix: true,
+                "The rule that enforces the dynamic-code ban lives here, so the banned names appear in this "
+                + "project as string constants the matcher compares against — not as calls the code makes. "
+                + "The compiler-side ban (RS0030) and the analyzer that replaced this scan both say the file "
+                + "is clean; a text scan cannot tell a constant from a call. Not debt — the one place the "
+                + "spellings must appear.",
+                TrackedBy: null),
         ],
         Controls =
         [

@@ -3,7 +3,7 @@
 //
 // WHY THIS FILE EXISTS
 // --------------------
-// The pilot analyzers in `HarborArchAnalyzers.cs` need a COMPILATION, not a
+// The analyzers in `src/Harbor.Arch.Analyzers/` need a COMPILATION, not a
 // file: a symbol is what tells the analyzer that `Assembly.Load` is a method
 // on `System.Reflection.Assembly` and that `CollectiblePluginLoadContext`
 // derives from `AssemblyLoadContext`. A compilation also carries the one fact
@@ -27,7 +27,7 @@
 // standard way an analyzer test host finds its own runtime) and the product
 // assemblies from the test's own output directory, so `Result<T>` and the
 // Harbor contracts resolve. Reference resolution failures do NOT fail this
-// harness: the pilot analyzers grade the symbols they care about, and a
+// harness: the analyzers grade the symbols they care about, and a
 // project whose generated code is missing (the Avalonia app's XAML-generated
 // members, for instance) still resolves every BCL symbol.
 
@@ -37,7 +37,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Harbor.Architecture.Tests;
 
-/// <summary>Builds one Roslyn compilation per product project, for the pilot analyzers.</summary>
+/// <summary>Builds one Roslyn compilation per product project, for the architecture analyzers.</summary>
 internal static class RoslynProjectCompilation
 {
     /// <summary>One product project: where it lives, what it is called, what it compiles.</summary>
@@ -48,7 +48,7 @@ internal static class RoslynProjectCompilation
 
     private static readonly Lazy<ImmutableArray<MetadataReference>> LazyReferences = new(BuildReferences);
 
-    /// <summary>The references every pilot compilation is built against.</summary>
+    /// <summary>The references every compilation is built against.</summary>
     internal static ImmutableArray<MetadataReference> References => LazyReferences.Value;
 
     /// <summary>

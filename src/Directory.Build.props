@@ -64,4 +64,46 @@
     </PackageReference>
   </ItemGroup>
 
+  <!--
+    Harbor.Arch.Analyzers — the repository's OWN architecture rules, as
+    compiler extensions (#1842).
+
+    A rule that lives in the architecture test project is judged by a test
+    run; a rule that lives here is judged by the BUILD, over every product
+    project, at the moment the code is written. The two rules that moved
+    here are the ones whose invariant is SEMANTIC — a namespace root has an
+    owner, and a dynamic-code API is a type — and a semantic invariant
+    cannot be decided by reading the text of a file.
+
+    OutputItemType=Analyzer hands the assembly to the compiler;
+    ReferenceOutputAssembly=false keeps it out of the consuming project's
+    reference list, so nothing about it reaches a shipped binary and the
+    NativeAOT rule (#626), which governs shipped code, is not engaged.
+
+    The reference is stated with an absolute path because this file is
+    imported by EVERY project under src/, and a relative path in a props
+    file is relative to the importing PROJECT, not to the props file.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Harbor.Arch.Analyzers/Harbor.Arch.Analyzers.csproj"
+                      Condition="'$(MSBuildProjectName)' != 'Harbor.Arch.Analyzers'">
+      <OutputItemType>Analyzer</OutputItemType>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!--
+    HARCH001 — the dynamic-code ban — is exempted for the plugin family, BY
+    ID, and the predicate is the one the compiler-side ban file already
+    uses: src/Harbor.Plugins.* loads code at run time because loading code
+    at run time IS the plugin product.
+
+    The exemption is by id and not by excluding the whole analyzer, so the
+    other rule the analyzer carries still applies to those projects: one
+    rule switched off must not switch off its neighbour.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectName.StartsWith('$(HarborDynamicCodeBanExemptProjectNamePrefix)'))">
+    <NoWarn>$(NoWarn);HARCH001</NoWarn>
+  </PropertyGroup>
+
 </Project>

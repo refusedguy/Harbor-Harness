@@ -255,7 +255,7 @@ public sealed class ExistenceCheckLivenessRule
     ///     </para>
     ///     <para>
     ///         The other thirty-six rows are sound, and that is the half of the
-    ///         measurement worth having. <c>OutOfScopeAssemblies</c> (2) and
+    ///         measurement worth having. <c>OutOfScopeAssemblies</c> (3) and
     ///         <c>SharedSourceFolders</c> (2) name real <c>src/</c> directories — the
     ///         latter two have no <c>.csproj</c> at all, being linked-source folders,
     ///         which is why an existence probe keyed on a project FILE would have
