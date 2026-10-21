@@ -1,4 +1,5 @@
 using Harbor.Plugins.Abstractions;
+using Harbor.Plugins.Registration;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Plugins.Hosting;
 /// <summary>
@@ -35,6 +36,15 @@ namespace Harbor.Plugins.Hosting;
 ///         than the one running, are both refused here, with the reason. A plugin with
 ///         no manifest is not affected: it compiles and registers exactly as before.
 ///     </para>
+///     <para>
+///         <b>The live composition (#1722).</b> The host keeps a ledger of every plugin
+///         it met — the ones that loaded, the ones that are waiting for a dependency,
+///         and the ones it refused — and projects it as <see cref="Inventory" />: a
+///         machine-readable answer to "why is my tool not there?". The ledger is a
+///         projection of the state the host already keeps, not a second lifecycle:
+///         there is no way for the inventory to disagree with the host about a
+///         plugin's phase.
+///     </para>
 /// </remarks>
 public sealed class PluginHost
 {
@@ -49,10 +59,16 @@ public sealed class PluginHost
     // #1733: the activation state of the load set. `_active` holds the plugins that are
     // initialized and registered; `_pending` holds the ones that are loaded and waiting for
     // a dependency. `_activeNames` is what a plugin-to-plugin dependency resolves against.
+    //
+    // #1722: `_inventory` is the LEDGER the live composition is projected from. It is
+    // filled in as the load proceeds — one entry per plugin the host met, with the
+    // phase it reached — and it is the only place the host keeps that history. The
+    // inventory is a rendering of it, not a second copy of it.
     private readonly object _sync = new();
     private readonly List<LoadedPlugin> _active = [];
     private readonly HashSet<string> _activeNames = new(StringComparer.Ordinal);
     private readonly List<PendingEntry> _pending = [];
+    private readonly List<PluginInventoryEntry> _inventory = [];
 
     /// <summary>
     ///     Construct a new plugin host.
@@ -124,6 +140,34 @@ public sealed class PluginHost
     }
 
     /// <summary>
+    ///     The live plugin composition, as one machine-readable document (#1722).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The snapshot says, for every plugin the host met: the phase it
+    ///         reached (pending, active or failed), the extension axes it carries,
+    ///         its version, the dependencies it declared, and what each of its
+    ///         registrations did in the host.
+    ///     </para>
+    ///     <para>
+    ///         It is a projection: the host fills the ledger in as the load
+    ///         proceeds, and this property renders it. Nothing is cached and
+    ///         nothing is decided here — the phase of a plugin is the phase the
+    ///         host gave it.
+    ///     </para>
+    /// </remarks>
+    public PluginInventory Inventory
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return new PluginInventory(_options.RouteId, [.. _inventory]);
+            }
+        }
+    }
+
+    /// <summary>
     ///     Load every script produced by the source, compiling + instantiating +
     ///     registering each in turn. The host log surfaces per-plugin failures; the
     ///     returned <see cref="Result" /> is failure only if the run itself aborted
@@ -154,6 +198,7 @@ public sealed class PluginHost
             if (refusal is not null)
             {
                 _logger.LogWarning("Plugin {Path} was not loaded: {Reason}", script.Path, refusal);
+                RecordInventory(RefusedEntry(script, refusal));
                 if (FailOrContinue(refusal))
                     return Result.Failure<IReadOnlyList<LoadedPlugin>>(refusal);
                 continue;
@@ -166,6 +211,7 @@ public sealed class PluginHost
                 // run continues — per-plugin failure is never an error, because the
                 // overall load still succeeds under ContinueOnError.
                 _logger.LogWarning("Plugin compilation failed for {Path}: {Error}", script.Path, compiled.Error);
+                RecordInventory(RefusedEntry(script, compiled.Error));
                 if (FailOrContinue(compiled.Error))
                     return compiled.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -180,6 +226,7 @@ public sealed class PluginHost
             if (instantiated.IsFailure)
             {
                 _logger.LogWarning("Plugin instantiation failed for {Path}: {Error}", script.Path, instantiated.Error);
+                RecordInventory(RefusedEntry(script, instantiated.Error));
                 if (FailOrContinue(instantiated.Error))
                     return instantiated.ConvertFailure<IReadOnlyList<LoadedPlugin>>();
                 continue;
@@ -261,20 +308,24 @@ public sealed class PluginHost
                     // A declaration the host cannot even read is a plugin bug, not a wait.
                     RemovePending(entry);
                     _logger.LogWarning("Plugin registration failed for {DisplayName}: {Error}", entry.Plugin.DisplayName, malformed);
+                    ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Failed, [], [], malformed));
                     continue;
                 }
 
                 if (unmet.Count > 0)
                 {
                     entry.Unsatisfied = unmet;
+                    ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Pending, unmet, [], null));
                     continue;
                 }
 
                 RemovePending(entry);
-                var registered = _registrar.Register(entry.Plugin, host);
+                var recorder = new PluginInventoryLoadHost(host);
+                var registered = _registrar.Register(entry.Plugin, recorder);
                 if (registered.IsFailure)
                 {
                     _logger.LogWarning("Plugin registration failed for {DisplayName}: {Error}", entry.Plugin.DisplayName, registered.Error);
+                    ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Failed, [], recorder.Registrations, registered.Error));
                     continue;
                 }
 
@@ -287,6 +338,7 @@ public sealed class PluginHost
                 activated++;
                 progressed = true;
                 _logger.LogInformation("Plugin {DisplayName} activated — its declared dependencies are met.", entry.Plugin.DisplayName);
+                ReplaceInventory(Entry(entry.Plugin, PluginInventoryPhase.Active, [], recorder.Registrations, null));
             }
 
             if (!progressed)
@@ -420,6 +472,7 @@ public sealed class PluginHost
         if (malformed is not null)
         {
             error = malformed;
+            RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], [], malformed));
             return ActivationOutcome.Failed;
         }
 
@@ -429,13 +482,19 @@ public sealed class PluginHost
             {
                 _pending.Add(new PendingEntry(plugin, unmet));
             }
+            RecordInventory(Entry(plugin, PluginInventoryPhase.Pending, unmet, [], null));
             return ActivationOutcome.Pending;
         }
 
-        var registered = _registrar.Register(plugin, host);
+        // #1722: the registration goes through a decorator that remembers what each
+        // door answered. The decorator forwards the host's own Result unchanged, so
+        // the plugin sees the truth and the host behaves exactly as before.
+        var recorder = new PluginInventoryLoadHost(host);
+        var registered = _registrar.Register(plugin, recorder);
         if (registered.IsFailure)
         {
             error = registered.Error;
+            RecordInventory(Entry(plugin, PluginInventoryPhase.Failed, [], recorder.Registrations, registered.Error));
             return ActivationOutcome.Failed;
         }
 
@@ -445,8 +504,111 @@ public sealed class PluginHost
             _activeNames.Add(plugin.Name);
         }
         _logger.LogInformation("Loaded plugin {DisplayName}", plugin.DisplayName);
+        RecordInventory(Entry(plugin, PluginInventoryPhase.Active, [], recorder.Registrations, null));
         return ActivationOutcome.Activated;
     }
+
+    // ── The live composition ledger (#1722) ──────────────────────────────────────
+
+    /// <summary>
+    ///     One plugin's entry in the ledger.
+    /// </summary>
+    /// <param name="plugin">The loaded plugin.</param>
+    /// <param name="phase">The phase the plugin reached.</param>
+    /// <param name="unsatisfied">The dependencies that are not satisfied yet.</param>
+    /// <param name="registrations">What the plugin's doors answered.</param>
+    /// <param name="failureReason">Why the host refused it, when it did.</param>
+    /// <returns>The entry.</returns>
+    private static PluginInventoryEntry Entry(
+        LoadedPlugin plugin,
+        PluginInventoryPhase phase,
+        IReadOnlyList<string> unsatisfied,
+        IReadOnlyList<PluginInventoryRegistration> registrations,
+        string? failureReason)
+    {
+        // The axes come from the ONE marker table the registrar dispatches on
+        // (`PluginAxisMarkers`), so the inventory cannot claim a plugin carries an
+        // axis the registrar never looked for.
+        PluginAxisMarkers markers = PluginAxisMarkers.Of(plugin.Instance);
+        return new PluginInventoryEntry(
+            plugin.Name,
+            plugin.Version.ToString(),
+            plugin.SourcePath,
+            phase,
+            markers.Names,
+            plugin.Dependencies,
+            unsatisfied,
+            registrations,
+            failureReason,
+            plugin.Manifest is not null);
+    }
+
+    /// <summary>
+    ///     The entry of a plugin the host never got far enough to know: a source
+    ///     that did not compile, did not instantiate, or shipped a manifest the host
+    ///     could not apply.
+    /// </summary>
+    /// <param name="script">The discovered plugin source.</param>
+    /// <param name="reason">Why the host refused it.</param>
+    /// <returns>The entry.</returns>
+    private static PluginInventoryEntry RefusedEntry(PluginScript script, string reason) =>
+        new(
+            Name: string.Empty,
+            Version: string.Empty,
+            SourcePath: script.Path,
+            Phase: PluginInventoryPhase.Failed,
+            Axes: [],
+            Dependencies: [],
+            UnsatisfiedDependencies: [],
+            Registrations: [],
+            FailureReason: reason,
+            ManifestPresent: script.Manifest is not null);
+
+    /// <summary>
+    ///     Add a plugin to the ledger.
+    /// </summary>
+    /// <param name="entry">The entry to add.</param>
+    private void RecordInventory(PluginInventoryEntry entry)
+    {
+        lock (_sync)
+        {
+            _inventory.Add(entry);
+        }
+    }
+
+    /// <summary>
+    ///     Replace a plugin's entry in the ledger — the pending entry becomes the
+    ///     active one, or the failed one.
+    /// </summary>
+    /// <param name="entry">The new entry.</param>
+    private void ReplaceInventory(PluginInventoryEntry entry)
+    {
+        lock (_sync)
+        {
+            for (int i = 0; i < _inventory.Count; i++)
+            {
+                if (SamePlugin(_inventory[i], entry))
+                {
+                    _inventory[i] = entry;
+                    return;
+                }
+            }
+
+            _inventory.Add(entry);
+        }
+    }
+
+    /// <summary>
+    ///     Whether two entries describe the same plugin: the same source file, and
+    ///     the same plugin name inside it. One source file may hold more than one
+    ///     plugin, so the name is part of the identity.
+    /// </summary>
+    /// <param name="left">The first entry.</param>
+    /// <param name="right">The second entry.</param>
+    /// <returns>True when both entries are about the same plugin.</returns>
+    private static bool SamePlugin(PluginInventoryEntry left, PluginInventoryEntry right) =>
+        string.Equals(left.SourcePath, right.SourcePath, StringComparison.Ordinal)
+        && string.Equals(left.Name, right.Name, StringComparison.Ordinal);
 
     /// <summary>
     ///     The declared dependencies that are not satisfied yet (#1733).

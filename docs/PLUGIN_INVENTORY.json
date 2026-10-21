@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "route": null,
+  "axes": [
+    {
+      "marker": "IToolPlugin",
+      "door": "RegisterTool"
+    },
+    {
+      "marker": "IProviderPlugin",
+      "door": "RegisterProvider"
+    },
+    {
+      "marker": "IAgentPlugin",
+      "door": "RegisterAgent"
+    },
+    {
+      "marker": "ITuiPlugin",
+      "door": "RegisterTuiPlugin"
+    },
+    {
+      "marker": "ITuiPanelPlugin",
+      "door": "RegisterPanelProvider"
+    },
+    {
+      "marker": "ISessionStorePlugin",
+      "door": "RegisterSessionStore"
+    },
+    {
+      "marker": "ITuiBackendPlugin",
+      "door": "RegisterTuiBackend"
+    }
+  ],
+  "routes": [
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterTool",
+      "marker": "IToolPlugin",
+      "carriage": "Carried",
+      "reason": "the tool's name, description and input schema travel on tools/list and its result on tools/call, so the core can call it; the tool's own safety profile stays with the host that executes it"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterProvider",
+      "marker": "IProviderPlugin",
+      "carriage": "Refused",
+      "reason": "an ILlmClient is a live streaming client: the wire would have to carry per-turn token deltas and the provider's credentials, and the MCP tool protocol carries neither"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterAgent",
+      "marker": "IAgentPlugin",
+      "carriage": "Refused",
+      "reason": "the core evaluates the agent's PermissionRuleset per call and freezes its agent registry at startup, before the lazily spawned plugin host is asked anything; carrying an agent needs a startup handshake this route deliberately does not have"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterTuiPlugin",
+      "marker": "ITuiPlugin",
+      "carriage": "ClosedSeam",
+      "reason": "the seam is closed by owner decision (#564): the plugin's TUI views are collected and never rendered, in-process or out-of-process"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterPanelProvider",
+      "marker": "ITuiPanelPlugin",
+      "carriage": "Refused",
+      "reason": "a panel is live UI-process state — it builds a view object and handles keys — so it is not a registration that can be serialized across a process boundary; carrying it needs a panel protocol, which the plugin showcase (#1434) is the place to design"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterSessionStore",
+      "marker": "ISessionStorePlugin",
+      "carriage": "Refused",
+      "reason": "the store is resolved in the core at startup through HARBOR_STORAGE; a store behind the pipe would put every session read and write on IPC, and the core's store contract has no remote form"
+    },
+    {
+      "route": "mcp-stdio",
+      "door": "RegisterTuiBackend",
+      "marker": "ITuiBackendPlugin",
+      "carriage": "Refused",
+      "reason": "a renderer is constructed in the UI process and paints frames; a backend factory cannot be expressed as an MCP tool, so the renderer axis has no wire form"
+    }
+  ],
+  "plugins": [
+    {
+      "name": "hello-world",
+      "version": "1.0.0",
+      "source": "samples/plugins-cs/HelloWorldPlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
+      "name": "session-broadcast",
+      "version": "1.0.0",
+      "source": "samples/plugins-cs/SessionBroadcastPlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
+      "name": "filetree",
+      "version": "1.0.0",
+      "source": "samples/plugins/Harbor.Plugin.FileTree/FileTreePlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
+      "name": "gittools",
+      "version": "1.1.0",
+      "source": "samples/plugins/Harbor.Plugin.GitTools/GitToolsPlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin",
+        "ITuiPanelPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
+      "name": "todowrite",
+      "version": "1.1.0",
+      "source": "samples/plugins/Harbor.Plugin.TodoWrite/TodoWritePlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin",
+        "ITuiPanelPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    },
+    {
+      "name": "websearch",
+      "version": "1.0.0",
+      "source": "samples/plugins/Harbor.Plugin.WebSearch/WebSearchPlugin.cs",
+      "phase": "declared",
+      "axes": [
+        "IToolPlugin"
+      ],
+      "dependencies": [],
+      "unsatisfiedDependencies": [],
+      "manifest": false,
+      "registrations": [],
+      "failureReason": null
+    }
+  ]
+}
