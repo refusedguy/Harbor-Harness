@@ -113,11 +113,11 @@ on:
       - 'tools/check-dup-jscpd.py'
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
-      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
-      # compares the result against its committed exceptions file, so a PR
-      # that edits the gate or the exceptions must run it — and so must a PR
-      # that edits the tree it measures.
-      - 'tools/check-test-json-reflection.py'
+      # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
+      # the result against its committed exceptions file, so a PR that edits
+      # the gate or the exceptions must run it — and so must a PR that edits
+      # the tree it measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, which the trigger below already covers.
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. `check-test-projects.py` reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
@@ -256,11 +256,11 @@ on:
       - 'tools/check-dup-jscpd.py'
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
-      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
-      # compares the result against its committed exceptions file, so a PR
-      # that edits the gate or the exceptions must run it — and so must a PR
-      # that edits the tree it measures.
-      - 'tools/check-test-json-reflection.py'
+      # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
+      # the result against its committed exceptions file, so a PR that edits
+      # the gate or the exceptions must run it — and so must a PR that edits
+      # the tree it measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, which the trigger below already covers.
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
@@ -476,7 +476,7 @@ jobs:
       # that found nothing, and the load-bearing fixture is the planted
       # reflection call — the gate MUST fail on it.
       - name: Reflection-JSON gate fails on a planted reflection call
-        run: python3 tools/check-test-json-reflection.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-json-reflection --self-test
       # #1888. The policy checker's failure path. It plants one defect per
       # rule in a synthetic tree and asserts that the rule fires, and that
       # the same tree without the defect is clean. A rule that cannot fire
@@ -1035,7 +1035,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that no test serializes through the reflection resolver
-        run: python3 tools/check-test-json-reflection.py
+        run: tools/bin/harbor-gates-linux-x64 check-test-json-reflection
 
   # #1575. Eleventh question, and the only one about DISPATCH: does the
   # product answer a question by comparing a string literal in a `case`
