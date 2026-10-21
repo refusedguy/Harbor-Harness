@@ -20,6 +20,16 @@
 # binary prints the pending ones out of it, so the two can never disagree
 # about which gate is still python.
 #
+# WHY THE PYTHON GATES RUN A FEW AT A TIME
+#
+# They are independent, and two of them are slow: the citation gate reads
+# every normative document, and the merge-loss gate walks the git history.
+# Run one after another they cost minutes; run a few at a time they cost
+# about as much as the slowest of them. The output of each gate is
+# collected separately and printed in the order of the list, so a parallel
+# run reads the same as a sequential one. This part disappears by itself
+# when the last python gate is ported.
+#
 # WHAT THIS NEEDS
 #
 #   the compiled binary (tools/bin/), bash, and -- for the gates that are
@@ -46,6 +56,10 @@ if [ ! -x "$GATES" ]; then
     exit 2
 fi
 
+# How many python gates run at the same time. Four is half of the cores of
+# a developer machine, and the two slow gates are not CPU-bound.
+PARALLEL=4
+
 overall=0
 
 # 1. The compiled gates: one command, and nothing else.
@@ -60,23 +74,75 @@ fi
 # "<name> TAB <command>", one per line.
 echo
 echo "== the gates that are still python =="
-pending=0
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+PENDING="$WORK/pending"
+"$GATES" all --pending >"$PENDING" 2>/dev/null
+
+# run_pending runs one gate into its own file and leaves its exit code and
+# its time beside it. The output is printed later, in the order of the
+# list, so that a parallel run reads the same as a sequential one.
+run_pending() {
+    local index="$1" command="$2"
+    local argv started ended
+    read -r -a argv <<<"$command"
+    started=$(date +%s%N)
+    "${argv[@]}" >"$WORK/$index.out" 2>&1
+    echo "$?" >"$WORK/$index.rc"
+    ended=$(date +%s%N)
+    echo "$(( (ended - started) / 1000000 ))" >"$WORK/$index.ms"
+}
+
+index=0
+running=0
+oldest=1
+pids=()
+names=()
 while IFS=$'\t' read -r name command; do
     [ -n "$name" ] || continue
-    pending=$((pending + 1))
+    index=$((index + 1))
+    names[$index]="$name"
+    run_pending "$index" "$command" &
+    pids[$index]=$!
+    running=$((running + 1))
+    if [ "$running" -ge "$PARALLEL" ]; then
+        # Wait for the oldest of the running gates and free its slot. The
+        # exit code is read from the file the gate wrote, so nothing here
+        # depends on WHICH gate finished first.
+        wait "${pids[$oldest]}"
+        running=$((running - 1))
+        oldest=$((oldest + 1))
+    fi
+done <"$PENDING"
+
+# The gates that are still running.
+for ((i = oldest; i <= index; i++)); do
+    wait "${pids[$i]}" 2>/dev/null
+done
+
+# The report: every gate, in the order of the list, with its time and its
+# output.
+for ((i = 1; i <= index; i++)); do
+    elapsed=""
+    if [ -f "$WORK/$i.ms" ]; then
+        elapsed="$(cat "$WORK/$i.ms") ms"
+    fi
     echo
-    echo "-- $name"
-    read -r -a argv <<<"$command"
-    "${argv[@]}"
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-        if [ "$overall" -eq 0 ]; then
+    echo "-- ${names[$i]}${elapsed:+ ($elapsed)}"
+    if [ -f "$WORK/$i.out" ]; then
+        cat "$WORK/$i.out"
+    fi
+    if [ -f "$WORK/$i.rc" ]; then
+        rc="$(cat "$WORK/$i.rc")"
+        if [ "$rc" -ne 0 ] && [ "$overall" -eq 0 ]; then
             overall=$rc
         fi
     fi
-done < <("$GATES" all --pending 2>/dev/null)
+done
 
-if [ "$pending" -eq 0 ]; then
+if [ "$index" -eq 0 ]; then
     echo "(none: every tree gate is compiled)"
 fi
 
