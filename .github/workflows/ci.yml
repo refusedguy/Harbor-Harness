@@ -1161,6 +1161,7 @@ jobs:
       # The base commit is the last field of the cache key that MATCHED
       # (the key ends in the commit the outputs were built from).
       - name: Normalise the source mtimes (so MSBuild can skip the unchanged)
+        id: normalize
         if: steps.cache-restore.outputs.cache-matched-key != ''
         shell: bash
         run: |
@@ -1175,7 +1176,27 @@ jobs:
             find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
             exit 0
           fi
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
           exit "$rc"
+
+      # The instant the compile begins, on the file system.
+      #
+      # The mtime normalisation above is allowed to lie about the mtimes of
+      # the sources, so a gate cannot ask "is this source newer than that
+      # output?" and get a trustworthy answer. The build start is a fact the
+      # normalisation cannot reach: it is written HERE, after the
+      # normalisation, and nothing the normalisation does can move it.
+      #
+      # Every output the compile produces is newer than this file; every
+      # output the compile did NOT produce is older than it. That is what
+      # the gate below reads.
+      - name: Mark the start of the compile
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          touch "$RUNNER_TEMP/harbor-build-start"
+          echo "build start marker: $RUNNER_TEMP/harbor-build-start"
 
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also COMPILES the 47-rule architecture gate embedded in
@@ -1227,6 +1248,38 @@ jobs:
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         id: compile
         run: bash build/build.sh Compile --configuration Release
+
+      # The lane compiled the tree it was given (issue #2100).
+      #
+      # The build-output cache restores obj/ and bin/ from a commit, and the
+      # mtime normalisation makes MSBuild skip the projects that did not
+      # change. That is what makes the compile incremental, and it is also
+      # what can make a COMPILE ERROR invisible: a project that is skipped
+      # is never handed to the compiler, so the error in it never reaches
+      # the build. That is the #2100 incident, and it is why this step
+      # exists.
+      #
+      # The gate asks the question the mtimes cannot answer: for every
+      # project whose SOURCES changed since the commit the restored outputs
+      # were built from, was the project COMPILED in this run? The evidence
+      # is the build's own output file: the compile writes it, and a skipped
+      # project keeps the one the cache carried. The build start marker
+      # above is the line between the two.
+      #
+      # It is a gate and not a report, because the failure it catches is a
+      # GREEN build on a tree that does not compile.
+      - name: The lane compiled the tree it was given (issue #2100)
+        if: steps.normalize.outputs.base != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          tools/bin/harbor-gates-linux-x64 check-compiled-tree \
+            --root "$GITHUB_WORKSPACE" \
+            --base "${{ steps.normalize.outputs.base }}" \
+            --build-start "$RUNNER_TEMP/harbor-build-start" \
+            --solution Harbor.slnx \
+            --config Release \
+            --min-projects 100
 
       # The zero-test guard is only a guard if it can go red (#1795). This
       # step proves it: it runs one suite with a filter that matches NO test

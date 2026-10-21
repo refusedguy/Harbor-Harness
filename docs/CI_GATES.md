@@ -326,6 +326,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
+| `tools/bin/harbor-gates-linux-x64 check-compiled-tree` | compiled: `tools/gates/check-compiled-tree` | the lane compiled the tree it was given: every project whose SOURCES changed since the commit the restored outputs were built from was COMPILED in this run, not skipped. The build-output cache and the mtime normalisation make the compile incremental, and a skipped project is never handed to the compiler, so a compile error in it never reaches the build (issue #2100) | ci.yml, docs.yml | build, selftest | gate | `--self-test` | — | `--min-projects 100` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a
