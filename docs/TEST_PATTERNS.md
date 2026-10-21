@@ -655,8 +655,8 @@ finally
 
 Use `Harbor.TestKit.TestMessages` to build realistic `AgentMessage` instances
 without hand-rolling constructors (#1816 — the tree builds every message
-through this factory, and `tools/codemod-test-events.py` moved the call sites
-over):
+through this factory, and `tools/gates/codemod-test-events/` moved the call
+sites over):
 
 ```csharp
 var userMsg    = TestMessages.User("Hello", sessionId: "session-1");
