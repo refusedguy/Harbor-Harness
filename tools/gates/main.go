@@ -43,14 +43,16 @@ import (
 	"strings"
 
 	changelog "harbor.local/gates/changelog-assemble"
-	coveragereport "harbor.local/gates/coverage-report"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -92,6 +94,11 @@ var registry = []registered{
 		run:     coveragereport.Run,
 	},
 	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
@@ -105,6 +112,11 @@ var registry = []registered{
 		name:    "pack-validate",
 		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
 		run:     packvalidate.Run,
+	},
+	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
 	},
 }
 

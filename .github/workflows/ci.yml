@@ -2361,7 +2361,7 @@ jobs:
               # fails loudly when a shard's filter drops a class (a filter that
               # silently drops tests is worse than the serialisation this
               # removes).
-              if python3 tools/run-e2e-avalonia-shards.py \
+              if tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards \
                   --dll "$dll" --results-dir "$trx_dir" --guard "$guard"; then
                 status="pass"
               else

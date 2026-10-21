@@ -279,13 +279,13 @@ type jsonFile struct {
 // jsonPayload is the model as the python original wrote it: the fields in
 // the order it wrote them.
 type jsonPayload struct {
-	Suites         []string             `json:"suites"`
-	ProductFiles   int                  `json:"product_files"`
-	CoveredFiles   int                  `json:"covered_files"`
-	UncoveredFiles int                  `json:"uncovered_files"`
-	AcceptedFiles  int                  `json:"accepted_files"`
-	UnacceptedFile int                  `json:"unaccepted_files"`
-	UnmappedPaths  []string             `json:"unmapped_paths"`
+	Suites         []string            `json:"suites"`
+	ProductFiles   int                 `json:"product_files"`
+	CoveredFiles   int                 `json:"covered_files"`
+	UncoveredFiles int                 `json:"uncovered_files"`
+	AcceptedFiles  int                 `json:"accepted_files"`
+	UnacceptedFile int                 `json:"unaccepted_files"`
+	UnmappedPaths  []string            `json:"unmapped_paths"`
 	Files          map[string]jsonFile `json:"files"`
 }
 

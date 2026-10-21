@@ -583,6 +583,16 @@ jobs:
       # exists.
       - name: Changelog assembler notices a diverged CHANGELOG.md
         run: tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test
+      # #2085. The two E2E plan tools. The generator derives the class
+      # universe from the source tree, and the runner reads the plan the
+      # generator wrote: a generator that stops finding the classes writes a
+      # plan that drops them, and a runner that stops noticing a dropped class
+      # reports a green suite with fewer tests than it has. Neither had a
+      # self-test before the port; both have one now, and both run it here.
+      - name: E2E shard generator still finds the classes of the tree
+        run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
+      - name: E2E shard runner still refuses a plan it cannot run
+        run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
 
   links:
     name: internal links

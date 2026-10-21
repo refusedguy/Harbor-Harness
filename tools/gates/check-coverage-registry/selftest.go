@@ -61,10 +61,10 @@ func cobertura(path string, filename string, lines map[int]int) {
 // `Orphan.cs` belongs to a project no report mentions at all. The registry
 // that goes with it accepts the two holes.
 type fixture struct {
-	root      string
+	root       string
 	sourceRoot string
-	coverage  string
-	registry  string
+	coverage   string
+	registry   string
 }
 
 // newFixture writes the fixture into a directory of its own.

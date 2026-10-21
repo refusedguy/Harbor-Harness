@@ -7,7 +7,7 @@
 // port keeps the same split: the model lives here, and each gate is a
 // package of its own that uses it.
 //
-// WHY A MODEL AND NOT A SCRIPT
+// # WHY A MODEL AND NOT A SCRIPT
 //
 // Issue #1753 asks for the honest form of a coverage number. The form the
 // repository had was a percentage over everything the instrument happened to
@@ -53,7 +53,7 @@
 //     so it is NOT a hole.
 //   - covered        at least one line was hit.
 //
-// THE ORACLE IS THE ENGINE, NOT A GUESS
+// # THE ORACLE IS THE ENGINE, NOT A GUESS
 //
 // The third case is the one that could have been a heuristic and is not. The
 // model does not parse C# to decide whether a file has code in it: it asks
