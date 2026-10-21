@@ -186,6 +186,14 @@ jobs:
   #     explicitly deferred (legacy areas would fail day one — see #99).
   #   - Per-project test failures are RECORDED, never fatal: the `test` job
   #     stays the gate. Instrumentation must not block PRs on flakes.
+  #
+  # What IS a gate in this job (issue #1753) is the REGISTRY: the list of
+  # the product files the lane is allowed not to cover
+  # (tools/coverage-registry.txt), each with a reason. The gate compares
+  # that list with what the measurement says, in both directions — a file
+  # that stopped being covered, and a row that is no longer needed. It
+  # fails on NO number: the numbers stay report-only, and the pull
+  # request path has no coverage in it at all since #1923.
   # Excluded suites: ui (Avalonia-headless flakes amplify under
   # instrumentation), e2e/load (slow, need display). Scope is stated in the
   # summary so numbers are never misread as whole-repo coverage.
@@ -371,6 +379,10 @@ jobs:
       # sweep of TestResults in case the extension places files elsewhere).
       # Pure stdlib python — no ReportGenerator/coverlet dependency.
       # No thresholds here: numbers are informational only (issue #99).
+      #
+      # There is NO TOTAL LINE any more (issue #1753). The per-suite columns
+      # overlap on the shared `src/` assemblies, so their sum was never the
+      # coverage of anything; the per-file report below is the honest form.
       - name: Publish coverage summary (report-only, no thresholds)
         if: always()
         shell: bash
@@ -392,13 +404,13 @@ jobs:
           except OSError:
               pass
 
-          lines = ["## Coverage (report-only, issue #99)", "",
+          lines = ["## Coverage per suite (report-only, issue #99)", "",
                    "_No thresholds — informational only. Scope: core + platform unit",
-                   "suites (ui/e2e excluded, see `coverage` job). Per-suite columns",
-                   "overlap on shared `src/` assemblies, so the TOTAL is indicative,",
-                   "not whole-repo coverage._", "",
+                   "suites (ui/e2e excluded, see `coverage` job). The columns OVERLAP",
+                   "on the shared `src/` assemblies, so they are NOT a total: the",
+                   "per-file report below is the union, and there is no global",
+                   "percentage anywhere._", "",
                    "| suite | tests | line coverage | lines |", "|---|---|---|---|"]
-          total_valid = total_covered = 0
           for name in sorted(files):
               try:
                   root = ET.parse(files[name]).getroot()
@@ -407,30 +419,64 @@ jobs:
                   rate = float(root.get("line-rate", 0.0)) * 100.0
                   cell = f"{rate:.1f}%"
                   detail = f"{covered}/{valid}"
-                  total_valid += valid
-                  total_covered += covered
               except Exception as ex:
                   cell = "n/a (unparsable)"
                   detail = str(ex)[:60]
               st = status.get(name.removesuffix(".cobertura.xml"), "?")
               short = name.removesuffix(".cobertura.xml")
               lines.append(f"| {short} | {st} | {cell} | {detail} |")
-          if total_valid:
-              lines += ["",
-                        f"**TOTAL (indicative): {100.0 * total_covered / total_valid:.1f}% "
-                        f"({total_covered}/{total_valid} lines)**"]
-          else:
-              lines += ["", "**No cobertura files produced — check the collect step log.**"]
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
               fh.write("\n".join(lines) + "\n")
           PY
 
-      - name: Upload cobertura reports
+      # The per-file report (issue #1753): the honest form of the number.
+      # There is no global percentage in it — the tables are per project and
+      # per file, the scope is written into the header, and the files the
+      # lane cannot see are listed instead of being averaged away.
+      - name: Publish the per-file coverage report (report-only)
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/coverage_report.py \
+            --coverage-dir Coverage \
+            --source-root . \
+            --registry tools/coverage-registry.txt \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --out Coverage/coverage-per-file.md \
+            --uncovered-out Coverage/coverage-uncovered-locations.txt \
+            --min-files 1200
+
+      # The registry against the measurement. This one FAILS the job, and
+      # that is the point: the numbers stay report-only, but the LIST of
+      # accepted holes has to match what the measurement says, in both
+      # directions — a file that stopped being covered, and a row that is
+      # no longer needed.
+      #
+      # The status file is passed so a suite that did not pass makes the
+      # measurement PARTIAL: the stale rows are still compared (that holds
+      # under a partial measurement), the uncovered files are not (a suite
+      # that died reports nothing, and its files would look like holes).
+      - name: The coverage registry against the measurement
+        if: always()
+        shell: bash
+        run: |
+          python3 tools/check-coverage-registry.py \
+            --coverage-dir Coverage \
+            --source-root . \
+            --registry tools/coverage-registry.txt \
+            --status Coverage/status.tsv \
+            --min-files 1200 \
+            --min-covered 400
+
+      - name: Upload the coverage reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-cobertura
-          path: "Coverage/*.cobertura.xml"
+          path: |
+            Coverage/*.cobertura.xml
+            Coverage/coverage-per-file.md
+            Coverage/coverage-uncovered-locations.txt
           if-no-files-found: warn
           retention-days: 30
 

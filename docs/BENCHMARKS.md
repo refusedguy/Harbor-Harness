@@ -2775,6 +2775,98 @@ into the table, `tools/measure-project-graph.py` parses the graph), and the
 nightly lane's analysis step can read the same measurements instead of
 growing a second parser.
 
+### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
+
+Measured on the nightly run [39515903563](https://github.com/refusedguy/Harbor-Harness/actions/runs/39515903563), branch `ci/1753-per-file-coverage` at `66b89974`, 2026-10-20. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/coverage_report.py`](../tools/coverage_report.py), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/check-coverage-registry.py`](../tools/check-coverage-registry.py).
+
+**WHAT THIS NUMBER IS NOT.** There is no global percentage here, on purpose. The number the lane used to publish was a sum over the per-suite columns, and those columns OVERLAP on the shared `src/` assemblies — the same line is counted once per suite that touched it — so the sum was never the coverage of anything, and the report said so in five words ("the TOTAL is indicative"). What is below is per project and per file, with the scope written down.
+
+**THE SCOPE.** The twenty core+platform unit suites. The ui, e2e and load suites are not part of the lane: they are slow, they need a display, and their flakes (#423) would make the number unreadable. Two of the product areas therefore sit OUTSIDE the measurement, and the registry says so per file instead of the number averaging them away.
+
+**THE FOUR STATES OF A FILE.** The engine is the oracle, not a guess: it instruments whole modules and reports every file of them that has something to instrument.
+
+| state | what it means | files |
+|---|---|---|
+| covered | at least one line was hit | 498 |
+| never ran | the engine saw the file and not one of its lines ran | 373 |
+| not loaded | the file's project is not in this lane at all | 208 |
+| no code to cover | the engine reported nothing for the file: an interface, an enum, a global-using file, a source-generated context | 172 |
+
+**THE PRODUCT, PER PROJECT** (1251 files under `src/` and `apps/`)
+
+| project | files | covered | never ran | not loaded | no code to cover |
+|---|---|---|---|---|---|
+| `src/Harbor.Tui.CellForge` | 113 | 30 | 82 | 0 | 1 |
+| `src/Harbor.Tui.CellForge.Engine` | 91 | 4 | 75 | 0 | 12 |
+| `src/Harbor.Ui.Framework.Rendering` | 50 | 7 | 32 | 0 | 11 |
+| `src/Harbor.AgentRuntime` | 34 | 30 | 0 | 0 | 4 |
+| `src/Harbor.Desktop.Abstractions` | 30 | 1 | 23 | 0 | 6 |
+| `src/Harbor.Ui.Framework.Services` | 32 | 3 | 23 | 0 | 6 |
+| `src/Harbor.Ui.Framework.State` | 51 | 23 | 22 | 0 | 6 |
+| `src/Harbor.Application` | 29 | 22 | 1 | 0 | 6 |
+| `src/Harbor.Abstractions` | 61 | 34 | 6 | 0 | 21 |
+| `src/Harbor.Abstractions.Contracts` | 41 | 32 | 5 | 0 | 4 |
+| `src/Harbor.Tools.Builtin` | 69 | 59 | 1 | 0 | 9 |
+| `src/Harbor.Hosting` | 35 | 32 | 2 | 0 | 1 |
+| `src/Harbor.Registries` | 12 | 10 | 0 | 0 | 2 |
+| `src/Harbor.SessionContext` | 18 | 16 | 0 | 0 | 2 |
+| `src/Harbor.Storage.Jsonl` | 21 | 20 | 0 | 0 | 1 |
+| `src/Harbor.Ipc.Abstractions` | 20 | 15 | 0 | 0 | 5 |
+| `src/Harbor.Ipc.Server` | 14 | 13 | 0 | 0 | 1 |
+| `src/Harbor.CodeGen` | 6 | 0 | 6 | 0 | 0 |
+| `src/Harbor.Ui.Framework.Projection` | 19 | 2 | 11 | 0 | 6 |
+| `src/Harbor.Ui.Framework.Abstractions` | 18 | 0 | 10 | 0 | 8 |
+| `src/Harbor.Ui.Framework.Sessions` | 15 | 2 | 8 | 0 | 5 |
+| `src/Harbor.Ui.Framework.ViewModels` | 10 | 1 | 9 | 0 | 0 |
+| `src/Harbor.Terminal.Abstractions` | 27 | 5 | 16 | 0 | 6 |
+| `src/Harbor.Plugins.Abstractions` | 16 | 6 | 1 | 0 | 9 |
+| `src/Harbor.Plugins.Hosting` | 9 | 7 | 1 | 0 | 1 |
+| `src/Harbor.Plugins.Storage` | 8 | 6 | 1 | 0 | 1 |
+| `src/Harbor.Plugins.Host` | 4 | 2 | 2 | 0 | 0 |
+| `src/Harbor.DesignSystem` | 14 | 4 | 5 | 0 | 5 |
+| `src/Harbor.Desktop.Shared` | 9 | 0 | 7 | 0 | 2 |
+| `src/Harbor.Desktop.Animations` | 5 | 0 | 3 | 0 | 2 |
+| `src/Harbor.Extensions` | 5 | 2 | 2 | 0 | 1 |
+| `src/Harbor.Tui.AnsiPlain` | 9 | 3 | 2 | 0 | 4 |
+| `src/Harbor.Tui.CellForge.Syntax` | 9 | 0 | 8 | 0 | 1 |
+| `src/Harbor.Tui.CellForge.Prompts` | 3 | 1 | 1 | 0 | 1 |
+| `src/Harbor.Tui.Notifications` | 1 | 0 | 1 | 0 | 0 |
+| `src/Harbor.Terminal.Pty` | 4 | 0 | 4 | 0 | 0 |
+| `src/Harbor.Logging` | 1 | 0 | 1 | 0 | 0 |
+| `src/Harbor.Telemetry.Otlp` | 1 | 0 | 1 | 0 | 0 |
+| `src/Harbor.Transport.Remote` | 5 | 3 | 1 | 0 | 1 |
+| `src/Harbor.ChangeTracking` | 12 | 11 | 0 | 0 | 1 |
+| `src/Harbor.Hooks` | 6 | 3 | 0 | 0 | 3 |
+| `src/Harbor.Ipc.Client` | 12 | 10 | 0 | 0 | 2 |
+| `src/Harbor.Ipc.InProcess` | 2 | 2 | 0 | 0 | 0 |
+| `src/Harbor.Permissions` | 8 | 6 | 0 | 0 | 2 |
+| `src/Harbor.PolicyConfig` | 13 | 9 | 0 | 0 | 4 |
+| `src/Harbor.Plugins.Compilation` | 6 | 5 | 0 | 0 | 1 |
+| `src/Harbor.Plugins.Instantiation` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Plugins.Registration` | 7 | 6 | 0 | 0 | 1 |
+| `src/Harbor.Plugins.Runtime` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Diagnostics.Abstractions` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Lsp` | 4 | 4 | 0 | 0 | 0 |
+| `src/Harbor.Onboarding` | 4 | 3 | 0 | 0 | 1 |
+| `src/Harbor.Storage.Memory` | 2 | 2 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Shared` | 4 | 4 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Sqlite` | 8 | 7 | 0 | 0 | 1 |
+| `src/Harbor.Telemetry.Core` | 10 | 10 | 0 | 0 | 0 |
+| `src/Harbor.Providers.Anthropic` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Providers.Ollama` | 1 | 1 | 0 | 0 | 0 |
+| `src/Harbor.Providers.OpenAI` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Providers.OpenAiCompatible` | 5 | 3 | 0 | 0 | 2 |
+| `src/Harbor.Providers.Shared` | 5 | 5 | 0 | 0 | 0 |
+| `apps/Harbor.App.Cli` | 115 | 0 | 0 | 115 | 0 |
+| `apps/Harbor.App.Avalonia` | 93 | 0 | 0 | 93 | 0 |
+| **total** | **1251** | **498** | **373** | **208** | **172** |
+
+**THE LINE COUNT, for the files the engine instrumented.** 61 560 product lines, 27 251 of them hit (44.3 %). The 23 316 lines of the 373 "never ran" files are the other half of that gap, and they are the deletion candidates: a file nobody ever ran is the strongest form of the "an uncovered line is often dead code" rule (#772, #755).
+
+**THE SHARE OF CONSCIOUSLY UNCOVERED CODE.** 581 of the 1251 product files (46.4 %) are holes of this measurement, and every one of them is in the registry with a reason: 373 file rows for the files the measurement saw and never ran, and 2 project rows (`apps/Harbor.App.Cli/`, `apps/Harbor.App.Avalonia/`) for the two projects the lane does not load at all. The registry is a RATCHET in both directions: a file that stops being covered has to have a row added, and a row whose file got covered has to have it deleted — the gate fails on either.
+
+**THE MEASUREMENT WAS EMPTY BEFORE THIS.** Run 39508517419 uploaded twenty cobertura files and every one of them was `<coverage line-rate="1"><packages /></coverage>`; every suite printed "Total - Line: N/A" and the summary printed "No cobertura files produced". The cause: Release sets `DebugType=none` (`Directory.Build.props`), so the build carries no PDB, and the coverage engine on Linux instruments the assemblies STATICALLY — the instrumentation maps IL back to source lines through the portable PDB next to each DLL. With no PDB there is nothing to instrument, and an empty report reads as "100 % covered" to anything that parses `line-rate`. The lane now builds with `-p:DebugType=portable -p:DebugSymbols=true`.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that

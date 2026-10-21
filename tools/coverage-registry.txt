@@ -1,0 +1,454 @@
+# coverage-registry — the product files the nightly coverage lane does not
+# cover, and why each one is allowed to stay that way.
+#
+# OWNER: issue #1753. Read by tools/check_coverage_registry.py, on every
+# nightly run.
+#
+# THIS IS A RATCHET, NOT A TARGET. The gate passes only when the set of
+# files the measurement says are not covered is exactly the set written
+# here:
+#
+#   * a hole this file does not carry is RED. A file that STOPPED BEING
+#     COVERED fails, and so does a new file that was never covered.
+#   * a row the tree no longer produces is RED. A file that got covered has
+#     to have its row deleted in the same diff that covered it.
+#
+# So the file can only shrink, and the gate gets stricter as the tree is
+# fixed. A covered file cannot stay blessed.
+#
+# ── FORMAT ────────────────────────────────────────────────────────────────
+#
+#   <path> | <kind> | <reason> | <owner>
+#
+#   path     The product file, repo-relative. A path that ends in "/" is a
+#            PROJECT row: it accepts every product file under it.
+#   kind     One of:
+#              NEVER-RAN     the measurement saw the file and ran not one
+#                            of its lines.
+#              NOT-MEASURED  the file belongs to a project this lane does
+#                            not load at all, so the measurement never saw
+#                            it.
+#   reason   Why this hole is allowed to stay. At least 40 characters, and
+#            not a bare URL: a URL says where the debt is, not why it is
+#            allowed here.
+#   owner    A '@handle' somebody can be asked about.
+#
+# ── WHAT THE MEASUREMENT IS ──────────────────────────────────────────────
+#
+# The nightly lane's coverage job (issue #99, moved off the pull-request
+# path by #1923) runs the twenty core+platform unit suites under the
+# Microsoft.Testing.Platform coverage extension and writes one cobertura
+# file per suite. The ui, e2e and load suites are NOT part of it: they are
+# slow, they need a display, and their flakes (#423) would make the number
+# unreadable.
+#
+# That scope is the reason this file is as long as it is. The lane's twenty
+# suites do not reach the UI, the desktop app or the CLI, so every file
+# they would have reached is a hole BY MEASUREMENT — not a claim that the
+# code is untested in the repository as a whole. The rows say which of the
+# two they are.
+#
+# ── WHY A FILE ROW AND NOT A PROJECT ROW ─────────────────────────────────
+#
+# A project row (a path that ends in "/") accepts every file under it, and
+# it is used only where the lane is BLIND: a project no suite loads at all
+# (the CLI and the Avalonia app). Everywhere else the lane does load the
+# project, so it can see the difference between a file that is covered and
+# one that is not — and a project row would hide that difference. Every
+# file of a loaded project is therefore named on its own row.
+#
+# ── WHAT IS NOT HERE ─────────────────────────────────────────────────────
+#
+# The files the coverage engine reported NOTHING for, in a project it did
+# report: they hold no code to cover (an interface, an enum, a global-using
+# file, a source-generated context), so they are not holes and they are not
+# listed. The report prints how many there were and cross-checks that none
+# of them carries code.
+#
+# ── PROVENANCE ───────────────────────────────────────────────────────────
+#
+# Measured on run 39515903563 of the nightly workflow, on the branch
+# ci/1753-per-file-coverage at 66b89974: 1251 product files, 498 of them
+# covered, 581 holes — 373 the measurement saw and never ran, 208 in the
+# two projects the lane does not load.
+#
+# The rows below are the measured state of the tree, not a wish list. A file
+# that gets covered has to have its row deleted in the same diff that
+# covered it, and a file that stops being covered has to have a row added
+# in the same diff that dropped it.
+#
+apps/Harbor.App.Avalonia/ | NOT-MEASURED | The Avalonia desktop app has no unit test project: the headless Avalonia suite is excluded from the coverage lane because of the flakes in #423, so no file of it is measured. | @refusedguy
+apps/Harbor.App.Cli/ | NOT-MEASURED | The CLI has no unit test project of its own: the end-to-end suite that drives it is not part of the nightly coverage lane, so no file of it is measured. | @refusedguy
+src/Harbor.Abstractions.Contracts/Models/UsdCell.cs | NEVER-RAN | The record is a value carrier of the cell-diff protocol; no suite of the lane constructs one, so its constructor never runs. | @refusedguy
+src/Harbor.Abstractions.Contracts/MoodFrameAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
+src/Harbor.Abstractions.Contracts/ObservedAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
+src/Harbor.Abstractions.Contracts/TerminalEscapeAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
+src/Harbor.Abstractions.Contracts/TuiRendererAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
+src/Harbor.Abstractions/Ide/IHarborIdeClient.cs | NEVER-RAN | The record is the IDE client's result value; the IDE bridge of the CLI is not started by any suite of the lane, so nothing constructs it. | @refusedguy
+src/Harbor.Abstractions/Sessions/ISessionStore.cs | NEVER-RAN | The contract's DEFAULT member bodies are what the engine reports, and no suite of the lane calls a default implementation. | @refusedguy
+src/Harbor.Abstractions/Terminal/ITerminalPaneLauncher.cs | NEVER-RAN | The terminal pane is launched by the desktop app and the CLI, neither of which a suite of the lane starts. | @refusedguy
+src/Harbor.Abstractions/Tools/ToolInfoAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
+src/Harbor.Abstractions/Tui/ITuiRenderer.cs | NEVER-RAN | The record is the key-press value of the renderer contract; the renderers of the UI are not driven by any suite of the lane. | @refusedguy
+src/Harbor.Abstractions/Tui/QrMatrix.cs | NEVER-RAN | The QR matrix is drawn by the onboarding flow of the CLI and the desktop app, and no suite of the lane starts them. | @refusedguy
+src/Harbor.Application/Resilience/IRetryPolicy.cs | NEVER-RAN | The retry policy contract has no implementation that a suite of the lane constructs, so the declaration the engine reports never runs. | @refusedguy
+src/Harbor.CodeGen/EscapeCodeGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/MoodFrameGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/ReactiveHookGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/RendererAdapterGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/ResourceKeyGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/ToolGlueGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.DesignSystem/DesignSystem/CellStyle.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.DesignSystem/DesignSystem/ChatPalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.DesignSystem/DesignSystem/ColorPalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.DesignSystem/DesignSystem/TerminalBackgroundProbe.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.DesignSystem/DesignSystem/ThemeOverrideSet.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/Configuration/AppConfigBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/Configuration/CompositeConfig.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/Messages/CrossVmMessages.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/Models/CommandPaletteItem.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/Models/SessionDotState.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ChatViewModelBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/CommandPaletteViewModelBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/CommandResultViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/DiffViewModelBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/DiffViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/EditorTabViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/FocusSessionViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ModelRateLabel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/MonacoEditorViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/OnboardingProviderOption.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/OnboardingViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/PickerModelViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ProviderBrowserViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ProviderConfigViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelLoadMessages.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/ProviderModelPickerViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/SessionCardViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Abstractions/ViewModels/SharedDataModels.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Animations/AnimationDurations.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Animations/EasingFunctions.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Animations/Transitions.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Commands/BuiltInCommands.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Commands/SlashCommands.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Locators/IShowPlaceholderFactory.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Locators/LocatorRegistration.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Locators/ViewModelLocator.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Services/FuzzySearchService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Desktop.Shared/Services/MarkdownToPlainTextService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Extensions/CollectionExtensions.cs | NEVER-RAN | The frozen-collection helpers are called by the product paths the lane does not exercise, so no suite of the lane runs a line of them. | @refusedguy
+src/Harbor.Extensions/MemoryPackExtensions.cs | NEVER-RAN | The MessagePack helpers are called by the storage paths the lane does not exercise, so no suite of the lane runs a line of them. | @refusedguy
+src/Harbor.Hosting/Modules/PluginAutoReloader.cs | NEVER-RAN | The reloader watches the plugin directory of a running host, and no suite of the lane starts a host that has one. | @refusedguy
+src/Harbor.Hosting/RuntimeRendererSwapMiddleware.cs | NEVER-RAN | The middleware sits in the CLI host's request pipeline, and no suite of the lane starts the CLI host. | @refusedguy
+src/Harbor.Logging/LoggerSetup.cs | NEVER-RAN | The logging is configured by the application hosts, and no suite of the lane starts a host. | @refusedguy
+src/Harbor.Plugins.Abstractions/IPluginAuditLog.cs | NEVER-RAN | The audit log contract is implemented by the plugin host, which no suite of the lane starts. | @refusedguy
+src/Harbor.Plugins.Hosting/LazyPluginCompiler.cs | NEVER-RAN | The lazy compiler runs when a CS-source plugin is loaded, and no suite of the lane loads one. | @refusedguy
+src/Harbor.Plugins.Host/NullEventBus.cs | NEVER-RAN | The null bus is the fallback the plugin host wires, and no suite of the lane starts the host. | @refusedguy
+src/Harbor.Plugins.Host/Program.cs | NEVER-RAN | The plugin host is an out-of-process executable that speaks MCP over stdout; no suite of the lane starts it. | @refusedguy
+src/Harbor.Plugins.Storage/EmbeddedResourcePluginSource.cs | NEVER-RAN | The embedded-resource plugin source is read when the plugin host starts, and no suite of the lane starts it. | @refusedguy
+src/Harbor.Telemetry.Otlp/HarborOtlpExporter.cs | NEVER-RAN | The OTLP exporter is wired by the application hosts, and no suite of the lane runs a host. | @refusedguy
+src/Harbor.Terminal.Abstractions/ITuiRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/PermissionMiniLine.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Renderers/CompactionLifecycleLines.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Rendering/GfmTable.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Rendering/GfmTableFormatter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Rendering/GfmTableParser.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Rendering/TableMeasurer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/ViewModels/ITuiViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/ChatHistoryView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/DiffPreviewView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/Grouping/GroupTree.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/Grouping/TranscriptGrouping.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/Grouping/TranscriptMountBudget.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/InputView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/ITuiView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Abstractions/Views/StatusBarView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Pty/NativeMethods.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Pty/PermissionGatedTerminalPaneLauncher.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Pty/PtyProcess.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Terminal.Pty/PtyTerminalPane.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tools.Builtin/FacadeMarker.cs | NEVER-RAN | The marker exists so the architecture suite force-loads the facade assembly; the field it holds is never read. | @refusedguy
+src/Harbor.Transport.Remote/RemoteGateway.cs | NEVER-RAN | The gateway is the IPC server side, and no suite of the lane starts a daemon that would serve it. | @refusedguy
+src/Harbor.Tui.AnsiPlain/AnsiTuiRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.AnsiPlain/TerminalQrRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Adapters/CellForgeDiffEncoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Adapters/CellForgeViewport.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Adapters/EngineFrameSource.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/DiagnosticsPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Mascot/AmbientMascot.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Mascot/MascotDirector.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Mascot/MascotPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Onboarding/OnboardingFlow.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/CellForgeJumpPaletteOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelAdapter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/CellForgePanelBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/CellForgeSkillFreshnessPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/PanelWidgetDecoders.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/PermissionPresentation.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Panels/SkillFreshnessPanelRegistration.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/BorderPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/ChildContainer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/GlowEffect.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/InlineImageLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/InlineSession.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/LayoutTree.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/MarkdownEditOps.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/OverlayStack.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/PromptRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/PromptViewport.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/ApprovalGateRouter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/ContextSegmentSync.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/InlineAgentStreamBridge.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/ScreenSession.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/StreamBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/StreamCoalescer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Streaming/ToolCardTracker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/AssistantMarkdownBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/AutocompleteTrigger.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/BreakdownStrip.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/CalendarView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ChatScreenLayout.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ColumnsBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/DialogOverlay.Painting.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/DiffViewerOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/GaugeBar.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ImageViewerOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlay.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/MarkupOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/MarkupPngBaker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/OverlayLayerBase.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/PaletteCatalogs.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/PanelChrome.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ReadGroupBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/RuleView.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/Scrollbar.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/SelectionEngine.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/SetupChecklistOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/StatusProjectorPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/StreamingMarkdownBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/TableBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/TimelineBlocks.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/TimelineLayoutCache.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/TimelineRing.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ToastOverlay.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ToastOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/ToolCallBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.Eviction.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/VirtualizedChatTimeline.StoreScroll.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Chat/Widgets/WhichKeyHelpOverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/CapabilityProber.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/InlineImageProbe.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/NotifyProbe.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/TerminalBackgroundProbe.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/TerminalCapabilities.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Capabilities/TerminalQueries.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/CapabilityEvent.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/FocusRouter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/FocusScope.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/FocusStack.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/IFocusable.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/InputEvent.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/KeyBindings.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/KeyEvent.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/KeyModifiers.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/MouseEvent.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/MouseRouter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/NullModeController.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/PasteEvent.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/PasteSanitizer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/ResizeSignal.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/TerminalInputSource.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/TerminalInputSourceOptions.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/TerminalInputStream.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/TerminalModeControllers.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/UiKeyDto.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/UnixTermiosModeController.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/VirtualInputSource.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Input/WindowsVtModeController.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/CsiDecoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/EscapeSequenceParser.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/KittyKeyDecoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/OscHandler.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/ParserOptions.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/SgrMouseDecoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Parsing/Utf8IncrementalDecoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/BufferSwapChain.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Cell.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/CellSimd.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/CellStyle.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/ContainerNode.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/DiffEngine.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/DirtyRect.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/EngineStageCounters.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/FlexLayout.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/FlexLayoutExplorer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/FrameDiff.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Graphics.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/InlineImageEncoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/INode.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/MarkupCells.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Osc1337Image.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Osc52Clipboard.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Osc777Notify.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Osc99Notify.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/OverlayLayer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/PostFx.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/Rect.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/ScreenBufferContentEquals.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/ScreenBuffer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/SizeConstraint.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/SpringFx.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/UnicodeWidth.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/WidgetMeasure.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Rendering/ZStackNode.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Streaming/CommitTickPacer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/AutocompletePalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/JpegProbe.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/MascotMode.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/RetryCountdown.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/ScrollInfo.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/SpinnerStrip.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/ThinkingSummary.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Engine/Widgets/ToolOutputCollapse.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/GenericGallery.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/GenericScreen.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/GenericScreenProjector.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/GenericTuiRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericForm.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericLiveRegion.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericProgress.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericSelectionList.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericTable.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericTextField.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge/Generic/Widgets/GenericWidgetsDemo.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Prompts/Widgets/FormPromptEngine.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/BuiltinLanguageSupports.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/CodeHighlightPalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/CodeSyntaxTokenizer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/CodeTokenizer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/ILanguageSupport.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Rendering/LanguageSupportRegistry.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Widgets/JsonThemeLoader.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.CellForge.Syntax/Widgets/ThemeFileWatcher.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Tui.Notifications/NotificationTuiRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Commands/SlashCommandCatalog.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Diagnostics/DiagnosticEntry.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Diagnostics/DiagnosticsPanelLoggerProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Diagnostics/InMemoryDiagnosticsPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Diagnostics/LogLevelTag.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Diagnostics/LogRow.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Forking/ISessionForker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Strings/UiStringsCatalog.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/Strings/UiStrings.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Abstractions/ToolCallState.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/ChatRolePresentation.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/DefaultUiProjector.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/PanelRows.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/SkillFreshness.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/StatusBarFacts.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/StatusProjector.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/StatusSegmentOrdering.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/SubagentsModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/UiRenderedLine.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Projection/UiScreenModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Projection/Rendering/ChatStreamingPresenter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/AnimationClock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Cell.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/DifferentialRenderPipeline.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/FrameTicker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Input/IKeyVocabulary.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Input/KeyEventMapper.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Input/UiKeyDto.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Markdown/DifferentialMarkdownPipeline.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Markdown/FrozenTailMarkdownCache.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Markdown/MarkdownBlockParser.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Markdown/MdModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Markdown/StreamingMarkdownRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/PerformanceContracts/MarkdownRenderPerformanceContract.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/PerformanceContracts/RendererPerformanceContract.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/PerformanceContracts/UiStageCounters.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Protocol/CellDiffBatchCodec.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Protocol/CellDiffBatch.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Protocol/RowHashDiffEncoder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Rect.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/ScreenBuffer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/TextWrap.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/UnicodeWidth.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/BasicBlocks.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/ChatBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/CostBarsBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/DiffBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/LineDiff.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/PanelFx.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/SparklineBlock.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/StatusSegmentBar.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/StatusViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Rendering/Widgets/WordDiff.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Overlays/OverlayController.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/CommandHit.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/CommandProviderRegistry.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/FileCommandProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/ICommandProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/PaletteModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/PaletteSelectController.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/PanelFuzzy.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/PluginPanelModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/ProviderPanelModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/SessionListSearchModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/SessionTreePanelModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/SlashCommandProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/SystemCommandProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/WorktreeCommandProvider.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Palettes/WorktreeJumpSeeder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/GitService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/GitSessionInfo.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/IOverlayStack.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/IThemeWatcher.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/IToastService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/SessionStatusTracker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Services/Services/ToastPresentation.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionContext.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionEventRouter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionGitTracker.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionLifecycleScope.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionLifecycleService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionManager.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionOptionalFactories.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.Sessions/Sessions/SessionStatusService.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Diff/DiffPlexPilot.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Diff/DiffPreview.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Markup/MarkupReducer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Markup/MarkupSendPreamble.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Panels/HelpKeymap.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Panels/TuiPanel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/SessionInfo.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/AsyncDataBinder.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/AsyncData.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/AsyncFeed.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/ChatAction.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/ChatKeyMap.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/ShellStatus.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/StatusBarText.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/ToolCallSnapshot.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/State/TuiEffectHost.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Tabs/ClosedTab.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Tabs/SessionTab.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Tabs/TabStripReducer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/Tabs/TabStripSnapshot.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.State/ToolCallKey.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/Animation/CostAnimator.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/ChatLineViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/SessionItemViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/SessionRowViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/SideBySideDiffViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/StoreSubscriberViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/TokenUsageViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/ToolCallProjection.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
+src/Harbor.Ui.Framework.ViewModels/ViewModels/ToolCallViewModel.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
