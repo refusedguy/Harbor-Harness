@@ -344,13 +344,13 @@ same self-description ("Implements Registry pattern (GOF)") without the composit
 step the tools registry took.
 
 So the real extension path is **Adapter + direct mutation**, three parallel
-copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:75-87`:
+copies, in `src/Harbor.Plugins.Registration/PluginRegistrar.cs:178-190`:
 
 | plugin role | adapter | reaches |
 |---|---|---|
-| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:202`), `AddTool` at `:227` wraps the tool in `SandboxedPluginTool` (`:231`, a Decorator) then calls `_host.RegisterTool` (`:238`) | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:67`) |
-| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:249`) | `IPluginLoadHost.RegisterProvider` (`:76`), called at `:279,290,297` |
-| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:314`) | `IPluginLoadHost.RegisterAgent` (`:83`), called at `:327` |
+| `IToolPlugin` | `ToolRegistryBuilderAdapter` (`:535`), `AddTool` at `:560` wraps the tool in `SandboxedPluginTool` (`:564`, a Decorator) then calls `_host.RegisterTool` (`:571`) | `IPluginLoadHost.RegisterTool` (`IPluginLoadHost.cs:82`) |
+| `IProviderPlugin` | `ProviderRegistryBuilderAdapter` (`:582`) | `IPluginLoadHost.RegisterProvider` (`:95`), called at `:612,623,630` |
+| `IAgentPlugin` | `AgentRegistryBuilderAdapter` (`:647`) | `IPluginLoadHost.RegisterAgent` (`:106`), called at `:660` |
 
 Two consequences worth stating plainly:
 
@@ -408,7 +408,7 @@ parse/IO failures.
 
 Two more live instances of the banned direction:
 
-- `src/Harbor.Abstractions/Tools/ITool.cs:150` — `ValidateArguments(args) =>
+- `src/Harbor.Abstractions/Tools/ITool.cs:157` — `ValidateArguments(args) =>
   Result.Success()` accepts any argument shape. Currently harmless **only**
   because all 22 in-tree `ITool` implementations override it (`grep -rnE "class
   [A-Za-z0-9_]+ *: *[A-Za-z0-9_.]*ITool" src/`, 22 distinct types, none in a file
@@ -655,9 +655,9 @@ the transition and the lifecycle are the same code path rather than two.*
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
 | Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |
-| Extension by mutating a concrete registry | `PluginRegistrar.cs:75-87` | Interface + a list of them (§5) |
-| Policy bolted onto an adapter | `SandboxedPluginTool` wraps tools only (`PluginRegistrar.cs:231`); the provider and agent paths get none | Policy at the extension point (§5) |
-| Permissive DIM | `IThemeWatcher.cs:31`, `src/Harbor.Abstractions/Tools/ITool.cs:150`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
+| Extension by mutating a concrete registry | `PluginRegistrar.cs:178-190` | Interface + a list of them (§5) |
+| Policy bolted onto an adapter | `SandboxedPluginTool` wraps tools only (`PluginRegistrar.cs:564`); the provider and agent paths get none | Policy at the extension point (§5) |
+| Permissive DIM | `IThemeWatcher.cs:31`, `src/Harbor.Abstractions/Tools/ITool.cs:157`, `ITuiView.cs:32` | Fail towards loudly-wrong (§6) |
 | Dead hook on a live interface | `ITuiView.cs:29,32` — zero callers | Zero callers ⇒ delete it (§6) |
 | Wildcard arm over a Harbor union | 7 sites, baselined in the guard | Name every arm; or log **and** count (§7) |
 | **Missing** arm, no default | was `ChatScreenBridge.HandleEvent` missing `CompactionFailedEvent` and falling through silently — **fixed in #840**; the census in `CompactionLifecycleLineTests` is what holds it | The default arm invents an answer; a missing arm just doesn't. Not covered by the wildcard guard (§7); covered by an arm census per family |
