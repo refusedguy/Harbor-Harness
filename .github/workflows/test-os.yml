@@ -402,28 +402,18 @@ jobs:
             exit 1
           }
 
-      # Same rationale as the `test` job in ci.yml — see the long comment
-      # there. Worth the extra plumbing here because these are the
-      # platform-sensitive measurements (bytes per agent turn, event-bus
-      # publish allocations): the question a reader otherwise has to ask by
-      # hand is precisely "does this number differ on windows/macOS?", and
-      # this shard is the only place that can be answered. `if: always()` so a
-      # failing OS still reports.
-      # `shell: bash` — the windows-latest default shell is pwsh, where the
-      # trailing `\` in the command below is a ParserError, not a continuation.
-      - name: Report test measurements (issue #618)
-        if: always()
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.os }}" \
-            --summary "$GITHUB_STEP_SUMMARY"
+      # The per-OS measurement reports (#618) and the skipped-test report
+      # (#1795) used to run HERE, on windows-latest and macos-latest. They
+      # do not any more, and that is a decision, not an accident: the gates
+      # that read the TRX files are compiled, and the committed binaries are
+      # LINUX binaries (tools/bin/harbor-gates-linux-x64, -arm64). Building
+      # a windows and a darwin binary as well would mean ~9 MB more of
+      # committed binaries to keep two REPORT-ONLY panels alive, and the
+      # numbers the panels carry are the linux ones: the measurement lane
+      # that the benchmarks quote is the linux shard matrix in ci.yml, and
+      # the gates themselves are identical on every OS.
+      #
+      # What this lane still owns: the tests on the platform-sensitive
+      # natives. The panels it loses are summaries of a run that is
+      # published here anyway.
 
-      # Issue #1795 — the skipped tests, with their reasons, in the same
-      # summary panel. Same rationale as the `test` job in ci.yml: a skipped
-      # test asserts nothing, and nothing in the log said how many there were.
-      - name: Report skipped tests (issue #1795)
-        if: always()
-        shell: bash
-        run: |
-          tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.os }}" \
-            --summary "$GITHUB_STEP_SUMMARY"

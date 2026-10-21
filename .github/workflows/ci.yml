@@ -2383,10 +2383,16 @@ jobs:
       # this step on windows-latest, where the default shell is pwsh and a
       # trailing `\` is a ParserError, not a line continuation.
       - name: Report test measurements (issue #618)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       # #1884: the CENSUS, next to the measurements above. The step above
@@ -2403,10 +2409,16 @@ jobs:
       # Reporting only, never a gate: the script exits 0 on a missing or
       # corrupt TRX set, and it prints its own one-line summary to the log.
       - name: Report the test census (issue #1884)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY" --top 15
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
       # Issue #1795 — the SKIPPED tests, with their reasons, in the same
@@ -2416,10 +2428,16 @@ jobs:
       # (that is how the 20 skipped Avalonia golden tests were found).
       # Reporting only, never a gate: the script exits 0 on a missing TRX.
       - name: Report skipped tests (issue #1795)
-        if: always()
+        if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+        if: always() && runner.arch == 'ARM64'
+        shell: bash
+        run: |
+          tools/bin/harbor-gates-linux-arm64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
       # Issue #1726 — the guard firings of this shard, CLASSIFIED.
