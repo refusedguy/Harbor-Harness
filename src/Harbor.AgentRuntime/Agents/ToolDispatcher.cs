@@ -608,10 +608,10 @@ public sealed class ToolDispatcher(
                 ? $"Tool '{toolCall.ToolName}' timed out after {t.TotalSeconds:0.#}s."
                 : "Tool execution was cancelled.";
             ToolDispatcherLog.ToolExecutionDeadlineHit(logger, oce, toolCall.ToolName, toolCall.Id);
-            string? budget = deadline is { } d ? $"deadline {d.TotalMilliseconds:0}ms" : null;
+            string? budgetNote = deadline is { } d ? $"deadline {d.TotalMilliseconds:0}ms" : null;
             var timeout = ToolResult.Failed(
                 detail,
-                ToolErrorCodes.Create(ToolErrorCodes.Timeout, budget));
+                ToolErrorCodes.Create(ToolErrorCodes.Timeout, budgetNote));
             await eventBus.PublishAsync(new ToolExecutionEndEvent(
                 toolCall.Id, timeout, true), TerminalEventToken).ConfigureAwait(false);
             return ToolResultEntry.From(toolCall.Id, toolCall.ToolName, timeout);
