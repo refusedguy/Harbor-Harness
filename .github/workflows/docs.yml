@@ -591,6 +591,17 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # #2119. The anchor gate asks whether a citation in a normative
+      # document still points at CODE, and at the symbol the document names
+      # beside it. Its failure path is tested here for the same reason as the
+      # others: a gate edited until it matches nothing is indistinguishable
+      # from a gate that found nothing. The load-bearing fixtures are the
+      # three shapes a drifted citation takes — the anchor moved off the
+      # line, the line slid onto a comment, the line slid onto a blank — and
+      # the gate MUST fail on all three, and MUST stay quiet on a citation
+      # that is right.
+      - name: Doc-anchor gate fails on a drifted anchor, a comment and a blank line
+        run: tools/bin/harbor-gates-linux-x64 check-doc-anchors --self-test
 
   links:
     name: internal links
@@ -1408,6 +1419,34 @@ jobs:
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
         run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+
+  # #2119. The SECOND question about a citation, and the one `check-doc-cites`
+  # cannot answer: a `file:line` resolves perfectly while naming the wrong
+  # line. The file is there, the line is inside the file, the line is not
+  # empty — and the thing the document says is on that line is not there.
+  # `docs/EVENT_TOPOLOGY.md` is the document that paid for it: four of its
+  # five producer rows had drifted, and eleven more citations in the
+  # normative set had slid onto a comment or a blank line.
+  #
+  # So this gate asks the question a line number cannot: the cited line must
+  # carry CODE, and when the document names the symbol it expects to find
+  # there — `path/File.cs:123#Symbol` — the symbol must be on that line.
+  # The anchor is opt-in: a citation without one is `check-doc-cites`' rule.
+  #
+  # The floor is the number of citations the gate checked, and it is set
+  # BELOW the measured 128 on purpose: the count only grows as documents
+  # cite more, and a floor at the current value would be a floor that the
+  # next document breaks.
+  anchors:
+    name: doc anchors
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that every normative citation points at code, and at the symbol it names
+        run: tools/bin/harbor-gates-linux-x64 check-doc-anchors --min-cites 100
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #

@@ -12,6 +12,16 @@
 > builds — and both existing docs gates passed it, because they check form, not
 > content.
 >
+> A fence is not enough, and #2119 is what it cost: a `file:line` resolves
+> perfectly while naming the WRONG line. The file is there, the line is inside
+> the file, the line is not empty — and the thing this document says is on
+> that line is not there. So a citation here may carry the **anchor** it
+> expects to find — `path/File.cs:123#Symbol` — and the compiled gate
+> `check-doc-anchors` then holds the document to it: the cited line must
+> carry code, and the symbol must be on it. The producer and subscriber tables
+> below are anchored; a citation without an anchor is the citation gate's
+> business alone.
+>
 > Related: #27 (CellForge TUI epic — the renderer that consumes most of this),
 > #33 (`Ui.Framework` into reusable layers — the reducer/TEA refactor §2
 > describes), #44 (dispatcher topology), #47 (mandatory/optional sinks).
@@ -26,10 +36,10 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:196,241,248,260
-  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:215,269,283,298,329,375,418,480,505,516
-  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:55,83,118
-  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:188
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305,389,442,456,471,482#PublishAsync
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035#PublishAsync
+  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:199,235,528#PublishAsync
+  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214#PublishAsync
         │ await _eventBus.PublishAsync(evt, ct)
         ▼
 InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.cs:353
@@ -44,14 +54,14 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
-  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303
-  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103
-  EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
-  InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
-  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103
-  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:237
-  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:31
-  Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
+  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303#Subscribe
+  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106-107#Subscribe
+  EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129#Subscribe
+  InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104#Subscribe
+  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:162-166#Subscribe
+  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474#Subscribe + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238#Subscribe
+  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18#Subscribe + InlineAgentStreamBridge.cs:35#Subscribe
+  Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61#Subscribe
 ```
 
 Every entry in that subscriber list is a live `IEventBus.Subscribe` on a shipped
@@ -62,6 +72,23 @@ is not topology. #594 then deleted that branch (with the `AppStore` /
 `Harbor.Ui.Framework.Reducers` it fed), so the list is now complete because
 there is nothing left off it.
 
+**The criterion for the producer table** (it is CONTENT, not a pointer, so it
+has to say what it lists): a row is a producer when it holds a **direct**
+`await <bus>.PublishAsync(...)` call, and every such call is a row. A helper
+that publishes on the caller's behalf would not be a producer row — there is
+none today, and if one appears the table says so rather than the helper's
+callers listing it. By that criterion the counts are: `AgentLoop` 6 (one
+`AgentStartEvent`, three `AgentEndEvent`, one `AgentErrorEvent` — the third
+`AgentEndEvent` is the cancelled one, published twice from two different
+branches), `ToolDispatcher` 7 (five `ToolExecutionEndEvent` — abandoned,
+cancelled, deadline, failed, hook-denied — one `ToolExecutionStartEvent` and
+one `ToolExecutionUpdateEvent`), `CompactionBehavior` 3 (started, completed,
+failed) and `SandboxedPluginTool` 1.
+
+The numbers above were re-measured on `dev` at `13961b71` (the lines the
+table names are the lines the tree has; #2119 replaced a table whose numbers
+had drifted — the file moved, the numbers did not).
+
 `Channel<T>` exists **only at the edges**, never in the core bus:
 
 | Channel | Location | Role |
@@ -69,8 +96,8 @@ there is nothing left off it.
 | Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:446-451` | replay-before-live per client; writer never silently drops |
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
-| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:103`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:205` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
-| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-15` (held by `DefaultAgent.cs:26`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:139` | agent steering messages, unrelated to the bus |
+| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92-93`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:165`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:270` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
+| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-17` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
 ## 2. Who updates the store
@@ -78,14 +105,14 @@ there is nothing left off it.
 The bus **never writes a store itself**. What a subscriber does with the event
 is the subscriber's business, and the live branches are:
 
-- **TUI / CLI** — the renderer is the subscriber. `ReplRunner.cs:312,467` and
-  `DemoCommand.cs:237` hand every event to `ITuiRenderer.RenderAsync`, and the
+- **TUI / CLI** — the renderer is the subscriber. `ReplRunner.cs:312,474` and
+  `DemoCommand.cs:238` hand every event to `ITuiRenderer.RenderAsync`, and the
   renderer dispatches into a `UiStore`
   (`src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:74`,
-  `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`), which reduces it
-  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:175-183`).
+  `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`), which reduces it
+  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:188`).
   The CellForge REPL takes the same route via its `_events` pump
-  (`ReplLifecycle.cs:205-209`).
+  (`ReplLifecycle.cs:270-274`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
   dispatches there (`apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61-80`).
 - **The flat-`AppState` branch no longer exists.** This document used to carry a
@@ -180,7 +207,7 @@ is the subscriber's business, and the live branches are:
   a declared in-process guarantee, and `IEventBus` is public in the
   zero-dependency `Harbor.Abstractions` assembly that every plugin references
   (`IPluginLoadHost.EventBus` hands a live bus to out-of-tree plugin code,
-  `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:60`, and the desktop app
+  `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:71`, and the desktop app
   declares `[Exposes(typeof(IEventBus))]`
   (`apps/Harbor.App.Avalonia/AppHost.cs:39`) as a validated DI capability).
   "No production callers" is therefore **not a provable claim**
@@ -189,7 +216,7 @@ is the subscriber's business, and the live branches are:
   on every publish **and** silently disqualified the fast path for every shipped
   preset (0/200 qualifying publishes on CLI and desktop, 200/200 only headless;
   the preset is `EventBusScrollback = 1000`,
-  `src/Harbor.Hosting/HarborComposeOptions.cs:153`).
+  `src/Harbor.Hosting/HarborComposeOptions.cs:180`).
   Retention is now armed by the first `GetScrollback` call
   (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:141`), so:
   - an unread ring costs nothing, and the fast path is reachable for the

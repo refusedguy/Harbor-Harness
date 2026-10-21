@@ -43,6 +43,7 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
+	docanchors "harbor.local/gates/check-doc-anchors"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
@@ -103,9 +104,9 @@ var registry = []registered{
 		run:     checkanalyzerscope.Run,
 	},
 	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
+		name:    "check-doc-anchors",
+		summary: "a file:line in a normative document still points at code, and at the symbol it names",
+		run:     docanchors.Run,
 	},
 	{
 		name:    "check-doc-facts",
@@ -136,11 +137,6 @@ var registry = []registered{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
 	},
 	{
 		name:    "gen-seam-graph",
