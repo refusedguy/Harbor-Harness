@@ -248,7 +248,7 @@ The modes are:
 | `tools/check-doc-cites.py` | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
 | `tools/check-doc-facts.py` | a count the onboarding documents state still equals the count of tracked files | docs.yml | facts, selftest | gate | `--self-test` | — | `--min-facts 5` |
-| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 38` |
+| `tools/check-gate-policy.py` | this table still describes the gates the repository runs | docs.yml | gate-policy, selftest | gate | `--self-test` | `docs/CI_GATES.md` | `--min-gates 42` |
 | `tools/check-local-merge-loss.py` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/check-no-test-sdk.py` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
 | `tools/check-md-links.py` | every internal link, anchor and `path/File.cs:123` reference resolves | docs.yml | links, selftest | gate | `--self-test` | — | `--min-files 250 --min-refs 600` |
@@ -269,7 +269,7 @@ The modes are:
 | `tools/md-lint.py` | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/gen-e2e-shards.py` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/md_gate.py` | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
-| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, nightly.yml | measure, measurement | reporter | — | — | — |
+| `tools/measure-build-cpu.py` | what a build command costs: the wall time, the CPU utilisation sampled from `/proc/stat`, the CPU accounted per process, and MSBuild's own task aggregates | meas-build-vcpu.yml, meas-analyzer-cost.yml, nightly.yml | measure, measurement | reporter | — | — | — |
 | `tools/measure-project-graph.py` | the shape of the project dependency graph: the depth, the level widths and the critical path, parsed from the solution and the `ProjectReference` edges. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/msbuild-evaluation-cost.py` | what a Release compile spends on MSBuild project evaluation, read from the performance summary | ci.yml, nightly.yml | build, measurement | reporter | `--self-test` | — | — |
 | `tools/run-e2e-avalonia-shards.py` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml | test | helper | — | — | — |
@@ -283,6 +283,9 @@ The modes are:
 | `tools/check-shard-balance.py` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/gen-seam-graph.py` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/check-analyzer-scope.py` | where each analyzer package is allowed to run: the scope table in `tools/analyzer-scope.json` against the tree, so a family cannot spread back to every project | ci.yml | analyzer-scope | gate | `--self-test` | `tools/analyzer-scope.json` | `--min-files 150` |
+| `tools/aggregate-analyzer-cost.py` | the analyzer cost table: what each analyzer pack costs the compiler, summed over the builds | meas-analyzer-cost.yml | aggregate | reporter | — | — | — |
+| `tools/coverage_report.py` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
+| `tools/check-coverage-registry.py` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
 Two things the table says that are easy to miss:
 
 - `tools/msbuild-evaluation-cost.py` measures time, and it is NOT a gate. It
