@@ -708,12 +708,7 @@ public class FullLayerMatrixTests
         // Infrastructure → Application edge that was pure dead permission.
         ["Harbor.Ipc.Server"] = new(Layer.Infrastructure,
             ["Harbor.Ipc.Abstractions", "Harbor.Abstractions"]),
-        // #1738: the plugin INVENTORY. FileSystemPluginInventory implements the
-        // Domain port Harbor.Abstractions.Plugins.IInstalledPluginInventory, so this
-        // assembly names Domain types directly. The reference is real (the
-        // inventory's signatures are Domain types), so the IL gate would
-        // redden if this permission were dropped.
-        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
+        ["Harbor.Plugins.Storage"] = new(Layer.Infrastructure, ["Harbor.Plugins.Abstractions"]),
         ["Harbor.Plugins.Compilation"] = new(Layer.Infrastructure,
             ["Harbor.Plugins.Abstractions", "Harbor.Abstractions"]),
         ["Harbor.Plugins.Instantiation"] = new(Layer.Infrastructure,
@@ -732,11 +727,18 @@ public class FullLayerMatrixTests
         // the registrar cannot disagree about which axes a plugin carries, and
         // reading it names the plugin contract's facade (Harbor.Abstractions),
         // which is Domain and always allowed. The other two edges stay vestigial.
+        // #1738: the plugin INVENTORY (FileSystemPluginInventory) lives here —
+        // the plugin runtime's composition root — and it names the manifest
+        // reader in Harbor.Plugins.Storage. It is here and not in
+        // Harbor.Plugins.Storage because the CLI composition root may not
+        // reference the storage layer (slice 3), and the tool that reads the
+        // inventory may not bind the plugin layers at all.
         ["Harbor.Plugins.Hosting"] = new(Layer.Infrastructure,
         [
             "Harbor.Abstractions",
             "Harbor.Plugins.Abstractions",
             "Harbor.Plugins.Registration",
+            "Harbor.Plugins.Storage",
         ]),
         // ---- CompositionRoot -----------------------------------------------
         ["Harbor.Hosting"] = new(Layer.CompositionRoot,
@@ -782,15 +784,12 @@ public class FullLayerMatrixTests
             // in-process compile pipeline; the composition root binds none of
             // them any more, so only the Hosting edge below stays.
             "Harbor.Plugins.Hosting",
-            // #1738: the plugin INVENTORY. The composition root builds the
-            // one FileSystemPluginInventory the agent-facing plugin_manager
-            // tool and the /plugins panel both read. The implementation lives
-            // in Harbor.Plugins.Storage because that is the layer that knows
-            // where plugin files come from (and where the manifest reader
-            // lives). The reference is real (RegistryFacade.Compose names
-            // FileSystemPluginInventory), so the IL gate would redden if this
-            // permission were dropped.
-            "Harbor.Plugins.Storage",
+            // #1738: the plugin INVENTORY. The composition root builds the one
+            // FileSystemPluginInventory the agent-facing plugin_manager tool
+            // and the /plugins panel both read — and the implementation lives
+            // in Harbor.Plugins.Hosting, because the composition root may not
+            // reference Harbor.Plugins.Storage (slice 3: the CLI assembly must
+            // not bind the in-process compile pipeline).
             // LoadedPlugin handle (StartupPluginLoad/PluginReloadService):
             "Harbor.Plugins.Abstractions",
         ]),

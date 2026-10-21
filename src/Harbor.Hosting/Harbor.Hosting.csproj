@@ -153,15 +153,6 @@
       Compilation / Instantiation / Registration) lives in the host process.
     -->
     <ProjectReference Include="..\Harbor.Plugins.Hosting\Harbor.Plugins.Hosting.csproj"/>
-    <!--
-      #1738: the plugin INVENTORY. The composition root builds the one
-      FileSystemPluginInventory the agent-facing plugin_manager tool and the
-      /plugins panel both read, so "what is installed" has one answer.
-      FileSystemPluginInventory lives in Harbor.Plugins.Storage because that
-      is the layer that knows where plugin files come from (and it is where
-      the manifest reader lives).
-    -->
-    <ProjectReference Include="..\Harbor.Plugins.Storage\Harbor.Plugins.Storage.csproj"/>
   </ItemGroup>
 
   <ItemGroup Condition="'$(HarborWithAllProviders)' == 'true'">

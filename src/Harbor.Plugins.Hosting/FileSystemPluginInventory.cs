@@ -3,7 +3,7 @@ using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 
-namespace Harbor.Plugins.Storage;
+namespace Harbor.Plugins.Hosting;
 
 /// <summary>
 ///     The plugin inventory over the two CS-source plugin scopes: the user's
@@ -196,7 +196,7 @@ public sealed class FileSystemPluginInventory : IInstalledPluginInventory
                 "The plugin source '{Source}' cannot be installed: {Error}",
                 source,
                 described.Error);
-            return Result.Failure<PluginInventoryChangeResult>(described.Error);
+            return described.ConvertFailure<PluginInventoryChangeResult>();
         }
 
         InstalledPluginEntry entry = described.Value;

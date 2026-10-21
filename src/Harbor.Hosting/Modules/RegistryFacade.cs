@@ -8,7 +8,7 @@ using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 #if HARBOR_WITH_PLUGINS
-using Harbor.Plugins.Storage;
+using Harbor.Plugins.Hosting;
 #endif
 
 // DI014/DI016 (Excubo): the registries are eager artifacts, so a temporary

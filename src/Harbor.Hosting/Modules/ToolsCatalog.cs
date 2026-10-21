@@ -225,10 +225,11 @@ internal static class ToolsCatalog
         }
 #if HARBOR_WITH_PLUGINS
         // #1738: the agent-facing plugin management tool. It is registered
-        // only where the plugin runtime is compiled in, and only when an
+        // only where the plugin runtime is compiled in, only in the full
+        // preset (the desktop subset has no plugin route), and only when an
         // inventory exists — the tool without one could neither read what is
         // installed nor change it.
-        if (pluginInventory is not null)
+        if (full && pluginInventory is not null)
         {
             tb.AddTool(lf => new PluginManagerTool(pluginInventory, lf.CreateLogger<PluginManagerTool>()));
         }

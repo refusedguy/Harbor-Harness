@@ -1,8 +1,8 @@
 using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Plugins;
-using Harbor.Plugins.Storage;
+using Harbor.Plugins.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-namespace Harbor.Plugins.Runtime.Tests.Storage;
+namespace Harbor.Plugins.Runtime.Tests.Hosting;
 
 /// <summary>
 ///     Tests for <see cref="FileSystemPluginInventory" /> (#1738) — the one
