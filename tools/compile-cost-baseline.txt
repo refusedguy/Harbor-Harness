@@ -1,0 +1,296 @@
+# compile-cost-baseline - what every project of the tree costs the
+# compiler, and what a change in one of them costs everybody who depends on
+# it.
+#
+# OWNER: issue #2112. Read by tools/bin/harbor-gates-linux-x64
+# measure-compile-cost, which compares a fresh measurement against this file
+# and goes red when a project grew past its budget.
+#
+# WHAT IS RECORDED HERE
+#
+#   [compiler]  the compiler's own totals of the measurement: how many Csc
+#               calls the build made, how many seconds they took, and the
+#               attribution ratio (the sum of the per-project own times over
+#               the compiler's total). A ratio near 1 means the measurement
+#               came from a build that ran one compiler at a time, and the
+#               per-project numbers are compile costs; a ratio of an order
+#               of magnitude more means the build ran its compilers in
+#               parallel and the per-project numbers are dominated by
+#               waiting, so the instrument refuses to price a radius with
+#               them.
+#
+#   [project]   what one project cost the compiler, in seconds, and how big
+#               it is (the .cs files the compiler reads, and their lines):
+#                 <path> | <seconds> | <files> | <lines>
+#
+#   [radius]    what a change in one project costs: the number of projects
+#               that depend on it, directly or through another project, and
+#               the price of that set in seconds:
+#                 <path> | <transitive consumers> | <seconds>
+#
+# HOW TO RE-MEASURE
+#
+#   1. Take a build log with the performance summary in it:
+#        dotnet build Harbor.slnx -c Release --no-restore \
+#          -maxcpucount:1 -v:m -clp:PerformanceSummary
+#      The -maxcpucount:1 matters: a build that runs many compilers at once
+#      cannot say what one project costs the compiler.
+#   2. Write the new baseline:
+#        harbor-gates measure-compile-cost --log <log> \
+#          --write-baseline tools/compile-cost-baseline.txt
+#
+# THE BUDGET
+#
+#   A project is over budget when its cost grew by more than 20 % AND by
+#   more than 10 seconds. Both, so a small project that grew by a third but
+#   is worth half a second is not a finding.
+#
+#   The growth is measured as the project's SHARE of the compiler's time,
+#   and not as its absolute seconds: a threshold on a live wall clock fails
+#   on a slow runner, and a machine that is 30 % slower makes every project
+#   look 30 % more expensive. A share does not move when the machine does.
+#
+# WHERE THE MEASUREMENT CAME FROM
+#
+#   The "source" line below says which build the numbers are from. A
+#   measurement taken from a CI run names the run and the arm; a
+#   measurement taken from a local build names the log file.
+
+[compiler]
+csc-calls 112
+csc-seconds 144.9
+corecompile-seconds 146.3
+attribution-ratio 2.98
+source ci-run 39483960190, arm c-verbose (the serial compile of 2026-10-20), log meas/c-verbose.log
+
+[project]
+apps/Harbor.App.Cli/Harbor.App.Cli.csproj | 29.0 | 117 | 18276
+build/_build.csproj | 0.1 | 32 | 3638
+samples/plugins/Harbor.Plugin.FileTree/Harbor.Plugin.FileTree.csproj | 0.0 | 1 | 145
+samples/plugins/Harbor.Plugin.GitTools/Harbor.Plugin.GitTools.csproj | 0.1 | 1 | 443
+samples/plugins/Harbor.Plugin.TodoWrite/Harbor.Plugin.TodoWrite.csproj | 0.1 | 1 | 427
+samples/plugins/Harbor.Plugin.WebSearch/Harbor.Plugin.WebSearch.csproj | 0.0 | 1 | 173
+src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj | 2.5 | 48 | 9919
+src/Harbor.Abstractions/Harbor.Abstractions.csproj | 4.3 | 71 | 8129
+src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj | 2.4 | 36 | 9167
+src/Harbor.Application/Harbor.Application.csproj | 2.2 | 32 | 5169
+src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj | 1.0 | 12 | 5566
+src/Harbor.DesignSystem/Harbor.DesignSystem.csproj | 0.2 | 14 | 1426
+src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj | 4.4 | 11 | 824
+src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj | 0.1 | 5 | 205
+src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj | 0.1 | 9 | 560
+src/Harbor.Desktop.ViewModels/Harbor.Desktop.ViewModels.csproj | 0.0 | 20 | 2805
+src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj | 0.1 | 3 | 137
+src/Harbor.Extensions/Harbor.Extensions.csproj | 0.1 | 5 | 648
+src/Harbor.Hooks/Harbor.Hooks.csproj | 0.3 | 6 | 1031
+src/Harbor.Hosting/Harbor.Hosting.csproj | 15.8 | 37 | 5842
+src/Harbor.Ipc.Abstractions/Harbor.Ipc.Abstractions.csproj | 0.3 | 20 | 2772
+src/Harbor.Ipc.Client/Harbor.Ipc.Client.csproj | 0.2 | 12 | 2360
+src/Harbor.Ipc.InProcess/Harbor.Ipc.InProcess.csproj | 0.1 | 2 | 335
+src/Harbor.Ipc.Server/Harbor.Ipc.Server.csproj | 0.2 | 14 | 2967
+src/Harbor.Logging/Harbor.Logging.csproj | 0.0 | 1 | 182
+src/Harbor.Lsp/Harbor.Lsp.csproj | 0.2 | 4 | 1932
+src/Harbor.Onboarding/Harbor.Onboarding.csproj | 0.2 | 4 | 862
+src/Harbor.Permissions/Harbor.Permissions.csproj | 0.3 | 8 | 1242
+src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj | 0.1 | 25 | 2549
+src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj | 0.1 | 6 | 831
+src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj | 0.1 | 6 | 1077
+src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj | 0.5 | 13 | 3193
+src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj | 0.1 | 3 | 194
+src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj | 0.1 | 8 | 1526
+src/Harbor.Plugins.Runtime/Harbor.Plugins.Runtime.csproj | 0.1 | 3 | 276
+src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj | 0.1 | 9 | 1323
+src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj | 0.0 | 14 | 2032
+src/Harbor.Providers.Anthropic/Harbor.Providers.Anthropic.csproj | 0.1 | 3 | 1025
+src/Harbor.Providers.Ollama/Harbor.Providers.Ollama.csproj | 0.1 | 1 | 765
+src/Harbor.Providers.OpenAI/Harbor.Providers.OpenAI.csproj | 0.1 | 3 | 1249
+src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj | 0.2 | 5 | 1276
+src/Harbor.Registries/Harbor.Registries.csproj | 1.8 | 14 | 3166
+src/Harbor.SessionContext/Harbor.SessionContext.csproj | 1.6 | 19 | 4476
+src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj | 0.9 | 35 | 9982
+src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj | 0.1 | 3 | 484
+src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj | 0.3 | 9 | 3052
+src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj | 0.3 | 10 | 1864
+src/Harbor.Telemetry.Otlp/Harbor.Telemetry.Otlp.csproj | 0.0 | 1 | 59
+src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj | 3.8 | 27 | 4768
+src/Harbor.Terminal.Pty/Harbor.Terminal.Pty.csproj | 0.1 | 4 | 763
+src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj | 0.9 | 77 | 14554
+src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj | 0.6 | 5 | 188
+src/Harbor.Tui.AnsiPlain/Harbor.Tui.AnsiPlain.csproj | 0.2 | 9 | 856
+src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj | 0.9 | 91 | 13681
+src/Harbor.Tui.CellForge.Prompts/Harbor.Tui.CellForge.Prompts.csproj | 0.2 | 3 | 1417
+src/Harbor.Tui.CellForge.Syntax/Harbor.Tui.CellForge.Syntax.csproj | 0.1 | 9 | 1114
+src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj | 3.1 | 113 | 34255
+src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj | 0.1 | 1 | 352
+src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj | 0.2 | 18 | 1754
+src/Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj | 0.3 | 19 | 3263
+src/Harbor.Ui.Framework.Rendering/Harbor.Ui.Framework.Rendering.csproj | 1.0 | 50 | 10745
+src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj | 0.3 | 32 | 3606
+src/Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj | 0.2 | 15 | 1557
+src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj | 1.8 | 51 | 8181
+src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj | 0.2 | 10 | 1424
+src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | 3.1 | 0 | 0
+tests/Harbor.Abstractions.Tests/Harbor.Abstractions.Tests.csproj | 0.7 | 32 | 4617
+tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj | 1.9 | 43 | 9996
+tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj | 1.0 | 53 | 9870
+tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj | 1.3 | 90 | 21104
+tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj | 29.7 | 187 | 110261
+tests/Harbor.Benchmarks/Harbor.Benchmarks.csproj | 1.0 | 39 | 6688
+tests/Harbor.ChangeTracking.Tests/Harbor.ChangeTracking.Tests.csproj | 0.4 | 13 | 4000
+tests/Harbor.CodeGen.Tests/Harbor.CodeGen.Tests.csproj | 0.0 | 2 | 491
+tests/Harbor.Config.Tests/Harbor.Config.Tests.csproj | 0.3 | 16 | 3435
+tests/Harbor.Core.Tests/Harbor.Core.Tests.csproj | 0.5 | 37 | 8408
+tests/Harbor.DesignSystem.Tests/Harbor.DesignSystem.Tests.csproj | 0.2 | 7 | 783
+tests/Harbor.Domain.Tests/Harbor.Domain.Tests.csproj | 0.3 | 9 | 1174
+tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj | 4.3 | 24 | 6251
+tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj | 0.4 | 3 | 448
+tests/Harbor.E2E.Framework.Tests/Harbor.E2E.Framework.Tests.csproj | 0.2 | 1 | 382
+tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj | 0.4 | 19 | 5340
+tests/Harbor.Hosting.Tests/Harbor.Hosting.Tests.csproj | 0.5 | 28 | 4617
+tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj | 0.4 | 26 | 5033
+tests/Harbor.LoadTests/Harbor.LoadTests.csproj | 0.3 | 3 | 1066
+tests/Harbor.Lsp.Tests/Harbor.Lsp.Tests.csproj | 0.2 | 9 | 1274
+tests/Harbor.Plugins.Abstractions.Tests/Harbor.Plugins.Abstractions.Tests.csproj | 0.2 | 2 | 594
+tests/Harbor.Plugins.Host.Tests/Harbor.Plugins.Host.Tests.csproj | 0.2 | 4 | 910
+tests/Harbor.Plugins.Runtime.Tests/Harbor.Plugins.Runtime.Tests.csproj | 0.5 | 41 | 7861
+tests/Harbor.Providers.Tests/Harbor.Providers.Tests.csproj | 0.4 | 20 | 4684
+tests/Harbor.Registries.Tests/Harbor.Registries.Tests.csproj | 0.3 | 18 | 3178
+tests/Harbor.Storage.Jsonl.Tests/Harbor.Storage.Jsonl.Tests.csproj | 0.5 | 33 | 8605
+tests/Harbor.Storage.Tests/Harbor.Storage.Tests.csproj | 0.6 | 23 | 5908
+tests/Harbor.Telemetry.Fixtures/Harbor.Telemetry.Fixtures.csproj | 0.0 | 4 | 85
+tests/Harbor.Telemetry.Tests/Harbor.Telemetry.Tests.csproj | 0.2 | 4 | 985
+tests/Harbor.Terminal.Abstractions.Tests/Harbor.Terminal.Abstractions.Tests.csproj | 0.2 | 6 | 1319
+tests/Harbor.Terminal.Pty.Tests/Harbor.Terminal.Pty.Tests.csproj | 0.2 | 2 | 291
+tests/Harbor.TestKit.Generated/Harbor.TestKit.Generated.csproj | 0.0 | 2 | 117
+tests/Harbor.TestKit.Generators.Tests/Harbor.TestKit.Generators.Tests.csproj | 0.2 | 2 | 301
+tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj | 0.1 | 2 | 1142
+tests/Harbor.TestKit.Support/Harbor.TestKit.Support.csproj | 0.3 | 27 | 3755
+tests/Harbor.TestKit.Tests/Harbor.TestKit.Tests.csproj | 0.2 | 15 | 2040
+tests/Harbor.TestKit.Tui/Harbor.TestKit.Tui.csproj | 0.2 | 6 | 833
+tests/Harbor.TestKit/Harbor.TestKit.csproj | 0.3 | 16 | 1934
+tests/Harbor.Tools.Builtin.Tests/Harbor.Tools.Builtin.Tests.csproj | 0.9 | 58 | 10636
+tests/Harbor.Transport.Remote.Tests/Harbor.Transport.Remote.Tests.csproj | 0.2 | 3 | 232
+tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj | 0.5 | 47 | 5388
+tests/Harbor.Tui.CellForge.Tests/Harbor.Tui.CellForge.Tests.csproj | 4.2 | 243 | 50359
+tests/Harbor.Tui.E2E.Tests/Harbor.Tui.E2E.Tests.csproj | 0.2 | 10 | 1347
+tests/Harbor.Tui.PerfTests/Harbor.Tui.PerfTests.csproj | 0.2 | 2 | 443
+tests/Harbor.Tui.RendererTests/Harbor.Tui.RendererTests.csproj | 0.2 | 12 | 1515
+tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj | 0.6 | 19 | 3912
+tests/Harbor.Ui.Framework.Tests/Harbor.Ui.Framework.Tests.csproj | 1.1 | 68 | 14773
+tools/Harbor.Evals/Harbor.Evals.csproj | 0.1 | 10 | 954
+
+[radius]
+apps/Harbor.App.Cli/Harbor.App.Cli.csproj | 2 | 30.4
+build/_build.csproj | 0 | 0.1
+samples/plugins/Harbor.Plugin.FileTree/Harbor.Plugin.FileTree.csproj | 0 | 0.0
+samples/plugins/Harbor.Plugin.GitTools/Harbor.Plugin.GitTools.csproj | 0 | 0.1
+samples/plugins/Harbor.Plugin.TodoWrite/Harbor.Plugin.TodoWrite.csproj | 0 | 0.1
+samples/plugins/Harbor.Plugin.WebSearch/Harbor.Plugin.WebSearch.csproj | 0 | 0.0
+src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj | 103 | 143.0
+src/Harbor.Abstractions/Harbor.Abstractions.csproj | 96 | 134.4
+src/Harbor.AgentRuntime/Harbor.AgentRuntime.csproj | 12 | 86.8
+src/Harbor.Application/Harbor.Application.csproj | 22 | 99.5
+src/Harbor.ChangeTracking/Harbor.ChangeTracking.csproj | 5 | 61.4
+src/Harbor.DesignSystem/Harbor.DesignSystem.csproj | 52 | 109.5
+src/Harbor.Desktop.Abstractions/Harbor.Desktop.Abstractions.csproj | 17 | 90.5
+src/Harbor.Desktop.Animations/Harbor.Desktop.Animations.csproj | 50 | 109.1
+src/Harbor.Desktop.Shared/Harbor.Desktop.Shared.csproj | 1 | 29.7
+src/Harbor.Desktop.ViewModels/Harbor.Desktop.ViewModels.csproj | 12 | 40.8
+src/Harbor.Diagnostics.Abstractions/Harbor.Diagnostics.Abstractions.csproj | 18 | 87.3
+src/Harbor.Extensions/Harbor.Extensions.csproj | 65 | 122.0
+src/Harbor.Hooks/Harbor.Hooks.csproj | 13 | 87.1
+src/Harbor.Hosting/Harbor.Hosting.csproj | 7 | 81.2
+src/Harbor.Ipc.Abstractions/Harbor.Ipc.Abstractions.csproj | 13 | 83.4
+src/Harbor.Ipc.Client/Harbor.Ipc.Client.csproj | 9 | 81.9
+src/Harbor.Ipc.InProcess/Harbor.Ipc.InProcess.csproj | 9 | 81.7
+src/Harbor.Ipc.Server/Harbor.Ipc.Server.csproj | 10 | 82.9
+src/Harbor.Logging/Harbor.Logging.csproj | 1 | 29.7
+src/Harbor.Lsp/Harbor.Lsp.csproj | 9 | 81.7
+src/Harbor.Onboarding/Harbor.Onboarding.csproj | 9 | 81.7
+src/Harbor.Permissions/Harbor.Permissions.csproj | 24 | 89.3
+src/Harbor.Plugins.Abstractions/Harbor.Plugins.Abstractions.csproj | 19 | 85.1
+src/Harbor.Plugins.Compilation/Harbor.Plugins.Compilation.csproj | 13 | 82.7
+src/Harbor.Plugins.Host/Harbor.Plugins.Host.csproj | 1 | 0.3
+src/Harbor.Plugins.Hosting/Harbor.Plugins.Hosting.csproj | 12 | 82.6
+src/Harbor.Plugins.Instantiation/Harbor.Plugins.Instantiation.csproj | 14 | 82.8
+src/Harbor.Plugins.Registration/Harbor.Plugins.Registration.csproj | 13 | 82.7
+src/Harbor.Plugins.Runtime/Harbor.Plugins.Runtime.csproj | 2 | 30.2
+src/Harbor.Plugins.Storage/Harbor.Plugins.Storage.csproj | 13 | 82.7
+src/Harbor.PolicyConfig/Harbor.PolicyConfig.csproj | 22 | 88.7
+src/Harbor.Providers.Anthropic/Harbor.Providers.Anthropic.csproj | 9 | 81.7
+src/Harbor.Providers.Ollama/Harbor.Providers.Ollama.csproj | 9 | 81.7
+src/Harbor.Providers.OpenAI/Harbor.Providers.OpenAI.csproj | 9 | 81.7
+src/Harbor.Providers.OpenAiCompatible/Harbor.Providers.OpenAiCompatible.csproj | 11 | 83.2
+src/Harbor.Registries/Harbor.Registries.csproj | 15 | 87.1
+src/Harbor.SessionContext/Harbor.SessionContext.csproj | 16 | 91.6
+src/Harbor.Storage.Jsonl/Harbor.Storage.Jsonl.csproj | 13 | 85.1
+src/Harbor.Storage.Memory/Harbor.Storage.Memory.csproj | 13 | 83.7
+src/Harbor.Storage.Sqlite/Harbor.Storage.Sqlite.csproj | 11 | 83.5
+src/Harbor.Telemetry.Core/Harbor.Telemetry.Core.csproj | 11 | 81.7
+src/Harbor.Telemetry.Otlp/Harbor.Telemetry.Otlp.csproj | 1 | 29.7
+src/Harbor.Terminal.Abstractions/Harbor.Terminal.Abstractions.csproj | 31 | 95.7
+src/Harbor.Terminal.Pty/Harbor.Terminal.Pty.csproj | 2 | 29.9
+src/Harbor.Tools.Builtin/Harbor.Tools.Builtin.csproj | 12 | 85.7
+src/Harbor.Transport.Remote/Harbor.Transport.Remote.csproj | 2 | 30.4
+src/Harbor.Tui.AnsiPlain/Harbor.Tui.AnsiPlain.csproj | 12 | 83.0
+src/Harbor.Tui.CellForge.Engine/Harbor.Tui.CellForge.Engine.csproj | 16 | 90.1
+src/Harbor.Tui.CellForge.Prompts/Harbor.Tui.CellForge.Prompts.csproj | 12 | 85.9
+src/Harbor.Tui.CellForge.Syntax/Harbor.Tui.CellForge.Syntax.csproj | 12 | 85.9
+src/Harbor.Tui.CellForge/Harbor.Tui.CellForge.csproj | 11 | 85.8
+src/Harbor.Tui.Notifications/Harbor.Tui.Notifications.csproj | 2 | 29.9
+src/Harbor.Ui.Framework.Abstractions/Harbor.Ui.Framework.Abstractions.csproj | 47 | 107.9
+src/Harbor.Ui.Framework.Projection/Harbor.Ui.Framework.Projection.csproj | 39 | 104.9
+src/Harbor.Ui.Framework.Rendering/Harbor.Ui.Framework.Rendering.csproj | 49 | 109.0
+src/Harbor.Ui.Framework.Services/Harbor.Ui.Framework.Services.csproj | 42 | 105.4
+src/Harbor.Ui.Framework.Sessions/Harbor.Ui.Framework.Sessions.csproj | 40 | 104.8
+src/Harbor.Ui.Framework.State/Harbor.Ui.Framework.State.csproj | 46 | 107.7
+src/Harbor.Ui.Framework.ViewModels/Harbor.Ui.Framework.ViewModels.csproj | 41 | 105.0
+src/Harbor.Ui.Framework/Harbor.Ui.Framework.csproj | 38 | 104.6
+tests/Harbor.Abstractions.Tests/Harbor.Abstractions.Tests.csproj | 0 | 0.7
+tests/Harbor.App.Avalonia.Tests/Harbor.App.Avalonia.Tests.csproj | 0 | 1.9
+tests/Harbor.App.Cli.Tests/Harbor.App.Cli.Tests.csproj | 0 | 1.0
+tests/Harbor.Application.Tests/Harbor.Application.Tests.csproj | 0 | 1.3
+tests/Harbor.Architecture.Tests/Harbor.Architecture.Tests.csproj | 0 | 29.7
+tests/Harbor.Benchmarks/Harbor.Benchmarks.csproj | 0 | 1.0
+tests/Harbor.ChangeTracking.Tests/Harbor.ChangeTracking.Tests.csproj | 0 | 0.4
+tests/Harbor.CodeGen.Tests/Harbor.CodeGen.Tests.csproj | 0 | 0.0
+tests/Harbor.Config.Tests/Harbor.Config.Tests.csproj | 0 | 0.3
+tests/Harbor.Core.Tests/Harbor.Core.Tests.csproj | 0 | 0.5
+tests/Harbor.DesignSystem.Tests/Harbor.DesignSystem.Tests.csproj | 0 | 0.2
+tests/Harbor.Domain.Tests/Harbor.Domain.Tests.csproj | 0 | 0.3
+tests/Harbor.E2E.App.Avalonia/Harbor.E2E.App.Avalonia.csproj | 0 | 4.3
+tests/Harbor.E2E.Cli/Harbor.E2E.Cli.csproj | 0 | 0.4
+tests/Harbor.E2E.Framework.Tests/Harbor.E2E.Framework.Tests.csproj | 0 | 0.2
+tests/Harbor.E2E.Framework/Harbor.E2E.Framework.csproj | 6 | 6.3
+tests/Harbor.Hosting.Tests/Harbor.Hosting.Tests.csproj | 0 | 0.5
+tests/Harbor.Ipc.Tests/Harbor.Ipc.Tests.csproj | 0 | 0.4
+tests/Harbor.LoadTests/Harbor.LoadTests.csproj | 0 | 0.3
+tests/Harbor.Lsp.Tests/Harbor.Lsp.Tests.csproj | 0 | 0.2
+tests/Harbor.Plugins.Abstractions.Tests/Harbor.Plugins.Abstractions.Tests.csproj | 0 | 0.2
+tests/Harbor.Plugins.Host.Tests/Harbor.Plugins.Host.Tests.csproj | 0 | 0.2
+tests/Harbor.Plugins.Runtime.Tests/Harbor.Plugins.Runtime.Tests.csproj | 0 | 0.5
+tests/Harbor.Providers.Tests/Harbor.Providers.Tests.csproj | 0 | 0.4
+tests/Harbor.Registries.Tests/Harbor.Registries.Tests.csproj | 0 | 0.3
+tests/Harbor.Storage.Jsonl.Tests/Harbor.Storage.Jsonl.Tests.csproj | 0 | 0.5
+tests/Harbor.Storage.Tests/Harbor.Storage.Tests.csproj | 0 | 0.6
+tests/Harbor.Telemetry.Fixtures/Harbor.Telemetry.Fixtures.csproj | 1 | 0.0
+tests/Harbor.Telemetry.Tests/Harbor.Telemetry.Tests.csproj | 0 | 0.2
+tests/Harbor.Terminal.Abstractions.Tests/Harbor.Terminal.Abstractions.Tests.csproj | 0 | 0.2
+tests/Harbor.Terminal.Pty.Tests/Harbor.Terminal.Pty.Tests.csproj | 0 | 0.2
+tests/Harbor.TestKit.Generated/Harbor.TestKit.Generated.csproj | 6 | 4.2
+tests/Harbor.TestKit.Generators.Tests/Harbor.TestKit.Generators.Tests.csproj | 0 | 0.2
+tests/Harbor.TestKit.Generators/Harbor.TestKit.Generators.csproj | 7 | 4.3
+tests/Harbor.TestKit.Support/Harbor.TestKit.Support.csproj | 33 | 24.8
+tests/Harbor.TestKit.Tests/Harbor.TestKit.Tests.csproj | 0 | 0.2
+tests/Harbor.TestKit.Tui/Harbor.TestKit.Tui.csproj | 10 | 11.2
+tests/Harbor.TestKit/Harbor.TestKit.csproj | 18 | 14.5
+tests/Harbor.Tools.Builtin.Tests/Harbor.Tools.Builtin.Tests.csproj | 0 | 0.9
+tests/Harbor.Transport.Remote.Tests/Harbor.Transport.Remote.Tests.csproj | 0 | 0.2
+tests/Harbor.Tui.CellForge.PtyTests/Harbor.Tui.CellForge.PtyTests.csproj | 0 | 0.5
+tests/Harbor.Tui.CellForge.Tests/Harbor.Tui.CellForge.Tests.csproj | 0 | 4.2
+tests/Harbor.Tui.E2E.Tests/Harbor.Tui.E2E.Tests.csproj | 0 | 0.2
+tests/Harbor.Tui.PerfTests/Harbor.Tui.PerfTests.csproj | 0 | 0.2
+tests/Harbor.Tui.RendererTests/Harbor.Tui.RendererTests.csproj | 0 | 0.2
+tests/Harbor.Tui.Tests/Harbor.Tui.Tests.csproj | 0 | 0.6
+tests/Harbor.Ui.Framework.Tests/Harbor.Ui.Framework.Tests.csproj | 0 | 1.1
+tools/Harbor.Evals/Harbor.Evals.csproj | 0 | 0.1
