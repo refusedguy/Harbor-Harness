@@ -316,7 +316,8 @@ public sealed class TestKitLocalDoubleRules
                 continue;
             }
 
-            SyntaxList<BaseTypeSyntax> bases = type.BaseList?.Types ?? default;
+            SeparatedSyntaxList<BaseTypeSyntax> bases =
+                type.BaseList?.Types ?? default(SeparatedSyntaxList<BaseTypeSyntax>);
 
             foreach (BaseTypeSyntax baseType in bases)
             {
