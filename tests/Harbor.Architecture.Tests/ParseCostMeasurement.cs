@@ -74,14 +74,16 @@ public sealed class ParseCostMeasurement
     ///     comments' lengths alone, so the bound is exact rather than
     ///     approximate. Files above the bound are reported as projections.
     ///     <para>
-    ///         This MEASUREMENT branch runs the legacy over the whole tree,
-    ///         so the bound is effectively off here: the number the report
-    ///         quotes — 12.9 GB for one pass over <c>tests/</c> — is measured,
-    ///         not projected. The bound comes back when the measurement becomes
-    ///         a permanent test.
+    ///         The bound is not decoration: with the bound off, the legacy
+    ///         allocates 12.5 GB in this one test, the process's resident set
+    ///         reaches 2.4 GB, and every OTHER test in the shard pays for the
+    ///         heap the measurement left behind. The measurement run that
+    ///         produced the headline number (12 465 MB, 3 304 ms for one pass
+    ///         over the tree) had the bound off; the numbers below are the
+    ///         same, with the un-affordable files reported as projections.
     ///     </para>
     /// </remarks>
-    private const long LegacyBudgetBytes = long.MaxValue;
+    private const long LegacyBudgetBytes = 64L * 1024 * 1024;
 
     /// <summary>
     ///     The measurement: the same tree, three implementations, the cost of
