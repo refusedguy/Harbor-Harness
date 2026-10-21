@@ -3244,23 +3244,29 @@ carries five shards with 347 s of service time, and it is the pool the
 4. **NativeAOT publish for CLI** — DONE on `fulltree`: 29 MB binary, 18 ms cold start, ~29 MB RSS idle (§4.4). Open: the `minimal` profile.
 5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
 
-## 10. The gate suite: the python gates in `tools/`
+## 10. The gate suite: the gates in `tools/`
 
 The gates are a product too: every pull request pays for them, and a
 gate that costs minutes costs every pull request. This section holds the
 numbers for the gate set, measured the way the workflows run it.
 
 **Method.** A clean checkout of the commit under test, with the git
-history (the gate `TEST-CITE-DRIFT` reads the history, so a tree without
-it is not the tree CI runs). Every gate is run with the arguments its
-workflow passes, from `bench/gates/tools.tsv`, five times, and the
-MINIMUM wall time is kept: the machine is shared and its load is 18-26, so
-the minimum is the estimate that the least foreign work distorts. The peak
-RSS is `/proc/<pid>/status VmHWM`, polled while the child runs, and not
+history (the gates that read the history — `check-doc-cites.py` and
+`check-local-merge-loss.py` — need it, and a tree without it is not the
+tree CI runs). Every gate is run with the arguments its workflow passes,
+from `bench/gates/tools.tsv`, five times, and the MINIMUM wall time is
+kept: the machine is shared and its load is 18-26, so the minimum is the
+estimate that the least foreign work distorts. The peak RSS is
+`/proc/<pid>/status VmHWM`, polled while the child runs, and not
 `getrusage(RUSAGE_CHILDREN).ru_maxrss`: on this host the latter carries a
 value the child never reached, because it inherits the accounting of the
 parent's own high-water mark. The measuring parent is a 2 KB C program
 (`bench/gates/maxrss.c`) for the same reason.
+
+**The set is the set CI runs**, and the gate `harbor-gates
+check-gate-bench-set` says so: it reads the workflow files, the measured
+set and the exclusion list, and fails when they disagree. §10.2 has the
+numbers and the list of what is out.
 
 ### 10.1 `check-doc-cites.py`: the git processes, batched (#2090)
 
@@ -3311,17 +3317,104 @@ file of this tree: of the files the gate uses it for, **0 disagree**.
 
 ## 10.2 The whole set, gate by gate
 
-The same harness, the same tree, the same moment, five runs each, the
-minimum wall time kept. `bench/gates/measure.sh` runs every gate the
-workflows run, with the arguments the workflows pass.
+**The set is the set CI runs.** `bench/gates/tools.tsv` holds one row per
+gate, with the arguments the workflow passes; `bench/gates/excluded.tsv`
+holds the gates CI runs that the set does not measure, each with the reason
+it is out (the .NET SDK, the network, or a self-test-only invocation). The
+two files are checked against the workflow files by the gate
+`harbor-gates check-gate-bench-set`, which fails when a gate a workflow runs
+is in neither file, when a row names a gate no workflow runs, and when a row
+passes arguments CI does not pass. The set below is therefore complete by
+construction, not by memory: **37 gates**, and a gate added to a workflow
+without a row in the table is red.
 
-**The three columns are three questions.**
+**Method.** The tree at `91fdaf6c` (`origin/dev` at `73c0b485` plus this
+branch's three commits), with the git history. Five runs per gate, the
+MINIMUM wall time kept, the machine shared (load 15-17 during the run). The
+exit code is the gate's own: `0` is a clean run, `1` is a run that found
+something, and `2` is "could not run".
 
-* **python** — the gates as they were.
-* **python + the git batching** — the doc-cites gate no longer asks git
-  about every file it read, only about the 30 that hold a citation.
-* **the compiled binary** — the gates that have moved to `harbor-gates`
-  run as the binary, the rest are still python.
+| gate | wall (s) | median (s) | peak RSS | exit |
+|---|---:|---:|---:|---:|
+| `check-doc-cites.py` | **83.054** | 116.863 | 56.8 MB | 0 |
+| `check-local-merge-loss.py` | **23.024** | 36.841 | 39.6 MB | 0 |
+| `check-test-dup.py` | 7.311 | 8.117 | 53.1 MB | 0 |
+| `check-string-switch.py` | 6.151 | 6.454 | 18.1 MB | 0 |
+| `check-result-chains.py` | 5.820 | 7.973 | 18.3 MB | 0 |
+| `check-test-projects.py` | 5.161 | 7.582 | 23.9 MB | 0 |
+| `check-gate-policy.py` | 1.932 | 2.151 | 25.0 MB | 0 |
+| `check-abstractions-contract` | 1.397 | 2.041 | 11.5 MB | 0 |
+| `check-arch-anchors.py` | 1.172 | 1.263 | 17.2 MB | 0 |
+| `guard-triage.py` | 1.123 | 1.224 | 30.7 MB | 0 |
+| `gen-seam-graph` | 1.037 | 1.190 | 81.0 MB | 0 |
+| `check-coverage-registry.py` | 0.905 | 1.174 | 18.1 MB | 1 |
+| `check-md-links.py` | 0.866 | 0.926 | 20.4 MB | 0 |
+| `md-lint.py` | 0.744 | 0.780 | 19.3 MB | 0 |
+| `coverage_report.py` | 0.704 | 0.766 | 19.2 MB | 0 |
+| `check-test-json-reflection.py` | 0.381 | 0.435 | 17.1 MB | 0 |
+| `aot-publish-gate.py` | 0.337 | 0.503 | 16.3 MB | 2 |
+| `check-arch-suite-once.py` | 0.325 | 0.407 | 17.6 MB | 0 |
+| `gen-plugin-inventory.py` | 0.298 | 0.372 | 18.2 MB | 0 |
+| `check-test-packages.py` | 0.253 | 0.287 | 18.8 MB | 1 |
+| `check-tool-schema-pin.py` | 0.253 | 0.332 | 19.5 MB | 0 |
+| `ci-shard-slices.py` | 0.204 | 0.231 | 19.3 MB | 0 |
+| `normalize-mtimes` | 0.171 | 0.210 | 10.5 MB | 0 |
+| `check-analyzer-scope` | 0.061 | 0.144 | 10.3 MB | 0 |
+| `check-xml-doc-coverage` | 0.060 | 0.069 | 9.4 MB | 0 |
+| `check-doc-facts` | 0.049 | 0.065 | 7.4 MB | 0 |
+| `check-no-test-sdk` | 0.024 | 0.028 | 9.4 MB | 0 |
+| `check-public-api-resign` | 0.023 | 0.030 | 7.8 MB | 0 |
+| `check-gate-bench-set` | 0.019 | 0.027 | 8.0 MB | 0 |
+| `aggregate-build-vcpu` | 0.011 | 0.013 | 5.3 MB | 1 |
+| `aggregate-analyzer-cost` | 0.010 | 0.031 | 5.6 MB | 1 |
+| `check-shard-balance` | 0.008 | 0.011 | 5.6 MB | 0 |
+| `pack-validate` | 0.007 | 0.010 | 6.2 MB | 1 |
+| `test-census` | 0.006 | 0.008 | 5.3 MB | 0 |
+| `test-skips` | 0.005 | 0.006 | 5.3 MB | 0 |
+| `test-measurements` | 0.005 | 0.007 | 5.3 MB | 0 |
+| `check-reference-trimmer` | 0.004 | 0.005 | 5.3 MB | 1 |
+| **the whole set** | **142.915** | | | |
+
+**The set costs 142.9 s**, and two gates are 74 % of it: the doc-cites gate
+(83.1 s, 58 %) and the merge-loss gate (23.0 s, 16 %). The other 35 gates
+together cost 36.8 s.
+
+**What the exit codes mean here.** Seven gates read an artifact the build
+produced, and the measuring machine has none of them, so they were measured
+against an EMPTY directory of the right shape: the TRX directory
+(`test-census`, `test-skips`, `test-measurements`, `guard-triage.py`), the
+packed packages (`pack-validate`), the coverage directory
+(`check-coverage-registry.py`, `coverage_report.py`), the measurement
+directory (`aggregate-analyzer-cost`, `aggregate-build-vcpu`), the analyzer's
+two files (`check-reference-trimmer`), the resolved package graph
+(`check-test-packages.py`) and the AOT publish log (`aot-publish-gate.py`).
+Their number is the cost of walking the tree and finding nothing, and the
+parse is NOT in it: for the six gates that report a finding (exit 1) and for
+the one that cannot judge what it was given (exit 2, the AOT publish log)
+the number is a LOWER BOUND. The list is in
+[bench/gates/README.md](../bench/gates/README.md).
+
+**The gates that are NOT in the set** are the ones that need the .NET SDK
+and the ones that need the network; they are listed with their reasons in
+[bench/gates/excluded.tsv](../bench/gates/excluded.tsv). The compile-time
+gates cost what §6 says: a build is 411 s, the compiler 518.8 s and the
+analyzers 673.5 s.
+
+### 10.2.1 What the set cost before: the batching and the port
+
+The measurement above is the set as it is now. The measurement it replaced
+(#2104) was of a smaller set, on older trees, and the two are not
+comparable row by row. It is quoted here because it is the measurement that
+decided the port, and because the numbers say what the port bought.
+
+The three columns are three questions, and each column is a DIFFERENT tree
+and a different moment:
+
+* **python** — the gates as they were, on `origin/dev` at `a763c824`, the
+  tree without the git batching and before any gate moved into the binary;
+* **python + the git batching** — the same set with the batching of #2090;
+* **the compiled binary** — the gates that had moved into `harbor-gates` run
+  as the binary, the rest are still python.
 
 | gate | python | python + batching | compiled | RSS python | RSS compiled |
 |---|---:|---:|---:|---:|---:|
@@ -3358,7 +3451,7 @@ workflows run, with the arguments the workflows pass.
 Three numbers, and they are the whole answer to "what does the language
 buy":
 
-1. **The set costs 619 s**, and 547 s of it is ONE gate. The other 28
+1. **The set cost 619 s**, and 547 s of it was ONE gate. The other 28
    instruments together cost 72 s.
 2. **The git batching takes the set from 619 s to 117 s (5.3x)**, and it
    touches no language at all.
@@ -3376,6 +3469,12 @@ gate were compiled, the set would be bounded by the doc-cites gate's
 python scanning: about 55 s of scanning and 13 s of git. The full port is
 therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
+
+Since then the port landed: twenty-one gates are compiled, and the set is
+measured again above. The 117 s of that table is the set of 28 gates; the
+142.9 s of the table above is the set of 37 gates, and the difference
+between the two numbers is mostly the gates that were not in the old set
+at all.
 
 ## 11. How to reproduce
 
