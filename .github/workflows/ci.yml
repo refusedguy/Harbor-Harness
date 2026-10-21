@@ -51,6 +51,22 @@
 #              stays on x64: the coverage engine has no linux-arm64 build,
 #              so it cannot follow the shards onto the arm64 pool.
 #
+#              MEASURED ON THE TREE WHERE IT HAPPENED. The job was OFF the
+#              pull-request path for one day and then came BACK: the local
+#              squash #1987 (264fbf92) brought an older ci.yml with the
+#              job in it. Measured on the two green pull-request runs of
+#              that tree — 39540570777 and 39538144280 — the job took
+#              269 s and 263 s, of which the collect step was 232 s and
+#              223 s: 4.4 runner-minutes per PR, for a number with no
+#              threshold. Before that squash, 11 consecutive PR runs had
+#              no coverage job at all. The cost is now back to 0 on the
+#              pull-request path, and the nightly lane pays 465…636 s of
+#              job time per merge into dev (median 579 s over the runs
+#              measured) — of which 171…271 s is the build of the tree it
+#              measures: a workflow cannot consume another workflow's
+#              artifacts, and the tree must be built with portable PDBs
+#              or the measurement is empty (#1753).
+#
 #   The nightly lane (.github/workflows/nightly.yml) also carries the
 #   analyzer inventory of the test projects and the build measurement (an
 #   MSBuild binary log -> job summary, with the CPU-utilisation and
@@ -816,14 +832,17 @@ jobs:
       # 68.0 s here, 65.9 s in the `core` shard, 63.3 s in `coverage`).
       # #1923 moved the coverage collection to the nightly lane and this
       # variable switched the gate off here, so the PR lane runs the suite
-      # ONCE now — in the `core` shard.
+      # ONCE now — in the `arch` shard (#1781 gave the suite a shard of its
+      # own). It ran TWICE for a day: the local squash #1987 brought the
+      # `coverage` job back into this file, and the lane paid the second
+      # execution for a report-only number until #1783 took it out again.
       #
       # The count is not a convention: tools/check-arch-suite-once.py reads
       # this file and fails the build when the PR lane runs the suite more
       # than once, or not at all, or when this variable stops switching the
       # gate off for pull_request events.
       #
-      # The ASSEMBLY is still built here — the `core` shard needs the DLL —
+      # The ASSEMBLY is still built here — the `arch` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
       # MSBuild, and an environment variable of the same name IS an MSBuild
       # property (Directory.Build.props only defaults it when it is empty),
@@ -1353,7 +1372,8 @@ jobs:
       # 63.3 s again in the `coverage` job — 197.2 s of CPU for one answer.
       # #1928 switched the build-time gate off on the pull-request lane and
       # #1923 moved the coverage collection to the nightly lane, so the suite
-      # runs ONCE now, in the `core` shard.
+      # runs ONCE now, in the `arch` shard (#1781 gave the suite a shard of
+      # its own).
       #
       # Nothing held that count. The gate is ONE environment variable (see
       # the job's env block above), and a coverage-like job on this lane is
@@ -1385,6 +1405,9 @@ jobs:
       # and then downloaded IN FULL by six jobs — the four test shards,
       # coverage and perf-gate: 10 + 17 + 60 + 9 + 11 + 10 = 117 s of runner
       # time to hand 2,676 MiB to consumers that each need a quarter of it.
+      # (The coverage job was one of those six consumers. It left the
+      # pull-request path with the rest of the lane, #1783, and the combined
+      # artifact it downloaded is gone from the list below.)
       #
       # Two changes, one artefact set:
       #
@@ -1438,12 +1461,14 @@ jobs:
       #     architecture rules), and one root-level path is enough to move
       #     the LCA up to the workspace.
       #
-      # `solution-binaries` is KEPT as the combined artifact the `coverage`
-      # job downloads (core + platform — the two shard lists coverage runs).
-      # It is duplicated on purpose: the coverage job belongs to the
-      # job-graph work, and this change must not depend on that edit landing
-      # first. When coverage switches to the two slices, this upload can be
-      # deleted — it is 135.1 MiB of the 448.1 MiB below.
+      # There is NO combined `solution-binaries` artifact. It existed only
+      # for the `coverage` job, which downloaded one artifact holding the
+      # core + platform shard outputs; the coverage job left the
+      # pull-request path (issue #1783 — it lives in nightly.yml now, and it
+      # builds the tree it measures), so the combined upload went with it.
+      # Measured on run 39434075758: the combined artifact was 160,758,552
+      # bytes = 153.3 MiB of the 448.1 MiB the six artifacts of that run
+      # carried, and the coverage job was the only thing that downloaded it.
       #
       # The upload total is FLAT: 448.1 MiB zipped across six artifacts
       # versus 446.1 MiB in one, and 4,329 files instead of 8,106 (fewer
@@ -2006,7 +2031,8 @@ jobs:
     #
     # What stays on x64, each for a reason that is a fact about the tree:
     # the build job (it produces the linux-x64 natives and the x64
-    # apphost), the coverage job (Microsoft.Testing.Extensions.CodeCoverage
+    # apphost), the coverage job (it lives in nightly.yml now, and
+    # Microsoft.Testing.Extensions.CodeCoverage
     # 18.12.0 ships no linux-arm64 instrumentation engine), the AOT job
     # (it publishes linux-x64) and the perf gate (it measures the machine
     # its baselines were taken on).
@@ -2037,13 +2063,19 @@ jobs:
     #     parallelism 3/3/3, serialised shards 0/0/0): no shard ever sat
     #     behind a sibling. The premise of the split (one queue means one
     #     shard at a time) is false at this load.
-    #   * The x64 queue is the CONTENDED one. It already carries build,
+    #   * The x64 queue is the CONTENDED one. It carried build,
     #     coverage, aot-publish, publish and perf-gate for every run, so a
     #     shard that joins it waits there, and the x64 jobs wait longer too
     #     (median queue wait: aot-publish 130 s in A against 278 s in B and
     #     294 s in C; coverage 96 s in A against 162 s in B and 227 s in C).
     #     The run's wall is then decided by the longest x64 job, not by the
     #     shards.
+    #
+    #     The coverage job is in that list because it was measured there; it
+    #     left the pull-request path with the rest of the lane (#1783), so
+    #     the queue it contended on does not carry it any more. The other
+    #     four are still on x64, and that is what the split is weighed
+    #     against.
     #
     # So all four shards stay on `ubuntu-24.04-arm`. Dispatching a shard
     # into the x64 pool is one `runner:` line, and while the x64 pool
@@ -2144,7 +2176,8 @@ jobs:
             # Without it a suite that discovered nothing exits 0 and this shard
             # reports green — and e2e is the ONLY home of those 479 tests:
             # neither the OS matrix's 6-project list (test-os.yml) nor
-            # coverage's 19 contains any of them, and fail-on-empty: false
+            # the nightly lane's coverage list (20 projects) contains any of
+            # them, and fail-on-empty: false
             # never notices an empty TRX.
             #
             # Harbor.E2E.Framework.Tests is the SIXTH project here, and it is
@@ -2564,6 +2597,9 @@ jobs:
   # The "~10-20 min" that used to be quoted here was an estimate, and it was
   # wrong by 3-6x — it is what made this job look expensive enough to
   # warrant its own scheduling decision.
+  # The coverage figure in that decomposition is NOT a pull-request cost any
+  # more: the coverage job left the pull-request path (#1783) and runs in
+  # nightly.yml, on merges into dev/master and on the nightly schedule.
   #
   # ON WALL-CLOCK TIME
   # -----------------
