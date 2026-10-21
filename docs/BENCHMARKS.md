@@ -2867,6 +2867,42 @@ Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-H
 
 **THE MEASUREMENT WAS EMPTY BEFORE THIS.** Run 39508517419 uploaded twenty cobertura files and every one of them was `<coverage line-rate="1"><packages /></coverage>`; every suite printed "Total - Line: N/A" and the summary printed "No cobertura files produced". The cause: Release sets `DebugType=none` (`Directory.Build.props`), so the build carries no PDB, and the coverage engine on Linux instruments the assemblies STATICALLY — the instrumentation maps IL back to source lines through the portable PDB next to each DLL. With no PDB there is nothing to instrument, and an empty report reads as "100 % covered" to anything that parses `line-rate`. The lane now builds with `-p:DebugType=portable -p:DebugSymbols=true`.
 
+### 6.9 The pull-request lane, measured (#1783) ✅ measured in CI
+
+Issue #1803's epic asks for one number: **what does a pull request cost today?** This section answers it from the job API of the green runs, and it answers the sub-question #1783 asks: what did the `coverage` job cost, and what did it produce?
+
+**WHAT THE LANE IS.** Sixteen jobs: `changes`, `public-api freeze`, `test/sample package set`, `no VSTest SDK in the tree`, `analyzer scope`, `unused references (ReferenceTrimmer)`, `build`, `pack`, five `test` shards (`core`, `arch`, `platform`, `ui`, `e2e`), `aot-publish`, `publish`, `perf-gate` and the `gate` that reads them. The OS matrix is not among them: it is its own workflow since #1787, and it runs on merges, on a schedule and on demand — not on every pull request. CodeQL is not among them either since #1796.
+
+**THE LANE, GREEN PULL-REQUEST RUNS.** `runner-min` is the sum of every job's wall; `wall` is the first job's start to the last job's end; `max wait` is the longest a job sat in the queue after `build` finished.
+
+| run | wall | runner-min | `build` | `max wait` after `build` |
+|---|---:|---:|---:|---:|
+| [39543869492](https://github.com/refusedguy/Harbor-Harness/actions/runs/39543869492) (dev push, the lane as it stands) | 675 s | 25.6 (21.0 without the two red jobs) | 429 s | 5 s |
+| 12 green pull-request runs, 2026-10-21 00:50-02:00 | 402-964 s (median 592 s) | 17.4-24.1 (median 20.8) | 257-421 s | 5-382 s |
+
+The spread between the two rows of the same table is the runner's own speed, not the lane's shape: the same job costs 257 s in one run and 429 s in another. That is why the numbers a change is judged by are the ones a job's OWN steps carry (the compile, the collection, the download), and not the lane's total.
+
+**THE `coverage` JOB, MEASURED.** It was on the lane until the workflow rebuild (`8d82cac1`), and the two green runs that still carried it are the measurement:
+
+| run | the job's wall | of which the `Collect coverage` step | the artifact it produced |
+|---|---:|---:|---:|
+| [39540570777](https://github.com/refusedguy/Harbor-Harness/actions/runs/39540570777) | **269 s** | 232 s | **6 143 bytes** |
+| [39538144280](https://github.com/refusedguy/Harbor-Harness/actions/runs/39538144280) | **263 s** | 223 s | **6 143 bytes** |
+
+That is 4.4-4.5 runner-minutes per pull request, the second-longest job of the lane after `build`, for a report that gated nothing.
+
+**WHAT IT PRODUCED.** Nothing. Every one of the twenty suites in that job printed `Total - Line: N/A`, and the artifact is 6 143 bytes — twenty empty `<coverage line-rate="1"><packages /></coverage>` files. The cause is the one §6.8 names: the lane runs the binaries the build job produced, and the Release build carries no PDB, so the engine has nothing to instrument.
+
+**WHAT IT DUPLICATED.** All twenty of its projects are in the `core`, `arch` and `platform` shard lists — the job was a second execution of work the shards did anyway. Measured against the recorded per-project costs ([tools/shard-costs.json](../tools/shard-costs.json), run 39504714459, 2026-10-20), those twenty projects are **153.1 s of the suite's 231.5 s** — **66 % of the measured test time** — and the architecture suite among them is the single most expensive project in the tree (91 s).
+
+**AND IT RAN THE ARCHITECTURE SUITE TWICE.** `tools/check-arch-suite-once.py` says so on the tree as it stood: *"the pull-request lane runs `Harbor.Architecture.Tests` 2 times — it must run exactly once: the `arch` shard's project list; the `coverage` job's command"*. With the coverage job off the lane the same gate says *"ok: 5 shards, the architecture suite runs once — in the `arch` shard"*. #1920 closed that count as done; the count was held by a coverage-like job being on the lane, and a squash-merge (`264fbf92`, the squash of #1987) brought that job back.
+
+**THE COMBINED ARTIFACT.** The job downloaded the whole solution in one artifact: 148.5 MiB (155 680 752 bytes), 16-17 s of the build job's own critical path to upload, 4 s to download. The shards download their own slices (`solution-binaries-core` 79 304 375 B, `-platform` 63 185 462 B, `-ui` 91 842 616 B, `-e2e` 91 397 967 B, `-arch` 16 212 481 B), so the combined slice was 148.5 MiB of redundancy.
+
+**THE LANE AGAINST THE EPIC'S BASELINE.** The epic's baseline is run 39192015051 (2026-10-19): **45.3 runner-minutes, 19.5 min wall**, of which `test-os` 19.5, `build` 8.7, the test shards 8.9, `coverage` 3.7, `aot` 3.4, `perf-gate` 0.8, `changes` 0.4, and **19.3 of the 45.3 runner-minutes (43 %) duplicated work**. Today's lane is **17.4-25.6 runner-minutes, 402-964 s wall**: the two largest terms of the baseline are gone (the OS matrix left the pull-request path in #1787, CodeQL in #1796), and the target of the epic (~22 runner-min, ~9.7 min wall) is met on the runner-minutes.
+
+**WHAT THE LANE IS SPENT ON NOW.** The `build` job (257-429 s) is the longest, and it is the whole tree compiled once: §6.7 measured that the compile is throughput-bound on the runner's four cores and that more MSBuild nodes do not buy more, so the lever is a second runner, not a second node. The `arch` shard (91 s of measured test time, 112-142 s of wall) is the second. The other four shards are 40-77 s each. The wall is NOT the sum of the shards: the queue wait after `build` is 5-382 s across the twelve green runs, and it is what decides the wall in the slow ones.
+
 ## 7. Comparison with previous (inflated) numbers
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that
