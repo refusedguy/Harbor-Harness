@@ -170,6 +170,55 @@ the reasons are in the table above: either the family fires in the product
 tree, or it is the base layer, or its cost is below the noise of the
 measurement.
 
+#### What the narrowing bought
+
+**The analyzer work of the whole build.** The compiler's report on the
+narrowed tree, against the same report on the all-on tree, normalized by the
+analyzer families that did not move (the runner that measured the second one
+was between 1.3x and 1.4x slower):
+
+| | all-on | narrowed | |
+|---|---|---|---|
+| `SonarAnalyzer.CSharp` | 204.1 s | 118–127 s | **−77…−86 s** |
+| `DependencyInjection.Lifetime.Analyzers` | 75.8 s | 34–37 s | **−39…−42 s** |
+| `AsyncFixer` | 33.9 s | 6.7–7.1 s | **−27 s** |
+| the three together | 313.9 s | 160–171 s | **−143…−154 s** |
+| **every analyzer in the build** | **594.4 s** | **459–491 s** | **−103…−135 s (−17…−23 %)** |
+
+**The wall time.** The `build` job's `Compile` step, same job, same image,
+same day:
+
+| tree | run | compile |
+|------|-----|---------|
+| **narrowed (this change)** | 39518815858 | **210 525 ms** |
+| all-on | 39515287115 (dev@9b0eebd4) | 415 007 ms |
+| all-on | 39511197855 (dev@dec54e5e) | 275 628 ms |
+| all-on | 39508517419 (dev@10c4bf6a) | 261 984 ms |
+| all-on | 39508413079 (dev@cc79bc07) | 409 069 ms |
+| all-on | 39504714459 (dev@b9f3c83c) | 417 037 ms |
+| all-on | 39500486942 (dev@d56aef9f) | 320 091 ms |
+
+The all-on compile ranges over **262–417 s** on this runner — a 1.6x spread
+for the same job — and the issue's own measurement (run 39192015051,
+2026-10-19) was 372.5 s. The narrowed compile is **below every one of
+them**.
+
+**What the paired arms could and could not resolve, said plainly.** The
+harness builds the same tree twice in one job — the baseline and its own arm
+— so the runner's speed cancels out of the difference. That was not enough
+on its own, and the control arms said so: with the compiler server left
+running between the two builds, the null arms (the baseline against itself)
+came out 55.6 s, 63.8 s and 65.8 s apart, with the compiler's own CPU
+falling from 455/522/585 s to 256/300/298 s between the halves of the same
+job — the shared compiler keeps the analyzer assemblies loaded and
+JIT-warmed. Shutting it down (`dotnet build-server shutdown`) brought the
+null arms to −16.9 s, −7.9 s and +1.6 s, but the second build in a job is
+still systematically slower (the compiler's own CPU is 8–24 % higher in it),
+and the spread of the arm deltas is ±20 s. **A paired wall-clock
+measurement on this runner cannot resolve an effect of this size.** The
+compiler's own analyzer report can, and it is what the numbers above are
+read from.
+
 #### What the narrowing costs, stated plainly
 
 **Narrowing Sonar to `tests/` removes Sonar's 447 preventive rules from the
