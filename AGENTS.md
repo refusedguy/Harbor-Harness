@@ -95,7 +95,8 @@ src/Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ — daemon/remote IPC
 src/Harbor.Transport.Remote/, Harbor.Telemetry.{Core,Otlp}/, Harbor.CodeGen/, Harbor.Logging/,
 src/Harbor.Extensions/, Harbor.Diagnostics.Abstractions/
 src/Harbor.Arch.Analyzers/           — the repository's OWN architecture rules as build-time analyzers
-                                       (HARCH001 dynamic code, HARCH002 namespace ownership); the compiler
+                                       (HARCH001 dynamic code, HARCH002 namespace ownership,
+                                       HARCH005/HARCH006 HTTP-client creation); the compiler
                                        runs them over src/ and apps/; procedure: docs/ANALYZERS_AUTHORING.md
 
 apps/Harbor.App.Cli/                  — CLI entry point, slash commands, REPL, HostBuilder DI root
@@ -124,7 +125,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 82 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 83 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
