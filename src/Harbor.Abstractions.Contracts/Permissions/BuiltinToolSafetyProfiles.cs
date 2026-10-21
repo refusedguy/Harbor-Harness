@@ -56,6 +56,12 @@ public static class BuiltinToolSafetyProfiles
         new("webfetch", ToolSafetyProfile.Opaque) { Category = ToolCategory.Network },
         new("task", ToolSafetyProfile.Opaque) { Category = ToolCategory.Exec },
         new("skill", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
+        // #1732: the runtime catalog. It takes no path and no command — it
+        // answers from the registries that are already in memory — so it is
+        // Opaque. It is Read because it only reads: the read-only agents may
+        // ask what the runtime has, and the write-category deny the read-only
+        // agents carry cannot touch it.
+        new("harbor_inspect", ToolSafetyProfile.Opaque) { Category = ToolCategory.Read },
         new("mcp_prompt", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         new("read_mcp_resource", ToolSafetyProfile.Opaque) { Category = ToolCategory.Mcp },
         // Peer supervision (#793). The system-prompt recipe used to string-match
@@ -106,6 +112,22 @@ public static class BuiltinToolSafetyProfiles
         // so a role here would name a capability the recipe cannot describe.
         new("session_broadcast", ToolSafetyProfile.Opaque),
         new("session_inbox", ToolSafetyProfile.Opaque),
+
+        // #1738: the agent-facing plugin management tool. Opaque, and the
+        // reason is in the tool's own documentation: its arguments are an
+        // action name, a plugin FILE NAME and — for an install — the path of
+        // a reviewed source that is READ. Permission rules match it against
+        // "*", so no glob pattern can match a path and none can be tricked
+        // into authorising one; the traversal the path guard protects
+        // against is closed by the inventory, which resolves a plugin only by
+        // its plain file name inside the two plugin roots and never writes
+        // outside them.
+        //
+        // It carries NO category on purpose, like the two session-IPC tools
+        // above: a category would make a class rule ("write" * Ask) fire
+        // against it and change the verdict for a tool whose own gate already
+        // asks about every change.
+        new("plugin_manager", ToolSafetyProfile.Opaque),
     ];
 
     /// <summary>

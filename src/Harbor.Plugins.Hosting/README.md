@@ -33,6 +33,27 @@ Infrastructure — plugin pipeline layer. Depends on all four lower plugin layer
 as data at discovery, and a manifest the host cannot read, or one that asks for
 a Harbor newer than the running one, is refused BEFORE the plugin is compiled.
 
+## The plugin life: define, run, stop, update (#1737)
+
+A plugin has a **definition** and a **run**, and the host keeps the two apart:
+
+| Operation | What it does |
+|---|---|
+| define | the host learns a plugin: the immutable package it met — source, version, manifest. |
+| run | the definition is started: the plugin is initialized and registers its contributions. |
+| stop | the live run is stopped: what it registered is taken back and the plugin is shut down. The DEFINITION is kept. |
+| update | the running version is REPLACED: the old run is stopped first, then the new one starts. |
+| undefine | the definition is forgotten. Refused while a run is live. |
+
+`PluginHost.Definitions` lists the definitions; `PluginHost.Inventory` is the
+machine-readable composition, and its `phase` says where each plugin is
+(`pending`, `active`, `failed`, or `stopped` — the one a load-only document
+cannot have).
+
+The load is idempotent: a plugin whose source did not change is left alone
+(the live run IS that plugin), and a plugin whose source changed is an update.
+A lifecycle gate serializes the operations, so an update cannot race a stop.
+
 ## Usage
 
 ```csharp

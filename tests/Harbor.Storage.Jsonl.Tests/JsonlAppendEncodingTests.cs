@@ -81,8 +81,13 @@ public class JsonlAppendEncodingTests
         }
     }
 
+    /// <summary>
+    ///     The edit is APPENDED (#1752), so the file holds both versions of the
+    ///     message — and the encoding of the appended one is the same LF-only
+    ///     shape the append path writes.
+    /// </summary>
     [Test]
-    public async Task UpdateMessageAsync_KeepsLfOnlyEncodingAndSingleEntry()
+    public async Task UpdateMessageAsync_KeepsLfOnlyEncodingAndAppendsTheVersion()
     {
         var store = CreateStore(out string tempDir);
         try
@@ -97,18 +102,24 @@ public class JsonlAppendEncodingTests
             await Assert.That(raw.Contains((byte)'\r')).IsFalse();
             string text = Encoding.UTF8.GetString(raw);
             string[] lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            await Assert.That(lines.Length).IsEqualTo(2);
+
+            // The header, the version that was there, and the version that
+            // replaced it — the record is immutable, so the earlier one stays.
+            await Assert.That(lines.Length).IsEqualTo(3);
             int idHits = 0;
             foreach (string line in lines)
             {
                 if (line.Contains("\"id\":\"m1\"", StringComparison.Ordinal))
                     idHits++;
             }
-            await Assert.That(idHits).IsEqualTo(1);
-            await Assert.That(lines[1].Contains("v2")).IsTrue();
+            await Assert.That(idHits).IsEqualTo(2);
+            await Assert.That(lines[1].Contains("v1")).IsTrue();
+            await Assert.That(lines[2].Contains("v2")).IsTrue();
 
+            // And the surface shows the current version — one message, not two.
             var read = await store.GetMessagesAsync(session.Id);
             await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)read.Value[0]).Content).IsEqualTo("v2");
         }
         finally

@@ -138,11 +138,14 @@ public sealed class EnforcerIntegrityTests
             "#450: declared but binds no type — the assembly's contracts are BCL-only, so the edge produces no IL."),
         new("Harbor.Terminal.Abstractions", "Harbor.Ui.Framework",
             "#450/#542: declared but binds no type — Harbor.Ui.Framework is an empty assembly (see issue #542)."),
-        new("Harbor.Plugins.Hosting", "Harbor.Plugins.Storage",
-            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
+        // #1738: the (Hosting -> Storage) exemption is GONE. It was a #450
+        // dead edge until the plugin INVENTORY started reading the manifest
+        // that sits next to a plugin source, which bound a real type in IL.
+        // DeclaredButUnboundProjectReferences_AreReallyUnbound fails the
+        // moment an exempt edge turns out to be live, so the exemption was
+        // removed and the edge justified in the matrix instead (the
+        // Harbor.Plugins.Hosting row in FullLayerMatrixTests.Matrix).
         new("Harbor.Plugins.Hosting", "Harbor.Plugins.Compilation",
-            "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
-        new("Harbor.Plugins.Hosting", "Harbor.Plugins.Instantiation",
             "#450/#541: pre-existing vestigial edge — Hosting composes the family via Plugins.Abstractions only. Remove the reference; see issue #541."),
         // #1722: the (Hosting -> Registration) exemption is GONE. It was a #450
         // dead edge until the live-composition inventory started reading the ONE
@@ -152,6 +155,13 @@ public sealed class EnforcerIntegrityTests
         // removed and the edge justified in the matrix instead (the
         // Harbor.Plugins.Hosting row in FullLayerMatrixTests.Matrix) — same
         // shape as #665 for Notifications and #663 for Sessions.
+        //
+        // #1732: the (Hosting -> Instantiation) exemption is GONE for the same
+        // reason: PluginRuntimeVersions read the Harbor version the
+        // instantiation layer hands every plugin context, and that bound a real
+        // type in IL. The exemption was removed and the edge justified in the
+        // matrix instead (the Harbor.Plugins.Hosting row in
+        // FullLayerMatrixTests.Matrix).
         new("Harbor.Hosting", "Harbor.Tui.CellForge.Engine",
             "#450/#546: pre-existing vestigial edge — DI wires the CellForge renderer, not the engine assembly directly. Remove the reference; see issue #546."),
         new("Harbor.Desktop.Shared", "Harbor.Ui.Framework",

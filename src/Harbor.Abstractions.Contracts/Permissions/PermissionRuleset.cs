@@ -166,6 +166,12 @@ public sealed record PermissionRuleset
         new("patch", "*", PermissionAction.Ask),
         new("task", "*", PermissionAction.Allow),
         new("skill", "*", PermissionAction.Allow),
+        // #1732: the runtime catalog is read-only, so it is allowed outright.
+        // The other agents allow it through the Read class their rulesets
+        // already name — `new("read", "*", Allow)` matches every tool the Read
+        // category holds, this one included — so this row is the explicit
+        // statement for the canonical ruleset rather than the only allowance.
+        new("harbor_inspect", "*", PermissionAction.Allow),
         new("session_read", "*", PermissionAction.Allow),
         new("session_steer", "*", PermissionAction.Ask),
         // #1759: asking the human a question is not an action on the machine.
@@ -175,7 +181,16 @@ public sealed record PermissionRuleset
         // itself.
         new("ask_user_question", "*", PermissionAction.Allow),
         new("session_broadcast", "*", PermissionAction.Allow),
-        new("session_inbox", "*", PermissionAction.Allow)
+        new("session_inbox", "*", PermissionAction.Allow),
+        // #1738: the agent-facing plugin management tool. ALLOW here does NOT
+        // mean "the agent may install plugins on its own" — the tool asks the
+        // user about every change it proposes, and the answer covers that one
+        // call only. The row exists so the DISPATCHER does not ask a second
+        // time about the same call: the tool's own question is the one that
+        // names the file, the scope and the effect. A user who does not want
+        // an agent touching plugins writes new("plugin_manager", "*", Deny)
+        // and the tool never starts.
+        new("plugin_manager", "*", PermissionAction.Allow)
     });
 
     /// <summary>

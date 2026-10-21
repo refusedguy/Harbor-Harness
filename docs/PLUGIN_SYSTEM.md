@@ -189,6 +189,50 @@ await pluginHost.LoadAllAsync(loadHost, ct);
 Both directories are scanned on every Harbor startup. Files in either directory are
 compiled into separate in-memory assemblies — they do NOT share types or namespaces.
 
+## Managing plugins from the agent (#1738)
+
+Harbor had no agent-facing plugin management until #1738: `harbor plugin
+list|install|uninstall` is a CLI verb, and the `/plugins` panel is a UI surface.
+The agent could neither see what was installed nor propose a change.
+
+The `plugin_manager` tool closes that gap, and it is the first Harbor tool whose
+safety is provided by POLICY rather than by trust:
+
+- **It reads the inventory.** `action: "list"` reports every installed plugin
+  in both scopes, with the facts the plugin declares in its manifest (version,
+  extension axes, the Harbor floor it needs) — read as DATA, without compiling
+  the plugin.
+- **It proposes a change.** `install`, `uninstall`, `enable` and `disable` build
+  a concrete proposal: which file, which scope, what will happen to it.
+- **The change happens only after the user approves it.** The tool asks through
+  the same approval channel the permission service uses (`ToolContext.Ask`),
+  and a denial, a cancellation or an unavailable approval channel ends the call
+  with nothing changed. The tool fails closed, exactly like the permission
+  service does.
+- **An approval covers that one call.** The answer is never written back to a
+  ruleset, so the session's permission mode is unchanged by it. A user who does
+  not want an agent touching plugins writes `new("plugin_manager", "*", Deny)`
+  in their config and the tool never starts; the read-only agents deny it
+  outright.
+- **Everything is logged.** The proposal, the answer and the outcome are three
+  separate log lines, so "the agent tried to install a plugin" is a fact in the
+  log and not a fact in the transcript.
+
+**One inventory, two consumers.** The tool and the `/plugins` panel read the
+SAME `IPluginInventory` — one implementation, so the panel and the agent cannot
+disagree about what is installed. The port lives in the Domain
+(`Harbor.Abstractions.Plugins.IPluginInventory`) because the tool
+(`Harbor.Tools.Builtin`) may not bind the plugin layers; the implementation
+lives in `Harbor.Plugins.Storage`, the layer that knows where plugin files come
+from.
+
+**What "install" means.** CS plugins are served by the separate
+`harbor-plugins-host` process, so installing a plugin means copying a reviewed
+`.cs` file (and the manifest it ships next to it) into a plugin scope. The host
+picks it up on its next start; nothing is compiled or registered in the CLI
+process. `enable` / `disable` rename the file to and from `<Name>.cs.disabled`,
+which is the switch the loader's `*.cs` glob reads.
+
 ## What APIs are available
 
 The compiled plugin can reference any type already loaded in the host's AppDomain at
@@ -681,6 +725,58 @@ and it Just Works. The layered architecture is purely a contributor concern: it 
 the runtime testable in isolation and lets you swap any layer for an alternative
 implementation (network storage, scripted engine, DI-aware instantiation, etc.).
 
+## The plugin life: define, run, stop, update (#1737)
+
+A plugin has a **definition** and a **run**, and the host keeps the two apart.
+
+| Operation | What it does |
+|---|---|
+| **define** | the host learns a plugin: the immutable package it met — its source, its version, its manifest. A definition outlives the run. |
+| **run** | the definition is started: the plugin is initialized and its contributions are registered. |
+| **stop** | the live run is stopped: what it registered is taken back and the plugin is shut down. The **definition is kept**, so the plugin can be run again. |
+| **update** | the running version is **replaced**: the old run is stopped first, then the new one starts. The two never hold the same name at the same time. |
+| **undefine** | the definition is forgotten. Refused while a run is live. |
+
+Three rules fall out of that model, and each of them answers a question the
+plugin runtime used to leave open:
+
+1. **A failed run never lingers.** If a door refuses a registration, whatever
+   landed before the refusal is taken back — a half-wired plugin does not
+   become a dead tool in the registry. The rollback needs a host that can undo
+   (`IReversiblePluginLoadHost`); a host that cannot says so, in the failure
+   text, instead of pretending.
+2. **A busy name is refused, not collided.** Running a plugin whose name is
+   already running fails with the way out: stop it first.
+3. **An incompatible plugin is refused at start**, and the refusal is visible:
+   the [inventory](#the-plugin-inventory-1722) carries it as a phase and a
+   reason (#1721 for the in-code floor, #1739 for the manifest's floor).
+
+### The states
+
+The inventory's `phase` is where a plugin is, and the lifecycle adds the one
+state a load-only document cannot have: `stopped` — the plugin was running and
+has been stopped. Its registrations are gone; its definition is not.
+
+| Phase | Meaning |
+|---|---|
+| `pending` | loaded, but waiting for a declared dependency (#1733) |
+| `active` | a run is live: initialized, and its contributions are registered |
+| `failed` | the host refused it, or it could not be brought up |
+| `stopped` | it was running and has been stopped; the definition is kept |
+
+### What it means for the route
+
+The out-of-process route carries the tool axis, so a tool is the one
+registration that can be taken back on that route; the other axes were refused
+at registration time, so there is nothing of theirs to take back. The undo
+methods say so with the reason the route declares, rather than answering
+`Success` for something that never happened.
+
+**What has NOT changed:** the CLI still never compiles plugins, and the
+`harbor-plugins-host` process is still the one that owns the plugin runtime.
+In-process reload of a CS plugin is still impossible under AOT (#626) — the
+Roslyn compiler needs a JIT — and this change does not promise it.
+
 ## Caching
 
 Compiled assemblies are written to `~/.harbor/plugins/cache/{sha256}.dll` keyed by the
@@ -785,6 +881,9 @@ strong naming, etc.).
 - [ ] v0.5 — Remove the `CsPluginLoader` facade; `PluginHostBuilder` becomes the only
       entry point.
 - [ ] v0.5 — `harbor plugins` slash-command: list loaded plugins, show source paths.
+- [x] Agent-facing plugin management with a per-change approval gate (#1738): the
+      `plugin_manager` tool reads the inventory and proposes a change; the change
+      happens only after the user approves that call.
 - [ ] v0.5 — `harbor plugins gc`: clean orphaned cache files.
 - [ ] v0.6 — `ShutdownAsync` lifecycle: call on Harbor exit in reverse-load order.
 - [ ] v0.6 — Hot-reload: watch `~/.harbor/plugins/` for changes and reload on the fly.

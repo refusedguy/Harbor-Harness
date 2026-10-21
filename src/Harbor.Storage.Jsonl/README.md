@@ -60,15 +60,18 @@ The keyless tier also needs the credential values the process holds. The provide
 
 ## Record order
 
-**The order of the records in the file is the order they were inserted in, and an update does not change it (#1798).**
+**The file is an append-only log (#1752): every record is written once and never rewritten. The order of the records is the order they were written in, and the SURFACE — what the model and the UI see — is a fold of that log.**
 
 - `AppendMessageAsync` appends one line at the end.
-- `UpdateMessageAsync` REPLACES the record where it stands — the fresh record takes the line the stale one held, and every other record keeps its own. A stale duplicate of the same id (a file written before the duplicate-drop, or an append that raced the edit) is dropped, so the file holds one record per id.
-- `DeleteMessagesAfterAsync` (the rewind) anchors on a record's POSITION in the file and drops every message record after it.
+- `UpdateMessageAsync` appends a NEW VERSION of the message. The record written before stays where it was, and the surface shows the newest version. The message keeps its place in the conversation: a message's place is where it was written FIRST, so an edit changes what was said, not when it was said.
+- `RewindMessagesAfterAsync` (the rewind) appends a `{"type":"rewind","id":...,"anchorId":...,"at":...,"removed":N}` record. The messages after the anchor leave the SURFACE — the records stay in the file.
+- `PurgeMessagesAfterAsync` (the prune) is the ONE verb that removes records: it rewrites the file without the tail after the anchor. It is never automatic — a caller has to ask for it by name.
 
-The invariant is what makes the rewind symmetric: a rewind to a message that was edited removes the messages that follow it. It was broken by a rewrite that dropped the stale record and appended the fresh one at the end of the file — the edited message jumped to the tail of the history, and a rewind anchored on it removed nothing, because the anchor was the last record in the file.
+The read path is separate from the file order: the reader keeps the arrival order and sorts by `CreatedAt` only when the file is not append-linear in time. The fold of the log (`SessionLogFold`, in `Harbor.Abstractions.Contracts`) applies the same rule, so the reader and the fold cannot disagree about where a message sits.
 
-The read path is separate from the file order: the reader keeps the arrival order and sorts by `CreatedAt` only when the file is not append-linear in time. So a moved record could still read back in the right order while the FILE said otherwise — the guard for this invariant is about the file (`tests/Harbor.Storage.Jsonl.Tests/JsonlSessionStoreUpdatePositionTests.cs`).
+Read the two views apart: `GetMessagesAsync` gives the surface (the current state of the conversation), `GetSessionLogAsync` gives the whole log (every version, every rewind event). A message that a rewind removed is SHADOWED — present in the log, not gone from it.
+
+A legacy file — one written before the rewind record existed — cannot contain a `{"type":"rewind"}` record, so the reader needs no format bump to understand one, and a legacy file reads exactly as it always did.
 
 ## Feedback records
 

@@ -72,6 +72,13 @@ public enum PluginInventoryPhase
     ///     The reason is in <see cref="PluginInventoryEntry.FailureReason" />.
     /// </summary>
     Failed,
+
+    /// <summary>
+    ///     The plugin WAS running and has been stopped (#1737): what it
+    ///     registered was taken back and the plugin was shut down. Its
+    ///     definition is kept, so the plugin can be run again.
+    /// </summary>
+    Stopped,
 }
 
 /// <summary>

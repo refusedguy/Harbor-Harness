@@ -32,6 +32,7 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(SessionHeaderEntry))]
 [JsonSerializable(typeof(MessageEntry))]
 [JsonSerializable(typeof(CheckpointEntry))]
+[JsonSerializable(typeof(SessionRewindEntry))]
 [JsonSerializable(typeof(MessageRatingEntry))]
 [JsonSerializable(typeof(SessionRemarkEntry))]
 [JsonSerializable(typeof(SessionCompactionEntry))]
@@ -40,6 +41,11 @@ namespace Harbor.Storage.Jsonl;
 [JsonSerializable(typeof(SessionMetadata))]
 [JsonSerializable(typeof(ExportEnvelope))]
 [JsonSerializable(typeof(ToolResultEntry))]
+// #1763: ToolResultEntry.DeferredContexts references DeferredToolContext;
+// source-gen walks the member graph, but registering it explicitly keeps the
+// intent visible and fails loudly at compile time if the member is ever renamed.
+[JsonSerializable(typeof(DeferredToolContext))]
+[JsonSerializable(typeof(DeferredContextMetadata))]
 [JsonSerializable(typeof(TextPartPayload))]
 [JsonSerializable(typeof(ThinkingPartPayload))]
 [JsonSerializable(typeof(ToolCallPartPayload))]

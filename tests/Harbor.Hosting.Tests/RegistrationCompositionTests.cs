@@ -40,16 +40,18 @@ public class RegistrationCompositionTests
     // ── Full preset (CLI default) ────────────────────────────────────────
 
     [Test]
-    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyOneBuiltinTools()
+    public async Task AddHarbor_Full14_RegistersExactlyTheTwentyThreeBuiltinTools()
     {
         using var sp = CompositionFixtures.Compose(new HarborComposeOptions { HarborDir = TempHarborDir(), DefaultStorageBackend = "memory" });
 
         var names = ToolNames(sp);
         // Full preset: 10 standard (read/write/edit/bash/glob/grep/ls/patch/notebook/tree)
-        // + skill + lsp + 6 full-only (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
+        // + skill + lsp + harbor_inspect (the read-only runtime catalog) + 6 full-only
+        // (task/webfetch/ripgrep/mcp/read_mcp_resource/mcp_prompt)
         // + session_read/session_steer (registered when a session store is composed)
+        // + plugin_manager (registered when the plugin runtime is compiled in — #1738)
         // + ask_user_question (#1759, the model-facing question channel)
-        // = 21.
+        // = 23.
         //
         // #557: this assertion used to be `IsGreaterThanOrEqualTo(expected.Length)`
         // against an 18-name manifest that had already rotted — `session_read` and
@@ -63,6 +65,8 @@ public class RegistrationCompositionTests
             "task", "webfetch", "session_read", "session_steer",
             "patch", "notebook", "ripgrep", "tree", "lsp",
             "mcp", "read_mcp_resource", "mcp_prompt",
+            "harbor_inspect",
+            "plugin_manager",
             "ask_user_question",
         };
 
@@ -87,14 +91,14 @@ public class RegistrationCompositionTests
         });
 
         var names = ToolNames(sp);
-        // 10 classic tools + lsp + skill.
-        await Assert.That(names.Count).IsEqualTo(12);
-        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill" })
+        // 10 classic tools + lsp + skill + harbor_inspect.
+        await Assert.That(names.Count).IsEqualTo(13);
+        foreach (string safe in new[] { "read", "write", "edit", "bash", "glob", "grep", "ls", "patch", "notebook", "tree", "lsp", "skill", "harbor_inspect" })
         {
             await Assert.That(names).Contains(safe);
         }
 
-        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "ask_user_question" })
+        foreach (string fullOnly in new[] { "task", "webfetch", "ripgrep", "mcp", "read_mcp_resource", "mcp_prompt", "plugin_manager", "ask_user_question" })
         {
             await Assert.That(names).DoesNotContain(fullOnly);
         }

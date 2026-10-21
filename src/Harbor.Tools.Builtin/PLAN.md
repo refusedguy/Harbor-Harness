@@ -8,7 +8,7 @@
 - [x] All implement `ITool` from `Harbor.Abstractions`
 - [x] S2 consolidation: 14 leaf tool projects merged into this facade assembly (`FacadeMarker.cs`)
 - [x] Sub-agent validation via `TaskTool` (code / plan / explore) — execution NOT implemented yet, calls fail explicitly (`Tools/Task/TaskTool.cs:11-15`)
-- [x] MCP trio: `McpRegistry` + `McpProcessClient` + `McpToolAdapter` under `Tools/Mcp/`, surfaced as the single `mcp` tool; servers from `~/.harbor/mcp.json` / `.harbor/mcp.json` / `HARBOR_MCP_CONFIG` (`Tools/Mcp/`, `src/Harbor.Hosting/Modules/ToolsCatalog.cs:60-72`)
+- [x] MCP trio: `McpRegistry` + `McpProcessClient` + `McpToolAdapter` under `Tools/Mcp/`, surfaced as the single `mcp` tool; servers from `~/.harbor/mcp.json` / `.harbor/mcp.json` / `HARBOR_MCP_CONFIG` (`Tools/Mcp/`, `src/Harbor.Hosting/Modules/ToolsCatalog.cs:61-73`)
 - [x] `webfetch` tool (HTTP GET → markdown, safe-fetch guards)
 - [x] `patch` tool (unified diff apply)
 - [x] `notebook` scratchpad tool (session-scoped notes)
@@ -22,7 +22,7 @@
 - [x] Bash with timeout, working dir, env vars, stdout/stderr capture, output cap
 - [x] Edit with atomic write (temp file + rename)
 - [x] Read with line numbers, offset/limit
-- [x] Host wiring via `Harbor.Hosting` `ToolsCatalog.CreateToolRegistry` — Full14 (14 tools) or 10-tool subset, then `registry.Freeze()` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:74-108`)
+- [x] Host wiring via `Harbor.Hosting` `ToolsCatalog.CreateToolRegistry` — Full14 (14 tools) or 10-tool subset, then `registry.Freeze()` (`src/Harbor.Hosting/Modules/ToolsCatalog.cs:75-109`)
 
 ## TODO
 

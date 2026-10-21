@@ -50,6 +50,10 @@ static Harbor.Abstractions.Models.ServiceScope.TryCreate(string? value) -> CShar
 static Harbor.Abstractions.Models.ServiceScope.implicit operator string!(Harbor.Abstractions.Models.ServiceScope! scope) -> string!
 static Harbor.Abstractions.Models.ServiceScope.operator !=(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
 static Harbor.Abstractions.Models.ServiceScope.operator ==(Harbor.Abstractions.Models.ServiceScope? left, Harbor.Abstractions.Models.ServiceScope? right) -> bool
+Harbor.Abstractions.Events.ProviderErrorKind.ContextOverflow = 8 -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.ClassifyResponse(System.Net.HttpStatusCode status, string? errorBody) -> Harbor.Abstractions.Events.ProviderErrorKind
+static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflow(Harbor.Abstractions.Events.ProviderErrorKind kind) -> bool
+static Harbor.Abstractions.Events.ProviderErrors.IsContextOverflowBody(string? body) -> bool
 Harbor.Abstractions.Sessions.SessionCompactionEvent
 Harbor.Abstractions.Sessions.SessionCompactionEvent.<Clone>$() -> Harbor.Abstractions.Sessions.SessionCompactionEvent!
 Harbor.Abstractions.Sessions.SessionCompactionEvent.Equals(Harbor.Abstractions.Sessions.SessionCompactionEvent? other) -> bool
@@ -80,5 +84,40 @@ Harbor.Abstractions.Sessions.SessionCompactionEventKind.End = 1 -> Harbor.Abstra
 Harbor.Abstractions.Sessions.SessionCompactionEventKind.Start = 0 -> Harbor.Abstractions.Sessions.SessionCompactionEventKind
 Harbor.Abstractions.Sessions.CompactionLock
 static Harbor.Abstractions.Sessions.CompactionLock.FindOpenStart(System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Sessions.SessionCompactionEvent!>! events) -> Harbor.Abstractions.Sessions.SessionCompactionEvent?
+Harbor.Abstractions.Models.DeferredContextMetadata
+Harbor.Abstractions.Models.DeferredContextMetadata.<Clone>$() -> Harbor.Abstractions.Models.DeferredContextMetadata!
+Harbor.Abstractions.Models.DeferredContextMetadata.Deconstruct(out string! Key, out string! Value) -> void
+Harbor.Abstractions.Models.DeferredContextMetadata.DeferredContextMetadata(string! Key, string! Value) -> void
+Harbor.Abstractions.Models.DeferredContextMetadata.Equals(Harbor.Abstractions.Models.DeferredContextMetadata? other) -> bool
+Harbor.Abstractions.Models.DeferredContextMetadata.Key.get -> string!
+Harbor.Abstractions.Models.DeferredContextMetadata.Key.init -> void
+Harbor.Abstractions.Models.DeferredContextMetadata.Value.get -> string!
+Harbor.Abstractions.Models.DeferredContextMetadata.Value.init -> void
+override Harbor.Abstractions.Models.DeferredContextMetadata.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.DeferredContextMetadata.GetHashCode() -> int
+override Harbor.Abstractions.Models.DeferredContextMetadata.ToString() -> string!
+static Harbor.Abstractions.Models.DeferredContextMetadata.operator !=(Harbor.Abstractions.Models.DeferredContextMetadata? left, Harbor.Abstractions.Models.DeferredContextMetadata? right) -> bool
+static Harbor.Abstractions.Models.DeferredContextMetadata.operator ==(Harbor.Abstractions.Models.DeferredContextMetadata? left, Harbor.Abstractions.Models.DeferredContextMetadata? right) -> bool
+Harbor.Abstractions.Models.DeferredToolContext
+Harbor.Abstractions.Models.DeferredToolContext.<Clone>$() -> Harbor.Abstractions.Models.DeferredToolContext!
+Harbor.Abstractions.Models.DeferredToolContext.Content.get -> string!
+Harbor.Abstractions.Models.DeferredToolContext.Content.init -> void
+Harbor.Abstractions.Models.DeferredToolContext.Deconstruct(out string! Content, out string! Source, out System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredContextMetadata!>? Metadata) -> void
+Harbor.Abstractions.Models.DeferredToolContext.DeferredToolContext(string! Content, string! Source, System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredContextMetadata!>? Metadata = null) -> void
+Harbor.Abstractions.Models.DeferredToolContext.Equals(Harbor.Abstractions.Models.DeferredToolContext? other) -> bool
+Harbor.Abstractions.Models.DeferredToolContext.Metadata.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredContextMetadata!>?
+Harbor.Abstractions.Models.DeferredToolContext.Metadata.init -> void
+Harbor.Abstractions.Models.DeferredToolContext.Source.get -> string!
+Harbor.Abstractions.Models.DeferredToolContext.Source.init -> void
+const Harbor.Abstractions.Models.DeferredToolContext.Marker = "[tool-context]" -> string!
+override Harbor.Abstractions.Models.DeferredToolContext.Equals(object? obj) -> bool
+override Harbor.Abstractions.Models.DeferredToolContext.GetHashCode() -> int
+override Harbor.Abstractions.Models.DeferredToolContext.ToString() -> string!
+static Harbor.Abstractions.Models.DeferredToolContext.operator !=(Harbor.Abstractions.Models.DeferredToolContext? left, Harbor.Abstractions.Models.DeferredToolContext? right) -> bool
+static Harbor.Abstractions.Models.DeferredToolContext.operator ==(Harbor.Abstractions.Models.DeferredToolContext? left, Harbor.Abstractions.Models.DeferredToolContext? right) -> bool
+Harbor.Abstractions.Models.ToolResult.DeferredContexts.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredToolContext!>?
+Harbor.Abstractions.Models.ToolResult.DeferredContexts.init -> void
+Harbor.Abstractions.Models.ToolResultEntry.DeferredContexts.get -> System.Collections.Generic.IReadOnlyList<Harbor.Abstractions.Models.DeferredToolContext!>?
+Harbor.Abstractions.Models.ToolResultEntry.DeferredContexts.init -> void
 
 Harbor.Abstractions.Permissions.ToolCategory.Interaction = 5 -> Harbor.Abstractions.Permissions.ToolCategory

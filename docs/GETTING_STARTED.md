@@ -388,7 +388,7 @@ harbor sessions  # list
 ## Tools available to the agent
 
 Full set (`HarborToolSetKind.Full14`, the CLI default — the enum name predates the
-20-tool count, see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
+23-tool count, see [TOOLS_CATALOG.md](./TOOLS_CATALOG.md)):
 
 | Tool | Description |
 |---|---|
@@ -412,10 +412,14 @@ Full set (`HarborToolSetKind.Full14`, the CLI default — the enum name predates
 | `lsp` | Language-server diagnostics / references / definition (when an LSP service is wired) |
 | `session_read` | Inspect a peer session's status, outcome and recent transcript (requires a session store) |
 | `session_steer` | Send a message / redirect / restart directive to a peer session (requires a session store) |
+| `harbor_inspect` | Read-only catalog of what this runtime offers (tools, agents, providers, skills, plugin axes, versions, limits) |
+| `plugin_manager` | List installed plugins; propose installing / removing / enabling / disabling one |
+| `ask_user_question` | Ask the user a structured question and read the answer back |
 
 The Avalonia desktop host registers the smaller `Standard10` set (the enum name
-predates the count — 12 members today: without `task`, `webfetch`, `ripgrep`,
-`mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
+predates the count — 13 members today: without `task`, `webfetch`, `ripgrep`,
+`mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`,
+`plugin_manager`, `ask_user_question`).
 
 ## Agents (modes)
 

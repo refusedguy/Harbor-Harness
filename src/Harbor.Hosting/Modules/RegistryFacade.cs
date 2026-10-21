@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Providers;
 using Harbor.Abstractions.Sessions;
 using Harbor.Abstractions.Tools;
@@ -6,6 +7,9 @@ using Harbor.Telemetry;
 using Harbor.Ui.Framework.Panels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+#if HARBOR_WITH_PLUGINS
+using Harbor.Plugins.Hosting;
+#endif
 
 // DI014/DI016 (Excubo): the registries are eager artifacts, so a temporary
 // provider is constructed deliberately to resolve logger factories for
@@ -91,6 +95,32 @@ internal static class RegistryFacade
             ctx.LoggerFactory.CreateLogger<Harbor.Application.Skills.SkillRegistry>());
         services.AddSingleton<ISkillRegistry>(skillRegistry);
 
+#if HARBOR_WITH_PLUGINS
+        // #1738: the plugin INVENTORY — one object, published here and used
+        // by BOTH consumers of "what is installed": the agent-facing
+        // plugin_manager tool (registered below, through ToolsCatalog) and the
+        // /plugins panel (through PluginReloadService). Two inventories would
+        // be two answers to one question, and the drift would show up as an
+        // agent proposing to remove a plugin the panel does not list.
+        IInstalledPluginInventory pluginInventory = new FileSystemPluginInventory(
+            Path.Combine(ctx.Options.HarborDir, "plugins"),
+            Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins"),
+            ctx.LoggerFactory.CreateLogger<FileSystemPluginInventory>());
+        services.AddSingleton<IInstalledPluginInventory>(pluginInventory);
+#else
+        // No plugin runtime in this build: the inventory does not exist and the
+        // plugin_manager tool is not registered (ToolsCatalog asks for it).
+        IInstalledPluginInventory? pluginInventory = null;
+#endif
+
+        // The provider registry is built BEFORE the tool registry (#1732): the
+        // `harbor_inspect` tool reports the providers this runtime has
+        // registered, and it reads that registry live. Nothing in the provider
+        // registry depends on the tool registry, so the order was free; it is
+        // now chosen rather than inherited from the sequence the two lines
+        // happened to be written in.
+        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
+
         // #1759: the question channel the model asks the human through. It is
         // built HERE, eagerly, for the same reason the tool registry is: the
         // ask_user_question tool needs it while the registry is being built,
@@ -105,7 +135,7 @@ internal static class RegistryFacade
         services.AddSingleton<Harbor.Abstractions.Interaction.IUserQuestionService>(
             sp => sp.GetRequiredService<Harbor.Application.Interaction.UserQuestionService>());
 
-        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry);
+        var toolRegistry = ToolsCatalog.CreateToolRegistry(ctx, mcpRegistry, agentRegistry, providerRegistry, questionService, subAgents, backgroundTasks, lspService, supervisedSessions, skillRegistry, pluginInventory);
         // The single attach point of both forwarders: the container resolves
         // ISubAgentRunner only after ISessionStore exists, so the attach runs
         // exactly once and inside the facade — HostBuilder's warmup
@@ -122,7 +152,6 @@ internal static class RegistryFacade
             supervisedSessions.Attach(store);
             return real;
         });
-        var providerRegistry = ProviderFactories.CreateProviderRegistry(ctx, services);
         var panelRegistry = new PanelRegistry(ctx.LoggerFactory.CreateLogger<PanelRegistry>());
 
         // #562: publish the bundle before Freeze() so a module that runs

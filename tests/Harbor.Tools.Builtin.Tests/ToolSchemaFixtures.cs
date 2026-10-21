@@ -41,6 +41,18 @@ internal static class ToolSchemaFixtures
         ("EditTool", () => new EditTool(NullLogger<EditTool>.Instance)),
         ("GlobTool", () => new GlobTool(NullLogger<GlobTool>.Instance)),
         ("GrepTool", () => new GrepTool(NullLogger<GrepTool>.Instance)),
+        // #1732: the runtime catalog. The factories need the registries it
+        // reads — the same objects the product hands it — so the schema the
+        // test sees is the schema the model sees.
+        ("InspectTool", () => new InspectTool(
+            new Harbor.Registries.Tools.ToolRegistry(),
+            new Harbor.Registries.Agents.AgentRegistry(),
+            new Harbor.Registries.Providers.ProviderRegistry(),
+            null,
+            null,
+            null,
+            RuntimeApiFacts.Empty,
+            NullLogger<InspectTool>.Instance)),
         ("LsTool", () => new LsTool(NullLogger<LsTool>.Instance)),
         ("LspTool", () => new LspTool(NullLogger<LspTool>.Instance)),
         ("McpPromptTool", () => new McpPromptTool(NullLogger<McpPromptTool>.Instance)),
@@ -49,6 +61,7 @@ internal static class ToolSchemaFixtures
         ("McpToolTool", () => new McpToolTool(NullLogger<McpToolTool>.Instance)),
         ("NotebookTool", () => new NotebookTool(NullLogger<NotebookTool>.Instance, NotebookRoot)),
         ("PatchTool", () => new PatchTool(NullLogger<PatchTool>.Instance)),
+        ("PluginManagerTool", () => new PluginManagerTool(new FakePluginInventory(), NullLogger<PluginManagerTool>.Instance)),
         ("ReadTool", () => new ReadTool(NullLogger<ReadTool>.Instance)),
         ("RipGrepTool", () => new RipGrepTool(NullLogger<RipGrepTool>.Instance)),
         ("SessionReadTool", () => new SessionReadTool(new DeferredSessionStore(), NullLogger<SessionReadTool>.Instance)),
