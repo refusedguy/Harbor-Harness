@@ -81,6 +81,8 @@ attachments/<sha256>.<ext>        the attachment bytes, named by the SHA-256 of 
 
 **What the archive does not carry.** A `file` part names a path on the machine that produced the session; the file itself is not in the archive. Collecting files from disk would turn "export my session" into an exfiltration channel, and the session file does not carry those bytes either — the archive is exactly as complete as the log it is built from.
 
+**Which version the archive carries.** The manifest's `version` is the version of the ARCHIVE format — the manifest's shape and the log's shape together. It is not the session file's generation (the catalog in `SessionFormatCatalog.cs`, #1749): the archive's log lines carry a position and the fold's verdict, so they are not the session file's records. The two version numbers answer different questions, and a reader that knows one does not know the other.
+
 ## Record order
 
 **The file is an append-only log (#1752): every record is written once and never rewritten. The order of the records is the order they were written in, and the SURFACE — what the model and the UI see — is a fold of that log.**
