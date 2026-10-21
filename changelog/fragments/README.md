@@ -1,7 +1,8 @@
 # changelog/fragments/
 
 One file per pull request, one entry inside it. The assembler
-(`tools/changelog-assemble.py`) glues them into the `[Unreleased]` section of
+(`tools/bin/harbor-gates-linux-x64 changelog-assemble`) glues them into the
+`[Unreleased]` section of
 `CHANGELOG.md` at release time.
 
 ## Why a directory instead of one file
@@ -41,5 +42,6 @@ entries in `CHANGELOG.md` do.
   because the fragment ends up inside the root-level `CHANGELOG.md`; the link
   checker knows this and resolves a fragment's links the same way;
 - the assembler is idempotent: running it twice changes nothing;
-- `python3 tools/changelog-assemble.py --self-test` proves the assembler
+- `tools/bin/harbor-gates-linux-x64 changelog-assemble --self-test` proves the
+  assembler
   still notices a diverged `CHANGELOG.md`.
