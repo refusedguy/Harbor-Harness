@@ -929,11 +929,11 @@ to build), one `$HOME` and one Harbor home. Re-keying the classes apart would
 not make the suite faster; it would make two of them drive the same window.
 The lever is the process, not the attribute: the shards are defined in
 [`e2e-shards.json`](../tests/Harbor.E2E.App.Avalonia/e2e-shards.json) — a
-GENERATED plan, produced by [`tools/gen-e2e-shards.py`](../tools/gen-e2e-shards.py)
+GENERATED plan, produced by [`harbor-gates gen-e2e-shards`](../tools/gates/gen-e2e-shards)
 from the source tree and from a measured CI run — and CI runs them as one
 `dotnet exec` of the same assembly PER SHARD, each with its own
 `--treenode-filter`, through
-[`tools/run-e2e-avalonia-shards.py`](../tools/run-e2e-avalonia-shards.py).
+[`harbor-gates run-e2e-avalonia-shards`](../tools/gates/run-e2e-avalonia-shards).
 
 Two things make that safe, and both are gates rather than comments:
 
