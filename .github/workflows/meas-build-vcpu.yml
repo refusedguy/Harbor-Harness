@@ -78,7 +78,12 @@ on:
         required: false
         default: ""
   push:
-    branches: [ci/1929-vcpu-falsification]
+    branches:
+      - 'ci/1929-vcpu-falsification'
+      # #2111: the same harness, on a branch that carries the current tree
+      # and the two new arms (E = the real switches through `dotnet msbuild`,
+      # F = the same plus /graphBuild).
+      - 'ci/2111-graph-build'
     # Only the harness itself re-runs the matrix. A docs-only commit must
     # not spend 14 build slots.
     paths:
@@ -188,6 +193,59 @@ jobs:
               dotnet build Harbor.slnx -c Release --no-restore
               -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
               -p:UseSharedCompilation=false -v:m -clp:PerformanceSummary
+          # ── arm E: the REAL switches, through `dotnet msbuild` (#2111) ────
+          #    `dotnet build` is `dotnet msbuild -restore -t:Build` plus the
+          #    SDK's own defaults, and the node count is one of the switches
+          #    only MSBuild's own command line carries: `-p:MaxCpuCount=0` is
+          #    a property, and the property appears in no MSBuild target and
+          #    in no global-property lookup, so it does nothing at all.
+          #    This arm is the command the NUKE Compile target runs after
+          #    #2111: the same build, the real switches, and NO graph build
+          #    yet — so it is the control for arm F.
+          - label: e-msbuild-r1
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false
+              -v:m -clp:PerformanceSummary
+          - label: e-msbuild-r2
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false
+              -v:m -clp:PerformanceSummary
+          - label: e-msbuild-r3
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false
+              -v:m -clp:PerformanceSummary
+          # ── arm F: the same, plus /graphBuild ─────────────────────────────
+          #    The project graph is constructed ONCE, up front, and the
+          #    projects are then built in graph order. The question this arm
+          #    answers is not "is graph build faster" but "does graph build
+          #    work on THIS solution at all" — a .slnx with a solution-level
+          #    metaproject is exactly the shape the graph build is known to
+          #    be picky about, and a build that does not run is not a
+          #    measurement.
+          - label: f-graph-r1
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false -graphBuild
+              -v:m -clp:PerformanceSummary
+          - label: f-graph-r2
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false -graphBuild
+              -v:m -clp:PerformanceSummary
+          - label: f-graph-r3
+            cmd: >-
+              dotnet msbuild Harbor.slnx -t:Build
+              -p:Configuration=Release -p:ContinuousIntegrationBuild=true
+              -maxcpucount:$(nproc) -nodeReuse:false -graphBuild
+              -v:m -clp:PerformanceSummary
     steps:
       - uses: actions/checkout@v7
         with:
