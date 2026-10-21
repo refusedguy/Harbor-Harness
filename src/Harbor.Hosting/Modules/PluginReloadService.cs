@@ -1,4 +1,6 @@
 #if HARBOR_WITH_PLUGINS
+using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Plugins;
 using Harbor.Plugins.Abstractions;
 using Microsoft.Extensions.Logging;
 namespace Harbor.Hosting;
@@ -39,6 +41,13 @@ public sealed record InstalledPlugin(string Name, string Scope, string FullPath,
 ///         shows what the host sees.
 ///     </para>
 ///     <para>
+///         <b>One inventory, two consumers (#1738).</b> The scope enumeration
+///         is NOT this class's own: it reads the same
+///         <see cref="IInstalledPluginInventory" /> the agent-facing
+///         <c>plugin_manager</c> tool reads, so the panel and the agent cannot
+///         disagree about what is installed.
+///     </para>
+///     <para>
 ///         Trust at reload time used to consult the persisted trust store; with
 ///         no in-process load there is no gate left in this process to consult
 ///         it. The host runs full-trust (see
@@ -48,18 +57,18 @@ public sealed record InstalledPlugin(string Name, string Scope, string FullPath,
 /// </remarks>
 public sealed class PluginReloadService
 {
-    private readonly string _harborDir;
+    private readonly IInstalledPluginInventory _inventory;
     private readonly ILogger<PluginReloadService> _logger;
 
     /// <summary>
     ///     Construct the service. Registered by <see cref="RegistriesModule" />
-    ///     with the resolved harbor directory.
+    ///     over the process-wide plugin inventory.
     /// </summary>
     public PluginReloadService(
-        string harborDir,
+        IInstalledPluginInventory inventory,
         ILogger<PluginReloadService> logger)
     {
-        _harborDir = harborDir ?? throw new ArgumentNullException(nameof(harborDir));
+        _inventory = inventory ?? throw new ArgumentNullException(nameof(inventory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -85,19 +94,20 @@ public sealed class PluginReloadService
 
     /// <summary>
     ///     List installed plugin files across both scopes for the
-    ///     <c>/plugins</c> panel. Enumerates <c>*.cs</c> (enabled) plus
-    ///     <c>*.cs.disabled</c> (toggled off — the loader glob skips them)
-    ///     and overlays the version bound by any reload pass so far.
-    ///     Missing scopes read as empty; unreadable scopes are skipped.
+    ///     <c>/plugins</c> panel. Reads the process-wide
+    ///     <see cref="IInstalledPluginInventory" /> — the same one the agent-facing
+    ///     <c>plugin_manager</c> tool reads — and overlays the version bound
+    ///     by any reload pass so far. A scope that exists but cannot be read
+    ///     reads as an empty list, with the reason logged.
     /// </summary>
     public IReadOnlyList<InstalledPlugin> ListInstalled()
     {
-        string globalPluginsDir = Path.Combine(_harborDir, "plugins");
-        string projectPluginsDir = Path.Combine(Directory.GetCurrentDirectory(), ".harbor", "plugins");
-
-        var files = new List<InstalledPlugin>();
-        CollectScope(files, globalPluginsDir, "global");
-        CollectScope(files, projectPluginsDir, "project");
+        Result<IReadOnlyList<InstalledPluginEntry>> listed = _inventory.List();
+        if (listed.IsFailure)
+        {
+            PluginReloadServiceLog.InventoryUnavailable(_logger, listed.Error);
+            return [];
+        }
 
         Dictionary<string, string> versions;
         lock (_installedLock)
@@ -105,12 +115,18 @@ public sealed class PluginReloadService
             versions = new Dictionary<string, string>(_loadedVersions, StringComparer.Ordinal);
         }
 
-        var result = new List<InstalledPlugin>(files.Count);
-        for (int i = 0; i < files.Count; i++)
+        IReadOnlyList<InstalledPluginEntry> entries = listed.Value;
+        var result = new List<InstalledPlugin>(entries.Count);
+        for (int i = 0; i < entries.Count; i++)
         {
-            var f = files[i];
-            versions.TryGetValue(f.FullPath, out string? version);
-            result.Add(f with { Version = version });
+            InstalledPluginEntry entry = entries[i];
+            versions.TryGetValue(entry.FullPath, out string? version);
+            result.Add(new InstalledPlugin(
+                entry.Name,
+                entry.Scope == PluginScope.Global ? "global" : "project",
+                entry.FullPath,
+                entry.Enabled,
+                version));
         }
 
         result.Sort(static (a, b) =>
@@ -119,39 +135,6 @@ public sealed class PluginReloadService
             return byScope != 0 ? byScope : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
         });
         return result;
-    }
-
-    private static void CollectScope(List<InstalledPlugin> files, string dir, string scope)
-    {
-        if (!Directory.Exists(dir))
-        {
-            return;
-        }
-
-        foreach (string pattern in new[] { "*.cs", "*.cs.disabled" })
-        {
-            string[] matches;
-            try
-            {
-                matches = Directory.GetFiles(dir, pattern);
-            }
-            catch (IOException)
-            {
-                continue;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            for (int i = 0; i < matches.Length; i++)
-            {
-                string fullPath = Path.GetFullPath(matches[i]);
-                bool enabled = !fullPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase);
-                string name = Path.GetFileName(enabled ? fullPath : fullPath[..^".disabled".Length]);
-                files.Add(new InstalledPlugin(name, scope, fullPath, enabled, Version: null));
-            }
-        }
     }
 
     /// <summary>
@@ -178,5 +161,8 @@ internal static partial class PluginReloadServiceLog
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Plugin reload is served out-of-process by harbor-plugins-host (#1055s3): restart the host to pick up changed scripts; nothing registered in-process.")]
     public static partial void ReloadOutOfProc(ILogger logger);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "The plugin inventory could not be read: {Error}")]
+    public static partial void InventoryUnavailable(ILogger logger, string error);
 }
 #endif
