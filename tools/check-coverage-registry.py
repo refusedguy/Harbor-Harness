@@ -386,6 +386,27 @@ def self_test() -> int:
                 f"{codes or 'no findings'}"
             )
 
+        # (c2) A report that cannot be READ is a measurement that did not
+        #      happen: the files it would have covered look uncovered, so
+        #      the comparison has to be skipped.
+        unreadable = _fixture(os.path.join(tmp, "unreadable"))
+        with open(os.path.join(unreadable["coverage"],
+                               "Harbor.Foo.Tests.cobertura.xml"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("<coverage><packages>truncated")
+        model = _model_for(unreadable)
+        if not model.unreadable:
+            failures.append(
+                "the unreadable report was not reported as unreadable"
+            )
+        findings = evaluate(model, min_files=3, min_covered=0, partial=True)
+        codes = [finding.code for finding in findings]
+        if "COV-UNCOVERED" in codes:
+            failures.append(
+                "an unreadable report still produced hole findings, so a "
+                "broken report would be reported as a hole in the tree"
+            )
+
         # (d) A row that names a file the tree does not have.
         missing = _fixture(os.path.join(tmp, "missing"))
         with open(missing["registry"], "a", encoding="utf-8") as handle:
@@ -442,7 +463,8 @@ def self_test() -> int:
         "self-test OK: the gate reports a file that stopped being covered, a "
         "registry row that is no longer needed, an empty measurement and a row "
         "for a file that is gone — the clean fixture stays clean, and a "
-        "partial measurement compares only the direction it supports"
+        "partial measurement (a failed suite, an unreadable report) compares "
+        "only the direction it supports"
     )
     return 0
 
@@ -491,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     model.registry = load_registry(args.registry)
     status = read_suite_status(args.status) if args.status else {}
     failed = sorted(name for name, state in status.items() if state != "pass")
-    partial = bool(failed)
+    partial = bool(failed) or bool(model.unreadable)
     findings = evaluate(model, min_files=args.min_files, min_covered=args.min_covered,
                         partial=partial)
 
@@ -506,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         payload = {
             "suites": model.suites,
+            "unreadable_reports": model.unreadable,
             "partial": partial,
             "failed_suites": failed,
             "product_files": len(model.product_files()),
@@ -529,7 +552,9 @@ def main(argv: list[str] | None = None) -> int:
         if partial:
             print(
                 f"note: the measurement is PARTIAL — {len(failed)} suite(s) did "
-                f"not pass ({', '.join(failed)}), so the uncovered files were "
+                f"not pass ({', '.join(failed)}), "
+                f"{len(model.unreadable)} report(s) could not be read "
+                f"({', '.join(model.unreadable)}), so the uncovered files were "
                 "NOT compared against the registry; the stale rows were"
             )
         print(f"{len(findings)} finding(s)")

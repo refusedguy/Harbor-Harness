@@ -178,6 +178,10 @@ class Model:
     registry: list[RegistryRow] = field(default_factory=list)
     suites: list[str] = field(default_factory=list)
     unmapped: list[str] = field(default_factory=list)
+    # The reports that could not be read at all. A suite whose report is
+    # unreadable produced no measurement, and the files it would have
+    # covered look uncovered — so the measurement is partial.
+    unreadable: list[str] = field(default_factory=list)
     # The files the engine reported nothing for, while it reported other
     # files of the same project. The engine instruments whole modules, so
     # these hold no code to cover.
@@ -185,6 +189,9 @@ class Model:
     # The files the engine did not report that nevertheless carry code. The
     # cross-check of the engine's answer; empty on the measured tree.
     not_instrumented_with_code: list[str] = field(default_factory=list)
+    # The cache for `loaded_projects`, which the per-file loop asks for once
+    # per file.
+    _loaded_projects: set[str] | None = None
 
     # -- the product tree -------------------------------------------------
 
@@ -200,7 +207,9 @@ class Model:
         A project is loaded when the engine reported at least one of its
         files: the engine instrumented the module and it was in the test
         process."""
-        return {project_of(p) for p in self.files}
+        if self._loaded_projects is None:
+            self._loaded_projects = {project_of(p) for p in self.files}
+        return self._loaded_projects
 
     def holes(self) -> list[str]:
         """The product files this measurement cannot account for.
@@ -403,15 +412,20 @@ def normalize_source_path(raw: str, projects: dict[str, str], roots: set[str]) -
 # ------------------------------------------------------------ the parsing
 
 
-def read_cobertura(path: str, projects: dict[str, str], roots: set[str]) -> tuple[dict[str, FileCoverage], list[str]]:
-    """One cobertura file: the coverage per source file, and what it could
-    not map."""
+def read_cobertura(path: str, projects: dict[str, str], roots: set[str]) -> tuple[dict[str, FileCoverage], list[str], bool]:
+    """One cobertura file: the coverage per source file, what it could not
+    map, and whether the file could be read at all.
+
+    A report that cannot be parsed is a measurement that did not happen, and
+    the caller has to know: the files it would have covered look uncovered,
+    and a gate that called them holes would be reporting a broken report.
+    """
     files: dict[str, FileCoverage] = {}
     unmapped: list[str] = []
     try:
         root = ET.parse(path).getroot()
     except (OSError, ET.ParseError):
-        return files, unmapped
+        return files, unmapped, False
     suite = os.path.basename(path)
     for node in root.iter("class"):
         raw = node.get("filename") or ""
@@ -436,7 +450,7 @@ def read_cobertura(path: str, projects: dict[str, str], roots: set[str]) -> tupl
                 count = 0
             hit = count > 0
             entry.lines[number] = entry.lines.get(number, False) or hit
-    return files, unmapped
+    return files, unmapped, True
 
 
 def load_coverage(coverage_dir: str, source_root: str) -> Model:
@@ -457,7 +471,10 @@ def load_coverage(coverage_dir: str, source_root: str) -> Model:
             continue
         suite = name.removesuffix(".cobertura.xml").removesuffix(".xml")
         model.suites.append(suite)
-        files, unmapped = read_cobertura(full, projects, roots)
+        files, unmapped, readable = read_cobertura(full, projects, roots)
+        if not readable:
+            model.unreadable.append(name)
+            continue
         for path, entry in files.items():
             merged = model.files.setdefault(path, FileCoverage(path=path))
             # The suites overlap on the shared product assemblies, so the
@@ -659,6 +676,15 @@ def render_report(model: Model, top: int = 25) -> str:
             "the tree and were left out: "
             + ", ".join(f"`{p}`" for p in model.unmapped[:5])
             + "._"
+        )
+        lines.append("")
+    if model.unreadable:
+        lines.append(
+            f"**{len(model.unreadable)} report(s) could not be read**: "
+            + ", ".join(f"`{p}`" for p in model.unreadable)
+            + ". The measurement is PARTIAL: the files those suites would have "
+            "covered look uncovered, so the registry is compared only in the "
+            "direction a partial measurement supports."
         )
         lines.append("")
     return "\n".join(lines)
