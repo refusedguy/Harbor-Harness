@@ -335,8 +335,7 @@ public sealed partial record ToolResult
     ///     survives a round-trip the way <see cref="Metadata" /> never could.
     /// </summary>
     [MemoryPackConstructor]
-    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, IReadOnlyList<DeferredToolContext>? DeferredContexts)
-    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, ToolErrorInfo? ErrorInfo)
+    private ToolResult(string Output, bool IsError, IReadOnlyList<FileAttachment>? Attachments, IReadOnlyList<DeferredToolContext>? DeferredContexts, ToolErrorInfo? ErrorInfo)
     {
         this.Output = Output;
         this.IsError = IsError;
@@ -489,8 +488,7 @@ public sealed partial record ToolResultEntry
     ///     the same way the message does.
     /// </summary>
     [MemoryPackConstructor]
-    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, IReadOnlyList<DeferredToolContext>? DeferredContexts)
-    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, ToolErrorInfo? ErrorInfo)
+    private ToolResultEntry(string ToolCallId, string ToolName, string Output, bool IsError, IReadOnlyList<DeferredToolContext>? DeferredContexts, ToolErrorInfo? ErrorInfo)
     {
         this.ToolCallId = ToolCallId;
         this.ToolName = ToolName;
@@ -574,9 +572,9 @@ public sealed partial record ToolResultEntry
     public static ToolResultEntry From(string toolCallId, string toolName, ToolResult result) =>
         new(toolCallId, toolName, result.Output, result.IsError, result.Metadata)
         {
-            DeferredContexts = result.DeferredContexts
+            DeferredContexts = result.DeferredContexts,
+            ErrorInfo = result.ErrorInfo,
         };
-        new(toolCallId, toolName, result.Output, result.IsError, result.Metadata) { ErrorInfo = result.ErrorInfo };
 }
 
 /// <summary>
