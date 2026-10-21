@@ -14,7 +14,7 @@
 
 using System.ComponentModel;
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Contracts.Events;
+using Harbor.Abstractions.Events;
 using TUnit.Assertions.Attributes;
 using TUnit.Assertions.Core;
 

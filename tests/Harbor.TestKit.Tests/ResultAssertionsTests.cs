@@ -15,7 +15,7 @@
 // helper: the old boolean form said "found False" and lost the reason.
 
 using CSharpFunctionalExtensions;
-using Harbor.Abstractions.Contracts.Events;
+using Harbor.Abstractions.Events;
 using Harbor.Abstractions.Models;
 using TUnit.Assertions;
 using TUnit.Assertions.Exceptions;
