@@ -110,7 +110,7 @@ public class ObservedGeneratorDriverTests
         (Compilation output, GeneratorDriverRunResult run) = Run(ObservedSource);
 
         GeneratorRunResult generator = run.Results[0];
-        await Assert.That(generator.GeneratedSources.Length).IsEqualTo(1);
+        await Assert.That(HintNames(generator)).IsEqualTo("Observed.Sample_IGreeter.g.cs");
 
         string generated = generator.GeneratedSources[0].SourceText.ToString();
         await Assert.That(generated).Contains("class ObservedGreeter");
@@ -131,7 +131,7 @@ public class ObservedGeneratorDriverTests
 
         GeneratorRunResult generator = run.Results[0];
 
-        await Assert.That(generator.GeneratedSources.Length).IsEqualTo(0);
+        await Assert.That(HintNames(generator)).IsEqualTo(string.Empty);
         await Assert.That(Errors(output)).IsEqualTo(string.Empty);
     }
 
@@ -161,9 +161,18 @@ public class ObservedGeneratorDriverTests
 
         // "Off" means NOTHING is emitted: no decorator, no instrument, no
         // span call. Not a decorator that measures nothing.
-        await Assert.That(generator.GeneratedSources.Length).IsEqualTo(0);
+        await Assert.That(HintNames(generator)).IsEqualTo(string.Empty);
         await Assert.That(Errors(output)).IsEqualTo(string.Empty);
     }
+
+    /// <summary>
+    ///     The names of the files the generator emitted. The names are part of
+    ///     the contract: two runs of the same compilation must produce the same
+    ///     file names.
+    /// </summary>
+    private static string HintNames(GeneratorRunResult generator) => string.Join(
+        ", ",
+        generator.GeneratedSources.Select(static source => source.HintName));
 
     private static string Errors(Compilation compilation) => string.Join(
         " | ",
@@ -228,14 +237,15 @@ public class ObservedGeneratorDriverTests
             }
         }
 
-        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Add(assembly);
-        }
-
         // The three the compilation cannot do without: the core library, the
         // assembly that carries the marker, and the assembly that carries the
         // contracts the generated decorator is written against.
+        //
+        // Nothing else: the generator decorates the marked seams of the
+        // assemblies a compilation references, so a compilation that saw every
+        // loaded assembly would also see the FIXTURE's marked seams — and the
+        // decorator for them would be emitted into this synthetic compilation
+        // too. The control has to be hermetic to mean anything.
         Add(typeof(object).Assembly);
         Add(typeof(ObservedAttribute).Assembly);
         Add(typeof(ITracer).Assembly);

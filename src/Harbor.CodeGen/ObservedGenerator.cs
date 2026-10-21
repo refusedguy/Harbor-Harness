@@ -1140,7 +1140,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
         {
             foreach (IParameterSymbol parameter in method.Parameters)
             {
-                if (parameter.RefKind != RefKind.None)
+                if (parameter.RefKind != RefKind.None || IsCancellationToken(parameter.Type))
                 {
                     continue;
                 }
@@ -1164,7 +1164,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
             }
 
             sb.Append(NewLine);
-            AppendRecord(sb, indent + "    ", instrument, "ok", start);
+            AppendRecord(sb, indent + "    ", instrument, "ok", start, span);
         }
         else
         {
@@ -1187,16 +1187,16 @@ public sealed class ObservedGenerator : IIncrementalGenerator
                     sb.Append(indent + "        " + span + "?.SetError(" + result + ".Error);" + NewLine);
                 }
 
-                AppendRecord(sb, indent + "        ", instrument, "failure", start);
+                AppendRecord(sb, indent + "        ", instrument, "failure", start, span);
                 sb.Append(indent + "    }" + NewLine);
                 sb.Append(indent + "    else" + NewLine);
                 sb.Append(indent + "    {" + NewLine);
-                AppendRecord(sb, indent + "        ", instrument, "ok", start);
+                AppendRecord(sb, indent + "        ", instrument, "ok", start, span);
                 sb.Append(indent + "    }" + NewLine);
             }
             else
             {
-                AppendRecord(sb, indent + "    ", instrument, "ok", start);
+                AppendRecord(sb, indent + "    ", instrument, "ok", start, span);
             }
 
             sb.Append(indent + "    return " + result + ";" + NewLine);
@@ -1205,7 +1205,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
         sb.Append(indent + "}" + NewLine);
         sb.Append(indent + "catch (global::System.OperationCanceledException)" + CancellationFilter(method) + NewLine);
         sb.Append(indent + "{" + NewLine);
-        AppendRecord(sb, indent + "    ", instrument, "cancelled", start);
+        AppendRecord(sb, indent + "    ", instrument, "cancelled", start, span);
         sb.Append(indent + "    throw;" + NewLine);
         sb.Append(indent + "}" + NewLine);
         sb.Append(indent + "catch (global::System.Exception"
@@ -1217,7 +1217,7 @@ public sealed class ObservedGenerator : IIncrementalGenerator
             sb.Append(indent + "    " + span + "?.SetError(" + exception + ".Message);" + NewLine);
         }
 
-        AppendRecord(sb, indent + "    ", instrument, "exception", start);
+        AppendRecord(sb, indent + "    ", instrument, "exception", start, span);
         sb.Append(indent + "    throw;" + NewLine);
         sb.Append(indent + "}" + NewLine);
 
@@ -1228,8 +1228,17 @@ public sealed class ObservedGenerator : IIncrementalGenerator
     ///     The call's own metrics: the counter and the duration histogram,
     ///     tagged with the status the call ended in.
     /// </summary>
-    private static void AppendRecord(StringBuilder sb, string indent, Instrument instrument, string status, string start)
+    private static void AppendRecord(StringBuilder sb, string indent, Instrument instrument, string status, string start, string span)
     {
+        if (instrument.EmitsSpan)
+        {
+            // The status travels on the span as well as on the metrics: the
+            // hand-written decorators put it on the span (TelemetryToolDecorator
+            // sets "tool.status"), and a span that says nothing about how the
+            // call ended is half an answer.
+            sb.Append(indent + span + "?.SetTag(\"" + instrument.StatusTag + "\", \"" + status + "\");" + NewLine);
+        }
+
         if (!instrument.EmitsMetrics)
         {
             return;
