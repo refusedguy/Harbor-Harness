@@ -92,6 +92,17 @@ public static class BuiltinToolSafetyProfiles
         // and a rule that names the class is how a user says "the model may
         // not interrupt me".
         new(WellKnownTools.AskUserQuestion, ToolSafetyProfile.Opaque) { Category = ToolCategory.Interaction },
+        // #1761: the goal axis. The argument is an operation name and a
+        // free-text reason — never a path — so the profile is Opaque. The
+        // category is deliberately NONE: the tool records the agent's verdict
+        // on the session's own goal record, and that is not a workspace
+        // mutation, a read, a shell, the network or MCP — it is in no class,
+        // and a class it does not belong to would be a lie with a price: a
+        // user's new("write", "*", Allow) would then authorise the model's
+        // verdict on its own work. The unclassified reading is fail-closed
+        // and is the right one. `ToolCategoryApprovalTests` names the
+        // exemption.
+        new("goal", ToolSafetyProfile.Opaque),
 
         // Plugin vocabulary: declared so a plugin that loads later still finds its
         // row, never registered by the builtin host. See

@@ -17,7 +17,7 @@
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 39 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
-> - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `./tools/gen-seam-graph.py --write` after changing a type under `src/` or `apps/`; the `seam graph` CI job fails when the committed copy is stale.
+> - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `seam graph` CI job fails when the committed copy is stale.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
 
 ## What Harbor is
@@ -87,7 +87,7 @@ src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients
 src/Harbor.Tools.Builtin/             — 23 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
                                         ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
                                         read_mcp_resource/mcp_prompt/session_read/session_steer/
-                                        harbor_inspect/plugin_manager/ask_user_question)
+                                        harbor_inspect/plugin_manager/goal/ask_user_question)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage

@@ -114,7 +114,10 @@ name: ci
 on:
   push:
     branches: [dev, master]
-    paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**']
+    # `tools/bin/**` is the compiled gate binary. It is a build artifact of
+    # `tools/gates/**`, and the gates-binary workflow rebuilds and commits it.
+    # A commit that carries only the artifact must not start the heavy lane.
+    paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**', 'tools/bin/**']
   pull_request:
   workflow_dispatch:
 

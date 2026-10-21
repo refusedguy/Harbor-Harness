@@ -36,7 +36,7 @@ check-string-switch-report.py	python3 tools/check-string-switch.py --report
 check-result-chains-report.py	python3 tools/check-result-chains.py --report
 check-test-json-reflection.py	python3 tools/check-test-json-reflection.py
 check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
-gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191
+gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
 check-doc-facts.py	python3 tools/check-doc-facts.py --min-facts 5
 check-analyzer-scope.py	python3 tools/check-analyzer-scope.py --min-files 150
