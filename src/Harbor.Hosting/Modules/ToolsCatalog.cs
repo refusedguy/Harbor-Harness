@@ -156,7 +156,8 @@ internal static class ToolsCatalog
         Harbor.Abstractions.Agents.IBackgroundTaskRegistry? backgroundTasks = null,
         Harbor.Abstractions.Lsp.ILspService? lspService = null,
         ISessionStore? sessionStore = null,
-        ISkillRegistry? skillRegistry = null)
+        ISkillRegistry? skillRegistry = null,
+        IToolOutputSpillStore? spillStore = null)
     {
         var registry = new ToolRegistry();
         var tb = new ToolRegistryBuilder(registry, ctx.LoggerFactory);
@@ -210,6 +211,13 @@ internal static class ToolsCatalog
         }
         tb.AddTool(lf => new PatchTool(lf.CreateLogger<PatchTool>()));
         tb.AddTool(lf => new NotebookTool(lf.CreateLogger<NotebookTool>()));
+        // #1748: the way back to a tool output that did not fit the context.
+        // The tool is registered whenever a spill store is wired; without one
+        // there is nothing to read back, and the pointer would be a lie.
+        if (spillStore is not null)
+        {
+            tb.AddTool(lf => new SpillReadTool(spillStore, lf.CreateLogger<SpillReadTool>()));
+        }
         if (full)
         {
             tb.AddTool(lf => new RipGrepTool(lf.CreateLogger<RipGrepTool>()));

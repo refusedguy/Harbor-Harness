@@ -137,6 +137,11 @@ public static class ConfigNormalizer
         config.Cost = new CostConfig(raw.CostLimit ?? CostConfig.Default.Limit);
         if (raw.Compaction is not null) config.Compaction = raw.Compaction;
 
+        // ── Tool output (#1748) ──
+        // Absent means "not configured": the defaults apply, and the section is
+        // only written back when it diverges from them.
+        config.ToolOutput = raw.ToolOutput ?? ToolOutputConfig.Default;
+
         // ── ApiKeys / Providers ──
         if (raw.ApiKeys is not null) config.ApiKeys = raw.ApiKeys;
         if (raw.Providers is not null) config.Providers = raw.Providers;

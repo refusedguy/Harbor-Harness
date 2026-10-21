@@ -64,6 +64,7 @@ public class ParameterSchemaCachingTests
         ("session_read", () => new SessionReadTool(new DeferredSessionStore(), NullLogger<SessionReadTool>.Instance)),
         ("session_steer", () => new SessionSteerTool(new DeferredSessionStore(), NullLogger<SessionSteerTool>.Instance)),
         ("skill", () => new SkillTool(NullLogger<SkillTool>.Instance)),
+        ("spill_read", () => new SpillReadTool(new FakeSpillStore(), NullLogger<SpillReadTool>.Instance)),
         ("task", () => new TaskTool(new AgentRegistry(), NullLogger<TaskTool>.Instance)),
         ("tree", () => new TreeTool(NullLogger<TreeTool>.Instance)),
         ("webfetch", () => new WebFetchTool(NullLogger<WebFetchTool>.Instance)),

@@ -1,3 +1,9 @@
+// #1748: the tool-output spill defaults live in Harbor.Abstractions.Tools, the
+// one tool type the configuration family references — the inline budget and
+// the spill TTL are policy numbers that BOTH the configuration default and the
+// context boundary read, and a second spelling of them would drift.
+using Harbor.Abstractions.Tools;
+
 namespace Harbor.Application.Configuration;
 /// <summary>
 ///     Provider / model / agent identity selection.
@@ -266,6 +272,53 @@ public sealed record ProviderConfigEntry(
     {
         if (string.IsNullOrWhiteSpace(ApiType))
             return Result.Failure<ProviderConfigEntry>("provider.apiType must not be empty");
+        return Result.Success(this);
+    }
+}
+
+/// <summary>
+///     The tool-output budget: how much of a tool result stays inline in the
+///     model context, and how long a spilled output is kept (issue #1748).
+/// </summary>
+/// <param name="SpillMaxChars">
+///     The inline budget per tool result, in characters. A result longer than
+///     this is written to Harbor's private spill area, and the model receives
+///     a preview plus the locator to read the rest back. Zero spills every
+///     result; a value above any result's length keeps everything inline.
+/// </param>
+/// <param name="SpillTtlHours">
+///     How long a session's spill directory is kept, in hours. The full output
+///     also lives in the session log — the file exists so the model can
+///     re-read it during the run.
+/// </param>
+/// <remarks>
+///     <para>
+///         <b>How this budget relates to the run budgets (#1557).</b> The run
+///         budgets in <c>RunBudgetCaps</c> bound the run as a whole: the
+///         tokens it spends, the money it costs, the output bytes it streams.
+///         This one bounds a SINGLE tool result on its way INTO the context,
+///         and it is the one that decides whether the model can still read what
+///         the tool produced. The two are complements, not alternatives: a
+///         spilled output costs the context nothing but the preview, so the
+///         run's token budget stretches further, while the run budget still
+///         stops a runaway agent from spending forever.
+///     </para>
+/// </remarks>
+public sealed record ToolOutputConfig(
+    [property: JsonPropertyName("spillMaxChars")] int SpillMaxChars,
+    [property: JsonPropertyName("spillTtlHours")] int SpillTtlHours)
+{
+    // #195: fresh instance per access (see IdentityConfig.Default).
+    public static ToolOutputConfig Default => new(
+        ToolOutputSpillPolicy.DefaultMaxInlineChars,
+        ToolOutputSpillPolicy.DefaultTtlHours);
+
+    public Result<ToolOutputConfig> Validate()
+    {
+        if (SpillMaxChars < 0)
+            return Result.Failure<ToolOutputConfig>("toolOutput.spillMaxChars must be >= 0");
+        if (SpillTtlHours < 1)
+            return Result.Failure<ToolOutputConfig>("toolOutput.spillTtlHours must be >= 1");
         return Result.Success(this);
     }
 }

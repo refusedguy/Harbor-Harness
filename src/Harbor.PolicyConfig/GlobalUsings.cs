@@ -13,7 +13,10 @@
 //    side binds is ProviderId / ModelRef, and those live in
 //    Harbor.Abstractions.Models.Identifiers, not here.
 //  - Harbor.Abstractions.Sessions — no session/compaction type is referenced.
-//  - Harbor.Abstractions.Tools    — no tool type is referenced.
+//  - Harbor.Abstractions.Tools    — the only tool type the configuration
+//    family references is the tool-output spill policy (#1748), and
+//    ConfigSections.cs imports it FILE-LOCALLY: the global set stays narrowed
+//    to what the cohort resolves without a file-local using.
 //
 // What stays, and who needs it:
 //

@@ -282,6 +282,19 @@ internal static class ParameterSchemaGolden
                 }
                 """,
 
+            ["spill_read"] =
+                """
+                {
+                  "type": "object",
+                  "properties": {
+                    "path":   { "type": "string",  "description": "Path of the spilled output, from the '[spilled: ...]' marker" },
+                    "offset": { "type": "integer", "description": "1-based start line (optional)" },
+                    "limit":  { "type": "integer", "description": "Max lines to return (optional)" }
+                  },
+                  "required": ["path"]
+                }
+                """,
+
             ["task"] =
                 """
                 {

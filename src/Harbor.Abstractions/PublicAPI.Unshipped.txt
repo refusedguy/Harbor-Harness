@@ -90,3 +90,27 @@ Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.ModelInvocable.init -> void
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.get -> bool
 Harbor.Abstractions.Sessions.SkillDescriptor.UserInvocable.init -> void
+Harbor.Abstractions.Tools.IToolOutputSpillStore
+Harbor.Abstractions.Tools.IToolOutputSpillStore.ReadAsync(string! sessionId, string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<CSharpFunctionalExtensions.Result<string!>>!
+Harbor.Abstractions.Tools.IToolOutputSpillStore.Root.get -> string!
+Harbor.Abstractions.Tools.IToolOutputSpillStore.Spill(string! sessionId, string! toolCallId, string! content) -> CSharpFunctionalExtensions.Result<Harbor.Abstractions.Tools.ToolOutputSpill!>
+Harbor.Abstractions.Tools.IToolOutputSpillStore.Sweep() -> CSharpFunctionalExtensions.Result<int>
+Harbor.Abstractions.Tools.ToolOutputSpill
+Harbor.Abstractions.Tools.ToolOutputSpill.<Clone>$() -> Harbor.Abstractions.Tools.ToolOutputSpill!
+Harbor.Abstractions.Tools.ToolOutputSpill.CharCount.get -> int
+Harbor.Abstractions.Tools.ToolOutputSpill.CharCount.init -> void
+Harbor.Abstractions.Tools.ToolOutputSpill.Deconstruct(out string! Path, out long SizeBytes, out int CharCount) -> void
+Harbor.Abstractions.Tools.ToolOutputSpill.Equals(Harbor.Abstractions.Tools.ToolOutputSpill? other) -> bool
+Harbor.Abstractions.Tools.ToolOutputSpill.Path.get -> string!
+Harbor.Abstractions.Tools.ToolOutputSpill.Path.init -> void
+Harbor.Abstractions.Tools.ToolOutputSpill.SizeBytes.get -> long
+Harbor.Abstractions.Tools.ToolOutputSpill.SizeBytes.init -> void
+Harbor.Abstractions.Tools.ToolOutputSpill.ToolOutputSpill(string! Path, long SizeBytes, int CharCount) -> void
+override Harbor.Abstractions.Tools.ToolOutputSpill.Equals(object? obj) -> bool
+override Harbor.Abstractions.Tools.ToolOutputSpill.GetHashCode() -> int
+override Harbor.Abstractions.Tools.ToolOutputSpill.ToString() -> string!
+static Harbor.Abstractions.Tools.ToolOutputSpill.operator !=(Harbor.Abstractions.Tools.ToolOutputSpill? left, Harbor.Abstractions.Tools.ToolOutputSpill? right) -> bool
+static Harbor.Abstractions.Tools.ToolOutputSpill.operator ==(Harbor.Abstractions.Tools.ToolOutputSpill? left, Harbor.Abstractions.Tools.ToolOutputSpill? right) -> bool
+Harbor.Abstractions.Tools.ToolOutputSpillPolicy
+const Harbor.Abstractions.Tools.ToolOutputSpillPolicy.DefaultMaxInlineChars = 2000 -> int
+const Harbor.Abstractions.Tools.ToolOutputSpillPolicy.DefaultTtlHours = 24 -> int

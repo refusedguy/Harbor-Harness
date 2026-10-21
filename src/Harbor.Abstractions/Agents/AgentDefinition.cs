@@ -121,6 +121,11 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            // #1748: the way back to a tool output that did not fit the
+            // context. It is a READ of the agent's own tool output, it writes
+            // nothing, and without it the pointer in the spilled tool result
+            // would be a dead end for every agent but `code`.
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),
@@ -151,6 +156,7 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),
@@ -201,6 +207,7 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),
@@ -245,6 +252,7 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),
@@ -291,6 +299,7 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),
@@ -344,6 +353,7 @@ public sealed record AgentDefinition(
         new PermissionRuleset(new PermissionRule[]
         {
             new("read", "*", PermissionAction.Allow),
+            new("spill_read", "*", PermissionAction.Allow),
             new("glob", "*", PermissionAction.Allow),
             new("grep", "*", PermissionAction.Allow),
             new("ls", "*", PermissionAction.Allow),

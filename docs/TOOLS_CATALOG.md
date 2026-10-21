@@ -30,6 +30,7 @@
    - [ripgrep](#ripgrep)
    - [tree](#tree)
    - [mcp](#mcp)
+   - [spill_read](#spill_read)
 3. ["When to use X vs Y" matrix](#3-when-to-use-x-vs-y-matrix)
 4. [Tool chains — common composition patterns](#4-tool-chains--common-composition-patterns)
 5. [Building your own tool — WebFetchTool walkthrough](#5-building-your-own-tool--webfetchtool-walkthrough)
@@ -43,20 +44,20 @@
 
 ## 1. Inventory
 
-Harbor ships **20 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
+Harbor ships **21 builtin tools** registered by `Harbor.Hosting.ToolsCatalog.CreateToolRegistry`
 (in `src/Harbor.Hosting/Modules/ToolsCatalog.cs`). They live in
 `src/Harbor.Tools.Builtin/Tools/<Name>/<Name>Tool.cs` and are plain `sealed` classes
 implementing `Harbor.Abstractions.Tools.ITool`.
 
 > **Tool sets**: hosts pick a `HarborToolSetKind` in `HarborComposeOptions`. `Full14`
-> (the CLI default — the enum name predates the tool count) registers all 20 tools
+> (the CLI default — the enum name predates the tool count) registers all 21 tools
 > (14 classic + `lsp` + `skill` + `read_mcp_resource` + `mcp_prompt` + `session_read` +
-> `session_steer`); `Standard10` (name likewise predates the count — 12 members today)
+> `session_steer` + `spill_read`); `Standard10` (name likewise predates the count — 13 members today)
 > omits the eight heavier ones (`task`, `webfetch`,
 > `ripgrep`, `mcp`, `read_mcp_resource`, `mcp_prompt`, `session_read`, `session_steer`).
 > The Avalonia desktop app uses `Standard10` (see `apps/Harbor.App.Avalonia/AppHost.cs`).
 > `session_read` / `session_steer` also require a wired `ISessionStore`; without one the
-> catalog registers 18.
+> catalog registers 19.
 
 | # | Tool | Mode | Permission | Purpose |
 |---|------|------|------------|---------|
@@ -80,6 +81,7 @@ implementing `Harbor.Abstractions.Tools.ITool`.
 | 18 | `lsp` | Sequential | Allow | Language-server diagnostics / references / definition |
 | 19 | `session_read` | Parallel | Allow | Inspect a peer session's status, outcome and recent transcript |
 | 20 | `session_steer` | Sequential | Ask | Send a message / redirect / restart directive to a peer session |
+| 21 | `spill_read` | Parallel | Allow | Read back a tool output that was too large to fit the context |
 
 > **Why these and not more?** Every builtin earns its slot by being either (a) essential for
 > any coding task (read/write/edit/bash/glob/grep/ls), (b) a host-aware primitive that needs
@@ -1082,6 +1084,70 @@ side effect the user has not explicitly requested.
 
 ---
 
+### `spill_read`
+
+**Description.** Reads back a tool output that did not fit the model context
+(#1748). A tool result longer than the inline budget (`toolOutput.spillMaxChars`
+in `config.json`, 2000 by default) is written to Harbor's private spill area
+(`$HARBOR_HOME/spill/<session>/`), and the model receives a preview plus a
+pointer instead of a silent cut:
+
+```
+…[spilled: this output is 48312 chars and did not fit the context. Full output:
+/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt (48312 bytes).
+Read it back with spill_read {"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt"}]
+```
+
+The read is paged by line, so re-reading the tail of a huge output does not
+re-create the overflow the spill solved.
+
+**Args schema.**
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "path":   { "type": "string",  "description": "Path of the spilled output, from the '[spilled: ...]' marker" },
+    "offset": { "type": "integer", "description": "1-based start line (optional)" },
+    "limit":  { "type": "integer", "description": "Max lines to return (optional)" }
+  },
+  "required": ["path"]
+}
+```
+
+**Examples.**
+
+```jsonc
+// 1. Read the whole spilled output (the first 2000 lines)
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt"}
+
+// 2. Read the window around the error
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt", "offset": 1200, "limit": 200}
+
+// 3. Continue where the previous read stopped
+{"path": "/home/u/.harbor/spill/s-01HN8Q-3f2a91c4d5e6f7081/a1b2c3d4e5f60718.txt", "offset": 1400}
+```
+
+**Permissions.** Allow — the tool is confined by the store to the CURRENT
+session's spill directory, so it can only reach the output of a tool the agent
+itself ran. It is declared `Opaque` on purpose: a path-taking declaration would
+put it under the workspace confinement, which downgrades an out-of-workspace
+path from "allow" to "ask" — and the spill area is outside the workspace by
+definition.
+
+**Mode.** `Parallel` (a read).
+
+**Tips.**
+- The path comes from the `[spilled: ...]` marker in the tool result — there is
+  no other way to learn it.
+- A file that is gone (the spill area is swept on a TTL) reads back as
+  "Spill file not found" — the full output is still in the session log.
+- If the store could not write the file at all, the tool result carries the
+  ORIGINAL output instead of a pointer: an overfull context is recoverable, a
+  silently cut one is not.
+
+---
+
 ## 3. "When to use X vs Y" matrix
 
 | You want to… | Use | Not | Why |
@@ -1102,6 +1168,7 @@ side effect the user has not explicitly requested.
 | Call an external MCP server | `mcp` | (nothing) | Only MCP bridge in the builtin set |
 | Check on a sub-agent you spawned | `session_read` | a new `task` | Reuses the peer's live context instead of restarting it |
 | Nudge a sub-agent off the wrong path | `session_steer` | (nothing) | Injects/redirects without discarding what the peer found |
+| Read a tool output that was too big for the context | `spill_read` | `read` | The path is outside the workspace; `read` would ask for permission on every window |
 
 ---
 
