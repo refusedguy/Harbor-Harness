@@ -34,6 +34,9 @@ internal static class ToolSchemaFixtures
     /// <summary>Every builtin tool that owns a parameter schema.</summary>
     internal static (string Key, Func<ITool> Factory)[] ToolFactories { get; } =
     [
+        ("AskUserQuestionTool", () => new AskUserQuestionTool(
+            new StubUserQuestionService(Harbor.Abstractions.Interaction.UserQuestionOutcome.Answered([])),
+            NullLogger<AskUserQuestionTool>.Instance)),
         ("BashTool", () => new BashTool(new SystemProcessProxy(), NullLogger<BashTool>.Instance)),
         ("EditTool", () => new EditTool(NullLogger<EditTool>.Instance)),
         ("GlobTool", () => new GlobTool(NullLogger<GlobTool>.Instance)),

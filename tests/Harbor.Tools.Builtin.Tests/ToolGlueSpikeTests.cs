@@ -356,4 +356,24 @@ public class ToolGlueSpikeTests
         await Assert.That(tool.PromptGuidelines[3]).IsEqualTo(
             "long independent recon: `background: true`, keep working — the report arrives as a follow-up message, do not poll");
     }
+
+    [Test]
+    public async Task AskUserQuestion_GlueMatchesDeletedHandwrittenMembers()
+    {
+        var tool = new AskUserQuestionTool(
+            new StubUserQuestionService(Harbor.Abstractions.Interaction.UserQuestionOutcome.Answered([])),
+            NullLogger<AskUserQuestionTool>.Instance);
+
+        await Assert.That(tool.Name.Value).IsEqualTo("ask_user_question");
+        await Assert.That(tool.DisplayName).IsEqualTo("Ask User Question");
+        await Assert.That(tool.Glyph).IsEqualTo("❓");
+        await Assert.That(tool.Description).IsEqualTo(
+            "Ask the user a structured question and wait for the answer. Use it when only the user can decide: which approach, which library, test or documentation. Not a permission request.");
+        await Assert.That(tool.ExecutionMode).IsEqualTo(ExecutionMode.Sequential);
+        await Assert.That(tool.PromptSnippet).IsEqualTo(
+            "ask_user_question: ask the user a structured question (options or free text) and wait for the answer");
+        await Assert.That(tool.PromptGuidelines.Count).IsEqualTo(4);
+        await Assert.That(tool.PromptGuidelines[3]).IsEqualTo(
+            "the wait is bounded: a timeout comes back as ASK_PENDING, never as silence");
+    }
 }

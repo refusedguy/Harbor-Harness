@@ -87,7 +87,7 @@ src/Harbor.Providers.{Anthropic,OpenAI,Ollama,OpenAiCompatible}/ — LLM clients
 src/Harbor.Tools.Builtin/             — 23 builtin tools under Tools/ (read/write/edit/bash/glob/grep/
                                         ls/skill/patch/notebook/tree/lsp/task/webfetch/ripgrep/mcp/
                                         read_mcp_resource/mcp_prompt/session_read/session_steer/
-                                        harbor_inspect/plugin_manager/goal)
+                                        harbor_inspect/plugin_manager/goal/ask_user_question)
 src/Harbor.Plugins.*                  — plugin hosting split: Abstractions, Compilation (Roslyn),
                                         Instantiation, Registration, Hosting, Runtime (CS loader),
                                         Host, Storage
