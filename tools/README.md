@@ -98,6 +98,7 @@ it from the sources in the same tree and compares the bytes.
 | Tool | What it does | Referenced from |
 |---|---|---|
 | [`gates/`](./gates) | The Go sources of the compiled gates: one directory per gate, standard library only, no external module. `build-gates.sh` (one directory up) builds `tools/bin/harbor-gates-linux-x64` and `tools/bin/harbor-gates-linux-arm64` byte-reproducibly and writes `tools/bin/SHA256SUMS`. The gates that moved: the seam graph (`gen-seam-graph`) and the repo-map counts (`check-doc-facts`). | [`docs/CI_GATES.md`](../docs/CI_GATES.md), [`.github/workflows/gates-binary.yml`](../.github/workflows/gates-binary.yml) |
+| [`gates/banned-api-exemptions/`](./gates/banned-api-exemptions) | The banned-API suppression catalogue, and the tree it accounts for: every `#pragma warning disable RS0030` in `src/` and `apps/` is compared with the catalogue at the bottom of `BannedSymbols.txt`, in both directions and in count. The ban is a compiler diagnostic, so a suppression is invisible to it by construction — this gate is what sees it. `--self-test` plants an unjustified suppression, a stale row, a count mismatch and an emptied catalogue, and asserts that each fires. | [`.github/workflows/docs.yml`](../.github/workflows/docs.yml) (`bannedapi`, `selftest`), [`docs/CI_GATES.md`](../docs/CI_GATES.md), issue #1730 |
 
 ## .NET tools
 

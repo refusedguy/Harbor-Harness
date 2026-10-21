@@ -42,6 +42,7 @@ import (
 	"sort"
 	"strings"
 
+	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/gen-seam-graph"
 	"harbor.local/gates/internal/gate"
@@ -60,6 +61,11 @@ type registered struct {
 }
 
 var registry = []registered{
+	{
+		name:    "banned-api-exemptions",
+		summary: "every banned-API suppression in the product tree is justified by the catalogue",
+		run:     bannedapiexemptions.Run,
+	},
 	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",

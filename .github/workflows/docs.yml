@@ -169,6 +169,13 @@ on:
       # squash-merge dropped content. The gate has to run on every such pull
       # request, and on the push that lands it — so the trigger is the
       # workflow files themselves, not the gate's own sources alone.
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A PR
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       - '.github/workflows/**'
       - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
@@ -296,6 +303,13 @@ on:
       - '.github/workflows/**'
       - 'tools/check-local-merge-loss.py'
       - 'tools/merge-loss-exceptions.txt'
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A pull request
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
       - 'tools/gates/**'
@@ -590,6 +604,13 @@ jobs:
       # exists.
       - name: Changelog assembler notices a diverged CHANGELOG.md
         run: python3 tools/changelog-assemble.py --self-test
+      # #1730. The banned-API exemption gate compares the catalogue in
+      # BannedSymbols.txt with the RS0030 suppressions the product tree
+      # carries. Its self-test plants an unjustified suppression, a stale
+      # row, a count mismatch and an emptied catalogue, and asserts that
+      # each fires - a gate that cannot say no enforces nothing.
+      - name: Banned-API exemption gate fails on an unjustified suppression
+        run: tools/bin/harbor-gates-linux-x64 banned-api-exemptions --self-test
 
   links:
     name: internal links
@@ -1407,6 +1428,38 @@ jobs:
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
         run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+
+  # #1730. The banned-API suppression catalogue, and the tree it accounts for.
+  #
+  # BannedSymbols.txt is a SECURITY control: it forbids the Newtonsoft
+  # serializer, the XML serializer, the Windows registry, the legacy async
+  # patterns and the sync-over-async calls, and the compiler enforces it
+  # through RS0030. A `#pragma warning disable RS0030` is the one way to
+  # switch that control off, and the diagnostic is exactly what the
+  # suppression switches off - so the compiler cannot see it, by
+  # construction.
+  #
+  # The catalogue at the bottom of BannedSymbols.txt records every
+  # suppression the product tree carries, with the reason it is there. This
+  # job compares the catalogue with the tree in BOTH directions: a
+  # suppression with no row is unjustified, a row whose file carries no
+  # suppression is stale, and a file whose count differs from its row count
+  # is a mismatch. The gate found two drifts on the tree it landed on, and
+  # both are fixed in the same commit.
+  #
+  # The floor is the ratchet, set AT the measured count: 6 rows over 6
+  # suppressions in 5 files. A PR that removes an exemption lowers it in
+  # the same diff, where a reviewer can see it.
+  bannedapi:
+    name: banned API exemptions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check every banned-API suppression against the catalogue
+        run: tools/bin/harbor-gates-linux-x64 banned-api-exemptions --min-exemptions 6
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
