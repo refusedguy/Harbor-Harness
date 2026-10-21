@@ -103,7 +103,8 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
         var declared = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 $"{SchemaAttributeNamespace}.{SchemaAttributeName}",
-                static ctx => ReadSchema(ctx.TargetSymbol))
+                static (node, _) => true,
+                static (ctx, _) => ReadSchema(ctx.TargetSymbol))
             .Where(static data => data is not null);
 
         var pins = context.AdditionalTextsProvider
@@ -121,7 +122,8 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
         var named = context.SyntaxProvider
             .ForAttributeWithMetadataName(
                 $"{ToolAttributeNamespace}.{ToolAttributeName}",
-                static ctx => ctx.TargetSymbol);
+                static (node, _) => true,
+                static (ctx, _) => ctx.TargetSymbol);
 
         context.RegisterSourceOutput(
             named.Collect(),
@@ -196,21 +198,18 @@ public sealed class ToolSchemaGenerator : IIncrementalGenerator
             string? itemsOf = null;
             foreach (var namedArgument in attribute.NamedArguments)
             {
-                switch (namedArgument.Key)
-                {
-                    case "Description":
-                        description = namedArgument.Value.Value as string;
-                        break;
-                    case "Enum":
-                        values = StringArray(namedArgument.Value);
-                        break;
-                    case "Required":
-                        required = namedArgument.Value.Value is true;
-                        break;
-                    case "ItemsOf":
-                        itemsOf = namedArgument.Value.Value as string;
-                        break;
-                }
+                // Not a switch on a string: the rule against one is in
+                // tools/check-string-switch.py, and four cases do not make
+                // a ladder worth the exemption.
+                string key = namedArgument.Key;
+                if (key == "Description")
+                    description = namedArgument.Value.Value as string;
+                else if (key == "Enum")
+                    values = StringArray(namedArgument.Value);
+                else if (key == "Required")
+                    required = namedArgument.Value.Value is true;
+                else if (key == "ItemsOf")
+                    itemsOf = namedArgument.Value.Value as string;
             }
 
             parameters.Add(new ParamData(name!, type!, description, values, required, itemsOf));
