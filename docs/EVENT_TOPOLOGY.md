@@ -26,18 +26,22 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:196,241,248,260
-  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:215,269,283,298,329,375,418,480,505,516
-  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:55,83,118
-  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:188
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305,389,442,456,471,482
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035
+  TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:239,336,433,440,445,459,504,533,588,668,789,846,882,1148
+  ToolRetryPolicy ............... src/Harbor.AgentRuntime/Agents/ToolRetryPolicy.cs:131,215,262,287,307,329
+  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:199,235,528
+  UpdateCoalescer ............... src/Harbor.AgentRuntime/Agents/UpdateCoalescer.cs:238
+  DefaultSessionContext ......... src/Harbor.AgentRuntime/Agents/DefaultSessionContext.cs:253
+  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214
         │ await _eventBus.PublishAsync(evt, ct)
         ▼
 InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.cs:353
-  0. fast path .................. src/Harbor.Registries/Events/InMemoryEventBus.cs:350-405
+  0. fast path .................. src/Harbor.Registries/Events/InMemoryEventBus.cs:368-409
      (zero subscribers + no mandatory sink + ring unarmed ⇒ returns before
       touching a collection; falls through to the slow path otherwise)
   1. middleware pipeline (registration order; drop/throw ⇒ event dies here)
-     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:489 (+816-847)
+     ............................ src/Harbor.Registries/Events/InMemoryEventBus.cs:489 (+816-848)
   2. scrollback ring append ...... src/Harbor.Registries/Events/InMemoryEventBus.cs:498 (+src/Harbor.Registries/Events/EventBusScrollbackStore.cs:179-201)
   3. lock-free snapshot .......... src/Harbor.Registries/Events/InMemoryEventBus.cs:504
   4. sequential awaited fan-out .. src/Harbor.Registries/Events/InMemoryEventBus.cs:533 (+862-956)
@@ -45,14 +49,24 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
   DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303
-  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103
+  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107
   EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
   InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
-  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103
-  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:237
-  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:31
+  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:162-166
+  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238
+  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:35
   Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
 ```
+
+The producers block is a **census**, and it is machine-checked: the
+compiled `check-event-topology` gate reads the block and the tree and
+requires the two to agree — every line the block cites must BE a publish
+call, every publish call in a file the block names must be cited, and every
+file under `src/` or `apps/` that publishes must be named
+(`tools/gates/check-event-topology/`). A `file:line` fence cannot see this
+class of defect: the four lines this block cited before the gate existed
+(`AgentLoop.cs:196,241,248,260`) all existed, none was blank, and none of
+them published.
 
 Every entry in that subscriber list is a live `IEventBus.Subscribe` on a shipped
 code path, and the list is exhaustive for `src/` + `apps/`. It is exhaustive
@@ -69,8 +83,8 @@ there is nothing left off it.
 | Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:446-451` | replay-before-live per client; writer never silently drops |
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
-| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:103`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:205` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
-| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-15` (held by `DefaultAgent.cs:26`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:139` | agent steering messages, unrelated to the bus |
+| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92-93`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:162-166`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:270-275` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
+| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-15` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:177-180` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
 ## 2. Who updates the store
@@ -78,14 +92,14 @@ there is nothing left off it.
 The bus **never writes a store itself**. What a subscriber does with the event
 is the subscriber's business, and the live branches are:
 
-- **TUI / CLI** — the renderer is the subscriber. `ReplRunner.cs:312,467` and
-  `DemoCommand.cs:237` hand every event to `ITuiRenderer.RenderAsync`, and the
+- **TUI / CLI** — the renderer is the subscriber. `ReplRunner.cs:312,474` and
+  `DemoCommand.cs:238` hand every event to `ITuiRenderer.RenderAsync`, and the
   renderer dispatches into a `UiStore`
   (`src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:74`,
-  `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`), which reduces it
-  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:175-183`).
+  `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`), which reduces it
+  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:180-188`).
   The CellForge REPL takes the same route via its `_events` pump
-  (`ReplLifecycle.cs:205-209`).
+  (`ReplLifecycle.cs:270-275`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
   dispatches there (`apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61-80`).
 - **The flat-`AppState` branch no longer exists.** This document used to carry a
@@ -163,11 +177,11 @@ is the subscriber's business, and the live branches are:
   implements neither. Shutdown hygiene lives in subscribers:
   `EventBroadcaster.DisposeAsync` unsubscribes and stops per-client writers
   (`EventBroadcaster.cs:110-126`), `InProcessHarborClient` unsubscribes and
-  completes its channel (`InProcessHarborClient.cs:246-255`). In-flight
+  completes its channel (`InProcessHarborClient.cs:249-258`). In-flight
   `PublishAsync` calls honour the caller's `CancellationToken` — cancellation
   abandons the remaining fan-out (tail loss by design).
 - **Late subscribers get future events only.** `Subscribe` never replays
-  (`InMemoryEventBus.cs:533-542`); history is available only as an explicit
+  (`InMemoryEventBus.cs:542-551`); history is available only as an explicit
   pull via `GetScrollback` (repeatable point-in-time copy,
   `src/Harbor.Registries/Events/EventBusScrollbackStore.cs:127-171`). Tested:
   `EventTopologySemanticsTests.LateSubscriber_SeesFutureOnly_ScrollbackIsSnapshot`.
@@ -180,7 +194,7 @@ is the subscriber's business, and the live branches are:
   a declared in-process guarantee, and `IEventBus` is public in the
   zero-dependency `Harbor.Abstractions` assembly that every plugin references
   (`IPluginLoadHost.EventBus` hands a live bus to out-of-tree plugin code,
-  `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:60`, and the desktop app
+  `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:71`, and the desktop app
   declares `[Exposes(typeof(IEventBus))]`
   (`apps/Harbor.App.Avalonia/AppHost.cs:39`) as a validated DI capability).
   "No production callers" is therefore **not a provable claim**
@@ -189,7 +203,7 @@ is the subscriber's business, and the live branches are:
   on every publish **and** silently disqualified the fast path for every shipped
   preset (0/200 qualifying publishes on CLI and desktop, 200/200 only headless;
   the preset is `EventBusScrollback = 1000`,
-  `src/Harbor.Hosting/HarborComposeOptions.cs:153`).
+  `src/Harbor.Hosting/HarborComposeOptions.cs:180`).
   Retention is now armed by the first `GetScrollback` call
   (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:141`), so:
   - an unread ring costs nothing, and the fast path is reachable for the
@@ -208,7 +222,7 @@ is the subscriber's business, and the live branches are:
 
 - **Throwing subscriber is evicted, others continue** — an exception in one
   handler marks it dead and removes it after the publish
-  (`InMemoryEventBus.cs:927-939`), never halting the renderer or other
+  (`InMemoryEventBus.cs:933-945`), never halting the renderer or other
   subscribers. Pre-existing test: `EventBusTests.FailingSubscriber_DoesNotBlockOthers`.
 - **An agent listener that throws is logged and KEPT** — `IAgent.Subscribe` wraps
   the caller's callback so the exception never reaches the bus
@@ -218,13 +232,13 @@ is the subscriber's business, and the live branches are:
   Tested: `AgentListenerFanOutTests.ThrowingListener_IsLoggedAndSkipped_AndStaysSubscribed`.
 - **Middleware failure drops the event for everyone** — a `false` return or a
   throw anywhere in the pipeline returns before scrollback and fan-out
-  (`InMemoryEventBus.cs:483-489,807-840`). Middleware is therefore a mandatory
+  (`InMemoryEventBus.cs:487-493,816-848`). Middleware is therefore a mandatory
   filter, not an optional listener.
 - **Slow-subscriber budget (A4):** each handler gets `DefaultHandlerBudget`
   (250 ms, `InMemoryEventBus.cs:118`); an over-budget handler is left behind
   (orphaned but observed), accrues a strike, and is evicted after
   `MaxSlowStrikes` (3, `InMemoryEventBus.cs:134`) consecutive strikes
-  (`InMemoryEventBus.cs:895-908,911-932`). `TimeSpan.Zero` disables the budget
+  (`InMemoryEventBus.cs:903-915,917-938`). `TimeSpan.Zero` disables the budget
   (legacy blocking semantics). Pre-existing tests:
   `EventBusBackpressureTests` (all three cases).
 - **Scrollback eviction (drop-oldest):** at capacity the oldest slot is
@@ -234,13 +248,13 @@ is the subscriber's business, and the live branches are:
 ## 6. Subscription lifecycle
 
 - Every `Subscribe` returns an `IDisposable`; disposal CAS-removes that exact
-  `Subscription` record (`InMemoryEventBus.cs:533-542,568-583`). Disposal is
+  `Subscription` record (`InMemoryEventBus.cs:542-551,568-583`). Disposal is
   idempotent (`_action = null` after first invoke,
   `InMemoryEventBus.cs:1164-1178`).
 - Holders responsible for disposal: `EventBroadcaster.DisposeAsync`,
   `InProcessHarborClient`, the CellForge REPL pump (`using var busPump`,
-  `ReplLifecycle.cs:98-104`), CellForge bridges
-  (`Subscription` property, `ChatScreenBridge.cs:105,108`),
+  `ReplLifecycle.cs:162-166`), CellForge bridges
+  (`Subscription` property, `ChatScreenBridge.cs:108,111`),
   `DiagnosticsAggregator`, and the REPL runners / `DemoCommand`
   (process-lifetime, never disposed — acceptable, bus is process-lifetime too).
 - `DefaultAgent` holds no bus subscription of its own (#1561). `IAgent.Subscribe`
@@ -305,17 +319,30 @@ is the subscriber's business, and the live branches are:
    `DispatchToSubscribersAsync`), gated on its own allocation measurement — not a
    public interface edit smuggled in under a performance heading.
 
-   Blast radius, searched rather than recalled (issue criterion #3): 315
-   `PublishAsync` call sites repo-wide, of which **29 are product code**
-   (`src/Harbor.Application` 28, `src/Harbor.Plugins.Registration` 1) and the rest
-   are tests and benchmarks; **5 implementors** (`InMemoryEventBus`, `NullEventBus`,
-   `FakeEventBus`, `RecordingEventBus`, `BenchEventBus`); `contrib/` has **zero**
-   call sites, which is also why an interface change there would have gone
-   unverified — CI does not compile it. All 29 product sites await exactly once
-   (290 awaited / 15 pass-through / 5 sync-waited / 1 expression-bodied helper
-   whose 5 call sites all await), so the `Task`→`ValueTask` single-await hazard
-   would not have broken anything today — and would still be a hazard, silently,
-   at the seam 29 call sites would be re-pointed at.
+   Blast radius, searched rather than recalled (issue criterion #3): **392**
+   `PublishAsync` call sites in the tracked `.cs` files, of which **39 are
+   product code** (`src/Harbor.AgentRuntime` 38, `src/Harbor.Plugins.Registration`
+   1) and 353 are tests and benchmarks; **8 implementors** of `IEventBus`
+   (`InMemoryEventBus`, `NullEventBus`, `FakeEventBus`, `RecordingEventBus`,
+   `BenchEventBus`, `CancelHonoringBus`, `CancelOnTurnStartBus`,
+   `ThrowingUpdateBus`) and the interface itself; `contrib/` has **zero** call
+   sites, which is also why an interface change there would have gone
+   unverified — CI does not compile it. The 392 split by how the call is
+   consumed: 361 awaited, 25 pass-through (the result is assigned, not
+   awaited), 6 fire-and-forget, 0 sync-waited. **38 of the 39 product sites
+   await exactly once, and ONE does not**
+   (`src/Harbor.AgentRuntime/Agents/TurnRunner.cs:882` — the per-delta
+   `MessageUpdateEvent` publish is fired and its task discarded), so the
+   `Task`→`ValueTask` single-await hazard would not have broken anything today
+   — and would still be a hazard, silently, at the seam 39 call sites would be
+   re-pointed at, and at that one site the difference between a discarded
+   `Task` and a discarded `ValueTask` is a defect class of its own.
+
+   The count is a grep over `git ls-files '*.cs'` for `\.PublishAsync\s*\(`,
+   with the declarations (`public Task PublishAsync(`) and the helper whose
+   name merely ends in `PublishAsync` (`CompactAndPublishAsync(`) left out —
+   the same definition the producers block and the `check-event-topology`
+   gate use.
 
    Enforced by `tests/Harbor.Registries.Tests/EventBusPublishShapeTests.cs`,
    which pins the shared-instance property on the fast path and on the

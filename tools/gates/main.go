@@ -47,6 +47,7 @@ import (
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	docfacts "harbor.local/gates/check-doc-facts"
+	checkeventtopology "harbor.local/gates/check-event-topology"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
@@ -88,6 +89,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-event-topology",
+		summary: "the producers block of the event topology still names the publish calls",
+		run:     checkeventtopology.Run,
 	},
 	{
 		name:    "check-no-test-sdk",

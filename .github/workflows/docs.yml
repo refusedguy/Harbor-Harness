@@ -597,6 +597,15 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
+      # #2119. The event-topology gate is the only one that asks whether the
+      # producers block of docs/EVENT_TOPOLOGY.md still names the publish
+      # calls the tree holds. A `file:line` fence cannot see that class of
+      # defect — the four lines the block cited were all real lines and none
+      # of them published — so the failure path is tested here for the same
+      # reason as the others: a rule edited until it matches nothing is
+      # indistinguishable from a rule that matched nothing.
+      - name: Event-topology gate fails on a stale producer citation
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
 
   links:
     name: internal links
@@ -1414,6 +1423,27 @@ jobs:
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
         run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+
+  # #2119. The producers block of docs/EVENT_TOPOLOGY.md is a census: it
+  # names every file that publishes and every line it publishes on. The
+  # `cites` job above fences a `file:line` — the file must exist, the line
+  # must be inside it — and that fence is blind to the defect this document
+  # had: all four lines the block cited existed, none was blank, and none of
+  # them published. This job asks the question the fence cannot: are the
+  # cited lines the publish calls, and is the list complete?
+  eventtopology:
+    name: event topology producers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      # The floor is set AT the measured count rather than below it: 8
+      # producers, 39 publish call sites. A floor with slack cannot tell
+      # "the tree got smaller" from "the matcher stopped matching".
+      - name: Check the producers block against the publish calls in the tree
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
