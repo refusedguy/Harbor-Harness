@@ -50,11 +50,12 @@
       All Microsoft.Extensions.* packages are pinned to the 10.0.13 servicing
       release (published 2026-10-13) — the same band that carries the three
       high-severity advisory fixes tracked in #1892. Transitive dependencies
-      (e.g. Terminal.Gui → Configuration.Binder 10.0.7, Termina →
-      Hosting.Abstractions 10.0.8) require >= 10.0.7 / 10.0.8 / 10.0.9
-      depending on the chain; pinning to 10.0.13 satisfies all transitive
-      minimums and CentralPackageTransitivePinningEnabled keeps them locked
-      to this version.
+      ask for LESS than the band (Terminal.Gui 2.5.0 → Configuration.Binder
+      10.0.11, Termina 0.17.0 → Hosting.Abstractions 10.0.10), so pinning to
+      10.0.13 satisfies every transitive minimum and
+      CentralPackageTransitivePinningEnabled keeps them locked to this
+      version. The lift is always UP: a package asking for less than the
+      central band is pulled up to it, never down.
     -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
@@ -229,11 +230,16 @@
       Spectre.Console stays at 0.54.0 — the last version with Color/Decoration
       types in the main Spectre.Console assembly. From 0.55 onward these
       types moved to Spectre.Console.Ansi without type forwarders, which
-      breaks RazorConsole.Core 0.6.0-alpha (which has a hard dependency on
+      breaks RazorConsole.Core 0.6.0 (which has a hard dependency on
       Spectre.Console 0.54.0 and whose source generator emits
       `Spectre.Console.Color` references). Upgrading RazorConsole to a
       newer release is blocked until RazorConsole publishes a build that
       targets Spectre.Console 0.55+.
+
+      Moving RazorConsole.Core from the dated 0.6.0-alpha to the stable
+      0.6.0 did NOT unblock it: the stable build still depends on
+      Spectre.Console 0.54.0, and so do the 1.0.0-alpha builds. The pin
+      moves only when a RazorConsole release raises that floor.
     -->
     <PackageVersion Include="OpenTelemetry" Version="1.20.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.0" />
@@ -274,9 +280,52 @@
     -->
     <PackageVersion Include="SixLabors.ImageSharp" Version="4.1.3" />
     <!-- ── Alternative UI stacks ─────────────────────────────────────────── -->
-    <PackageVersion Include="Terminal.Gui" Version="2.4.17" />
-    <PackageVersion Include="Termina" Version="0.15.0" />
-    <PackageVersion Include="RazorConsole.Core" Version="0.6.0-alpha.20260506-3ec7409" />
+    <!--
+      Six pins in this file serve ONLY contrib/: Terminal.Gui, Termina,
+      Termina.Generators and RazorConsole.Core (below and in the source
+      generators group), Dirkster.AvalonDock and Jint. Their consumers are
+      Harbor.Tui.TerminalGui, Harbor.Tui.Termina, Harbor.Tui.RazorConsole,
+      Harbor.Scripting.Engines and Harbor.App.Wpf. contrib/ is not in
+      Harbor.slnx, no project in src/, apps/ or tests/ references these
+      packages, and CI never compiles them — so the compatibility of each
+      move was checked against the shipped assemblies of BOTH versions
+      (#1904), not against a build.
+
+      Terminal.Gui 2.4.17 -> 2.5.0: the two versions agree on every member
+      the contrib renderer calls (Application.Create/Init, IApplication.Run/
+      AddTimeout/RemoveTimeout/RequestStop, SchemeManager.AddScheme, the
+      View/TextView/Label/Window surface, Dim/Pos, Key/KeyCode). What 2.5.0
+      dropped is the configuration-manager stack (ConfigurationManager,
+      ConfigProperty, SettingsScope, SourcesManager, MecSchemeManager,
+      ThemeScope, Scope`1, DeepCloner, ConfigLocations, AppSettingsScope) and
+      moved IAcceptTarget from Terminal.Gui to Terminal.Gui.Input. None of it
+      is reachable from contrib: the renderer touches one member of that
+      namespace, SchemeManager.AddScheme, and it is still there.
+    -->
+    <PackageVersion Include="Terminal.Gui" Version="2.5.0" />
+    <PackageVersion Include="Termina" Version="0.17.0" />
+    <!--
+      RazorConsole.Core 0.6.0-alpha.20260506-3ec7409 -> 0.6.0 (stable).
+
+      The dated pre-release was replaced by the stable build of the SAME
+      minor (published 2026-09-29). The Spectre.Console blocker above is
+      unchanged by it: 0.6.0 still declares a hard dependency on
+      Spectre.Console 0.54.0, exactly like the alpha did, so the pin on
+      Spectre.Console stays where it is.
+
+      What changed in the package itself: the layout widgets were reworked
+      (PanelWidget/RowWidget/PaddingWidget -> BoxWidget/FlexWidget, and
+      PanelBorderStyle -> BoxBorderStyle), which dropped the `XxxAttribute`
+      string accessors on the Panel/Rows/Columns/Padder/FlexBox/Align
+      components. The contrib razor file uses none of those accessors: its
+      generated code binds Panel.Title/TitleColor/BorderColor/Expand,
+      TextInput.Label/LabelColor/Placeholder/PlaceholderColor/BorderColor/
+      FocusedBorderColor/OnSubmit/Expand/Value and Markup.Content/
+      Foreground/Decoration — every one of them is still a plain property in
+      0.6.0, and ViewHeightScrollable.LinesToRender and
+      ViewHeightScrollable.ScrollContext are still there.
+    -->
+    <PackageVersion Include="RazorConsole.Core" Version="0.6.0" />
     <!-- Avalonia 12.1.x — latest stable line (12.1.4, released 2026-10-09).
          Brings the new Win32 chrome renderer (ExtendClientAreaChromeHints),
          fixed Dispatcher.MainLoop PlatformNotSupportedException on Windows
@@ -305,8 +354,26 @@
          unless they ask for it. -->
     <PackageVersion Include="Markdig" Version="1.4.2" />
     <PackageVersion Include="AvalonEdit" Version="6.3.1.120" />
-    <PackageVersion Include="Dirkster.AvalonDock" Version="4.74.1" />
-    <PackageVersion Include="LiveChartsCore.SkiaSharpView.WPF" Version="2.1.0-dev-798" />
+    <!--
+      Dirkster.AvalonDock 4.74.1 -> 5.0.1 (major, Ms-PL in both).
+
+      The one contrib consumer is Harbor.App.Wpf, and it touches AvalonDock
+      from XAML only: <avalonDock:DockingManager> with DocumentsSource,
+      ActiveContent, DocumentHeaderTemplate and LayoutItemTemplate. All four
+      properties and the DockingManager type itself are still there in 5.0.1,
+      and the XAML namespace "https://github.com/Dirkster99/AvalonDock" still
+      maps to the same five CLR namespaces (AvalonDock, .Controls,
+      .Converters, .Layout, .Themes) — so the tag still resolves.
+
+      What v5 actually changed is the serialization stack: the layout model
+      left IXmlSerializable (ReadXml/WriteXml/GetSchema are gone from the
+      Layout* types), LayoutSerializer/XmlLayoutSerializer are gone, and the
+      DTO layer plus the non-WPF core moved into the new
+      Dirkster.AvalonDock.Core package (netstandard2.0, no dependencies).
+      None of that is reachable from the WPF app, which does no layout
+      persistence at all.
+    -->
+    <PackageVersion Include="Dirkster.AvalonDock" Version="5.0.1" />
     <!-- ── .NET MAUI (workload-supplied; version matches the maui-windows
          workload pack installed on the build machine) ──────────────────── -->
     <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.20" />
@@ -316,7 +383,21 @@
     <PackageVersion Include="Microsoft.Maui.Resizetizer" Version="10.0.20" />
     <PackageVersion Include="Microsoft.Maui.Controls.Build.Tasks" Version="10.0.20" />
     <!-- ── Scripting engines ─────────────────────────────────────────────── -->
-    <PackageVersion Include="Jint" Version="4.13.0" />
+    <!--
+      Jint 4.13.0 -> 4.17.0 (BSD-2-Clause). The only transitive moves from
+      Acornima 1.6.2 to 1.7.0.
+
+      The contrib consumer is Harbor.Scripting.Engines: new Engine(o => ...),
+      Options.TimeoutInterval/MaxStatements/LimitRecursion/LimitMemory/
+      CancellationToken/AllowOperatorOverloading, Engine.Execute/SetValue and
+      the JsValue surface (FromObject, Undefined, IsUndefined, IsNull,
+      ToObject, Get). Every one of those is present in 4.17.0. The members
+      4.17.0 dropped are JsMap.GetOwnProperty/TryGetProperty and
+      JsSet.GetOwnProperty/TryGetProperty/Item — the contrib code touches
+      neither, and the Jint.DoubleExtensions/Int32Extensions/Int64Extensions
+      helper classes are gone too, with no user in the tree.
+    -->
+    <PackageVersion Include="Jint" Version="4.17.0" />
     <!-- ── Roslyn analyzers (consumed via Directory.Build.props) ─────────── -->
     <!--
       Roslynator 4.15.0 → 5.0.1 (#1851).
@@ -477,7 +558,20 @@
     -->
     <PackageVersion Include="ConsoleAppFramework" Version="5.7.13" />
     <!-- ── Source generators (PrivateAssets="all" at consumption site) ───── -->
-    <PackageVersion Include="Termina.Generators" Version="0.15.0" />
+    <!--
+      Termina.Generators 0.15.0 -> 0.17.0 (Apache-2.0), moved in lockstep with
+      the Termina pin above: the generator emits code against the Termina
+      version it ships with, so the two are one decision, not two.
+
+      The package itself is analyzer-only in both versions — a single
+      analyzers/dotnet/cs/Termina.Generators.dll and no dependencies — so
+      the move changes the emitted code and nothing else. Note that Termina
+      0.17.0 no longer carries Termina.Generators as a transitive (0.15.0
+      did): the generator now arrives only through the direct
+      PackageReference in contrib/tui/Harbor.Tui.Termina, which is how it
+      was already consumed.
+    -->
+    <PackageVersion Include="Termina.Generators" Version="0.17.0" />
     <!-- SG3 spike (issue 1244): ctor(ILogger) generation for the 8
          [AutoConstruct] tools in Harbor.Tools.Builtin. Pinned 4.0.2: the 4.x
          line adds a source-generated IoC container ([ServiceProvider]) that
