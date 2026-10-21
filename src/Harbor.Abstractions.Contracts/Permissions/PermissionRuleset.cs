@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Models;
+using Harbor.Abstractions.Models.Identifiers;
 namespace Harbor.Abstractions.Permissions;
 /// <summary>
 ///     Permission ruleset for an agent or session.
@@ -133,55 +134,55 @@ public sealed record PermissionRuleset
     /// </summary>
     public static PermissionRuleset Default { get; } = new(new PermissionRule[]
     {
-        new("read", "*", PermissionAction.Allow),
-        new("glob", "*", PermissionAction.Allow),
-        new("grep", "*", PermissionAction.Allow),
-        new("ls", "*", PermissionAction.Allow),
-        new("write", "src/*", PermissionAction.Allow),
-        new("write", "*", PermissionAction.Ask),
-        new("edit", "src/*", PermissionAction.Allow),
-        new("edit", "*.env", PermissionAction.Deny),
-        new("edit", "*.env.*", PermissionAction.Deny),
-        new("edit", "*", PermissionAction.Ask),
-        new("bash", "ls *", PermissionAction.Allow),
-        new("bash", "cat *", PermissionAction.Allow),
-        new("bash", "grep *", PermissionAction.Allow),
-        new("bash", "rg *", PermissionAction.Allow),
-        new("bash", "find *", PermissionAction.Allow),
-        new("bash", "git status", PermissionAction.Allow),
-        new("bash", "git diff *", PermissionAction.Allow),
-        new("bash", "git log *", PermissionAction.Allow),
-        new("bash", "rm -rf /", PermissionAction.Deny),
-        new("bash", "sudo *", PermissionAction.Deny),
-        new("bash", "*", PermissionAction.Ask),
-        new("webfetch", "*", PermissionAction.Ask),
-        new("tree", "*", PermissionAction.Allow),
-        new("ripgrep", "*", PermissionAction.Allow),
-        new("notebook", "*", PermissionAction.Allow),
-        new("mcp", "*", PermissionAction.Ask),
-        new("read_mcp_resource", "*", PermissionAction.Ask),
-        new("mcp_prompt", "*", PermissionAction.Ask),
-        new("lsp", "*", PermissionAction.Allow),
-        new("patch", "src/*", PermissionAction.Allow),
-        new("patch", "*", PermissionAction.Ask),
-        new("task", "*", PermissionAction.Allow),
-        new("skill", "*", PermissionAction.Allow),
+        new(WellKnownTools.Read, "*", PermissionAction.Allow),
+        new(WellKnownTools.Glob, "*", PermissionAction.Allow),
+        new(WellKnownTools.Grep, "*", PermissionAction.Allow),
+        new(WellKnownTools.Ls, "*", PermissionAction.Allow),
+        new(WellKnownTools.Write, "src/*", PermissionAction.Allow),
+        new(WellKnownTools.Write, "*", PermissionAction.Ask),
+        new(WellKnownTools.Edit, "src/*", PermissionAction.Allow),
+        new(WellKnownTools.Edit, "*.env", PermissionAction.Deny),
+        new(WellKnownTools.Edit, "*.env.*", PermissionAction.Deny),
+        new(WellKnownTools.Edit, "*", PermissionAction.Ask),
+        new(WellKnownTools.Bash, "ls *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "cat *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "grep *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "rg *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "find *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "git status", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "git diff *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "git log *", PermissionAction.Allow),
+        new(WellKnownTools.Bash, "rm -rf /", PermissionAction.Deny),
+        new(WellKnownTools.Bash, "sudo *", PermissionAction.Deny),
+        new(WellKnownTools.Bash, "*", PermissionAction.Ask),
+        new(WellKnownTools.WebFetch, "*", PermissionAction.Ask),
+        new(WellKnownTools.Tree, "*", PermissionAction.Allow),
+        new(WellKnownTools.RipGrep, "*", PermissionAction.Allow),
+        new(WellKnownTools.Notebook, "*", PermissionAction.Allow),
+        new(WellKnownTools.Mcp, "*", PermissionAction.Ask),
+        new(WellKnownTools.ReadMcpResource, "*", PermissionAction.Ask),
+        new(WellKnownTools.McpPrompt, "*", PermissionAction.Ask),
+        new(WellKnownTools.Lsp, "*", PermissionAction.Allow),
+        new(WellKnownTools.Patch, "src/*", PermissionAction.Allow),
+        new(WellKnownTools.Patch, "*", PermissionAction.Ask),
+        new(WellKnownTools.Task, "*", PermissionAction.Allow),
+        new(WellKnownTools.Skill, "*", PermissionAction.Allow),
         // #1732: the runtime catalog is read-only, so it is allowed outright.
         // The other agents allow it through the Read class their rulesets
         // already name — `new("read", "*", Allow)` matches every tool the Read
         // category holds, this one included — so this row is the explicit
         // statement for the canonical ruleset rather than the only allowance.
-        new("harbor_inspect", "*", PermissionAction.Allow),
-        new("session_read", "*", PermissionAction.Allow),
-        new("session_steer", "*", PermissionAction.Ask),
+        new(WellKnownTools.HarborInspect, "*", PermissionAction.Allow),
+        new(WellKnownTools.SessionRead, "*", PermissionAction.Allow),
+        new(WellKnownTools.SessionSteer, "*", PermissionAction.Ask),
         // #1759: asking the human a question is not an action on the machine.
         // Nothing is written, nothing is executed, and the question channel is
         // what the human's answer gates, not the permission system. Allow it,
         // so the model may ask without a second prompt on top of the question
         // itself.
-        new("ask_user_question", "*", PermissionAction.Allow),
-        new("session_broadcast", "*", PermissionAction.Allow),
-        new("session_inbox", "*", PermissionAction.Allow),
+        new(WellKnownTools.AskUserQuestion, "*", PermissionAction.Allow),
+        new(WellKnownTools.SessionBroadcast, "*", PermissionAction.Allow),
+        new(WellKnownTools.SessionInbox, "*", PermissionAction.Allow),
         // #1738: the agent-facing plugin management tool. ALLOW here does NOT
         // mean "the agent may install plugins on its own" — the tool asks the
         // user about every change it proposes, and the answer covers that one
@@ -190,7 +191,7 @@ public sealed record PermissionRuleset
         // names the file, the scope and the effect. A user who does not want
         // an agent touching plugins writes new("plugin_manager", "*", Deny)
         // and the tool never starts.
-        new("plugin_manager", "*", PermissionAction.Allow)
+        new(WellKnownTools.PluginManager, "*", PermissionAction.Allow)
     });
 
     /// <summary>

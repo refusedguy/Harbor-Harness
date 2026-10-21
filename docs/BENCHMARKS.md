@@ -2513,6 +2513,144 @@ between the lane shapes, so a single run cannot separate "the lane got cheaper"
 from "the runner was faster". The range is the honest statement of what these
 numbers support.
 
+#### 6.4.1 The build job, step by step (#1788) ✅ measured in CI
+
+Issue [#1788](https://github.com/refusedguy/Harbor-Harness/issues/1788) asks
+what the `build` job is made of now, and what is left on the critical path.
+This is the answer, step by step, from the job API (`started_at` /
+`completed_at` per step), `ubuntu-24.04`, SDK 10.0.402, 2026-10-21.
+
+**The lane as it was on `dev` that day**, three pull-request runs, the same
+day, three different branches. The `build` job wall is the first job's start
+to its end; the compile is the NUKE `Compile` step.
+
+| step | [39533897704](https://github.com/refusedguy/Harbor-Harness/actions/runs/39533897704) | [39537006278](https://github.com/refusedguy/Harbor-Harness/actions/runs/39537006278) | [39536616567](https://github.com/refusedguy/Harbor-Harness/actions/runs/39536616567) |
+|---|---:|---:|---:|
+| checkout | 3 s | 3 s | 3 s |
+| setup .NET 10 (+ the NuGet cache) | 23 s | 25 s | 23 s |
+| compute the cache key | 0 s | 0 s | 0 s |
+| **restore obj/ + bin/** | **1 s (nothing found)** | **0 s (nothing found)** | **0 s (nothing found)** |
+| **normalise the source mtimes** | **skipped** | **skipped** | **skipped** |
+| **NUKE compile (Release)** | **261 s** | **213 s** | **267 s** |
+| banned-assembly gate | 0 s | 1 s | 0 s |
+| CLI smoke | 0 s | 0 s | 1 s |
+| installer scripts + build catalog | 2 s | 1 s | 2 s |
+| pack NuGet libraries | 13 s | 9 s | 15 s |
+| validate the packages | 0 s | 0 s | 1 s |
+| determinism (two packs) | 11 s | 9 s | 12 s |
+| clean-room smoke-install | 5 s | 5 s | 8 s |
+| upload the nupkg artifact | 3 s | 3 s | 3 s |
+| advisory report (only when the deps moved) | 34 s | skipped | skipped |
+| upload the arch-gate log | 0 s | 0 s | 0 s |
+| **`build` job wall** | **360 s** | **274 s** | **341 s** |
+
+**The compile is 60-80 % of the job, and it has always been a COLD compile.**
+The two steps that make the build-output cache (#1927) worth having are the
+restore and the mtime normalisation. On every pull-request run measured —
+nine of them, 39533897704, 39534715983, 39534774534, 39536616567,
+39536917277, 39536932230, 39537006278, 39538144280 and 39538764502 — the
+restore printed
+
+```
+Cache not found for input keys: msbuild-v1-...-<pr sha>, msbuild-v1-...-
+```
+
+and the normalisation step, which runs only when the restore matched
+something, was SKIPPED every time. So nothing was ever restored and the whole
+tree was recompiled on every pull request. §6.7's sentence "The PR lane's
+build is incremental since #1927's build-output cache landed (it restores the
+base branch's `obj/` and rebuilds what changed)" was true of the design and
+false of every run: the lane restored nothing.
+
+**And it did not fire on the dev lane either.** The same "Cache not found for
+input keys" is what the dev pushes of that day printed — 39541235668,
+39543869492, 39548137817, 39548929800, 39550199548 and 39552451465 all had
+the normalisation step SKIPPED, and every one of them SAVED an entry
+afterwards. The next dev push, 39543869492, could not find the entry the
+previous one had saved 18 minutes earlier: same scope, same prefix. The cache
+of #1927 had never fired anywhere.
+
+**One cause, and it is measured: the VERSION.** The cache's version is a hash
+of the `path` input — upstream, `getCacheVersion(paths, …)` is the SHA-256 of
+the path LINES (trimmed, empties dropped) joined with `|`, plus the
+compression method and the salt `1.0` — and the restore asks the service for
+"the entry with this key AND this version". The comment lines are lines, so
+they are in the hash. The restore's path input carried NINE comment lines
+that the save's did not, so the two hashed to two different versions and the
+restore could never find the entry the save wrote. Replaying that hash over
+the two path inputs of the tree that failed (sha `7c7a13e1`): the restore's
+14 lines (9 of them comments) hash to `bcff3b41…`, the save's 5 lines hash
+to `3dd0d4fb…`; after the fix both inputs are the same 5 lines and both hash
+to `3dd0d4fb…`.
+
+The proof in two runs, four minutes apart, in the SAME scope: dispatch
+39541292620 saved the entry under the key `…-7c7a13e1` (`Cache saved with
+key: msbuild-v1-…-7c7a13e1`), and dispatch 39542435400 then asked for that
+EXACT key and the restore still answered
+
+```
+Cache not found for input keys: msbuild-v1-…-7c7a13e1, msbuild-v1-…
+```
+
+Same key, same scope, other version: the entry was there and the restore
+could not see it.
+
+**The scope is not the cause, and the dev lane's own runs say so.** On the dev
+push 39543869492 the dev scope already held an entry with the same prefix —
+saved 18 minutes earlier by 39541235668 — the run was in that same scope,
+and the restore still printed "Cache not found for input keys". What the
+pull-request lane adds is that its OWN scope holds nothing (the
+pull-request lane never writes), so the entry worth restoring lives in the
+base branch's scope — and the exact key is what crosses into it: measured,
+run 39545372020, a pull-request run, restored the dev scope's entry
+`…-8d82cac1` by its exact key. The step that resolves the entry reads the
+REST API, which lists every scope, and names the base scope's newest entry
+with this prefix.
+
+**The NuGet cache setup-dotnet restores was found on every pull request** —
+because setup-dotnet passes ONE path input to both its restore and its save,
+so the two versions agree. That is the whole difference between the two
+caches: same mechanism, same action, one pair of path inputs identical and
+one pair not.
+
+**After the fix** (runs [39545372020](https://github.com/refusedguy/Harbor-Harness/actions/runs/39545372020)
+and [39546195823](https://github.com/refusedguy/Harbor-Harness/actions/runs/39546195823)):
+the restore finds the entry for the first time — 20 s and 22 s of download
+instead of 0 s — and the normalisation step runs for the first time
+(`[normalize-mtimes] base=8d82cac1 base_time=1792556668 changed=2
+rebuilt=2 skipped=3820 missing=0 outputs_stamped=15232`).
+
+**And on the tree this branch now sits on** (run
+[39556560488](https://github.com/refusedguy/Harbor-Harness/actions/runs/39556560488),
+after the rebase onto `dev`): the resolve step looked in `refs/heads/dev`,
+named the entry built from dev's HEAD (`…-6f197b60`), the restore took 41 s
+and the normalisation step ran again (`[normalize-mtimes] base=6f197b60
+base_time=1792562836 changed=5 rebuilt=5 skipped=3833 missing=0
+outputs_stamped=15236`).
+
+**And the wall did not get shorter yet, and the reason is the next step.** The
+compile measured 265 s on run 39545372020 and 256 s on run 39556560488,
+against 215 s on the branch's earlier iteration, before the version fix (run
+39541310960, attempt 2, sha 7c7a13e1 — that run's restore still found
+nothing, so it compiled the whole tree cold): the cache is restored, and
+MSBuild still rebuilds the whole tree. The reason is visible in the tool's
+own comment: the analyzer assemblies in the NuGet folder are an INPUT of every
+`CoreCompile`, and the compile's own restore extracts them AFTER the outputs
+were stamped — so every project's analyzer is newer than its output, and
+every project looks stale again. Stamping the outputs ahead of the restore
+(the tool stamps with "now", the restore lands a few seconds later) is the
+one line that is left. Until that lands, the cache costs its download and
+buys nothing: the honest number for this change is "the cache fires", not
+"the lane is faster".
+
+**What is left on the critical path after the cache works** (the same step
+list, run 39545372020, on the tree that has the pack job and the arch shard):
+setup .NET 21 s, restore 20 s, compile 265 s, the pack inputs upload 21 s, the
+six shard-slice uploads 38 s. The compile is the term to attack, and §6.7 has
+already measured why it is hard: it is analyzer-bound and throughput-bound on
+the runner's four cores, so more MSBuild nodes buy nothing and only the
+analyzers themselves (or a second runner) do.
+
 ### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
 
 The architecture gate runs in **Release** in CI: `Directory.Build.props`
@@ -2650,9 +2788,19 @@ separately and is in none of the numbers below.
 
 **The measured compile is a COLD one.** Every run starts from a fresh
 checkout with no `obj/`, so it measures a from-scratch Release compile of the
-whole tree. The PR lane's build is incremental since #1927's build-output
-cache landed (it restores the base branch's `obj/` and rebuilds what
-changed), so the PR lane's wall time is NOT the number below.
+whole tree. The PR lane's build was NOT incremental while this section was
+written: the build-output cache never fired (the restore found nothing on
+every pull-request run, and on every dev push of that day too — §6.4.1 has
+the runs and the cause), so the PR lane compiled the whole tree too, and the
+PR lane's wall time IS the number below.
+
+**That is still true after the cache was fixed.** The cache now fires on the
+pull-request lane (the restore finds the base branch's entry and the
+normalisation step runs), but the PR lane's compile is STILL a full rebuild:
+the restored outputs are there, and the analyzer assemblies in the NuGet
+folder are newer than every one of them, so MSBuild rebuilds the tree either
+way (§6.4.1 names the one line that is left). The number below therefore
+still describes the pull-request lane.
 
 **The meter is calibrated, not asserted.** A known 1-way load reads 1.11 busy
 cores and a known 4-way load reads 4.00 (`calib-1-way` / `calib-4-way` in the
@@ -2694,9 +2842,10 @@ spends most of its time waiting for a CPU that is busy anyway.
 **The graph is not the limiter either.** Measured, not modelled: at least four
 projects were in flight for 60.7..99.2 % of the build (peak 75..83 in
 flight, average 25..33). The graph agrees
-(`tools/measure-project-graph.py`, on this branch's tree): 109 projects, 465
-edges, depth 15, widest level 20 projects, and 11 of its 16 levels are wide
-enough for four compilers.
+(`tools/measure-project-graph.py`, on this branch's tree, re-measured on
+2026-10-21 after the rebase onto `dev`): 112 projects, 492 edges, depth 15,
+widest level 22 projects, and 9 of its 16 levels are wide enough for four
+compilers.
 
 **What the verdict is for #1929.** The issue's decision table cannot be used
 as written: the ratio it asks for reads 1.0, which the table maps to "the
@@ -3094,7 +3243,63 @@ carries five shards with 347 s of service time, and it is the pool the
 4. **NativeAOT publish for CLI** — DONE on `fulltree`: 29 MB binary, 18 ms cold start, ~29 MB RSS idle (§4.4). Open: the `minimal` profile.
 5. **Self-contained + `PublishSingleFile` + trimmed** for desktop apps — Avalonia target: ~50 MB single .exe.
 
-## 10. How to reproduce
+## 10. The gate suite: the python gates in `tools/`
+
+The gates are a product too: every pull request pays for them, and a
+gate that costs minutes costs every pull request. This section holds the
+numbers for the gate set, measured the way the workflows run it.
+
+**Method.** A clean checkout of the commit under test, with the git
+history (the gate `TEST-CITE-DRIFT` reads the history, so a tree without
+it is not the tree CI runs). Every gate is run with the arguments its
+workflow passes, from `bench/gates/tools.tsv`, five times, and the
+MINIMUM wall time is kept: the machine is shared and its load is 18-26, so
+the minimum is the estimate that the least foreign work distorts. The peak
+RSS is `/proc/<pid>/status VmHWM`, polled while the child runs, and not
+`getrusage(RUSAGE_CHILDREN).ru_maxrss`: on this host the latter carries a
+value the child never reached, because it inherits the accounting of the
+parent's own high-water mark. The measuring parent is a 2 KB C program
+(`bench/gates/maxrss.c`) for the same reason.
+
+### 10.1 `check-doc-cites.py`: the git processes, batched (#2090)
+
+| | before | after |
+|---|---|---|
+| wall time, whole gate | **669 s** | **209 s** (3.2x) |
+| `git` processes | **1233** | **37** |
+| time inside `git` | **414 s** | **39 s** |
+| peak RSS | 75.6 MB | 74.9 MB |
+| output | the findings | **byte-identical** |
+
+Tree: `origin/dev` at `a763c824`, 3876 files, 1291 tracked `.cs` files
+under `tests/`. The gate's own output is byte-identical before and after
+(the two runs are compared with `diff`), and its self-test still passes
+(67 checks).
+
+What the 1233 processes were: 1188 `git blame` calls, one per file under
+`tests/` that the gate read, 40 `git show` calls, and 5 others. The blame
+call is the expensive one: **347 ms each**, and the cost is not the output
+but the per-process walk of the history that finds the commit that wrote a
+line.
+
+What replaced it:
+
+- the gate asks git about the files that HOLD a citation, not about every
+  file it read. In this tree **30 of the 1291** files under `tests/` hold a
+  citation (94 citations), and the gate used to ask git about all of them;
+- one `git log -p -U0` over those files, and the blame rebuilt from the
+  diffs. The hunks of one commit are applied from the last to the first,
+  because they all speak about the file as it was BEFORE that commit;
+- a file whose reconstruction does not reproduce the file at HEAD is
+  answered by `git blame` itself, in parallel. That is the fallback for the
+  files whose history crosses a merge, which a diff-based reconstruction
+  cannot carry across;
+- the `git show` calls go through one `git cat-file --batch` process.
+
+The reconstruction was checked against `git blame` line by line for every
+file of this tree: of the files the gate uses it for, **0 disagree**.
+
+## 11. How to reproduce
 
 All numbers in this doc are reproducible from the repo:
 
@@ -3130,7 +3335,7 @@ dotnet build -c Release
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-## 11. See also
+## 12. See also
 
 - [Architecture layers](./ARCHITECTURE_LAYERS.md) — why the project is split this way
 - [Code principles audit](./CODE_PRINCIPLES_AUDIT.md) — performance findings and fixes

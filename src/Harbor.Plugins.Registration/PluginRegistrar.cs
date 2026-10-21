@@ -8,6 +8,7 @@ using Harbor.Plugins.Abstractions;
 using Harbor.Plugins.Instantiation;
 using Harbor.Terminal.Abstractions;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 namespace Harbor.Plugins.Registration;
 /// <summary>
 ///     Default <see cref="IPluginRegistrar" />. Builds a <see cref="PluginContext" />,
@@ -40,6 +41,7 @@ public sealed class PluginRegistrar : IPluginRegistrar
     private readonly ILoggerFactory _loggerFactory;
     private readonly IPluginAuditLog? _audit;
     private readonly Version _harborVersion;
+    private readonly IPluginConfigSource? _config;
 
     /// <summary>
     ///     Construct a new registrar.
@@ -55,18 +57,25 @@ public sealed class PluginRegistrar : IPluginRegistrar
     ///     <see cref="PluginLifecycle.CurrentHarborVersion" />, the same version the
     ///     plugin is handed in <see cref="PluginContext.HarborVersion" />.
     /// </param>
+    /// <param name="config">
+    ///     Where the plugin's own configuration section is read from (#1734).
+    ///     Null, the default, means the host publishes no sections, and every
+    ///     plugin starts with the settings its own schema declares.
+    /// </param>
     public PluginRegistrar(
         string pluginRoot,
         ILogger<PluginRegistrar> logger,
         ILoggerFactory loggerFactory,
         IPluginAuditLog? audit = null,
-        Version? harborVersion = null)
+        Version? harborVersion = null,
+        IPluginConfigSource? config = null)
     {
         _pluginRoot = pluginRoot ?? throw new ArgumentNullException(nameof(pluginRoot));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loggerFactory = loggerFactory;
         _audit = audit;
         _harborVersion = harborVersion ?? PluginLifecycle.CurrentHarborVersion;
+        _config = config;
     }
 
     /// <inheritdoc />
@@ -123,7 +132,29 @@ public sealed class PluginRegistrar : IPluginRegistrar
             return Result.Failure<IPluginRun>(manifestRefusal);
         }
 
-        var context = PluginLifecycle.BuildContext(host, plugin.Instance, _pluginRoot, plugin.SourcePath);
+        // #1734: the plugin's own configuration section, checked against the
+        // schema the plugin declared. The check happens HERE, before the
+        // plugin is initialized: a plugin whose settings the configuration
+        // does not satisfy must not run at all, because a plugin that starts
+        // with settings it could not read is a plugin that fails later, in a
+        // place that has nothing to do with the mistake.
+        var config = ResolveConfig(plugin);
+        if (config.IsFailure)
+        {
+            _logger.LogWarning(
+                "Plugin {DisplayName} has a configuration the host cannot accept: {Reason}",
+                plugin.DisplayName,
+                config.Error);
+            return config.ConvertFailure<IPluginRun>();
+        }
+
+        var context = PluginLifecycle.BuildContext(
+            host,
+            plugin.Instance,
+            _pluginRoot,
+            plugin.SourcePath,
+            config.Value);
+
         var initResult = PluginLifecycle.Initialize(plugin.Instance, context);
         if (initResult.IsFailure)
             return initResult.ConvertFailure<IPluginRun>();
@@ -259,6 +290,104 @@ public sealed class PluginRegistrar : IPluginRegistrar
                 plugin.DisplayName,
                 rollback.Error);
         }
+    }
+
+    // ── The plugin's own configuration (#1734) ─────────────────────────────────
+
+    /// <summary>
+    ///     The plugin's configuration section, resolved against the schema the
+    ///     plugin declared.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         Three cases, and the third one is the reason this method
+    ///         exists:
+    ///     </para>
+    ///     <list type="number">
+    ///         <item>
+    ///             <description>
+    ///                 The plugin declares a schema and the user configured
+    ///                 nothing: the section resolves to the declared defaults,
+    ///                 and the plugin starts.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 The plugin declares a schema and the user configured
+    ///                 something: the section is checked against the schema,
+    ///                 and a setting that is wrong refuses the plugin with a
+    ///                 message that names it.
+    ///             </description>
+    ///         </item>
+    ///         <item>
+    ///             <description>
+    ///                 The plugin declares NO schema and the user configured
+    ///                 something: there is nothing to check the section
+    ///                 against, so the host cannot know what the user meant.
+    ///                 The plugin is refused, and the message says which
+    ///                 settings were dropped rather than ignoring them.
+    ///             </description>
+    ///         </item>
+    ///     </list>
+    /// </remarks>
+    /// <param name="plugin">The plugin being registered.</param>
+    /// <returns>The resolved values, or a failure naming the setting at fault.</returns>
+    private Result<IReadOnlyDictionary<string, PluginConfigValue>> ResolveConfig(LoadedPlugin plugin)
+    {
+        string path = $"plugins.{plugin.Instance.Name}";
+        PluginConfigSchema? schema = plugin.Manifest?.Config;
+        JsonElement? section = _config?.Section(plugin.Instance.Name);
+
+        if (schema is null)
+        {
+            string? configured = SettingNames(section.GetValueOrDefault());
+            if (configured is not null)
+            {
+                return Result.Failure<IReadOnlyDictionary<string, PluginConfigValue>>(
+                    $"{path}: the plugin declares no configuration schema, but the configuration has a section for "
+                    + $"it (settings: {configured}). The plugin was not started.");
+            }
+
+            return Result.Success<IReadOnlyDictionary<string, PluginConfigValue>>(
+                new Dictionary<string, PluginConfigValue>());
+        }
+
+        return PluginConfigValidator.Validate(schema, section.GetValueOrDefault(), path);
+    }
+
+    /// <summary>
+    ///     The setting names a section carries, for the message that names a
+    ///     section the host cannot interpret.
+    /// </summary>
+    /// <remarks>
+    ///     An empty section carries nothing, and a section that carries nothing
+    ///     is not a section the host has to refuse: the user wrote nothing
+    ///     down, so there is nothing to interpret.
+    /// </remarks>
+    /// <param name="section">The section the user wrote.</param>
+    /// <returns>
+    ///     The setting names, or <see langword="null" /> when the section
+    ///     carries nothing.
+    /// </returns>
+    private static string? SettingNames(JsonElement section)
+    {
+        if (section.ValueKind == JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        if (section.ValueKind != JsonValueKind.Object)
+        {
+            return "(the section is not an object)";
+        }
+
+        var names = new List<string>();
+        foreach (JsonProperty property in section.EnumerateObject())
+        {
+            names.Add(property.Name);
+        }
+
+        return names.Count == 0 ? null : string.Join(", ", names);
     }
 
     // ── The manifest gate (#1739) ───────────────────────────────────────────────

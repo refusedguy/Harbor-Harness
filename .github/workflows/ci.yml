@@ -51,6 +51,22 @@
 #              stays on x64: the coverage engine has no linux-arm64 build,
 #              so it cannot follow the shards onto the arm64 pool.
 #
+#              MEASURED ON THE TREE WHERE IT HAPPENED. The job was OFF the
+#              pull-request path for one day and then came BACK: the local
+#              squash #1987 (264fbf92) brought an older ci.yml with the
+#              job in it. Measured on the two green pull-request runs of
+#              that tree — 39540570777 and 39538144280 — the job took
+#              269 s and 263 s, of which the collect step was 232 s and
+#              223 s: 4.4 runner-minutes per PR, for a number with no
+#              threshold. Before that squash, 11 consecutive PR runs had
+#              no coverage job at all. The cost is now back to 0 on the
+#              pull-request path, and the nightly lane pays 465…636 s of
+#              job time per merge into dev (median 579 s over the runs
+#              measured) — of which 171…271 s is the build of the tree it
+#              measures: a workflow cannot consume another workflow's
+#              artifacts, and the tree must be built with portable PDBs
+#              or the measurement is empty (#1753).
+#
 #   The nightly lane (.github/workflows/nightly.yml) also carries the
 #   analyzer inventory of the test projects and the build measurement (an
 #   MSBuild binary log -> job summary, with the CPU-utilisation and
@@ -816,14 +832,17 @@ jobs:
       # 68.0 s here, 65.9 s in the `core` shard, 63.3 s in `coverage`).
       # #1923 moved the coverage collection to the nightly lane and this
       # variable switched the gate off here, so the PR lane runs the suite
-      # ONCE now — in the `core` shard.
+      # ONCE now — in the `arch` shard (#1781 gave the suite a shard of its
+      # own). It ran TWICE for a day: the local squash #1987 brought the
+      # `coverage` job back into this file, and the lane paid the second
+      # execution for a report-only number until #1783 took it out again.
       #
       # The count is not a convention: tools/check-arch-suite-once.py reads
       # this file and fails the build when the PR lane runs the suite more
       # than once, or not at all, or when this variable stops switching the
       # gate off for pull_request events.
       #
-      # The ASSEMBLY is still built here — the `core` shard needs the DLL —
+      # The ASSEMBLY is still built here — the `arch` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
       # MSBuild, and an environment variable of the same name IS an MSBuild
       # property (Directory.Build.props only defaults it when it is empty),
@@ -873,7 +892,7 @@ jobs:
       #
       # MSBuild is ALREADY incremental: CoreCompile skips a project whose
       # output is newer than its inputs. CI is cold only because obj/ and
-      # bin/ are absent, so every pull request recompiles all 104 projects.
+      # bin/ are absent, so every pull request recompiles all 112 projects.
       # These three steps restore those two directories and let MSBuild
       # decide the fine-grained work; the rest of the build is unchanged.
       #
@@ -918,26 +937,150 @@ jobs:
           echo "cache prefix: ${prefix}"
           echo "cache key:    ${prefix}-${{ github.sha }}"
 
+      # ── Which entry to restore ─────────────────────────────────────────────
+      #
+      # The build-output cache never fired at all: on the pull-request lane
+      # AND on the dev lane the restore found nothing and the whole tree was
+      # recompiled. The VERSION was the cause (spelled out at the restore step
+      # below); WHICH entry to restore is a question of scope, and this step
+      # answers it by name. The difference is the whole compile: 154-271 s of
+      # the build job's 274-360 s wall.
+      #
+      # MEASURED (the runs and the numbers are in docs/BENCHMARKS.md §6.4.1):
+      # on every pull-request run measured — nine of them, 39533897704,
+      # 39534715983, 39534774534, 39536616567, 39536917277, 39536932230,
+      # 39537006278, 39538144280 and 39538764502 — the restore printed
+      #
+      #   Cache not found for input keys: msbuild-v1-...-<pr sha>, msbuild-v1-...-
+      #
+      # every time, and the "Normalise the source mtimes" step right below it
+      # — the one that runs only when the restore matched something — was
+      # SKIPPED every time. So every pull request restored NOTHING and
+      # recompiled all 112 projects: 154-271 s of the build job's wall, and
+      # the compile alone is 60-80 % of it.
+      #
+      # THE CAUSE WAS THE VERSION, and the dev lane's own runs say that the
+      # scope is not it: on the dev push 39543869492 the dev scope already
+      # held an entry with the same prefix — saved 18 minutes earlier by
+      # 39541235668 — the run was in that same scope, and the restore STILL
+      # printed "Cache not found for input keys". The cache never fired on
+      # the dev lane either on that day: the entry was there and the restore
+      # could not see it. What the version is and why the two inputs
+      # disagreed is spelled out at the restore step below.
+      #
+      # WHY THE ENTRY AND NOT THE PREFIX: a pull-request run's own scope
+      # holds nothing — the pull-request lane never writes, the save is
+      # limited to dev/master pushes and manual dispatches — so the entry
+      # worth restoring lives in the base branch's scope. The prefix asks the
+      # service for "the newest entry with this prefix among the scopes this
+      # run can read"; this step asks the REST API, which lists EVERY scope,
+      # and names the base scope's newest entry with this prefix. The exact
+      # key is what crosses into the base branch's scope: measured, run
+      # 39545372020 — a pull-request run — restored the dev scope's entry
+      # ...-8d82cac1 by its exact key.
+      #
+      # The API instead of a second restore-key, on purpose: the entry the
+      # base branch actually has is not necessarily the one built from the
+      # base branch's HEAD — a push whose save was skipped, or an entry that
+      # has since been evicted, both leave a gap that only the API can see —
+      # and "the newest entry with THIS toolchain and THESE props" is the
+      # one worth restoring either way. The prefix still narrows the search
+      # to the same toolchain and the same package graph, so a stale entry
+      # built from different props can never be picked up.
+      - name: Resolve the base branch's build-output cache entry
+        id: cache-entry
+        shell: bash
+        env:
+          # The job's own token. `GITHUB_TOKEN` is NOT in the runner's
+          # environment by default - the token is a CONTEXT
+          # (`github.token`), and a step only sees it if the step says so.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          prefix="${{ steps.cache-key.outputs.prefix }}"
+          # The base branch of the pull request; for a push it is the branch
+          # the run pushes to. Either way it is the scope the entry worth
+          # restoring is expected to live in.
+          base_ref="${{ github.base_ref }}"
+          [ -n "$base_ref" ] || base_ref="${{ github.ref_name }}"
+          scope="refs/heads/${base_ref}"
+          echo "cache prefix:    ${prefix}"
+          echo "looking in scope: ${scope}"
+          key="$(curl -fsSL --max-time 60 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            | jq -r --arg prefix "$prefix" --arg scope "$scope" '
+                [ .actions_caches[] | select(.key | startswith($prefix)) ]
+                | ( (map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                    // (sort_by(.created_at) | last) )
+                | .key // empty' 2>/dev/null)"
+          if [ -n "$key" ]; then
+            echo "key=${key}" >> "$GITHUB_OUTPUT"
+            echo "cache entry to restore: ${key}"
+          else
+            echo "no build-output cache entry for this prefix — this lane compiles from scratch"
+          fi
+
       - name: Restore the build outputs (obj/ + bin/)
         id: cache-restore
         uses: actions/cache/restore@v6
         with:
+          # THE PATH INPUT BELOW MUST BE BYTE-FOR-BYTE THE PATH INPUT OF THE
+          # SAVE STEP. The cache's VERSION is a hash of that input, and the
+          # restore asks the cache service for "the entry with this key AND
+          # this version". Two path inputs that differ by even one character
+          # are two versions, and then the restore can never find the entry
+          # the save wrote.
+          #
+          # WHAT THE VERSION IS, since it decides whether the cache works at
+          # all: upstream, `getCacheVersion(paths, ...)` is the SHA-256 of
+          # the path LINES (trimmed, empties dropped) joined with "|", plus
+          # the compression method and the salt "1.0". The comment lines are
+          # lines, so they are in the hash.
+          #
+          # They differed by NINE COMMENT lines, which is how the cache never
+          # fired: the restore's block explained why the runtime assets and
+          # the symbols are left out, the save's block did not, and the two
+          # strings hashed to two different versions. Replaying that hash
+          # over the two path inputs of the tree that failed (sha 7c7a13e1):
+          # the restore's 14 lines (9 of them comments) hash to bcff3b41...,
+          # the save's 5 lines hash to 3dd0d4fb..., and after this fix both
+          # inputs are the same 5 lines and hash to 3dd0d4fb....
+          #
+          # Measured: the restore printed "Cache not found for input keys" on
+          # every pull-request run (nine of them, 39533897704 ..
+          # 39538764502), on every dev push of that day, and on the manual
+          # dispatches 39541292620 and 39542435400, while the save step wrote
+          # the entry every time.
+          #
+          # Dispatch 39542435400 is the proof in one run: its resolve step
+          # found the entry that dispatch 39541292620 had saved under the EXACT
+          # key ...-7c7a13e1, and the restore still refused that key —
+          # "Cache not found for input keys: msbuild-v1-...-7c7a13e1,
+          # msbuild-v1-...". Same key, SAME scope, other version: the entry
+          # was there and the restore could not see it. The comments are
+          # here, ABOVE the key, for that reason.
+          #
+          # The runtime assets (the native libraries of every RID) and the
+          # satellite assemblies are COPIES of what the NuGet folder already
+          # holds: nothing in MSBuild's up-to-date check reads them, and the
+          # build re-copies them from the packages. They are the bulk of the
+          # payload, and the repository's 10 GB cache budget cannot hold them
+          # — the first version of this cache (1,921 MiB per entry) was
+          # evicted within minutes of being written, because the NuGet caches
+          # already fill the budget. The debug symbols go for the same
+          # reason: the artifacts do not carry them either.
           path: |
             **/obj
             **/bin
-            # The runtime assets (the native libraries of every RID) and the
-            # satellite assemblies are COPIES of what the NuGet folder already
-            # holds: nothing in MSBuild's up-to-date check reads them, and the
-            # build re-copies them from the packages. They are the bulk of the
-            # payload, and the repository's 10 GB cache budget cannot hold
-            # them — the first version of this cache (1,921 MiB per entry)
-            # was evicted within minutes of being written, because the NuGet
-            # caches already fill the budget. The debug symbols go for the
-            # same reason: the artifacts do not carry them either.
             !**/runtimes/**
             !**/*.resources.dll
             !**/*.pdb
-          key: ${{ steps.cache-key.outputs.key }}
+          # The entry the step above resolved, when there is one. The
+          # fallbacks are the old behaviour: the key for THIS commit first,
+          # then the prefix.
+          key: ${{ steps.cache-entry.outputs.key || steps.cache-key.outputs.key }}
           restore-keys: |
             ${{ steps.cache-key.outputs.prefix }}-
 
@@ -1022,6 +1165,7 @@ jobs:
       # (CompileTarget carries it). The bootstrap also compiles
       # build/_build.csproj, so NUKE build-code edits validate here too.
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        id: compile
         run: bash build/build.sh Compile --configuration Release
 
       # The zero-test guard is only a guard if it can go red (#1795). This
@@ -1228,7 +1372,8 @@ jobs:
       # 63.3 s again in the `coverage` job — 197.2 s of CPU for one answer.
       # #1928 switched the build-time gate off on the pull-request lane and
       # #1923 moved the coverage collection to the nightly lane, so the suite
-      # runs ONCE now, in the `core` shard.
+      # runs ONCE now, in the `arch` shard (#1781 gave the suite a shard of
+      # its own).
       #
       # Nothing held that count. The gate is ONE environment variable (see
       # the job's env block above), and a coverage-like job on this lane is
@@ -1260,6 +1405,9 @@ jobs:
       # and then downloaded IN FULL by six jobs — the four test shards,
       # coverage and perf-gate: 10 + 17 + 60 + 9 + 11 + 10 = 117 s of runner
       # time to hand 2,676 MiB to consumers that each need a quarter of it.
+      # (The coverage job was one of those six consumers. It left the
+      # pull-request path with the rest of the lane, #1783, and the combined
+      # artifact it downloaded is gone from the list below.)
       #
       # Two changes, one artefact set:
       #
@@ -1313,12 +1461,14 @@ jobs:
       #     architecture rules), and one root-level path is enough to move
       #     the LCA up to the workspace.
       #
-      # `solution-binaries` is KEPT as the combined artifact the `coverage`
-      # job downloads (core + platform — the two shard lists coverage runs).
-      # It is duplicated on purpose: the coverage job belongs to the
-      # job-graph work, and this change must not depend on that edit landing
-      # first. When coverage switches to the two slices, this upload can be
-      # deleted — it is 135.1 MiB of the 448.1 MiB below.
+      # There is NO combined `solution-binaries` artifact. It existed only
+      # for the `coverage` job, which downloaded one artifact holding the
+      # core + platform shard outputs; the coverage job left the
+      # pull-request path (issue #1783 — it lives in nightly.yml now, and it
+      # builds the tree it measures), so the combined upload went with it.
+      # Measured on run 39434075758: the combined artifact was 160,758,552
+      # bytes = 153.3 MiB of the 448.1 MiB the six artifacts of that run
+      # carried, and the coverage job was the only thing that downloaded it.
       #
       # The upload total is FLAT: 448.1 MiB zipped across six artifacts
       # versus 446.1 MiB in one, and 4,329 files instead of 8,106 (fewer
@@ -1576,10 +1726,38 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+      # ── Save the build outputs ────────────────────────────────────────────
+      #
+      # The PULL REQUEST lane never writes. A pull request would create one
+      # entry per run (the key ends in the commit), and the repository's
+      # 10 GB cache budget would fill up with pull-request entries and evict
+      # the ones the base branch needs — that is the thrash the rule exists
+      # to prevent.
+      #
+      # dev and master push, and so does a MANUAL workflow_dispatch: that is
+      # the deliberate way to exercise the cache end to end on a branch that
+      # is not dev/master, and a manual run is rare enough not to thrash.
+      #
+      # The save is the LAST step of the job, after the compile and the
+      # shard-slice uploads: an entry is only worth keeping if the bytes in it
+      # are the ones a green compile produced.
+      #
+      # "Green" here means THE COMPILE, not the whole job. The entry holds
+      # obj/ and bin/ and nothing else, so the compile's outcome is what
+      # decides whether those bytes are worth keeping. Before this, the save
+      # step's condition named the EVENT only, so it inherited the implicit
+      # success() and ANY red step skipped it — the compile included:
+      # measured, six dev pushes (39533121069, 39533217825, 39538626670,
+      # 39539597700, 39539618952, 39540516677) failed in the compile and their
+      # save step was skipped. Now the compile's outcome is the gate: a red
+      # compile still skips the save, and a red step BELOW it (a slice list
+      # that drifted, an upload that failed) no longer costs the lane the
+      # entry, because those bytes are the ones the compile produced.
       - name: Save the build outputs (dev/master pushes and manual runs)
         if: >-
-          (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
-          || github.event_name == 'workflow_dispatch'
+          !cancelled() && steps.compile.outcome == 'success' &&
+          ((github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/master'))
+          || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
           path: |
@@ -1853,7 +2031,8 @@ jobs:
     #
     # What stays on x64, each for a reason that is a fact about the tree:
     # the build job (it produces the linux-x64 natives and the x64
-    # apphost), the coverage job (Microsoft.Testing.Extensions.CodeCoverage
+    # apphost), the coverage job (it lives in nightly.yml now, and
+    # Microsoft.Testing.Extensions.CodeCoverage
     # 18.12.0 ships no linux-arm64 instrumentation engine), the AOT job
     # (it publishes linux-x64) and the perf gate (it measures the machine
     # its baselines were taken on).
@@ -1884,13 +2063,19 @@ jobs:
     #     parallelism 3/3/3, serialised shards 0/0/0): no shard ever sat
     #     behind a sibling. The premise of the split (one queue means one
     #     shard at a time) is false at this load.
-    #   * The x64 queue is the CONTENDED one. It already carries build,
+    #   * The x64 queue is the CONTENDED one. It carried build,
     #     coverage, aot-publish, publish and perf-gate for every run, so a
     #     shard that joins it waits there, and the x64 jobs wait longer too
     #     (median queue wait: aot-publish 130 s in A against 278 s in B and
     #     294 s in C; coverage 96 s in A against 162 s in B and 227 s in C).
     #     The run's wall is then decided by the longest x64 job, not by the
     #     shards.
+    #
+    #     The coverage job is in that list because it was measured there; it
+    #     left the pull-request path with the rest of the lane (#1783), so
+    #     the queue it contended on does not carry it any more. The other
+    #     four are still on x64, and that is what the split is weighed
+    #     against.
     #
     # So all four shards stay on `ubuntu-24.04-arm`. Dispatching a shard
     # into the x64 pool is one `runner:` line, and while the x64 pool
@@ -1991,7 +2176,8 @@ jobs:
             # Without it a suite that discovered nothing exits 0 and this shard
             # reports green — and e2e is the ONLY home of those 479 tests:
             # neither the OS matrix's 6-project list (test-os.yml) nor
-            # coverage's 19 contains any of them, and fail-on-empty: false
+            # the nightly lane's coverage list (20 projects) contains any of
+            # them, and fail-on-empty: false
             # never notices an empty TRX.
             #
             # Harbor.E2E.Framework.Tests is the SIXTH project here, and it is
@@ -2411,6 +2597,9 @@ jobs:
   # The "~10-20 min" that used to be quoted here was an estimate, and it was
   # wrong by 3-6x — it is what made this job look expensive enough to
   # warrant its own scheduling decision.
+  # The coverage figure in that decomposition is NOT a pull-request cost any
+  # more: the coverage job left the pull-request path (#1783) and runs in
+  # nightly.yml, on merges into dev/master and on the nightly schedule.
   #
   # ON WALL-CLOCK TIME
   # -----------------

@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Ui.Framework.State;
 using Harbor.Abstractions.Models;
 using Ensure = Harbor.Abstractions.Extensions.Ensure;
@@ -24,7 +25,7 @@ public static class PanelExtractors
 {
     /// <summary>Tool names tracked by <see cref="ExtractRecentChanges" />.</summary>
     private static readonly FrozenSet<string> TrackedTools = FrozenSet.ToFrozenSet(
-        new[] { "edit", "write", "read", "patch" },
+        new string[] { WellKnownTools.Edit, WellKnownTools.Write, WellKnownTools.Read, WellKnownTools.Patch },
         StringComparer.OrdinalIgnoreCase);
 
     private static readonly Regex TodoRegex = new(

@@ -573,6 +573,15 @@ jobs:
       # that matches.
       - name: Plugin-inventory gate fails on a stale snapshot
         run: python3 tools/gen-plugin-inventory.py --self-test
+      # The changelog assembler glues the per-pull-request fragments into the
+      # [Unreleased] section of CHANGELOG.md at release time, so a PR that
+      # adds a fragment must NOT edit CHANGELOG.md itself. The gate over the
+      # table in docs/CI_GATES.md asks every script with a self-test to be
+      # run by some workflow; without this step the assembler is a tool whose
+      # self-test nobody calls, and the table cannot say honestly that it
+      # exists.
+      - name: Changelog assembler notices a diverged CHANGELOG.md
+        run: python3 tools/changelog-assemble.py --self-test
 
   links:
     name: internal links
