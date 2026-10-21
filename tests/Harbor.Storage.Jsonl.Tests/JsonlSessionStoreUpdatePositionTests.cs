@@ -45,7 +45,7 @@ public class JsonlSessionStoreUpdatePositionTests
             var append = await store.AppendMessageAsync(
                 session.Id,
                 TestMessages.User($"body {i}", id: $"m{i}", sessionId: session.Id, createdAt: Epoch.AddSeconds(i), model: "claude-opus-4"));
-            await Assert.That(append.IsSuccess).IsTrue();
+            await Assert.That(append).IsSuccessful();
         }
 
         return (store, session.Id, Path.Combine(root, $"{session.Id}.jsonl"));
@@ -102,7 +102,7 @@ public class JsonlSessionStoreUpdatePositionTests
             // the same instant. This is what an edit IS: the same message, with
             // a different payload.
             var edited = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(1), model: "claude-opus-4"));
-            await Assert.That(edited.IsSuccess).IsTrue();
+            await Assert.That(edited).IsSuccessful();
 
             string[] after = await File.ReadAllLinesAsync(path);
             Dictionary<string, int> afterIndexes = MessageLineIndexes(after);
@@ -117,7 +117,7 @@ public class JsonlSessionStoreUpdatePositionTests
             // The history still reads in insertion order: the edit changed
             // what was said, not when it was said.
             var messages = await store.GetMessagesAsync(sessionId);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(4);
             await Assert.That(messages.Value[0].Id).IsEqualTo("m0");
             await Assert.That(messages.Value[1].Id).IsEqualTo("m1");
@@ -128,7 +128,7 @@ public class JsonlSessionStoreUpdatePositionTests
             // And the version that was replaced is still in the log, as a
             // shadowed record — nothing was overwritten.
             var log = await store.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
             var bodies = log.Value
                 .Where(e => e.Kind == SessionLogEntryKind.Message)
                 .Select(e => ((UserMessage)e.Message!).Content)
@@ -156,10 +156,10 @@ public class JsonlSessionStoreUpdatePositionTests
         try
         {
             var edited = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(1), model: "claude-opus-4"));
-            await Assert.That(edited.IsSuccess).IsTrue();
+            await Assert.That(edited).IsSuccessful();
 
             var rewind = await store.DeleteMessagesAfterAsync(sessionId, "m1");
-            await Assert.That(rewind.IsSuccess).IsTrue();
+            await Assert.That(rewind).IsSuccessful();
 
             // m2 and m3 follow m1 in the conversation, so they are what the
             // rewind removes.

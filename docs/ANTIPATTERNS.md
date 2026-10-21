@@ -1164,7 +1164,7 @@ catch (ArgumentException) { /* expected */ }
 
 // ✅ BEST — Result<T> (no exception to catch)
 var result = MethodThatMightFail();
-await Assert.That(result.IsFailure).IsTrue();
+await Assert.That(result).IsFailed();
 await Assert.That(result.Error).Contains("expected error");
 ```
 
@@ -1261,11 +1261,60 @@ public async Task Add_TwoPlusTwo_EqualsFour()
 }
 ```
 
+### 40. Asserting a result through its boolean property
+
+**What.** `await Assert.That(result.IsSuccess).IsTrue();` — the assertion is made
+on a `bool` the result happens to expose, instead of on the result.
+
+**What goes wrong.** The failure is reported at the `bool`:
+
+```
+Expected to be true but found False
+```
+
+which answers neither *which* result failed nor *why*. The reader has to go
+back to the test and find the variable the assertion did not name, and then
+find the error the assertion did not carry. Measured on `origin/dev@259d0a5d`,
+this form stood at **1846 sites** across **35 test projects** — it was the
+majority spelling, which is why the mistake is invisible: every one of those
+tests passes.
+
+**Right way.** Assert the result through the shared chain, and let the helper
+put the reason in the message. The helper is `ResultAssertions` in
+`tests/Harbor.TestKit.Support/ResultAssertions.cs`, and the namespace is
+`Harbor.TestKit` — one `using` line, whichever part of the kit a project
+takes.
+
+```csharp
+// ❌ WRONG — the failure says "found False" and names nothing
+await Assert.That(result.IsSuccess).IsTrue();
+await Assert.That(result.IsFailure).IsTrue();
+await Assert.That(toolResult.IsError).IsFalse();
+
+// ✅ RIGHT — the failure names the result and its error
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+```
+
+The five families, one pair each: `Result<T>` and `Result` (two unrelated
+types — `Result<T>` does not derive from `Result`) take `IsSuccessful()` /
+`IsFailed()`; `ToolResult`, `ToolResultEntry` and `ToolCallLink` take
+`HasSucceeded()` / `HasFailed()`.
+
+**The trap inside the trap.** The old helper's own doc comment said to put the
+error text in `.Because(result.Error)`. `Because` takes its argument EAGERLY,
+and `Result.Error` **throws** on a successful result
+(`ErrorIsInaccessibleForSuccess` in CSharpFunctionalExtensions 3.7.0) — so that
+advice turns every passing test into an exception. The error text belongs in
+the helper, which reads `.Error` only on the failure path, where the result is
+known to have failed.
+
 ---
 
 ## See also
 
-- [PATTERNS.md](./PATTERNS.md) — что мы ДЕЛАЕМ (18 паттернов).
+- [PATTERNS.md](./PATTERNS.md) — что мы ДЕЛАЕМ (9 паттернов).
 - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — 45 known violations в Harbor.
 - [CLAUDE.md](../CLAUDE.md) §Code review checklist — что проверять в PR.
 - [DEVELOPMENT.md](./DEVELOPMENT.md) §Principles checklist — расширенный чек-лист.

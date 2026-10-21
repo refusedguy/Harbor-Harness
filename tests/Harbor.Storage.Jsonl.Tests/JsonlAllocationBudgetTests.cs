@@ -29,7 +29,7 @@ public class JsonlAllocationBudgetTests
             """{"type":"message","id":"m1","createdAt":"2026-01-01T00:00:00Z","role":"user","payload":{"content":"hello","agent":"code","model":"test-model"}}""");
 
         var first = JsonlLineParser.Parse(line, "sess-1");
-        await Assert.That(first.IsSuccess).IsTrue();
+        await Assert.That(first).IsSuccessful();
         await Assert.That(((UserMessage)first.Value).Content).IsEqualTo("hello");
 
         for (int i = 0; i < 200; i++)
@@ -69,7 +69,7 @@ public class JsonlAllocationBudgetTests
             }
 
             var first = await store.GetMessagesAsync(session.Id);
-            await Assert.That(first.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
             await Assert.That(first.Value.Count).IsEqualTo(100);
 
             GC.Collect();

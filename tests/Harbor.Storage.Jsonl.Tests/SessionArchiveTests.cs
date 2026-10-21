@@ -66,7 +66,7 @@ public class SessionArchiveTests
         byte[] archive = await ExportAsync(store, session.Id);
 
         var read = await new SessionArchiveReader().ReadAsync(new MemoryStream(archive));
-        await Assert.That(read.IsSuccess).IsTrue();
+        await Assert.That(read).IsSuccessful();
 
         SessionArchive decoded = read.Value;
         await Assert.That(decoded.Session.Id).IsEqualTo(session.Id);
@@ -90,7 +90,7 @@ public class SessionArchiveTests
 
         var written = await WriteAsync(store, session.Id);
 
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         SessionArchiveManifest manifest = written.Value;
         await Assert.That(manifest.Marker).IsEqualTo("$harbor-session-archive");
         await Assert.That(manifest.Version).IsEqualTo(1);
@@ -130,7 +130,7 @@ public class SessionArchiveTests
         var store = new LogStore(session, log);
 
         var written = await WriteAsync(store, session.Id);
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
 
         SessionArchiveManifest manifest = written.Value;
         await Assert.That(manifest.LogSource).IsEqualTo("log");
@@ -144,7 +144,7 @@ public class SessionArchiveTests
         // collected for.
         var read = await new SessionArchiveReader().ReadAsync(
             new MemoryStream(await ExportAsync(store, session.Id)));
-        await Assert.That(read.IsSuccess).IsTrue();
+        await Assert.That(read).IsSuccessful();
         await Assert.That(read.Value.Log.Count).IsEqualTo(3);
 
         var shadowed = read.Value.Log[0];
@@ -169,7 +169,7 @@ public class SessionArchiveTests
         // The JSONL backend exposes its append-only log (#1752), so the
         // archive holds the WHOLE log — and says so, so a reader is never
         // left to infer which of the two it is holding.
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(written.Value.LogSource).IsEqualTo("log");
     }
 
@@ -183,7 +183,7 @@ public class SessionArchiveTests
 
         // A store that has the log API but no entries yet holds no log: the
         // manifest must not claim one the archive does not hold.
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(written.Value.LogSource).IsEqualTo("surface");
     }
 
@@ -197,7 +197,7 @@ public class SessionArchiveTests
 
         // A store that cannot hand back a log offers the surface, and the
         // manifest says so rather than letting a reader infer it.
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(written.Value.LogSource).IsEqualTo("surface");
     }
 
@@ -218,7 +218,7 @@ public class SessionArchiveTests
             attachments: [new ImageAttachment("/tmp/b.png", "image/png", 1, 1, png)]));
 
         var written = await WriteAsync(store, session.Id);
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(written.Value.Attachments.Length).IsEqualTo(1);
 
         byte[] archive = await ExportAsync(store, session.Id);
@@ -228,7 +228,7 @@ public class SessionArchiveTests
 
         // Both turns still point at the one file, and the bytes come back.
         var read = await new SessionArchiveReader().ReadAsync(new MemoryStream(archive));
-        await Assert.That(read.IsSuccess).IsTrue();
+        await Assert.That(read).IsSuccessful();
 
         var first = (UserMessage)read.Value.Log[0].Message!;
         var second = (UserMessage)read.Value.Log[1].Message!;
@@ -253,7 +253,7 @@ public class SessionArchiveTests
             ]));
 
         var written = await WriteAsync(store, session.Id);
-        await Assert.That(written.IsSuccess).IsTrue();
+        await Assert.That(written).IsSuccessful();
         await Assert.That(written.Value.Attachments.Length).IsEqualTo(2);
 
         byte[] archive = await ExportAsync(store, session.Id);
@@ -332,7 +332,7 @@ public class SessionArchiveTests
         buffer.Position = 0;
         var read = await new SessionArchiveReader().ReadAsync(buffer);
 
-        await Assert.That(read.IsSuccess).IsFalse();
+        await Assert.That(read).IsFailed();
         await Assert.That(read.Error).Contains("manifest.json");
     }
 

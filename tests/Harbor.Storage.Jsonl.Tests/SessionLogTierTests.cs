@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Jsonl.Tests;
@@ -56,7 +57,7 @@ public class SessionLogTierTests
             $"my key is {ShapedKey} and the other one is {OpaqueKey}",
             "code",
             "claude-opus-4");
-        await Assert.That((await store.AppendMessageAsync(sessionId, user)).IsSuccess).IsTrue();
+        await Assert.That((await store.AppendMessageAsync(sessionId, user))).IsSuccessful();
 
         using var args = JsonDocument.Parse(
             $$"""
@@ -70,14 +71,14 @@ public class SessionLogTierTests
             StopReason.ToolUse,
             new Usage(10, 5),
             "claude-opus-4");
-        await Assert.That((await store.AppendMessageAsync(sessionId, assistant)).IsSuccess).IsTrue();
+        await Assert.That((await store.AppendMessageAsync(sessionId, assistant))).IsSuccessful();
 
         var toolResult = new ToolResultMessage(
             "msg-tool",
             sessionId,
             DateTimeOffset.UtcNow,
             [new ToolResultEntry("call-1", "bash", $"the file holds {ShapedKey}", false)]);
-        await Assert.That((await store.AppendMessageAsync(sessionId, toolResult)).IsSuccess).IsTrue();
+        await Assert.That((await store.AppendMessageAsync(sessionId, toolResult))).IsSuccessful();
     }
 
     [Test]
@@ -190,11 +191,11 @@ public class SessionLogTierTests
             // what comes back is the SCRUBBED text — which is what a replay
             // needs, because the replay sees exactly what the file holds.
             var session = await store.GetAsync(sessionId);
-            await Assert.That(session.IsSuccess).IsTrue();
+            await Assert.That(session).IsSuccessful();
             await Assert.That(session.Value.Model).IsEqualTo("claude-opus-4");
 
             var messages = await store.GetMessagesAsync(sessionId);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(3);
 
             var user = (UserMessage)messages.Value[0];
@@ -228,7 +229,7 @@ public class SessionLogTierTests
                 $"the key is {ShapedKey}",
                 "code",
                 "claude-opus-4");
-            await Assert.That((await store.AppendMessageAsync(sessionId, edited)).IsSuccess).IsTrue();
+            await Assert.That((await store.AppendMessageAsync(sessionId, edited))).IsSuccessful();
 
             // An edit is a second write of the same record: it must be scrubbed
             // on the way out too, or the rewrite would put the credential back
@@ -240,7 +241,7 @@ public class SessionLogTierTests
                 $"summary: the key was {ShapedKey}",
                 "code",
                 "claude-opus-4");
-            await Assert.That((await store.UpdateMessageAsync(sessionId, compactionSummary)).IsSuccess).IsTrue();
+            await Assert.That((await store.UpdateMessageAsync(sessionId, compactionSummary))).IsSuccessful();
 
             string raw = await File.ReadAllTextAsync(path);
             await Assert.That(raw).DoesNotContain(ShapedKey);
@@ -265,14 +266,14 @@ public class SessionLogTierTests
                 DateTimeOffset.UtcNow,
                 "hello",
                 "code",
-                "claude-opus-4"))).IsSuccess).IsTrue();
+                "claude-opus-4")))).IsSuccessful();
 
             // The title is the caller's text, and it travels with every
             // rewrite of the header.
             var session = await store.GetAsync(sessionId);
-            await Assert.That(session.IsSuccess).IsTrue();
+            await Assert.That(session).IsSuccessful();
             await Assert.That((await store.UpdateAsync(
-                session.Value with { Title = $"the key is {ShapedKey}" })).IsSuccess).IsTrue();
+                session.Value with { Title = $"the key is {ShapedKey}" }))).IsSuccessful();
 
             // The feedback note is free text the user typed, and it leaves the
             // machine with the rest of the log.
@@ -282,7 +283,7 @@ public class SessionLogTierTests
                 FeedbackRating.Helpful,
                 FeedbackCategory.TaskResult,
                 $"the key is {ShapedKey}");
-            await Assert.That(rated.IsSuccess).IsTrue();
+            await Assert.That(rated).IsSuccessful();
 
             string raw = await File.ReadAllTextAsync(path);
             await Assert.That(raw).DoesNotContain(ShapedKey);
@@ -309,7 +310,7 @@ public class SessionLogTierTests
                 "max_tokens=4096 prompt_tokens=12 token_count=3 the file is src/Harbor.Storage.Jsonl/SessionLogTier.cs",
                 "code",
                 "claude-opus-4");
-            await Assert.That((await store.AppendMessageAsync(sessionId, message)).IsSuccess).IsTrue();
+            await Assert.That((await store.AppendMessageAsync(sessionId, message))).IsSuccessful();
 
             string raw = await File.ReadAllTextAsync(path);
 

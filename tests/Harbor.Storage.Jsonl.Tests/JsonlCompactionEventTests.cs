@@ -15,6 +15,7 @@
 
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -69,12 +70,12 @@ public class JsonlCompactionEventTests
             // from carries the message and nothing else — and the record is
             // not counted as a broken record either.
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(messages.Value[0].Id).IsEqualTo("msg-user");
 
             var transcript = await store.GetTranscriptAsync(session.Id);
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Integrity.UnreadableRecordCount).IsEqualTo(0);
             await Assert.That(transcript.Value.Integrity.IsComplete).IsTrue();
         }
@@ -102,7 +103,7 @@ public class JsonlCompactionEventTests
                 store.GetRootDirectory(), NullLogger<JsonlSessionStore>.Instance);
 
             var events = await reopened.GetCompactionEventsAsync(session.Id);
-            await Assert.That(events.IsSuccess).IsTrue();
+            await Assert.That(events).IsSuccessful();
             await Assert.That(events.Value.Count).IsEqualTo(1);
             await Assert.That(events.Value[0].Turn).IsEqualTo(5);
 

@@ -1004,9 +1004,10 @@ dotnet run --project tests/Harbor.Core.Tests -c Release -- --minimum-expected-te
 ### Assertions
 
 ```csharp
-// Booleans
-await Assert.That(result.IsSuccess).IsTrue();
-await Assert.That(result.IsFailure).IsTrue();
+// Results — assert the RESULT, not its boolean (see below)
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
 
 // Equality
 await Assert.That(value).IsEqualTo("expected");
@@ -1028,6 +1029,63 @@ await Assert.That(async () => await fragile.Method())
 await Assert.That(async () => await fragile.Method())
     .Throws<InvalidOperationException>(ex => ex.Message.Contains("expected text"));
 ```
+
+### Asserting a result: the Result, not the boolean
+
+**What.** `await Assert.That(result.IsSuccess).IsTrue();` — the assertion is made
+on a `bool` the result exposes, instead of on the result.
+
+**Why.** The boolean form reports the failure at the `bool`:
+
+```
+Expected to be true but found False
+```
+
+which answers neither *which* result failed nor *why*. The chain form reports
+the result, and the helper puts the reason in the message:
+
+```
+Expected to be successful but it failed with: Session 's1' not found.
+```
+
+**Right way.** The helper is `ResultAssertions`, in the `Harbor.TestKit`
+namespace, in `tests/Harbor.TestKit.Support/ResultAssertions.cs`. One
+`using Harbor.TestKit;` and the chain links are there:
+
+```csharp
+// ❌ WRONG — the failure says "found False" and names nothing
+await Assert.That(result.IsSuccess).IsTrue();
+await Assert.That(result.IsFailure).IsTrue();
+await Assert.That(toolResult.IsError).IsFalse();
+
+// ✅ RIGHT — the failure names the result and its error
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+```
+
+| the type | the assertion |
+|---|---|
+| `Result<T>` | `IsSuccessful()` / `IsFailed()` |
+| `Result` (the non-generic one) | `IsSuccessful()` / `IsFailed()` |
+| `ToolResult` | `HasSucceeded()` / `HasFailed()` |
+| `ToolResultEntry` | `HasSucceeded()` / `HasFailed()` |
+| `ToolCallLink` | `HasSucceeded()` / `HasFailed()` |
+
+`Result` and `Result<T>` are two unrelated types — `Result<T>` does not derive
+from `Result` — so each has its own pair, and the compiler picks by the
+receiver's type.
+
+**The trap inside the trap.** Do NOT put the error text in
+`.Because(result.Error)`: `Because` takes its argument eagerly, and
+`Result.Error` throws on a SUCCESSFUL result
+(`ErrorIsInaccessibleForSuccess` in CSharpFunctionalExtensions 3.7.0), so that
+turns every passing test into an exception. The error text is already in the
+failure message, because the helper reads `.Error` only on the failure path.
+
+The full rule, with the measurement behind it, is
+[PATTERNS.md §9](./PATTERNS.md#9-result-assertions--assert-the-result-not-its-boolean);
+the forbidden form is [ANTIPATTERNS.md §40](./ANTIPATTERNS.md#40-asserting-a-result-through-its-boolean-property).
 
 ### The TUnit analyzer gate: an assertion may not be made on a constant
 
@@ -1204,6 +1262,7 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 | `ThrowingLlmClient` | `ILlmClient` whose `StreamAsync` always throws. |
 | `TestMessages.*` | Message builders: `User(content, …)`, `Assistant(text, …)`, `AssistantParts(parts, …)`, `ToolResult(entries, …)`. The payload comes first, the rest is named. |
 | `TestSessionContext(Session, seedMessages?)` | `ISessionContext` with `SteeringQueue` + `EnqueueSteering`. |
+| `ResultAssertions` | The result-assertion chain: `IsSuccessful()` / `IsFailed()` for `Result` and `Result<T>`, `HasSucceeded()` / `HasFailed()` for `ToolResult`, `ToolResultEntry` and `ToolCallLink`. Lives in the SUPPORT part (`tests/Harbor.TestKit.Support/`) — same namespace, so the `using` above finds it. See [Asserting a result](#asserting-a-result-the-result-not-the-boolean). |
 
 ### Example: using TestKit in an agent-loop test
 

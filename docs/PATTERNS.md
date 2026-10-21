@@ -34,7 +34,7 @@
 > (`file:line`)**, and **the known trap**.
 
 Связанные документы:
-- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 39 вещей, которые мы НЕ делаем.
+- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 40 вещей, которые мы НЕ делаем.
 - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — известные нарушения.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — high-level дизайн.
 - [EVENT_BUS_SINKS.md](./EVENT_BUS_SINKS.md) — нормативная таблица sink-вердиктов.
@@ -55,6 +55,7 @@
 | a REPL slash command | §4 Command | — |
 | a plugin extension point | §5 Extension points | — |
 | a stateful projection of the event stream | §8 State + lifetime | — |
+| a test that checks a result | §9 Result assertions | `ResultAssertionsTests` |
 
 **The guard column exists because of #555's sequencing rule.** Guards land
 *before or with* the rewrite, and a refactor without a guard gets undone by the
@@ -647,7 +648,87 @@ the transition and the lifecycle are the same code path rather than two.*
 
 ---
 
-## 9. Anti-convention summary — read before you design
+## 9. Result assertions — assert the Result, not its boolean
+
+**The convention.** A test that checks a result asserts the RESULT, through one
+shared chain, and the failure message carries the reason. Asserting the boolean
+property is the form this section replaces.
+
+### The canonical implementation
+
+`tests/Harbor.TestKit.Support/ResultAssertions.cs:112`:
+
+```csharp
+public static AssertionResult IsSuccessful<T>(this Result<T> result) =>
+    result.IsSuccess
+        ? AssertionResult.Passed
+        : AssertionResult.Failed($"it failed with: {result.Error}");
+```
+
+Each `[GenerateAssertion]` method becomes one link of the `Assert.That(...)`
+chain, so the call site reads as one sentence:
+
+```csharp
+// ✅ RIGHT — the failure names the result and its error
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+```
+
+The helper lives in the SUPPORT part (`tests/Harbor.TestKit.Support/`), not in
+the core kit, because it needs no product assembly beyond the two contract
+assemblies — and 24 test projects take only the support part. The namespace is
+`Harbor.TestKit` either way, so a consumer's `using` line does not change.
+
+The five families, one pair each:
+
+| the type | the flag | the assertion |
+|---|---|---|
+| `Result<T>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `Result` (non-generic) | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `ToolResult` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolResultEntry` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolCallLink` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+
+`Result` and `Result<T>` are two unrelated types in
+CSharpFunctionalExtensions — `Result<T>` does not derive from `Result` — so
+each needs its own pair, and the compiler picks by the receiver's type.
+
+### The known trap (#1569): the boolean form reports a `bool`, and the "just add
+the error text" advice is a landmine
+
+Measured on `origin/dev@259d0a5d`, the old form stood at **1846 sites** across
+**35 test projects** (`Assert.That(x.IsSuccess).IsTrue()` and its relatives),
+while the chain form was used in **78**. The old form is not wrong — it
+asserts the same thing — but it reports the failure at the `bool`:
+
+```
+Expected to be true but found False
+```
+
+which answers neither "which result failed" nor "why". The chain form reports
+the result, and the helper puts the reason in the message, so the failure
+reads:
+
+```
+Expected to be successful but it failed with: Session 's1' not found.
+```
+
+The second half of the trap is the advice that used to sit in the helper's own
+doc comment: *put the error text in `.Because(result.Error)`*. `Because` takes
+its argument EAGERLY, and `Result.Error` **throws** on a successful result
+(`ErrorIsInaccessibleForSuccess` in CSharpFunctionalExtensions 3.7.0), so that
+advice turns every passing test into an exception. The error text is read on
+the failure path only, inside the helper, where the result is known to have
+failed.
+
+**The rule:** *assert the result, not its boolean; and the reason belongs in
+the failure message, which means the helper reads `.Error` only after it knows
+the result failed.*
+
+---
+
+## 10. Anti-convention summary — read before you design
 
 | Anti-convention | Where it lives today | Rule |
 |---|---|---|
@@ -664,6 +745,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `Resolve` returns `Maybe.None`; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
+| Asserting a result through its boolean | 1846 sites across 35 test projects, measured on `origin/dev@259d0a5d` | Assert the result; the reason goes in the failure message (§9) |
 
 ---
 
