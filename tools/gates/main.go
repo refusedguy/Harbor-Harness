@@ -87,6 +87,16 @@ var registry = []registered{
 		run:     aggregateanalyzercost.Run,
 	},
 	{
+		name:    "aggregate-analyzer-cost",
+		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
+		run:     aggregateanalyzercost.Run,
+	},
+	{
+		name:    "aggregate-build-vcpu",
+		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
+		run:     aggregatebuildvcpu.Run,
+	},
+	{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
@@ -97,9 +107,24 @@ var registry = []registered{
 		run:     changelog.Run,
 	},
 	{
+		name:    "changelog-assemble",
+		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
+		run:     changelog.Run,
+	},
+	{
 		name:    "check-abstractions-contract",
 		summary: "every dependency the five guarded src/ projects declare is load-bearing",
 		run:     checkabstractionscontract.Run,
+	},
+	{
+		name:    "check-abstractions-contract",
+		summary: "every dependency the five guarded src/ projects declare is load-bearing",
+		run:     checkabstractionscontract.Run,
+	},
+	{
+		name:    "check-analyzer-scope",
+		summary: "where each analyzer package is allowed to run",
+		run:     checkanalyzerscope.Run,
 	},
 	{
 		name:    "check-analyzer-scope",
@@ -122,9 +147,29 @@ var registry = []registered{
 		run:     docfacts.Run,
 	},
 	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
 		name:    "check-no-test-sdk",
 		summary: "no project file declares the VSTest host that stops TUnit's discovery",
 		run:     checknotestsdk.Run,
+	},
+	{
+		name:    "check-no-test-sdk",
+		summary: "no project file declares the VSTest host that stops TUnit's discovery",
+		run:     checknotestsdk.Run,
+	},
+	{
+		name:    "check-public-api-resign",
+		summary: "a change to the frozen surface is re-signed in the same commit",
+		run:     checkpublicapiresign.Run,
 	},
 	{
 		name:    "check-public-api-resign",
@@ -137,9 +182,24 @@ var registry = []registered{
 		run:     checkreferencetrimmer.Run,
 	},
 	{
+		name:    "check-reference-trimmer",
+		summary: "does any project in the tree reference a package the compiler never uses",
+		run:     checkreferencetrimmer.Run,
+	},
+	{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-shard-balance",
+		summary: "are the CI test shards balanced by what their projects cost",
+		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-xml-doc-coverage",
+		summary: "every public member of the frozen contract assembly carries an XML doc",
+		run:     checkxmldoccoverage.Run,
 	},
 	{
 		name:    "check-xml-doc-coverage",
@@ -167,9 +227,29 @@ var registry = []registered{
 		run:     genseamgraph.Run,
 	},
 	{
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
+	},
+	{
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
+	},
+	{
 		name:    "measure-build-cpu",
 		summary: "what a build command costs: the wall time and the CPU utilisation",
 		run:     measurebuildcpu.Run,
+	},
+	{
+		name:    "measure-build-cpu",
+		summary: "what a build command costs: the wall time and the CPU utilisation",
+		run:     measurebuildcpu.Run,
+	},
+	{
+		name:    "measure-project-graph",
+		summary: "the shape of the project dependency graph",
+		run:     measureprojectgraph.Run,
 	},
 	{
 		name:    "measure-project-graph",
@@ -182,9 +262,24 @@ var registry = []registered{
 		run:     msbuildevaluationcost.Run,
 	},
 	{
+		name:    "msbuild-evaluation-cost",
+		summary: "what a Release compile spends on MSBuild project evaluation",
+		run:     msbuildevaluationcost.Run,
+	},
+	{
 		name:    "normalize-mtimes",
 		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
 		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "normalize-mtimes",
+		summary: "the source mtimes tell the truth, so MSBuild can skip what did not change",
+		run:     normalizemtimes.Run,
+	},
+	{
+		name:    "pack-validate",
+		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
+		run:     packvalidate.Run,
 	},
 	{
 		name:    "pack-validate",
@@ -202,9 +297,24 @@ var registry = []registered{
 		run:     testcensus.Run,
 	},
 	{
+		name:    "test-census",
+		summary: "the per-test and per-project wall census of a CI run",
+		run:     testcensus.Run,
+	},
+	{
 		name:    "test-measurements",
 		summary: "the per-test measurements a CI run printed",
 		run:     testmeasurements.Run,
+	},
+	{
+		name:    "test-measurements",
+		summary: "the per-test measurements a CI run printed",
+		run:     testmeasurements.Run,
+	},
+	{
+		name:    "test-skips",
+		summary: "the tests a run skipped, and the reason each declared",
+		run:     testskips.Run,
 	},
 	{
 		name:    "test-skips",
