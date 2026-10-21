@@ -30,6 +30,17 @@
 # number this file reports. The `null-*` arms are the control — they build
 # the same tree twice and their difference is the noise floor.
 #
+# AND THE COMPILER SERVER IS SHUT DOWN BETWEEN THE TWO BUILDS, because a
+# paired measurement is only paired if both halves are in the same state.
+# The shared compiler survives the first build of a job with the analyzer
+# assemblies loaded and JIT-warmed, so the second build pays for the
+# analyzers far less: the null arms came out 55.6 s, 63.8 s and 65.8 s
+# apart, with the compiler's own CPU falling from 455/522/585 s to
+# 256/300/298 s between the halves of the same job. That bias is larger
+# than the effect most of these arms look for. `dotnet build-server
+# shutdown` puts the second build in the state the first one was in, and in
+# the state a CI job's single build is in: nothing warm.
+#
 # THE ARMS
 #   null-<n>        the baseline against itself. The difference is the
 #                   noise, and it is what the other differences are read
@@ -262,6 +273,21 @@ jobs:
           # from-scratch build like the first: an incremental build would
           # compile nothing and the difference would be meaningless.
           dotnet build Harbor.slnx -c Release --no-restore -t:Clean > clean.log 2>&1 || true
+          # AND THE COMPILER SERVER IS SHUT DOWN, because otherwise the second
+          # build is not a cold one. The shared compiler (VBCSCompiler) stays
+          # alive between the two builds of a job, and it holds the analyzer
+          # assemblies LOADED and JIT-WARMED — so the second build pays for
+          # the analyzers far less. Measured: the null arms (the baseline
+          # against itself) came out 55.6 s, 63.8 s and 65.8 s apart, and the
+          # compiler's own CPU fell from 455/522/585 s to 256/300/298 s
+          # between the two halves of the same job. That bias is larger than
+          # the effect most of these arms are looking for.
+          #
+          # Shutting the server down puts the second build in the same state
+          # as the first, and the same state a CI job's single build is in:
+          # no compiler server, nothing warm. The null arms are the control
+          # that proves it.
+          dotnet build-server shutdown >> clean.log 2>&1 || true
           python3 tools/measure-build-cpu.py --label "$LABEL-arm" --out-dir meas -- bash -c "$arm"
           arm_rc=$?
           {
