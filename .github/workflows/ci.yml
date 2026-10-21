@@ -1115,6 +1115,39 @@ jobs:
           restore-keys: |
             ${{ steps.cache-key.outputs.prefix }}-
 
+      # ── MEASURE (issue #2100): the restore runs BEFORE the outputs are stamped ──
+      #
+      # The order in the lane used to be: restore the cached outputs → stamp
+      # them → NUKE, and NUKE's own `Restore` target runs `dotnet restore`
+      # INSIDE the compile step. Two things that MSBuild compares against the
+      # outputs are written by that restore, and both of them land AFTER the
+      # stamping:
+      #
+      #   * obj/<project>.csproj.nuget.g.props — an input of every project,
+      #     through `$(MSBuildAllProjects)`;
+      #   * the analyzer assemblies in the NuGet folder — an input of
+      #     `CoreCompile`, through `@(Analyzer)`.
+      #
+      # A file newer than the output makes the project out of date, so every
+      # project the restore touches rebuilds even when its sources did not
+      # change. Measured on the baseline run (39584940379): the NUKE restore
+      # reported "115 of 117 projects are up-to-date for restore", i.e. it
+      # rewrote the graph for 2 of them, and those 2 (plus their dependents)
+      # were rebuilt for that reason alone.
+      #
+      # Running the restore HERE puts everything it writes BEFORE the
+      # stamping, so the stamping has the last word: the g.props and the
+      # analyzers end up older than the outputs they are compared against.
+      # The restore that NUKE runs afterwards is a no-op (the assets file and
+      # the dgspec hash are already in place), so nothing is written after
+      # the stamping any more.
+      #
+      # The cost is one restore of the solution (~6 s measured with a warm
+      # package cache). The compile's own restore does not go away: NUKE
+      # still runs it, and it now finds nothing to do.
+      - name: Restore the package graph (before the outputs are stamped)
+        run: dotnet restore Harbor.slnx -v minimal
+
       # The checkout gave every source file the CURRENT clock, so every
       # restored output looks stale and MSBuild would rebuild the whole
       # solution — the trap #1927 names. This step puts the mtimes back
