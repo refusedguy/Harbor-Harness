@@ -2423,6 +2423,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Report test measurements (issue #618, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2449,6 +2450,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
 
+      - name: Report the test census (issue #1884, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
@@ -2468,6 +2470,7 @@ jobs:
           tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
 
+      - name: Report skipped tests (issue #1795, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
         run: |
