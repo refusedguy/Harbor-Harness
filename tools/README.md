@@ -92,6 +92,7 @@ gate over the table in it.
 |---|---|---|
 | [`Harbor.Evals/`](./Harbor.Evals) | Task-solving eval runner — executes `evals/tasks` fixtures against a live model and scores the result. Stdlib + provider HTTP only; no runtime changes to Harbor. | [AGENTS.md](../AGENTS.md) §Evals, [docs/EVALS.md](../docs/EVALS.md) |
 | [`DesignSystemDocGen/`](./DesignSystemDocGen) | Generates the public theme API reference from the compiler-emitted XML doc of `Harbor.DesignSystem` + `docs/schemas/harbor-theme.schema.json`. Fails the build if a listed token is missing from the docs — deliberate: doc rot should not be silent. | [docs/DESIGN_SYSTEM_API.md](../docs/DESIGN_SYSTEM_API.md) |
+| [`normalize-mtimes.py`](./normalize-mtimes.py) | After the build-output cache is restored, the source mtimes are set to the truth, so MSBuild rebuilds exactly what the pull request changed and skips the rest. `--self-test` proves it still tells a changed file from an unchanged one. | `.github/workflows/ci.yml`, `.github/workflows/docs.yml` |
 
 ## Note on the eval runner
 
