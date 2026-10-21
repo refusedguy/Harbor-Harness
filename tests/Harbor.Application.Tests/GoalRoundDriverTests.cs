@@ -67,7 +67,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal("make the tests pass", GoalPhase.Active, maxRounds: 3));
+        store.Seed(session.Id, TestGoals.NewGoal("make the tests pass", GoalPhase.Active, maxRounds: 3));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -99,7 +99,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal(maxRounds: 3));
+        store.Seed(session.Id, TestGoals.NewGoal(maxRounds: 3));
 
         var first = NewDriver(store);
         var firstOutcome = await first.TryReserveRoundAsync(
@@ -124,7 +124,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal(maxRounds: 2, roundsStarted: 2, revision: 3));
+        store.Seed(session.Id, TestGoals.NewGoal(maxRounds: 2, roundsStarted: 2, revision: 3));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -149,7 +149,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal(phase: GoalPhase.Complete));
+        store.Seed(session.Id, TestGoals.NewGoal(phase: GoalPhase.Complete));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -166,7 +166,7 @@ public class GoalRoundDriverTests
     {
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal(phase: GoalPhase.Blocked, revision: 2));
+        store.Seed(session.Id, TestGoals.NewGoal(phase: GoalPhase.Blocked, revision: 2));
 
         var context = new TestSessionContext(session);
         var driver = NewDriver(store);
@@ -185,7 +185,7 @@ public class GoalRoundDriverTests
         // tells the model to call something it cannot call.
         var store = new FakeGoalStore();
         Session session = NewSession();
-        store.Seed(session.Id, FakeGoalStore.NewGoal());
+        store.Seed(session.Id, TestGoals.NewGoal());
 
         var working = new TestSessionContext(session);
         await NewDriver(store).TryReserveRoundAsync(

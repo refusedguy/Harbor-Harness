@@ -64,7 +64,7 @@ public class JsonlSessionGoalTests
 
             var appended = await store.AppendGoalAsync(
                 session.Id,
-                FakeGoalStore.NewGoal($"fix the {Marker}", GoalPhase.Active, maxRounds: 5, roundsStarted: 2));
+                TestGoals.NewGoal($"fix the {Marker}", GoalPhase.Active, maxRounds: 5, roundsStarted: 2));
 
             await Assert.That(appended.IsSuccess).IsTrue();
             await Assert.That(appended.Value.Objective).IsEqualTo($"fix the {Marker}");
@@ -122,10 +122,10 @@ public class JsonlSessionGoalTests
         {
             var session = (await store.CreateAsync("/goal", "code", "anthropic", "claude-opus-4")).Value;
 
-            await store.AppendGoalAsync(session.Id, FakeGoalStore.NewGoal($"first {Marker}", GoalPhase.Active, revision: 1));
+            await store.AppendGoalAsync(session.Id, TestGoals.NewGoal($"first {Marker}", GoalPhase.Active, revision: 1));
             await store.AppendGoalAsync(
                 session.Id,
-                FakeGoalStore.NewGoal($"second {Marker}", GoalPhase.Complete, roundsStarted: 2, revision: 2));
+                TestGoals.NewGoal($"second {Marker}", GoalPhase.Complete, roundsStarted: 2, revision: 2));
 
             var read = await store.GetGoalAsync(session.Id);
 
@@ -154,13 +154,13 @@ public class JsonlSessionGoalTests
         {
             var session = (await store.CreateAsync("/goal", "code", "anthropic", "claude-opus-4")).Value;
 
-            await store.AppendGoalAsync(session.Id, FakeGoalStore.NewGoal($"first {Marker}", revision: 1));
+            await store.AppendGoalAsync(session.Id, TestGoals.NewGoal($"first {Marker}", revision: 1));
 
             // The same revision again: the store already holds it, and a write
             // that names an older revision must not overwrite the newer fact.
             var stale = await store.AppendGoalAsync(
                 session.Id,
-                FakeGoalStore.NewGoal($"stale {Marker}", GoalPhase.Complete, revision: 1));
+                TestGoals.NewGoal($"stale {Marker}", GoalPhase.Complete, revision: 1));
 
             await Assert.That(stale.IsFailure).IsTrue()
                 .Because("a stale revision is refused; the loser of a race re-reads and decides again");
@@ -184,7 +184,7 @@ public class JsonlSessionGoalTests
         {
             var session = (await store.CreateAsync("/goal", "code", "anthropic", "claude-opus-4")).Value;
             await store.AppendMessageAsync(session.Id, Msg(session.Id, 0));
-            await store.AppendGoalAsync(session.Id, FakeGoalStore.NewGoal($"objective {Marker}"));
+            await store.AppendGoalAsync(session.Id, TestGoals.NewGoal($"objective {Marker}"));
 
             var messages = await store.GetMessagesAsync(session.Id);
 

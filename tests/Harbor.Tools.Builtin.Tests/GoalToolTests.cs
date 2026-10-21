@@ -34,7 +34,7 @@ public class GoalToolTests
     public async Task Complete_RecordsTheGoalAsComplete()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal());
+        store.Seed(SessionId, TestGoals.NewGoal());
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(
@@ -54,7 +54,7 @@ public class GoalToolTests
     public async Task Block_RecordsTheGoalAsBlocked_WithTheAgentsOwnReason()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal());
+        store.Seed(SessionId, TestGoals.NewGoal());
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(
@@ -74,7 +74,7 @@ public class GoalToolTests
     public async Task Block_WithoutAReason_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal());
+        store.Seed(SessionId, TestGoals.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("""{"operation":"block"}"""));
@@ -88,7 +88,7 @@ public class GoalToolTests
     public async Task AnUnknownOperation_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal());
+        store.Seed(SessionId, TestGoals.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("""{"operation":"finished"}"""));
@@ -100,7 +100,7 @@ public class GoalToolTests
     public async Task AMissingOperation_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal());
+        store.Seed(SessionId, TestGoals.NewGoal());
         var tool = NewTool(store);
 
         var validation = tool.ValidateArguments(Args("{}"));
@@ -128,7 +128,7 @@ public class GoalToolTests
     public async Task AGoalThatIsAlreadyComplete_IsRefused()
     {
         var store = new FakeGoalStore();
-        store.Seed(SessionId, FakeGoalStore.NewGoal(phase: GoalPhase.Complete));
+        store.Seed(SessionId, TestGoals.NewGoal(phase: GoalPhase.Complete));
         var tool = NewTool(store);
 
         var result = await tool.ExecuteAsync(

@@ -72,30 +72,4 @@ public sealed class FakeGoalStore : ISessionGoalStore
     /// <returns>The goal, or null.</returns>
     public Goal? Peek(string sessionId) =>
         _goals.TryGetValue(sessionId, out Goal? goal) ? goal : null;
-
-    /// <summary>
-    ///     Build a goal for a test: the objective, the phase, the round budget,
-    ///     the counter and the revision. The two timestamps are the store's
-    ///     business and no test asserts on them.
-    /// </summary>
-    /// <param name="objective">What the goal is.</param>
-    /// <param name="phase">Where the goal stands.</param>
-    /// <param name="maxRounds">How many rounds the goal may get.</param>
-    /// <param name="roundsStarted">How many rounds it has had.</param>
-    /// <param name="revision">The goal's revision counter.</param>
-    /// <returns>The goal.</returns>
-    public static Goal NewGoal(
-        string objective = "make the tests pass",
-        GoalPhase phase = GoalPhase.Active,
-        int maxRounds = 3,
-        int roundsStarted = 0,
-        int revision = 1) =>
-        new(
-            objective,
-            phase,
-            maxRounds,
-            roundsStarted,
-            revision,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow);
 }
