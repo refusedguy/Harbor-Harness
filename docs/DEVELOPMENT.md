@@ -77,6 +77,52 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) v1.61.0 (pinned in `Direct
 - **Pre-existing Avalonia 12 headless failures** (`MarkdownRenderer_SetMarkdown_DoesNotThrow`, `CodeBlock_Default_Code_IsEmpty`, `TypewriterStreamingText_CanSet_Text` — "Stack empty" in `SetInheritanceParent`), plus an occasional flaky pair `ChatView_Inflates` / `TryGet_ReturnsNullForUnregistered`. Not Harbor bugs — see ROADMAP backlog.
 - **IPC named-pipe event-stream tests on Linux** (`Harbor.Ipc.Tests`) self-skip unless `HARBOR_IPC_EVENTSTREAM=1` is set; some timing flakes remain.
 
+### Golden baselines — one contract
+
+A golden is a committed snapshot of what a piece of code renders. Since
+issue #1776 there is **one** implementation of the mechanics, and it lives
+in the kit: `Harbor.TestKit.Golden`
+([`tests/Harbor.TestKit.Support/Golden.cs`](../tests/Harbor.TestKit.Support/Golden.cs)).
+A lane keeps only what is its own — the directory its baselines live in, the
+shape of its document, and the assertion it fails with.
+
+The contract, in full:
+
+- **Where a baseline lives.** `tests/fixtures/<suite>/<name>.golden.txt`.
+  `Golden.FixtureDir("<suite>")` builds the path; `Golden.BaselinePath(dir,
+  name)` builds the file.
+- **How it is compared.** Byte-for-byte after the line-ending normalisation
+  (`CRLF` and lone `CR` become `LF`). The normalisation is deliberately not
+  "improved": the committed baselines were written under it.
+- **How it is regenerated.** `HARBOR_UPDATE_GOLDENS=1` — one spelling for the
+  whole repository. CI never sets it: CI compares, it never rewrites.
+- **What a missing baseline says.** The path that is missing and the command
+  that seeds it.
+
+| Lane | Fixture directory | Helper |
+|---|---|---|
+| CellForge grid dumps | `tests/fixtures/celldiff/` | `CelldiffGoldens` |
+| Generic gallery | `tests/fixtures/generic-layout/` | `Golden.VerifyText` directly |
+| PTY scenarios | `tests/fixtures/consoleex-pty/` | `Golden.VerifyText` directly |
+| Renderer frames | `tests/fixtures/renderer-frames/` | `GoldenFrames` |
+| Avalonia components | `tests/fixtures/golden/`, `tests/fixtures/avalonia/frames/` | `GoldenFrame` |
+
+Regenerate a lane locally:
+
+```bash
+HARBOR_UPDATE_GOLDENS=1 dotnet run --project tests/Harbor.Tui.CellForge.Tests -c Release --no-build
+```
+
+or, without a local .NET setup, dispatch the workflow — it regenerates,
+re-verifies and commits the baselines back to the branch:
+
+```bash
+gh workflow run goldens.yml --ref <branch>
+```
+
+The workflow's default suite list lives in
+[`.github/workflows/goldens.yml`](../.github/workflows/goldens.yml).
+
 ## Documentation checks
 
 Two stdlib-only Python 3 gates (no pip install, no network, no dotnet) run on
