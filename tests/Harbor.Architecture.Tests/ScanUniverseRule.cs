@@ -425,9 +425,24 @@ public sealed class ScanUniverseRule
     ///         exists so that a test project can reach the shared helpers
     ///         without gaining a product assembly it did not already have.
     ///     </para>
+    ///     <para>
+    ///         #1797 moves <c>tests=38</c> to <c>tests=40</c>: the
+    ///         <c>[Observed]</c> generator's guard gained two parts. The
+    ///         FIXTURE (<c>tests/Harbor.Telemetry.Fixtures</c>) references the
+    ///         contracts assembly the marker lives in and the diagnostics
+    ///         contracts the generated decorator is written against; the GUARD
+    ///         (<c>tests/Harbor.CodeGen.Tests</c>) references the generator, the
+    ///         telemetry implementation and the fixture. Neither is in the
+    ///         inventory — the architecture tests do not reference them — so no
+    ///         reflection rule built on this helper can see them, and both are
+    ///         blind for the reason <c>Harbor.TestKit.Support</c> is (#1772): a
+    ///         test-only part that exists so that a test project can reach the
+    ///         machinery without gaining a product assembly it did not already
+    ///         have.
+    ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=15", "samples=5", "tests=38", "tools=1"];
+        ["apps=2", "contrib=15", "samples=5", "tests=40", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(
