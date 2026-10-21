@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 // #793's shape: TUnit.Core ships a `TestSessionContext` of its own, so the
 // alias is what says which one this file means.
-using TestSessionContext = Harbor.Application.Tests.Fakes.TestSessionContext;
+using TestSessionContext = Harbor.TestKit.TestSessionContext;
 
 namespace Harbor.Application.Tests;
 
