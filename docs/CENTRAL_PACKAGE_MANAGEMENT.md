@@ -28,6 +28,7 @@
 11. [Common pitfalls](#11-common-pitfalls)
 12. [Verifying CPM is working](#12-verifying-cpm-is-working)
 13. [References](#13-references)
+14. [The restore: the audit pin, the lock files, and the CI cache](#14-the-restore-the-audit-pin-the-lock-files-and-the-ci-cache)
 
 ---
 
@@ -847,6 +848,183 @@ dotnet list package --vulnerable
 - `docs/FEATURE_RESEARCH.md` §11 — grok-build analysis (companion doc, written in same round)
 - `docs/ARCHITECTURE_LAYERS.md` — Clean / Hexagonal / Onion layering rules
 - `Harbor.slnx` — solution file (will be updated to add new desktop-app projects in the next round)
+
+---
+
+## 14. The restore: the audit pin, the lock files, and the CI cache
+
+> **Decided on 2026-10-20, issue #1857.** Every number below is measured, not
+> estimated: the graph from the live nuget.org package metadata, the cache
+> sizes from the GitHub Actions cache API, the restore times from the CI run
+> logs. The method is written out with each number so the next reader can
+> repeat it.
+
+### 14.1 The NuGet audit pin
+
+`Directory.Build.props` pins two MSBuild properties:
+
+```xml
+<NuGetAuditMode>all</NuGetAuditMode>
+<NuGetAuditLevel>moderate</NuGetAuditLevel>
+```
+
+**The SDK default they are written against.** NuGet 7.0 (the .NET 10 SDK)
+changed the default of `NuGetAuditMode`: it is `all` for a project that
+targets `net10.0` or higher, and `direct` below that. Harbor targets
+`net10.0`, so the effective default here is already `all`; `direct` is the
+pre-NuGet-7.0 (.NET 8/9 SDK) behaviour and is still the default for a
+project below net10.0. The pin of `all` therefore does not turn the audit on
+. It makes the gate a property of the repository rather than a property of
+the SDK, and it is the value a project that drops below net10.0 falls back
+on.
+
+`NuGetAuditLevel` is the other half. The SDK default is `low`, which reports
+every advisory: NU1901 (low), NU1902 (moderate), NU1903 (high), NU1904
+(critical). The pin to `moderate` keeps NU1902/NU1903/NU1904 inside the gate
+and drops NU1901. That is a narrowing of the SDK default, and it is
+deliberate: under `TreatWarningsAsErrors=true`, a low-severity advisory in a
+transitive package this repository does not control would break every build
+in the repository on the day the advisory is published, and the severities
+this repository has actually had to act on are the moderate and high ones:
+the MessagePack and ImageSharp advisories, whose per-project `NU1902;NU1903`
+suppressions #1911 removed.
+
+**One file governs the pin, and it is the root `Directory.Build.props`.**
+`apps/`, `tests/` and `src/` import it by RELATIVE path. The relative path
+is not a style choice: the project-file analyzer can only follow an import it
+can resolve on disk, and with the `GetPathOfFileAbove` property function it
+could not. `src/Directory.Build.props` was the last file still using the
+function form, and the consequence was a red build: 60 `error Proj0040:
+Set <NuGetAuditMode> to all` on the dev build of 2026-10-20, because the
+analyzer could not see the pin from `src/`.
+
+The two places the pin does NOT reach, so the claim is not read as covering
+them: `build/` (the NUKE tool, which declares that it does not inherit
+solution-wide strictness. It audits at the SDK default of `all`/`low`,
+which is WIDER than the repository's gate) and `contrib/` (not built by CI).
+
+### 14.2 The package graph, measured
+
+The graph below was walked from the live nuget.org metadata on 2026-10-20:
+the direct `<PackageReference>` set out of the tree, then each package's
+nuspec, resolved the way NuGet resolves it (the version CPM pins, or the
+lowest version that satisfies the range).
+
+| | |
+|---|---|
+| Packages in the resolved graph | **196** |
+| Dependency edges | 492 |
+| Distinct version ranges in the graph | 68 |
+| Ranges that FLOAT (`1.0.*`) | **0** |
+| Ranges with NO lower bound | **0** |
+| Packages whose version `Directory.Packages.props` pins | 60 (every direct reference) |
+| Packages resolved by a transitive range instead | 136 |
+| `packages.lock.json` files in the tree | **0** |
+| Projects that set `RestorePackagesWithLockFile` | **0** |
+| Projects that set `RestoreLockedMode` | **0** |
+
+**What the numbers say about reproducibility.** 66 of the 68 ranges are a
+bare minimum version (NuGet's `>= x.y.z` form), one is `[2.5.1, 3.0.0)` and
+two are exact. Not one of them floats and not one of them is open at the
+bottom, so NuGet's lowest-applicable rule always has a fixed lower bound to
+resolve against. The resolved graph is therefore a function of
+`Directory.Packages.props` and the immutable nuspecs of the packages it
+names, which is the same conclusion the `docs/ANALYZERS.md` Proj0040 row
+reaches from the other side: a transitive advisory is Harbor's subject
+because Harbor decides the transitive versions.
+
+### 14.3 The lock files: NOT adopted, and why
+
+**Decision: `RestorePackagesWithLockFile` stays off, and the tree stays
+all-or-nothing.** No project has a `packages.lock.json` and no project sets
+the property, so there is no half-migrated state for anybody to inherit.
+
+The reasons, in the order they decided it:
+
+1. **The restore is already reproducible** (§14.2). A lock file's value here
+   is a DETECTOR: it fails a restore whose resolved graph no longer matches
+   the recorded one, not a fix. The drift it would catch (a package
+   unlisted, or a version published later that is LOWER than the current
+   lowest applicable) is real but narrow.
+2. **The cost is per project.** `RestorePackagesWithLockFile` is a property
+   that makes NuGet write one file next to every project: ~140 files, each
+   of which every dependabot PR has to reconcile, and each of which turns
+   stale into a red CI for everybody else (`RestoreLockedMode` fails the
+   restore). The tree would have to land in ONE wave, and a wave that
+   half-lands is the worst state of all.
+3. **The cheaper detector is the mechanism already in use.**
+   `CentralPackageTransitivePinningEnabled` is on, and
+   `Directory.Packages.props` pins the transitive versions it names
+   deliberately. Pinning the REMAINING 136 transitive packages the same way
+   is 136 lines in ONE file: one reviewable diff, no per-project file to
+   keep in sync, and no dependabot conflict that is not already a conflict
+   on the props file. That is the follow-up, and it is not this change.
+
+**The gate that keeps the decision honest** is `tools/check-test-packages.py`
+(the `test-packages` CI job). It reports the states the tree must never be
+in:
+
+| Rule | The state it refuses |
+|------|----------------------|
+| `RESTORE-INPUTS-UNENFORCED` | a `packages.lock.json` exists but nothing sets `RestorePackagesWithLockFile`, so NuGet never writes it, never checks it, and the file rots |
+| `RESTORE-INPUTS-UNWRITTEN` | `RestorePackagesWithLockFile` is set and no project has a lock file, so every restore writes one and the tree is dirty after every restore |
+| `RESTORE-LOCKED-WITHOUT-FILES` | `RestoreLockedMode` is set without `RestorePackagesWithLockFile`, which is a restore that fails |
+| `RESTORE-INPUTS-PARTIAL` | a scope where some projects carry a lock file and others do not, which means two projects in one scope restore differently |
+
+Its `--self-test` carries a fixture for each rule and one for the green
+case (every project of the scope locked, property set), so the gate is known
+to bite and known not to cry wolf.
+
+**What the wave would need, when it is taken up:** a machine that can
+restore (this change was authored where `dotnet restore` is not available),
+the lock files regenerated and committed for EVERY project in one commit, the
+gate above extended to compare them against the recorded graph, and a
+dependabot story that keeps them in step.
+
+### 14.4 The CI cache: what a pin change costs, and the fix
+
+`actions/setup-dotnet@v6` with `cache: true` and
+`cache-dependency-path: "Directory.Packages.props"` builds the cache key as
+`dotnet-cache-${os}-${hashFiles('Directory.Packages.props')}` and calls
+`cache.restoreCache(paths, primaryKey)` with **no restore keys** (the
+action's own source, `src/cache-restore.ts`). Two consequences, both
+measured:
+
+* **A pin change is a TOTAL cache miss.** Nothing falls back to the previous
+  entry, so the whole graph is downloaded again: **452 MiB across 196
+  packages**, measured by pulling the whole graph from nuget.org on
+  2026-10-20 (45 s wall clock at 16 parallel connections). The cost in CI
+  job time is smaller than the byte count suggests. The restore step took
+  21-30 s cold against 13 s warm, so **8-17 s per restoring job**, and there
+  are two jobs that restore (`build` and `test-packages`).
+* **The cache entry is 1.54 GiB, and there are 7 of them.** Read from the
+  GitHub Actions cache API on 2026-10-20: each `dotnet-cache-Linux-…`
+  entry is 1,617,932,154 bytes, and the repository held 7 entries
+  (10.8 GiB) against GitHub's 10 GB per-repository quota. The entries are
+  per props-hash AND per ref, so a PR that changes a pin adds one, and a
+  dev push after a pin change adds another.
+
+**The fix, when the CI lane is next restructured:** give the cache a
+restore-key fallback, so a miss costs the DELTA instead of the whole graph.
+`setup-dotnet` does not expose one, so it takes an explicit `actions/cache`
+step in place of the built-in one:
+
+```yaml
+      - name: Cache the NuGet packages (a miss costs the delta, not the graph)
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+```
+
+**This change does not apply it**, and the reason is a conflict, not a
+judgement: `.github/workflows/ci.yml` is claimed by four open PRs
+(1923, 1944, 1937 and 1946), and 1923 ("split the PR lane") restructures
+the lanes and adds a `pack` job that consumes the same cache key. A
+cache-key change made now would be re-landed or lost in that restructure;
+it belongs with it.
 
 ---
 
