@@ -28,6 +28,8 @@
   href: BENCHMARKS_RENDERERS.md
 - name: Build
   href: BUILD.md
+- name: Buildsystem Study
+  href: BUILDSYSTEM_STUDY.md
 - name: Central Package Management
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
