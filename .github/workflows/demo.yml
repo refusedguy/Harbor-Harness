@@ -32,7 +32,7 @@
 #      number of 1/GIF_FPS intervals, the same rule DEMO_LINE_HOLD follows for
 #      lines). The record-twice check below is what proves it, for both kinds.
 #
-#   3. FRAME PACING — tools/demo_repro.py re-paces each capture onto a fixed
+#   3. FRAME PACING — harbor-gates demo-repro re-paces each capture onto a fixed
 #      cadence (demo/toolchain.lock: GIF_STATE_FRAMES per screen, GIF_TAIL_FRAMES
 #      for the settled screen, GIF_FRAMES as the hard ceiling). The frame count and
 #      duration are therefore constants of the toolchain, not of the machine.
@@ -95,7 +95,7 @@ on:
     # EVERY recording input belongs here, not just the tapes (issue #427).
     # demo/run-scene.sh scrubs and paces the captured output,
     # demo/install-toolchain.sh and demo/toolchain.lock pin vhs/ttyd/the font,
-    # and tools/demo_repro.py re-paces the frames the gate then measures. All
+    # and harbor-gates demo-repro re-paces the frames the gate then measures. All
     # four move pixels. A change outside this filter lands on dev with no
     # workflow run, no drift gate and no red job — the README GIFs then go
     # stale in silence, which is the failure a maintainer cannot see and this
@@ -107,7 +107,7 @@ on:
       - "src/Harbor.Terminal.Abstractions/**"
       - "apps/Harbor.App.Cli/**"
       - "demo/**"
-      - "tools/demo_repro.py"
+      - "tools/gates/demo-repro/**"
       - ".github/workflows/demo.yml"
   # PR-time coverage for the one rule that had none. AGENTS.md, CONTRIBUTING.md and
   # docs/DEMO_GIFS.md all say a PR must not carry regenerated or hand-edited GIFs —
@@ -256,12 +256,12 @@ jobs:
         run: |
           set -euo pipefail
           for gif in hero markdown approval plain; do
-            python3 tools/demo_repro.py normalize \
+            tools/bin/harbor-gates-linux-x64 demo-repro normalize \
               --input "assets/demo/${gif}-raw.gif" \
               --output "assets/demo/${gif}-compressed.gif"
             rm -f "assets/demo/${gif}-raw.gif"
           done
-          python3 tools/demo_repro.py report --dir assets/demo
+          tools/bin/harbor-gates-linux-x64 demo-repro report --dir assets/demo
 
       # Size/quality drift gate. Stdlib-only GIF walker (no decoder, no extra
       # package): reads block structure, per-frame delays and the raw LZW
@@ -631,7 +631,7 @@ jobs:
       # into unexplained reds.
       - name: Baseline manifest is well-formed
         if: always()
-        run: python3 tools/demo_repro.py check-manifest
+        run: tools/bin/harbor-gates-linux-x64 demo-repro check-manifest
 
       - name: Upload demo GIFs artifact
         if: always()
@@ -811,18 +811,25 @@ jobs:
               sed "s#^Output \"assets/demo/$tape-raw.gif\"\$#Output \"$RUNNER_TEMP/pass-$pass/$tape-raw.gif\"#" \
                 "demo/$tape.tape" > "$RUNNER_TEMP/pass-$pass/$tape.tape"
               vhs "$RUNNER_TEMP/pass-$pass/$tape.tape"
-              python3 tools/demo_repro.py normalize \
+              tools/bin/harbor-gates-linux-x64 demo-repro normalize \
                 --input "$RUNNER_TEMP/pass-$pass/$tape-raw.gif" \
                 --output "$RUNNER_TEMP/pass-$pass/$tape.gif"
             done
           done
+
+      # The tool's own self-test: it reads the lock, walks a GIF, refuses a
+      # file that is not one, and names the field a baseline entry is
+      # missing. A tool that stopped reading a recording would report a green
+      # demo for a recording it never looked at.
+      - name: The demo tool still reads a recording
+        run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
 
       - name: Compare the two passes
         run: |
           set -euo pipefail
           failed=0
           for tape in hero markdown approval plain; do
-            if ! python3 tools/demo_repro.py compare \
+            if ! tools/bin/harbor-gates-linux-x64 demo-repro compare \
               --a "$RUNNER_TEMP/pass-A/$tape.gif" \
               --b "$RUNNER_TEMP/pass-B/$tape.gif" \
               --name "$tape" --summary; then

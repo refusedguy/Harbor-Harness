@@ -100,7 +100,7 @@ by itself evidence of a regression.
 
 This is worth stating twice because it is the single easiest thing to get wrong,
 and it was nearly got wrong in the other direction while writing
-`tools/demo_repro.py check-manifest`. A check that requires the manifest to match
+`harbor-gates demo-repro check-manifest`. A check that requires the manifest to match
 the committed GIFs sounds like the obvious missing gate. It is not: it would fail on
 the documented happy path, on every green run that commits GIFs without
 re-recording the manifest. What *can* be required is that the manifest is
@@ -188,7 +188,7 @@ Judging the pixels is the drift gate's job, on the merge.
 | `src/Harbor.Terminal.Abstractions/**` | view/VM contract changes |
 | `apps/Harbor.App.Cli/**` | the `harbor demo` command |
 | `demo/**` | tapes, the scrubber, the installer, the toolchain pins |
-| `tools/demo_repro.py` | the frame pacer the gate measures |
+| `harbor-gates demo-repro` | the frame pacer the gate measures |
 | `.github/workflows/demo.yml` | the workflow itself |
 
 Two throttle layers sit in front of the recording. A `concurrency` group
@@ -197,7 +197,7 @@ Two throttle layers sit in front of the recording. A `concurrency` group
 than an hour ago. Manual dispatch always proceeds — the throttle is there because
 merge velocity, not because a dispatch should be silently dropped.
 
-The trigger list is not maintained by hand. `demo/**` and `tools/demo_repro.py`
+The trigger list is not maintained by hand. `demo/**` and `tools/gates/demo-repro/**`
 were added by #427 because they were missing, and
 [`DemoGifTriggerSurfaceTests`](../tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs)
 pins the coverage: every recording input must be matched by `on.push.paths`. The
@@ -285,7 +285,7 @@ moved.
 
 ### What *is* gated about the manifest
 
-`python3 tools/demo_repro.py check-manifest` runs as its own step in the workflow
+`harbor-gates demo-repro check-manifest` runs as its own step in the workflow
 (`if: always()`), and it is deliberately **not** an equality check against the
 committed GIFs — see above. It asserts that each comparison the drift gate is about
 to make is *defined*:
@@ -424,15 +424,15 @@ gh workflow run demo.yml -f reproducibility=true     # record twice and compare
 # Local — record one tape by hand. Requires the pinned toolchain.
 demo/install-toolchain.sh
 vhs demo/hero.tape
-python3 tools/demo_repro.py normalize \
+tools/bin/harbor-gates-linux-x64 demo-repro normalize \
   --input assets/demo/hero-raw.gif \
   --output assets/demo/hero-compressed.gif
-python3 tools/demo_repro.py report --dir assets/demo
+tools/bin/harbor-gates-linux-x64 demo-repro report --dir assets/demo
 
 # Local — is baseline.json well-formed enough for the drift gate to mean
 # anything? Does NOT assert it matches the committed GIFs: record_baseline
 # defaults to false, so the manifest is expected to lag the artifacts.
-python3 tools/demo_repro.py check-manifest
+tools/bin/harbor-gates-linux-x64 demo-repro check-manifest
 
 # Local — the in-process recorder behind HARBOR_DEMO=1. Needs a PTY plus
 # ffmpeg; writes assets/demo/frames/<scene>/, which is gitignored scratch.

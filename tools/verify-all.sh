@@ -12,6 +12,42 @@ cd "$REPO" || exit 2
 BIN="tools/bin/harbor-gates-linux-x64"
 FAILED=0
 
+# THE JSCPD REPORT FIXTURE.
+#
+# The report case compares the ANALYSIS: the gate reads the report the tool
+# wrote and compares it with the committed baseline. Without a report there
+# is nothing to analyse, and the two sides then differ in the exit code
+# ALONE: the python original raises SystemExit (1) and the binary returns 2
+# -- "the gate could not run" is 2 in the contract of the binary, and the
+# python had no way to say it. That difference is real and documented, but
+# it is not what this harness is for, and a leftover file in /tmp made the
+# difference appear or disappear from run to run.
+#
+# So the fixture is written HERE, every run, in a directory of this run's
+# own: the comparison is of the analysis and not of the absence of a file,
+# and it is the same on a clean machine and on a busy one.
+REPORT_DIR="$(mktemp -d)"
+trap 'rm -rf "$REPORT_DIR"' EXIT
+JSCPD_REPORT="$REPORT_DIR/jscpd-report.json"
+cat > "$JSCPD_REPORT" <<'JSON'
+{
+  "statistics": {
+    "total": {
+      "sources": 0,
+      "lines": 0,
+      "tokens": 0,
+      "clones": 0,
+      "duplicatedLines": 0,
+      "duplicatedTokens": 0,
+      "percentage": 0.0,
+      "percentageTokens": 0.0,
+      "newClones": 0,
+      "newDuplicatedLines": 0
+    }
+  }
+}
+JSON
+
 run() {
     local label="$1"; shift
     echo "=== $label"
@@ -32,7 +68,7 @@ run "check-test-json-reflection (report)"     origin/dev:tools/check-test-json-r
 run "check-test-json-reflection (json-out)"   origin/dev:tools/check-test-json-reflection.py --json-out -- check-test-json-reflection --json-out
 run "check-test-json-reflection (self-test)"  origin/dev:tools/check-test-json-reflection.py --self-test -- check-test-json-reflection --self-test
 run "check-dup-jscpd (the self-test)"         origin/dev:tools/check-dup-jscpd.py --self-test -- check-dup-jscpd --self-test
-run "check-dup-jscpd (the report)"           origin/dev:tools/check-dup-jscpd.py --report /tmp/opencode/jscpd/jscpd-report.json -- check-dup-jscpd --report /tmp/opencode/jscpd/jscpd-report.json
+run "check-dup-jscpd (the report)"           origin/dev:tools/check-dup-jscpd.py --report "$JSCPD_REPORT" -- check-dup-jscpd --report "$JSCPD_REPORT"
 run "check-test-packages (the self-test)"     origin/dev:tools/check-test-packages.py --self-test -- check-test-packages --self-test
 run "check-test-packages (the gate)"          origin/dev:tools/check-test-packages.py -- check-test-packages
 run "check-test-packages (the report)"        origin/dev:tools/check-test-packages.py --report -- check-test-packages --report
