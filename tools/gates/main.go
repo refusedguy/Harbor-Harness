@@ -60,6 +60,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
 	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
 	mdlint "harbor.local/gates/md-lint"
@@ -199,6 +200,11 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "guard-triage",
