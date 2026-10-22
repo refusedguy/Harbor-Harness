@@ -692,9 +692,11 @@ requests on 2026-10-21: **23.5 runner-minutes** and **814 s of wall**
 (median), of which the wall is **29 % queue wait**. The bill: 27 % test
 shards, 25 % the compile, 19 % the SECOND compile of the reference trimmer,
 16 % the docs gates. The instrument is `harbor-gates pr-cost`, and it reads
-the Actions API rather than a hand-written table — the wall is the maximum
-of the two parallel workflows, not their sum. Quote §11, not this paragraph,
-and re-measure before quoting either.
+the Actions API rather than a hand-written table: the wall is the maximum
+of the two parallel workflows, not their sum. The twelve are a tree of
+2026-10-21 and the lane has moved since: the same instrument reads **19.0
+runner-minutes** for a pull request on the tree of 2026-10-22 (§11.6).
+Quote §11, not this paragraph, and re-measure before quoting either.
 
 ### Adding a benchmark
 
