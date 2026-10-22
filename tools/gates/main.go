@@ -57,6 +57,7 @@ import (
 	resultchains "harbor.local/gates/check-result-chains"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	stringswitch "harbor.local/gates/check-string-switch"
+	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
 	codemodtoolnames "harbor.local/gates/codemod-tool-names"
@@ -188,6 +189,11 @@ var registry = []registered{
 		name:    "check-string-switch",
 		summary: "does a switch compare a string literal, and is every ladder listed",
 		run:     stringswitch.Run,
+	},
+	{
+		name:    "check-workflows",
+		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
+		run:     checkworkflows.Run,
 	},
 	{
 		name:    "check-xml-doc-coverage",
