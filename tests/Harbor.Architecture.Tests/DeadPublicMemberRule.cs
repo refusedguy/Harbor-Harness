@@ -742,19 +742,6 @@ internal static class DeadPublicMemberProbe
                         memberCursor++;
                     }
 
-                    // NEGATIVE CONTROL — THE PLANTED DEFECT. This line makes
-                    // the forward-only cursor skip the FIRST member of every
-                    // type, which is the exact defect a one-pass member walk
-                    // can have. It is here so that the equivalence test is
-                    // PROVED to be able to fail: with this line the
-                    // equivalence test and the synthetic control must go
-                    // RED. It is removed in the next commit.
-                    if (memberCursor < memberMatches.Count
-                        && memberMatches[memberCursor].Index <= bodyEnd)
-                    {
-                        memberCursor++;
-                    }
-
                     for (int m = memberCursor; m < memberMatches.Count; m++)
                     {
                         Match member = memberMatches[m];
