@@ -81,10 +81,72 @@ WHY THIS FILE EXISTS (issue #1888)
                                 gate that fails on a slow runner is a gate
                                 that gets switched off.
 
+  THE TREE RUNNER (issue #2122)
+
+    `harbor-gates all` runs many gates in ONE command, and a workflow that
+    calls it runs every gate of its list that is compiled into the binary.
+    The four rules below are what the policy has to learn to keep the table
+    honest about that:
+
+    POLICY-ALL-LIST-UNREADABLE   the list of the tree runner cannot be read.
+                                Without the list the checker cannot tell
+                                which gates the runner runs, and a policy
+                                that cannot tell is a policy that protects
+                                nothing. The rule is LOUD on purpose: a
+                                reformat of the list must go red, not
+                                silently empty the coverage.
+    POLICY-ALL-GATE-MISSING      a gate of the list is in neither
+                                tools/gates/<name>/ nor tools/<name>.py. The
+                                runner would start it and fail: a gate that
+                                cannot run is a gate that checks nothing.
+    POLICY-ALL-GATE-UNRUN        a gate of the list that NO workflow runs,
+                                neither directly nor through the runner. A
+                                gate nobody runs is a gate nobody reviews,
+                                and a list that names it is a list that
+                                lies about the coverage.
+    POLICY-ALL-FLOORS-WEAKER     the runner runs a gate with FEWER floors
+                                than the gate's own job passes. The floor is
+                                the non-vacuity proof, and a runner that
+                                passes fewer of them is a runner where the
+                                gate can be green because it scanned
+                                nothing. The floors are checked BY THE LIST
+                                of gates and not by the lines of a workflow:
+                                a gate whose job is deleted is still a gate
+                                with floors, and the runner is what passes
+                                them now.
+
   The rules that are NOT mechanical are stated in the document itself and
   reviewed by a human: what a gate checks, that its message names the
   violator, that it has no allow-list, and that it does not duplicate
   another gate. This file does not pretend to check prose.
+
+  TODO(gates-go): the Go port of this gate (tools/gates/check-gate-policy/)
+  is not in dev yet, so the four rules above live in this python original.
+  They MUST come with the port, with the same codes, the same texts and the
+  same self-test cases:
+    - POLICY-ALL-LIST-UNREADABLE
+    - POLICY-ALL-GATE-MISSING
+    - POLICY-ALL-GATE-UNRUN
+    - POLICY-ALL-FLOORS-WEAKER
+  What the port has to translate:
+    - ALL_GATE ("all"), ALL_LIST_SOURCE ("tools/gates/all/gates.go") and
+      the constants of the parser: the list is read out of the GO SOURCE of
+      the runner's package, and the port reads the same file;
+    - parse_all_list() and AllEntry: the parser of the `var treeGates =
+      []treeGate{` block, the name, the args and the writer flag of every
+      entry;
+    - all_entries(), all_state(): the state of a gate of the list in this
+      tree (compiled, python, missing);
+    - all_invocations(): the effective invocations - the gates of the list
+      that the runner really runs, with the floors of the list;
+    - all_findings(): the four rules above;
+    - the self-test cases "a gate of the list that nothing runs",
+      "a gate the list runs without the floors of its own job" and
+      "a gate of the list that is not in the tree", and the fixture of the
+      `all` package (tools/gates/all/gates.go with a list of two gates, the
+      workflow step that calls the runner, and the row of the table).
+  The policy they enforce is stated in docs/CI_GATES.md, "The tree runner
+  is a runner, and the policy reads its list".
 
 NON-VACUITY
 
@@ -165,6 +227,48 @@ COMPILED_INVOKE_RE = re.compile(
 
 # A workflow job id: two spaces, an id, a colon.
 JOB_RE = re.compile(r"^  ([A-Za-z0-9_.\-]+):\s*$")
+
+# THE TREE RUNNER.
+#
+# `harbor-gates all` is a RUNNER: one command that runs many gates, and a
+# workflow that calls it runs every gate of its list that is compiled into
+# the binary. The policy has to know which gates those are, or the table in
+# docs/CI_GATES.md cannot say what CI runs.
+#
+# WHERE THE LIST COMES FROM, AND WHY NOT FROM THE BINARY
+#
+# The list is read out of the GO SOURCE of the runner's package
+# (tools/gates/all/gates.go), and not out of `harbor-gates all --list`:
+#
+#   - the committed binaries are LINUX binaries, and this checker has to run
+#     on any machine a developer sits at. A verdict that depends on the
+#     runner's operating system is a verdict that is green by never running
+#     on every machine that is not linux.
+#   - `--list` prints a HUMAN table ("what each gate needs"). Recovering
+#     machine facts out of a human table couples the policy to a
+#     presentation format, and the format is the thing most likely to
+#     change for a reader's sake.
+#
+# The source cannot drift from the binary: the binary IS the build of that
+# source, the `gates-binary` workflow rebuilds it from the sources in the
+# same tree and compares the bytes on every pull request that touches
+# tools/gates/**, and it rebuilds and commits it on every push to dev. A
+# pull request that changes the list without rebuilding the binary is red
+# there, not green here.
+#
+# And the parse is LOUD: a list that cannot be read is a finding
+# (POLICY-ALL-LIST-UNREADABLE), never an empty list. A policy that cannot
+# tell which gates the runner runs must say so, not shrug.
+ALL_GATE = "all"
+ALL_PACKAGE_DIR = "tools/gates/all"
+ALL_LIST_SOURCE = "tools/gates/all/gates.go"
+
+# The Go declaration of the list.
+ALL_LIST_DECL_RE = re.compile(r"^var\s+treeGates\s*=\s*\[\]treeGate\s*\{")
+# One field of an entry: `name: "x"`, `args: []string{...}`.
+ALL_NAME_RE = re.compile(r'name:\s*"([^"]+)"')
+ALL_ARGS_RE = re.compile(r"args:\s*\[\]string\{(.*?)\}", re.S)
+ALL_WRITER_RE = re.compile(r"writer:\s*true")
 
 # A step of a job: six spaces and a dash.
 STEP_RE = re.compile(r"^      - ")
@@ -438,6 +542,283 @@ def read_workflows(repo: str) -> tuple[dict[str, list[str]], list[Invocation]]:
     return job_ids, invocations
 
 
+# ---------------------------------------------------------- the tree runner
+#
+# `harbor-gates all` is a RUNNER of gates, and the policy has to read its
+# list to know what a workflow that calls it really runs.
+
+
+class AllEntry:
+    """One gate of the list of the tree runner.
+
+    The fields are what the policy needs and nothing more: the name (the
+    gate), the arguments (the floors the runner passes it) and the writer
+    flag (a gate that REWRITES the tree is not run by a checker).
+    """
+
+    def __init__(self, name: str, args: list[str], writer: bool = False):
+        self.name = name
+        self.args = args
+        self.writer = writer
+        # The state of the gate in this tree: "compiled", "python" or
+        # "missing". It is filled in by all_state().
+        self.state = "missing"
+
+    @property
+    def floors(self) -> list[str]:
+        """The `--min-*` arguments of the entry, as `flag value` pairs."""
+        return sorted(floor_pairs(self.args))
+
+    @property
+    def is_compiled(self) -> bool:
+        """The runner runs this gate: it is compiled into the binary.
+
+        A gate that is still a python script is NOT run by the runner: the
+        binary must not need python, and the local runner
+        (tools/check-local.sh) runs those with python3. A gate the runner
+        does not run is a gate that needs a job of its own in CI.
+        """
+        return self.state == "compiled"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+def parse_all_list(text: str) -> tuple[list[AllEntry], str]:
+    """The gates of the list of the tree runner, and why there is no list.
+
+    The list is a Go composite literal, and this reads the entries out of
+    it: the name, the arguments and the writer flag of each.
+
+    A list that cannot be read is an ERROR and not an empty list. The
+    difference is the difference between a policy that says "I cannot tell
+    which gates the runner runs" and a policy that says "the runner runs
+    nothing" - and the second one is a lie that lets the table drift.
+    """
+    lines = text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if ALL_LIST_DECL_RE.match(line.strip()):
+            start = index
+            break
+    if start is None:
+        return [], f"{ALL_LIST_SOURCE} has no `var treeGates = []treeGate{{` block"
+
+    entries: list[AllEntry] = []
+    body: list[str] = []
+    inside = False
+    depth = 0
+    for line in lines[start + 1:]:
+        stripped = line.strip()
+        if not inside:
+            if stripped == "{":
+                inside = True
+                depth = 1
+                body = []
+            elif stripped == "}":
+                break
+            continue
+        # The braces are counted, and not the lines: an entry whose `args`
+        # span several lines has a closing brace of its own before the
+        # closing brace of the entry.
+        depth += line.count("{") - line.count("}")
+        if depth <= 0:
+            entry = _all_entry("\n".join(body))
+            if entry is None:
+                return [], (f"{ALL_LIST_SOURCE} has an entry of the list with "
+                            f"no name")
+            entries.append(entry)
+            inside = False
+            body = []
+            continue
+        body.append(line)
+    if inside:
+        return [], f"{ALL_LIST_SOURCE} has an unterminated entry of the list"
+    if not entries:
+        return [], f"{ALL_LIST_SOURCE} has an empty list of tree gates"
+    return entries, ""
+
+
+def _all_entry(text: str) -> AllEntry | None:
+    """One entry of the list, or None when it carries no name."""
+    name_match = ALL_NAME_RE.search(text)
+    if not name_match:
+        return None
+    args: list[str] = []
+    args_match = ALL_ARGS_RE.search(text)
+    if args_match:
+        args = _go_tokens(args_match.group(1))
+    return AllEntry(name_match.group(1), args, bool(ALL_WRITER_RE.search(text)))
+
+
+def _go_tokens(text: str) -> list[str]:
+    """The elements of a `[]string{...}` literal, as a list of tokens.
+
+    A string literal loses its quotes; an identifier (a placeholder such as
+    `placeholderBase`) keeps its name, because the policy has no business
+    resolving it and no floor is one.
+    """
+    tokens: list[str] = []
+    for piece in text.split(","):
+        token = piece.strip()
+        if not token:
+            continue
+        if token.startswith('"') and token.endswith('"') and len(token) >= 2:
+            tokens.append(token[1:-1].replace('\\"', '"'))
+        else:
+            tokens.append(token)
+    return tokens
+
+
+def all_state(repo: str, entry: AllEntry) -> str:
+    """What a gate of the list turned out to be in this tree.
+
+    The tree is the truth: a directory under tools/gates/ is a compiled
+    gate, and a script in tools/ is a python gate. A gate that is neither
+    is a gate that cannot run.
+    """
+    if os.path.isdir(os.path.join(repo, COMPILED_SOURCE_DIR, entry.name)):
+        return "compiled"
+    if os.path.isfile(os.path.join(repo, "tools", entry.name + ".py")):
+        return "python"
+    return "missing"
+
+
+def all_entries(repo: str) -> tuple[list[AllEntry], str]:
+    """The list of the tree runner, with the state of every gate filled in.
+
+    An empty list and no reason means the tree has no tree runner at all:
+    there is nothing to understand, and no rule to enforce. A reason means
+    the runner is there and its list cannot be read, which IS a finding.
+    """
+    package = os.path.join(repo, ALL_PACKAGE_DIR)
+    if not os.path.isdir(package):
+        return [], ""
+    path = os.path.join(repo, ALL_LIST_SOURCE)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        return [], f"{ALL_LIST_SOURCE} cannot be read"
+    entries, reason = parse_all_list(text)
+    if reason:
+        return [], reason
+    for entry in entries:
+        entry.state = all_state(repo, entry)
+    return entries, ""
+
+
+def all_invocations(invocations: list[Invocation],
+                    entries: list[AllEntry]) -> list[Invocation]:
+    """The invocations the tree runner makes of the gates of its list.
+
+    A workflow that calls `harbor-gates all` runs every gate of the list
+    that is COMPILED into the binary, and it runs it with the arguments of
+    the list. The invocation of the runner is therefore an invocation of
+    each of those gates, in the workflow and the job of the runner.
+    """
+    effective: list[Invocation] = []
+    for runner in invocations:
+        if runner.gate != ALL_GATE or runner.is_self_test:
+            continue
+        for entry in entries:
+            if not entry.is_compiled or entry.writer:
+                continue
+            effective.append(Invocation(
+                workflow=runner.workflow,
+                job=runner.job,
+                script=runner.script,
+                args=" ".join(entry.args),
+                gate=entry.name,
+            ))
+    return effective
+
+
+def all_findings(entries: list[AllEntry],
+                 invocations: list[Invocation]) -> list[Finding]:
+    """The rules of the tree runner.
+
+    Four things can be wrong with the coverage of the runner, and each of
+    them is a hole in what CI checks:
+
+      - a gate of the list that is not in the tree at all: the runner
+        would start it and fail, and the list is a claim about a gate that
+        does not exist;
+      - a gate of the list that nothing runs: the coverage of the list is
+        empty where it claims to be full;
+      - a gate the runner runs with fewer floors than the gate's own job
+        passes: the floor is the non-vacuity proof, and a runner that
+        passes fewer of them is a runner where the gate can be green
+        because it scanned nothing;
+      - a list that cannot be read: the policy cannot tell what the runner
+        runs, and says so.
+    """
+    findings: list[Finding] = []
+
+    for entry in entries:
+        if entry.state == "missing":
+            findings.append(Finding(
+                "POLICY-ALL-GATE-MISSING",
+                f"{entry.name} is in the list of the tree runner, and there "
+                f"is no {COMPILED_SOURCE_DIR}/{entry.name} and no "
+                f"tools/{entry.name}.py — a gate that cannot run is a gate "
+                f"that checks nothing",
+                ALL_LIST_SOURCE,
+            ))
+            continue
+
+        calls = _calls_of(entry, invocations)
+        if not calls:
+            findings.append(Finding(
+                "POLICY-ALL-GATE-UNRUN",
+                f"{entry.name} is in the list of the tree runner, and no "
+                f"workflow runs it: neither directly nor through the "
+                f"runner — a gate nobody runs is a gate nobody reviews",
+                ALL_LIST_SOURCE,
+            ))
+            continue
+
+        # The floors of the gate: what its own job passes, and what the
+        # runner passes. The runner must not pass FEWER of them.
+        own: set[str] = set()
+        for invocation in calls:
+            if invocation.is_self_test:
+                continue
+            own.update(invocation.floors)
+        if own:
+            passed = set(entry.floors)
+            missing = sorted(own - passed)
+            if missing:
+                findings.append(Finding(
+                    "POLICY-ALL-FLOORS-WEAKER",
+                    f"the tree runner runs {entry.name} with the floors "
+                    f"{' '.join(entry.floors) if entry.floors else '(none)'}, "
+                    f"and {entry.name}'s own job passes "
+                    f"{' '.join(sorted(own))} — a runner that passes fewer "
+                    f"floors than another runner is a runner where the gate "
+                    f"can be green because it scanned nothing",
+                    ALL_LIST_SOURCE,
+                ))
+    return findings
+
+
+def _calls_of(entry: AllEntry, invocations: list[Invocation]) -> list[Invocation]:
+    """The invocations of one gate of the list.
+
+    A compiled gate is invoked as the binary and the gate's name; a gate
+    that is still python is invoked as the script. Both are matched by the
+    name, so that the answer does not depend on the architecture of the
+    binary the workflow happens to call.
+    """
+    found = []
+    for invocation in invocations:
+        if invocation.gate == entry.name:
+            found.append(invocation)
+        elif not invocation.gate and invocation.script == entry.name + ".py":
+            found.append(invocation)
+    return found
+
+
 # ------------------------------------------------------------------- checks
 
 
@@ -514,6 +895,27 @@ def evaluate(repo: str) -> tuple[list[Finding], int]:
                 f"nothing",
                 f"{invocation.workflow} · {invocation.job}",
             ))
+
+    # THE TREE RUNNER. A workflow that calls `harbor-gates all` runs every
+    # gate of the list that is compiled into the binary, and it runs it with
+    # the arguments of the list. Those invocations are added to the ones
+    # the workflows make directly, so that every rule below sees the whole
+    # truth: which gates run, where they run, and with which floors.
+    entries, list_reason = all_entries(repo)
+    effective: list[Invocation] = []
+    if list_reason:
+        findings.append(Finding(
+            "POLICY-ALL-LIST-UNREADABLE",
+            f"{list_reason} — the policy cannot tell which gates the tree "
+            f"runner runs, and a policy that cannot tell is a policy that "
+            f"protects nothing",
+            ALL_LIST_SOURCE,
+        ))
+    else:
+        effective = all_invocations(invocations, entries)
+        for invocation in effective:
+            invoked.setdefault(invocation.key, []).append(invocation)
+        findings.extend(all_findings(entries, invocations + effective))
 
     documented: dict[str, dict[str, str]] = {}
     for cells in rows:
@@ -1098,6 +1500,51 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gamma --self-test
       - name: Check
         run: tools/bin/harbor-gates-linux-x64 gamma --min-files 10
+      - name: The runner runs every tree gate
+        run: tools/bin/harbor-gates-linux-x64 all
+      - name: The runner proves its failure paths
+        run: tools/bin/harbor-gates-linux-x64 all --self-test
+""")
+    # The tree runner: the list of the gates it runs, and the command that
+    # runs them. The list is read out of the GO SOURCE of the package, so
+    # the fixture carries one.
+    _write(os.path.join(root, "tools", "gates", "all", "gates.go"), """// Package all runs the tree gates in one command.
+package all
+
+// treeGate is one gate of the list.
+type treeGate struct {
+	name  string
+	needs string
+	args  []string
+}
+
+// treeGates is the list of the tree gates.
+var treeGates = []treeGate{
+	{
+		name:  "alpha",
+		needs: "the tree",
+		args:  []string{"--min-files", "10"},
+	},
+	{
+		name:  "gamma",
+		needs: "the tree",
+		args:  []string{"--min-files", "10"},
+	},
+}
+""")
+    _write(os.path.join(root, "tools", "gates", "all", "run.go"), """package all
+
+import "flag"
+
+// run is the entry point of the runner.
+func run(args []string) int {
+	selfTest := flag.Bool("self-test", false, "prove the runner can fail")
+	flag.Parse()
+	_ = *selfTest
+	// The runner takes --self-test, --list and --pending.
+	_ = "--self-test"
+	return 0
+}
 """)
     _write(os.path.join(root, TABLE_DOC), """# Gates
 
@@ -1108,11 +1555,82 @@ jobs:
 | `tools/alpha.py` | python | a floor over the tree | wf.yml | check | gate | `--self-test` | — | `--min-files 10` |
 | `tools/beta.py` | python | nothing, it prints | wf.yml | report | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 gamma` | compiled: `tools/gates/gamma` | a compiled floor over the tree | wf-compiled.yml | compiled | gate | `--self-test` | — | `--min-files 10` |
+| `tools/bin/harbor-gates-linux-x64 all` | compiled: `tools/gates/all` | every tree gate in one command | wf-compiled.yml | compiled | gate | `--self-test` | — | — |
 """)
 
 
 def _codes(findings: list[Finding]) -> list[str]:
     return sorted(finding.code for finding in findings)
+
+
+# The entry of the fixture's list that the cases below change.
+_FIXTURE_GAMMA = """	{
+		name:  "gamma",
+		needs: "the tree",
+		args:  []string{"--min-files", "10"},
+	},
+"""
+
+# A gate of the list that nothing runs: it is in the tree, it is in the
+# list, and no workflow calls it.
+_FIXTURE_DELTA = """	{
+		name:  "delta",
+		needs: "the tree",
+	},
+"""
+
+# A gate of the list that is not in the tree at all.
+_FIXTURE_EPSILON = """	{
+		name:  "epsilon",
+		needs: "the tree",
+	},
+"""
+
+
+def _plant_all_list(root: str, new: str) -> None:
+    """Replace the last entry of the fixture's list of the tree runner."""
+    path = os.path.join(root, "tools", "gates", "all", "gates.go")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    if _FIXTURE_GAMMA not in text:
+        raise AssertionError("fixture does not contain the gamma entry")
+    _write(path, text.replace(_FIXTURE_GAMMA, new + _FIXTURE_GAMMA, 1))
+
+
+def _plant_all_unrun(root: str) -> None:
+    """A gate of the list that no workflow runs."""
+    _write(os.path.join(root, "tools", "delta.py"), '''#!/usr/bin/env python3
+"""Delta.
+
+Stdlib only — no pip, no network, no dotnet. A tool no workflow runs.
+"""
+''')
+    _plant_all_list(root, _FIXTURE_DELTA)
+    _edit_table(
+        root,
+        "| `tools/bin/harbor-gates-linux-x64 gamma` |",
+        "| `tools/delta.py` | python | a tool no workflow runs | — | — | "
+        "reporter | — | — | — |\n"
+        "| `tools/bin/harbor-gates-linux-x64 gamma` |",
+    )
+
+
+def _plant_all_floors(root: str) -> None:
+    """The runner runs a gate without the floors the gate's own job passes."""
+    path = os.path.join(root, "tools", "gates", "all", "gates.go")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    old = ('		name:  "gamma",\n		needs: "the tree",\n'
+           '		args:  []string{"--min-files", "10"},')
+    new = '		name:  "gamma",\n		needs: "the tree",\n		args:  []string{},'
+    if old not in text:
+        raise AssertionError("fixture does not contain the args of gamma")
+    _write(path, text.replace(old, new, 1))
+
+
+def _plant_all_missing(root: str) -> None:
+    """A gate of the list that is in neither tools/gates/ nor tools/."""
+    _plant_all_list(root, _FIXTURE_EPSILON)
 
 
 def self_test() -> int:
@@ -1126,8 +1644,8 @@ def self_test() -> int:
             failures.append(
                 "the clean fixture is not clean: " + "; ".join(map(str, clean))
             )
-        if gates != 3:
-            failures.append(f"the clean fixture has {gates} rows, expected 3")
+        if gates != 4:
+            failures.append(f"the clean fixture has {gates} rows, expected 4")
 
         # The planted defects below are DATA: the strings are what a broken
         # script would contain, and a scan for a dotnet call or for a timer
@@ -1270,6 +1788,21 @@ def self_test() -> int:
                 lambda r: _write(
                     os.path.join(r, "tools", "gamma.py"),
                     '#!/usr/bin/env python3\n"""Gamma.\n\nStdlib only."""\n'),
+            ),
+            (
+                "POLICY-ALL-GATE-UNRUN",
+                "a gate of the list of the tree runner that nothing runs",
+                _plant_all_unrun,
+            ),
+            (
+                "POLICY-ALL-FLOORS-WEAKER",
+                "the tree runner runs a gate without the floors of its own job",
+                _plant_all_floors,
+            ),
+            (
+                "POLICY-ALL-GATE-MISSING",
+                "a gate of the list of the tree runner that is not in the tree",
+                _plant_all_missing,
             ),
         ]
         # --- end fixture data ---
