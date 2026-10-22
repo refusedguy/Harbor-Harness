@@ -734,45 +734,98 @@ public sealed class TuiDriver : IE2eDriver
 
         var ptyDeadline = TimeSpan.FromSeconds(10);
         if (timeout is { } t) ptyDeadline = t;
+
+        // The tear-tolerant needle is LOOP-INVARIANT: the pattern does not
+        // change between polls, so it is computed once instead of once per
+        // poll. The old shape recomputed it on every iteration and threw the
+        // string away.
+        //
+        // The stripping rule itself lives in `ScreenText`: it is the ground
+        // truth the pooled matcher in `ScreenSearch` is proved against, and
+        // the proof needs both sides to use the SAME rule — including the
+        // fast path that returns its input unchanged when the input holds
+        // none of ' ', '\n', '\r' and '\t'.
+        string needle = StripWhitespace(pattern);
+
         var ptySw = Stopwatch.StartNew();
         while (ptySw.Elapsed < ptyDeadline)
         {
             ct.ThrowIfCancellationRequested();
-            string screen = await ReadScreenAsync(ct).ConfigureAwait(false);
-            if (screen.Contains(pattern, StringComparison.Ordinal))
-                return true;
-            // Also check the AnsiTerminalBuffer 2D grid — renderers like
-            // Spectre.Console use cursor positioning to overwrite text, so the
-            // flat ANSI-stripped buffer may not contain text that IS visible
-            // on the actual screen.
-            lock (_terminalBuffer)
+
+            // The append-only log, COPIED ONCE into a pooled buffer instead of
+            // into a fresh string. The log is never trimmed, so it grows for
+            // the whole scenario; the old shape copied all of it on every
+            // poll, and then copied all of it a second time with the
+            // whitespace removed. Two full copies of a megabyte, a hundred
+            // times over, is the largest single source of garbage in the E2E
+            // and ui shards.
+            char[] screen = ScreenSnapshot(out int screenLength);
+            try
             {
-                if (_terminalBuffer.ContainsText(pattern))
+                if (ScreenSearch.ContainsOrdinal(screen.AsSpan(0, screenLength), pattern.AsSpan()))
+                    return true;
+
+                // Also check the AnsiTerminalBuffer 2D grid — renderers like
+                // Spectre.Console use cursor positioning to overwrite text, so the
+                // flat ANSI-stripped buffer may not contain text that IS visible
+                // on the actual screen.
+                lock (_terminalBuffer)
+                {
+                    if (_terminalBuffer.ContainsText(pattern))
+                        return true;
+                }
+
+                await Task.Delay(100, ct).ConfigureAwait(false);
+
+                // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
+                // or repaint mid-line split the pattern across grid rows / leave
+                // interleaved repaint artifacts in the flat log. Dropping ALL
+                // whitespace on both sides matches when every character is present
+                // in order, regardless of layout. Only consulted after exact matching
+                // fails, so strict tests are unaffected.
+                if (needle.Length == 0)
+                    continue;
+
+                lock (_terminalBuffer)
+                {
+                    if (_terminalBuffer.ContainsTextIgnoringWhitespace(needle))
+                        return true;
+                }
+
+                if (ScreenSearch.ContainsIgnoringWhitespace(screen.AsSpan(0, screenLength), needle.AsSpan()))
                     return true;
             }
-            await Task.Delay(100, ct).ConfigureAwait(false);
-
-            // Wrap/tear-tolerant fallback (last): renderers whose panels word-wrap
-            // or repaint mid-line split the pattern across grid rows / leave
-            // interleaved repaint artifacts in the flat log. Dropping ALL
-            // whitespace on both sides matches when every character is present
-            // in order, regardless of layout. Only consulted after exact matching
-            // fails, so strict tests are unaffected.
-            string needle = StripWhitespace(pattern);
-            if (needle.Length == 0)
-                continue;
-
-            lock (_terminalBuffer)
+            finally
             {
-                string visible = _terminalBuffer.GetVisibleText();
-                if (StripWhitespace(visible).Contains(needle, StringComparison.Ordinal))
-                    return true;
+                ArrayPool<char>.Shared.Return(screen);
             }
-
-            if (StripWhitespace(screen).Contains(needle, StringComparison.Ordinal))
-                return true;
         }
         return false;
+    }
+
+    /// <summary>
+    ///     A copy of the append-only screen log, in a pooled buffer.
+    /// </summary>
+    /// <param name="length">How many characters the copy holds.</param>
+    /// <returns>
+    ///     The rented buffer, which the caller MUST return to
+    ///     <see cref="ArrayPool{T}.Shared" />.
+    /// </returns>
+    /// <remarks>
+    ///     The copy is taken under the same lock the old
+    ///     <see cref="ReadScreenAsync" /> took it under, at the same point of
+    ///     the poll, so it holds the same characters — the difference is that
+    ///     the buffer is POOLED, so a poll allocates nothing.
+    /// </remarks>
+    private char[] ScreenSnapshot(out int length)
+    {
+        lock (_screen)
+        {
+            length = _screen.Length;
+            char[] buffer = ArrayPool<char>.Shared.Rent(length);
+            _screen.CopyTo(0, buffer, 0, length);
+            return buffer;
+        }
     }
 
     /// <summary>
@@ -798,21 +851,18 @@ public sealed class TuiDriver : IE2eDriver
     ///         the call site could not have told them apart, because both take a
     ///         string and return a string. Pinned by
     ///         <c>WhitespaceCollapseDivergenceTests</c> so neither side is
-    ///         "simplified" into the other.
+    ///         "simplified" into the other — and that test finds this method by
+    ///         REFLECTION, by name, so the name and the shape stay.
+    ///     </para>
+    ///     <para>
+    ///         The RULE itself lives in <see cref="ScreenText" />: it is the
+    ///         ground truth the pooled matcher in <see cref="ScreenSearch" /> is
+    ///         proved against, and the proof needs both sides to strip the same
+    ///         way — including the fast path that returns its input unchanged
+    ///         when the input holds none of ' ', '\n', '\r' and '\t'.
     ///     </para>
     /// </remarks>
-    private static string StripWhitespace(string input)
-    {
-        if (input.IndexOf(' ') < 0 && input.IndexOf('\n') < 0 && input.IndexOf('\r') < 0 && input.IndexOf('\t') < 0)
-            return input;
-        var sb = new System.Text.StringBuilder(input.Length);
-        foreach (char ch in input)
-        {
-            if (!char.IsWhiteSpace(ch))
-                sb.Append(ch);
-        }
-        return sb.ToString();
-    }
+    private static string StripWhitespace(string input) => ScreenText.StripWhitespace(input);
 
     /// <inheritdoc />
     public async Task<int> WaitForExitAsync(TimeSpan? timeout = null, CancellationToken ct = default)
