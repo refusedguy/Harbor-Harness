@@ -252,7 +252,7 @@ fallout. Ничего в `build/_build/` не трогаем.
 
 | Файл | Строк | Что меняется |
 |---|---:|---|
-| `build/_build/Build.cs` | 382 | `using Nuke.Common;` → `using Fallout.Common;`; `NukeBuild` → `FalloutBuild`; `using Nuke.Common.ProjectModel;` → `using Fallout.Common.ProjectModel;`; `[Solution("Harbor.slnx")] private readonly Solution Solution;` — **тип и имя поля те же**, меняется только пространство имён. 13 таргетов остаются 13. |
+| `build/_build/Build.cs` | 382 | `using Nuke.Common;` → `using Fallout.Common;`; `NukeBuild` → `FalloutBuild`; `using Nuke.Common.ProjectModel;` → `using Fallout.Common.ProjectModel;`; `[Solution("Harbor.slnx")] private readonly Solution Solution;` — **тип и имя поля те же**, меняется только пространство имён. 15 таргетов остаются 15. |
 | `build/_build/Components/ArchiveBuilder.cs` | 102 | `using Nuke.Common.IO;` → `using Fallout.Common.IO;`. `AbsolutePath` — тот же тип, другое пространство. |
 | `build/_build/Components/ArtifactPathResolver.cs` | 104 | `using Nuke.Common.IO;` + `using Nuke.Common.Tools.DotNet;` → `Fallout.*`. |
 | `build/_build/Components/CliBuildConfigurator.cs` | 86 | **не меняется** — своего кода NUKE не касается. |
@@ -266,7 +266,7 @@ fallout. Ничего в `build/_build/` не трогаем.
 | `build/_build/Configuration/RendererSelection.cs` | 32 | не меняется |
 | `build/_build/Extensions/DotNetPublishExtensions.cs` | 33 | `using Nuke.Common.Tools.DotNet;` → `Fallout.Common.Tools.DotNet;`. Расширения на `DotNetPublishSettings` переносятся как есть. |
 | `build/_build/Extensions/FileSystemTasksExtensions.cs` | 59 | `using Nuke.Common.IO;` → `Fallout.Common.IO;`. |
-| `build/_build/GlobalUsings.cs` | 3 | `global using Nuke.Common;` → `global using Fallout.Common;`. |
+| `build/_build/GlobalUsings.cs` | 3 | **не меняется** — в файле только `global using Harbor.Build.Configuration;`, NUKE он не касается |
 | `build/_build/Meta/BuildOutput.cs` | 314 | не меняется (свой код) |
 | `build/_build/Meta/DoctorChecks.cs` | 481 | не меняется (свой код) |
 | `build/_build/Meta/DotNetArgv.cs` | 66 | `using Nuke.Common.IO;` → `Fallout.Common.IO;`. **Рендер argv — наш код**, API не трогаем. |
@@ -292,12 +292,12 @@ fallout. Ничего в `build/_build/` не трогаем.
 | `Directory.Build.props` (корень) | 268 | комментарии в строках 208, 218, 228, 256 упоминают «NUKE-driven release builds» и «NUKE spelling» — переписать. Свойства не меняются. |
 | `.nuke/` → `.fallout/` | 2 файла | `build.schema.json` (6 776 байт) и `parameters.json` (39 байт) — переименовать каталог, содержимое сохраняется. |
 
-**Итого по шагу 1:** 32 файла `.cs` (из них **13 вообще не меняются** — своего кода
-NUKE не касается, правятся только `using`-ы в 19), 2 файла props, 2 bootstrap-скрипта,
+**Итого по шагу 1:** 32 файла `.cs` (из них **12 вообще не меняются** — своего кода
+NUKE не касается, правятся только `using`-ы в **20**), 2 файла props, 2 bootstrap-скрипта,
 1 `.csproj`, 1 каталог `.nuke/`.
 
-**Чем доказываем.** Шаг 0 повторяется на каждом из 13 таргетов: argv совпадает,
-exit code совпадает, `list --format json` совпадает 1:1. Плюс — сборка всех 13
+**Чем доказываем.** Шаг 0 повторяется на каждом из 15 таргетов: argv совпадает,
+exit code совпадает, `list --format json` совпадает 1:1. Плюс — сборка всех 15
 таргетов на fallout проходит без NUKE.
 
 **Что может сломаться.**
@@ -468,14 +468,14 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
 |---|---:|---|
 | файлов `.cs` в `build/_build/` | **32** | `find build/_build -name '*.cs'` |
 | строк в них | **3 718** | `cat \| grep -c ''` |
-| из них меняются (правка `using`-ов) | **19** | таблица шага 1 |
-| из них не меняются | **13** | таблица шага 1 |
-| таргетов | **13** | `grep "private Target"` в `Build.cs` |
+| из них меняются (правка `using`-ов) | **20** | `grep -rl Nuke build/_build/` |
+| из них не меняются | **12** | `find build/_build -name '*.cs'` минус те, что содержат `Nuke` |
+| таргетов | **15** | `grep -cE 'private (new )?Target [A-Za-z]+' build/_build/Build.cs`; столько же записей в `TargetCatalog` |
 | мета-команд (`List`, `Doctor`, `What`) | 3 | там же |
 | файлов конфигурации сборщика | **5** | `_build.csproj`, `build/Directory.Build.props`, `build/build.sh`, `build/build.ps1`, `.nuke/` |
 | строк в `_build.csproj` | 105 | `wc -l` |
 | distinct NuKE-идентификаторов, которые мы используем | **7** | `grep -rho "Nuke\.[A-Za-z.]*"` |
-| уникальных `using Nuke.*` | **7** | таблица шага 1 |
+| уникальных `using Nuke.*` | **4** | `Nuke.Common`, `Nuke.Common.IO`, `Nuke.Common.ProjectModel`, `Nuke.Common.Tools.DotNet` (33 строки `using` всего) |
 | пакетных пинов, которые надо пересмотреть | **4** | `NuGet.Packaging` (поднять), `Microsoft.Build*` (оставить), `System.Security.Cryptography.Xml` (оставить), `Nuke.Common` (заменить) |
 
 ### 4.2 Места в CI
@@ -513,7 +513,7 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
 | Шаг | Оценка | Что входит |
 |---|---:|---|
 | 0. Пилот `Pack` | **0,5-1 день** | второй build-проект, сравнение argv/состава/выхода, шаг в джобе `pack` |
-| 1. Перенос `build/_build/` | **1-2 дня** | 19 файлов с правкой `using`, пересборка 13 таргетов, сверка каталога 1:1, переписывание `_build.csproj` и пинов |
+| 1. Перенос `build/_build/` | **1-2 дня** | 20 файлов с правкой `using`, пересборка 15 таргетов, сверка каталога 1:1, переписывание `_build.csproj` и пинов |
 | 2. CI и bootstrap | **0,5 дня** | 2 точки вызова, 3 комментария, 2 скрипта |
 | 3. Документация | **0,5-1 день** | 8 документов, 3 файла конфигурации, прогон `check-md-links` и `md-lint` |
 | 4. Удаление старого | **0,25 дня** | удаление каталога, чистка конфигурации, зелёная полоса |
@@ -650,7 +650,7 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
 | # | Риск | Вероятность | Цена | Мера |
 |---|---|---|---|---|
 | R1 | **Полоса CI перестаёт стартовать** | средняя | критическая | Пилот (шаг 0) добавляет, ничего не заменяет. Переключение — одна точка входа. Удаление — последним. Каждый шаг имеет явную откатку. |
-| R2 | NUKE-версия `10.4.0` fallout'а ведёт себя иначе в 13 таргетов | средняя | средняя | Шаг 0 проверяет `Pack`; шаг 1 проверяет все 13 через argv + exit code + `list` 1:1. |
+| R2 | NUKE-версия `10.4.0` fallout'а ведёт себя иначе в 15 таргетов | средняя | средняя | Шаг 0 проверяет `Pack`; шаг 1 проверяет все 15 через argv + exit code + `list` 1:1. |
 | R3 | **`NuGet.Packaging 6.12.5` → NU1605, restore не проходит** | **высокая** (уже найдено) | средняя | Поднять пин до 6.14.3 в шаге 1. Проверка: restore `build/_build.csproj` должен пройти. |
 | R4 | Другая модель кэша / другая нумерация версий | средняя | средняя | Версии fallout'а — semver, `10.4.0` — стабильная. Нумерация CI-артефактов (`build-<run>`) — наша, не fallout'а. Проверяется первым прогоном `pack`. |
 | R5 | Другие пути к артефактам (`.nuke/` → `.fallout/`) | **высокая** (уже известно) | низкая | Переименование каталога — шаг 1. Пути к артефактам (`artifacts/publish/...`) задаёт наш `ArtifactPathResolver`, не fallout. |
@@ -661,7 +661,7 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
 | R10 | `DotNetTasks` не переброшен в shim (issue #69) | **подтверждено** | средняя | Shim-путь не используем; идём через `fallout-migrate`. |
 | R11 | Пространство имён разъезжается между 10.x и 11.x (`Fallout.Common.ProjectModel` vs `Fallout.Solutions`) | **подтверждено** | низкая | Фиксируем версию **10.4.0** в `build/_build.csproj`; гейт шага 5 фиксирует, что пин не поедет. |
 | R12 | Fallout'а никто не использует (103 тыс. скачиваний против 39,9 млн) | **подтверждено** | высокая | Это настоящий риск. Меры: пинить версию; не полагаться на `develop`; иметь план отката (NUKE-дерево остаётся в git). Осознанное решение владельца, а не случайность. |
-| R13 | `fallout-migrate` не справится с нашим кодом (32 файла, не шаблон NUKE) | средняя | низкая | Инструмент идемпотентен и имеет `--dry-run`. Пилот на 19 файлах с `using`-ами покажет охват. |
+| R13 | `fallout-migrate` не справится с нашим кодом (32 файла, не шаблон NUKE) | средняя | низкая | Инструмент идемпотентен и имеет `--dry-run`. Пилот на 20 файлах с `using`-ами покажет охват. |
 | R14 | Транзитивные зависимости fallout'а тянут новые пакеты (`Octokit 14.0.0`, `Azure.Identity 1.17.1`, `YamlDotNet 16.3.0`) | **подтверждено** | низкая | CPM выключен для `build/` — пин-каталог не пострадает. Время restore вырастет; замеряем на шаге 1. |
 | R15 | Генерация workflow-файлов втягивает нас в отдельный проект | средняя | высокая | **Явно вне объёма** (п. 5.2). В план не входит, решается отдельной задачей. |
 
@@ -721,4 +721,4 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
    требует `dotnet` (локальный запрещён). Проверяется в CI на шаге 0.
 7. **Полный перечень API-расхождений между `Nuke.Common 10.1.0` и
    `Fallout.Common 10.4.0`.** Сверялась только та поверхность, которую используем мы
-   (7 идентификаторов, 19 файлов). Полное сравнение публичного API не делалось.
+   (7 идентификаторов, 20 файлов). Полное сравнение публичного API не делалось.

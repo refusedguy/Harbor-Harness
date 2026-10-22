@@ -22,7 +22,7 @@
 ## Context
 
 Harbor собирается NUKE: оркестратор — проект `build/_build.csproj` (32 файла `.cs`,
-3 718 строк, 13 таргетов), пакет `Nuke.Common 10.1.0`, bootstrap — `build/build.sh`
+3 718 строк, 15 таргетов), пакет `Nuke.Common 10.1.0`, bootstrap — `build/build.sh`
 и `build/build.ps1`. В CI оркестратор зовётся из двух мест: `.github/workflows/ci.yml:1354`
 (`bash build/build.sh Compile --configuration Release`) и `.github/workflows/ci.yml:1562`
 (`bash build/build.sh list --format json > /dev/null`).
@@ -124,7 +124,7 @@ ADR-0002 проекта fallout'а публикуется на nuget.org тол�
 
 | Что должно остаться правдой | Где это огорожено | Чем проверяется |
 |---|---|---|
-| Список таргетов не изменился: 13 штук, те же имена | `build/_build/Meta/TargetCatalog.cs`, метод `Verify` (строка 332) — сверяет каталог с рефлексией | шаг CI `bash build/build.sh list --format json > /dev/null` (`.github/workflows/ci.yml:1562`) |
+| Список таргетов не изменился: 15 штук, те же имена | `build/_build/Meta/TargetCatalog.cs`, метод `Verify` (строка 332) — сверяет каталог из 15 записей с рефлексией | шаг CI `bash build/build.sh list --format json > /dev/null` (`.github/workflows/ci.yml:1562`) |
 | `Compile` даёт тот же артефакт | шаг 0 (сравнение) и джоб `build` (`.github/workflows/ci.yml:799`) | CI |
 | `Pack` даёт тот же пакет | шаг 0 (сравнение состава и CRC) и джоб `pack` (`.github/workflows/ci.yml:2125`) | CI |
 | NativeAOT-публикация работает | джоб `aot-publish` (`.github/workflows/ci.yml:2972`) | CI |
