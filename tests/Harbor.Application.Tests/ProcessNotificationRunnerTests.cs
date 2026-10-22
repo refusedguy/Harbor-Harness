@@ -70,8 +70,7 @@ public class ProcessNotificationRunnerTests
     {
         var logger = new CapturingLogger<ProcessNotificationRunner>();
         var runner = new ProcessNotificationRunner(logger);
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
 
         runner.Run(MissingBinary, ["title", "body"], cts.Token);
 

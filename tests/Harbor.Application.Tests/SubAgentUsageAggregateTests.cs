@@ -136,7 +136,7 @@ public class SubAgentUsageAggregateTests
         ScriptedChildReads store,
         CapturingLogger<SubAgentRunner> logger)
     {
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("model exploded");
         await Assert.That(result.Error).Contains("[resume-session:");
         await Assert.That(store.AggregateReadCount).IsEqualTo(1);
@@ -178,7 +178,7 @@ public class SubAgentUsageAggregateTests
         var result = await runner.RunAsync(
             AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: "parent-1"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("model exploded");
         await Assert.That(store.AggregateReadCount).IsEqualTo(1);
         // The parent's totals carry the child's partial spend.

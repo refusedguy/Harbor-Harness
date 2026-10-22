@@ -213,7 +213,7 @@ public class RetryLlmClientDecoratorTests
 
         Result<IReadOnlyList<ModelInfo>> result = await decorator.GetModelsAsync(CancellationToken.None);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsSameReferenceAs(modelList);
     }
 
