@@ -74,7 +74,27 @@ public sealed class CfeControlPositiveControlTests
     ///     reported, or <c>null</c> when no SDK is available (the test then
     ///     self-skips rather than reporting a false failure).
     /// </summary>
-    private static async Task<ProbeResult?> BuildControlAsync()
+    /// <remarks>
+    ///     MEMOISED, and the reason is the cost: the probe is a real
+    ///     <c>dotnet build</c> of a real project, and it took fifteen seconds a
+    ///     time. The two tests below ask the build the same question — does
+    ///     CFE0001 fire on the bad file, and does it stay quiet on the good
+    ///     one — and ONE build answers both: the good file is compiled into the
+    ///     same project as the bad one, so its silence is in the same output.
+    ///     Building it twice bought nothing and cost fifteen seconds of the
+    ///     shard's summed test time on every run.
+    ///     <para>
+    ///         The memo is a <see cref="Lazy{T}" /> and not a null-coalescing
+    ///         assignment, because the two tests run at the same time: a
+    ///         <c>??=</c> would let both of them start a build, and the cost
+    ///         would come back.
+    ///     </para>
+    /// </remarks>
+    private static readonly Lazy<Task<ProbeResult?>> LazyProbe = new(BuildControlOnceAsync);
+
+    private static Task<ProbeResult?> BuildControlAsync() => LazyProbe.Value;
+
+    private static async Task<ProbeResult?> BuildControlOnceAsync()
     {
         if (RepoPaths.RepoRoot is not { } root)
         {
