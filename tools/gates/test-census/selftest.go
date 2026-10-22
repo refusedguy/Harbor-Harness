@@ -21,7 +21,7 @@ const sampleTRX = `<?xml version="1.0" encoding="utf-8"?>
   <Results>
     <UnitTestResult testId="a" testName="Measures_Thing" outcome="Passed" duration="00:00:02.0000000">
       <Output><StdOut>alloc: 42 B
-[alloc-census] bytes=1048576 process=2097152 scope=thread</StdOut></Output>
+[alloc-bytes] bytes=1048576 process=2097152 scope=thread</StdOut></Output>
     </UnitTestResult>
     <UnitTestResult testId="b" testName="Silent" outcome="Passed" duration="00:00:03.0000000" />
     <UnitTestResult testId="c" testName="Broken" outcome="Failed" duration="00:00:01.0000000" />
@@ -175,7 +175,7 @@ func selfTestRun() int {
 	if bytes, scope, ok := parseAlloc("alloc: 42 B"); ok || bytes != 0 || scope != "" {
 		problems = append(problems, "a text that is not a census line must not read as a measurement")
 	}
-	if bytes, scope, ok := parseAlloc("[alloc-census] bytes=0 process=0 scope=thread"); !ok || bytes != 0 || scope != "thread" {
+	if bytes, scope, ok := parseAlloc("[alloc-bytes] bytes=0 process=0 scope=thread"); !ok || bytes != 0 || scope != "thread" {
 		problems = append(problems, "a census line that measured zero bytes must read as a measurement of zero")
 	}
 

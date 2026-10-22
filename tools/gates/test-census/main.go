@@ -400,8 +400,8 @@ func fmtFactor(value float64, has bool) string {
 // allocCensusLine is the marker the probe (tests/AllocationCensus.cs) writes
 // into a test's own output block:
 //
-//	[alloc-census] bytes=123456 process=234567 scope=thread
-const allocCensusLine = "[alloc-census]"
+//	[alloc-bytes] bytes=123456 process=234567 scope=thread
+const allocCensusLine = "[alloc-bytes]"
 
 // resultOutput is the text of a result's output block: the standard output and
 // the standard error, in the order the TRX lists them.

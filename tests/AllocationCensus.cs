@@ -53,9 +53,14 @@
 //
 // THE LINE
 // --------
-//     [alloc-census] bytes=123456 process=234567 scope=thread
+//     [alloc-bytes] bytes=123456 process=234567 scope=thread
 //
 // `tools/gates/test-census` reads it out of the TRX and renders the ranking.
+//
+// The marker is `[alloc-bytes]` and NOT `[alloc-census]`: the static census
+// of the test tree (#2190) already prints `[alloc-census]` lines into the
+// architecture suite's TRX, and two instruments that share a marker are two
+// instruments whose lines a reader cannot tell apart.
 //
 // WHY IT IS A SEPARATE FILE, COMPILED INTO EVERY TEST PROJECT
 // -----------------------------------------------------------
@@ -98,7 +103,7 @@ internal static class AllocationCensus
     /// <summary>
     ///     The marker the census tool looks for in a test's output block.
     /// </summary>
-    internal const string LinePrefix = "[alloc-census]";
+    internal const string LinePrefix = "[alloc-bytes]";
 
     /// <summary>
     ///     Whether the census runs at all. Read once, because an environment
