@@ -894,6 +894,22 @@ jobs:
       # the key, so a runner that moves the folder gets a cold build
       # instead of a wrong one.
       NUGET_PACKAGES: /home/runner/.nuget/packages
+      # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
+      #
+      # MSBuild nodes are kept alive between builds by default, and a
+      # reused node carries the PREVIOUS build's state (its evaluation
+      # caches, its loaded assemblies). A build that reuses a node is
+      # therefore not the same build as a build that does not, and on CI
+      # there is nothing to reuse: this job compiles once.
+      #
+      # `MSBUILDDISABLENODEREUSE=1` is the environment switch MSBuild
+      # reads (Microsoft.Build.CommandLine.XMake,
+      # ProcessNodeReuseSwitch); dotnet/arcade sets it for the same
+      # reason. The NUKE Compile target ALSO passes `/nodeReuse:false`,
+      # which is the same decision as a switch — the switch wins over the
+      # environment variable, so a local `./build.sh Compile` and this
+      # job compile the identical graph.
+      MSBUILDDISABLENODEREUSE: '1'
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
