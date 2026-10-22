@@ -92,7 +92,7 @@ if [[ ! -x "$INSTALL_DIR/bin/ttyd" ]]; then
 fi
 
 # --- ffmpeg -----------------------------------------------------------------
-# The recorder muxes with it and tools/demo_repro.py re-paces with it, so it is
+# The recorder muxes with it and harbor-gates demo-repro re-paces with it, so it is
 # pinned like everything else rather than taken from whatever the image ships (the
 # GitHub runner image ships none at all).
 if [[ -x "$INSTALL_DIR/bin/ffmpeg" ]]; then

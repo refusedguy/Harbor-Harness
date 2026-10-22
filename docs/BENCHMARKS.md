@@ -1143,6 +1143,53 @@ each line's tabs through a `StringBuilder`, and the measurement of that cut read
 line costs the object, its chunk buffer and the string it hands back). The
 expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
+#### The yardstick has a price, and the gate now pays it (run 39633684054)
+
+The time branch is in **probe units**, so the runner's speed is supposed to
+cancel: the numerator and the denominator are both measured on the same runner
+in the same run. It cancels only while the yardstick IS the yardstick. The probe
+is a fixed workload, so its cost is a property of the machine — and the machine
+has a price: **0.000343-0.000353 ms/unit** in the nineteen measured
+`test (ui)` runs of the fleet that read it (the oldest, run 39372950798, read
+0.000380).
+
+Three runs read **0.000041 ms/unit** instead — 8.5x below — while the workload
+the probe was supposed to normalize was UNCHANGED:
+
+| Run | probe ms/unit | frame ms/unit | frame probe units | verdict |
+|---|---|---|---|---|
+| 39633684054 | 0.000041 | 0.0815 | **1992.3** (budget 700) | red |
+| 39609285153 | 0.000041 | 0.0816 | **1990.3** (budget 700) | red |
+| 39619582982 | 0.000041 | — | — | red (patch split only) |
+| 39639468264 (healthy) | 0.000350 | 0.0827 | 236.5 | green |
+| 39654104203 (healthy, this branch) | 0.000348 | 0.0814 | 234.1 | green |
+
+The numerator's spread was 1.01x in the red run — "reproducible" — so the
+helper trusted the measurement and the ratio it asserted was 8.5x the cost the
+runner actually produced. **A gate that fails on a number its runner never
+produced is a red light, not a measurement.**
+
+So the gate now declares the band the yardstick has to stay in
+(`0.000150-0.000600 ms/unit` — 2.3x below and 1.6x above what the fleet
+produces, so a slower or a faster machine still measures inside it). Outside
+the band the time branch **reports and stands down** and the byte branch — the
+machine-independent one, the branch that can be a hard gate — still asserts. The
+budgets are untouched: the byte budgets (8 B / 4 KiB / 128 KiB) are the real
+limits, and the time budgets stay in the currency the fleet is calibrated in.
+
+The band also catches the other direction: run 39599923626 read 0.00072 ms/unit
+in one of its six gates — 2x the fleet's price — and that gate stood down (its
+own spread was 6.25x). A yardstick that reads 2x slow deflates every ratio
+built on it, and a gate that passes because its yardstick was slow measures
+nothing.
+
+The warm-up of the patch split grew from 3 to 32 iterations at the same time:
+the call-counting threshold is 30 calls, the measured window drives 8 splits
+per round, and the short warm-up left the first measured rounds running tier-0
+code. The measurement of run 39654104203 therefore reads **397.1** probe units
+per split (0.1379 ms/unit against a probe of 0.000347 ms/unit) where the old
+warm-up read 505.2 — the same code, measured honestly.
+
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
 > the `test (ui)` job log on every run, and the compiled `test-measurements` gate lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
@@ -2468,6 +2515,121 @@ count measures the code. The shared snapshot
 > The `coverage` job re-runs the architecture suite a second time (report-only,
 > no gate), so the suite's cost per PR is currently paid twice.
 
+### 6.5.2 The architecture suite's parser and its Roslyn sweep (#2110) — measured
+
+The `arch` shard's wall was set by the layer UNDER the rules: the text
+parser every rule reads the tree through, and the Roslyn analyzer driver,
+which used to walk the same 64 product compilations FOUR times.
+
+**The wall**, `ubuntu-24.04-arm`, the numbers from the `arch` shard's TRX.
+The first two columns are on the SAME base commit (`a019e928`), so the
+difference between them is the branch's work and nothing else:
+
+| | dev @ `a019e928` (run 39717885532) | the branch @ `a019e928` (run 39718941803) | the branch's later runs (39721154583, 39722755948, 39723469087) | |
+|---|---:|---:|---:|---|
+| tests discovered / passed | 1129 / 1129 | 1136 / 1136 | 1136 / 1136 | |
+| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | 85.00 / 80.00 / 83.00 s | −22.1 … −25.0 % |
+| sum of the per-test durations | 1325.38 s | 1010.60 s | 1037.64 / 924.00 / 1026.15 s | −22.6 … −30.3 % |
+| parallelism factor | 12.43× | 12.34× | 12.21× / 11.55× / 12.37× | |
+| the `test (arch)` job | 127 s | 98 s | 99 / 102 / 96 s | −22 … −25 % |
+
+Four green runs of the branch read 80.00 / 81.91 / 83.00 / 85.00 s against
+the baseline's 106.63 s: a spread of 6.2 % of the wall, which is the
+runner's own noise, and a median of 82.5 s — **−22.6 %**. The later runs
+sit on a base two commits ahead of `a019e928` (the real MSBuild switches of
+issue 2111 and the Go-source gate of issue 2078), and neither touches the
+architecture suite.
+
+**What moved**, the class spans (last end − first start) and the single
+tests, from the same TRX sets:
+
+| class | dev | the branch | |
+|---|---:|---:|---|
+| `ArchAnalyzerPromotionTests` | 92.0 s | **27.0–31.0 s** | the sweep runs once, concurrently |
+| `PanelKeyRouteReachabilityRule` | 84.0 s | 47.0–49.0 s | |
+| `HttpClientCreationAnalyzerTests` | 60.0 s | 39.0–45.0 s | |
+| `HttpClientReuseRules` | 60.0 s | 39.0–45.0 s | |
+| `TokenCellSingleHomeRules` | 37.0 s | 23.0–25.0 s | |
+| `UnguardedResultReadAnalyzerTests` | 27.0 s | 0.5 s | |
+
+| test | dev | the branch | |
+|---|---:|---:|---|
+| `ArchAnalyzerPromotionTests.The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap` | 90.80 s | 31.31 s | |
+| `ArchAnalyzerPromotionTests.The_Analyzer_Sees_Every_File_The_Text_Rule_Sees` | 64.02 s | 31.34 s | |
+| `UnguardedResultReadAnalyzerTests.The_Analyzer_Sees_Every_Site_The_Text_Rule_Sees` | 27.14 s | 0.52 s | |
+| `DeadPublicMemberRule.EveryScopedPublicMember_IsReferencedOrTolerated` (the rule's own scan) | 2.44 s | 1.69 s | |
+
+**The Roslyn sweep, measured inside the run.** The line the sweep prints
+itself:
+
+| | dev | the branch | |
+|---|---:|---:|---|
+| one driver pass over 64 product compilations | 63 372 ms | **31 301 ms** | −51 % |
+| passes over the same compilations | 4 | **1** | |
+
+**The parser, measured on its own.** The corpus is every `.cs` file of
+`src/`, `apps/` and `tests/` — 2 676 files, 25 115 393 characters. The
+sample is the 300 LARGEST of them (9 669 584 B), because a per-byte cost
+measured on the biggest files is the worst case. The allocations are the
+thread's own, read with `GC.GetAllocatedBytesForCurrentThread()`.
+
+| | legacy | the substrate | |
+|---|---:|---:|---|
+| the identifier counter, allocations | 334 742 320 B | **27 149 664 B** | −91.9 % |
+| the identifier counter, time | 257 ms | 188 ms | |
+| the literal blanker, allocations | 38 708 448 B | **19 740 048 B** | −49.0 % |
+| the literal blanker, time | 30 ms | 23 ms | |
+
+**Roslyn is the modern API, and it does not pay.** On the same sample, the
+text scan costs 24 ms and a Roslyn parse of the same bytes costs 668 ms —
+**27.8× more**, and 141 761 584 B of garbage against 31 176 944 B. The
+projection for the whole tree is 1 735 ms for the parse against a text pass
+over the same tree. It also changes the VERDICTS: on all 40 of the largest
+sampled files the text stripper and the Roslyn one disagree, because the
+text stripper cannot tell a comment from a `//` inside a string literal and
+eats the rest of such a line. The rules are written against that behaviour,
+so a real parse is not an option here.
+
+**The equivalence, and where it is proved.** The parser's own bytes are
+proved identical to the previous implementation's over the whole corpus
+(2 676 files, `blank-diffs=0`, `count-diffs=0`), and the rule whose inputs
+the rewrite changed proves the same VERDICTS over the live tree against the
+scan from before the rewrite. Neither proof is "the tests are still green":
+a rule that finds nothing reports nothing.
+
+**And the proofs can fail.** Run 39721911469 carried a PLANTED defect: the
+one-pass member cursor was made to skip the first member of every type,
+which is the exact defect a forward-only walk can have. Five tests went
+red, and the five are the ones that have to:
+
+| test | what it caught |
+|---|---|
+| `DeadPublicMemberEquivalenceTests.The_Member_Walk_Finds_The_Same_Members_As_The_Walk_Before_The_Rewrite` | the live-tree comparison: the two walks disagree about the graded surface |
+| `DeadPublicMemberEquivalenceTests.A_File_With_Several_Types_Loses_No_Member` | the synthetic two-types control: the first type's members are missing |
+| `DeadPublicMemberEquivalenceTests.The_Gate_Skips_The_Type_Parse_And_The_Verdict_Does_Not_Move` | the gate's own comparison |
+| `DeadPublicMemberRule.NonVacuity_ASyntheticMemberWithNoReference_IsReported` | the rule stopped watching a member — its own load-bearing control |
+| `DeadPublicMemberRule.ToleratedSurface_RowsAreStillDeadMembers` | a tolerance row's member stopped being graded |
+
+So the rewrite does not weaken the rule: the rule still catches the rule
+losing a member, and the new proofs catch the rewrite losing one.
+
+**What holds the wall now.** Not the parsing. The class spans that remain:
+`PanelKeyRouteReachabilityRule` 47.0–49.0 s (the backtracking
+`MemberDeclaration` pattern over the product trees), `HttpClientReuseRules`
+and `HttpClientCreationAnalyzerTests` 39.0–45.0 s each (the HTTP-client rule
+of issue 1724), and the Roslyn sweep 27.0–31.0 s. The stripper is no longer
+a term: the comment stripper's own cost is measured in
+`ParseCostMeasurement`, and the scanner allocates 78.2 MB over the whole
+tree against the legacy form's 12 587 MB.
+
+> The `arch` shard's runner is noisy: a run whose `/run/user/<uid>/.dotnet`
+> state is wrong fails the NuGet first-use migration of the probe that
+> `CfeControlPositiveControlTests` spawns, and the NuGet cache that
+> migration populates is what `BannedApiProbe` reads its analyzer from — so
+> four unrelated tests go red together. Run 39718941803 failed that way on
+> its first attempt and passed on the re-run of the same job with the same
+> artifacts; the numbers above are from the green runs.
+
 ### 6.4 CI lane walls: the build job, the compile step, the artifact transfer ✅ measured
 
 The test shards are half of the CI bill. The `build` job compiles everything once
@@ -2655,6 +2817,175 @@ six shard-slice uploads 38 s. The compile is the term to attack, and §6.7 has
 already measured why it is hard: it is analyzer-bound and throughput-bound on
 the runner's four cores, so more MSBuild nodes buy nothing and only the
 analyzers themselves (or a second runner) do.
+
+#### 6.4.2 The tree IS incremental: the compile rebuilds 3 of 117 projects (#2107)
+
+Issue [#2107](https://github.com/refusedguy/Harbor-Harness/issues/2107) asked
+whether the build-output cache pays off, and its own measurement said it does
+not: the lane restored the tree and then recompiled **117 of 117** projects,
+with the compile at 247-260 s — the cache buying 21 s of download and nothing
+else. Measured again on 2026-10-22, on the tree of `dev` @ `bfa1c99d`, the tree
+IS incremental: the compile rebuilds **three** projects and costs **36.7 s**.
+
+The count is a fact about the disk, not a reading of the log: a project the
+compile rebuilt has an intermediate assembly (`obj/Release/net10.0/<T>.dll`)
+NEWER than the moment the compile started, and a project it skipped keeps the
+stamping timestamp the restore gave it. The step that measures it is the
+`build` job's "DIAGNOSTIC: how many projects the compile rebuilt" in
+`.github/workflows/ci.yml`.
+
+| run | lane | build-output cache | NUKE compile | projects rebuilt |
+|---|---|---|---:|---:|
+| [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934) | PR `ci/2107-incremental` | **HIT** (`…-bfa1c99d`, 1 841 MB, 36.8 s) | **36.7 s** | **3** of 117 |
+| [39719039714](https://github.com/refusedguy/Harbor-Harness/actions/runs/39719039714) | PR `feat/2111-msbuild-switches` | HIT (`…-a019e928`) | 31.2 s | not measured |
+| [39721963101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721963101) | push `dev` | HIT (`…-6e6b0da9`) | 30.9 s | not measured |
+| [39718825965](https://github.com/refusedguy/Harbor-Harness/actions/runs/39718825965) | PR `ci/2108-merge-reference-trimmer` | **MISS** — the props hash differs | 190.8 s | 117 (a cold compile) |
+| [39721596368](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721596368) | PR `feat/gates-a` | **MISS** — the path list differs | 219.8 s | 117 (a cold compile) |
+| [39722582254](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722582254) | manual dispatch | **MISS** — the scope | 183.1 s | 117 (a cold compile) |
+
+**Three reasons the cache misses, and they are three different things.** The
+restore step prints "Cache not found for input keys" in all three cases, and
+the reason is a different one each time.
+
+1. **The props hash.** The key carries a hash of `Directory.Packages.props`,
+   `Directory.Build.props`, `Directory.Build.targets` and `global.json`. A pull
+   request that touches one of them has a prefix the base branch has no entry
+   for, and the restore finds nothing at all. Measured on run 39718825965: the
+   lane's prefix ended in `1de69dbd…`, the base branch's in `61e83d62…`.
+   **This miss is correct and cannot be bought back**: `$(MSBuildAllProjects)` —
+   every imported `.props`/`.targets`, the props files among them — is an
+   INPUT of `CoreCompile` (SDK: `Roslyn/Microsoft.CSharp.Core.targets`), so a
+   changed props file is newer than the outputs and every project that imports
+   it has to be compiled again. The compile is full either way; what the miss
+   costs is the 10-37 s the restore would have cost.
+2. **The path list.** The cache's VERSION is a hash of the `path` input, and
+   the restore asks the service for "the entry with this key AND this
+   version". A branch whose path list differs from the base branch's asks for
+   a version the base branch never wrote. Measured on run 39721596368 (the
+   branch `feat/gates-a`, whose list carried `!tools/bin/**` and seven comment
+   lines that `dev`'s list did not): the resolve step named `dev`'s entry
+   `…-6e6b0da9` — the REST API lists every scope and every version — and the
+   restore refused it. **Fixed here**: the list is one env var
+   (`HARBOR_BUILD_OUTPUT_CACHE_PATHS`) that the restore step and the save step
+   both read, so there is no second copy to drift, and the comments live in the
+   YAML and not inside the value (a comment inside the value is a LINE of the
+   hash, so editing one used to change the version and cost the lane its
+   cache). The hash of the four lines the var holds is
+   `c59a4786cc2123d53e9d1c95486e32a211f9dcf3885f53318b7aedde237d9947`
+   (`sha256` of the lines joined with `|`, plus `zstd-without-long` and the
+   salt `1.0`), and that is the `version` the REST API reports for every entry
+   `dev` has written since #2117.
+3. **The scope.** The cache service serves a run the entries of its own
+   branch, of the branches below it, and — for a pull request — of the base
+   branch. A manual dispatch on a feature branch gets none of `dev`'s
+   entries, and the run the issue quotes (39658451546) is such a dispatch: its
+   resolve step found `dev`'s entry through the REST API and the restore could
+   not see it. Nothing in the workflow can change that; the scope is the
+   service's rule.
+
+**What the issue prescribed, and what the measurement says.** The issue asked
+for the restore to be moved before the stamping. It is already where it has to
+be: the restore inside the compile is a NO-OP — it does not rewrite the
+NuGet-generated files, and those files (`obj/<T>.csproj.nuget.g.props`) are in
+`$(MSBuildAllProjects)`, so a rewrite would make every project look stale
+again. The measurement says they are not rewritten: three projects rebuilt,
+not 117. The issue's other candidate — the `.pdb` — is not an output of
+`CoreCompile` in Release at all (`Directory.Build.props` sets
+`DebugType=none` there, so `_DebugSymbolsProduced` is false and the `.pdb`
+leaves the target's output list), which is why excluding it from the payload
+changed nothing.
+
+**And the cause the merged diagnostic reported was the diagnostic's own.**
+The step merged with #2123 asks MSBuild for its verdict on one project, and it
+answered
+"Input file `…GeneratedMSBuildEditorConfig.editorconfig` is newer than output
+file `…xml`". The step builds that project on its own, and a project-level
+build has no `$(SolutionDir)`, so the generated editorconfig gets
+`build_property.SolutionDir = *Undefined*` instead of the solution build's
+path — the content differs, the SDK rewrites the file (it writes only when the
+content differs), and the rewrite makes it newer than the outputs. Measured on
+run 39723477934, the diff was exactly that one line. The diagnostic therefore
+rebuilt the very project it was measuring and named a cause the lane does not
+have; the step now passes `-p:SolutionDir="$GITHUB_WORKSPACE/"`, so its
+verdict is the lane's own. Measured on run 39725284841, after that fix: the
+editorconfig's hash is the same before and after the diagnostic's own build
+(`e68c5f62…`), the diff is empty, and MSBuild answers **"Skipping target
+"CoreCompile" because all output files are up-to-date with respect to the
+input files."** — the tree is incremental, said by MSBuild itself.
+
+#### 6.4.3 The cache hits in 78 % of the pull-request runs, and every miss has a name
+
+The cache does not "sometimes work": it hits on **14 of the 18** pull-request
+runs measured on 2026-10-22, and each of the four misses has a cause that is
+in the pull request's own diff. The table is every pull-request run of
+`.github/workflows/ci.yml` in the last 60 runs that had a build job; the
+compile is the NUKE `Compile` phase and the wall is the `build` job's.
+
+| run | lane | cache | why | NUKE compile | `build` job |
+|---|---|---|---|---:|---:|
+| [39725284841](https://github.com/refusedguy/Harbor-Harness/actions/runs/39725284841) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 185 s |
+| [39724322981](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724322981) | PR `perf/arch-parser` | HIT | — | 52.3 s | 210 s |
+| [39723562597](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723562597) | PR `fix/2061b` | HIT | — | 213.6 s | 389 s |
+| [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934) | PR `ci/2107-incremental` | HIT | — | 36.7 s | 180 s |
+| [39723469087](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723469087) | PR `perf/arch-parser` | HIT | — | 55.2 s | 217 s |
+| [39723207604](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723207604) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 151 s |
+| [39722755948](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722755948) | PR `perf/arch-parser` | HIT | — | 60.3 s | 230 s |
+| [39721927302](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721927302) | PR `feat/gates-d-5` | HIT | — | 65.4 s | 251 s |
+| [39721911469](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721911469) | PR `perf/arch-parser` | HIT | — | 55.4 s | 219 s |
+| [39721827406](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721827406) | PR `perf/arch-parser` | HIT | — | (not measured) | 80 s |
+| [39721223746](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721223746) | PR `feat/gates-d-6` | HIT | — | 57.9 s | 207 s |
+| [39721154583](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721154583) | PR `perf/arch-parser` | HIT | — | 53.2 s | 212 s |
+| [39720669054](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720669054) | PR `fix/2119-event-topology` | HIT | — | 39.0 s | 207 s |
+| [39720312442](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720312442) | PR `fix/2119-event-topology` | HIT | — | 32.2 s | 199 s |
+| [39724256147](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724256147) | PR `feat/gates-a` | **MISS** | the path list | 147.9 s | 241 s |
+| [39722793701](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722793701) | PR `feat/gates-a` | **MISS** | the path list | 223.0 s | 344 s |
+| [39721596368](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721596368) | PR `feat/gates-a` | **MISS** | the path list | 219.8 s | 346 s |
+| [39721996221](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721996221) | PR `ci/2108-merge-reference-trimmer` | **MISS** | the props hash | 221.5 s | 356 s |
+
+**14 hits, 4 misses: 78 %.** The three `feat/gates-a` runs are one branch (it
+was pushed three times), so per branch the sample is 8 branches that hit on
+every run and 2 that missed on every run. The three dev pushes of the same
+window hit as well (39723714473, 39724342525, 39725519389).
+
+**WHAT THE KEY IS, AND WHAT A HIT DEPENDS ON.** The key is
+
+```
+msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+```
+
+and the parts that decide a hit are:
+
+| part | what it is | a miss when |
+|---|---|---|
+| `<props hash>` | `hashFiles` over `Directory.Packages.props`, `Directory.Build.props`, `Directory.Build.targets`, `global.json` | the pull request touches one of the four — the prefix names an entry no branch has (run 39721996221: the lane's prefix ended in `1de69dbd…`, the base branch's in `61e83d62…`) |
+| the VERSION | the SHA-256 of the cache action's `path` input: the lines joined with a pipe, plus the compression method and the salt `1.0` | the pull request's `path` list differs from the base branch's — the service is asked for "the entry with this key AND this version", and the base branch never wrote that version (runs 39721596368, 39722793701, 39724256147) |
+| the scope | the service serves a run the entries of its own branch, of the branches below it and — for a pull request — of the base branch | the run is not a pull request and not a push to `dev`: a manual dispatch on a feature branch sees none of `dev`'s entries (run 39658451546) |
+
+**THERE IS NO RACE IN IT.** The key is not computed from the pull request's
+commit: the resolve step names the base branch's newest entry with the prefix
+(it sorts the REST API's list by `created_at` and takes the last), and the
+`restore-keys` fallback asks the service for "the newest entry with this
+prefix" among the scopes the run can read. So a base branch whose newest push
+has not saved its entry yet costs the lane FRESHNESS, not the hit — the
+stamper's diff covers the delta, and an entry that is one push older is still
+a valid base.
+
+**A HIT DOES NOT MEAN A FAST COMPILE, AND THAT IS A FOURTH, NAMED CASE.** Run
+39723562597 hit the cache and still compiled in 213.6 s. Its diff against the
+base carries `BannedSymbols.txt` and the analyzer that reads it: the analyzer
+is rebuilt, its output assembly is an INPUT of every `CoreCompile`, so every
+project is out of date and the whole tree compiles again. Same shape as a
+props change: the cache hit, and the tree still full.
+
+**WHAT A MISS COSTS.** The `build` job's wall, same lane shape: 185 s on a
+hit (run 39725284841) and 297 s on a miss (run 39725420279) — **112 s**, or
+1.9 runner-minutes. The whole pull-request lane costs 15.0 runner-minutes on a
+hit and 17.1 on a miss (the sum of the job durations, measured on those two
+runs), of which the `build` job is 3.1 and 5.0 minutes and the
+`unused references (ReferenceTrimmer)` job — a SECOND, full compile, because
+the analyzer has to run in every project — is 4.1 minutes either way. At the
+measured 78 % hit rate the misses cost 0.22 × 112 s = **25 s per lane**, and a
+lane that hit every time would cost 15.0 runner-minutes instead of 15.4.
 
 ### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
 
@@ -2864,9 +3195,10 @@ told from the baseline: 1.08 on the wall, 1.04 after the speed
 normalisation, the same 112 `Csc` tasks, the same 3.3..3.6 busy cores. MSBuild
 reads the `-maxcpucount` SWITCH; the `MaxCpuCount` property appears in no
 MSBuild target and in no global-property lookup. The repository's own
-`-p:MaxCpuCount=0` (`build/_build/Targets/CompileTarget.cs:22` and `:34`) is
-a no-op for the same reason: `dotnet build` is parallel on its own, which is
-why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy cores.
+`-p:MaxCpuCount=0` (what `build/_build/Targets/CompileTarget.cs` used to
+pass) was a no-op for the same reason: `dotnet build` is parallel on its own,
+which is why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy
+cores. #2111 replaced that line with the real switches — see §6.7.2.
 
 **Practical conclusion: two jobs are worth it, but not for the reason in the
 issue, and not for the number in the issue.**
@@ -3049,10 +3381,75 @@ pragma removed:
 |-----|------|----------|
 | [39637090212](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637090212) | before | the **build** job is red — the IL3000 warning is an error under `TreatWarningsAsErrors=true` |
 | [39637286644](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637286644) | after | the **build** job is green and the **aot-publish** job is red — the check is in the job that owns it |
+### 6.7.2 The real MSBuild switches: `/maxcpucount`, `/nodeReuse`, `/graphBuild`
+
+**What the NUKE Compile target passed, and why it was nothing.**
+`build/_build/Targets/CompileTarget.cs` ran
+
+```
+dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+```
+
+`-p:MaxCpuCount=0` is a PROPERTY. MSBuild reads the node count as the
+SWITCH `-maxcpucount`, and the `MaxCpuCount` property appears in no
+MSBuild target and in no global-property lookup — §6.7 measured that
+property as indistinguishable from the baseline (wall ratio 1.08). The
+line read like "use all CPUs" and did nothing at all. Worse, the
+"0 means all CPUs" spelling is not even a legal value: MSBuild's
+`ProcessMaxCPUCountSwitch` throws `InvalidMaxCPUCountValueOutsideRange`
+for anything outside 1..1024.
+
+**What replaced it.** `dotnet build` is `dotnet msbuild -restore -t:Build`
+plus the SDK's own defaults, and the node count is one of the switches
+only MSBuild's own command line carries. Going through `dotnet msbuild`
+is what makes the switches reachable at all:
+
+```
+dotnet msbuild Harbor.slnx -t:Build -p:Configuration=Release \
+  -p:ContinuousIntegrationBuild=true -maxcpucount:4 -nodeReuse:false
+```
+
+**The measurement** (CI run 39634501061, `meas-build-vcpu.yml`, three
+replicates per arm, the same runner: `ubuntu-24.04` image
+`ubuntu24/20261018.339.1`, 4 vCPU, .NET SDK 10.0.402). The architecture
+gate is ON in this harness, so its duration is the runner's speed proxy
+and it is subtracted in the "compile phase" column.
+
+| arm | the command | n | wall (s) | median | compile phase (wall − gate), median | `Csc` task time, median | speed-normalized wall ratio |
+|-----|-------------|--:|----------|--------|--------------------------------------|--------------------------|-----------------------------|
+| A | `dotnet build … -p:MaxCpuCount=0` (what CI ran before #2111) | 3 | 253.0..409.6 | 319.4 | 202.6 s | 266.2 s | 1.00 |
+| E | `dotnet msbuild … -maxcpucount:4 -nodeReuse:false` | 3 | 237.4..376.6 | 304.2 | **189.7 s** | 265.7 s | **0.9** |
+| F | E, plus `-graphBuild` | 3 | 282.7..447.2 | 412.1 | **253.9 s** | **858.2 s** | 1.0 |
+
+**Arm E is what the build now runs.** The same build, the real switches:
+the compile phase is 6 % shorter and the speed-normalized wall ratio is
+0.9. The `Csc` task time is the same (265.7 s against 266.2 s) — the
+wall difference is in how the work is scheduled, not in how much of it
+there is.
+
+**Arm F is NOT adopted, and the reason is measured.** `/graphBuild`
+WORKS on this solution — 118 compilations, exit 0, the same project set,
+so a `.slnx` with a solution-level metaproject is not a shape the graph
+build refuses. But it costs **1.3x the wall** (412.1 s against 304.2 s
+at the median) and **3.2x the compiler's own task time** (858.2 s
+against 265.7 s): the graph is constructed once, but every project is
+then evaluated in a graph node, and the analyzers run again. The arm
+stays in the harness, so the number can be re-read when the tree's shape
+changes.
+
+**Node reuse goes off on CI, the way dotnet/arcade does it.** The
+`build` job sets `MSBUILDDISABLENODEREUSE=1`, the environment variable
+MSBuild's `ProcessNodeReuseSwitch` reads, and the NUKE target passes
+`/nodeReuse:false`, which is the same decision as a switch (the switch
+wins over the environment variable). The reason is not speed: a reused
+node carries the previous build's state — its evaluation caches, its
+loaded assemblies — so a build that reuses a node is not the same build
+as a build that does not. On CI there is nothing to reuse: this job
+compiles once.
 
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 
-Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-Harness/actions/runs/39528039639), branch `ci/1753-per-file-coverage` at `c480a98f`, 2026-10-21. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/gates/coverage-report/`](../tools/gates/coverage-report/), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/gates/check-coverage-registry/`](../tools/gates/check-coverage-registry/).
+Measured on the nightly run [39627786424](https://github.com/refusedguy/Harbor-Harness/actions/runs/39627786424), branch `dev` at `259d0a5d`, 2026-10-21 — the first run in which the lane got all the way to the measurement. The lane is the `coverage` job of `.github/workflows/nightly.yml`; the reader is [`tools/gates/coverage-report/`](../tools/gates/coverage-report/), the registry is [`tools/coverage-registry.txt`](../tools/coverage-registry.txt), and the gate is [`tools/gates/check-coverage-registry/`](../tools/gates/check-coverage-registry/). All twenty suites of the lane passed and every report parsed, so the measurement is COMPLETE, not partial. The tree has moved since that run; §6.8.1 says by how much and what the gate said about the new tree.
 
 **WHAT THIS NUMBER IS NOT.** There is no global percentage here, on purpose. The number the lane used to publish was a sum over the per-suite columns, and those columns OVERLAP on the shared `src/` assemblies — the same line is counted once per suite that touched it — so the sum was never the coverage of anything, and the report said so in five words ("the TOTAL is indicative"). What is below is per project and per file, with the scope written down.
 
@@ -3062,83 +3459,128 @@ Measured on the nightly run [39528039639](https://github.com/refusedguy/Harbor-H
 
 | state | what it means | files |
 |---|---|---|
-| covered | at least one line was hit | 497 |
-| never ran | the engine saw the file and not one of its lines ran | 373 |
-| not loaded | the file's project is not in this lane at all | 208 |
-| no code to cover | the engine reported nothing for the file: an interface, an enum, a global-using file, a source-generated context | 172 |
+| covered | at least one line was hit | 554 |
+| never ran | the engine saw the file and not one of its lines ran | 378 |
+| not loaded | the file's project is not in this lane at all | 210 |
+| no code to cover | the engine reported nothing for the file: an interface, an enum, a global-using file, a source-generated context | 186 |
 
-**THE PRODUCT, PER PROJECT** (1250 files under `src/` and `apps/`)
+**THE PRODUCT, PER PROJECT** (1328 files under `src/` and `apps/`)
 
 | project | files | covered | never ran | not loaded | no code to cover |
 |---|---|---|---|---|---|
 | `src/Harbor.Tui.CellForge` | 113 | 30 | 82 | 0 | 1 |
 | `src/Harbor.Tui.CellForge.Engine` | 91 | 4 | 75 | 0 | 12 |
 | `src/Harbor.Ui.Framework.Rendering` | 50 | 7 | 32 | 0 | 11 |
-| `src/Harbor.Ui.Framework.State` | 51 | 23 | 22 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Services` | 32 | 3 | 23 | 0 | 6 |
-| `src/Harbor.Desktop.Abstractions` | 30 | 1 | 23 | 0 | 6 |
-| `src/Harbor.Abstractions` | 61 | 34 | 6 | 0 | 21 |
-| `src/Harbor.Application` | 29 | 22 | 1 | 0 | 6 |
-| `src/Harbor.Abstractions.Contracts` | 41 | 32 | 5 | 0 | 4 |
-| `src/Harbor.Tools.Builtin` | 69 | 59 | 1 | 0 | 9 |
-| `src/Harbor.Hosting` | 35 | 32 | 2 | 0 | 1 |
+| `src/Harbor.Ui.Framework.State` | 51 | 23 | 22 | 0 | 6 |
+| `src/Harbor.Desktop.ViewModels` | 20 | 0 | 18 | 0 | 2 |
 | `src/Harbor.Terminal.Abstractions` | 27 | 5 | 16 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Projection` | 19 | 2 | 11 | 0 | 6 |
 | `src/Harbor.Ui.Framework.Abstractions` | 18 | 0 | 10 | 0 | 8 |
-| `src/Harbor.Ui.Framework.Sessions` | 15 | 2 | 8 | 0 | 5 |
+| `src/Harbor.CodeGen` | 9 | 0 | 9 | 0 | 0 |
 | `src/Harbor.Ui.Framework.ViewModels` | 10 | 1 | 9 | 0 | 0 |
-| `src/Harbor.Plugins.Abstractions` | 16 | 6 | 1 | 0 | 9 |
-| `src/Harbor.Plugins.Hosting` | 9 | 7 | 1 | 0 | 1 |
-| `src/Harbor.Plugins.Storage` | 8 | 6 | 1 | 0 | 1 |
-| `src/Harbor.Plugins.Host` | 4 | 2 | 2 | 0 | 0 |
-| `src/Harbor.DesignSystem` | 14 | 4 | 5 | 0 | 5 |
+| `src/Harbor.Tui.CellForge.Syntax` | 9 | 0 | 8 | 0 | 1 |
+| `src/Harbor.Ui.Framework.Sessions` | 15 | 2 | 8 | 0 | 5 |
 | `src/Harbor.Desktop.Shared` | 9 | 0 | 7 | 0 | 2 |
+| `src/Harbor.Abstractions` | 71 | 41 | 5 | 0 | 25 |
+| `src/Harbor.Abstractions.Contracts` | 48 | 38 | 5 | 0 | 5 |
+| `src/Harbor.DesignSystem` | 14 | 4 | 5 | 0 | 5 |
+| `src/Harbor.Desktop.Abstractions` | 11 | 1 | 5 | 0 | 5 |
+| `src/Harbor.Plugins.Host` | 6 | 2 | 4 | 0 | 0 |
+| `src/Harbor.Terminal.Pty` | 4 | 0 | 4 | 0 | 0 |
 | `src/Harbor.Desktop.Animations` | 5 | 0 | 3 | 0 | 2 |
 | `src/Harbor.Extensions` | 5 | 2 | 2 | 0 | 1 |
+| `src/Harbor.Hosting` | 37 | 34 | 2 | 0 | 1 |
+| `src/Harbor.Tools.Builtin` | 77 | 65 | 2 | 0 | 10 |
 | `src/Harbor.Tui.AnsiPlain` | 9 | 3 | 2 | 0 | 4 |
-| `src/Harbor.Tui.CellForge.Syntax` | 9 | 0 | 8 | 0 | 1 |
-| `src/Harbor.Tui.CellForge.Prompts` | 3 | 1 | 1 | 0 | 1 |
-| `src/Harbor.Tui.Notifications` | 1 | 0 | 1 | 0 | 0 |
-| `src/Harbor.Terminal.Pty` | 4 | 0 | 4 | 0 | 0 |
+| `src/Harbor.Application` | 32 | 25 | 1 | 0 | 6 |
 | `src/Harbor.Logging` | 1 | 0 | 1 | 0 | 0 |
+| `src/Harbor.Plugins.Abstractions` | 25 | 11 | 1 | 0 | 13 |
+| `src/Harbor.Plugins.Hosting` | 13 | 11 | 1 | 0 | 1 |
+| `src/Harbor.Plugins.Storage` | 9 | 7 | 1 | 0 | 1 |
 | `src/Harbor.Telemetry.Otlp` | 1 | 0 | 1 | 0 | 0 |
 | `src/Harbor.Transport.Remote` | 5 | 3 | 1 | 0 | 1 |
-| `src/Harbor.AgentRuntime` | 33 | 29 | 0 | 0 | 4 |
-| `src/Harbor.Storage.Jsonl` | 21 | 20 | 0 | 0 | 1 |
-| `src/Harbor.Ipc.Abstractions` | 20 | 15 | 0 | 0 | 5 |
-| `src/Harbor.SessionContext` | 18 | 16 | 0 | 0 | 2 |
-| `src/Harbor.Ipc.Server` | 14 | 13 | 0 | 0 | 1 |
-| `src/Harbor.PolicyConfig` | 13 | 9 | 0 | 0 | 4 |
+| `src/Harbor.Tui.CellForge.Prompts` | 3 | 1 | 1 | 0 | 1 |
+| `src/Harbor.Tui.Notifications` | 1 | 0 | 1 | 0 | 0 |
+| `apps/Harbor.App.Avalonia` | 93 | 0 | 0 | 93 | 0 |
+| `apps/Harbor.App.Cli` | 117 | 0 | 0 | 117 | 0 |
+| `src/Harbor.AgentRuntime` | 36 | 32 | 0 | 0 | 4 |
+| `src/Harbor.Arch.Analyzers` | 2 | 2 | 0 | 0 | 0 |
 | `src/Harbor.ChangeTracking` | 12 | 11 | 0 | 0 | 1 |
-| `src/Harbor.Ipc.Client` | 12 | 10 | 0 | 0 | 2 |
-| `src/Harbor.Registries` | 12 | 10 | 0 | 0 | 2 |
-| `src/Harbor.Telemetry.Core` | 10 | 10 | 0 | 0 | 0 |
-| `src/Harbor.Permissions` | 8 | 6 | 0 | 0 | 2 |
-| `src/Harbor.Storage.Sqlite` | 8 | 7 | 0 | 0 | 1 |
-| `src/Harbor.Plugins.Registration` | 7 | 6 | 0 | 0 | 1 |
+| `src/Harbor.Diagnostics.Abstractions` | 3 | 2 | 0 | 0 | 1 |
 | `src/Harbor.Hooks` | 6 | 3 | 0 | 0 | 3 |
-| `src/Harbor.Plugins.Compilation` | 6 | 5 | 0 | 0 | 1 |
-| `src/Harbor.CodeGen` | 6 | 0 | 6 | 0 | 0 |
-| `src/Harbor.Providers.OpenAiCompatible` | 5 | 3 | 0 | 0 | 2 |
-| `src/Harbor.Providers.Shared` | 5 | 5 | 0 | 0 | 0 |
+| `src/Harbor.Ipc.Abstractions` | 20 | 15 | 0 | 0 | 5 |
+| `src/Harbor.Ipc.Client` | 12 | 10 | 0 | 0 | 2 |
+| `src/Harbor.Ipc.InProcess` | 2 | 2 | 0 | 0 | 0 |
+| `src/Harbor.Ipc.Server` | 14 | 13 | 0 | 0 | 1 |
 | `src/Harbor.Lsp` | 4 | 4 | 0 | 0 | 0 |
 | `src/Harbor.Onboarding` | 4 | 3 | 0 | 0 | 1 |
-| `src/Harbor.Storage.Shared` | 4 | 4 | 0 | 0 | 0 |
-| `src/Harbor.Diagnostics.Abstractions` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Permissions` | 8 | 6 | 0 | 0 | 2 |
+| `src/Harbor.Plugins.Compilation` | 6 | 5 | 0 | 0 | 1 |
 | `src/Harbor.Plugins.Instantiation` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.Plugins.Registration` | 8 | 7 | 0 | 0 | 1 |
 | `src/Harbor.Plugins.Runtime` | 3 | 2 | 0 | 0 | 1 |
+| `src/Harbor.PolicyConfig` | 14 | 10 | 0 | 0 | 4 |
 | `src/Harbor.Providers.Anthropic` | 3 | 3 | 0 | 0 | 0 |
-| `src/Harbor.Providers.OpenAI` | 3 | 3 | 0 | 0 | 0 |
-| `src/Harbor.Ipc.InProcess` | 2 | 2 | 0 | 0 | 0 |
-| `src/Harbor.Storage.Memory` | 2 | 2 | 0 | 0 | 0 |
 | `src/Harbor.Providers.Ollama` | 1 | 1 | 0 | 0 | 0 |
-| `apps/Harbor.App.Cli` | 115 | 0 | 0 | 115 | 0 |
-| `apps/Harbor.App.Avalonia` | 93 | 0 | 0 | 93 | 0 |
-| **total** | **1250** | **497** | **373** | **208** | **172** |
+| `src/Harbor.Providers.OpenAI` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Providers.OpenAiCompatible` | 5 | 3 | 0 | 0 | 2 |
+| `src/Harbor.Providers.Shared` | 5 | 5 | 0 | 0 | 0 |
+| `src/Harbor.Registries` | 14 | 12 | 0 | 0 | 2 |
+| `src/Harbor.SessionContext` | 19 | 16 | 0 | 0 | 3 |
+| `src/Harbor.Storage.Jsonl` | 35 | 32 | 0 | 0 | 3 |
+| `src/Harbor.Storage.Memory` | 3 | 3 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Shared` | 4 | 4 | 0 | 0 | 0 |
+| `src/Harbor.Storage.Sqlite` | 9 | 8 | 0 | 0 | 1 |
+| `src/Harbor.Telemetry.Core` | 10 | 10 | 0 | 0 | 0 |
+| **total** | **1328** | **554** | **378** | **210** | **186** |
 
-**THE LINE COUNT, for the files the engine instrumented.** 61 539 product lines, 27 228 of them hit (44.2 %). The 23 316 lines of the 373 "never ran" files are the other half of that gap, and they are the deletion candidates: a file nobody ever ran is the strongest form of the "an uncovered line is often dead code" rule (#772, #755).
+**THE LINE COUNT, for the files the engine instrumented.** 67 426 product lines, 31 249 of them hit (46.3 %). The 24 415 lines of the 378 "never ran" files are the other half of that gap, and they are the deletion candidates: a file nobody ever ran is the strongest form of the "an uncovered line is often dead code" rule (#772, #755).
 
-**THE SHARE OF CONSCIOUSLY UNCOVERED CODE.** 581 of the 1250 product files (46.5 %) are holes of this measurement, and every one of them is in the registry with a reason: 373 file rows for the files the measurement saw and never ran, and 2 project rows (`apps/Harbor.App.Cli/`, `apps/Harbor.App.Avalonia/`) for the two projects the lane does not load at all. The registry is a RATCHET in both directions: a file that stops being covered has to have a row added, and a row whose file got covered has to have it deleted — the gate fails on either.
+**THE SHARE OF CONSCIOUSLY UNCOVERED CODE.** 588 of the 1328 product files (44.3 %) are holes of this measurement, and every one of them is in the registry with a reason: 378 file rows for the files the measurement saw and never ran, and 2 project rows (`apps/Harbor.App.Cli/`, `apps/Harbor.App.Avalonia/`) for the two projects the lane does not load at all. The registry is a RATCHET in both directions: a file that stops being covered has to have a row added, and a row whose file got covered has to have it deleted — the gate fails on either.
+
+#### 6.8.1 The registry against the measurement (#2064) ✅ the first reconciliation
+
+**THE STATE THE ISSUE FOUND.** The registry was written against run 39528039639 (branch `ci/1753-per-file-coverage` at `c480a98f`) and never checked against a measurement again. Since then the tree grew by 78 product files, and five of the new ones landed outside the lane's reach: the tool-schema generator (#2063), the [Observed] generator's diagnostics (#2072), the plugin host's config source (#2048) and its inventory publisher (#2076), and the `[ToolParam]` attribute (#2063). Meanwhile `src/Harbor.Abstractions/Sessions/ISessionStore.cs` got covered. The registry was wrong in both directions, and it stayed wrong because NO measurement had been taken since — the lane died before it measured, first on a broken build (`CS0234` in `Harbor.Application.Tests`), then on a missing `Coverage/` directory, so the gate read "no coverage directory" instead of a verdict.
+
+**THE RECONCILIATION, against run 39627786424** (`dev` at `259d0a5d`; 20 suites, all passed, all reports parsed, so the measurement is complete).
+
+| | before | after |
+|---|---|---|
+| rows in the registry | 376 | 380 |
+| file rows / project rows | 374 / 2 | 378 / 2 |
+| holes in the measurement (files the lane cannot account for) | 588 | 588 |
+| holes the registry accepted | 583 | 588 |
+| holes NO row accepted | 5 | 0 |
+| rows that outlived their file (the file got covered) | 1 | 0 |
+| files the registry names and the tree does not have | 0 | 0 |
+| **the gate's verdict** | **6 findings, exit 1** | **0 findings, exit 0** |
+
+**THE SIX FINDINGS** the gate printed on the dev tree, and what each one became:
+
+| finding | file | what it is | what was done |
+|---|---|---|---|
+| `COV-UNCOVERED` | `src/Harbor.CodeGen/ToolSchemaGenerator.cs` | the generator runs inside the compiler at build time | row added |
+| `COV-UNCOVERED` | `src/Harbor.CodeGen/ObservedDiagnostics.cs` | the descriptors of the [Observed] generator; same reason | row added |
+| `COV-UNCOVERED` | `src/Harbor.Plugins.Host/ConfigFilePluginConfigSource.cs` | read by the plugin host at its startup; no suite of the lane starts the host | row added |
+| `COV-UNCOVERED` | `src/Harbor.Plugins.Host/PluginInventoryPublisher.cs` | called by the host after its load and after every activation pass | row added |
+| `COV-UNCOVERED` | `src/Harbor.Tools.Builtin/ToolParamAttribute.cs` | read by the schema generator inside the compiler; a test process only carries its metadata | row added |
+| `COV-ROW-STALE` | `src/Harbor.Abstractions/Sessions/ISessionStore.cs` | the file is covered now, so the row outlived its reason | row deleted |
+
+Each new row carries a reason of at least 40 characters and an owner, like every other row: the registry is a list of conscious holes, not a list of excuses.
+
+**THE GATE FALLS WHEN THE TWO DISAGREE — the negative check.** A gate that cannot fail is not a gate, so the divergence is planted on purpose and the lane is run again with it. The planted defect is the row that was deleted above (`src/Harbor.Abstractions/Sessions/ISessionStore.cs`, a file the measurement says is covered): the lane must report `COV-ROW-STALE` and fail.
+
+| run | what it measured | the gate's verdict |
+|---|---|---|
+| [39627786424](https://github.com/refusedguy/Harbor-Harness/actions/runs/39627786424) | the tree at `dev` `259d0a5d`, BEFORE the fix | **6 findings, exit 1** — 5 `COV-UNCOVERED` and 1 `COV-ROW-STALE`; the `coverage` job was red |
+| [39632794079](https://github.com/refusedguy/Harbor-Harness/actions/runs/39632794079) | the branch with the fix (`fix/2064-coverage-registry`, `a6eccccd`) | **0 findings, exit 0** — `product files: 1328 covered: 554 uncovered: 588 in the registry: 588 registry rows: 380`; the `coverage` job, the `gate` job and the `measurement` job are all green |
+| [39633963169](https://github.com/refusedguy/Harbor-Harness/actions/runs/39633963169) | the same branch with ONE row planted back — the row for the file that got covered | **1 finding, exit 1** — `COV-ROW-STALE: the file is covered now, so the row has outlived its reason and has to go (src/Harbor.Abstractions/Sessions/ISessionStore.cs)`; the `coverage` job is red, the other two jobs are green |
+| [39719902323](https://github.com/refusedguy/Harbor-Harness/actions/runs/39719902323) | the merged tree — `dev` at `a019e928` plus this branch — with the registry as it stands | **0 findings, exit 0** — `product files: 1329 covered: 555 uncovered: 588 in the registry: 588 registry rows: 380`; the `gate` job, the `coverage` job and the `measurement` job are all green |
+
+The third run is the negative control, and it is a CI run of the whole lane: the same tree, the same measurement (1328 / 554 / 588), and a registry with one row too many. The gate saw it and failed the job. The gate's own `--self-test` proves the same thing without a runner: it plants a file that stopped being covered, a row that is no longer needed, an empty measurement, an unreadable report, a row for a file that is gone, and a partial measurement, and it asserts that each one produces its finding.
+
+**WHAT CAME AFTER THE MEASUREMENT.** The tree grew by ONE product file after that run — `src/Harbor.Arch.Analyzers/HttpClientCreationAnalyzer.cs` (#2148) — and the lane's arch suite drives it in process (`tests/Harbor.Architecture.Tests/Roslyn/HttpClientCreationAnalyzerTests.cs`), so it is covered and no row is due for it. No product file was deleted or moved since, so no row names a file the tree does not have. Run 39719902323 measured the merged tree and said so with numbers: 1329 product files, 555 of them covered (the analyzer is the +1), 588 holes, 380 rows, **0 findings** — the registry still matches the measurement.
 
 **THE MEASUREMENT WAS EMPTY BEFORE THIS.** Run 39508517419 uploaded twenty cobertura files and every one of them was `<coverage line-rate="1"><packages /></coverage>`; every suite printed "Total - Line: N/A" and the summary printed "No cobertura files produced". The cause: Release sets `DebugType=none` (`Directory.Build.props`), so the build carries no PDB, and the coverage engine on Linux instruments the assemblies STATICALLY — the instrumentation maps IL back to source lines through the portable PDB next to each DLL. With no PDB there is nothing to instrument, and an empty report reads as "100 % covered" to anything that parses `line-rate`. The lane now builds with `-p:DebugType=portable -p:DebugSymbols=true`.
 
@@ -3502,7 +3944,396 @@ python scanning: about 55 s of scanning and 13 s of git. The full port is
 therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
 
-## 11. How to reproduce
+## 11. What a pull request costs
+
+**The question this section answers.** Three numbers about the pull-request
+lane were known, and none of them was the price of a pull request:
+
+* issue [#2108](https://github.com/refusedguy/Harbor-Harness/issues/2108)
+  measured the bill of ONE lane run: 19.4 runner-minutes, 17 jobs, run
+  `39556560488`;
+* issue [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110)
+  measured what CLOSES the lane (the arch shard);
+* §10 measured the gate set, on a laptop, one gate at a time.
+
+What nobody had was the whole bill: the runner-minutes, the wall, the
+critical path and the peak width of one pull request, and the split of that
+bill by what the seconds buy. A decision about the lane needs all four,
+because they are four different numbers and only one of them is a sum.
+
+**THE INSTRUMENT.** `tools/gates/pr-cost` is a compiled gate, the same binary
+the repository already ships (`tools/bin/harbor-gates-linux-x64 pr-cost`).
+It reads what the Actions REST API returns and prints the tables below; its
+input is the job list of a run, so no number in this section was transcribed
+by hand. It is REPORTING: it never fails a build. Its own proof that it can
+fail is its `--self-test`, which plants a stripe whose wall, busy time and
+peak width are known, and a timestamp that cannot be parsed (that one must
+be an ERROR, because an unreadable timestamp read as "no time" would report
+a bill of zero, and zero is the number that looks like good news).
+
+### 11.1 The sample, and what it is
+
+Twelve pull requests, the last twelve of 2026-10-21 that built the tree and
+ran the five test shards, 16:47:08 to 17:22:51 UTC. The criterion is
+mechanical and is in the data: the `build` job of `ci.yml` ran, all five
+shards ran, and every job of both workflows finished. A pull request that
+touches only `docs/` or only `tools/` never starts the .NET build: its bill
+is 4.8 runner-minutes, and it is a different shape, not a cheaper pull
+request.
+
+| | |
+|---|---|
+| the twelve runs | `39637885344`, `39638416505`, `39638565635`, `39638603945`, `39638705616`, `39639468264`, `39640369150`, `39640971168`, `39641227183`, `39641476017`, `39641977262`, `39643272476` |
+| their head commits | `eee6a5b1`, `f7257f8d`, `6d47858e`, `90e1c345`, `9c4853d7`, `938ae03c`, `f25f2075`, `372d0285`, `b854599b`, `dbd9f9a0`, `a828bed6`, `222fa198` |
+| their `docs.yml` twins | the runs started in the same second on the same branch |
+| the workflows | `ci.yml` (13-14 live jobs) and `docs.yml` (21 live jobs; 22 on the one branch that adds the `workflow files` gate) |
+| the pool | `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-24.04-arm` |
+| dev's tip that day | `13961b71` and `bb9c76b9` (dev moved twice inside the sample window) |
+
+**WHICH ATTEMPT THE TABLES READ.** Four of the twelve had a flaky shard and
+were re-run. Every table in this section reads the FIRST attempt of each run,
+because that is one pass of the lane, and a second pass is a separate bill
+(§11.2 names its price). The Actions API serves the LAST attempt by default
+(`filter=latest`), and for those four runs the two differ: the re-run
+replaces the failed job's timestamps with later ones, so the default view is
+a mixture of two attempts, and its wall is 393 to 745 s longer. Reading the
+first attempt needs `filter=all` and a pick of the lowest `run_attempt`
+(§11.8).
+
+**THE TREE THE TWELVE RAN ON, AND WHAT CHANGED IN THE LANE SINCE.** The
+`ci.yml` of all twelve heads has the SAME job list as dev's `ci.yml` today:
+the same thirteen jobs, in the same order, and the `reference-trimmer` job is
+still in it. Four things changed inside the lane since:
+
+| change | what it does to the pull-request lane |
+|---|---|
+| [#2123](https://github.com/refusedguy/Harbor-Harness/pull/2123) | three `DIAGNOSTIC` steps in the `build` job. They run only when the build-output cache matched, and it never matched in the twelve, so they cost 0 s there and 7 s in the run of 2026-10-22 below |
+| [#2134](https://github.com/refusedguy/Harbor-Harness/pull/2134) | the `aot-publish` job's gate is the compiled binary now, not the python script. Same job, same lane |
+| [#2153](https://github.com/refusedguy/Harbor-Harness/pull/2153) | the ILLink analyzer and the vs-threading family leave the ordinary build: 801.3 analyzer-seconds become 491.4, the change's own measurement. Its WALL effect was inside the 28 s noise floor of the harness that measured it, so the compile is cheaper by an amount the harness could not resolve |
+| [#2155](https://github.com/refusedguy/Harbor-Harness/pull/2155), [#2158](https://github.com/refusedguy/Harbor-Harness/pull/2158) | `MSBUILDDISABLENODEREUSE=1` in the `build` job, and `HarborArchGate: 'false'` for every event. The pull-request lane already had the architecture gate off, so the second half of that change does not touch it |
+
+Two more changed the lane's shape since, one of them still in flight. The
+`go-quality` gate of PR #2162 joined the `docs.yml` gate lane: that lane
+runs twenty-two jobs today, and the sample's twenty-one had no such job. The
+unused-reference analyzer moves into the ordinary compile in PR #2138, and
+the `reference-trimmer` job is deleted with it. That pull request is not
+merged yet: the job is still in dev's `ci.yml`, and §11.6 measures the
+lane it will produce.
+
+**THE WALL IS NOT THE SUM, AND THAT IS THE POINT.** `ci.yml` and `docs.yml`
+have no `needs:` between them, so they start together, and the pull request
+waits for the LONGER of the two. The bill is their sum and the wall is
+their maximum. A table that adds the two columns to get the wall is wrong,
+and the wrongness is the expensive kind: it says every new job costs the
+whole wall.
+
+### 11.2 What one pull request costs
+
+| pull request | runs | jobs | runner-min | wall (s) | critical path (s) | peak width | busy (s) | idle (s) | mean concurrency | the tail |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| PR #39637885344 (feat/workflow-parse-gate) | 2 | 35 | **23.4** | 787 | 787 | 5 | 626 | 161 | 1.78 | `gate` |
+| PR #39638416505 (test/1812-e2e-framework) | 2 | 35 | **23.8** | 796 | 796 | 5 | 582 | 214 | 1.79 | `gate` |
+| PR #39638565635 (test/1553-ensure-guards) | 2 | 35 | **27.1** | 718 | 718 | 6 | 578 | 140 | 2.27 | `gate` |
+| PR #39638603945 (feat/gates-a) | 2 | 34 | **23.5** | 1018 | 1018 | 4 | 707 | 311 | 1.38 | `gate` |
+| PR #39638705616 (fix/ci-duplicate-yaml-key) | 2 | 34 | **23.4** | 724 | 724 | 5 | 640 | 84 | 1.94 | `gate` |
+| PR #39639468264 (refactor/1569-testkit-scaffold) | 2 | 35 | **25.4** | 962 | 962 | 6 | 667 | 295 | 1.58 | `gate` |
+| PR #39640369150 (refactor/1569-testkit-scaffold-b) | 2 | 35 | **24.1** | 832 | 832 | 6 | 582 | 250 | 1.74 | `gate` |
+| PR #39640971168 (feat/gates-d-3) | 2 | 34 | **22.7** | 790 | 790 | 5 | 663 | 127 | 1.73 | `gate` |
+| PR #39641227183 (feat/2111-msbuild-switches) | 2 | 34 | **23.1** | 983 | 983 | 6 | 641 | 342 | 1.41 | `gate` |
+| PR #39641476017 (feat/gates-a) | 2 | 34 | **21.9** | 915 | 915 | 5 | 635 | 280 | 1.44 | `gate` |
+| PR #39641977262 (arch/1724-semantic-guards) | 2 | 34 | **23.5** | 925 | 925 | 6 | 632 | 293 | 1.52 | `gate` |
+| PR #39643272476 (feat/gates-d-3) | 2 | 34 | **21.2** | 742 | 742 | 5 | 599 | 143 | 1.72 | `gate` |
+
+**THE HEADLINE.** A pull request in this repository costs **23.5
+runner-minutes** (median; min 21.2, max 27.1) and **814 s of wall**
+(median; min 718, max 1018). The critical path is the wall by definition,
+from the first job's start to the last job's end, and it is always the
+`gate` job that ends it.
+
+**THE FOUR THAT NEEDED A SECOND ATTEMPT.** The re-run is a second pass of
+the lane, and it is not in the tables above. Its price is WALL, not runner
+time: the re-run replaces the failed shard's seconds with a new shard's
+seconds, so the bill barely moves, and what it adds is the wait for a runner
+and for the lane to be checked again.
+
+| pull request | the shard that failed | first attempt: wall / runner-min | last attempt: wall / runner-min | the re-run costs |
+|---|---|---|---|---|
+| PR #39639468264 | `test (ui)` | 962 s / 25.4 | 1355 s / 25.4 | 393 s of wall, 0.0 runner-min |
+| PR #39640369150 | `test (ui)` | 832 s / 24.1 | 1573 s / 24.1 | 741 s of wall, 0.0 runner-min |
+| PR #39641227183 | `test (core)` | 983 s / 23.1 | 1728 s / 23.0 | 745 s of wall, 0.1 runner-min |
+| PR #39641476017 | `test (platform)` | 915 s / 21.9 | 1306 s / 22.1 | 391 s of wall, 0.2 runner-min |
+
+**THE ANCHOR RUN, READ BY THE SAME INSTRUMENT.** Issue #2108's number,
+19.4 runner-minutes and 17 jobs, is the `ci.yml` LANE of run `39556560488`,
+and the instrument reads it back exactly: ci.yml 19.4 runner-minutes over
+13 live jobs (the 17 are the jobs the lane declares; four of them were
+skipped). The WHOLE stripe of that run, ci.yml plus its `docs.yml` twin, is
+**23.0 runner-minutes** and 909 s of wall, against the twelve's median 23.5
+and 814 s, and the decomposition agrees with the twelve to within a point
+per article: build 29 % against 25 %, reference trim 19 % against 19 %, test
+shards 26 % against 27 %, docs gates 15 % against 16 %. The reference run
+and the twelve are the same lane.
+
+**THE TWO WORKFLOWS, SEPARATELY.** The median `ci.yml` lane is 19.3
+runner-minutes over 13 jobs; the median `docs.yml` lane is 3.8
+runner-minutes over 21 jobs. The `docs.yml` lane is 16 % of the bill and it
+is ENTIRELY off the critical path: in all twelve runs the `ci.yml` lane is
+the longer one, so the gate lane never set the wall. It starts with
+`ci.yml`, runs its twenty-one gates in parallel, and finishes long before
+the build does.
+
+| pull request | workflow | jobs | runner-min | wall (s) | wait before the first job (s) |
+|---|---|---:|---:|---:|---:|
+| PR #39637885344 | ci.yml | 13 | 19.4 | 747 | 55 |
+| PR #39637885344 | docs.yml | 22 | 4.0 | 407 | 15 |
+| PR #39638416505 | ci.yml | 14 | 20.1 | 784 | 61 |
+| PR #39638416505 | docs.yml | 21 | 3.6 | 693 | 49 |
+| PR #39638565635 | ci.yml | 14 | 23.6 | 718 | 49 |
+| PR #39638565635 | docs.yml | 21 | 3.5 | 372 | 96 |
+| PR #39638603945 | ci.yml | 13 | 19.1 | 871 | 213 |
+| PR #39638603945 | docs.yml | 21 | 4.4 | 835 | 66 |
+| PR #39638705616 | ci.yml | 13 | 19.7 | 724 | 13 |
+| PR #39638705616 | docs.yml | 21 | 3.8 | 389 | 48 |
+| PR #39639468264 | ci.yml | 14 | 21.3 | 962 | 33 |
+| PR #39639468264 | docs.yml | 21 | 4.0 | 648 | 88 |
+| PR #39640369150 | ci.yml | 14 | 20.3 | 774 | 124 |
+| PR #39640369150 | docs.yml | 21 | 3.8 | 526 | 66 |
+| PR #39640971168 | ci.yml | 13 | 18.9 | 762 | 148 |
+| PR #39640971168 | docs.yml | 21 | 3.8 | 294 | 120 |
+| PR #39641227183 | ci.yml | 13 | 19.3 | 793 | 394 |
+| PR #39641227183 | docs.yml | 21 | 3.8 | 427 | 204 |
+| PR #39641476017 | ci.yml | 13 | 18.1 | 872 | 245 |
+| PR #39641476017 | docs.yml | 21 | 3.8 | 339 | 202 |
+| PR #39641977262 | ci.yml | 13 | 19.3 | 723 | 296 |
+| PR #39641977262 | docs.yml | 21 | 4.2 | 541 | 94 |
+| PR #39643272476 | ci.yml | 13 | 17.6 | 742 | 43 |
+| PR #39643272476 | docs.yml | 21 | 3.6 | 265 | 71 |
+
+### 11.3 The bill, article by article
+
+The twelve pull requests together: **283.1 runner-minutes**.
+
+| article | runner-min | share |
+|---|---:|---:|
+| build (compile) | 69.4 | **25 %** |
+| build (reference trim) | 53.9 | **19 %** |
+| test shards | 75.2 | **27 %** |
+| docs.yml gates | 46.3 | **16 %** |
+| packaging | 18.1 | 6 % |
+| ci.yml gates | 13.8 | 5 % |
+| aot publish | 3.6 | 1 % |
+| orchestration (`changes`, `gate`) | 2.5 | 1 % |
+| **total** | **283.1** | **100 %** |
+
+**THE TWO FULL BUILDS ARE A THIRD OF THE BILL.** The `build` job compiles the
+tree once (median 250 s of compile); the `unused references
+(ReferenceTrimmer)` job compiles it AGAIN, from scratch, in its own job
+(`.github/workflows/ci.yml:726`), and its own median wall is 274 s. Two
+full compiles per pull request: 470 s of the 1410 s of a median pull
+request's bill, **33 %**, and the two jobs' own walls (358 s and 274 s) are
+632 s of the `ci.yml` lane's 1158 s, **55 % of the lane**, and 45 % of the
+whole stripe's bill. Issue #2108 measured the same two builds as 660 s and
+44 % of the bill on run `39556560488`; the shape is unchanged, and the share
+grew because the gate lane got cheaper around it.
+
+**THE BUILD JOB, STEP BY STEP** (median of the twelve; the job's own wall is
+358 s, min 291, max 392):
+
+| step | seconds |
+|---|---:|
+| **NUKE compile (Release, zero warnings, docs, deterministic)** | **250** (min 184, max 273) |
+| setup .NET 10 (+ the NuGet cache) | 26 |
+| stash the pack inputs (the `pack` job's slice) | 20 |
+| stash the build outputs, core and ui shards | 10 each |
+| checkout | 8 |
+| the TUnit-analyzer and installer gates | 2 each |
+
+**The ReferenceTrimmer job** (median wall 274 s): its own `dotnet build` is
+**220 s** (min 161, max 265), the restore with the analyzer is 11 s, setup
+.NET is 32 s.
+
+**THE SHARDS** (median wall): `test (arch)` **124 s** (min 86, max 148),
+`test (ui)` 78 s, `test (core)` 68 s, `test (platform)` 64 s, `test (e2e)`
+46 s. The `pack` job's own wall is 90 s. The arch shard is the LONGEST of
+the five in 12 of the 12 runs, and the last one to FINISH in 7 of the 12,
+which is what issue #2110's reading of the lane's tail is confirmed by: the
+lane's tail is a shard.
+
+**THE CRITICAL PATH, STAGE BY STAGE** (median): `changes` to `build` to
+shards to `gate` = **725 s** (min 640, max 883). The `gate` job itself is
+2 to 4 s of work; it waits a median of **95 s** for a runner after the last
+shard ends (min 32 s, max 213 s), because it is the one job that can only
+start when everything else has finished.
+
+### 11.4 What each known fix is worth
+
+| fix | what it is | runner-minutes per pull request | wall | issue |
+|---|---|---:|---:|---|
+| the ReferenceTrimmer is a second full build | merging it into the main compile, or reusing the build's outputs | **not measured as a delta.** The job is still in dev and still 19 % of the sample's bill. On the lanes of 2026-10-22 the stripe costs 19.0 runner-minutes with the job and 18.5 without it, but those are two different runs with different cache states, so the difference is not the merge's price | **0 measured** | [#2108](https://github.com/refusedguy/Harbor-Harness/issues/2108) |
+| the commit sha in `AssemblyInformationalVersion` | `IncludeSourceRevisionInInformationalVersion=false` (`Directory.Build.props:72`) | **0 on the runs of 2026-10-21, and that is now a fact about the cache, not about the fix.** The compile step of those twelve is 184 to 273 s (median 250 s), and the build-output cache did not fire: the "Restore the build outputs (obj/ + bin/)" step took 0 s in eight runs and 1 s in four, and the log of the newest of them says `Cache not found for input keys: msbuild-v1-…`. On the pull-request run of 2026-10-22 the cache DID fire (24 s of restore) and the compile took 45 s. The lever is the cache; the fix is what makes a restored tree valid | **0 measured**; 205 s of compile on the runs where the cache fires | [#2137](https://github.com/refusedguy/Harbor-Harness/issues/2137) |
+| the arch shard is ONE project | splitting `Harbor.Architecture.Tests` into 3-4 shards | **+2.5**, three more shard jobs, each with its own setup, download and teardown. It is a COST, not a saving | **≤ 46 s**, the arch shard's 124 s minus the next-longest shard's 78 s. That difference is the ceiling; a four-way split is a projection, not a measurement | [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110) |
+| the architecture gate runs twice on a dev push | switching it off inside the build, as the PR path already does | **0 on the PR lane** | **0 on the PR lane**; 132 s of the dev push's build, which #2158 has since removed | [#2114](https://github.com/refusedguy/Harbor-Harness/issues/2114) |
+| the gate set | the `docs.yml` gate lane (21 gates in the sample, 22 today) and the `ci.yml` gates | **5.0** (3.8 + 1.2), 21 % of the bill | **0**, the gate lane runs in parallel with `ci.yml` | §10.2 |
+
+**WHY THE #2108 FIX IS 19 % OF THE BILL AND 0 % OF THE WALL.** The
+ReferenceTrimmer job runs in parallel with the `build` job, both need only
+`changes`, and it is NOT in the `gate` job's `needs:` list
+(`.github/workflows/ci.yml:3376`). The `gate` job is what the pull request
+waits for, and it never waits for the trimmer. So the trimmer's 274 s are
+274 s of runner time and not one second of wall. It does hold a runner of
+the `ubuntu-24.04` pool for 274 s, concurrently with the build, so it is a
+candidate for the queue wait below, which is a statement about the pool,
+not about the job.
+
+### 11.5 The 4 vCPU question, and the width of the lane
+
+**The hypothesis is already falsified for the build, by measurement.**
+§6.7 is the falsification: one MSBuild node is not slower than four
+(ratio 1.02 on the wall, 0.95 without the architecture gate), because a
+SINGLE compilation already uses 3.3 to 3.6 of the runner's four cores,
+Roslyn's parallel analyzer driver inside one `CoreCompile`. More MSBuild
+nodes buy nothing; more CORES do.
+
+**What this section adds is the width of the lane itself.** The peak width
+of the twelve pull requests is **4 to 6 jobs** (median 5), and the mean
+concurrency over the wall is **1.38 to 2.27** (median 1.72). The lane is
+not short of parallelism at its peak: the burst after the build runs the
+`pack` job and five shards at once, on three runner pools.
+
+**AND THE RUNNERS ARE NOT IDLE BECAUSE THE LANE HAS TOO FEW JOBS, THEY ARE
+IDLE BECAUSE THE POOL IS QUEUED.** The idle column of §11.2 is the time the
+pull request spent with NO job running: a median of **232 s of the 814 s
+wall (29 %)**. That is the queue wait, and the queue is the repository's own
+load: during the measured window **11 to 32 `ci.yml` and `docs.yml` runs
+were in flight at once (median 20)**, against 0 to 5 (median 1) in the hour
+around the runs of 2026-10-22 below. A pull request in this repository is
+queued behind the merge train, and the wall is a property of the
+repository's throughput, not of the lane's shape.
+
+**SO WHAT IS THE LEVER.** Not "more parallel jobs in the lane": the lane
+already fans out to six after the build, and the runner is not waiting for a
+job. The two levers that the measurements point at are:
+
+1. **the compile, on a second runner**, 250 s of the 358 s build job, and
+   the build is on the critical path. §6.7 estimates ~1.4x for two
+   independent clusters of the project graph, and this measurement says the
+   term is 250 s of a 725 s chain;
+2. **the queue**, which is not a lane property: the wall is 29 % queue, and
+   §6.9's three paired runs are the same finding from the other side.
+
+### 11.6 The same measurement on the tree of 2026-10-22
+
+The twelve are a measurement of 2026-10-21. The lane has moved since, and
+the two pull-request runs of 2026-10-22 are the same instrument read on the
+tree of today. Both are pull-request runs, and the first one ran the
+`ci.yml` of dev's tip as it stands now.
+
+| pull request | tree | ci.yml jobs | ci.yml runner-min | docs.yml runner-min | the whole stripe | wall (s) | idle (s) | peak width |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| PR #39719039714 (feat/2111-msbuild-switches) | dev's `ci.yml` of 2026-10-22 | 13 | 15.8 | 3.2 | **19.0** | 326 | 2 | 13 |
+| PR #39718825965 (ci/2108-merge-reference-trimmer) | the same lane with the `reference-trimmer` job removed (PR #2138) | 13 | 15.0 | 3.5 | **18.5** | 472 | 5 | 16 |
+
+**WHAT MOVED.** The stripe's bill went from the sample's 23.5
+runner-minutes to 19.0, and the bill of the PR lane of 2026-10-22 splits
+this way: build (compile) 3.0 runner-min (16 %), build (reference trim) 4.2
+(22 %), packaging 1.6 (8 %), test shards 6.1 (32 %), ci.yml gates 0.6 (3 %),
+docs.yml gates 3.2 (17 %), orchestration 0.2 (1 %). Two things moved, and
+they are not the same thing:
+
+* **the compile.** On the run of 2026-10-22 the build-output cache FIRED
+  (24 s of restore) and the compile took 45 s against the sample's 250 s.
+  On the run of PR #2138's lane it did not fire and the compile took 208 s.
+  The cache is the lever, and it fires on some pull-request runs and not on
+  others;
+* **the queue.** The idle time of the two runs is 2 s and 5 s, against the
+  sample's 232 s, and the repository had 0 to 5 `ci.yml` and `docs.yml` runs
+  in flight at once (median 1) against the sample's median 20. The wall of
+  326 s and 472 s is a wall with no queue in it, and it is not comparable
+  with the sample's 814 s as a price of the lane: the lane's own work was
+  324 s and 467 s, against the sample's median 634 s.
+
+**THE PR #2138 LANE, AS MEASURED.** The `reference-trimmer` job is gone and
+the analyzer runs inside the ordinary compile. The stripe bills 18.5
+runner-minutes against 19.0 with the job, and the "build (reference trim)"
+article is 0. The difference between the two runs is NOT the merge's price:
+the compile was 208 s in one and 45 s in the other, because the cache fired
+in one and not in the other. A paired measurement of that merge is still
+missing.
+
+**THE DEV-PUSH LANE, FOR THE RECORD.** The same measurement on the push to
+dev of run `39717885532` (dev's tip `a019e928`, 2026-10-22 03:37 UTC) reads
+16 live ci.yml jobs, 24.8 runner-minutes and 509 s of wall, with the
+compile at 183 s and the trimmer's own build at 207 s. It is the push lane
+and not the pull-request lane: it saves the build outputs after the compile
+and it resolves the build-output cache from the previous commit, so its
+compile is not the pull-request lane's compile.
+
+### 11.7 What this section does NOT measure
+
+* **The nightly lane and the dev-push lane.** Both are measured elsewhere
+  (§6.8 for the coverage lane); the numbers here are the pull-request lane
+  only. The architecture suite does not run inside the build on any lane any
+  more: `HarborArchGate` is `'false'` for every event since #2158
+  (`.github/workflows/ci.yml:887`), so the 132 s that #2114 measured on a
+  dev push is gone from the dev push as well.
+* **The pull request that does not build.** A pull request that touches only
+  `docs/` or only `tools/` never starts the .NET build; its bill is 4.8
+  runner-minutes (measured on run `39641146271`, the same day) and its wall
+  is 542 s of gate lane. This section's own pull request is one of them:
+  PR #2169 touches no `src/`, `apps/` or `tests/` file, and its own run
+  `39722580870` billed 4.5 runner-minutes over 27 jobs and a 38 s wall,
+  which is five ci.yml jobs and the 22-job gate lane.
+* **The cost of the queue wait.** The idle time is measured; the share of
+  it that belongs to a given job is not.
+* **A pull request whose build fails.** The lane then runs fewer jobs (the
+  shards never start): measured on run `39639464986`, whose ci.yml lane ran
+  eight jobs and 16.7 runner-minutes, and whose whole stripe is 21.5
+  runner-minutes and a 1053 s wall, of which 167 s is queue.
+* **The runner speed.** The spread of the compile step across the twelve
+  runs (184 to 273 s) is the runner's, not the tree's; §6.4 says the same
+  about the lane's own numbers.
+* **The price of PR #2138.** Two lanes, two runs, two cache states. The
+  merge's own price is not measured here.
+
+### 11.8 How to reproduce this section
+
+```bash
+# One file per pull request: the runs of BOTH workflows, as the API reports
+# them. `filter=all` returns the jobs of EVERY attempt, and the first attempt
+# is the one this section reads: the lowest `run_attempt` of the run.
+stripe () {                             # $1 = run id, $2 = workflow name
+  local id="$1" wf="$2" created
+  created=$(gh api "repos/:owner/:repo/actions/runs/$1" --jq .created_at)
+  gh api "repos/:owner/:repo/actions/runs/$1/jobs?per_page=100&filter=all" \
+    | jq -s --argjson id "$1" --arg wf "$wf" --arg created "$created" \
+        '([.[].jobs[]] | map(.run_attempt) | min) as $first
+         | {id:$id, workflow:$wf, created_at:$created,
+            jobs: [.[].jobs[] | select(.run_attempt == $first)]}'
+}
+{ stripe "$CI_RUN" ci; stripe "$DOCS_RUN" docs; } | jq -s '.' > run-$PR.json
+
+# the instrument
+tools/bin/harbor-gates-linux-x64 pr-cost run-*.json
+tools/bin/harbor-gates-linux-x64 pr-cost --steps run-*.json   # step by step
+tools/bin/harbor-gates-linux-x64 pr-cost --self-test            # the proof
+```
+
+**WHY THE FILTER IS PART OF THE RECIPE.** The Actions API serves the LAST
+attempt of a run by default (`filter=latest`), and for the four runs of
+§11.2 that needed a second attempt the last attempt is a mixture: the jobs
+that were not re-run keep their first-attempt timestamps, and the re-run
+jobs carry later ones. Dropping `--filter=all` and the pick of the lowest
+`run_attempt` moves the wall of those four runs by 393 to 745 s, and the
+median wall of the twelve with them.
+
+**WHY THE RECIPE PUTS BOTH RUNS IN ONE FILE.** A pull request's bill is the
+STRIPE of its two workflows, and the instrument's per-pull-request table is
+a table of stripes: a file with the `ci.yml` run alone measures the lane,
+and a file with both measures the pull request. The `created_at` of the run
+is what the "wait before the first job" column reads, so the recipe fetches
+it from the run itself.
+
+## 12. How to reproduce
 
 All numbers in this doc are reproducible from the repo:
 
@@ -3538,7 +4369,7 @@ dotnet build -c Release
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-## 12. See also
+## 13. See also
 
 - [Architecture layers](./ARCHITECTURE_LAYERS.md) — why the project is split this way
 - [Code principles audit](./CODE_PRINCIPLES_AUDIT.md) — performance findings and fixes

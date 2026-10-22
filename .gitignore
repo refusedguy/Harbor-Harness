@@ -175,3 +175,9 @@ __pycache__/
 # report is a measurement, never a baseline (issue #1847). The committed
 # baseline is tools/jscpd-baseline.json.
 jscpd-report.json
+
+# The duplicate-test-body gate writes its groups next to the checkout when
+# CI asks for the report (`--json-out test-dup-groups.json`), and the local
+# runner asks for the same report so that the two commands agree. It is a
+# diagnostic, never a baseline: the committed one is tools/test-dup-baseline.json.
+test-dup-groups.json

@@ -89,9 +89,17 @@ func countLines(data []byte) int {
 type Cost struct {
 	// Project is the project's path, relative to the solution.
 	Project string
-	// Millis is the project's OWN time: the time MSBuild reported for it,
-	// minus the own time of the projects it references.
+	// Millis is the project's OWN time: the time MSBuild reported for the
+	// project, summed over the instances of it. Nothing is subtracted from
+	// it, because in a build that runs one compiler at a time the build of a
+	// referenced project is not inside the window of the project that
+	// references it (see the package doc).
 	Millis int64
+	// Measured says the log carried a row for this project. A project the
+	// log says NOTHING about has no cost: its zero is the absence of a
+	// measurement, not a measurement of zero, and a caller that treats it
+	// as one prices a project that was never built.
+	Measured bool
 	// Source is the size of the project.
 	Source Source
 }
@@ -122,19 +130,20 @@ func (c Cost) Seconds() float64 {
 // are usable at all (See AttributionRatio).
 func ComputeCosts(graph *Graph, log *Log, sources map[string]Source) map[string]Cost {
 	out := map[string]Cost{}
-	times := ResolveProjectTimes(graph, log)
+	times, measured := ResolveProjectTimes(graph, log)
 	for _, project := range graph.SortedProjects() {
 		out[project] = Cost{
-			Project: project,
-			Millis:  times[project],
-			Source:  sources[project],
+			Project:  project,
+			Millis:   times[project],
+			Measured: measured[project],
+			Source:   sources[project],
 		}
 	}
 	return out
 }
 
 // ResolveProjectTimes maps the solution's projects onto the times the log
-// reported.
+// reported, and says which of them the log measured at all.
 //
 // The log spells a project with the ABSOLUTE path of the machine that built
 // it ("/home/runner/work/Harbor-Harness/Harbor-Harness/src/Harbor.Core/
@@ -146,8 +155,14 @@ func ComputeCosts(graph *Graph, log *Log, sources map[string]Source) map[string]
 // different directories would then share a number, which is wrong, but a
 // tree does not have two projects with the same file name, and a wrong
 // number here would be visible in the table.
-func ResolveProjectTimes(graph *Graph, log *Log) map[string]int64 {
+//
+// The second result says which projects the log carried a ROW for. A project
+// the log says nothing about is not a project that cost nothing: it is a
+// project the log does not measure, and the caller must be able to tell the
+// two apart.
+func ResolveProjectTimes(graph *Graph, log *Log) (map[string]int64, map[string]bool) {
 	out := map[string]int64{}
+	measured := map[string]bool{}
 	byName := map[string]int64{}
 	for path, millis := range log.ProjectMillis {
 		byName[baseName(path)] += millis
@@ -155,6 +170,7 @@ func ResolveProjectTimes(graph *Graph, log *Log) map[string]int64 {
 	for _, project := range graph.SortedProjects() {
 		if millis, ok := log.ProjectMillis[project]; ok {
 			out[project] = millis
+			measured[project] = true
 			continue
 		}
 		suffix := "/" + strings.ReplaceAll(project, "\\", "/")
@@ -163,6 +179,7 @@ func ResolveProjectTimes(graph *Graph, log *Log) map[string]int64 {
 			normalized := strings.ReplaceAll(path, "\\", "/")
 			if strings.HasSuffix(normalized, suffix) {
 				out[project] = millis
+				measured[project] = true
 				found = true
 				break
 			}
@@ -170,33 +187,66 @@ func ResolveProjectTimes(graph *Graph, log *Log) map[string]int64 {
 		if found {
 			continue
 		}
-		out[project] = byName[baseName(project)]
+		// The last resort: the file name. The map holds only the names
+		// the log actually carries, so a name that is not in it is a
+		// project the log says NOTHING about, and it is NOT a project
+		// that cost nothing.
+		if millis, ok := byName[baseName(project)]; ok {
+			out[project] = millis
+			measured[project] = true
+		}
 	}
+	return out, measured
+}
+
+// MeasuredCount is the number of projects the log carried a row for.
+func MeasuredCount(costs map[string]Cost) int {
+	count := 0
+	for _, cost := range costs {
+		if cost.Measured {
+			count++
+		}
+	}
+	return count
+}
+
+// MeasuredCosts returns the costs of the projects the log measured, the
+// most expensive first.
+//
+// The projects the log says nothing about are NOT in the list: their zero
+// is the absence of a measurement, and a caller that priced them would
+// price a project that was never built.
+func MeasuredCosts(costs map[string]Cost) []Cost {
+	out := make([]Cost, 0, len(costs))
+	for _, cost := range costs {
+		if !cost.Measured {
+			continue
+		}
+		out = append(out, cost)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Millis != out[j].Millis {
+			return out[i].Millis > out[j].Millis
+		}
+		return out[i].Project < out[j].Project
+	})
 	return out
 }
 
-// topologicalOrder returns the projects of the graph with the references
-// before the projects that reference them.
-func topologicalOrder(graph *Graph) []string {
-	state := map[string]int{}
-	var order []string
-	var visit func(project string)
-	visit = func(project string) {
-		switch state[project] {
-		case 1, 2:
-			return
+// UnmeasuredCosts returns the costs of the projects the log carried no row
+// for, sorted by the project's path.
+func UnmeasuredCosts(costs map[string]Cost) []Cost {
+	out := make([]Cost, 0, len(costs))
+	for _, cost := range costs {
+		if cost.Measured {
+			continue
 		}
-		state[project] = 1
-		for _, reference := range graph.References[project] {
-			visit(reference)
-		}
-		state[project] = 2
-		order = append(order, project)
+		out = append(out, cost)
 	}
-	for _, project := range graph.SortedProjects() {
-		visit(project)
-	}
-	return order
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Project < out[j].Project
+	})
+	return out
 }
 
 // AttributionRatio is the sum of the per-project times over the compiler's
@@ -232,19 +282,4 @@ func TotalCost(costs map[string]Cost, projects []string) int64 {
 		total += costs[project].Millis
 	}
 	return total
-}
-
-// SortedCosts returns the costs, the most expensive first.
-func SortedCosts(costs map[string]Cost) []Cost {
-	out := make([]Cost, 0, len(costs))
-	for _, cost := range costs {
-		out = append(out, cost)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Millis != out[j].Millis {
-			return out[i].Millis > out[j].Millis
-		}
-		return out[i].Project < out[j].Project
-	})
-	return out
 }

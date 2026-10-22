@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>Palette slash reference — opens the full slash-command palette.</summary>
@@ -11,7 +12,7 @@ internal sealed class HelpCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         ctx.Host.OpenSlashPalette();
         ctx.Host.WakeUp();
         return Task.CompletedTask;

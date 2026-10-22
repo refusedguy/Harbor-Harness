@@ -21,8 +21,8 @@ const (
 
 // rowRe is one row of a performance summary section:
 //
-//	 1234 ms  /w/src/Harbor.Core/Harbor.Core.csproj                       1 calls
-//	 1234 ms  Csc                                                          109 calls
+//	1234 ms  /w/src/Harbor.Core/Harbor.Core.csproj                       1 calls
+//	1234 ms  Csc                                                          109 calls
 //
 // The scope may contain spaces (a project path may), so it is matched
 // lazily and the trailing "N calls" is what closes the row.
@@ -36,8 +36,8 @@ var timestampPrefixRe = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?\s*\|\s?`)
 // Log is what a build log says about the compiler's work.
 //
 // The totals are what the compiler did: the number of Csc calls and the
-// milliseconds they took. The projects are what MSBuild reported per project,
-// INCLUSIVE of the builds of the projects that project references.
+// milliseconds they took. The projects are what MSBuild reported per project:
+// the time it spent on that project, summed over the instances of it.
 type Log struct {
 	// Source is where the log came from.
 	Source string
@@ -104,7 +104,7 @@ func ParseLogReader(source string, reader io.Reader) (*Log, error) {
 
 func parseLog(source string, reader io.Reader) (*Log, error) {
 	out := &Log{
-		Source:       source,
+		Source:        source,
 		ProjectMillis: map[string]int64{},
 		ProjectCalls:  map[string]int{},
 		Tasks:         map[string]int64{},

@@ -655,8 +655,8 @@ finally
 
 Use `Harbor.TestKit.TestMessages` to build realistic `AgentMessage` instances
 without hand-rolling constructors (#1816 — the tree builds every message
-through this factory, and `tools/codemod-test-events.py` moved the call sites
-over):
+through this factory, and `tools/gates/codemod-test-events/` moved the call
+sites over):
 
 ```csharp
 var userMsg    = TestMessages.User("Hello", sessionId: "session-1");
@@ -940,14 +940,17 @@ Two things make that safe, and both are gates rather than comments:
 * **A class in no shard is a class CI stops running.** The plan is graded by
   `E2eAvaloniaShardCoverageRules` in
   [`tests/Harbor.Architecture.Tests`](../tests/Harbor.Architecture.Tests/),
-  which re-derives the class universe from the tree — including the classes of
-  the REFERENCED `Harbor.E2E.Framework` project, which TUnit also runs inside
-  every project that references it, and which a filter that forgot them would
-  drop silently — and fails when one is missing. That check is an architecture
-  rule rather than a test inside the E2E assembly on purpose: a new class
-  there is an UNKEYED test, and its presence reshuffles an order-fragile
-  suite. The first version of the shard table shipped such a guard and it cost
-  two real failures before it was removed (PR #1818).
+  which re-derives the class universe from the tree and fails when one is
+  missing. The universe is the classes of `Harbor.E2E.App.Avalonia` ALONE: a
+  REFERENCED test project cannot contribute one, because
+  `TestProjectReferenceRules` forbids a referenced test project to declare
+  test methods at all. The framework's own tests live in
+  `Harbor.E2E.Framework.Tests`, a project nothing references, and they run
+  exactly once. That check is an architecture rule rather than a test inside
+  the E2E assembly on purpose: a new class there is an UNKEYED test, and its
+  presence reshuffles an order-fragile suite. The first version of the shard
+  table shipped such a guard and it cost two real failures before it was
+  removed (PR #1818).
 * **The runner proves what ran.** It enumerates the assembly's tests with
   `--list-tests json`, compares that map against each shard's TRX, and fails
   naming the class and the shard if a filter dropped anything.

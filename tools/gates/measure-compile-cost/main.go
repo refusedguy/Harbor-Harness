@@ -39,8 +39,8 @@ import (
 // half a second to one second; a number of seconds alone flags a project
 // that was already expensive.
 type Budget struct {
-	Percent  float64
-	Seconds  float64
+	Percent float64
+	Seconds float64
 }
 
 // DefaultBudget is the budget the repository records.
@@ -59,6 +59,69 @@ var DefaultBudget = Budget{Percent: 20, Seconds: 10}
 // scheduler.
 const maxAttributionRatio = 12
 
+// minAttributionRatio is the smallest ratio of the per-project times over the
+// compiler's total that still means "the rows are the work".
+//
+// The compiler's time is INSIDE the rows: every Csc call happens while some
+// project is being built, so the rows of a complete log add up to at least
+// the compiler's total. A ratio below 1 therefore means the log is missing
+// rows — a truncated log, a log of a different build, or a log whose project
+// paths do not match the solution.
+//
+// A ratio below 1 is refused for the same reason a ratio above 12 is: the
+// numbers would not be what they claim to be. With the rows short, the
+// instrument would spread the compiler's whole total over the few rows it
+// has, and every project would be priced with a share of a total it did not
+// earn — a plausible-looking number that the log does not support.
+//
+// The floor is 1 and not higher because the rows of a complete log add up to
+// the compiler's total PLUS the negotiation of the target frameworks, so a
+// complete log measures above 1, and a log that measures below 1 has rows
+// missing.
+const minAttributionRatio = 1
+
+// priceRefusal says whether a log's per-project rows can be priced at all.
+//
+// The empty string means they can. Anything else is the text that says why
+// not, and the caller REFUSES the log: it exits 2, "the gate could not run",
+// and prints no table. The two refusals are the two directions of the same
+// tell:
+//
+//   - a ratio above the ceiling is a build that ran its compilers in
+//     parallel, so the rows hold waiting rather than work;
+//   - a ratio below the floor is a log whose rows are short, so part of the
+//     compiler's time is in no row at all.
+//
+// Both are refusals rather than measurements on purpose: a plausible-looking
+// number that the log does not support is worse than no number, because
+// nothing in the table says where it came from.
+//
+// The function is separate from Run so that the self-test can assert the
+// refusal path, and not only the path that prices.
+func priceRefusal(logPath string, ratio float64) string {
+	if ratio > maxAttributionRatio {
+		return fmt.Sprintf(
+			"the log %s is from a build that ran its compilers in parallel: the\n"+
+				"per-project times add up to %.1f times the compiler's own total, so they\n"+
+				"are dominated by WAITING and not by compilation. A build that ran one\n"+
+				"compiler at a time puts the same numbers at about 3.\n"+
+				"  measure with: dotnet build Harbor.slnx -c Release --no-restore \\\n"+
+				"                   -maxcpucount:1 -v:m -clp:PerformanceSummary\n",
+			logPath, ratio)
+	}
+	if ratio < minAttributionRatio {
+		return fmt.Sprintf(
+			"the log %s does not account for the compiler's own work: the per-project\n"+
+				"times add up to only %.2f times the compiler's own total, so some of the\n"+
+				"compilation is in no project row at all. Spreading the compiler's whole\n"+
+				"total over the rows that are there would price every project with a\n"+
+				"share it did not earn, so this log is refused rather than priced.\n"+
+				"  a complete log's rows add up to at least the compiler's total\n",
+			logPath, ratio)
+	}
+	return ""
+}
+
 // options are the flags of the gate.
 type options struct {
 	log           string
@@ -66,6 +129,7 @@ type options struct {
 	baseline      string
 	writeBaseline string
 	jsonOut       string
+	sourceLabel   string
 	budget        Budget
 	minProjects   int
 	selfTest      bool
@@ -132,6 +196,16 @@ func Run(args []string) int {
 				value = args[i]
 			}
 			opts.jsonOut = value
+		case "--source-label":
+			if !hasValue {
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "--source-label needs a text")
+					return gate.Broken
+				}
+				i++
+				value = args[i]
+			}
+			opts.sourceLabel = value
 		case "--budget-percent":
 			if !hasValue {
 				if i+1 >= len(args) {
@@ -182,6 +256,7 @@ func Run(args []string) int {
 		case "--help", "-h":
 			fmt.Println("usage: harbor-gates measure-compile-cost --log <build.log> [--solution Harbor.slnx]")
 			fmt.Println("                                              [--baseline <file>] [--write-baseline <file>]")
+			fmt.Println("                                              [--source-label <text>]")
 			fmt.Println("                                              [--budget-percent 20] [--budget-seconds 10]")
 			fmt.Println("                                              [--min-projects 1] [--json out.json] [--self-test]")
 			return gate.Green
@@ -229,22 +304,17 @@ func Run(args []string) int {
 	}
 	sources := buildcost.ReadSources(graph)
 	costs := buildcost.ComputeCosts(graph, log, sources)
-	if len(costs) < opts.minProjects {
-		fmt.Fprintf(os.Stderr, "the measurement covers %d projects, and the floor is %d\n",
-			len(costs), opts.minProjects)
+	measuredProjects := buildcost.MeasuredCount(costs)
+	if measuredProjects < opts.minProjects {
+		fmt.Fprintf(os.Stderr,
+			"the log measured %d of the %d projects of the solution, and the floor is %d\n",
+			measuredProjects, len(graph.Projects), opts.minProjects)
 		return gate.Broken
 	}
 
 	ratio := buildcost.AttributionRatio(costs, log.CscMillis)
-	if ratio > maxAttributionRatio {
-		fmt.Fprintf(os.Stderr,
-			"the log %s is from a build that ran its compilers in parallel: the\n"+
-				"per-project times add up to %.1f times the compiler's own total, so they\n"+
-				"are dominated by WAITING and not by compilation. A build that ran one\n"+
-				"compiler at a time puts the same numbers at about 3.\n"+
-				"  measure with: dotnet build Harbor.slnx -c Release --no-restore \\\n"+
-				"                   -maxcpucount:1 -v:m -clp:PerformanceSummary\n",
-			opts.log, ratio)
+	if refusal := priceRefusal(opts.log, ratio); refusal != "" {
+		fmt.Fprint(os.Stderr, refusal)
 		return gate.Broken
 	}
 	measurement := measure(graph, costs, log, ratio)
@@ -261,16 +331,30 @@ func Run(args []string) int {
 	if opts.writeBaseline != "" {
 		baseline := buildcost.NewBaseline()
 		baseline.Source = opts.log
+		if opts.sourceLabel != "" {
+			baseline.Source = opts.sourceLabel
+		}
 		baseline.CscCalls = log.CscCalls
 		baseline.CscSeconds = float64(log.CscMillis) / 1000.0
 		baseline.CoreCompileSeconds = float64(log.CoreCompileMillis) / 1000.0
 		baseline.AttributionRatio = ratio
+		baseline.SolutionProjects = measurement.SolutionProjects
+		baseline.MeasuredProjects = measurement.MeasuredProjects
 		for _, row := range measurement.Projects {
 			baseline.Projects[row.Project] = row.Seconds
 			baseline.ProjectFiles[row.Project] = row.Files
 			baseline.ProjectLines[row.Project] = row.Lines
 		}
 		for _, row := range measurement.Radii {
+			// A radius whose set holds a project this log did not
+			// measure is priced with the measured part of it, and
+			// that price is NOT the price of the set. It is not
+			// recorded: a baseline that holds a lower bound as
+			// if it were the price compares a fresh measurement
+			// against a number that was never true.
+			if row.Measured < row.Projects {
+				continue
+			}
 			baseline.Radius[row.Project] = row.Seconds
 			baseline.RadiusConsumers[row.Project] = row.Consumers
 		}
@@ -299,6 +383,10 @@ func Run(args []string) int {
 }
 
 // projectRow is one row of the per-project table.
+//
+// Every row of the table is a MEASURED project: a project the log carried
+// no row for is not in the table at all, because its zero is the absence of
+// a measurement and not a measurement of zero.
 type projectRow struct {
 	Project string `json:"project"`
 	// OwnSeconds is the time MSBuild reported for the project itself.
@@ -309,6 +397,17 @@ type projectRow struct {
 	Lines   int     `json:"lines"`
 }
 
+// unmeasuredRow is a project the log said nothing about.
+//
+// Its cost is UNKNOWN, and the row says so: the file and line counts are
+// read from the tree and are true, and there is no cost because there was
+// no measurement.
+type unmeasuredRow struct {
+	Project string `json:"project"`
+	Files   int    `json:"files"`
+	Lines   int    `json:"lines"`
+}
+
 // radiusRow is one row of the radius table.
 type radiusRow struct {
 	Project   string  `json:"project"`
@@ -317,18 +416,31 @@ type radiusRow struct {
 	Projects  int     `json:"radius_projects"`
 	Seconds   float64 `json:"seconds"`
 	Share     float64 `json:"share"`
+	// Measured is the number of the projects of the radius set the log
+	// measured. The set holds Projects of them. A row with fewer measured
+	// projects than the set holds is a LOWER BOUND: it is the price of
+	// the measured part of the set, and not the price of the set.
+	Measured int `json:"measured_projects"`
 }
 
 // measurement is everything one run of the instrument produced.
 type measurement struct {
-	Source            string       `json:"source"`
-	CscCalls          int          `json:"csc_calls"`
-	CscSeconds        float64      `json:"csc_seconds"`
-	CoreCompileSecond float64      `json:"corecompile_seconds"`
-	AttributionRatio  float64      `json:"attribution_ratio"`
-	TotalSeconds      float64      `json:"total_seconds"`
-	Projects          []projectRow `json:"projects"`
-	Radii             []radiusRow  `json:"radii"`
+	Source            string  `json:"source"`
+	CscCalls          int     `json:"csc_calls"`
+	CscSeconds        float64 `json:"csc_seconds"`
+	CoreCompileSecond float64 `json:"corecompile_seconds"`
+	AttributionRatio  float64 `json:"attribution_ratio"`
+	TotalSeconds      float64 `json:"total_seconds"`
+	// SolutionProjects is the number of projects the solution holds.
+	SolutionProjects int `json:"solution_projects"`
+	// MeasuredProjects is the number of them the log carried a row for.
+	MeasuredProjects int `json:"measured_projects"`
+	// Projects holds the measured projects, the most expensive first.
+	Projects []projectRow `json:"projects"`
+	// Unmeasured holds the projects the log said nothing about.
+	Unmeasured []unmeasuredRow `json:"unmeasured"`
+	// Radii holds every project of the solution.
+	Radii []radiusRow `json:"radii"`
 }
 
 // measure turns the log and the graph into the two tables.
@@ -338,6 +450,10 @@ type measurement struct {
 // total says how much of the build was compilation. The share is what the
 // radius is priced with, and the shares of the whole tree add up to the
 // compiler's total.
+//
+// A project the log says NOTHING about is not priced. Its zero would be a
+// number the log does not support, and a tree of priced zeros is a tree of
+// invented numbers.
 func measure(graph *buildcost.Graph, costs map[string]buildcost.Cost,
 	log *buildcost.Log, ratio float64) *measurement {
 	out := &measurement{
@@ -346,19 +462,18 @@ func measure(graph *buildcost.Graph, costs map[string]buildcost.Cost,
 		CscSeconds:        float64(log.CscMillis) / 1000.0,
 		CoreCompileSecond: float64(log.CoreCompileMillis) / 1000.0,
 		AttributionRatio:  ratio,
+		SolutionProjects:  len(graph.Projects),
+		MeasuredProjects:  buildcost.MeasuredCount(costs),
 	}
 	var ownTotal float64
-	for _, cost := range costs {
+	for _, cost := range buildcost.MeasuredCosts(costs) {
 		ownTotal += cost.Seconds()
 	}
 	scale := 0.0
 	if ownTotal > 0 {
 		scale = out.CscSeconds / ownTotal
 	}
-	for _, cost := range buildcost.SortedCosts(costs) {
-		if cost.Millis == 0 && cost.Source.Files == 0 {
-			continue
-		}
+	for _, cost := range buildcost.MeasuredCosts(costs) {
 		out.Projects = append(out.Projects, projectRow{
 			Project:    cost.Project,
 			OwnSeconds: cost.Seconds(),
@@ -368,11 +483,28 @@ func measure(graph *buildcost.Graph, costs map[string]buildcost.Cost,
 		})
 		out.TotalSeconds += cost.Seconds() * scale
 	}
+	for _, cost := range buildcost.UnmeasuredCosts(costs) {
+		out.Unmeasured = append(out.Unmeasured, unmeasuredRow{
+			Project: cost.Project,
+			Files:   cost.Source.Files,
+			Lines:   cost.Source.Lines,
+		})
+	}
 	for _, project := range graph.SortedProjects() {
 		radius := graph.RadiusOf(project)
-		seconds := costs[project].Seconds() * scale
+		seconds := 0.0
+		measured := 0
+		if cost, ok := costs[project]; ok && cost.Measured {
+			seconds += cost.Seconds() * scale
+			measured++
+		}
 		for _, consumer := range radius.Consumers {
-			seconds += costs[consumer].Seconds() * scale
+			cost, ok := costs[consumer]
+			if !ok || !cost.Measured {
+				continue
+			}
+			seconds += cost.Seconds() * scale
+			measured++
 		}
 		out.Radii = append(out.Radii, radiusRow{
 			Project:   project,
@@ -380,6 +512,7 @@ func measure(graph *buildcost.Graph, costs map[string]buildcost.Cost,
 			Consumers: len(radius.Consumers),
 			Projects:  len(radius.Consumers) + 1,
 			Seconds:   seconds,
+			Measured:  measured,
 		})
 	}
 	sort.Slice(out.Radii, func(i, j int) bool {
@@ -403,8 +536,8 @@ func printMeasurement(m *measurement, logPath string, log *buildcost.Log) {
 	fmt.Printf("csc seconds                  : %.1f\n", m.CscSeconds)
 	fmt.Printf("corecompile seconds          : %.1f\n", m.CoreCompileSecond)
 	fmt.Printf("attribution ratio            : %.2f\n", m.AttributionRatio)
-	fmt.Printf("the whole tree               : %.1f s of compiler time over %d projects\n",
-		m.TotalSeconds, len(m.Projects))
+	fmt.Printf("the whole tree               : %.1f s of compiler time over %d of %d projects\n",
+		m.TotalSeconds, m.MeasuredProjects, m.SolutionProjects)
 	fmt.Println()
 	fmt.Println("project                                       | csc s | own s | files | lines")
 	fmt.Println("----------------------------------------------+-------+-------+-------+------")
@@ -417,8 +550,24 @@ func printMeasurement(m *measurement, logPath string, log *buildcost.Log) {
 	fmt.Println("project                                       | direct | consumers | csc s | share")
 	fmt.Println("----------------------------------------------+--------+-----------+-------+------")
 	for _, row := range m.Radii {
-		fmt.Printf("%-46s | %6d | %9d | %5.1f | %5.1f %%\n",
-			row.Project, row.Direct, row.Consumers, row.Seconds, row.Share)
+		price := fmt.Sprintf("%5.1f", row.Seconds)
+		if row.Measured < row.Projects {
+			// The set holds a project this log did not measure, so
+			// the price is the price of the measured part of it.
+			price = fmt.Sprintf("%5.1f+", row.Seconds)
+		}
+		fmt.Printf("%-46s | %6d | %9d | %s | %5.1f %%\n",
+			row.Project, row.Direct, row.Consumers, price, row.Share)
+	}
+	if len(m.Unmeasured) > 0 {
+		fmt.Println()
+		fmt.Printf("%d project(s) of the solution were not measured by this log.\n",
+			len(m.Unmeasured))
+		fmt.Println("Their cost is UNKNOWN, not zero, so they are not priced:")
+		for _, row := range m.Unmeasured {
+			fmt.Printf("  %-46s %5d files %7d lines\n", row.Project, row.Files, row.Lines)
+		}
+		fmt.Println("The rows marked + above are a lower bound: their set holds one of them.")
 	}
 }
 
@@ -444,7 +593,7 @@ type verdict struct {
 
 // compare compares the measurement with the recorded baseline.
 //
-// THE GROWTH IS A SHARE, NOT A CLOCK
+// # THE GROWTH IS A SHARE, NOT A CLOCK
 //
 // The rule is "+20 % AND +10 s", and both numbers are about the project's
 // SHARE of the compiler's time, because a threshold on a live wall clock

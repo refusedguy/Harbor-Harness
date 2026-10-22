@@ -45,6 +45,44 @@ const (
 	fixtureRatioTolerance = 0.02
 )
 
+// runCapturing runs the gate and returns what it printed.
+//
+// The gate writes its table to os.Stdout and its refusals to os.Stderr, so
+// the self-test swaps both for a file while it runs and reads them back.
+// The point of the capture is the refusal: a refused log must print NO
+// table, and the self-test has to see the empty stdout to say so.
+func runCapturing(args []string) (code int, out string, errOut string) {
+	outFile, err := os.CreateTemp("", "compile-cost-selftest-out")
+	if err != nil {
+		return gate.Broken, "", "cannot make a temporary file for the captured output"
+	}
+	defer os.Remove(outFile.Name())
+	errFile, err := os.CreateTemp("", "compile-cost-selftest-err")
+	if err != nil {
+		outFile.Close()
+		os.Remove(outFile.Name())
+		return gate.Broken, "", "cannot make a temporary file for the captured error output"
+	}
+	defer os.Remove(errFile.Name())
+
+	originalOut, originalErr := os.Stdout, os.Stderr
+	os.Stdout, os.Stderr = outFile, errFile
+	code = Run(args)
+	os.Stdout, os.Stderr = originalOut, originalErr
+	outFile.Close()
+	errFile.Close()
+
+	written, err := os.ReadFile(outFile.Name())
+	if err != nil {
+		return code, "", "cannot read the captured output"
+	}
+	failed, err := os.ReadFile(errFile.Name())
+	if err != nil {
+		return code, "", "cannot read the captured error output"
+	}
+	return code, string(written), string(failed)
+}
+
 // selfTestRun measures the planted fixture and asserts its shape.
 //
 // The negative example is the point: the fixture is measured twice, once as
@@ -234,6 +272,104 @@ func selfTestRun() int {
 	check(len(unknown.Unknown) == len(measured.Projects),
 		fmt.Sprintf("a project that is not in the baseline is reported: %d of %d",
 			len(unknown.Unknown), len(measured.Projects)))
+
+	// THE REFUSALS. An instrument that prices a log it cannot read is an
+	// instrument that prints plausible numbers nobody can check, so the two
+	// logs the rows cannot support are written here and the gate has to
+	// REFUSE them: exit code 2, "the gate could not run", and no table.
+	//
+	// The parallel log: the same project rows, but the compiler's own
+	// total is a fraction of them, which is what a build that ran its
+	// compilers at once looks like.
+	//
+	// The short log: the compiler's own total is bigger than the rows
+	// add up to, which is what a truncated log, or a log of another build,
+	// looks like.
+	refusals := []struct {
+		name    string
+		from    string
+		to      string
+		wantSay string
+	}{
+		{
+			name:    "a build that ran its compilers in parallel",
+			from:    "    100000 ms  Csc",
+			to:      "      3000 ms  Csc",
+			wantSay: "ran its compilers in parallel",
+		},
+		{
+			name:    "a log whose rows do not add up to the compiler's total",
+			from:    "     40000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/App/App.csproj",
+			to:      "      5000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/App/App.csproj",
+			wantSay: "does not account for the compiler's own work",
+		},
+	}
+	for _, refusal := range refusals {
+		path := filepath.Join(directory, refusal.name+".log")
+		edited := strings.ReplaceAll(string(original), refusal.from, refusal.to)
+		if edited == string(original) {
+			check(false, "the fixture log does not carry the row the "+refusal.name+" log edits")
+			continue
+		}
+		if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+			check(false, "cannot write the "+refusal.name+" log: "+err.Error())
+			continue
+		}
+		code, out, errOut := runCapturing([]string{
+			"--log", path,
+			"--solution", solutionPath,
+			"--min-projects", "1",
+		})
+		check(code == gate.Broken,
+			fmt.Sprintf("the gate refuses %s: it exited %d, and the refusal is %d",
+				refusal.name, code, gate.Broken))
+		check(out == "",
+			fmt.Sprintf("the gate refuses %s, and it printed a table anyway: %q",
+				refusal.name, out))
+		check(strings.Contains(errOut, refusal.wantSay),
+			fmt.Sprintf("the refusal of %s does not say why: %q", refusal.name, errOut))
+	}
+
+	// The fixture itself is admissible: the same question on the log the
+	// fixture wrote must not refuse it, or the refusals above prove
+	// nothing.
+	check(priceRefusal(logPath, ratio) == "",
+		"the fixture log is refused, so the refusal path proves nothing")
+
+	// A project the log says NOTHING about is not priced. Its zero is the
+	// absence of a measurement, and a table that holds it would print a
+	// number the log does not support.
+	missingPath := filepath.Join(directory, "a log with a missing project row.log")
+	missing := strings.ReplaceAll(string(original),
+		"214.851 |     40000 ms  /home/runner/work/Harbor-Harness/Harbor-Harness/src/App/App.csproj   3 calls\n",
+		"")
+	if missing == string(original) {
+		check(false, "the fixture log does not carry the row the missing-row log removes")
+	} else if err := os.WriteFile(missingPath, []byte(missing), 0o644); err != nil {
+		check(false, "cannot write the missing-row log: "+err.Error())
+	} else if missingLog, err := buildcost.ParseLog(missingPath); err != nil {
+		check(false, "the missing-row log does not parse: "+err.Error())
+	} else {
+		missingCosts := buildcost.ComputeCosts(graph, missingLog, sources)
+		missingMeasurement := measure(graph, missingCosts, missingLog,
+			buildcost.AttributionRatio(missingCosts, missingLog.CscMillis))
+		priced := map[string]bool{}
+		for _, row := range missingMeasurement.Projects {
+			priced[row.Project] = true
+		}
+		check(len(missingMeasurement.Projects) == 3,
+			fmt.Sprintf("the missing-row log priced 3 projects, got %d", len(missingMeasurement.Projects)))
+		check(len(missingMeasurement.Unmeasured) == 1,
+			fmt.Sprintf("the missing-row log reported 1 unmeasured project, got %d",
+				len(missingMeasurement.Unmeasured)))
+		check(!priced["src/App/App.csproj"],
+			"a project the log says nothing about is priced, and its zero is not a measurement")
+		if len(missingMeasurement.Unmeasured) == 1 {
+			check(missingMeasurement.Unmeasured[0].Project == "src/App/App.csproj",
+				fmt.Sprintf("the unmeasured project is App, got %q",
+					missingMeasurement.Unmeasured[0].Project))
+		}
+	}
 
 	for _, problem := range problems {
 		fmt.Printf("  SELF-TEST FAIL: %s\n", problem)

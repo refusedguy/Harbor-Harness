@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Overlays;
 
@@ -27,7 +28,7 @@ internal sealed class PluginsPanelCommand : IReplCommand
 
     public async Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         var reload = host.PluginReload;
         if (reload is null)

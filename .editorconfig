@@ -863,6 +863,23 @@ dotnet_diagnostic.ADP0001.severity = suggestion
 # rule can be switched off without switching off its neighbour.
 dotnet_diagnostic.HARCH001.severity = warning # the tree is clean against this rule: the text rule that stays as the oracle reads the whole source text, and the analyzer's differential over the live tree agrees with it
 dotnet_diagnostic.HARCH002.severity = warning # the tree is clean against this rule: the ownership table is the only input, and no project outside the owners declares an owned root
+#
+# HARCH005 — an HTTP client is created at this site, and HARCH006 — it is
+# created inside a delegate, so it is minted per call (#1854). Both are
+# decided by resolving the TYPE: the target-typed `HttpClient client = new();`
+# and the fully qualified `new System.Net.Http.HttpClient()` are one fact, and
+# a name inside a comment or a string literal is not a creation at all.
+#
+# Both are `suggestion`, which is the FIRST step of the ladder in
+# docs/ANALYZERS_AUTHORING.md §Severity. The gate for these two rules is the
+# architecture suite, which drives the analyzer in-process over the live tree
+# and compares the allowance table with what it finds; the build only
+# COLLECTS the findings. They are not at `warning` yet because the table that
+# says which of the seven sites may create a client lives with the gate, not
+# with the compiler, and a build-time rule that cannot see the table would
+# report all seven.
+dotnet_diagnostic.HARCH005.severity = suggestion # the rule's gate is the architecture suite (tests/Harbor.Architecture.Tests/HttpClientReuseRules.cs), which drives this analyzer in-process; the build collects the findings, and the ladder's first step is `suggestion` (docs/ANALYZERS_AUTHORING.md §Severity)
+dotnet_diagnostic.HARCH006.severity = suggestion # the rule's gate is the architecture suite (tests/Harbor.Architecture.Tests/HttpClientReuseRules.cs), which drives this analyzer in-process; the build collects the findings, and the ladder's first step is `suggestion` (docs/ANALYZERS_AUTHORING.md §Severity)
 # ============================================================================
 # PATH-SCOPED SEVERITY OVERRIDES (#838, narrowed at #865; #1905 adds tests/)
 # ============================================================================

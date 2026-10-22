@@ -1357,6 +1357,8 @@ package** and **no new entry** in `Directory.Packages.props`.
 |---|---|---|
 | `HARCH001` | the dynamic-code family of [#626](https://github.com/refusedguy/Harbor-Harness/issues/626): an assembly loaded at run time, a load context, or a type of the emit namespace. It resolves the TYPE, so a type derived from a banned one is a hit, and a comment or a string literal that names one is not. | `warning`, so `TreatWarningsAsErrors` makes it a build error. The tree is clean against it: the text rule that remains as the oracle reads 100 % of the source text, and the analyzer's differential over the live tree agrees with it. |
 | `HARCH002` | a namespace root declared by a project that does not own it, which is the invariant of [#452](https://github.com/refusedguy/Harbor-Harness/issues/452). A file walk cannot state it, because the shared source folders are compiled into several assemblies at once. | `warning`, for the same reason. The ownership table is the one fact no compiler can supply, and the live tree is clean against it. |
+| `HARCH005` | an HTTP client is created at this site, which is the invariant of [#1854](https://github.com/refusedguy/Harbor-Harness/issues/1854). It resolves the TYPE, so the target-typed `HttpClient client = new();` and the fully qualified `new System.Net.Http.HttpClient()` are one fact, and a name inside a comment or a string literal is not a creation at all. | `suggestion` — the first step of the ladder in [ANALYZERS_AUTHORING.md §Severity](./ANALYZERS_AUTHORING.md#severity). The gate is the architecture suite, which drives the analyzer in-process over the live tree and compares the allowance table with what it finds; the build only collects the findings. It is not at `warning` yet because the table that says which sites may create a client lives with the gate, not with the compiler. |
+| `HARCH006` | an HTTP client is created inside a delegate, so it is minted per call. It reads the SYNTAX TREE, so it sees all three spellings of the shape — an expression-bodied lambda, a lambda with a block body, and an anonymous method — where the text rule it replaces saw one. | `suggestion`, for the same reason as `HARCH005`. |
 
 **The exception belongs to the caller.** The plugin family is exempt from
 `HARCH001` **by id**, in `src/Directory.Build.props`, with the same predicate
@@ -1617,16 +1619,33 @@ references that none of them reach:
 | `RT0002` | a `<ProjectReference>` the compiler never uses |
 | `RT0003` | a `<PackageReference>` the compiler never uses |
 
-It is **off by default and on in exactly one place**: the `reference-trimmer`
-job in `.github/workflows/ci.yml` sets the `HarborReferenceTrimmer` property,
-which is what makes `Directory.Build.props` add the `<PackageReference>`. The
-ordinary build is untouched.
+It is **off by default and on in exactly one place**: the `build` job in
+`.github/workflows/ci.yml`, whose compile step sets the `HarborReferenceTrimmer`
+property, which is what makes `Directory.Build.props` add the
+`<PackageReference>`. The ordinary local build is untouched — the property is
+not set there, and the analyzer package is not restored.
 
-It is a separate job rather than a build step for three reasons: the analysis
-costs a semantic pass over every compilation; its findings are warnings, and
-this repository sets `TreatWarningsAsErrors=true`, so the package would break
-the build the day it was added; and the tool sees source only, so it cannot
-see reflection, DI registration by convention or a plugin loaded by name.
+Since #2108 it runs **inside** that compile rather than in a job of its own.
+It used to have a separate job, and that job compiled the whole tree a second
+time (`dotnet restore` + `dotnet build Harbor.slnx -c Release`): 260 s, 22 % of
+the pull-request lane's runner-minutes, for one answer. The analyzer now runs
+in the compile the lane already pays for, and the gate reads the findings out
+of that compile's warning log.
+
+Two things keep the merge safe. The findings are warnings, and this
+repository sets `TreatWarningsAsErrors=true`, so the RT codes are demoted back
+to warnings when the analyzer is on — `NoWarn` would have been wrong, because
+it would hide the findings from the compiler's output and the gate would read
+an empty log and call it clean. And the analyzer needs the XML documentation
+file (it says so itself, in RT0000: without the doc file its "used
+references" answer is less accurate, because a reference used only from a
+`<see cref="…"/>` is bound only when the documentation is generated), so the
+compile turns the doc file on — as a global property, because fourteen test
+projects turn it off in their own `.csproj`.
+
+The tool sees source only, so it cannot see reflection, DI registration by
+convention or a plugin loaded by name: every finding is a CANDIDATE that a
+human reads, and the baseline is where that read is recorded.
 
 The gate is [the compiled `check-reference-trimmer` gate](../tools/gates/check-reference-trimmer/main.go)
 and its ratchet is

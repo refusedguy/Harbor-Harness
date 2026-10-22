@@ -34,6 +34,14 @@ type Baseline struct {
 	// total. It is the number that says whether the per-project numbers
 	// are compile costs or scheduler.
 	AttributionRatio float64
+	// SolutionProjects is the number of projects the solution held when
+	// the measurement was taken.
+	SolutionProjects int
+	// MeasuredProjects is the number of them the log carried a row for.
+	// The two numbers together say how much of the tree the measurement
+	// covers: a project the log says nothing about is NOT a project that
+	// cost nothing, and it is not recorded as one.
+	MeasuredProjects int
 	// Projects maps a project path to its recorded cost in seconds.
 	Projects map[string]float64
 	// ProjectFiles and ProjectLines are the recorded size of every
@@ -85,6 +93,8 @@ func WriteBaseline(path string, baseline *Baseline) error {
 	text.WriteString(fmt.Sprintf("csc-seconds %.1f\n", baseline.CscSeconds))
 	text.WriteString(fmt.Sprintf("corecompile-seconds %.1f\n", baseline.CoreCompileSeconds))
 	text.WriteString(fmt.Sprintf("attribution-ratio %.2f\n", baseline.AttributionRatio))
+	text.WriteString(fmt.Sprintf("solution-projects %d\n", baseline.SolutionProjects))
+	text.WriteString(fmt.Sprintf("measured-projects %d\n", baseline.MeasuredProjects))
 	text.WriteString(fmt.Sprintf("source %s\n", baseline.Source))
 	text.WriteString("\n")
 	text.WriteString(SectionProject + "\n")
@@ -126,22 +136,38 @@ const baselineHeader = `# compile-cost-baseline - what every project of the tree
 #   [compiler]  the compiler's own totals of the measurement: how many Csc
 #               calls the build made, how many seconds they took, and the
 #               attribution ratio (the sum of the per-project own times over
-#               the compiler's total). A ratio near 1 means the measurement
-#               came from a build that ran one compiler at a time, and the
-#               per-project numbers are compile costs; a ratio of an order
-#               of magnitude more means the build ran its compilers in
-#               parallel and the per-project numbers are dominated by
-#               waiting, so the instrument refuses to price a radius with
-#               them.
+#               the compiler's total). A ratio of about 1 to 3 means the
+#               measurement came from a build that ran one compiler at a
+#               time, and the per-project numbers are compile costs; a ratio
+#               of an order of magnitude more means the build ran its
+#               compilers in parallel and the per-project numbers are
+#               dominated by waiting, so the instrument refuses to price a
+#               radius with them. A ratio BELOW 1 means the log is missing
+#               rows, and the instrument refuses that too.
+#
+#               solution-projects and measured-projects say how much of the
+#               tree the measurement covers: the log measured that many of
+#               the solution's projects. A project the log says nothing
+#               about is NOT a project that cost nothing, and it is not
+#               recorded as one.
 #
 #   [project]   what one project cost the compiler, in seconds, and how big
 #               it is (the .cs files the compiler reads, and their lines):
 #                 <path> | <seconds> | <files> | <lines>
+#               The rows are the projects the log measured. A project the
+#               log says nothing about has no row: its cost is unknown, and
+#               a row with a zero would say it cost nothing.
 #
 #   [radius]    what a change in one project costs: the number of projects
 #               that depend on it, directly or through another project, and
 #               the price of that set in seconds:
 #                 <path> | <transitive consumers> | <seconds>
+#               The rows are the radii whose set was measured WHOLE. A set
+#               with a project missing from the log is priced with the
+#               measured part of it, and that price is a lower bound, so it
+#               is not recorded here: a baseline that holds a lower bound as
+#               if it were the price compares a fresh measurement against a
+#               number that was never true.
 #
 # HOW TO RE-MEASURE
 #
@@ -152,6 +178,11 @@ const baselineHeader = `# compile-cost-baseline - what every project of the tree
 #      cannot say what one project costs the compiler.
 #   2. Write the new baseline:
 #        harbor-gates measure-compile-cost --log <log> \
+#          --write-baseline tools/compile-cost-baseline.txt
+#      The "source" line is the path of the log. A measurement taken from a
+#      CI run says which run it was, and names it with --source-label:
+#        harbor-gates measure-compile-cost --log <log> \
+#          --source-label "ci-run 39483960190, arm c-verbose" \
 #          --write-baseline tools/compile-cost-baseline.txt
 #
 # THE BUDGET
@@ -222,6 +253,18 @@ func ReadBaseline(path string) (*Baseline, error) {
 					return nil, fmt.Errorf("%s:%d: attribution-ratio is not a number: %w", path, number+1, err)
 				}
 				out.AttributionRatio = parsed
+			case "solution-projects":
+				parsed, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, fmt.Errorf("%s:%d: solution-projects is not a number: %w", path, number+1, err)
+				}
+				out.SolutionProjects = parsed
+			case "measured-projects":
+				parsed, err := strconv.Atoi(value)
+				if err != nil {
+					return nil, fmt.Errorf("%s:%d: measured-projects is not a number: %w", path, number+1, err)
+				}
+				out.MeasuredProjects = parsed
 			case "source":
 				out.Source = value
 			}

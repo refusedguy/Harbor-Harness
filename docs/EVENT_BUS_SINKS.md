@@ -31,10 +31,10 @@ projection or a third-party extension — when nothing downstream of it becomes
 *wrong*, only less informed.
 
 The verdict is declared by the sink (`IEventBusMiddleware.SinkKind`,
-`src/Harbor.Abstractions/Events/IEventBusMiddleware.cs:51`), **defaults to
+`src/Harbor.Abstractions/Events/IEventBusMiddleware.cs:63`), **defaults to
 mandatory** so an unconsidered sink can never be bypassed by accident, and is
 read **once in the bus constructor**
-(`src/Harbor.Registries/Events/InMemoryEventBus.cs:302-315`). Nothing on the
+(`src/Harbor.Registries/Events/InMemoryEventBus.cs:296-320`). Nothing on the
 publish path re-derives it, and no sink type is special-cased by name.
 
 **Optional does not mean "may be skipped in silence."** On the fast path the bus
@@ -47,26 +47,26 @@ publish path re-derives it, and no sink type is special-cased by name.
 | # | Site | Sink | Verdict | Reason (what breaks if the event is silently dropped) |
 |---|---|---|---|---|
 | 1 | *removed in #478* — was `apps/Harbor.App.Cli/Hosting/HostBuilder.cs` | ~~`TypeFilterMiddleware` (CLI preset)~~ | **n/a — deleted** | it was registered with NO allowed types, so it admitted every event while still declaring **mandatory**: the CLI paid the mandatory-sink cost (fast path off, queue-age envelope built) for a filter that dropped nothing. Deleting it is delivery-neutral — the filter passed everything — and it was the one term in this table that was not true |
-| 2 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:143` | `EventBusScrollback = 1000` (retention) | **retention, armed by its reader** (#518) | capacity alone no longer gates the fast path: a reader asking for history arms the ring on the spot, so an unread one is neither written nor paid for. With #1 gone, nothing is left in this preset to observe a publish — see §5 |
-| 3 | `src/Harbor.Hosting/HarborComposeOptions.cs:151-155` | `CliDefault()` — scrollback 1000, no sinks | **retention, armed by its reader** (#518) | same as #2, and with #1 removed this preset is now structurally identical to #4 |
-| 4 | `src/Harbor.Hosting/HarborComposeOptions.cs:157-160` | `DesktopDefault()` — no sink, default capacity | **retention, armed by its reader** (#518) | same as #2 — no sink, and nobody reads the ring |
+| 2 | `apps/Harbor.App.Cli/Hosting/HostBuilder.cs:182` | `EventBusScrollback = 1000` (retention) | **retention, armed by its reader** (#518) | capacity alone no longer gates the fast path: a reader asking for history arms the ring on the spot, so an unread one is neither written nor paid for. With #1 gone, nothing is left in this preset to observe a publish — see §5 |
+| 3 | `src/Harbor.Hosting/HarborComposeOptions.cs:177-182` | `CliDefault()` — scrollback 1000, no sinks | **retention, armed by its reader** (#518) | same as #2, and with #1 removed this preset is now structurally identical to #4 |
+| 4 | `src/Harbor.Hosting/HarborComposeOptions.cs:185-189` | `DesktopDefault()` — no sink, default capacity | **retention, armed by its reader** (#518) | same as #2 — no sink, and nobody reads the ring |
 | 5 | `src/Harbor.Hosting/HarborComposeOptions.cs:79` | `EventBusMiddlewares` factory | **n/a (wiring)** | the composition-time channel through which #1/#4 reach the bus; `null` means "no sinks", never "sniff later" |
-| 6 | `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | the one place a bus is constructed in production | **n/a (wiring)** | computes the mandatory set once and hands the bus to DI; the verdict never depends on DI order |
+| 6 | `src/Harbor.Hosting/Modules/ConfigurationModule.cs:82-86` | the one place a bus is constructed in production | **n/a (wiring)** | computes the mandatory set once and hands the bus to DI; the verdict never depends on DI order |
 | 7 | `src/Harbor.Registries/Events/TypeFilterMiddleware.cs` | type allowlist filter | **mandatory** | same reason as a filter should have: it is a contract on what the projections downstream may see, so bypassing it would push unapproved event types into rendered state. Since #478 the verdict is earned rather than assumed — the constructor rejects an empty allowlist, so a mandatory sink cannot be one that admits everything (`tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs` fails the build on a typeless product call site) |
 | 8 | `src/Harbor.Registries/Events/SamplingMiddleware.cs:34` | rate limiter for `MessageUpdateEvent` | **optional** | its own job is to drop events for cheaper rendering; nothing downstream becomes *wrong* without it, only less sampled. It is drained on the fast path anyway |
 | 9 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:353-405` | the publish guard itself | **n/a (decision)** | the only place a publish may be short-circuited; §3 |
-| 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:460-473`, counters at `:582-629` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
-| 11 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:474` | `LogDebug("Publishing event: …")` | **optional (diagnostic)** | a log line; not a record anyone reconciles against |
+| 10 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:465-476`, counters at `:591-655` | queue-age envelope (`PublishedCount`, `InflightPublishCount`, `OldestPendingAge`, `MaxDispatchDuration`) | **accounting/telemetry — skipped, but counted** | the envelope is deliberately not entered on the fast path (#47/S2 computes percentiles over completed slow-path publishes only). The skip is not silent: `FastPathCount` makes the total publish count exact (`FastPathCount + PublishedCount`) |
+| 11 | `src/Harbor.Registries/Events/InMemoryEventBus.cs:484` | `LogDebug("Publishing event: …")` | **optional (diagnostic)** | a log line; not a record anyone reconciles against |
 | 12 | `src/Harbor.Plugins.Host/NullEventBus.cs:11` | no-op bus for the standalone MCP plugin host | **optional (all sinks absent by construction)** | there is no subscriber, no retention and no sink, so every publish is unobservable *by design of the host*, not by accident of a guard |
 | 13 | `contrib/apps/Harbor.App.Wpf/App.xaml.cs:176` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | no scrollback override → library default capacity. Listed for completeness only: `contrib/` is unmaintained and outside CI, so its composition is not exercised by anything in this repo |
 | 14 | `contrib/apps/Harbor.App.Maui/MauiProgram.cs:76` | `AddSingleton<IEventBus, InMemoryEventBus>()` | **retention, armed by its reader** (#518) | same as #13 |
-| 15 | `apps/Harbor.App.Avalonia/AppHost.cs:76` + `src/Harbor.Hosting/Modules/ConfigurationModule.cs:70-74` | desktop preset through `AddHarbor` | **retention, armed by its reader** (#518) | no sink, default capacity → **eligible**, 200/200 (§5) |
-| 16 | `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:60`, `src/Harbor.Abstractions/Plugins/IPlugin.cs:123`, `src/Harbor.Plugins.Host/McpPluginLoadHost.cs:40` | the bus handed to plugins | **optional** | third-party code: a plugin subscription is an extension point, and it must not be able to defeat the fast path for the host. The host's own state never depends on a plugin observing an event |
+| 15 | `apps/Harbor.App.Avalonia/AppHost.cs:76` + `src/Harbor.Hosting/Modules/ConfigurationModule.cs:82-86` | desktop preset through `AddHarbor` | **retention, armed by its reader** (#518) | no sink, default capacity → **eligible**, 200/200 (§5) |
+| 16 | `src/Harbor.Plugins.Abstractions/IPluginLoadHost.cs:71`, `src/Harbor.Abstractions/Plugins/IPlugin.cs:172`, `src/Harbor.Plugins.Host/McpPluginLoadHost.cs:65` | the bus handed to plugins | **optional** | third-party code: a plugin subscription is an extension point, and it must not be able to defeat the fast path for the host. The host's own state never depends on a plugin observing an event |
 | 17 | `tests/Harbor.Core.Tests/EventBusMiddlewareTests.cs:15,30,45,59,72,94,108` + the stubs themselves at `tests/Harbor.TestKit.Support/TestEventBusMiddleware.cs:25-95` | pass-through / drop / transform / throwing / recording fakes | **mandatory (interface default)** | they are the pipeline's own test surface; declaring nothing must keep them on the full path, and the default does exactly that |
-| 18 | `tests/Harbor.App.Cli.Tests/CellForgeReplSmokeTests.cs:49`, `tests/Harbor.Ipc.Tests/TestHost.cs:30`, `tests/Harbor.LoadTests/MultiSessionLoadHarness.cs:101`, `tests/Harbor.Plugins.Runtime.Tests/TestSupport/FakePluginLoadHost.cs:76` | test buses | **mandatory retention / n/a** | constructed with the default capacity; they are not the case under test |
+| 18 | `tests/Harbor.App.Cli.Tests/CellForgeReplSmokeTests.cs:51`, `tests/Harbor.Ipc.Tests/TestHost.cs:33`, `tests/Harbor.LoadTests/MultiSessionLoadHarness.cs:125`, `tests/Harbor.Plugins.Runtime.Tests/TestSupport/FakePluginLoadHost.cs:82` | test buses | **mandatory retention / n/a** | constructed with the default capacity; they are not the case under test |
 | 19 | `tests/Harbor.TestKit/Fakes/IEventBus.cs:6`, `tests/Harbor.Plugins.Runtime.Tests/TestSupport/RecordingEventBus.cs:9` | `FakeEventBus`, `RecordingEventBus` | **n/a (test doubles)** | they replace the bus rather than sit behind it |
-| 20 | `tests/Harbor.Benchmarks/EventBusBenchmark.cs:23`, `EventBusScrollbackBenchmark.cs:27,33,83`, `EventBroadcasterThroughputBenchmark.cs:33`, `EventBusFastPathBenchmark.cs` | benchmark buses | **n/a (measurement)** | the fast-path file is the only one that constructs a 0-scrollback bus on purpose, because it is the row that must report 0 B/op |
-| 21 | `tests/Harbor.Benchmarks/AgentLoopBenchmark.cs:354` | `BenchEventBus` (drops everything) | **n/a (measurement)** | isolates AgentLoop cost from bus cost |
+| 20 | `tests/Harbor.Benchmarks/EventBusBenchmark.cs:139-143`, `EventBusScrollbackBenchmark.cs:48,61,176,237`, `EventBroadcasterThroughputBenchmark.cs:63,196`, `EventBusFastPathBenchmark.cs` | benchmark buses | **n/a (measurement)** | the fast-path file is the only one that constructs a 0-scrollback bus on purpose, because it is the row that must report 0 B/op |
+| 21 | `tests/Harbor.Benchmarks/AgentLoopBenchmark.cs:358` | `BenchEventBus` (drops everything) | **n/a (measurement)** | isolates AgentLoop cost from bus cost |
 
 <!-- #594 deleted the allow-unwired EventBusAppStoreDispatcher escape hatch
      above, because the type it protected no longer exists. An allowance for a
@@ -90,17 +90,19 @@ recorded, because they answer #44's topology question.
 | Site | Verdict | Reason |
 |---|---|---|
 | `src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303` | mandatory | listener fan-out drives sub-agent/turn accounting. The subscription is taken when a caller calls `IAgent.Subscribe`, not in the agent's constructor (#1561): the agent no longer holds a bus subscription of its own, so an agent nobody listens to leaves the bus with zero subscribers |
-| `src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:102,103` | mandatory | tool-error and agent-error records must exist for `/diagnostics` |
+| `src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107` | mandatory | tool-error and agent-error records must exist for `/diagnostics` |
 | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129` | mandatory | remote/daemon clients and reconnect replay (own 1000-envelope ring) |
 | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104` | mandatory | in-process client stream |
 | `src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18` | mandatory | CellForge renderer |
-| `src/Harbor.Tui.CellForge/Chat/Streaming/InlineAgentStreamBridge.cs:31` | mandatory | inline agent stream renderer |
-| `apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,467` | mandatory | REPL renderer, live for the session |
-| `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:98-103` | mandatory | CellForge REPL event pump (`_events` channel → render loop) |
+| `src/Harbor.Tui.CellForge/Chat/Streaming/InlineAgentStreamBridge.cs:35` | mandatory | inline agent stream renderer |
+| `apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474` | mandatory | REPL renderer, live for the session |
+| `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:163` | mandatory | CellForge REPL event pump (`_events` channel → render loop) |
 | `apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61` | mandatory | Avalonia UI state router |
-| `apps/Harbor.App.Cli/Commands/DemoCommand.cs:237` | optional | demo renderer; no state depends on it |
+| `apps/Harbor.App.Cli/Commands/DemoCommand.cs:238` | optional | demo renderer; no state depends on it |
+| `apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278` | optional | the demo scene's own recorder; no state depends on it |
+| `src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136` | mandatory | the per-turn summary the oracle reports; a dropped turn record is a wrong report |
 | plugin subscriptions (#16 above) | optional | third-party extension point |
-| `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:30` | n/a | the proxy holds no subscription of its own — it forwards to the agent, and since #1561 the agent's subscription IS a bus subscription |
+| `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:32` | n/a | the proxy holds no subscription of its own — it forwards to the agent, and since #1561 the agent's subscription IS a bus subscription |
 
 `EventBusAppStoreDispatcher` used to sit in this table as "the UI state
 projection — the state the user reads". It was not: no composition root
@@ -119,7 +121,7 @@ fast path  ⇔  FastPathEligible
 ```
 
 - `HasMandatorySink` is computed **once in the constructor** from the sinks'
-  own `SinkKind` verdicts (`InMemoryEventBus.cs:302-315`). A sink that declares
+  own `SinkKind` verdicts (`InMemoryEventBus.cs:296-320`). A sink that declares
   nothing counts as mandatory, so an unconsidered sink keeps the full path.
 - `RetentionArmed` flips on the first `GetScrollback` call
   (`src/Harbor.Registries/Events/EventBusScrollbackStore.cs:141`) and never flips back (#518).
