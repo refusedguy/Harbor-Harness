@@ -85,7 +85,6 @@ src/Harbor.Abstractions.Contracts/ObservedAttribute.cs | NEVER-RAN | Nothing in 
 src/Harbor.Abstractions.Contracts/TerminalEscapeAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions.Contracts/TuiRendererAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions/Ide/IHarborIdeClient.cs | NEVER-RAN | The record is the IDE client's result value; the IDE bridge of the CLI is not started by any suite of the lane, so nothing constructs it. | @refusedguy
-src/Harbor.Abstractions/Sessions/ISessionStore.cs | NEVER-RAN | The contract's DEFAULT member bodies are what the engine reports, and no suite of the lane calls a default implementation. | @refusedguy
 src/Harbor.Abstractions/Terminal/ITerminalPaneLauncher.cs | NEVER-RAN | The terminal pane is launched by the desktop app and the CLI, neither of which a suite of the lane starts. | @refusedguy
 src/Harbor.Abstractions/Tools/ToolInfoAttribute.cs | NEVER-RAN | Nothing in the tree applies the attribute with an argument, so the constructor the engine reports never runs. | @refusedguy
 src/Harbor.Abstractions/Tui/ITuiRenderer.cs | NEVER-RAN | The record is the key-press value of the renderer contract; the renderers of the UI are not driven by any suite of the lane. | @refusedguy
@@ -93,11 +92,13 @@ src/Harbor.Abstractions/Tui/QrMatrix.cs | NEVER-RAN | The QR matrix is drawn by 
 src/Harbor.Application/Resilience/IRetryPolicy.cs | NEVER-RAN | The retry policy contract has no implementation that a suite of the lane constructs, so the declaration the engine reports never runs. | @refusedguy
 src/Harbor.CodeGen/EscapeCodeGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.CodeGen/MoodFrameGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/ObservedDiagnostics.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.CodeGen/ObservedGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process. The one suite that drives it in process (tests/Harbor.CodeGen.Tests) is out of this lane on purpose — tools/ci-project-lists.json names it under coverage.exclude, for the same reason it names Harbor.TestKit.Generators.Tests — so no suite of the lane runs a line of it. | @refusedguy
 src/Harbor.CodeGen/ReactiveHookGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.CodeGen/RendererAdapterGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.CodeGen/ResourceKeyGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.CodeGen/ToolGlueGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
+src/Harbor.CodeGen/ToolSchemaGenerator.cs | NEVER-RAN | The generator runs inside the compiler at build time, not inside a test process, so no suite of the lane ever runs a line of it. | @refusedguy
 src/Harbor.DesignSystem/DesignSystem/CellStyle.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.DesignSystem/DesignSystem/ChatPalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.DesignSystem/DesignSystem/ColorPalette.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
@@ -142,6 +143,8 @@ src/Harbor.Hosting/Modules/PluginAutoReloader.cs | NEVER-RAN | The reloader watc
 src/Harbor.Hosting/RuntimeRendererSwapMiddleware.cs | NEVER-RAN | The middleware sits in the CLI host's request pipeline, and no suite of the lane starts the CLI host. | @refusedguy
 src/Harbor.Logging/LoggerSetup.cs | NEVER-RAN | The logging is configured by the application hosts, and no suite of the lane starts a host. | @refusedguy
 src/Harbor.Plugins.Abstractions/IPluginAuditLog.cs | NEVER-RAN | The audit log contract is implemented by the plugin host, which no suite of the lane starts. | @refusedguy
+src/Harbor.Plugins.Host/ConfigFilePluginConfigSource.cs | NEVER-RAN | The plugin host reads the plugin's configuration from disk when the host starts, and no suite of the lane starts the host. | @refusedguy
+src/Harbor.Plugins.Host/PluginInventoryPublisher.cs | NEVER-RAN | The inventory is published by the running plugin host, and no suite of the lane starts the host. | @refusedguy
 src/Harbor.Plugins.Hosting/LazyPluginCompiler.cs | NEVER-RAN | The lazy compiler runs when a CS-source plugin is loaded, and no suite of the lane loads one. | @refusedguy
 src/Harbor.Plugins.Host/NullEventBus.cs | NEVER-RAN | The null bus is the fallback the plugin host wires, and no suite of the lane starts the host. | @refusedguy
 src/Harbor.Plugins.Host/Program.cs | NEVER-RAN | The plugin host is an out-of-process executable that speaks MCP over stdout; no suite of the lane starts it. | @refusedguy
@@ -168,6 +171,7 @@ src/Harbor.Terminal.Pty/PermissionGatedTerminalPaneLauncher.cs | NEVER-RAN | The
 src/Harbor.Terminal.Pty/PtyProcess.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.Terminal.Pty/PtyTerminalPane.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.Tools.Builtin/FacadeMarker.cs | NEVER-RAN | The marker exists so the architecture suite force-loads the facade assembly; the field it holds is never read. | @refusedguy
+src/Harbor.Tools.Builtin/ToolParamAttribute.cs | NEVER-RAN | The attribute is instantiated by the compiler when it reads the tool's declaration, not by a test process, so no suite of the lane runs a line of it. | @refusedguy
 src/Harbor.Transport.Remote/RemoteGateway.cs | NEVER-RAN | The gateway is the IPC server side, and no suite of the lane starts a daemon that would serve it. | @refusedguy
 src/Harbor.Tui.AnsiPlain/AnsiTuiRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy
 src/Harbor.Tui.AnsiPlain/TerminalQrRenderer.cs | NEVER-RAN | The Avalonia and end-to-end suites that reach this file are not part of the nightly coverage lane, so no line of it runs there. | @refusedguy

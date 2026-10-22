@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Tui.CellForge.Widgets;
 
 namespace Harbor.App.Cli.Repl.Commands;
@@ -18,7 +19,7 @@ internal sealed class SetupCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         ctx.Host.Palette.Hide();
 
         if (!string.Equals(ctx.RawId, "checklist", StringComparison.OrdinalIgnoreCase)

@@ -122,6 +122,8 @@
   href: SCRIPTING.md
 - name: Security Audit
   href: SECURITY_AUDIT.md
+- name: Semantic Guards
+  href: SEMANTIC_GUARDS.md
 - name: Session Format
   href: SESSION_FORMAT.md
 - name: Spectre Tui Deep Dive

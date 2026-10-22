@@ -41,7 +41,7 @@ check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 10
 check-doc-facts.py	python3 tools/check-doc-facts.py --min-facts 5
 check-analyzer-scope.py	python3 tools/check-analyzer-scope.py --min-files 150
 check-tunit-analyzer-gate.py	python3 tools/check-tunit-analyzer-gate.py
-check-coverage-registry.py	python3 tools/check-coverage-registry.py
+check-coverage-registry.py	python3 tools/check-coverage-registry.py	tools/bin/harbor-gates-linux-x64 check-coverage-registry
 check-shard-balance.py	python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
 test-census.py	python3 tools/test-census.py TestResults

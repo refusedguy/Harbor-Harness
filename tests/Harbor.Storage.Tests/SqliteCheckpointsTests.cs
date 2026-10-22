@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -61,7 +62,7 @@ public class SqliteCheckpointsTests
             var ids = await SeedAsync(store, session.Id, 3);
 
             var marked = await store.CreateCheckpointAsync(session.Id, ids[1], "before-refactor");
-            await Assert.That(marked.IsSuccess).IsTrue();
+            await Assert.That(marked).IsSuccessful();
             await Assert.That(marked.Value.MessageId).IsEqualTo(ids[1]);
             await Assert.That(marked.Value.MessageIndex).IsEqualTo(1);
             await Assert.That(marked.Value.Label).IsEqualTo("before-refactor");
@@ -95,7 +96,7 @@ public class SqliteCheckpointsTests
             var checkpoint = (await store.CreateCheckpointAsync(session.Id, ids[1])).Value;
 
             var rewound = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value.Removed).IsEqualTo(2);
             await Assert.That(rewound.Value.Remaining).IsEqualTo(2);
             await Assert.That(rewound.Value.MessageId).IsEqualTo(ids[1]);
@@ -121,7 +122,7 @@ public class SqliteCheckpointsTests
 
             // The restored checkpoint survived, so rewinding there twice works.
             var rewoundAgain = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewoundAgain.IsSuccess).IsTrue();
+            await Assert.That(rewoundAgain).IsSuccessful();
             await Assert.That(rewoundAgain.Value.Removed).IsEqualTo(1);
             await Assert.That(rewoundAgain.Value.Remaining).IsEqualTo(2);
         }
@@ -143,7 +144,7 @@ public class SqliteCheckpointsTests
             var late = await store.CreateCheckpointAsync(session.Id, ids[2], "late");
 
             var rewound = await store.RewindToCheckpointAsync(session.Id, early.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value.Removed).IsEqualTo(3);
             await Assert.That(rewound.Value.Remaining).IsEqualTo(1);
 
@@ -175,7 +176,7 @@ public class SqliteCheckpointsTests
             var ids = await SeedAsync(store, session.Id, 4);
             var checkpoint = (await store.CreateCheckpointAsync(session.Id, ids[1], "label")).Value;
             var rewound = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
 
             var listedBefore = await store.ListCheckpointsAsync(session.Id);
             var messagesBefore = await store.GetMessagesAsync(session.Id);
@@ -186,7 +187,7 @@ public class SqliteCheckpointsTests
             var reloaded = new SqliteSessionStore(dbPath, NullLogger<SqliteSessionStore>.Instance);
 
             var listedAfter = await reloaded.ListCheckpointsAsync(session.Id);
-            await Assert.That(listedAfter.IsSuccess).IsTrue();
+            await Assert.That(listedAfter).IsSuccessful();
             await Assert.That(listedAfter.Value.Count).IsEqualTo(listedBefore.Value.Count);
             for (int i = 0; i < listedBefore.Value.Count; i++)
             {
@@ -212,7 +213,7 @@ public class SqliteCheckpointsTests
             // restored checkpoint reports the single message appended since.
             await reloaded.AppendMessageAsync(session.Id, Msg(session.Id, 99));
             var again = await reloaded.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(again.IsSuccess).IsTrue();
+            await Assert.That(again).IsSuccessful();
             await Assert.That(again.Value.Removed).IsEqualTo(1);
             await Assert.That(again.Value.Remaining).IsEqualTo(2);
         }
@@ -233,7 +234,7 @@ public class SqliteCheckpointsTests
 
             var result = await store.RewindToCheckpointAsync(session.Id, "no-such-checkpoint");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("no-such-checkpoint");
             await Assert.That(result.Error).Contains(session.Id);
 
@@ -268,7 +269,7 @@ public class SqliteCheckpointsTests
 
             var result = await store.RewindToCheckpointAsync(session.Id, trailId);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains(trailId);
         }
         finally
@@ -290,7 +291,7 @@ public class SqliteCheckpointsTests
             var last = (await store.CreateCheckpointAsync(session.Id, ids[2])).Value;
             await Assert.That(last.MessageIndex).IsEqualTo(2);
             var zero = await store.RewindToCheckpointAsync(session.Id, last.Id);
-            await Assert.That(zero.IsSuccess).IsTrue();
+            await Assert.That(zero).IsSuccessful();
             await Assert.That(zero.Value.Removed).IsEqualTo(0);
             await Assert.That(zero.Value.Remaining).IsEqualTo(3);
 
@@ -298,7 +299,7 @@ public class SqliteCheckpointsTests
             var first = (await store.CreateCheckpointAsync(session.Id, ids[0], "head")).Value;
             await Assert.That(first.MessageIndex).IsEqualTo(0);
             var one = await store.RewindToCheckpointAsync(session.Id, first.Id);
-            await Assert.That(one.IsSuccess).IsTrue();
+            await Assert.That(one).IsSuccessful();
             await Assert.That(one.Value.Removed).IsEqualTo(2);
             await Assert.That(one.Value.Remaining).IsEqualTo(1);
 
@@ -322,19 +323,19 @@ public class SqliteCheckpointsTests
             await SeedAsync(store, session.Id, 1);
 
             var missingSession = await store.ListCheckpointsAsync("no-such-session");
-            await Assert.That(missingSession.IsFailure).IsTrue();
+            await Assert.That(missingSession).IsFailed();
             await Assert.That(missingSession.Error).IsEqualTo("Session 'no-such-session' not found.");
 
             var rewindMissingSession = await store.RewindToCheckpointAsync("no-such-session", "no-such-checkpoint");
-            await Assert.That(rewindMissingSession.IsFailure).IsTrue();
+            await Assert.That(rewindMissingSession).IsFailed();
             await Assert.That(rewindMissingSession.Error).IsEqualTo("Session 'no-such-session' not found.");
 
             var checkpointMissingSession = await store.CreateCheckpointAsync("no-such-session", "m");
-            await Assert.That(checkpointMissingSession.IsFailure).IsTrue();
+            await Assert.That(checkpointMissingSession).IsFailed();
             await Assert.That(checkpointMissingSession.Error).IsEqualTo("Session 'no-such-session' not found.");
 
             var missingMessage = await store.CreateCheckpointAsync(session.Id, "no-such-message");
-            await Assert.That(missingMessage.IsFailure).IsTrue();
+            await Assert.That(missingMessage).IsFailed();
             await Assert.That(missingMessage.Error)
                 .IsEqualTo($"Message 'no-such-message' not found in session '{session.Id}'.");
         }
@@ -355,10 +356,10 @@ public class SqliteCheckpointsTests
             await store.CreateCheckpointAsync(session.Id, ids[0]);
 
             var deleted = await store.DeleteAsync(session.Id);
-            await Assert.That(deleted.IsSuccess).IsTrue();
+            await Assert.That(deleted).IsSuccessful();
 
             var listed = await store.ListCheckpointsAsync(session.Id);
-            await Assert.That(listed.IsFailure).IsTrue();
+            await Assert.That(listed).IsFailed();
             await Assert.That(listed.Error).IsEqualTo($"Session '{session.Id}' not found.");
         }
         finally
