@@ -1,0 +1,2267 @@
+{
+ "schema": "harbor.arch-rules/tiers/1",
+ "comment": [
+  "The architecture rule set, classified. The machine-readable form of",
+  "docs/ARCH_RULES.md, and the input a future gate reads.",
+  "",
+  "TIERS",
+  "  A  the rule catches a defect and is cheap: it reads a graph, IL",
+  "     or a declaration, so a refactor that keeps the invariant does",
+  "     not fire it.",
+  "  B  the rule catches a defect but nags: it reads text, or binds to",
+  "     a file, a line or a name, so a legitimate change can fire it.",
+  "  C  the rule catches the tree's SHAPE: it is a census, a ratchet or",
+  "     a baseline. It claims no defect; it holds a number.",
+  "",
+  "VERDICT",
+  "  defect    the subject is an invariant that was broken once.",
+  "  refactor  the subject is a shape that a legitimate change moves.",
+  "  shape     the rule measures; neither of the two.",
+  "",
+  "FALSE-POSITIVE COST",
+  "  low      a refactor that keeps the invariant cannot fire it.",
+  "  medium   a refactor can fire it, but only by moving a declaration.",
+  "  high     it binds to the TEXT of a file, so a reformat fires it.",
+  "",
+  "EVIDENCE",
+  "  The firings a guard was classified from, when the triage registry",
+  "  (tools/guard-triage-classes.json) has any. A guard with no",
+  "  evidence has not fired yet, and its tier is a reading of its",
+  "  source, not a measurement. That is the limit of this file."
+ ],
+ "count": 160,
+ "guards": [
+  {
+   "guard": "AbstractionsNamespaceOwnershipRules",
+   "file": "tests/Harbor.Architecture.Tests/AbstractionsNamespaceOwnershipRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "The layers are declared but the NAMES do not reflect them.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AbstractionsSplitLayerRules",
+   "file": "tests/Harbor.Architecture.Tests/AbstractionsSplitLayerRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "layer-dependency rules for the Harbor.Abstractions contract split (F1 decoupling, sprint 5v2).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AcceptedStopCensusRule",
+   "file": "tests/Harbor.Architecture.Tests/AcceptedStopCensusRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "AcceptedStopCensusRule — ratchet for the number 401 remainder, the B2 core.",
+   "triage_firings": [
+    {
+     "rule": "AcceptedStopCensusRule.TerminalToolEndEvents_StillRideTerminalToken",
+     "class": "defect",
+     "reason": "The rule pins a FLOOR of seven terminal ToolExecutionEndEvent publishes; the firings read 5, so the dispatcher's terminal surface lost two publishes. That is the regression the rule exists to catch, not a bookkeeping chore.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 38864383040 (branch refactor-1507-tooldispatcher-retrypolicy) — 'Expected to be greater than or equal to 7 ... but received 5'",
+      "guard: tests/Harbor.Architecture.Tests/AcceptedStopCensusRule.cs:91"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38864383040 (branch refactor-1507-tooldispatcher-retrypolicy) — 'Expected to be greater than or equal to 7 ... but received 5'",
+    "guard: tests/Harbor.Architecture.Tests/AcceptedStopCensusRule.cs:91"
+   ]
+  },
+  {
+   "guard": "AgentStateContractRules",
+   "file": "tests/Harbor.Architecture.Tests/AgentStateContractRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the IAgent.State declaration, not the text that names it",
+   "checks": "`IAgent.State` was declared `AgentState State { get; }` — non-nullable — while `DefaultAgent` initialised the backing field with `null!` and first assigned it inside `Initialize`.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AnalyzerSeverityScopeRules",
+   "file": "tests/Harbor.Architecture.Tests/AnalyzerSeverityScopeRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the severity entry's own path, resolved against the project graph",
+   "checks": "the DI severity model has a per-PATH layer, and nothing owned the gap between that layer and the document which claims to summarise it.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AotBlockDemotionRules",
+   "file": "tests/Harbor.Architecture.Tests/AotBlockDemotionRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "\"the AOT block claims analysis passes cleanly while demoting IL2026 to a warning\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ApprovalGateWaiterRaceRules",
+   "file": "tests/Harbor.Architecture.Tests/ApprovalGateWaiterRaceRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the awaited terminal state, read from the syntax tree",
+   "checks": "source-level guard for the #765/#797 flake class: a test that asserts a terminal approval disposition while a WaitForDecisionAsync waiter is parked on the very TCS the decision completes.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaConverterInstanceRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaConverterInstanceRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the converter type the view declares",
+   "checks": "source-level guard for issue #1539: a view that declares its own converter instance allocates one per inflation.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaDispatchAsyncVoidRule",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaDispatchAsyncVoidRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the Dispatch overload the call resolves to",
+   "checks": "Avalonia headless suite must not write `session.Dispatch(async () => …)`, because that call does not await what it appears to await (#766, generalising #972).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaFileTreeWalkRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaFileTreeWalkRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "source-level guard for issue #492: `MainViewModel` owned a recursive filesystem scanner (`Directory.GetDirectories` / `Directory.GetFiles` / `new DirectoryInfo`), a hardcoded depth cap, a hardcoded i…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaFireAndForgetRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaFireAndForgetRules.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "RETIRED pattern matcher, kept as a NON-GATING ORACLE.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaHeadlessSessionHelperRule",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaHeadlessSessionHelperRule.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "medium",
+   "semantic_check": "the helper's declaration and its callers",
+   "checks": "the Avalonia headless suite opens ONE session, through ONE helper.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaInitializeComponentShadowRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaInitializeComponentShadowRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the InitializeComponent declaration, not a call-shaped string",
+   "checks": "source-level guard against a hand-written `InitializeComponent` shadowing the one Avalonia's source generator emits (issue #973).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaTerminalPaneSpawnRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaTerminalPaneSpawnRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "source-level guard for issue #672: TerminalPaneViewModel forked a real interactive shell (`$SHELL -i`, full inherited environment) straight out of a Presentation assembly, with no permission gate, no…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "AvaloniaTextFileIoRules",
+   "file": "tests/Harbor.Architecture.Tests/AvaloniaTextFileIoRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "source-level guard for issue #934: `CodeEditorViewModel` read and wrote the file the user opened straight from the view-model, with no seam: `File.Exists`, `File.ReadAllTextAsync`, `File.WriteAllText…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "BackgroundTaskSyncResultRule",
+   "file": "tests/Harbor.Architecture.Tests/BackgroundTaskSyncResultRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the await the drain path does or does not have",
+   "checks": "BackgroundTaskSyncResultRule — the background-task drain path stays async.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "BuildGraphCoverageRule",
+   "file": "tests/Harbor.Architecture.Tests/BuildGraphCoverageRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#1005 reported FOUR csproj files that CI never builds, and supported that with a grep for each project's path over `*.csproj`: apps/Harbor.App.Avalonia/Harbor.App.Avalonia.csproj src/Harbor.CodeGen/H…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "BuiltinAgentPickerProjectionRules",
+   "file": "tests/Harbor.Architecture.Tests/BuiltinAgentPickerProjectionRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the registry the picker projects from",
+   "checks": "#582 measured \"adding a builtin agent = 3 structural edits, one a hardcoded onboarding menu\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeDiffEncoderBoundaryRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeDiffEncoderBoundaryRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "boundary between the portable cell-diff protocol and the CellForge engine's frame (issue #1519).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeEngineAbsenceAxisTests",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeEngineAbsenceAxisTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "pins WHICH of the two absence axes each public member of src/Harbor.Tui.CellForge.Engine is on.",
+   "triage_firings": [
+    {
+     "rule": "CellForgeEngineAbsenceAxisTests.NoMaybeMemberIsReadWithAStructUnawareForm",
+     "class": "defect",
+     "reason": "A Maybe member is read through a form that does not compile for a struct; the read is a real absence bug, not a shape preference.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/CellForgeEngineAbsenceAxisTests.cs:236"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/CellForgeEngineAbsenceAxisTests.cs:236"
+   ]
+  },
+  {
+   "guard": "CellForgeEngineAtomicityRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeEngineAtomicityRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "step 1; CLOSED by #436.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeEngineCseOwnershipTests",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeEngineCseOwnershipTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the engine's CSharpFunctionalExtensions reachability has no owner yet, and no prose keeps it that way.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeEngineEnterPolicyParityRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeEngineEnterPolicyParityRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#435 deleted the last `Harbor.Ui.Framework.State` edge out of `Harbor.Tui.CellForge.Engine` by moving the Enter-key DECISION down into the BCL-only layer: Harbor.Ui.Framework.Rendering.Input.EnterPol…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeEngineVocabularyParityRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeEngineVocabularyParityRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#436 turned `Harbor.Tui.CellForge.Engine` into a standalone leaf: zero ProjectReference entries to Harbor assemblies, zero per-file imports of Harbor namespaces.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeGraphRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeGraphRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the CellForge project graph: which layer each CellForge project sits in",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeMascotMoveOutRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeMascotMoveOutRules.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Issue #1619 named the mascot as the \"trial balloon\" for the move-out mechanics: a decoration cluster (MascotDirector + MascotPanel + AmbientMascot, ~574 lines) with exactly TWO inbound references (Ch…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CellForgeWidgetAxisRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the axis the widget declares, not the string that spells it",
+   "checks": "\"Is the CellForge widget set closed at compile time, and can a plugin add a widget?\" #564 measured it and reported the cost of an in-tree widget (4-5 files, all structural).",
+   "triage_firings": [
+    {
+     "rule": "CellForgeWidgetAxisRules.PerimeterSettlesAgainstTheFilesThatNameTheSeam",
+     "class": "defect",
+     "reason": "A document that names the view seam is in neither the teaching nor the describing list, so the guard would be green over a document that teaches a dead seam. The rule names the missing file (CHANGELOG.md).",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:1200 — 'Unclassified: CHANGELOG.md'"
+     ]
+    },
+    {
+     "rule": "CellForgeWidgetAxisRules.WidgetAxis_TheShippedLayoutTreeHasNoSecondHome",
+     "class": "defect",
+     "reason": "A `new LayoutTree(` outside the recorded builder set is a second home for the chrome; the rule names the offending file and line.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 38357908793 — 'Offenders: src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs:102'",
+      "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:751"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:1200 — 'Unclassified: CHANGELOG.md'",
+    "run 38357908793 — 'Offenders: src/Harbor.Tui.CellForge/Chat/Rendering/ScreenBuilder.cs:102'",
+    "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetAxisRules.cs:751"
+   ]
+  },
+  {
+   "guard": "CellForgeWidgetStateRules",
+   "file": "tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the state record the widget owns",
+   "checks": "for the widget-state half of #592.",
+   "triage_firings": [
+    {
+     "rule": "CellForgeWidgetStateRules.ClassifiedProperties_StillExistAndAreStillNullableReferences",
+     "class": "noise",
+     "reason": "The rule fired on its own exemption table: an entry whose property was renamed or removed has to be deleted with it. Nothing in the product is wrong.",
+     "ratchet": "ledger-edit",
+     "evidence": [
+      "run 39391713493 — 'stale: [SessionTabStripPanel.Dispatch]'",
+      "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:179"
+     ]
+    },
+    {
+     "rule": "CellForgeWidgetStateRules.EveryNullablePublicWidgetProperty_IsClassified",
+     "class": "defect",
+     "reason": "A nullable public widget property is neither widget state nor a classified hook; the rule names the property and the file:line it sits on.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:149 — 'the.Dispatch (src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs:240)'"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 39391713493 — 'stale: [SessionTabStripPanel.Dispatch]'",
+    "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:179",
+    "guard: tests/Harbor.Architecture.Tests/CellForgeWidgetStateRules.cs:149 — 'the.Dispatch (src/Harbor.Tui.CellForge/Chat/Widgets/SessionTabStripPanel.cs:240)'"
+   ]
+  },
+  {
+   "guard": "CfeControlPositiveControlTests",
+   "file": "tests/Harbor.Architecture.Tests/CfeControlPositiveControlTests.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "proves the CFE0001 analyzer is not vacuous.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CfeValueBaselineTests",
+   "file": "tests/Harbor.Architecture.Tests/CfeValueBaselineTests.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "ROP-001 backstop, and the tests that prove the backstop is real.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ChildProcessPipeDrainRules",
+   "file": "tests/Harbor.Architecture.Tests/ChildProcessPipeDrainRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #884, widened for #908.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CommonConfigContractRules",
+   "file": "tests/Harbor.Architecture.Tests/CommonConfigContractRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the config section declaration",
+   "checks": "for #453.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ConfigHalfPairWriteRules",
+   "file": "tests/Harbor.Architecture.Tests/ConfigHalfPairWriteRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the write pair, resolved from the declarations",
+   "checks": "for #894.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ConfigSectionDocRules",
+   "file": "tests/Harbor.Architecture.Tests/ConfigSectionDocRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the section's own declaration, matched by symbol",
+   "checks": "the guard for the documentation half of the same issue.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ConfigSetSingleTableTests",
+   "file": "tests/Harbor.Architecture.Tests/ConfigSetSingleTableTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`set` has ONE key table.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ContractsArtifactCapabilityRule",
+   "file": "tests/Harbor.Architecture.Tests/ContractsArtifactCapabilityRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the capability's own declaration",
+   "checks": "for epic #41 slice B3.1 (#405).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ContribBoundaryNameRule",
+   "file": "tests/Harbor.Architecture.Tests/ContribBoundaryNameRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "a MEASUREMENT, not a prohibition: how many simple type names are declared on BOTH sides of the boundary CI does not build.",
+   "triage_firings": [
+    {
+     "rule": "ContribBoundaryNameRule.CrossBoundaryNames_MatchTheMeasuredBaseline",
+     "class": "noise",
+     "reason": "The file says it is 'a MEASUREMENT, not a prohibition'. The firing says the measured set of names declared on both sides of the contrib/ boundary moved; contrib/ is not compiled by CI, so nothing that ships can break.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ContribBoundaryNameRule.cs:368"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/ContribBoundaryNameRule.cs:368"
+   ]
+  },
+  {
+   "guard": "ContribIsolationRules",
+   "file": "tests/Harbor.Architecture.Tests/ContribIsolationRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the `contrib/` boundary.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CostPricedInCoreRules",
+   "file": "tests/Harbor.Architecture.Tests/CostPricedInCoreRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the pricing call the core makes",
+   "checks": "\"the cost of a session is computed by the headless core; the presentation layer only displays it\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "CostUnpricedBitRules",
+   "file": "tests/Harbor.Architecture.Tests/CostUnpricedBitRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the unpriced bit's carrier",
+   "checks": "for #942: the core's \"I could not price this session\" bit must REACH the surface that paints the money.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DeadPublicInterfaceRule",
+   "file": "tests/Harbor.Architecture.Tests/DeadPublicInterfaceRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "A public interface with NO implementor and NO consumer is a promise nobody keeps, and nothing in the tree said so.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DeadPublicMemberRule",
+   "file": "tests/Harbor.Architecture.Tests/DeadPublicMemberRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "The member-level half of the dead-surface finding #1831 made: a public member that nothing in the tree references is a promise nobody keeps, and nothing in the tree said so.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DebouncedSettleShapeRule",
+   "file": "tests/Harbor.Architecture.Tests/DebouncedSettleShapeRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the settle call's shape",
+   "checks": "settle that waits out the debounce must not BE the debounce, multiplied (#757).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DefaultAgentSingleSourceTests",
+   "file": "tests/Harbor.Architecture.Tests/DefaultAgentSingleSourceTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "\"Which agent is the default?\" was answered in three places inside src/Harbor.Ui.Framework.Sessions, and one of the three did not answer it at all: SessionFactory.ResolveAgentDefinitionAsync `a.Name.V…",
+   "triage_firings": [
+    {
+     "rule": "DefaultAgentSingleSourceTests.CoreFallbackConstant_IsDerivedFromTheOneAgentNameConstant",
+     "class": "style",
+     "reason": "The rule finds the declaration by a text anchor ('class AgentName' at that commit) and reads the value with a regex. The refactor that turned AgentName into a record moved the declaration out of the anchor's reach, so the rule reported a missing declaration that was present at src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs:529.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "run 38860059916 (branch rec1-1559-identifiers-records, merge b215b840) — 'No `AgentName.Fallback = \"…\"` declaration was found in src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs'",
+      "truth at the tested tree: `public sealed record AgentName` at Identifiers.cs:506 and `public const string Fallback = \"code\";` at Identifiers.cs:529",
+      "guard at that commit: tests/Harbor.Architecture.Tests/DefaultAgentSingleSourceTests.cs:479 — text.IndexOf(\"class AgentName\")"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38860059916 (branch rec1-1559-identifiers-records, merge b215b840) — 'No `AgentName.Fallback = \"…\"` declaration was found in src/Harbor.Abstractions.Contracts/Models/Identifiers/Identifiers.cs'",
+    "truth at the tested tree: `public sealed record AgentName` at Identifiers.cs:506 and `public const string Fallback = \"code\";` at Identifiers.cs:529",
+    "guard at that commit: tests/Harbor.Architecture.Tests/DefaultAgentSingleSourceTests.cs:479 — text.IndexOf(\"class AgentName\")"
+   ]
+  },
+  {
+   "guard": "DefaultInterfaceMemberRule",
+   "file": "tests/Harbor.Architecture.Tests/DefaultInterfaceMemberRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for docs/PATTERNS.md §\"Default interface members: a default must fail towards loudly-wrong\" (issue #579).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DefaultModelDocClaimTests",
+   "file": "tests/Harbor.Architecture.Tests/DefaultModelDocClaimTests.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "medium",
+   "semantic_check": "the model id the doc names, matched against the catalog",
+   "checks": "the documentation named the free model as `kilocode/kilo-auto/free` in five places while providers/kilocode.json has declared `tencent/hy3:free` all along.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DefaultModelSingleSourceTests",
+   "file": "tests/Harbor.Architecture.Tests/DefaultModelSingleSourceTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`IdentityConfig` declared the default model id TWICE, seven lines apart, and the two copies did not agree: public const string FallbackModel = \"kilocode/tencent/hy3:free\"; ModelRef.Create(pid, \"tence…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DemoGifTriggerSurfaceTests",
+   "file": "tests/Harbor.Architecture.Tests/DemoGifTriggerSurfaceTests.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the demo GIFs are regenerated by a workflow that fires on `push` PATHS, so the A/B question \"did anything that can move a pixel change?\" is answered entirely by whether a recording input is inside th…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DesignSystemLeafTakesNoIoRules",
+   "file": "tests/Harbor.Architecture.Tests/DesignSystemLeafTakesNoIoRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #536.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DesktopAbstractionsLeafTakesNoIoRules",
+   "file": "tests/Harbor.Architecture.Tests/DesktopAbstractionsLeafTakesNoIoRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #534.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DesktopSharedTakesNoIoRules",
+   "file": "tests/Harbor.Architecture.Tests/DesktopSharedTakesNoIoRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #535.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DiSeverityDemotionRules",
+   "file": "tests/Harbor.Architecture.Tests/DiSeverityDemotionRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the severity entry the demotion sets",
+   "checks": "#865: the Avalonia block in `.editorconfig` demoted four DI rules under one sentence that named three of them.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DiagnosticsClassificationRule",
+   "file": "tests/Harbor.Architecture.Tests/DiagnosticsClassificationRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the detector's own declaration list, read by symbol",
+   "checks": "Deciding \"is this line a diagnostic, and how bad is it\" is COUNTING, not DRAWING.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DialogKeyDispatchCensusRule",
+   "file": "tests/Harbor.Architecture.Tests/DialogKeyDispatchCensusRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "+ ratchet for #472 item 2 and #473.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "DiffSurfaceNameCollisionRule",
+   "file": "tests/Harbor.Architecture.Tests/DiffSurfaceNameCollisionRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the two surfaces' declarations",
+   "checks": "The line diff has exactly ONE implementation in this repo: `src/Harbor.Ui.Framework.Rendering/Widgets/LineDiff.cs` (Myers O(ND), added by #694).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "E2eAvaloniaShardCoverageRules",
+   "file": "tests/Harbor.Architecture.Tests/E2eAvaloniaShardCoverageRules.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "arch-rule half of the headless Avalonia E2E process split.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ExhaustiveUnionSwitchRule",
+   "file": "tests/Harbor.Architecture.Tests/ExhaustiveUnionSwitchRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for docs/PATTERNS.md §\"Type unions: a switch is a compile error when the union grows\" (issue #578).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ExistenceCheckLivenessRule",
+   "file": "tests/Harbor.Architecture.Tests/ExistenceCheckLivenessRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "a MEASUREMENT: how many of this project's \"this name must exist\" checks can actually fail.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ExtensionAxisDoorHonestyRule",
+   "file": "tests/Harbor.Architecture.Tests/ExtensionAxisDoorHonestyRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the door's own registration",
+   "checks": "door-honesty half of the successor to #620's ExtensionAxisFreezeRule (issue #1719), and the guard #1758 asks for.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ExtensionAxisRegistrationRule",
+   "file": "tests/Harbor.Architecture.Tests/ExtensionAxisRegistrationRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "successor to #620's ExtensionAxisFreezeRule.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ExtensionAxisRouteCarriageRule",
+   "file": "tests/Harbor.Architecture.Tests/ExtensionAxisRouteCarriageRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "transport half of the extension-axis contract (issue #1723).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "FatInterfaceShapeRatchet",
+   "file": "tests/Harbor.Architecture.Tests/FatInterfaceShapeRatchet.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #471, slice 2: the three interfaces the issue names and the fourth it under-counts.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "FeatureFlagWiringRules",
+   "file": "tests/Harbor.Architecture.Tests/FeatureFlagWiringRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the flag's declaration",
+   "checks": "`apps/Harbor.App.Cli/Harbor.App.Cli.csproj` offers two ways to turn NativeAOT on and they are not equivalent.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "FileLogSinkOwnershipRule",
+   "file": "tests/Harbor.Architecture.Tests/FileLogSinkOwnershipRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the sink type the host registers",
+   "checks": "A `Microsoft.Extensions.Logging.ILoggerProvider` implementation is a LOGGING PROVIDER: the thing an app registers to get its log lines somewhere.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "FullLayerMatrixTests",
+   "file": "tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "table-driven layer rules for EVERY main-solution Harbor src assembly (ROP-D Z2).",
+   "triage_firings": [
+    {
+     "rule": "FullLayerMatrixTests.EverySrcAssembly_ReferenceSet_MatchesMatrix",
+     "class": "defect",
+     "reason": "A src assembly with no matrix row is an assembly no layer rule constrains - unbounded reach. The rule names the assembly.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:755 — 'Harbor.Registries: no matrix row'"
+     ]
+    },
+    {
+     "rule": "FullLayerMatrixTests.Matrix_CoversExactlyTheSrcInventory",
+     "class": "defect",
+     "reason": "The same hole from the other side: the src inventory has an assembly the matrix does not cover, so that assembly is unconstrained.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:886 — 'missingRows: [Harbor.Registries]'"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:755 — 'Harbor.Registries: no matrix row'",
+    "guard: tests/Harbor.Architecture.Tests/FullLayerMatrixTests.cs:886 — 'missingRows: [Harbor.Registries]'"
+   ]
+  },
+  {
+   "guard": "GateGlowConsumerReachabilityRule",
+   "file": "tests/Harbor.Architecture.Tests/GateGlowConsumerReachabilityRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the consumer's declaration",
+   "checks": "The gate-glow pipeline has a producer with a test and a consumer with none, and the missing half is the half the user can see.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "HandRolledResultShapeTests",
+   "file": "tests/Harbor.Architecture.Tests/HandRolledResultShapeTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "no hand-rolled Result<T> facades in shipped code.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "HdsPaletteReachabilityRules",
+   "file": "tests/Harbor.Architecture.Tests/HdsPaletteReachabilityRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "behind #583: the Avalonia app SHIPS six HDS palettes, and the desktop path could reach two of them.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "HostingCompositionNullabilityRules",
+   "file": "tests/Harbor.Architecture.Tests/HostingCompositionNullabilityRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the nullable annotation on the declaration",
+   "checks": "for the `null!` wave in the composition root (src/Harbor.Hosting), issue #562.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "HttpClientReuseRules",
+   "file": "tests/Harbor.Architecture.Tests/HttpClientReuseRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Issue #1854 collected a candidate analyzer package (IDisposableAnalyzers, rule IDISP014 \"use a single instance of HttpClient\") and REJECTED it: the upstream has had no release for years and 24 of its…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "IdeAbandonObserveRule",
+   "file": "tests/Harbor.Architecture.Tests/IdeAbandonObserveRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "IdeAbandonObserveRule — the IDE bridge background prompt run must stay observed.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "InnerExceptionRules",
+   "file": "tests/Harbor.Architecture.Tests/InnerExceptionRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Two sites in the product threw a new exception inside a catch and dropped the caught exception on the floor.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "KeyGateFamilyRules",
+   "file": "tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the key gate's declaration",
+   "checks": "for #833.",
+   "triage_firings": [
+    {
+     "rule": "KeyGateFamilyRules.TableCoversEveryRoutedSiteInTheProductTree",
+     "class": "defect",
+     "reason": "A site that routes keys is absent from the family table, so it has not declared its family - the exact shape the rule was written for (QuestionFormView shipping with the command predicate).",
+     "ratchet": "keep",
+     "evidence": [
+      "run 38264879229 — 'src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs'",
+      "guard: tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs:741"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38264879229 — 'src/Harbor.Tui.CellForge.Engine/Input/BindingsMap.cs'",
+    "guard: tests/Harbor.Architecture.Tests/KeyGateFamilyRules.cs:741"
+   ]
+  },
+  {
+   "guard": "LayerClaimMatchesMatrixRules",
+   "file": "tests/Harbor.Architecture.Tests/LayerClaimMatchesMatrixRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the matrix row the claim names",
+   "checks": "for the layer-CLAIM class (#895).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "LayerDependencyTests",
+   "file": "tests/Harbor.Architecture.Tests/LayerDependencyTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the layer dependency edges, read by reflection over the loaded assemblies",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "LayerDocAgreementRule",
+   "file": "tests/Harbor.Architecture.Tests/LayerDocAgreementRule.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the layer graph, compared to the doc by name instead of by line",
+   "checks": "`docs/ARCHITECTURE_LAYERS.md` §1 assigned all four IPC assemblies to APPLICATION.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "LayerTableDocAgreementRules",
+   "file": "tests/Harbor.Architecture.Tests/LayerTableDocAgreementRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the layer table's own rows",
+   "checks": "for #922.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "LegacyFlatTeaBranchRule",
+   "file": "tests/Harbor.Architecture.Tests/LegacyFlatTeaBranchRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "The `AgentEvent` → UI-state fold has exactly ONE home in this repo, and it is `Harbor.Ui.Framework.State`: `UiStore.Dispatch(AgentEvent)` reduces through `State/ChatAppReducer.cs`, with the domain-fr…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "LogLevelMnemonicRule",
+   "file": "tests/Harbor.Architecture.Tests/LogLevelMnemonicRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the mnemonic table's declaration",
+   "checks": "The 4-character LogLevel mnemonic (TRAC / DBUG / INFO / WARN / ERRO / CRIT / NONE) is a shared rendered string, and a switch that maps `LogLevel` to a rendered string is a hand-maintained table.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "MapErrorFailureShapeTests",
+   "file": "tests/Harbor.Architecture.Tests/MapErrorFailureShapeTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the \"hand-rolled error re-wrapping → ResultExtensions.MapError\" wave, plus the behaviour tests that pin the converted error text.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "MaybeAbsenceTests",
+   "file": "tests/Harbor.Architecture.Tests/MaybeAbsenceTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the \"absence is Maybe<T>\" wave.",
+   "triage_firings": [
+    {
+     "rule": "MaybeAbsenceTests.GuardedProjects_DeclareNoAbsenceViaNullableOutParameter",
+     "class": "defect",
+     "reason": "A nullable out-parameter is the banned way to declare absence; the rule names the site and the project.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/MaybeAbsenceTests.cs:225"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/MaybeAbsenceTests.cs:225"
+   ]
+  },
+  {
+   "guard": "McpHttpClientOwnershipRules",
+   "file": "tests/Harbor.Architecture.Tests/McpHttpClientOwnershipRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "The remote-MCP transports each assembled their own HttpClient: private HttpClient GetClient() { if (_client is { } existing) return existing; var handler = new SocketsHttpHandler { PooledConnectionLi…",
+   "triage_firings": [
+    {
+     "rule": "McpHttpClientOwnershipRules.Assert_TheClientHasExactlyOneOwnerAndItIsNotPublic",
+     "class": "defect",
+     "reason": "Two owners of the remote-MCP HttpClient is the duplication #1567 removed coming back; the rule names both owners.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/McpHttpClientOwnershipRules.cs:160 — 'Owners: Harbor.Tools.Mcp.McpHttpClientFactory, Harbor.Tools.Mcp.McpOAuthHandler+<>c'"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/McpHttpClientOwnershipRules.cs:160 — 'Owners: Harbor.Tools.Mcp.McpHttpClientFactory, Harbor.Tools.Mcp.McpOAuthHandler+<>c'"
+   ]
+  },
+  {
+   "guard": "McpOAuthTokenShapeRules",
+   "file": "tests/Harbor.Architecture.Tests/McpOAuthTokenShapeRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the token record's declaration",
+   "checks": "`McpOAuthHandler` surfaced ONE lookup — \"give me an access token for this server\" — through THREE conventions at once: 1.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "MegaConstructorDoneStateTests",
+   "file": "tests/Harbor.Architecture.Tests/MegaConstructorDoneStateTests.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the constructor's parameter list",
+   "checks": "done-state guard for issue #486 findings 3–4.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ModelRateLabelRules",
+   "file": "tests/Harbor.Architecture.Tests/ModelRateLabelRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the rate table's declaration",
+   "checks": "for the pricing half of issue #686.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ModelRefSingleParserTests",
+   "file": "tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`ModelRef.TryParse` (src/Harbor.Abstractions.Contracts/Models/Identifiers/ Identifiers.cs) is, in the words of the declaration it grew out of, \"the only function in the repo written to read a `provid…",
+   "triage_firings": [
+    {
+     "rule": "ModelRefSingleParserTests.EveryAdHocCut_IsEitherTheContractOrInventoryed",
+     "class": "defect",
+     "reason": "A new hand-rolled read of a slash-separated string appeared in product code, with the file and line named. A second parser of the same concept is a real drift source.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:419 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'"
+     ]
+    },
+    {
+     "rule": "ModelRefSingleParserTests.EveryInventoryEntry_StillNamesAFileThatStillCuts",
+     "class": "noise",
+     "reason": "The rule fired on its own inventory: an entry names a file that no longer contains an ad-hoc cut, so the exception is stale. The rule asks for the row to be deleted.",
+     "ratchet": "ledger-edit",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:442 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:419 — 'src/Harbor.Application/Configuration/OnboardingPicks.cs:56 [ADHOC-CUT]'",
+    "guard: tests/Harbor.Architecture.Tests/ModelRefSingleParserTests.cs:442 — 'inventory entry src/Harbor.Application/Configuration/OnboardingWizard.cs no longer contains an ad-hoc cut'"
+   ]
+  },
+  {
+   "guard": "MoneyCellSingleHomeRules",
+   "file": "tests/Harbor.Architecture.Tests/MoneyCellSingleHomeRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the cell writer's declaration",
+   "checks": "for #682: a session's MONEY CELL has ONE shape, and only the two rendering conventions are allowed to write it.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "NetArchLayerRules",
+   "file": "tests/Harbor.Architecture.Tests/NetArchLayerRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "NetArchTest-based layer dependency rules.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "OnboardingFireAndForgetRule",
+   "file": "tests/Harbor.Architecture.Tests/OnboardingFireAndForgetRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "OnboardingFireAndForgetRule — the onboarding wizard's background work stays observed.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "OpenAiCompatiblePumpObserveRule",
+   "file": "tests/Harbor.Architecture.Tests/OpenAiCompatiblePumpObserveRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "OpenAiCompatiblePumpObserveRule — the OpenAI-compatible SSE pump stays observed.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "OverlayKeyPlaneCensusRule",
+   "file": "tests/Harbor.Architecture.Tests/OverlayKeyPlaneCensusRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "+ ratchet for issue #812.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "OverlayKeyRouteClaimRule",
+   "file": "tests/Harbor.Architecture.Tests/OverlayKeyRouteClaimRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the route the doc names",
+   "checks": "five doc comments (and four more this file found) describe an input path that no product host uses.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PanelImplementationBoundaryRules",
+   "file": "tests/Harbor.Architecture.Tests/PanelImplementationBoundaryRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#474 was filed from the 2026-09-28 audit: \"`PanelContext — IServiceProvider? Services stuffed into a per-frame context bag.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PanelKeyRouteReachabilityRule",
+   "file": "tests/Harbor.Architecture.Tests/PanelKeyRouteReachabilityRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the route's declaration",
+   "checks": "(and its parent #812): a key hand-off must be reachable from product code, and the tests that drive an unreachable hand-off are not evidence of anything.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PresentationCapabilityRules",
+   "file": "tests/Harbor.Architecture.Tests/PresentationCapabilityRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "CAPABILITY half of the layer contract for issue 455, \"ARCH-5: Presentation layer performs I/O and spawns processes; no capability rules\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProcessEnvIsolationRule",
+   "file": "tests/Harbor.Architecture.Tests/ProcessEnvIsolationRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the process-environment write",
+   "checks": "Nine test classes call `Environment.SetEnvironmentVariable`, and not one of them carried a `[NotInParallel]` form of any kind.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProjectKeyedScanRule",
+   "file": "tests/Harbor.Architecture.Tests/ProjectKeyedScanRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "a MEASUREMENT, not a fix: which directories under `src/` hold compiled product code and are not a project, because they have no `.csproj` to be found by.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PromptCacheKeyCoverageRules",
+   "file": "tests/Harbor.Architecture.Tests/PromptCacheKeyCoverageRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the cache-key builder's declaration",
+   "checks": "`CachingSystemPromptBuilder` is a memoizing decorator: it answers a repeat context from a hash instead of calling the inner builder, and the only thing that makes that legal is that the hash covers e…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PromptClockPurityRule",
+   "file": "tests/Harbor.Architecture.Tests/PromptClockPurityRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the clock call's receiver",
+   "checks": ". (#814) THE CONVENTION BEING ENFORCED An ISystemPromptBuilder implementation reads NO clock. The prompt is a pure function of its SystemPromptContext, or it is not — and \"not\" is a cache defect, not…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PromptSectionPolicyRule",
+   "file": "tests/Harbor.Architecture.Tests/PromptSectionPolicyRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the section's declaration",
+   "checks": ". THE CONVENTION BEING ENFORCED A prompt-assembly method (one that appends `## ` Markdown section headers into a StringBuilder) must not carry a bare, non-zero numeric bound inside a conditional. Suc…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProviderAuthSingleAnswerRules",
+   "file": "tests/Harbor.Architecture.Tests/ProviderAuthSingleAnswerRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #671.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProviderCatalogueBudgetRules",
+   "file": "tests/Harbor.Architecture.Tests/ProviderCatalogueBudgetRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the catalogue's declaration",
+   "checks": "for #685.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProviderIdDispatchRule",
+   "file": "tests/Harbor.Architecture.Tests/ProviderIdDispatchRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Issue #560 asked whether Harbor still edits provider-keyed tables when a new LLM provider is added.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProviderModelAbsenceRules",
+   "file": "tests/Harbor.Architecture.Tests/ProviderModelAbsenceRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the model's declaration",
+   "checks": "`SessionFactory.ResolveProviderModelFromConfigAsync` returned `Task<(string? ProviderId, string? ModelId)>`.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ProviderPayloadSerializationRules",
+   "file": "tests/Harbor.Architecture.Tests/ProviderPayloadSerializationRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "\"[GoF-A8] Provider payload builders: untyped Dictionary/anonymous types + reflection\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "PublicAbstractBaseLivenessRules",
+   "file": "tests/Harbor.Architecture.Tests/PublicAbstractBaseLivenessRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#1835 audited the base classes under `src/` and measured twelve `public abstract` types with ZERO product descendants — 788 lines of published base class that nothing in the tree derives from.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ReadOnlyAgentPermissionRule",
+   "file": "tests/Harbor.Architecture.Tests/ReadOnlyAgentPermissionRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "#798 is a careful, well-evidenced issue.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ReadOnlyAgentShellAllowRule",
+   "file": "tests/Harbor.Architecture.Tests/ReadOnlyAgentShellAllowRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the hole #798 did not report.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ReadmeCoverageTests",
+   "file": "tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "medium",
+   "semantic_check": "the project list the README coverage is measured against",
+   "checks": "per-project README coverage gate.",
+   "triage_firings": [
+    {
+     "rule": "ReadmeCoverageTests.Assert_NoNewProjectLacksAReadme",
+     "class": "style",
+     "reason": "A new src project without a README.md is a documentation chore against a template, not a broken product. The firings all name one project (Harbor.Hooks, from the #1613 extraction).",
+     "ratchet": "keep",
+     "evidence": [
+      "run 38866609300 (branch refactor/1613-hookrunner-extract) — 'Missing: Harbor.Hooks'",
+      "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:114"
+     ]
+    },
+    {
+     "rule": "ReadmeCoverageTests.Assert_PackableReadmesHaveRequiredSections",
+     "class": "style",
+     "reason": "A packable README that misses a template section is a documentation chore; the rule names the project and the missing section.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 39002438978 (branch refactor/1613-hookrunner-extract) — 'Harbor.Hooks: missing limits'",
+      "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:136"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38866609300 (branch refactor/1613-hookrunner-extract) — 'Missing: Harbor.Hooks'",
+    "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:114",
+    "run 39002438978 (branch refactor/1613-hookrunner-extract) — 'Harbor.Hooks: missing limits'",
+    "guard: tests/Harbor.Architecture.Tests/ReadmeCoverageTests.cs:136"
+   ]
+  },
+  {
+   "guard": "ReflectionConventionRule",
+   "file": "tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "and the migration of its rule to the compiler (issue #1844).",
+   "triage_firings": [
+    {
+     "rule": "ReflectionConventionRule.NonVacuity_The_Compiler_Bans_A_Synthetic_Violation",
+     "class": "defect",
+     "reason": "The compiler ban did not report a planted violation, so the ban file does not cover a capability the convention names. The rule names the missing symbol.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 39395794130 (branch refactor/1844-banned-api-rule) — 'missing: System.Reflection.Assembly.Load'",
+      "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:347"
+     ]
+    },
+    {
+     "rule": "ReflectionConventionRule.The_Ban_File_Covers_Every_Public_Assembly_Load_Overload",
+     "class": "noise",
+     "reason": "The rule fired on its own instrument: the reflection read of the framework's public Assembly.Load surface came back empty, so the comparison below would have been vacuous. Nothing in the product is wrong, and the migration to the compiler ban is what emptied the read.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "run 39395794130 (branch refactor/1844-banned-api-rule) — 'but received empty collection'",
+      "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:314"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 39395794130 (branch refactor/1844-banned-api-rule) — 'missing: System.Reflection.Assembly.Load'",
+    "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:347",
+    "run 39395794130 (branch refactor/1844-banned-api-rule) — 'but received empty collection'",
+    "guard: tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs:314"
+   ]
+  },
+  {
+   "guard": "ReleaseBuildConfigurationRule",
+   "file": "tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "CI run 39389070999 built `Harbor.slnx` in Release, and the project-completion timeline showed THREE of the 112 compiled projects producing `bin/Debug` output and no `bin/Release` output at all: src/H…",
+   "triage_firings": [
+    {
+     "rule": "ReleaseBuildConfigurationRule.EveryProjectTheReleaseBuildPullsIn_IsBuiltInTheSolutionConfiguration",
+     "class": "defect",
+     "reason": "A referenced project that is not a row of Harbor.slnx falls back to Debug in the Release build. The rule names the edges.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:528"
+     ]
+    },
+    {
+     "rule": "ReleaseBuildConfigurationRule.NoReleaseOutput_HoldsACopyOfADebugBuild",
+     "class": "defect",
+     "reason": "A file in a bin/Release directory is byte-identical to the project's own Debug output: the #1921 defect, measured.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:804"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:528",
+    "guard: tests/Harbor.Architecture.Tests/ReleaseBuildConfigurationRule.cs:804"
+   ]
+  },
+  {
+   "guard": "RemoteTransportResultRules",
+   "file": "tests/Harbor.Architecture.Tests/RemoteTransportResultRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`IMcpRemoteTransport` used to declare exactly one member: Task<JsonDocument?> RoundTripAsync(...) A nullable document has two meanings and no way to tell them apart: \"the server answered 202 with no…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "RenderInvalidationCoalescingTests",
+   "file": "tests/Harbor.Architecture.Tests/RenderInvalidationCoalescingTests.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the coalescer's declaration",
+   "checks": "contract for RENDER invalidation coalescing on the CellForge REPL frame loop (issue #396, epic #47/S5).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "RendererEventSeamRule",
+   "file": "tests/Harbor.Architecture.Tests/RendererEventSeamRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for docs/PATTERNS.md §\"Observer → the event seam\" (issue #575).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ReplConstructorCompositionTests",
+   "file": "tests/Harbor.Architecture.Tests/ReplConstructorCompositionTests.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the constructor's parameter list",
+   "checks": "for the REPL's own wiring (issue #486).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ResultConversionBehaviourTests",
+   "file": "tests/Harbor.Architecture.Tests/ResultConversionBehaviourTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "behaviour proof for the ConvertFailure wave.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ResultFailureConversionTests",
+   "file": "tests/Harbor.Architecture.Tests/ResultFailureConversionTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the `ConvertFailure` wave.",
+   "triage_firings": [
+    {
+     "rule": "ResultFailureConversionTests.GuardedTrees_DoNotHandRollFailureConversion",
+     "class": "defect",
+     "reason": "A hand-rolled `Result.Failure<K>(other.Error)` throws InvalidOperationException on a success, so the code named by the rule is broken, not differently shaped.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 38862719862 (branch fix/1546-webfetch-ssrf-result-railway) — 'src/Harbor.Tools.Builtin/Tools/WebFetch/WebFetchTool.cs:334 - hand-rolled failure r...'",
+      "guard: tests/Harbor.Architecture.Tests/ResultFailureConversionTests.cs:156"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38862719862 (branch fix/1546-webfetch-ssrf-result-railway) — 'src/Harbor.Tools.Builtin/Tools/WebFetch/WebFetchTool.cs:334 - hand-rolled failure r...'",
+    "guard: tests/Harbor.Architecture.Tests/ResultFailureConversionTests.cs:156"
+   ]
+  },
+  {
+   "guard": "ResultMaybeSignatureTests",
+   "file": "tests/Harbor.Architecture.Tests/ResultMaybeSignatureTests.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the Result<T?> declaration, matched by symbol",
+   "checks": "for the ROP wave that replaced every `Result<T?>` in the non-test tree with `Result<Maybe<T>>`.",
+   "triage_firings": [
+    {
+     "rule": "ResultMaybeSignatureTests.Assert_NoResultOfNullableValueTypeUnderSrc",
+     "class": "defect",
+     "reason": "`Result<T?>` under src/ hides absence inside success; the rule names the file and line of the banned shape.",
+     "ratchet": "keep",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/ResultMaybeSignatureTests.cs:86 — 'src/Harbor.Tools.Builtin/Tools/Mcp/McpSseParser.cs:88: Result<JsonElement?> frame'"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/ResultMaybeSignatureTests.cs:86 — 'src/Harbor.Tools.Builtin/Tools/Mcp/McpSseParser.cs:88: Result<JsonElement?> frame'"
+   ]
+  },
+  {
+   "guard": "ResultTryAdoptionTests",
+   "file": "tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "ROP wave: `try/catch -> Result` must ride the library, not be hand-rolled.",
+   "triage_firings": [
+    {
+     "rule": "ResultTryAdoptionTests.HandRolledTryCatchToResult_UsesResultTry",
+     "class": "defect",
+     "reason": "A hand-rolled catch-to-Result is a second implementation of a library member and will drift; the rule names the site and the line.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 36534957325 (branch dev) — 'src/Harbor.Lsp/LspManager.cs:307 - catch(Exception) builds Result.Failure by hand; use Result.Try'",
+      "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:151"
+     ]
+    },
+    {
+     "rule": "ResultTryAdoptionTests.KnownExemptSites_AreStillAccurate",
+     "class": "noise",
+     "reason": "The rule fired on its own exemption table: the recorded reason no longer matches the site, so the exemption is stale and the row has to go. The site itself is fine.",
+     "ratchet": "ledger-edit",
+     "evidence": [
+      "run 36536630732 — 'src/Harbor.Lsp/LspManager.cs:240 - catch no longer constructs Result.Failure ... - needs a control-flow refactor'",
+      "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:177"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 36534957325 (branch dev) — 'src/Harbor.Lsp/LspManager.cs:307 - catch(Exception) builds Result.Failure by hand; use Result.Try'",
+    "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:151",
+    "run 36536630732 — 'src/Harbor.Lsp/LspManager.cs:240 - catch no longer constructs Result.Failure ... - needs a control-flow refactor'",
+    "guard: tests/Harbor.Architecture.Tests/ResultTryAdoptionTests.cs:177"
+   ]
+  },
+  {
+   "guard": "ScanUniverseRule",
+   "file": "tests/Harbor.Architecture.Tests/ScanUniverseRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "a MEASUREMENT, not a fix: what is in the reflection scan universe of Harbor.Architecture.Tests, and — the part that matters more — what is NOT in it.",
+   "triage_firings": [
+    {
+     "rule": "ScanUniverseRule.BlindProjects_MatchTheMeasuredBaseline",
+     "class": "noise",
+     "reason": "The file says it is 'a MEASUREMENT, not a fix'. Every firing is the measured count of non-product projects that reference src/ moving by one, because a test project was added. The product graph did not change.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "run 39117642149 — 'apps=2 | contrib=14 | samples=5 | tests=32 | tools=1'",
+      "run 39365793623 — '... | tests=33 | tools=1'",
+      "run 39380697456 — '... | tests=34 | tools=1'",
+      "run 39416159291 — '... | tests=36 | tools=1'",
+      "guard: tests/Harbor.Architecture.Tests/ScanUniverseRule.cs:577"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 39117642149 — 'apps=2 | contrib=14 | samples=5 | tests=32 | tools=1'",
+    "run 39365793623 — '... | tests=33 | tools=1'",
+    "run 39380697456 — '... | tests=34 | tools=1'",
+    "run 39416159291 — '... | tests=36 | tools=1'",
+    "guard: tests/Harbor.Architecture.Tests/ScanUniverseRule.cs:577"
+   ]
+  },
+  {
+   "guard": "ScanVisibilityRule",
+   "file": "tests/Harbor.Architecture.Tests/ScanVisibilityRule.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "a MEASUREMENT, not a fix: which top-level repository trees the shared scan helper can read, and which it silently returns nothing for.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SeamTypeLeakRules",
+   "file": "tests/Harbor.Architecture.Tests/SeamTypeLeakRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "two seams named a CONCRETE implementation type where the consumer therefore learned the implementation instead of the contract.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ServiceLocatorBoundaryRules",
+   "file": "tests/Harbor.Architecture.Tests/ServiceLocatorBoundaryRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Issue #470 was \"[DIP] Two service locators in hot paths\": `ToolContext.Services` — declared `IServiceProvider`, passed as `null!` by BOTH production call sites (ToolDispatcher / McpStdioServer), so t…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionAgentResolutionTests",
+   "file": "tests/Harbor.Architecture.Tests/SessionAgentResolutionTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "The issue was filed against a tree where \"resolve an AgentDefinition, falling back to a default\" appeared to be hand-rolled eight times: five inside src/Harbor.Ui.Framework.Sessions and four in apps/…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionForkPortSeamRules",
+   "file": "tests/Harbor.Architecture.Tests/SessionForkPortSeamRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the port's declaration",
+   "checks": "for #882.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionStatusReader",
+   "file": "tests/Harbor.Architecture.Tests/SessionStatusFrameReachabilityRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the projection's declaration",
+   "checks": "#687 removed the transcript heuristic from `ChatStreamingPresenter.DeriveStatus` and made the reducer the single source of a session's status.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionStatusFrameReachabilityTests",
+   "file": "tests/Harbor.Architecture.Tests/SessionStatusFrameReachabilityTests.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the projection's declaration",
+   "checks": "tests for #861.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionStatusSourceRule",
+   "file": "tests/Harbor.Architecture.Tests/SessionStatusSourceRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the status source's declaration",
+   "checks": "`SessionStatus` (idle / working / done / error / aborted) is a DOMAIN FACT decided once, by the core, around the run that establishes it.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionStatusTableRule",
+   "file": "tests/Harbor.Architecture.Tests/SessionStatusTableRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the label table's declaration",
+   "checks": "`SessionStatus` (idle / working / done / error / aborted) has exactly one rendered form per concern, and both live in ONE file: src/Harbor.Ui.Framework.ViewModels/Converters/StatusMappers.cs SessionS…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SessionStoreFailureTextParityRules",
+   "file": "tests/Harbor.Architecture.Tests/SessionStoreFailureTextParityRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the failure text each store builds",
+   "checks": "#764's claim: \"Harbor.Storage.Memory hand-writes the session-store failure texts nine times, and `SessionStoreErrors` is supposed to be their single home.\" The single-home half is TRUE — `src/Harbor.…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SharedSourceLinkRules",
+   "file": "tests/Harbor.Architecture.Tests/SharedSourceLinkRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "Two `src/` folders hold shared source and produce no assembly: their files are `<Compile Include>`-linked into consumer projects instead of being referenced.",
+   "triage_firings": [
+    {
+     "rule": "SharedSourceLinkRules.The_Link_Inventory_Is_Not_Empty",
+     "class": "noise",
+     "reason": "The rule pins a hard-coded count of `<Compile Include>` link items, so every added or removed shared-source link fires it. The rule's own message says the guard would then judge a set that is not the build's.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "run 38516394743 (branch perf/1102-requestbuild-args) — 'Expected to be 14'",
+      "run 38854377103 (branch nightshift/1563-utf8jsonreader-helpers) — 'Expected to be 16'",
+      "guard: tests/Harbor.Architecture.Tests/SharedSourceLinkRules.cs:207"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38516394743 (branch perf/1102-requestbuild-args) — 'Expected to be 14'",
+    "run 38854377103 (branch nightshift/1563-utf8jsonreader-helpers) — 'Expected to be 16'",
+    "guard: tests/Harbor.Architecture.Tests/SharedSourceLinkRules.cs:207"
+   ]
+  },
+  {
+   "guard": "SharedSourceTreeSnapshotTests",
+   "file": "tests/Harbor.Architecture.Tests/SharedSourceTreeSnapshotTests.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the shared source snapshot (issue #1791).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SlashCommandContextScopeTests",
+   "file": "tests/Harbor.Architecture.Tests/SlashCommandContextScopeTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for the slash-command context bag (issue #483).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SlashCommandRouterShapeRule",
+   "file": "tests/Harbor.Architecture.Tests/SlashCommandRouterShapeRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the contracts layer must not declare a slash-command ROUTER again, and must not declare the `Result<bool>` shape whose negative case is a routing decision rather than a failure.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "SlashResultChannelTests",
+   "file": "tests/Harbor.Architecture.Tests/SlashResultChannelTests.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the channel's declaration",
+   "checks": "for the slash-command `Result` channel (issue #603).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TelemetryOtlpBoundaryRules",
+   "file": "tests/Harbor.Architecture.Tests/TelemetryOtlpBoundaryRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "OTLP exporter stays OUT of the product graph, and the OpenTelemetry SDK stays out of everything except that exporter (#1799).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestDiagnosticsOutputRule",
+   "file": "tests/Harbor.Architecture.Tests/TestDiagnosticsOutputRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the diagnostic sink's declaration",
+   "checks": "for #1856: a test's diagnostics belong to that test.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestKitCompositionRules",
+   "file": "tests/Harbor.Architecture.Tests/TestKitCompositionRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`Harbor.TestKit` was ONE project holding ONE file that needs the UI stack (`UiTestDoubles.cs` — the dispatcher double and the counting view-model stubs) next to ten files that need none of it.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestKitLocalDoubleRules",
+   "file": "tests/Harbor.Architecture.Tests/TestKitLocalDoubleRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "medium",
+   "semantic_check": "the double's declaration",
+   "checks": "`Harbor.TestKit` is the one place a shared test double is supposed to live, and it was not: five test projects each kept their OWN set of interface doubles, and the sets did not even agree with each…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestKitSharedCopyReasonRules",
+   "file": "tests/Harbor.Architecture.Tests/TestKitSharedCopyReasonRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the shared double's declaration",
+   "checks": "second half.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestProjectReferenceRules",
+   "file": "tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "edges BETWEEN test projects, and the two costs a wrong edge carries.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TestShardZeroTestGuardRules",
+   "file": "tests/Harbor.Architecture.Tests/TestShardZeroTestGuardRules.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the `test` job's shard matrix states a zero-test guard per shard, and one of the four entries stated the OPPOSITE with nothing recorded next to it.",
+   "triage_firings": [
+    {
+     "rule": "TestShardZeroTestGuardRules.TheGuardFlagIsActuallyReadByTheRunStep",
+     "class": "defect",
+     "reason": "The CI run step had lost MTP's strict zero-tests policy, so a shard in which every test was skipped would have read as green. The rule named the missing flag.",
+     "ratchet": "keep",
+     "evidence": [
+      "run 39436392533 — 'Expected to contain \"--zero-tests-policy strict\"'",
+      "guard: tests/Harbor.Architecture.Tests/TestShardZeroTestGuardRules.cs:170"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 39436392533 — 'Expected to contain \"--zero-tests-policy strict\"'",
+    "guard: tests/Harbor.Architecture.Tests/TestShardZeroTestGuardRules.cs:170"
+   ]
+  },
+  {
+   "guard": "ThemeAxisStaysDataRules",
+   "file": "tests/Harbor.Architecture.Tests/ThemeAxisStaysDataRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "behind #622, which was the *exception* clause to the #555 feature freeze.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ThemeStoreSeamRules",
+   "file": "tests/Harbor.Architecture.Tests/ThemeStoreSeamRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #668, and for the duplicate half of #479-A6.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ToastKindTableRule",
+   "file": "tests/Harbor.Architecture.Tests/ToastKindTableRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "the kind-to-presentation mapping is ONE table, and no product file may write a second one.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TokenCellSingleHomeRules",
+   "file": "tests/Harbor.Architecture.Tests/TokenCellSingleHomeRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the cell writer's declaration",
+   "checks": "for #788: a session's TOKEN CELL is written by more than one surface, and the set of writers is frozen here WITHOUT choosing which notation is canonical, because that choice is the owner's and ADR-01…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TokenTrackingRatchet",
+   "file": "tests/Harbor.Architecture.Tests/TokenTrackingRatchet.cs",
+   "tier": "C",
+   "verdict": "shape",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #471, slice 1: ITokenTracker.",
+   "triage_firings": [
+    {
+     "rule": "TokenTrackingRatchet.Control_TheSplitLandingIsReportedAsProgressNotAsARegression",
+     "class": "noise",
+     "reason": "A control test whose expectation is a hard-coded list of seven member names: the aggregate now declares eight, so the control's list is stale. The ratchet itself did not rot; the control's table did.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "run 38695392450 — 'all seven must show up as improvements ... but collection has 8 items but expected 7'",
+      "guard: tests/Harbor.Architecture.Tests/TokenTrackingRatchet.cs:709"
+     ]
+    }
+   ],
+   "evidence": [
+    "run 38695392450 — 'all seven must show up as improvements ... but collection has 8 items but expected 7'",
+    "guard: tests/Harbor.Architecture.Tests/TokenTrackingRatchet.cs:709"
+   ]
+  },
+  {
+   "guard": "ToolDispatcherSyncResultRule",
+   "file": "tests/Harbor.Architecture.Tests/ToolDispatcherSyncResultRule.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "ToolDispatcherSyncResultRule — the abandon paths stay async.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ToolGlyphTableRule",
+   "file": "tests/Harbor.Architecture.Tests/ToolGlyphTableRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the glyph table's declaration",
+   "checks": "Issue #680 reported that `ChatViewModelBase` holds a hand-written glyph catalogue for ten builtin tools and rebuilds a structured tool call by re-parsing the rendered transcript line.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "ToolNameListRule",
+   "file": "tests/Harbor.Architecture.Tests/ToolNameListRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the catalog declaration the list is compared against",
+   "checks": "The issue says \"eight hand-maintained lists of tool names, two of them already wrong\".",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TransportRetryOwnershipRules",
+   "file": "tests/Harbor.Architecture.Tests/TransportRetryOwnershipRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "\"Should this failure be retried, and how long should we wait?\" was supposed to have one owner: `Harbor.Application.Resilience.RetryPolicy`.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TrimUnsafeReflectionRules",
+   "file": "tests/Harbor.Architecture.Tests/TrimUnsafeReflectionRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "(\"48/S3\"): trim-safety of the hot paths, and why \"zero allocations\" is not the claim.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "TuiReadLineContractRules",
+   "file": "tests/Harbor.Architecture.Tests/TuiReadLineContractRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the read-line contract's declaration",
+   "checks": "`ITuiRenderer.ReadLineAsync` used to return `Task<Result<string>>`, and EVERY implementation answered end-of-input with `Result.Success(line ?? string.Empty)`.",
+   "triage_firings": [
+    {
+     "rule": "TuiReadLineContractRules.RendererTrees_AllExist",
+     "class": "noise",
+     "reason": "The rule pins a hard-coded count of renderer families, so moving a family out of the product (NickConsoleEx to contrib/) fires it. The rule's own message says a new family must raise the number in the same commit - the count is the rule's table, not the product.",
+     "ratchet": "fix-the-rule",
+     "evidence": [
+      "guard: tests/Harbor.Architecture.Tests/TuiReadLineContractRules.cs:267 — 'Expected to be 6 ... but found 5'"
+     ]
+    }
+   ],
+   "evidence": [
+    "guard: tests/Harbor.Architecture.Tests/TuiReadLineContractRules.cs:267 — 'Expected to be 6 ... but found 5'"
+   ]
+  },
+  {
+   "guard": "TypeFilterRegistrationTests",
+   "file": "tests/Harbor.Architecture.Tests/TypeFilterRegistrationTests.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`TypeFilterMiddleware` had a two-state constructor: new TypeFilterMiddleware(logger) -> _allowAll = true new TypeFilterMiddleware(logger, typeof(Foo)) -> a real filter The empty form filtered NOTHING…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "UiConfigDefaultsRule",
+   "file": "tests/Harbor.Architecture.Tests/UiConfigDefaultsRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the default's declaration",
+   "checks": "Two desktop view-models hand-picked a DEFAULT for a persisted config field that the core already gives a default to, and the two answers disagreed with the core: SettingsViewModel._defaultProvider =…",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "UiFrameworkNullabilityRules",
+   "file": "tests/Harbor.Architecture.Tests/UiFrameworkNullabilityRules.cs",
+   "tier": "B",
+   "verdict": "refactor",
+   "false_positive_cost": "high",
+   "semantic_check": "the nullable annotation on the declaration",
+   "checks": "for the `null!` wave in src/Harbor.Ui.Framework*.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "UiSingletonThreadSafetyRules",
+   "file": "tests/Harbor.Architecture.Tests/UiSingletonThreadSafetyRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "for #605 (GoF-A19).",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "UnguardedResultReadRules",
+   "file": "tests/Harbor.Architecture.Tests/UnguardedResultReadRules.cs",
+   "tier": "A",
+   "verdict": "defect",
+   "false_positive_cost": "low",
+   "semantic_check": "",
+   "checks": "`IConfigStore.LoadAsync` really does fail: `JsonConfigStore.LoadCore` ends in `Result.Try(..., ResultErrors.Message)` and returns `Failure(\"config.json is corrupt: …\")` on a `JsonException`.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "VendoredHtmlSurfaceRules",
+   "file": "tests/Harbor.Architecture.Tests/VendoredHtmlSurfaceRules.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the surface type's declaration",
+   "checks": "source-level guard for issue #878.",
+   "triage_firings": [],
+   "evidence": []
+  },
+  {
+   "guard": "WellKnownToolsRule",
+   "file": "tests/Harbor.Architecture.Tests/WellKnownToolsRule.cs",
+   "tier": "B",
+   "verdict": "defect",
+   "false_positive_cost": "medium",
+   "semantic_check": "the catalog declaration the names are compared against",
+   "checks": "#1564 moved the builtin tool names out of two hundred and ninety-two string literals and into one catalog, `WellKnownTools`.",
+   "triage_firings": [],
+   "evidence": []
+  }
+ ],
+ "excluded": [
+  {
+   "file": "tests/Harbor.Architecture.Tests/BannedApiProbe.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/BenchmarkContractTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/CoreSessionForker.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/EffectiveInterfaceSurface.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/EnforcerIntegrityTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/ExemptionReason.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/GlobalUsings.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/NamespaceOwnershipControlTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/PluginAllowance.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/PresentationCapabilityInstrumentationTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/RepoPaths.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/ScanRule.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/ScanRuleTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SharedSourceTreeSnapshot.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SourceCommentStripper.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SourceCommentStripperTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SourceNullabilityScan.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SourceScan.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/SourceTreeScanMeasurement.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/ToolNameInventory.cs",
+   "why": "support or infrastructure: it carries no rule of its own"
+  },
+  {
+   "file": "tests/Harbor.Architecture.Tests/UnobservedTaskRuleTests.cs",
+   "why": "a control over the guard machinery, not a guard of the product"
+  }
+ ]
+}
