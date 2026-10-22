@@ -18,6 +18,8 @@
   href: ARCHITECTURE_AUDIT_V2.md
 - name: Architecture Layers
   href: ARCHITECTURE_LAYERS.md
+- name: Architecture Rules
+  href: ARCH_RULES.md
 - name: Avalonia Ux Audit
   href: AVALONIA_UX_AUDIT.md
 - name: Benchmarks
