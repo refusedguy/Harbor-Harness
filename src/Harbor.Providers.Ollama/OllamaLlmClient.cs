@@ -493,7 +493,12 @@ public sealed class OllamaLlmClient : ILlmClient
                     break;
 
                 case JsonTokenType.PropertyName:
-                    string prop = reader.GetString() ?? string.Empty;
+                    // The name is matched against this client's own literal
+                    // table, so the dispatch costs NO string: the old path
+                    // allocated one per property per line, and a line is what
+                    // every token of every answer arrives as (see
+                    // Utf8JsonReaderExtensions.PropertyName).
+                    string prop = ChunkPropertyName(ref reader);
                     if (!reader.Read())
                         throw new JsonException("Truncated line: property without value.");
                     HandleValue(ref reader, depth, prop, inMessage, inTc, inFunction,
@@ -513,6 +518,42 @@ public sealed class OllamaLlmClient : ILlmClient
 
         return events;
     }
+
+    /// <summary>
+    ///     The name of the property the reader is on, as one of the literals
+    ///     this client dispatches on — or <see cref="string.Empty" /> for a
+    ///     name it does not know. The table is matched against the RAW bytes
+    ///     of the name, so the dispatch allocates nothing; the literals are
+    ///     interned, so the comparisons are the same ones the old path made.
+    /// </summary>
+    private static string ChunkPropertyName(ref Utf8JsonReader reader)
+    {
+        string? known = MatchChunkProperty(reader.ValueSpan);
+        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
+    }
+
+    /// <summary>
+    ///     The property names this client dispatches on. The table is
+    ///     EXHAUSTIVE over the literals <see cref="HandleValue" /> compares
+    ///     against — a name missing from it would stop being dispatched on,
+    ///     which is why the parity test pins the whole set.
+    /// </summary>
+    private static string? MatchChunkProperty(ReadOnlySpan<byte> raw) => raw switch
+    {
+        // Ordered by how often a line carries them, not alphabetically.
+        var x when x.SequenceEqual("message"u8) => "message",
+        var x when x.SequenceEqual("content"u8) => "content",
+        var x when x.SequenceEqual("done"u8) => "done",
+        var x when x.SequenceEqual("tool_calls"u8) => "tool_calls",
+        var x when x.SequenceEqual("index"u8) => "index",
+        var x when x.SequenceEqual("id"u8) => "id",
+        var x when x.SequenceEqual("function"u8) => "function",
+        var x when x.SequenceEqual("name"u8) => "name",
+        var x when x.SequenceEqual("arguments"u8) => "arguments",
+        var x when x.SequenceEqual("prompt_eval_count"u8) => "prompt_eval_count",
+        var x when x.SequenceEqual("eval_count"u8) => "eval_count",
+        _ => null
+    };
 
     private static void EmitToolCall(
         List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
