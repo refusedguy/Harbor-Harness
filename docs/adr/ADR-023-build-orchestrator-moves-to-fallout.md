@@ -142,10 +142,61 @@ ADR-0002 проекта fallout'а публикуется на nuget.org тол�
   → `Fallout.Solutions` уже случился в 11.x). Отсюда — **пин версии** и **шаг 0 как
   пилот**. Транзитивные зависимости fallout'а шире (`Octokit 14.0.0`,
   `Azure.Identity 1.17.1`, `YamlDotNet 16.3.0`), restore станет медленнее.
-- **Нейтральные.** Формат workflow-файлов не меняется: Fallout умеет генерировать
-  `.github/workflows/*.yml` из атрибута `[GitHubActions]`, и это меняет горизонт
-  (см. §«Что остаётся в YAML» в отчёте), но **в объём переезда не входит**:
-  генератор не пишет `needs:` (топологию джобов), а у нас 104 джоба в 17 файлах.
+- **Нейтральные.** Формат workflow-файлов не меняется. Fallout умеет генерировать
+  `.github/workflows/*.yml` из атрибута `[GitHubActions]`, но **этот генератор есть и
+  в NUKE** (`source/Nuke.Common/CI/GitHubActions/GitHubActionsAttribute.cs`, та же
+  строка `ConfigurationFile`), то есть он не является причиной переезда. И он не
+  выражает нашу модель джобов: не пишет `needs:`, `strategy:`/`matrix:`, джобные
+  `if:`, `permissions:`, `outputs:`, `env:` — а id и имя джоба у него выведены из
+  одной строки, тогда как 7 из 8 обязательных проверок (`.github/rulesets/dev.json`,
+  `.github/rulesets/master.json` — правило лежит файлом в репозитории) имеют имя,
+  отличное от job id, а пробел в job id GitHub не допускает. В объём переезда
+  генерация не входит; см. §«Где живёт генерация CI-конфигурации».
+
+## Правила зависимостей по каталогам
+
+Сведено из дерева, файл за файлом. Это то, что определяет, чем сборщику разрешено
+пользоваться при переезде.
+
+| Каталог | Какие правила на него распространяются | Можно ли брать зависимости | Чем проверяется |
+|---|---|---|---|
+| `src/`, `apps/`, `tests/` | корневой `Directory.Build.props` (анализаторы, AOT/трим, banned-API, CPM **включён**); `src/`, `apps/`, `tests/` **импортируют родителя** | **да**, версия обязана лежать в `Directory.Packages.props`; `Version=` в `.csproj` — NU1008 | `tools/gates/check-abstractions-contract` (периметр: `Harbor.Abstractions.Contracts`, `Harbor.Extensions`, `Harbor.Application`, `Harbor.PolicyConfig`), матрица слоёв в `tests/Harbor.Architecture.Tests/`, `check-analyzer-scope`, `check-no-test-sdk`, `check-test-packages` |
+| `tools/` (C#) | тот же корневой props — своих `Directory.Build.props` у `tools/` нет | **да**, версия в `Directory.Packages.props` | restore; NU1008 |
+| **`build/`** (сборщик) | **корневой props НЕ применяется**: `build/Directory.Build.props` не импортирует родителя; CPM **выключен** в двух местах (`build/Directory.Build.props:39-40` и `build/_build.csproj`); анализаторы off, `TreatWarningsAsErrors` off | **да, свободно** — версия прямо в `build/_build.csproj`; запись в `Directory.Packages.props` для сборщика **не нужна** (мёртвый текст — ровно то, что #1896 убрал для `Nuke.Common`) | restore; правило зафиксировано **документом** — `docs/CENTRAL_PACKAGE_MANAGEMENT.md` §4.4 — а не гейтом. Гейта на «версия сборщика в одном месте» нет |
+| **`tools/gates/`** (Go) | отдельный Go-модуль `harbor.local/gates`, `go 1.27.3`, **ноль внешних `require`**. `docs/CI_GATES.md` правило 6: *«with the standard library only and no external module»*; там же: *«there is no `go.sum`: a gate that fetched something at run time could not run on a runner with no network»*; `tools/gates/README.md` правило 4 — то же | **нет** — внешний модуль запрещён **правилом репозитория**, а не просто неудобен | `go-quality` (gofmt, `go vet`, регистрация, полы `--min-files 75 --min-packages 28`); `gates-binary` → джоб `verify-committed` пересобирает бинарь и сверяет байты |
+| `contrib/` | не собирается CI | — | — |
+
+**Что из этого следует для переезда.** Правила AOT, запретов и слоёв к сборщику не
+относятся: он вне матрицы слоёв и вне периметра `check-abstractions-contract`. CPM на
+него не распространяется, поэтому новый пакет сборщика — это одна строка в
+`build/_build.csproj`. **Оговорка:** пакет приходит со своим транзитивным деревом, а
+ни один гейт сегодня на дерево зависимостей сборщика не смотрит (`check-test-packages`
+покрывает тесты и сэмплы). Это новый долг, а не бесплатный выигрыш.
+
+**И NU1605 при выключенном CPM — это про прямой `PackageReference`:** наш пин
+`NuGet.Packaging 6.12.5` ниже транзитивного требования `Fallout.Tooling` (6.14.3) →
+ошибка restore. Лечится поднятием пина до **6.14.3**; `CentralPackageTransitivePinningEnabled`
+это не спасёт, потому что он выключен и для `build/`.
+
+**Где живёт генерация CI-конфигурации.** Отдельное решение, и оно **не** в объёме
+переезда. Если её делать — то **в `tools/gates/`, на Go, без внешних зависимостей**,
+по образцу `gen-seam-graph` (генератор пишет `--write`, CI падает на устаревшей
+коммитированной копии). Причины, по фактам:
+
+- Гейт должен срабатывать там, где нет SDK и нет сборки дерева, — ради этого гейты и
+  стали компилируемым бинарём в git. C#-генератор потребовал бы restore и сборку
+  оркестратора, то есть **не сработал бы в lanes документации и в PR, ломающем
+  сборку**, — ровно там, где расхождение и должно ловиться.
+- Внешняя зависимость в Go-гейте **запрещена правилом** (`docs/CI_GATES.md` правило 6),
+  а `vendor/` был бы нарушением этого правила для всех гейтов репозитория. Выход:
+  YAML писать руками, как `gen-seam-graph` пишет markdown руками. Тогда `go.mod`
+  остаётся пустым, `GOFLAGS=-mod=mod` в `tools/build-gates.sh` остаётся герметичным
+  (сеть не нужна, потому что тянуть нечего), и воспроизводимость байтов не меняется.
+- Fallout-генератор нашу модель джобов не выражает: он не пишет `needs:`,
+  `strategy:`/`matrix:`, джобные `if:`, `permissions:`, `outputs:` и `env:` — и у него
+  id и имя джоба выведены из **одной** строки (`GitHubActionsJob.Write` пишет
+  `$"{Name}:"` и `$"name: {Name}"`), тогда как у нас 7 из 8 обязательных проверок
+  имеют имя, отличное от job id, а пробел в job id GitHub не допускает.
 
 ## Alternatives considered
 
