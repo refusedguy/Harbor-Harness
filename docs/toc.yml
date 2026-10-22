@@ -146,6 +146,8 @@
   href: TestKit-Expansion-Report.md
 - name: Verified Change
   href: VERIFIED_CHANGE.md
+- name: Workflow Generation
+  href: WORKFLOW_GENERATION.md
 - name: Xml Doc Audit
   href: XML_DOC_AUDIT.md
 - name: Hotfix Sprint Prompt
