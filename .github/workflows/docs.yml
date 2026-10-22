@@ -610,6 +610,16 @@ jobs:
       # no Go. The toolchain's own fixtures run in gates-binary.yml.
       - name: Go-quality gate fails on an unformatted file and a diverged registry
         run: tools/bin/harbor-gates-linux-x64 go-quality --self-test
+      # #2119. The event-topology gate is the only one that asks whether the
+      # producer table of a normative document still names the tree's real
+      # PublishAsync call sites. The `file:line` fence asks whether a line
+      # EXISTS, and in that table the line number is the content of the row,
+      # so the fence passed a table that named four sites where the file had
+      # seven. Its failure path is tested here for the same reason as the
+      # others: a rule edited until it matches nothing is indistinguishable
+      # from a rule that found nothing.
+      - name: Event-topology gate fails on a drifted producer row
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
       # #2086. The demo gate moved into the compiled binary, and its self-test
       # runs here for the same reason as the others: a rule edited until it
       # matches nothing is indistinguishable from a rule that found nothing.
@@ -619,6 +629,30 @@ jobs:
       # The fixtures are hand-made and need neither ffmpeg nor a recording.
       - name: Demo gate still reads a recording and names a missing baseline field
         run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
+
+  # #2119. The event topology of the harness is a normative document: it
+  # says which code publishes on the bus and which code subscribes, and every
+  # one of those claims is a `file:line`. The citation fence that guards
+  # every other normative document asks one question of a citation: does the
+  # line exist? That is the right question for a linear citation and the
+  # wrong one for the producer table, where the line number IS the content of
+  # the row. A row that named four call sites where the file holds seven
+  # passed the fence, and the document said "normative" the whole time.
+  #
+  # So this gate asks the question the fence cannot: the row and the file
+  # must agree on the SET of call sites, in both directions, and every file
+  # that publishes must have a row. The floors are the ratchet: a scan that
+  # measured fewer rows than the tree holds cannot say the tree is fine.
+  eventtopology:
+    name: event topology
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the producer rows name the tree's real call sites
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
 
   links:
     name: internal links
