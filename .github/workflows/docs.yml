@@ -24,15 +24,14 @@
 #   selftest  all four gates against fixtures that are known-broken. A checker
 #             that has quietly stopped finding anything is still green on every
 #             PR, so the failure path is tested on every docs change.
+#   tree      EVERY gate that needs nothing but the tree, in one command:
+#             `harbor-gates all`. One table, one exit code, and the list of
+#             the gates in tools/gates/all/gates.go. The gates of that list
+#             that are still python keep a job of their own below: the
+#             binary must not need python.
 #   links     internal link + GitHub anchor resolution, with a file/ref floor.
 #   cites     `file:line` in a normative document resolves, and a type it names
 #             is constructed by something (#664).
-#   facts     a COUNT the onboarding documents state still equals the count of
-#             tracked files it is counting (#933). This is the only one of the
-#             four that asks a numeric question, and it is deliberately not a
-#             cross-check between the copies of a prose fact: measured, that
-#             gate is red on dated records and green on the live defect. The
-#             `facts` job's comment carries the measurement.
 #   lint      markdown structural invariants, with a file/line floor.
 #   testdup   duplicated test bodies in tests/ (#1778), with a scan-size floor.
 #             It lives here rather than in ci.yml because it needs no .NET
@@ -599,6 +598,65 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
       - name: E2E shard runner still refuses a plan it cannot run
         run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
+      # The pull-request cost measurement: the runner-minutes, the wall, the
+      # critical path, the peak width, and the bill split by article. It is a
+      # tool a human runs over the job list of a CI run, and no workflow runs
+      # it — but its self-test is called here for the same reason as the
+      # others: an instrument edited until it measures nothing is
+      # indistinguishable from an instrument that measured an empty pull
+      # request. The load-bearing fixtures are the three numbers a hand-
+      # written table gets wrong — the wall (which is the MAXIMUM of two
+      # parallel workflows, not their sum), the busy time (which excludes the
+      # wait for a runner) and the peak width (which counts a job that ends
+      # as the next one starts ONCE, not twice) — and the one refusal: a
+      # timestamp that cannot be parsed must be an error, because a bill of
+      # zero is the number that looks like good news.
+      - name: Pull-request cost measurement still measures a planted pull request
+        run: tools/bin/harbor-gates-linux-x64 pr-cost --self-test
+      # The gate over the Go sources of the gates themselves. Its failure path
+      # is tested here for the same reason as the others: a rule edited until
+      # it matches nothing is indistinguishable from a rule that found
+      # nothing. The load-bearing fixtures are the three shapes -- an
+      # unformatted file, a package the registry does not name, and a package
+      # without a self-test -- and the fixture that needs the Go toolchain
+      # (a printf `go vet` must reject) says it did not run when the
+      # toolchain is absent, which is the case HERE: this workflow installs
+      # no Go. The toolchain's own fixtures run in gates-binary.yml.
+      - name: Go-quality gate fails on an unformatted file and a diverged registry
+        run: tools/bin/harbor-gates-linux-x64 go-quality --self-test
+      # #2119. The event-topology gate is the only one that asks whether the
+      # producer table of a normative document still names the tree's real
+      # PublishAsync call sites. The `file:line` fence asks whether a line
+      # EXISTS, and in that table the line number is the content of the row,
+      # so the fence passed a table that named four sites where the file had
+      # seven. Its failure path is tested here for the same reason as the
+      # others: a rule edited until it matches nothing is indistinguishable
+      # from a rule that found nothing.
+      - name: Event-topology gate fails on a drifted producer row
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
+      # The workflow gate: a file with a duplicate key in a mapping is a file
+      # GitHub refuses to parse, and the refusal is silent — the run is
+      # created with ZERO jobs. The gate's own proof that it can fail, run
+      # here because the gate itself lives in the `workflows` job below, and
+      # a job that cannot start cannot prove anything.
+      - name: Workflow gate fails on a duplicate key and stays quiet on a legal repeat
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --self-test
+      # #2086. The demo gate moved into the compiled binary, and its self-test
+      # runs here for the same reason as the others: a rule edited until it
+      # matches nothing is indistinguishable from a rule that found nothing.
+      # The demo workflow runs the gate on real recordings, but that workflow
+      # fires on a pull request only for `assets/demo/**`, so a pull request
+      # that edits the GATE itself would never reach a self-test placed there.
+      # The fixtures are hand-made and need neither ffmpeg nor a recording.
+      - name: Demo gate still reads a recording and names a missing baseline field
+        run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
+      # #2122. The runner of the tree gates, and the list it runs. Its failure
+      # path is the same shape as every other gate's: a gate that cannot
+      # start, a gate that is missing, a report whose order depends on the
+      # speed of the machine are all failures that only a planted fixture
+      # catches.
+      - name: The tree-gate runner fails on a planted defect
+        run: tools/bin/harbor-gates-linux-x64 all --self-test
       # #2131. The gate that keeps the benchmark's gate set and the CI's gate
       # set from drifting apart: the file that lists the gates the benchmark
       # measures must list every gate a workflow runs, and the gates that are
@@ -607,6 +665,76 @@ jobs:
       # indistinguishable from a gate that found nothing.
       - name: The gate-bench-set gate fails on a gate the set does not hold
         run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test
+
+  # The tree gates, in ONE command.
+  #
+  # Every gate of this repository that needs nothing but the tree — no
+  # build, no SDK, no network — is one subcommand of the compiled binary,
+  # and this job runs all of them: `harbor-gates all` starts the ones that
+  # are compiled, in parallel, and prints ONE table (gate, exit code, time,
+  # first line of the output). The list of the tree gates is in
+  # tools/gates/all/gates.go, and it is checked against the workflows, so a
+  # gate that needs what the build produces cannot be in it.
+  #
+  # The gates of the list that are still PYTHON are not run by this job:
+  # the binary must not need python. They keep a job of their own below,
+  # and the local runner (tools/check-local.sh) runs them with the same
+  # list and the same flags.
+  #
+  # The per-gate jobs of the COMPILED tree gates are gone (the `contract`,
+  # `facts`, `xmldoc` and `seamgraph` jobs), and the table in
+  # docs/CI_GATES.md says so: for every gate of the list this job runs, the
+  # table names THIS job and the floors the runner passes it. The policy
+  # checker (tools/check-gate-policy.py) reads the list of the runner and
+  # knows that a workflow which calls `harbor-gates all` runs the gates of
+  # that list, so the record of which job owns which gate survives the
+  # consolidation — and the floors survive it too, because the list carries
+  # them and the checker fails when the runner passes a gate FEWER floors
+  # than its own job passed.
+  #
+  # This job is also the one command a developer can run on their own
+  # machine: tools/check-local.sh runs it and the gates that are still
+  # python.
+  tree:
+    name: tree gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # The full history, and the reason is one gate: the public-API
+      # re-signing gate reads the commit RANGE of the pull request, and a
+      # shallow checkout has no merge base to read it from. The `public-api`
+      # job of ci.yml needs the same history for the same reason.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run every gate that needs nothing but the tree
+        run: tools/bin/harbor-gates-linux-x64 all
+
+  # #2119. The event topology of the harness is a normative document: it
+  # says which code publishes on the bus and which code subscribes, and every
+  # one of those claims is a `file:line`. The citation fence that guards
+  # every other normative document asks one question of a citation: does the
+  # line exist? That is the right question for a linear citation and the
+  # wrong one for the producer table, where the line number IS the content of
+  # the row. A row that named four call sites where the file holds seven
+  # passed the fence, and the document said "normative" the whole time.
+  #
+  # So this gate asks the question the fence cannot: the row and the file
+  # must agree on the SET of call sites, in both directions, and every file
+  # that publishes must have a row. The floors are the ratchet: a scan that
+  # measured fewer rows than the tree holds cannot say the tree is fine.
+  eventtopology:
+    name: event topology
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the producer rows name the tree's real call sites
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
 
   links:
     name: internal links
@@ -734,16 +862,12 @@ jobs:
   # 5, so a rule that silently stops matching drives the number down and this
   # job goes red instead of reporting a clean tree — the #591 shape, which the
   # --self-test also pins from the other side.
-  facts:
-    name: repo-map counts
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check every repo-map count against the tree
-        run: tools/bin/harbor-gates-linux-x64 check-doc-facts --min-facts 5
+  #
+  # The JOB is gone: the gate is compiled into the binary, it is in the list
+  # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
+  # runs it with the same floor. The floor still travels: the list of the
+  # runner carries `--min-facts 5`, and the gate policy checks that the
+  # runner passes the gate the floors its own job passed.
 
   # #428. Fifth question, and the only one about a package rather than a
   # document: not "do the links resolve", not "is the file shaped right", not
@@ -770,27 +894,18 @@ jobs:
   # removed a declaration, so a floor below the post-fix count would have been a
   # floor that a re-added phantom still cleared. Lower them only in the same diff
   # that legitimately removes a dependency, where a reviewer can see it.
-  contract:
-    name: guarded project dependencies
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      # Floors are the ratchet, and they are set AT the measured counts rather
-      # than below them — a floor with slack cannot tell "the tree got smaller"
-      # from "the matcher stopped matching", and only the first of those is a
-      # change a reviewer should have to look at. A PR that legitimately removes
-      # a dependency lowers them in the same diff. Recomputed when the perimeter
-      # widened to four projects (was 9 / 6 / 75 over two), and again after
-      # #1623 moved the agent loop out of the Application perimeter
-      # (--report: 13 / 7 / 143), and again after #1624 moved the
-      # session-context cohort out of the same perimeter (--report: 13 / 7 / 130),
-      # and again after #1625 moved the configuration family out of it and the
-      # new Harbor.PolicyConfig assembly into it (--report: 19 / 7 / 141).
-      - name: Check the guarded projects' declared dependencies
-        run: tools/bin/harbor-gates-linux-x64 check-abstractions-contract --min-packages 19 --min-namespaces 7 --min-files 141
+  #
+  # The JOB is gone: the gate is compiled into the binary, it is in the list
+  # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
+  # runs it with the same floors: `--min-packages 19 --min-namespaces 7
+  # --min-files 141` (recomputed when the perimeter widened to four projects
+  # (was 9 / 6 / 75 over two), and again after #1623 moved the agent loop
+  # out of the Application perimeter (--report: 13 / 7 / 143), and again
+  # after #1624 moved the session-context cohort out of the same perimeter
+  # (--report: 13 / 7 / 130), and again after #1625 moved the configuration
+  # family out of it and the new Harbor.PolicyConfig assembly into it
+  # (--report: 19 / 7 / 141)). A gate that needs the SDK cannot run here,
+  # and this one needs nothing but the tree.
 
   # #1778. Sixth question, and the only one about the TEST tree: not "do the
   # links resolve", not "is the file shaped right", not "does the file:line
@@ -1263,16 +1378,11 @@ jobs:
   # "the surface got smaller" from "the matcher stopped matching". The
   # non-vacuity proof is the gate's own --self-test (one undocumented member
   # fails, naming it), run in the `selftest` job above.
-  xmldoc:
-    name: xml-doc coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check XML-doc coverage of the frozen contract assembly
-        run: tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
+  #
+  # The JOB is gone: the gate is compiled into the binary, it is in the list
+  # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
+  # runs it with the same floors: `--min-members 493 --min-documented 478
+  # --min-coverage 0.96`.
 
   # #1731. Twelfth question, and the only one that asks whether a GENERATED
   # document still matches the tree it was generated from.
@@ -1281,8 +1391,8 @@ jobs:
   # `docs/SEAM_GRAPH.md`: the seam graph — who implements a seam, who extends
   # what implements it, who consumes it, who is registered in the container,
   # and where the seam is bypassed. The point of generating it rather than
-  # writing it is that the document cannot drift: this job regenerates the
-  # document and fails if the committed one differs.
+  # writing it is that the document cannot drift: the tree runner regenerates
+  # the document and fails if the committed one differs.
   #
   # The floors are a ratchet on the SCAN SIZE, like the floors above: a scan
   # that silently stopped covering the tree would produce a document that
@@ -1297,16 +1407,10 @@ jobs:
   # The non-vacuity proof is the gate's own --self-test (a stale document
   # fails, a freshly generated one passes, and the route grader tells a
   # registering route from a refusing one), run in the `selftest` job above.
-  seamgraph:
-    name: seam graph
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check the committed seam graph matches the tree
-        run: tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
+  #
+  # The JOB is gone: the gate is compiled into the binary, it is in the list
+  # of the tree runner (tools/gates/all/gates.go), and the `tree` job above
+  # runs it with the same floors: `--min-files 2523 --min-interfaces 191`.
 
   # #1888. Eleventh question, and the only one about the gates themselves:
   # not "do the links resolve" and not "is the file shaped right" and not
@@ -1364,7 +1468,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the measured gate set against the workflows
-        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 37
+        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 41
 
   # #1558. The chain census, and the ratchet on it.
   #
@@ -1450,6 +1554,38 @@ jobs:
       - name: Check the committed plugin inventory against the tree
         run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
 
+  # The workflow gate. A workflow file with a DUPLICATE KEY in a mapping is a
+  # file GitHub refuses to parse, and the refusal is silent from the
+  # repository's point of view: the run is created, it has ZERO jobs, and it
+  # closes as "failure" with the text "This run likely failed because of a
+  # workflow file issue". The lane is not red — it is ABSENT — and every pull
+  # request that waits for it waits forever.
+  #
+  # It happened here. On 2026-10-21 the `ci` workflow stopped running at all:
+  # runs 39627731779 and 39627783779 had zero jobs, and the run before them
+  # (39613662649) had sixteen. The commit that broke it (e7479b9a, #2115)
+  # gave three shard-reporting steps an arm64 twin and wrote the twin as a
+  # second `if:`/`shell:`/`run:` inside the first step's mapping.
+  #
+  # THIS job lives in the documentation lane on purpose: a gate that polices
+  # `ci.yml` cannot live in `ci.yml`, because a broken `ci.yml` takes its own
+  # gate with it. The documentation lane starts on every pull request, with or
+  # without a .NET build.
+  #
+  # The floor is the number of workflow files the tree holds (17), so a scan
+  # that stopped matching the tree drives the number down and this job goes
+  # red instead of reporting a clean tree.
+  workflows:
+    name: workflow files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that no workflow file declares a key twice
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
+
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
   # docfx.json is the manifest (metadata lane + content globs + nav); this job
@@ -1459,7 +1595,7 @@ jobs:
   # a static `_site` (copied markdown + generated index) with stdlib python
   # only — no SDK, no docfx binary, so this workflow stays dotnet-free.
   # The full `docfx build` with generated API pages (api/*.yml) is a later
-  # slice (ADR-017); the XML-doc coverage gate is the `xmldoc` job above.
+  # slice (ADR-017); the XML-doc coverage gate runs in the `tree` job above.
   # Internal links inside the
   # assembled site are covered by the `links` job above, which runs on the same
   # tree and the same trigger paths — no second link checker is introduced here.

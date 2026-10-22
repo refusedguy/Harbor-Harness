@@ -14,6 +14,9 @@
 // three sources and fails when they disagree:
 //
 //	.github/workflows/*.yml   what CI really runs, and with which arguments
+//	tools/gates/all/gates.go  the list of the tree runner: a workflow that
+//	                          calls `harbor-gates all` RUNS the gates of
+//	                          that list, and the reader has to know it
 //	bench/gates/tools.tsv    the set the benchmark measures
 //	bench/gates/excluded.tsv the gates CI runs that the set does NOT measure,
 //	                          each with the reason it is out
@@ -29,6 +32,9 @@
 //	BENCH-SET-COMMAND-DEAD   the measured row runs a file that is not in the
 //	                         tree
 //	BENCH-SET-ROW-SHAPE      a row is not what the format says
+//	BENCH-SET-RUNNER-UNREADABLE the list of the tree runner cannot be read,
+//	                         so the reader cannot tell which gates a
+//	                         workflow that calls the runner really runs
 //
 // # WHY A COMPILED GATE
 //
@@ -179,6 +185,31 @@ func check(root string) ([]finding, int, int) {
 		ran[inv.name] = append(ran[inv.name], inv)
 	}
 
+	// A workflow that calls the tree runner RUNS the gates of the runner's
+	// list. Without this, every gate the runner starts looks like a gate
+	// nobody runs, and the set drops the gates a pull request pays.
+	entries, reason := readRunnerEntries(root)
+	if reason != "" {
+		findings = append(findings, finding{
+			code:  "BENCH-SET-RUNNER-UNREADABLE",
+			msg:   reason,
+			where: runnerListFile,
+		})
+	}
+	runnerInvs := runnerInvocations(root, entries)
+	for _, inv := range invocations {
+		if inv.name != runnerGate || inv.selfTest() {
+			continue
+		}
+		for _, started := range runnerInvs {
+			expanded := started
+			expanded.workflow = inv.workflow
+			expanded.job = inv.job
+			invoked[started.name] = append(invoked[started.name], expanded)
+			ran[started.name] = append(ran[started.name], expanded)
+		}
+	}
+
 	// Every gate CI runs is measured, or excluded with a reason.
 	measuredNames := map[string]bool{}
 	for _, row := range measured.rows {
@@ -188,6 +219,7 @@ func check(root string) ([]finding, int, int) {
 	for _, row := range excluded.rows {
 		excludedNames[row.name] = true
 	}
+
 	for name := range invoked {
 		if measuredNames[name] || excludedNames[name] {
 			continue

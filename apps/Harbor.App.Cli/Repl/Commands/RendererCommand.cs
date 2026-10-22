@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Extensions;
 using Harbor.Hosting.Rendering;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -15,7 +16,7 @@ internal sealed class RendererCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         var pipeline = host.RendererPipeline;
         if (pipeline is null)

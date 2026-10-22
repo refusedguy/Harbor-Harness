@@ -40,28 +40,36 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
+	"harbor.local/gates/check-event-topology"
 	benchset "harbor.local/gates/check-gate-bench-set"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
+	codemodtestevents "harbor.local/gates/codemod-test-events"
+	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	coveragereport "harbor.local/gates/coverage-report"
+	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
 	"harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	prcost "harbor.local/gates/pr-cost"
 	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
@@ -95,6 +103,11 @@ var registry = []registered{
 		run:     aggregatebuildvcpu.Run,
 	},
 	{
+		name:    "all",
+		summary: "every gate that needs nothing but the tree, in one command",
+		run:     all.Run,
+	},
+	{
 		name:    "aot-publish-gate",
 		summary: "the AOT publish's outcome and diagnostics match the committed record",
 		run:     aotpublish.Run,
@@ -123,6 +136,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-event-topology",
+		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
+		run:     eventtopology.Run,
 	},
 	{
 		name:    "check-gate-bench-set",
@@ -155,14 +173,34 @@ var registry = []registered{
 		run:     shardbalance.Run,
 	},
 	{
+		name:    "check-workflows",
+		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
+		run:     checkworkflows.Run,
+	},
+	{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
 	},
 	{
+		name:    "codemod-test-events",
+		summary: "the hand-built test events and messages move onto the shared builders",
+		run:     codemodtestevents.Run,
+	},
+	{
+		name:    "codemod-tool-names",
+		summary: "the tool-name literals move onto the WellKnownTools catalog",
+		run:     codemodtoolnames.Run,
+	},
+	{
 		name:    "coverage-report",
 		summary: "the per-project and per-file coverage report of a run",
 		run:     coveragereport.Run,
+	},
+	{
+		name:    "demo-repro",
+		summary: "the demo GIFs are reproducible, and the baseline manifest is well-formed",
+		run:     demorepro.Run,
 	},
 	{
 		name:    "gen-e2e-shards",
@@ -175,9 +213,9 @@ var registry = []registered{
 		run:     genseamgraph.Run,
 	},
 	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "measure-build-cpu",
@@ -203,6 +241,11 @@ var registry = []registered{
 		name:    "pack-validate",
 		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
 		run:     packvalidate.Run,
+	},
+	{
+		name:    "pr-cost",
+		summary: "what one pull request costs: the runner-minutes, the wall, the critical path and the peak width",
+		run:     prcost.Run,
 	},
 	{
 		name:    "run-e2e-avalonia-shards",

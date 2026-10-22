@@ -24,15 +24,16 @@
 # reason nobody reads.
 
 # gate	reason
-changelog-assemble	CI runs only its own self-test: the assembler is a release-time tool, and a pull request owns its own fragment
+all	the runner is not a gate: it starts the gates of the tree list in parallel, and the set measures each of them on its own. The job's wall is the slowest of them, not their sum
 check-dup-jscpd.py	the gate downloads the jscpd binary from the network on first use, and there is no network and no binary on the measuring machine
 check-tunit-analyzer-gate.py	the control runs the compiler: it builds a throwaway project and reads its output, and the measuring machine has no .NET SDK
-demo_repro.py	the demo is recorded by running Harbor and the gate compares two recordings of it, so it needs the built product and the .NET SDK
+go-quality	the gate runs `go vet` and `go build`, and the toolchain CI uses is fetched from the network; the measuring machine has none it may rely on
 measure-aot-workload.sh	the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK
 measure-build-cpu	the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
 measure-jit-workload.sh	the workload builds the CLI and runs it, so it needs the .NET SDK
 measure-project-graph	CI runs only its own self-test: the project graph is read by a human, not by a build
 msbuild-evaluation-cost	the measurement reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in docs/BENCHMARKS.md §6
+pr-cost	CI runs only its own self-test: the cost of a pull request is a measurement a human runs over the job list of a run
 public-api-nonvacuity.sh	the proof builds a throwaway project against the public-API analyzer and requires it to fail, so it needs the .NET SDK
 run-e2e-avalonia-shards	the runner starts one `dotnet exec` per shard, so it needs the built product and the .NET SDK
 gen-e2e-shards	CI runs only its own self-test: the shard plan is a generator a human runs before a release, and no build reads it

@@ -52,6 +52,42 @@ The measured set holds check-alpha.py and check-beta.
 The excluded set holds check-gamma.py.
 `
 
+// The runner of the tree gates: a workflow that calls `harbor-gates all`
+// RUNS the gates of the runner's list. The fixture list has one compiled
+// gate and one python one, because the runner runs the compiled ones only.
+const syntheticRunnerList = `package all
+
+var treeGates = []treeGate{
+	{
+		name:  "check-beta",
+		needs: "the tree",
+		args:  []string{"--check", "--min-files", "5"},
+	},
+	{
+		name:  "check-epsilon",
+		needs: "the tree",
+		args:  []string{"--min-files", "7"},
+	},
+}
+`
+
+// syntheticRunnerWorkflow is the workflow that calls the runner.
+const syntheticRunnerWorkflow = `name: synthetic
+on: [push]
+jobs:
+  tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: the tree gates
+        run: tools/bin/harbor-gates-linux-x64 all
+`
+
+// syntheticRunnerTools is the measured set of the runner fixture: the gate
+// of the list that no workflow names one by one is in it, because the
+// runner runs it.
+const syntheticRunnerTools = `check-beta	tools/bin/harbor-gates-linux-x64 check-beta --check --min-files 5
+`
+
 // syntheticTree writes the fixture tree and returns its root.
 func syntheticTree() (string, error) {
 	root, err := os.MkdirTemp("", "bench-set-selftest-")
@@ -106,6 +142,19 @@ func hasCode(findings []finding, code string) bool {
 func write(root, name, body string) {
 	_ = os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755)
 	_ = os.WriteFile(filepath.Join(root, name), []byte(body), 0o644)
+}
+
+// cleanFixture puts the fixture tree back into its clean shape.
+//
+// The tree runner's package goes with it: a tree with no runner has no list
+// to read, and the reader must not report a runner it cannot find.
+func cleanFixture(root string) {
+	write(root, ".github/workflows/ci.yml", syntheticWorkflow)
+	write(root, "bench/gates/tools.tsv", syntheticTools)
+	write(root, "bench/gates/excluded.tsv", syntheticExcluded)
+	write(root, "bench/gates/README.md", syntheticReadme)
+	_ = os.RemoveAll(filepath.Join(root, "tools", "gates", "all"))
+	_ = os.RemoveAll(filepath.Join(root, "tools", "gates", "check-epsilon"))
 }
 
 func selfTestRun() int {
@@ -211,10 +260,61 @@ func selfTestRun() int {
 		}
 	}
 
+	// THE TREE RUNNER. A workflow that calls `harbor-gates all` RUNS the
+	// gates of the runner's list, so the reader has to know them: the
+	// workflows do not name those gates one by one any more.
+	runnerFixtures := []fixture{
+		{
+			name: "the runner runs the gates of its list",
+			code: "BENCH-SET-GATE-MISSING",
+			plant: func() {
+				// The list has a compiled gate the set does not hold.
+				write(root, ".github/workflows/ci.yml", syntheticRunnerWorkflow)
+				write(root, "bench/gates/tools.tsv", syntheticRunnerTools)
+				write(root, "tools/gates/all/gates.go", syntheticRunnerList)
+				write(root, "tools/gates/check-epsilon/selftest.go", "")
+			},
+		},
+	}
+
+	for _, f := range runnerFixtures {
+		cleanFixture(root)
+		f.plant()
+		findings, _, _ := check(root)
+		fired := hasCode(findings, f.code)
+		mark := "ok"
+		if !fired {
+			mark = "<< MISMATCH"
+			ok = false
+		}
+		fmt.Printf("  [%-38s] %-28s %s\n", f.name, f.code, mark)
+		if !fired {
+			fmt.Printf("      the rule did not fire; the findings were %s\n", strings.Join(codes(findings), " "))
+		}
+	}
+
+	// The other half of the runner: a row that names a gate the RUNNER runs
+	// is not stale. The workflows do not name that gate one by one any more,
+	// so a reader that only looked at the workflows would call the row
+	// stale and the measured set would go on measuring gates no pull
+	// request pays for.
+	cleanFixture(root)
+	write(root, ".github/workflows/ci.yml", syntheticRunnerWorkflow)
+	write(root, "bench/gates/tools.tsv", syntheticRunnerTools)
+	write(root, "bench/gates/excluded.tsv", "")
+	write(root, "tools/gates/all/gates.go", syntheticRunnerList)
+	write(root, "tools/gates/check-epsilon/selftest.go", "")
+	runnerFindings, _, _ := check(root)
+	if hasCode(runnerFindings, "BENCH-SET-GATE-STALE") {
+		fmt.Printf("  [%-38s] %-28s %s\n", "a row the runner runs is not stale", "BENCH-SET-GATE-STALE", "<< MISMATCH")
+		fmt.Printf("      the rule fired; the findings were %s\n", strings.Join(codes(runnerFindings), " "))
+		ok = false
+	} else {
+		fmt.Printf("  [%-38s] %-28s ok\n", "a row the runner runs is not stale", "BENCH-SET-GATE-STALE")
+	}
+
 	// The tree is put back, and the gate is green on it again.
-	write(root, "bench/gates/tools.tsv", syntheticTools)
-	write(root, "bench/gates/excluded.tsv", syntheticExcluded)
-	write(root, "bench/gates/README.md", syntheticReadme)
+	cleanFixture(root)
 	restored, _, _ := check(root)
 	if len(restored) > 0 {
 		fmt.Printf("  [%-38s] %s\n", "the tree is clean again", strings.Join(codes(restored), " "))

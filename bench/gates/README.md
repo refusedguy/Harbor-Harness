@@ -52,11 +52,29 @@ The two files and the workflow files are checked against each other by
 | `BENCH-SET-ARGS-DIVERGE` | the measured row does not pass the arguments CI passes, so the benchmark times a different gate |
 | `BENCH-SET-COMMAND-DEAD` | the measured row runs a file that is not in the tree |
 | `BENCH-SET-ROW-SHAPE` | a row is not the name and the command |
+| `BENCH-SET-RUNNER-UNREADABLE` | the list of the tree runner cannot be read, so the gate cannot tell which gates the runner runs |
 
 So the set cannot drift away from CI: a gate added to a workflow without a
 row in `tools.tsv` is red, and a row whose arguments fell behind the
 workflow's is red too. The instrument that times the set is checked by the
 gate that checks the set.
+
+**The tree runner is part of the answer.** Most of the tree gates run
+through ONE command, `harbor-gates all`, and a workflow that calls the
+runner RUNS the gates of the runner's list — the workflows do not name
+those gates one by one any more. The gate reads that list out of the GO
+SOURCE of the runner's package (`tools/gates/all/gates.go`), the same way
+the gate policy reads it, and it compares the measured row with the flags
+the LIST carries. A list that cannot be read is a finding, not an empty
+list.
+
+**What the set's total is, and what it is not.** The set is the SUM of the
+gates, one after another, because that is what the harness times. The
+`tree` job of `docs.yml` runs the same gates IN PARALLEL, through the
+runner, so the job's wall is about the slowest of them and not their sum.
+The table in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §10.2 is the sum,
+and it is the sum the harness has always measured: what one gate costs, and
+what the gates cost when they are run one after another.
 
 ## The gates that are NOT in the set
 
@@ -64,15 +82,16 @@ Three reasons a gate CI runs is out of the measured set, and only three.
 
 | gate | why it is out |
 |---|---|
-| `changelog-assemble` | CI runs only its own self-test: the assembler is a release-time tool, and a pull request owns its own fragment |
+| `all` | the runner is not a gate: it starts the gates of the tree list in parallel, and the set measures each of them on its own. The job's wall is the slowest of them, not their sum |
 | `check-dup-jscpd.py` | the gate downloads the jscpd binary from the network on first use, and there is no network and no binary on the measuring machine |
 | `check-tunit-analyzer-gate.py` | the control runs the compiler: it builds a throwaway project and reads its output, and the measuring machine has no .NET SDK |
-| `demo_repro.py` | the demo is recorded by running Harbor and the gate compares two recordings of it, so it needs the built product and the .NET SDK |
+| `go-quality` | the gate runs `go vet` and `go build`, and the toolchain CI uses is fetched from the network; the measuring machine has none it may rely on |
 | `measure-aot-workload.sh` | the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK |
 | `measure-build-cpu` | the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §6 |
 | `measure-jit-workload.sh` | the workload builds the CLI and runs it, so it needs the .NET SDK |
 | `measure-project-graph` | CI runs only its own self-test: the project graph is read by a human, not by a build |
 | `msbuild-evaluation-cost` | the measurement reads the performance summary of a `dotnet build`, so it needs the .NET SDK; the numbers it produces live in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §6 |
+| `pr-cost` | CI runs only its own self-test: the cost of a pull request is a measurement a human runs over the job list of a run |
 | `public-api-nonvacuity.sh` | the proof builds a throwaway project against the public-API analyzer and requires it to fail, so it needs the .NET SDK |
 | `run-e2e-avalonia-shards` | the runner starts one `dotnet exec` per shard, so it needs the built product and the .NET SDK |
 | `gen-e2e-shards` | CI runs only its own self-test: the shard plan is a generator a human runs before a release, and no build reads it |
