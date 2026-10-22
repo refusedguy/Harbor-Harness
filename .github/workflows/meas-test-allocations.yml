@@ -42,7 +42,7 @@
 #
 # THE OUTPUT
 # ----------
-# Every suite writes a TRX, and `tools/test-measurements.py` renders the
+# Every suite writes a TRX, and the `test-measurements` gate renders the
 # measurements a test PRINTED into the job summary — the `[alloc-cost]` and
 # `[alloc-rank]` lines, with the test that produced them. The TRX files are
 # uploaded, so the full census (one line per site) is downloadable and not
@@ -145,7 +145,7 @@ jobs:
       - name: The measurements, in the job summary
         if: always()
         run: |
-          python3 tools/test-measurements.py TestResults --summary "$GITHUB_STEP_SUMMARY" --max-rows 500
+          tools/bin/harbor-gates-linux-x64 test-measurements TestResults --summary "$GITHUB_STEP_SUMMARY" --max-rows 500
           {
             echo ""
             echo "### The per-suite wall (seconds)"
