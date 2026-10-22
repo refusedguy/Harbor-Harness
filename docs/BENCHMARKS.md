@@ -1143,6 +1143,53 @@ each line's tabs through a `StringBuilder`, and the measurement of that cut read
 line costs the object, its chunk buffer and the string it hands back). The
 expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
+#### The yardstick has a price, and the gate now pays it (run 39633684054)
+
+The time branch is in **probe units**, so the runner's speed is supposed to
+cancel: the numerator and the denominator are both measured on the same runner
+in the same run. It cancels only while the yardstick IS the yardstick. The probe
+is a fixed workload, so its cost is a property of the machine — and the machine
+has a price: **0.000343-0.000353 ms/unit** in the nineteen measured
+`test (ui)` runs of the fleet that read it (the oldest, run 39372950798, read
+0.000380).
+
+Three runs read **0.000041 ms/unit** instead — 8.5x below — while the workload
+the probe was supposed to normalize was UNCHANGED:
+
+| Run | probe ms/unit | frame ms/unit | frame probe units | verdict |
+|---|---|---|---|---|
+| 39633684054 | 0.000041 | 0.0815 | **1992.3** (budget 700) | red |
+| 39609285153 | 0.000041 | 0.0816 | **1990.3** (budget 700) | red |
+| 39619582982 | 0.000041 | — | — | red (patch split only) |
+| 39639468264 (healthy) | 0.000350 | 0.0827 | 236.5 | green |
+| 39654104203 (healthy, this branch) | 0.000348 | 0.0814 | 234.1 | green |
+
+The numerator's spread was 1.01x in the red run — "reproducible" — so the
+helper trusted the measurement and the ratio it asserted was 8.5x the cost the
+runner actually produced. **A gate that fails on a number its runner never
+produced is a red light, not a measurement.**
+
+So the gate now declares the band the yardstick has to stay in
+(`0.000150-0.000600 ms/unit` — 2.3x below and 1.6x above what the fleet
+produces, so a slower or a faster machine still measures inside it). Outside
+the band the time branch **reports and stands down** and the byte branch — the
+machine-independent one, the branch that can be a hard gate — still asserts. The
+budgets are untouched: the byte budgets (8 B / 4 KiB / 128 KiB) are the real
+limits, and the time budgets stay in the currency the fleet is calibrated in.
+
+The band also catches the other direction: run 39599923626 read 0.00072 ms/unit
+in one of its six gates — 2x the fleet's price — and that gate stood down (its
+own spread was 6.25x). A yardstick that reads 2x slow deflates every ratio
+built on it, and a gate that passes because its yardstick was slow measures
+nothing.
+
+The warm-up of the patch split grew from 3 to 32 iterations at the same time:
+the call-counting threshold is 30 calls, the measured window drives 8 splits
+per round, and the short warm-up left the first measured rounds running tier-0
+code. The measurement of run 39654104203 therefore reads **397.1** probe units
+per split (0.1379 ms/unit against a probe of 0.000347 ms/unit) where the old
+warm-up read 505.2 — the same code, measured honestly.
+
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
 > the `test (ui)` job log on every run, and the compiled `test-measurements` gate lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
@@ -2864,9 +2911,10 @@ told from the baseline: 1.08 on the wall, 1.04 after the speed
 normalisation, the same 112 `Csc` tasks, the same 3.3..3.6 busy cores. MSBuild
 reads the `-maxcpucount` SWITCH; the `MaxCpuCount` property appears in no
 MSBuild target and in no global-property lookup. The repository's own
-`-p:MaxCpuCount=0` (`build/_build/Targets/CompileTarget.cs:22` and `:34`) is
-a no-op for the same reason: `dotnet build` is parallel on its own, which is
-why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy cores.
+`-p:MaxCpuCount=0` (what `build/_build/Targets/CompileTarget.cs` used to
+pass) was a no-op for the same reason: `dotnet build` is parallel on its own,
+which is why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy
+cores. #2111 replaced that line with the real switches — see §6.7.2.
 
 **Practical conclusion: two jobs are worth it, but not for the reason in the
 issue, and not for the number in the issue.**
@@ -3049,6 +3097,71 @@ pragma removed:
 |-----|------|----------|
 | [39637090212](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637090212) | before | the **build** job is red — the IL3000 warning is an error under `TreatWarningsAsErrors=true` |
 | [39637286644](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637286644) | after | the **build** job is green and the **aot-publish** job is red — the check is in the job that owns it |
+### 6.7.2 The real MSBuild switches: `/maxcpucount`, `/nodeReuse`, `/graphBuild`
+
+**What the NUKE Compile target passed, and why it was nothing.**
+`build/_build/Targets/CompileTarget.cs` ran
+
+```
+dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+```
+
+`-p:MaxCpuCount=0` is a PROPERTY. MSBuild reads the node count as the
+SWITCH `-maxcpucount`, and the `MaxCpuCount` property appears in no
+MSBuild target and in no global-property lookup — §6.7 measured that
+property as indistinguishable from the baseline (wall ratio 1.08). The
+line read like "use all CPUs" and did nothing at all. Worse, the
+"0 means all CPUs" spelling is not even a legal value: MSBuild's
+`ProcessMaxCPUCountSwitch` throws `InvalidMaxCPUCountValueOutsideRange`
+for anything outside 1..1024.
+
+**What replaced it.** `dotnet build` is `dotnet msbuild -restore -t:Build`
+plus the SDK's own defaults, and the node count is one of the switches
+only MSBuild's own command line carries. Going through `dotnet msbuild`
+is what makes the switches reachable at all:
+
+```
+dotnet msbuild Harbor.slnx -t:Build -p:Configuration=Release \
+  -p:ContinuousIntegrationBuild=true -maxcpucount:4 -nodeReuse:false
+```
+
+**The measurement** (CI run 39634501061, `meas-build-vcpu.yml`, three
+replicates per arm, the same runner: `ubuntu-24.04` image
+`ubuntu24/20261018.339.1`, 4 vCPU, .NET SDK 10.0.402). The architecture
+gate is ON in this harness, so its duration is the runner's speed proxy
+and it is subtracted in the "compile phase" column.
+
+| arm | the command | n | wall (s) | median | compile phase (wall − gate), median | `Csc` task time, median | speed-normalized wall ratio |
+|-----|-------------|--:|----------|--------|--------------------------------------|--------------------------|-----------------------------|
+| A | `dotnet build … -p:MaxCpuCount=0` (what CI ran before #2111) | 3 | 253.0..409.6 | 319.4 | 202.6 s | 266.2 s | 1.00 |
+| E | `dotnet msbuild … -maxcpucount:4 -nodeReuse:false` | 3 | 237.4..376.6 | 304.2 | **189.7 s** | 265.7 s | **0.9** |
+| F | E, plus `-graphBuild` | 3 | 282.7..447.2 | 412.1 | **253.9 s** | **858.2 s** | 1.0 |
+
+**Arm E is what the build now runs.** The same build, the real switches:
+the compile phase is 6 % shorter and the speed-normalized wall ratio is
+0.9. The `Csc` task time is the same (265.7 s against 266.2 s) — the
+wall difference is in how the work is scheduled, not in how much of it
+there is.
+
+**Arm F is NOT adopted, and the reason is measured.** `/graphBuild`
+WORKS on this solution — 118 compilations, exit 0, the same project set,
+so a `.slnx` with a solution-level metaproject is not a shape the graph
+build refuses. But it costs **1.3x the wall** (412.1 s against 304.2 s
+at the median) and **3.2x the compiler's own task time** (858.2 s
+against 265.7 s): the graph is constructed once, but every project is
+then evaluated in a graph node, and the analyzers run again. The arm
+stays in the harness, so the number can be re-read when the tree's shape
+changes.
+
+**Node reuse goes off on CI, the way dotnet/arcade does it.** The
+`build` job sets `MSBUILDDISABLENODEREUSE=1`, the environment variable
+MSBuild's `ProcessNodeReuseSwitch` reads, and the NUKE target passes
+`/nodeReuse:false`, which is the same decision as a switch (the switch
+wins over the environment variable). The reason is not speed: a reused
+node carries the previous build's state — its evaluation caches, its
+loaded assemblies — so a build that reuses a node is not the same build
+as a build that does not. On CI there is nothing to reuse: this job
+compiles once.
 
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 

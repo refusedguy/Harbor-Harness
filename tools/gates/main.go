@@ -56,6 +56,7 @@ import (
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
@@ -173,6 +174,11 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "measure-build-cpu",
