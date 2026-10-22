@@ -220,6 +220,7 @@ internal sealed record KeyRouteReport(
 ///     </para>
 /// </remarks>
 /// <param name="ReadMs">How long reading the product trees took.</param>
+/// <param name="TypeMapMs">How long building the type→file map took.</param>
 /// <param name="HandOffScanMs">How long collecting the hand-off sites took.</param>
 /// <param name="CallersMs">How long the reachability passes took.</param>
 /// <param name="TotalMs">How long the whole scan took.</param>
@@ -233,6 +234,7 @@ internal sealed record KeyRouteReport(
 /// <param name="HandOffMatches">How many times the hand-off pattern ran.</param>
 internal sealed record ScanPhases(
     long ReadMs,
+    long TypeMapMs,
     long HandOffScanMs,
     long CallersMs,
     long TotalMs,
@@ -244,6 +246,48 @@ internal sealed record ScanPhases(
     long MemberMatches,
     long CallSiteMatches,
     long HandOffMatches);
+
+/// <summary>
+///     How the scan finds the type declarations of a file.
+/// </summary>
+/// <remarks>
+///     The type→file map is what resolves a call qualified by a type name
+///     (<c>Type.Member(</c>) to the file that declares the type, and the map is
+///     built by running ONE pattern over each file's text. There are four ways
+///     to run it, and they do not cost the same: the whole-file
+///     <see cref="System.Text.RegularExpressions.MatchCollection" /> is LAZY,
+///     and enumerating it re-enters the pattern engine once per match — which
+///     on a <c>^</c>-anchored pattern over a whole file is the most expensive
+///     thing this rule does. The strategies are here so the choice is made on a
+///     MEASUREMENT, and so the oracle can still be run against the winner.
+/// </remarks>
+internal enum TypeScanStrategy
+{
+    /// <summary>
+    ///     One whole-file match collection per file, enumerated — the way the
+    ///     rule has always built the map.
+    /// </summary>
+    WholeText,
+
+    /// <summary>
+    ///     One match per line. The pattern is anchored per line by design (the
+    ///     header says the multiline flag is load-bearing), so this is the same
+    ///     shape of scan over the same bytes.
+    /// </summary>
+    PerLine,
+
+    /// <summary>
+    ///     The whole text, matched by hand: one <c>Match(text, position)</c> at
+    ///     a time, each starting where the last one ended.
+    /// </summary>
+    ManualLoop,
+
+    /// <summary>
+    ///     The whole text through the span-based enumerator, which yields
+    ///     matches without materialising a <c>Match</c> per hit.
+    /// </summary>
+    EnumerateMatches,
+}
 
 /// <summary>
 ///     One unreachable router the project is carrying ON PURPOSE, and the issue that
@@ -500,11 +544,19 @@ internal static class PanelKeyRouteProbe
     /// </remarks>
     /// <param name="sources">Product sources as the shared snapshot's file views.</param>
     /// <returns>What the scan found, including the orphans it could not place.</returns>
-    internal static KeyRouteReport Scan(IReadOnlyList<SourceTreeFile> sources)
-    {
-        var typeOwner = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        var handOffs = new List<KeyHandOff>();
+    internal static KeyRouteReport Scan(IReadOnlyList<SourceTreeFile> sources) =>
+        Scan(sources, TypeScanStrategy.WholeText);
 
+    /// <summary>
+    ///     Finds every hand-off and decides which of them product code can reach.
+    /// </summary>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
+    /// <param name="strategy">How the type→file map is built.</param>
+    /// <returns>What the scan found, including the orphans it could not place.</returns>
+    internal static KeyRouteReport Scan(
+        IReadOnlyList<SourceTreeFile> sources,
+        TypeScanStrategy strategy)
+    {
         // The counters and the phase clock. Both are MEASUREMENT, not
         // behaviour: they count the work the scan did and time each phase, and
         // the counts are what say which part of the rule to change. The scan
@@ -513,10 +565,93 @@ internal static class PanelKeyRouteProbe
         var counters = new ScanCounters();
         var watch = System.Diagnostics.Stopwatch.StartNew();
 
+        // The type→file map. It is built FIRST and on its own, because it is
+        // the phase that decides how the rest of the scan is read: a call
+        // qualified by a type name resolves through it, and a map built from a
+        // different set of declarations would move a verdict.
+        Dictionary<string, List<string>> typeOwner = BuildTypeOwner(sources, strategy);
+        long typeMapMs = watch.ElapsedMilliseconds;
+
+        KeyRouteReport report = ScanCore(sources, typeOwner, counters, out long handOffScanMs, out long callersMs);
+
+        LastPhases = new ScanPhases(
+            ReadMs: 0,
+            TypeMapMs: typeMapMs,
+            HandOffScanMs: handOffScanMs,
+            CallersMs: callersMs,
+            TotalMs: watch.ElapsedMilliseconds,
+            Files: sources.Count,
+            Lines: counters.Lines,
+            HandOffSites: report.HandOffs.Count,
+            EnclosingWalks: counters.EnclosingWalks,
+            CallersPasses: counters.CallersPasses,
+            MemberMatches: counters.MemberMatches,
+            CallSiteMatches: counters.CallSiteMatches,
+            HandOffMatches: counters.HandOffMatches);
+
+        return report;
+    }
+
+    /// <summary>
+    ///     The scan, given the type→file map already built.
+    /// </summary>
+    /// <remarks>
+    ///     The measurement uses it to time the scan WITHOUT the map, so the
+    ///     map's own cost is not paid twice in one measurement.
+    /// </remarks>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
+    /// <param name="typeOwner">The type→file map.</param>
+    /// <returns>What the scan found, including the orphans it could not place.</returns>
+    internal static KeyRouteReport ScanWithTypeOwner(
+        IReadOnlyList<SourceTreeFile> sources,
+        IReadOnlyDictionary<string, List<string>> typeOwner)
+    {
+        var counters = new ScanCounters();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        KeyRouteReport report = ScanCore(sources, typeOwner, counters, out long handOffScanMs, out long callersMs);
+
+        LastPhases = new ScanPhases(
+            ReadMs: 0,
+            TypeMapMs: 0,
+            HandOffScanMs: handOffScanMs,
+            CallersMs: callersMs,
+            TotalMs: watch.ElapsedMilliseconds,
+            Files: sources.Count,
+            Lines: counters.Lines,
+            HandOffSites: report.HandOffs.Count,
+            EnclosingWalks: counters.EnclosingWalks,
+            CallersPasses: counters.CallersPasses,
+            MemberMatches: counters.MemberMatches,
+            CallSiteMatches: counters.CallSiteMatches,
+            HandOffMatches: counters.HandOffMatches);
+
+        return report;
+    }
+
+    /// <summary>
+    ///     The scan proper: the hand-off sites, and which of them product code
+    ///     can reach.
+    /// </summary>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
+    /// <param name="typeOwner">The type→file map.</param>
+    /// <param name="counters">The work counters.</param>
+    /// <param name="handOffScanMs">How long collecting the hand-off sites took.</param>
+    /// <param name="callersMs">How long the reachability passes took.</param>
+    /// <returns>What the scan found, including the orphans it could not place.</returns>
+    private static KeyRouteReport ScanCore(
+        IReadOnlyList<SourceTreeFile> sources,
+        IReadOnlyDictionary<string, List<string>> typeOwner,
+        ScanCounters counters,
+        out long handOffScanMs,
+        out long callersMs)
+    {
+        var handOffs = new List<KeyHandOff>();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
         foreach (SourceTreeFile source in sources)
         {
             string file = SourceScan.Relative(source.Path);
-            string text = source.StrippedText;
 
             // The snapshot's own line view (#1791). The scan used to split the
             // text here, and `Callers` below split it AGAIN for every hand-off
@@ -524,25 +659,6 @@ internal static class PanelKeyRouteProbe
             // every file, on every scan. One split per file, shared.
             ImmutableArray<string> lines = source.StrippedNewlineLines;
             counters.Lines += lines.Length;
-
-            foreach (Match type in TypeDeclaration.Matches(text))
-            {
-                if (type.Groups["name"].Value is not { Length: > 0 } typeName)
-                {
-                    continue;
-                }
-
-                if (!typeOwner.TryGetValue(typeName, out List<string>? owners))
-                {
-                    owners = [];
-                    typeOwner[typeName] = owners;
-                }
-
-                if (!owners.Contains(file))
-                {
-                    owners.Add(file);
-                }
-            }
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -560,14 +676,14 @@ internal static class PanelKeyRouteProbe
             }
         }
 
+        handOffScanMs = watch.ElapsedMilliseconds;
+
         // A hand-off PERFORMER is a member that hands a key off. A consumer's own
         // `OnKey` is a performer by this definition too, and that is correct: the
         // third hand-off #857 names is a layer whose `OnKey` is reached by nothing,
         // and the rule must be able to judge it.
         var performers = new HashSet<ProductMethod>(
             handOffs.Select(h => new ProductMethod(h.File, h.Performer)));
-
-        long handOffScanMs = watch.ElapsedMilliseconds;
 
         var orphans = new List<OrphanHandOff>();
         foreach (KeyHandOff handOff in handOffs)
@@ -618,21 +734,7 @@ internal static class PanelKeyRouteProbe
                 chain));
         }
 
-        long callersMs = watch.ElapsedMilliseconds - handOffScanMs;
-
-        LastPhases = new ScanPhases(
-            ReadMs: 0,
-            HandOffScanMs: handOffScanMs,
-            CallersMs: callersMs,
-            TotalMs: watch.ElapsedMilliseconds,
-            Files: sources.Count,
-            Lines: counters.Lines,
-            HandOffSites: handOffs.Count,
-            EnclosingWalks: counters.EnclosingWalks,
-            CallersPasses: counters.CallersPasses,
-            MemberMatches: counters.MemberMatches,
-            CallSiteMatches: counters.CallSiteMatches,
-            HandOffMatches: counters.HandOffMatches);
+        callersMs = watch.ElapsedMilliseconds - handOffScanMs;
 
         return new KeyRouteReport(sources.Count, handOffs, orphans);
     }
@@ -641,6 +743,203 @@ internal static class PanelKeyRouteProbe
     /// <param name="Candidates">Callers identified with a file and a name.</param>
     /// <param name="Unattributed">A call existed but the scan could not place it in a method.</param>
     private readonly record struct CallerSet(IReadOnlyList<ProductMethod> Candidates, bool Unattributed);
+
+    /// <summary>
+    ///     The type→file map: the simple name of every type the tree declares,
+    ///     and the files that declare it.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The map is what resolves a call qualified by a type name
+    ///         (<c>Type.Member(</c>) to a file: a call whose receiver names a
+    ///         type is a call of that type's member, and it is the target's
+    ///         member only if the type lives in the target's file. Without the
+    ///         map, every qualified call would be unattributable, and the rule
+    ///         would fail open on all of them.
+    ///     </para>
+    ///     <para>
+    ///         The files are in scan order and the FIRST one wins, because a
+    ///         type name used twice in the tree must resolve to one file and
+    ///         not to two.
+    ///     </para>
+    /// </remarks>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
+    /// <param name="strategy">How the declarations are found.</param>
+    /// <returns>The map.</returns>
+    internal static Dictionary<string, List<string>> BuildTypeOwner(
+        IReadOnlyList<SourceTreeFile> sources,
+        TypeScanStrategy strategy)
+    {
+        var typeOwner = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+
+        foreach (SourceTreeFile source in sources)
+        {
+            string file = SourceScan.Relative(source.Path);
+
+            switch (strategy)
+            {
+                case TypeScanStrategy.WholeText:
+                    AddTypesWholeText(typeOwner, file, source.StrippedText);
+                    break;
+                case TypeScanStrategy.PerLine:
+                    AddTypesPerLine(typeOwner, file, source);
+                    break;
+                case TypeScanStrategy.ManualLoop:
+                    AddTypesManualLoop(typeOwner, file, source.StrippedText);
+                    break;
+                case TypeScanStrategy.EnumerateMatches:
+                    AddTypesEnumerateMatches(typeOwner, file, source.StrippedText);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "unknown type-scan strategy.");
+            }
+        }
+
+        return typeOwner;
+    }
+
+    /// <summary>
+    ///     Adds one type name to the map, keeping the files in scan order and
+    ///     each file once.
+    /// </summary>
+    /// <param name="typeOwner">The map to add to.</param>
+    /// <param name="file">The file that declares the type.</param>
+    /// <param name="typeName">The type's simple name.</param>
+    private static void AddTypeOwner(
+        Dictionary<string, List<string>> typeOwner,
+        string file,
+        string typeName)
+    {
+        if (!typeOwner.TryGetValue(typeName, out List<string>? owners))
+        {
+            owners = [];
+            typeOwner[typeName] = owners;
+        }
+
+        if (!owners.Contains(file))
+        {
+            owners.Add(file);
+        }
+    }
+
+    /// <summary>
+    ///     The way the map has always been built: one whole-file match
+    ///     collection per file, enumerated.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the ORACLE. The rule's verdicts were computed with this
+    ///         map, and the strategies beside it exist to make the map cheaper.
+    ///         Every one of them has to produce the same map, and
+    ///         <c>PanelKeyRouteEquivalenceTests</c> is what holds them to it.
+    ///     </para>
+    ///     <para>
+    ///         It is also the most expensive thing the rule does, and the
+    ///         reason is the shape of the collection: <c>Regex.Matches</c>
+    ///         returns a LAZY collection, and enumerating it re-enters the
+    ///         pattern engine once per match. Over a whole file, with a
+    ///         <c>^</c>-anchored pattern, that is the rule's whole wall.
+    ///     </para>
+    /// </remarks>
+    /// <param name="typeOwner">The map to add to.</param>
+    /// <param name="file">The file that declares the type.</param>
+    /// <param name="text">The file's comment-stripped text.</param>
+    private static void AddTypesWholeText(
+        Dictionary<string, List<string>> typeOwner,
+        string file,
+        string text)
+    {
+        foreach (Match type in TypeDeclaration.Matches(text))
+        {
+            if (type.Groups["name"].Value is not { Length: > 0 } typeName)
+            {
+                continue;
+            }
+
+            AddTypeOwner(typeOwner, file, typeName);
+        }
+    }
+
+    /// <summary>
+    ///     One match per line.
+    /// </summary>
+    /// <remarks>
+    ///     The pattern is anchored per line BY DESIGN — the header says the
+    ///     multiline flag is load-bearing — so a line is the unit the pattern
+    ///     is written for, and a line cannot match across a newline.
+    /// </remarks>
+    /// <param name="typeOwner">The map to add to.</param>
+    /// <param name="file">The file that declares the type.</param>
+    /// <param name="source">The file's view of the tree.</param>
+    private static void AddTypesPerLine(
+        Dictionary<string, List<string>> typeOwner,
+        string file,
+        SourceTreeFile source)
+    {
+        foreach (string line in source.StrippedNewlineLines)
+        {
+            Match type = TypeDeclaration.Match(line);
+            if (type.Success && type.Groups["name"].Value is { Length: > 0 } typeName)
+            {
+                AddTypeOwner(typeOwner, file, typeName);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     The whole text, matched by hand: one match at a time, each starting
+    ///     where the last one ended.
+    /// </summary>
+    /// <remarks>
+    ///     The same matches as the whole-file collection, in the same order,
+    ///     found without materialising a collection per file.
+    /// </remarks>
+    /// <param name="typeOwner">The map to add to.</param>
+    /// <param name="file">The file that declares the type.</param>
+    /// <param name="text">The file's comment-stripped text.</param>
+    private static void AddTypesManualLoop(
+        Dictionary<string, List<string>> typeOwner,
+        string file,
+        string text)
+    {
+        int position = 0;
+        while (position <= text.Length)
+        {
+            Match type = TypeDeclaration.Match(text, position);
+            if (!type.Success)
+            {
+                return;
+            }
+
+            if (type.Groups["name"].Value is { Length: > 0 } typeName)
+            {
+                AddTypeOwner(typeOwner, file, typeName);
+            }
+
+            position = type.Index + type.Length;
+        }
+    }
+
+    /// <summary>
+    ///     The whole text through the span-based enumerator, which yields the
+    ///     matches without materialising a <c>Match</c> per hit.
+    /// </summary>
+    /// <param name="typeOwner">The map to add to.</param>
+    /// <param name="file">The file that declares the type.</param>
+    /// <param name="text">The file's comment-stripped text.</param>
+    private static void AddTypesEnumerateMatches(
+        Dictionary<string, List<string>> typeOwner,
+        string file,
+        string text)
+    {
+        foreach (ValueMatch type in TypeDeclaration.EnumerateMatches(text))
+        {
+            if (type.Groups["name"].ValueSpan is { Length: > 0 } nameSpan)
+            {
+                AddTypeOwner(typeOwner, file, new string(nameSpan));
+            }
+        }
+    }
 
     /// <summary>
     ///     Every product method that calls <paramref name="target" />.

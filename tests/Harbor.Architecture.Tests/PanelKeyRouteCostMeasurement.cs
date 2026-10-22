@@ -73,8 +73,8 @@ public sealed class PanelKeyRouteCostMeasurement
         {
             Console.WriteLine(
                 $"[arch-cost] panel-key-route insitu read-ms={seen.ReadMs} "
-                + $"handoff-scan-ms={seen.HandOffScanMs} callers-ms={seen.CallersMs} "
-                + $"total-ms={seen.TotalMs}");
+                + $"type-map-ms={seen.TypeMapMs} handoff-scan-ms={seen.HandOffScanMs} "
+                + $"callers-ms={seen.CallersMs} total-ms={seen.TotalMs}");
 
             Console.WriteLine(
                 $"[arch-count] panel-key-route insitu files={seen.Files} lines={seen.Lines} "
@@ -83,18 +83,57 @@ public sealed class PanelKeyRouteCostMeasurement
                 + $"callsite-matches={seen.CallSiteMatches} handoff-matches={seen.HandOffMatches}");
         }
 
-        // ── the same scan, alone, with nothing else running ────────────────
         IReadOnlyList<SourceTreeFile> sources = PanelKeyRouteProbe.ReadProductTrees();
 
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        var watch = Stopwatch.StartNew();
-        KeyRouteReport report = PanelKeyRouteProbe.Scan(sources);
-        watch.Stop();
-        long scanBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        // ── the type→file map, built the four ways ─────────────────────────
+        //
+        // The map is the phase the scan spends its wall on, and the four ways
+        // of building it are the candidates. Each is measured over the whole
+        // product tree, and each is compared with the whole-file collection —
+        // the oracle — by `PanelKeyRouteEquivalenceTests`.
+        var maps = new Dictionary<TypeScanStrategy, Dictionary<string, List<string>>>();
+        foreach (TypeScanStrategy strategy in Enum.GetValues<TypeScanStrategy>())
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var watch = Stopwatch.StartNew();
+            Dictionary<string, List<string>> map = PanelKeyRouteProbe.BuildTypeOwner(sources, strategy);
+            watch.Stop();
+            long mapBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            maps[strategy] = map;
+
+            Console.WriteLine(
+                $"[arch-cost] panel-key-route type-map strategy={strategy} "
+                + $"ms={watch.ElapsedMilliseconds} bytes={mapBytes} types={map.Count}");
+        }
+
+        // The oracle is the whole-file collection, and every other strategy has
+        // to produce the same map. The differences are COUNTED here and
+        // ASSERTED by the equivalence test; a count is what a reader needs
+        // when a strategy turns out to be wrong.
+        Dictionary<string, List<string>> oracle = maps[TypeScanStrategy.WholeText];
+        foreach ((TypeScanStrategy strategy, Dictionary<string, List<string>> map) in maps)
+        {
+            if (strategy == TypeScanStrategy.WholeText)
+            {
+                continue;
+            }
+
+            List<string> differences = CompareTypeMaps(oracle, map);
+            Console.WriteLine(
+                $"[arch-count] panel-key-route type-map strategy={strategy} "
+                + $"differences={differences.Count} "
+                + $"sample={(differences.Count == 0 ? "(none)" : string.Join(" | ", differences.Take(3)))}");
+        }
+
+        // The scan WITHOUT the map: what the rest of the rule costs.
+        var scanWatch = Stopwatch.StartNew();
+        KeyRouteReport report = PanelKeyRouteProbe.ScanWithTypeOwner(sources, oracle);
+        scanWatch.Stop();
 
         Console.WriteLine(
-            $"[arch-cost] panel-key-route isolated-scan-ms={watch.ElapsedMilliseconds} "
-            + $"bytes={scanBytes} handoffs={report.HandOffs.Count} orphans={report.Orphans.Count}");
+            $"[arch-cost] panel-key-route isolated-scan-without-map-ms={scanWatch.ElapsedMilliseconds} "
+            + $"handoffs={report.HandOffs.Count} orphans={report.Orphans.Count}");
 
         // ── each pattern of the scan, alone, over the whole tree ───────────
         ScanComponentCosts components = PanelKeyRouteProbe.MeasureComponents(sources);
@@ -126,16 +165,53 @@ public sealed class PanelKeyRouteCostMeasurement
         // ── the test tree, which the rule's measurement also reads ─────────
         IReadOnlyList<SourceTreeFile> testSources = PanelKeyRouteReachabilityRule.TestSources;
 
-        before = GC.GetAllocatedBytesForCurrentThread();
-        watch.Restart();
+        long beforeTest = GC.GetAllocatedBytesForCurrentThread();
+        var deadWatch = Stopwatch.StartNew();
         IReadOnlyList<string> deadRouteTests =
             PanelKeyRouteProbe.TestsThatDriveOnlyDeadRoutes(report, testSources);
-        watch.Stop();
-        long deadTestBytes = GC.GetAllocatedBytesForCurrentThread() - before;
+        deadWatch.Stop();
+        long deadTestBytes = GC.GetAllocatedBytesForCurrentThread() - beforeTest;
 
         Console.WriteLine(
-            $"[arch-cost] panel-key-route isolated-dead-test-ms={watch.ElapsedMilliseconds} "
+            $"[arch-cost] panel-key-route isolated-dead-test-ms={deadWatch.ElapsedMilliseconds} "
             + $"bytes={deadTestBytes} hits={deadRouteTests.Count} "
             + $"test-files={testSources.Count}");
+    }
+
+    /// <summary>
+    ///     The differences between two type→file maps, one per difference.
+    /// </summary>
+    /// <param name="oracle">The map the rule's verdicts were computed with.</param>
+    /// <param name="candidate">The map to compare against it.</param>
+    /// <returns>One message per difference; empty when the maps agree.</returns>
+    private static List<string> CompareTypeMaps(
+        IReadOnlyDictionary<string, List<string>> oracle,
+        IReadOnlyDictionary<string, List<string>> candidate)
+    {
+        var differences = new List<string>();
+
+        foreach ((string type, List<string> files) in oracle)
+        {
+            if (!candidate.TryGetValue(type, out List<string>? other))
+            {
+                differences.Add($"{type}: missing from the candidate");
+                continue;
+            }
+
+            if (!files.SequenceEqual(other, StringComparer.Ordinal))
+            {
+                differences.Add($"{type}: [{string.Join(",", files)}] vs [{string.Join(",", other)}]");
+            }
+        }
+
+        foreach (string type in candidate.Keys)
+        {
+            if (!oracle.ContainsKey(type))
+            {
+                differences.Add($"{type}: not in the oracle");
+            }
+        }
+
+        return differences;
     }
 }
