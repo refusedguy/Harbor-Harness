@@ -31,7 +31,7 @@ public class JsonlSessionStoreRopTests
 
             var result = await store.GetAsync(session.Id);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains(session.Id);
             await Assert.That(result.Error).Contains("corrupt");
             await Assert.That(result.Error).Contains(path);
@@ -54,7 +54,7 @@ public class JsonlSessionStoreRopTests
 
             var result = await store.GetAsync(session.Id);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains(session.Id);
             await Assert.That(result.Error).Contains("empty");
         }
@@ -72,7 +72,7 @@ public class JsonlSessionStoreRopTests
         {
             var result = await store.GetAsync("nonexistent-id");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).IsEqualTo("Session 'nonexistent-id' not found.");
         }
         finally
@@ -94,7 +94,7 @@ public class JsonlSessionStoreRopTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("kept");
         }
@@ -115,7 +115,7 @@ public class JsonlSessionStoreRopTests
 
             var result = await store.UpdateMessageAsync(session.Id, ghost);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).IsEqualTo(
                 $"Message 'msg-ghost' not found in session '{session.Id}'.");
         }

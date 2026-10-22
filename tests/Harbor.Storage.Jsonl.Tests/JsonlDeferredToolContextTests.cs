@@ -84,7 +84,7 @@ public class JsonlDeferredToolContextTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var message = (ToolResultMessage)back.Value;
         var decoded = message.Results.Single().DeferredContexts;
         await Assert.That(decoded).IsNotNull();
@@ -113,7 +113,7 @@ public class JsonlDeferredToolContextTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var message = (ToolResultMessage)back.Value;
         var decoded = message.Results.Single().DeferredContexts;
         await Assert.That(decoded).IsNotNull();
@@ -129,7 +129,7 @@ public class JsonlDeferredToolContextTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var message = (ToolResultMessage)back.Value;
         await Assert.That(message.Results.Single().DeferredContexts).IsNull();
     }

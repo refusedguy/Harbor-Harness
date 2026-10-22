@@ -93,7 +93,7 @@ number.
 
 | gate | the artifact the gate reads | what the row measures |
 |---|---|---|
-| `aot-publish-gate.py` | `publish/aot-publish.log` | the walk to the log; the log is empty, so the gate reports that it could not judge the publish (exit 2) |
+| `aot-publish-gate` | `publish/aot-publish.log` | the walk to the log; the log is empty, so the gate reports that it could not judge the publish (exit 2) |
 | `aggregate-analyzer-cost` | `meas/` | the walk of an empty measurement directory |
 | `aggregate-build-vcpu` | `meas/` | the walk of an empty measurement directory |
 | `check-coverage-registry.py` | `Coverage/` | the walk of an empty coverage directory |

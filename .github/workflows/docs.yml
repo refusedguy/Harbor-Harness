@@ -589,14 +589,6 @@ jobs:
       # is indistinguishable from a measurement of an empty graph.
       - name: Project-graph measurement still measures a planted graph
         run: tools/bin/harbor-gates-linux-x64 measure-project-graph --self-test
-      # #2131. The gate that keeps the benchmark's gate set and the CI's gate
-      # set from drifting apart: the file that lists the gates the benchmark
-      # measures must list every gate a workflow runs, and the gates that are
-      # out of the set must say why. Its failure path is tested here for the
-      # same reason as the others: a gate edited until it matches nothing is
-      # indistinguishable from a gate that found nothing.
-      - name: The gate-bench-set gate fails on a gate the set does not hold
-        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test
       # #2085. The two E2E plan tools. The generator derives the class
       # universe from the source tree, and the runner reads the plan the
       # generator wrote: a generator that stops finding the classes writes a
@@ -607,6 +599,14 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
       - name: E2E shard runner still refuses a plan it cannot run
         run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
+      # #2131. The gate that keeps the benchmark's gate set and the CI's gate
+      # set from drifting apart: the file that lists the gates the benchmark
+      # measures must list every gate a workflow runs, and the gates that are
+      # out of the set must say why. Its failure path is tested here for the
+      # same reason as the others: a gate edited until it matches nothing is
+      # indistinguishable from a gate that found nothing.
+      - name: The gate-bench-set gate fails on a gate the set does not hold
+        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test
 
   links:
     name: internal links

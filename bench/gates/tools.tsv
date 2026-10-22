@@ -26,7 +26,7 @@
 # The last row rewrites the mtimes of the tree, so it is last.
 
 # gate	command
-aot-publish-gate.py	python3 tools/aot-publish-gate.py --log publish/aot-publish.log --baseline .github/aot-warning-baseline.txt --expect-rid linux-x64 --expect-recipe fulltree --expect-status published
+aot-publish-gate	tools/bin/harbor-gates-linux-x64 aot-publish-gate --log publish/aot-publish.log --baseline .github/aot-warning-baseline.txt --expect-rid linux-x64 --expect-recipe fulltree --expect-status published
 aggregate-analyzer-cost	tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost meas --summary meas/summary.md
 aggregate-build-vcpu	tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu meas --baseline a-prop0
 check-abstractions-contract	tools/bin/harbor-gates-linux-x64 check-abstractions-contract --min-packages 19 --min-namespaces 7 --min-files 141
