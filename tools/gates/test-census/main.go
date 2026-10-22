@@ -53,7 +53,7 @@ type projectRecord struct {
 	sumDuration float64
 	// sumAlloc is the project's total allocation, over the tests the census
 	// measured. allocCount is how many tests carried a measurement.
-	sumAlloc  int64
+	sumAlloc   int64
 	allocCount int
 }
 
