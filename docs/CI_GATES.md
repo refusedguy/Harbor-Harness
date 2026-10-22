@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `ec2d38e9` plus this branch's commits),
+Measured on this branch (`dev` at `bfa1c99d` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 30 553 lines |
-| of them, the `check-*.py` family | 17 files, 19 055 lines |
-| workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
-| gates that block a build | 29 |
+| python tools in `tools/` | 23 files, 23 115 lines |
+| of them, the `check-*.py` family | 14 files, 17 130 lines |
+| workflows that run a python tool | 3: `ci.yml`, `demo.yml`, `docs.yml` |
+| gates that block a build | 31 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 42 |
+| tools with a self-test | 46 |
 | tools with a ratchet | 21 |
-| tools with a floor | 26 |
+| tools with a floor | 28 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -243,14 +243,15 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (17 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (15 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. The compiled gates carry the ones that used to be python scripts. The
-python tools left are the ones a workflow still runs, the ones a human runs,
-the three that rewrite hand-built sources, and the two that are loaded by
-other tools rather than run — `md_gate.py` and `tool_schema_model.py`. A tool
-that is not listed is a tool nobody reviews. The table records, for each one,
-the question
+tree. The compiled gates carry the ones that used to be python scripts.
+Twelve of the python tools left are run by a workflow; the other three are
+`codemod-tool-schemas.py`, which rewrites hand-built sources and that a
+human runs, and `md_gate.py` and `tool_schema_model.py`, which are loaded
+by other tools rather than run. All of them are listed, because a tool that
+is not listed is a tool nobody reviews. The table records, for each one, the
+question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
 self-test, the ratchet it holds, and the floors CI passes it. The table is
@@ -282,14 +283,14 @@ The modes are:
 | `tools/check-tool-schema-pin.py` | python | the parameter schema of every builtin tool still is the one that was pinned: the schema is the tool's contract with the model, and a schema that moved while the pin did not is a model that may send something the tool does not accept | docs.yml | selftest, tool-schema | gate | `--selftest` | — | `--min-tools 25` |
 | `tools/check-tunit-analyzer-gate.py` | python | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
 | `tools/ci-shard-slices.py` | python | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
-| `tools/codemod-test-events.py` | python | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/bin/harbor-gates-linux-x64 codemod-test-events` | compiled: `tools/gates/codemod-test-events` | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/codemod-tool-schemas.py` | python | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/md_gate.py` | python | shared plumbing for the markdown gates: the tracked-file list, the floors, the fixture harness. The two markdown gates moved into the compiled binary, so their Go port of this module is `tools/gates/internal/mdgate`; this file stays because `check-doc-cites.py` is still python and still reads it | — | — | library | — | — | — |
 | `tools/tool_schema_model.py` | python | shared data for the tool-schema gates: the one reading of a tool's [ToolParam] declaration, so the pin is written from the same model the gate reads it with | — | — | library | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-arch-suite-once` | compiled: `tools/gates/check-arch-suite-once` | the architecture suite runs EXACTLY ONCE on every lane of ci.yml: the build job switches the build-time gate off for pull_request AND push events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a lane that switched the gate back on | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
-| `tools/codemod-tool-names.py` | python | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/bin/harbor-gates-linux-x64 codemod-tool-names` | compiled: `tools/gates/codemod-tool-names` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu` | compiled: `tools/gates/aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
 | `tools/bin/harbor-gates-linux-x64 check-no-test-sdk` | compiled: `tools/gates/check-no-test-sdk` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |

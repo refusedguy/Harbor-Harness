@@ -58,6 +58,8 @@ import (
 	shardbalance "harbor.local/gates/check-shard-balance"
 	stringswitch "harbor.local/gates/check-string-switch"
 	"harbor.local/gates/check-xml-doc-coverage"
+	codemodtestevents "harbor.local/gates/codemod-test-events"
+	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
@@ -191,6 +193,16 @@ var registry = []registered{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "codemod-test-events",
+		summary: "the hand-built test events and messages move onto the shared builders",
+		run:     codemodtestevents.Run,
+	},
+	{
+		name:    "codemod-tool-names",
+		summary: "the tool-name literals move onto the WellKnownTools catalog",
+		run:     codemodtoolnames.Run,
 	},
 	{
 		name:    "coverage-report",
