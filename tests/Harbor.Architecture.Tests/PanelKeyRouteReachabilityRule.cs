@@ -932,7 +932,17 @@ internal static class PanelKeyRouteProbe
         string file,
         string text)
     {
-        foreach (ValueMatch type in TypeDeclaration.EnumerateMatches(text))
+        // UNBLOCKING FIX, NOT THIS BRANCH'S WORK (dev was red on it, and the
+        // red build measures nothing).
+        //
+        // `ValueMatch` has no `Groups`: the span-based enumerator yields one
+        // value per MATCH of the whole pattern, and the type name is a CAPTURE
+        // GROUP inside that match, which a `ValueMatch` cannot reach. The
+        // other two readers of this pattern (`AddTypesWholeText`,
+        // `AddTypesManualLoop`) take a `Match` for exactly that reason, and
+        // this one now does the same — so it compiles, and it reads the same
+        // names they read.
+        foreach (Match type in TypeDeclaration.Matches(text))
         {
             if (type.Groups["name"].ValueSpan is { Length: > 0 } nameSpan)
             {
