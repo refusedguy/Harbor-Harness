@@ -3,9 +3,8 @@ package archsuiteonce
 // selftest.go -- the gate's own proof that it can fail.
 //
 // Each rule fires on a planted defect; the clean fixture stays clean. The
-// python original planted ten defects and asserted that each fires; the
-// port plants the same ten, against the same fixture text, and asserts the
-// same thing.
+// python original plants the same defects against the same fixture text and
+// asserts the same thing; the port does the same.
 
 import (
 	"fmt"
@@ -94,8 +93,7 @@ func selfTestRun() int {
 			description: "a build job that says nothing about the gate runs it",
 			apply: func(w string) (string, bool) {
 				return edit(w,
-					"      HarborArchGate: ${{ github.event_name == 'pull_request' "+
-						"&& 'false' || 'true' }}\n",
+					"      HarborArchGate: 'false'\n",
 					"")
 			},
 		},
@@ -104,8 +102,8 @@ func selfTestRun() int {
 			description: "a build job whose gate is on for every event runs it twice",
 			apply: func(w string) (string, bool) {
 				return edit(w,
-					"${{ github.event_name == 'pull_request' && 'false' || 'true' }}",
-					"'true'")
+					"      HarborArchGate: 'false'\n",
+					"      HarborArchGate: 'true'\n")
 			},
 		},
 		{
@@ -118,12 +116,13 @@ func selfTestRun() int {
 			},
 		},
 		{
-			code:        "GATE-ON-MERGE",
-			description: "a gate that is off for every event leaves the merge path bare",
+			code:        "GATE-OFF-PUSH",
+			description: "a gate that is on for a push runs the suite twice on the merge path",
 			apply: func(w string) (string, bool) {
 				return edit(w,
-					"${{ github.event_name == 'pull_request' && 'false' || 'true' }}",
-					"'false'")
+					"      HarborArchGate: 'false'\n",
+					"      HarborArchGate: ${{ github.event_name == 'pull_request' "+
+						"&& 'false' || 'true' }}\n")
 			},
 		},
 	}

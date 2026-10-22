@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     env:
-      HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      HarborArchGate: 'false'
     steps:
       - uses: actions/checkout@v7
       - name: Build solution via NUKE

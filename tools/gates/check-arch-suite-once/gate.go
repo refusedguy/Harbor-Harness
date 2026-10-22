@@ -1,8 +1,8 @@
 // Package archsuiteonce is the compiled port of tools/check-arch-suite-once.py.
 //
-// The gate counts the architecture suite's executions on the pull-request
-// lane: on a pull request the suite must run EXACTLY ONCE, and zero
-// executions is a finding too.
+// The gate counts the architecture suite's executions on every lane of
+// ci.yml: the suite must run EXACTLY ONCE, and zero executions is a
+// finding too.
 //
 // It reads two files as text — .github/workflows/ci.yml and
 // Directory.Build.props — and asks five questions:
@@ -10,7 +10,7 @@
 //	EXEC-ONCE      the suite is executed exactly once
 //	GATE-OFF-PR    every job that compiles the solution switches the
 //	               build-time gate off for pull_request events
-//	GATE-ON-MERGE  at least one of those jobs still runs the gate for push
+//	GATE-OFF-PUSH  the same for push events
 //	GATE-DEFAULT   Directory.Build.props defaults the gate to true
 //	GATE-CONDITION the target's own condition still asks the property
 //
@@ -80,6 +80,18 @@ var eventRe = regexp.MustCompile(`^github\.event_name\s*==\s*'([A-Za-z_]+)'$`)
 
 // The word `dotnet`, as a word.
 var dotnetRe = regexp.MustCompile(`\bdotnet\b`)
+
+// gateEvents are the two events a job that compiles the solution has to
+// switch the build-time gate off for: the pull-request lane and the merge
+// path. The code is the rule's name, the name is the event the rule asks
+// about.
+var gateEvents = []struct {
+	code string
+	name string
+}{
+	{"GATE-OFF-PR", "pull_request"},
+	{"GATE-OFF-PUSH", "push"},
+}
 
 // Run is the gate entry point.
 func Run(args []string) int {
@@ -353,12 +365,17 @@ func compilesTheSolution(block string) bool {
 // gateValue returns the value of a `HarborArchGate` expression for one
 // event, or "" when the gate cannot tell.
 //
-// The shape the workflows use is the GitHub expression
+// The shape the workflow uses is the literal
+//
+//	HarborArchGate: 'false'
+//
+// and the shape it USED to use is the GitHub expression
 //
 //	${{ github.event_name == 'pull_request' && 'false' || 'true' }}
 //
 // which is read here as "the condition, the value when it holds, the value
-// when it does not". A literal is a literal. Anything else is unknown: the
+// when it does not" — the shape a regression would take, and the one the
+// self-test plants. A literal is a literal. Anything else is unknown: the
 // gate cannot tell, and a gate that cannot tell treats that as a finding
 // rather than as a pass.
 func gateValue(expression string, event string) string {
@@ -428,17 +445,17 @@ func checkOnce(workflow string, shards map[string][]string) []string {
 	}
 	if len(executions) == 0 {
 		return []string{
-			fmt.Sprintf("EXEC-ONCE: the pull-request lane runs `%s` NOWHERE - the "+
-				"architecture gate would not run at all on a pull request", suite),
+			fmt.Sprintf("EXEC-ONCE: the lane runs `%s` NOWHERE - the "+
+				"architecture gate would not run at all", suite),
 		}
 	}
 	return []string{
-		fmt.Sprintf("EXEC-ONCE: the pull-request lane runs `%s` %d times - it must "+
+		fmt.Sprintf("EXEC-ONCE: the lane runs `%s` %d times - it must "+
 			"run exactly once: %s", suite, len(executions), strings.Join(executions, "; ")),
 	}
 }
 
-// checkGate is GATE-OFF-PR and GATE-ON-MERGE: the gate's placement.
+// checkGate is GATE-OFF-PR and GATE-OFF-PUSH: the gate's placement.
 func checkGate(workflow string) []string {
 	var problems []string
 	var compiling []string
@@ -469,56 +486,36 @@ func checkGate(workflow string) []string {
 		if anyContains(blocks, flagOff) {
 			// The command line says so, for every event. That is a job that
 			// never runs the gate (the reference-trimmer job), which is
-			// allowed: the build job is the one that has to keep it.
+			// allowed: the build job is the one that has to switch it off.
 			continue
 		}
 		value, ok := jobEnv(jobs[job])[gateProperty]
 		if !ok {
-			problems = append(problems, fmt.Sprintf(
-				"GATE-OFF-PR: the `%s` job compiles the solution and says nothing "+
-					"about `%s` - the suite would run inside that build as well as "+
-					"in the shard", job, gateProperty))
+			for _, event := range gateEvents {
+				problems = append(problems, fmt.Sprintf(
+					"%s: the `%s` job compiles the solution and says nothing "+
+						"about `%s` - the suite would run inside that build as well "+
+						"as in the shard", event.code, job, gateProperty))
+			}
 			continue
 		}
-		onPullRequest := gateValue(value, "pull_request")
-		switch onPullRequest {
-		case "false":
-			continue
-		case "true":
-			problems = append(problems, fmt.Sprintf(
-				"GATE-OFF-PR: the `%s` job's `%s` is `%s` - the suite runs inside "+
-					"that build AND in the shard", job, gateProperty, value))
-		default:
-			problems = append(problems, fmt.Sprintf(
-				"GATE-OFF-PR: the `%s` job's `%s` is `%s`, and this checker cannot "+
-					"tell what it yields for a pull_request event - expected "+
-					"`${{ github.event_name == 'pull_request' && 'false' || 'true' }}",
-				job, gateProperty, value))
+		for _, event := range gateEvents {
+			switchedOff := gateValue(value, event.name)
+			switch switchedOff {
+			case "false":
+				continue
+			case "true":
+				problems = append(problems, fmt.Sprintf(
+					"%s: the `%s` job's `%s` is `%s` - the suite runs inside "+
+						"that build AND in the shard", event.code, job, gateProperty, value))
+				continue
+			default:
+				problems = append(problems, fmt.Sprintf(
+					"%s: the `%s` job's `%s` is `%s`, and this checker cannot "+
+						"tell what it yields for a %s event - expected `'false'`",
+					event.code, job, gateProperty, value, event.name))
+			}
 		}
-	}
-
-	// The merge path keeps the gate.
-	keepsIt := false
-	for _, job := range compiling {
-		blocks := runBlocks(jobs[job])
-		if anyContains(blocks, flagOff) {
-			continue
-		}
-		value, ok := jobEnv(jobs[job])[gateProperty]
-		if !ok {
-			keepsIt = true
-			break
-		}
-		if gateValue(value, "push") == "true" {
-			keepsIt = true
-			break
-		}
-	}
-	if !keepsIt {
-		problems = append(problems,
-			"GATE-ON-MERGE: no job in this workflow runs the architecture gate "+
-				"for a push event - a merge into dev/master would no longer fail "+
-				"the BUILD on a layering regression")
 	}
 	return problems
 }

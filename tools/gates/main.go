@@ -40,12 +40,15 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	archanchors "harbor.local/gates/check-arch-anchors"
 	archsuiteonce "harbor.local/gates/check-arch-suite-once"
+	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
 	mdlinks "harbor.local/gates/check-md-links"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
@@ -54,6 +57,8 @@ import (
 	shardbalance "harbor.local/gates/check-shard-balance"
 	stringswitch "harbor.local/gates/check-string-switch"
 	"harbor.local/gates/check-xml-doc-coverage"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
 	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
@@ -63,19 +68,13 @@ import (
 	"harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
 	"harbor.local/gates/test-skips"
 	"os"
 	"sort"
 	"strings"
-	aotpublish "harbor.local/gates/aot-publish-gate"
-	registrygate "harbor.local/gates/check-coverage-registry"
-	mergeloss "harbor.local/gates/check-local-merge-loss"
-	coveragereport "harbor.local/gates/coverage-report"
-	gene2eshards "harbor.local/gates/gen-e2e-shards"
-	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
-
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -102,6 +101,11 @@ var registry = []registered{
 		run:     aggregatebuildvcpu.Run,
 	},
 	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
+	},
+	{
 		name:    "changelog-assemble",
 		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
 		run:     changelog.Run,
@@ -117,14 +121,34 @@ var registry = []registered{
 		run:     checkanalyzerscope.Run,
 	},
 	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
+		name:    "check-arch-anchors",
+		summary: "may an architecture rule anchor on a line number",
+		run:     archanchors.Run,
+	},
+	{
+		name:    "check-arch-suite-once",
+		summary: "the architecture suite runs exactly once on every lane",
+		run:     archsuiteonce.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
 	},
 	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
+	},
+	{
+		name:    "check-md-links",
+		summary: "every internal link, anchor and file:line reference resolves",
+		run:     mdlinks.Run,
 	},
 	{
 		name:    "check-no-test-sdk",
@@ -142,9 +166,19 @@ var registry = []registered{
 		run:     checkreferencetrimmer.Run,
 	},
 	{
+		name:    "check-result-chains",
+		summary: "the chain candidates among the if (x.IsFailure) guard sites",
+		run:     resultchains.Run,
+	},
+	{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-string-switch",
+		summary: "does a switch compare a string literal, and is every ladder listed",
+		run:     stringswitch.Run,
 	},
 	{
 		name:    "check-xml-doc-coverage",
@@ -152,14 +186,29 @@ var registry = []registered{
 		run:     checkxmldoccoverage.Run,
 	},
 	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
 	},
 	{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "guard-triage",
+		summary: "what each architecture-guard firing MEANT: defect, style, noise or unknown",
+		run:     guardtriage.Run,
+	},
+	{
+		name:    "md-lint",
+		summary: "the tracked markdown obeys the invariants the repository claims",
+		run:     mdlint.Run,
 	},
 	{
 		name:    "measure-build-cpu",
@@ -187,6 +236,11 @@ var registry = []registered{
 		run:     packvalidate.Run,
 	},
 	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
+	},
+	{
 		name:    "test-census",
 		summary: "the per-test and per-project wall census of a CI run",
 		run:     testcensus.Run,
@@ -200,71 +254,6 @@ var registry = []registered{
 		name:    "test-skips",
 		summary: "the tests a run skipped, and the reason each declared",
 		run:     testskips.Run,
-	},
-	{
-		name:    "check-arch-anchors",
-		summary: "may an architecture rule anchor on a line number",
-		run:     archanchors.Run,
-	},
-	{
-		name:    "check-arch-suite-once",
-		summary: "the architecture suite runs exactly once on the pull-request lane",
-		run:     archsuiteonce.Run,
-	},
-	{
-		name:    "check-md-links",
-		summary: "every internal link, anchor and file:line reference resolves",
-		run:     mdlinks.Run,
-	},
-	{
-		name:    "guard-triage",
-		summary: "what each architecture-guard firing MEANT: defect, style, noise or unknown",
-		run:     guardtriage.Run,
-	},
-	{
-		name:    "md-lint",
-		summary: "the tracked markdown obeys the invariants the repository claims",
-		run:     mdlint.Run,
-	},
-	{
-		name:    "check-string-switch",
-		summary: "does a switch compare a string literal, and is every ladder listed",
-		run:     stringswitch.Run,
-	},
-	{
-		name:    "check-result-chains",
-		summary: "the chain candidates among the if (x.IsFailure) guard sites",
-		run:     resultchains.Run,
-	},
-	{
-		name:    "aot-publish-gate",
-		summary: "the AOT publish's outcome and diagnostics match the committed record",
-		run:     aotpublish.Run,
-	},
-	{
-		name:    "check-coverage-registry",
-		summary: "the registry of consciously uncovered files still matches the measurement",
-		run:     registrygate.Run,
-	},
-	{
-		name:    "check-local-merge-loss",
-		summary: "a local squash-merge into dev dropped no content",
-		run:     mergeloss.Run,
-	},
-	{
-		name:    "coverage-report",
-		summary: "the per-project and per-file coverage report of a run",
-		run:     coveragereport.Run,
-	},
-	{
-		name:    "gen-e2e-shards",
-		summary: "the process plan of the headless Avalonia E2E suite",
-		run:     gene2eshards.Run,
-	},
-	{
-		name:    "run-e2e-avalonia-shards",
-		summary: "the headless Avalonia E2E plan, one process per shard",
-		run:     rune2eshards.Run,
 	},
 }
 

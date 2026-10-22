@@ -454,10 +454,9 @@ func runShard(shard shard, dll string, resultsDir string, guard []string) shardR
 // classes.
 //
 // The shape is `/*/*/(ClassA)|(ClassB)/*`: the assembly and namespace
-// segments are wildcards (the classes live in three namespaces - this one,
-// `ComponentTests`, and the referenced `Harbor.E2E.Framework`), the class
-// segment is the OR of the requested names, and the test segment is a
-// wildcard.
+// segments are wildcards (the classes live in two namespaces - this one and
+// `ComponentTests`), the class segment is the OR of the requested names, and
+// the test segment is a wildcard.
 func filterFor(classNames []string) string {
 	if len(classNames) == 0 {
 		return ""

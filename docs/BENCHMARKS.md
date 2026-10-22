@@ -1143,6 +1143,53 @@ each line's tabs through a `StringBuilder`, and the measurement of that cut read
 line costs the object, its chunk buffer and the string it hands back). The
 expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
+#### The yardstick has a price, and the gate now pays it (run 39633684054)
+
+The time branch is in **probe units**, so the runner's speed is supposed to
+cancel: the numerator and the denominator are both measured on the same runner
+in the same run. It cancels only while the yardstick IS the yardstick. The probe
+is a fixed workload, so its cost is a property of the machine — and the machine
+has a price: **0.000343-0.000353 ms/unit** in the nineteen measured
+`test (ui)` runs of the fleet that read it (the oldest, run 39372950798, read
+0.000380).
+
+Three runs read **0.000041 ms/unit** instead — 8.5x below — while the workload
+the probe was supposed to normalize was UNCHANGED:
+
+| Run | probe ms/unit | frame ms/unit | frame probe units | verdict |
+|---|---|---|---|---|
+| 39633684054 | 0.000041 | 0.0815 | **1992.3** (budget 700) | red |
+| 39609285153 | 0.000041 | 0.0816 | **1990.3** (budget 700) | red |
+| 39619582982 | 0.000041 | — | — | red (patch split only) |
+| 39639468264 (healthy) | 0.000350 | 0.0827 | 236.5 | green |
+| 39654104203 (healthy, this branch) | 0.000348 | 0.0814 | 234.1 | green |
+
+The numerator's spread was 1.01x in the red run — "reproducible" — so the
+helper trusted the measurement and the ratio it asserted was 8.5x the cost the
+runner actually produced. **A gate that fails on a number its runner never
+produced is a red light, not a measurement.**
+
+So the gate now declares the band the yardstick has to stay in
+(`0.000150-0.000600 ms/unit` — 2.3x below and 1.6x above what the fleet
+produces, so a slower or a faster machine still measures inside it). Outside
+the band the time branch **reports and stands down** and the byte branch — the
+machine-independent one, the branch that can be a hard gate — still asserts. The
+budgets are untouched: the byte budgets (8 B / 4 KiB / 128 KiB) are the real
+limits, and the time budgets stay in the currency the fleet is calibrated in.
+
+The band also catches the other direction: run 39599923626 read 0.00072 ms/unit
+in one of its six gates — 2x the fleet's price — and that gate stood down (its
+own spread was 6.25x). A yardstick that reads 2x slow deflates every ratio
+built on it, and a gate that passes because its yardstick was slow measures
+nothing.
+
+The warm-up of the patch split grew from 3 to 32 iterations at the same time:
+the call-counting threshold is 30 calls, the measured window drives 8 splits
+per round, and the short warm-up left the first measured rounds running tier-0
+code. The measurement of run 39654104203 therefore reads **397.1** probe units
+per split (0.1379 ms/unit against a probe of 0.000347 ms/unit) where the old
+warm-up read 505.2 — the same code, measured honestly.
+
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
 > the `test (ui)` job log on every run, and the compiled `test-measurements` gate lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
