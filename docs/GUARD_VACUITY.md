@@ -1,9 +1,11 @@
 # Can each guard fail? The vacuity sweep of issue #1730
 
-> Status (2026-10-21): an audit, on the tree at `550b5969`. A dated record, not a
-> normative claim about the current tree. Every "умеет падать" verdict below was
-> **executed**, not read: the self-test of every gate in scope was run locally and
-> its verdict recorded in the table.
+> Status (2026-10-22): an audit, re-run on the tree this branch merges into (`dev` at
+> `a019e928` plus #1725 and #1730). The first sweep was made on the tree at `550b5969`
+> (2026-10-21); every self-test in the table below was **executed** again on the merged tree,
+> and its verdict recorded. A dated record, not a normative claim about the current tree. Every
+> "умеет падать" verdict below was **executed**, not read: the self-test of every gate in scope
+> was run locally and its verdict recorded in the table.
 
 Issue #1730 asks one question about every guard: **can it fail?** A guard that
 cannot fail is not a guard — it is a green check that checks nothing, and it is
@@ -42,7 +44,7 @@ repository is written against.
 ## The gates
 
 The perimeter of this audit is the architecture gates and the security gates.
-Every self-test in the table was run on the tree at `550b5969`; the verdict
+Every self-test in the table was run on the merged tree; the verdict
 column is the exit code and the tool's own last line.
 
 ### The architecture gates
@@ -52,7 +54,7 @@ column is the exit code and the tool's own last line.
 | `tests/Harbor.Architecture.Tests/` (160 guards) | **partly — 152 of 160** | 152 guards declare a positive control (`ScanRule.Controls`, a planted fixture, a control test) or a discovery floor | the 8 guards that declare neither: see [the eight](#the-eight-that-declare-neither) below |
 | `tools/check-arch-anchors.py` | yes | `--self-test` plants a `file:line` anchor inside an architecture rule and asserts the gate reports it (rc=0, "4 checks passed") | — |
 | `tools/check-arch-suite-once.py` | yes | `--self-test` plants ten workflow defects (a duplicate shard, a missing gate switch, no shard at all) and asserts each fires (rc=0, "still fails on every planted defect") | — |
-| `tools/check-abstractions-contract.py` | yes | `--self-test` plants a phantom package and an empty declaration list and asserts both fire (rc=0, "16 fixtures") | — |
+| `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | yes | `--self-test` plants a phantom package and an empty declaration list and asserts both fire (rc=0, "16 fixtures") | — |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | yes | `--self-test` plants a stale document and asserts the gate reports it (rc=0, "the self-test passed") | — |
 | `tools/check-result-chains.py` | yes | `--self-test` plants every guard shape the census looks for and asserts each is found and told apart (rc=0) | — |
 | `tools/check-string-switch.py` | yes | `--self-test` plants a string switch and asserts the gate reports it (rc=0, "still finds a planted string switch") | — |
@@ -67,16 +69,16 @@ column is the exit code and the tool's own last line.
 | the banned-API ban, compiler half (RS0030 over `BannedSymbols.txt`) | yes | `BannedApiProbe` runs the **build's own analyzer** in-process over a planted `System.Reflection.Assembly.Load` and asserts it fires; the rule caught a real hole in the ban file in run 39395794130 | — |
 | the banned-API ban, **catalogue half** (the `#pragma warning disable RS0030` exemptions) | **no — was not checked** | nothing: the catalogue is prose in a comment and no gate read it | **closed by this change**: `tools/gates/banned-api-exemptions` compares the catalogue with the tree in both directions and in count. It found two drifts: a stale row (`RegistriesModule.cs`) and a file with two suppressions under one row (`SettingsViewModel.cs`) |
 | `tools/check-test-packages.py` | yes | `--self-test` plants a banned package directly, a banned package arriving transitively, a banned assembly in the output tree, a stale exception and an unjustified one (rc=0, "19 fixtures") | the **product** projects' package graph: the gate's scope is the test and sample projects, so a banned package that reaches a product project transitively is not covered. Proposed below |
-| `tools/check-public-api-resign.py` | yes | `--self-test` plants an unre-signed declaration, a baseline edit with no code behind it and a row written twice (rc=0) | — |
-| `tools/check-reference-trimmer.py` | yes | `--self-test` plants an uncarried finding, a stale baseline row and a row without a reason (rc=0) | — |
-| `tools/check-analyzer-scope.py` | yes | `--self-test` plants a family that spread back to every project, a family with no version pin and a table row with no declaration (rc=0, "12 fixtures") | — |
+| `tools/bin/harbor-gates-linux-x64 check-public-api-resign` | yes | `--self-test` plants an unre-signed declaration, a baseline edit with no code behind it and a row written twice (rc=0, "self-test PASS") | — |
+| `tools/bin/harbor-gates-linux-x64 check-reference-trimmer` | yes | `--self-test` plants an uncarried finding, a stale baseline row and a row without a reason (rc=0, "self-test OK") | — |
+| `tools/bin/harbor-gates-linux-x64 check-analyzer-scope` | yes | `--self-test` plants a family that spread back to every project, a family with no version pin and a table row with no declaration (rc=0, "12 fixtures") | — |
 | `tools/check-tunit-analyzer-gate.py` | yes | `--selftest` plants an offender and a waiver and asserts each behaves as it must (rc=0) | — |
-| `tools/aot-publish-gate.py` | yes | `--selftest` plants a new diagnostic id, a third-party id and a wrong recipe, and asserts each is rejected (rc=0, "25 cases") | — |
-| `tools/check-no-test-sdk.py` | yes | `--selftest` plants a `PackageReference`, a `PackageVersion` pin and three spellings of each (rc=0, "12 fixtures") | — |
+| `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | yes | `--selftest` plants a new diagnostic id, a third-party id and a wrong recipe, and asserts each is rejected (rc=0, "25 cases") | — |
+| `tools/bin/harbor-gates-linux-x64 check-no-test-sdk` | yes | `--selftest` plants a `PackageReference`, a `PackageVersion` pin and three spellings of each (rc=0, "11 fixtures") | — |
 | `tools/check-test-json-reflection.py` | yes | `--self-test` plants a reflection call and asserts the gate reports it (rc=0) | — |
 | `tools/check-tool-schema-pin.py` | yes | `--selftest` feeds the analysis every broken input and asserts each is rejected (rc=0) | — |
-| `tools/check-coverage-registry.py` | yes | `--self-test` plants a file that stopped being covered and asserts the gate reports it on both sides of the ratchet (rc=0) | — |
-| `tools/check-shard-balance.py` | yes | `--self-test` plants a runaway shard, a missing cost and a missing shard list (rc=0) | — |
+| `tools/bin/harbor-gates-linux-x64 check-coverage-registry` | yes | `--self-test` plants a file that stopped being covered and asserts the gate reports it on both sides of the ratchet (rc=0) | — |
+| `tools/bin/harbor-gates-linux-x64 check-shard-balance` | yes | `--self-test` plants a runaway shard, a missing cost and a missing shard list (rc=0) | — |
 
 **One gate in the whole table had no proof, and it was a security gate.** Every
 other gate in the perimeter already had a self-test that plants a violation of
@@ -87,12 +89,19 @@ the repository could see it. The tree had drifted: a catalogue row for a
 `RegistriesModule.cs` suppression that no longer exists, and a file carrying
 two suppressions under one row.
 
+The table names the gates as the merged tree has them: eight of the scripts that
+were python when the sweep started are now subcommands of the compiled binary
+(#2085, #2115, #2127, #2134), and their self-tests were run through the binary
+on the merged tree.
+
 ## The eight that declare neither
 
 Eight of the 160 architecture guards declare **neither a positive control nor a
 discovery floor**. Their verdict is derived from the tree, so a matcher that
 stops matching reads as green. These are the eight, and what each one is
-missing:
+missing. The merge re-checked the census: none of the eight files changed, and
+none of the 152 that declare a control lost one, so the split is 152 and 8 on
+the merged tree too.
 
 | guard | what it grades | how it can read green on a broken matcher | the control it needs |
 |---|---|---|---|

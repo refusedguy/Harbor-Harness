@@ -1,18 +1,18 @@
 {
   "schema": "harbor.arch-rule-tiers/1",
-  "generated_at": "2026-10-21",
+  "generated_at": "2026-10-22",
   "issue": 1725,
   "population": {
     "tree": "tests/Harbor.Architecture.Tests",
-    "cs_files": 181,
-    "top_level_classes": 239,
-    "classes_with_tests": 167,
+    "cs_files": 185,
+    "top_level_classes": 244,
+    "classes_with_tests": 169,
     "guards": 160,
-    "instrument_self_tests": 7,
+    "instrument_self_tests": 9,
     "engine_or_probe": 2,
-    "helper_classes_without_tests": 72,
-    "test_attributes": 1107,
-    "tree_lines": 107568,
+    "helper_classes_without_tests": 75,
+    "test_attributes": 1115,
+    "tree_lines": 109342,
     "ticket_claim_110": {
       "value": 110,
       "measured_at_commit": "d96b66ec",
@@ -55,19 +55,19 @@
     "2": 23
   },
   "semantic_candidates": {
-    "count": 78,
+    "count": 77,
     "kinds": {
-      "roslyn-analyzer": 74,
-      "derived-value": 4
+      "derived-value": 4,
+      "roslyn-analyzer": 73
     },
     "kind_legend": {
       "roslyn-analyzer": "the rule grades source TEXT today; a Roslyn analyzer over the product tree decides the same question by TYPE. This is the #1729 pilot shape.",
       "derived-value": "the rule's instrument is bound to form: it compares a live measurement with a written-down number or list. The repair is to DERIVE the value, so the check survives the change.",
       "il-probe": "the rule already decides by symbol (reflection over the loaded assembly, or Mono.Cecil over the IL). No conversion needed -- it is the shape the others should move to."
     },
-    "already_semantic_rules": 42,
-    "estimated_lines_saved": 18040,
-    "share_of_tree_lines": 0.1677
+    "already_semantic_rules": 43,
+    "estimated_lines_saved": 17840,
+    "share_of_tree_lines": 0.1632
   },
   "rules": [
     {
@@ -743,6 +743,27 @@
       "estimated_lines_saved": 300
     },
     {
+      "id": "CommentStripperEquivalenceTests",
+      "file": "tests/Harbor.Architecture.Tests/CommentStripperEquivalenceTests.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 3,
+      "file_lines": 321,
+      "subject": "The comment blanker that replaced the old stripper produces the BYTES the old one produced.",
+      "checks": "Compares the new scanner (SourceCommentBlanker) with the kept old implementation (CommentStripperOracle) over the three trees the rules read: src/, apps/ and tests/.",
+      "defect_signal": "Nothing about the product: this is the control that proves the blanker can fail. A blanker that produced different bytes would move every finding a rule reports, and a rule whose finding moved is a rule whose verdict changed, however green the test stays.",
+      "refactor_signal": "Nothing. It grades the instrument against its oracle.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit e237a93c 'the comment stripper allocated the SQUARE of every block comment, and one comment was 10.6 GiB' (#2167)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
       "id": "CommonConfigContractRules",
       "file": "tests/Harbor.Architecture.Tests/CommonConfigContractRules.cs",
       "kind": "guard",
@@ -1021,7 +1042,7 @@
       "kind": "guard",
       "note": null,
       "tests": 8,
-      "file_lines": 1043,
+      "file_lines": 1055,
       "subject": "A default interface member is the exception, not the rule.",
       "checks": "Reads the published interfaces' members through reflection, classifies each (forwarded, default-bodied, abstract) and requires every default member to be justified.",
       "defect_signal": "A default member silently changed the behaviour of every implementor.",
@@ -1252,7 +1273,7 @@
       "kind": "guard",
       "note": null,
       "tests": 6,
-      "file_lines": 397,
+      "file_lines": 402,
       "subject": "The Avalonia E2E shard list covers every test file exactly once.",
       "checks": "Reads tests/Harbor.E2E.App.Avalonia/e2e-shards.json and the test tree, and compares the shard assignment with the files on disk.",
       "defect_signal": "A test file was in no shard, so it never ran.",
@@ -1567,20 +1588,20 @@
       "kind": "guard",
       "note": null,
       "tests": 7,
-      "file_lines": 450,
+      "file_lines": 684,
       "subject": "One HttpClient per owner, not one per call.",
-      "checks": "Source-scans for `new HttpClient(` and compares the call sites with the declared owner set.",
-      "defect_signal": "A per-call HttpClient exhausted the socket pool under load; #1854 measured it.",
-      "refactor_signal": "The owner set names five real paths; a rename invalidates a row.",
+      "checks": "Reads the verdicts of the analyzer that asks the same two questions by symbol (HARCH005 and HARCH006), and compares the creation sites with the declared owner set. The text matcher survives as the ORACLE of the differential and gates nothing.",
+      "defect_signal": "A per-call HttpClient exhausted the socket pool under load; #1854 measured it. The text matcher could only see an expression-bodied lambda, and a block-bodied lambda or an anonymous method -- both the shape the rule exists for -- was invisible to it.",
+      "refactor_signal": "The owner set names five real paths; a rename invalidates a row. The creation itself is resolved through the semantic model now, so a rename of the created type re-points the rule.",
       "false_positive_cost": 1,
       "tier": "B",
       "evidence": [
         "measured: no firing in the window"
       ],
-      "semantic_candidate": true,
-      "semantic_kind": "roslyn-analyzer",
-      "already_semantic": false,
-      "estimated_lines_saved": 200
+      "semantic_candidate": false,
+      "semantic_kind": "il-probe",
+      "already_semantic": true,
+      "estimated_lines_saved": 0
     },
     {
       "id": "IdeAbandonObserveRule",
@@ -2108,12 +2129,33 @@
       "estimated_lines_saved": 300
     },
     {
+      "id": "ParseCostMeasurement",
+      "file": "tests/Harbor.Architecture.Tests/ParseCostMeasurement.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 2,
+      "file_lines": 441,
+      "subject": "What the architecture suite's source parsing costs, and what the retired stripper would have cost.",
+      "checks": "Measures the per-file cost of the retired quadratic blanking, of the linear oracle and of the current scanner over the repository's own tree, and prints the [arch-cost] lines the CI measurement lane renders.",
+      "defect_signal": "Nothing about the product: the retired blanking allocated in proportion to the SQUARE of each block comment's length, and 11.40 GB of its 12.82 GB came from ONE 75 497-character doc comment.",
+      "refactor_signal": "Nothing. It measures the instrument; the rules keep their own assertions.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit e237a93c 'the comment stripper allocated the SQUARE of every block comment, and one comment was 10.6 GiB' (#2167)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
       "id": "PresentationCapabilityInstrumentationTests",
       "file": "tests/Harbor.Architecture.Tests/PresentationCapabilityInstrumentationTests.cs",
       "kind": "instrument-self-test",
       "note": null,
-      "tests": 3,
-      "file_lines": 72,
+      "tests": 6,
+      "file_lines": 264,
       "subject": "The capability probe must read the PRODUCT's IL, not the coverage instrumenter's.",
       "checks": "Builds a compilation with and without the coverage instrumenter and asserts the probe's verdict is the same for both.",
       "defect_signal": "The nightly coverage lane injects a tracker that writes files; the probe read the tracker's own filesystem calls and reported a filesystem capability in the Presentation layer.",
@@ -2134,7 +2176,7 @@
       "kind": "guard",
       "note": null,
       "tests": 13,
-      "file_lines": 1456,
+      "file_lines": 1566,
       "subject": "A Presentation assembly may not use the capabilities the layer denies it.",
       "checks": "Walks the IL of every Presentation assembly with Mono.Cecil and fails on a subprocess spawn, System.IO.File, System.IO.Directory, network or reflection emit; a reasoned KnownViolations baseline holds the accepted sites.",
       "defect_signal": "#455: the reference matrix could not see System.IO.File, System.Diagnostics.Process or HttpClient, so a perfectly layered assembly could still fork a shell or overwrite the user's config.",
@@ -2470,7 +2512,7 @@
       "kind": "guard",
       "note": null,
       "tests": 6,
-      "file_lines": 1046,
+      "file_lines": 1057,
       "subject": "A Release build produces Release output, and the solution configuration builds every project it pulls in.",
       "checks": "Reads the solution configuration's project list, then compares each built project's bin/Release output with its bin/Debug output byte for byte.",
       "defect_signal": "#1921: three of the 112 compiled projects produced bin/Debug output and no bin/Release output at all (run 39407510139).",
@@ -2701,7 +2743,7 @@
       "kind": "guard",
       "note": null,
       "tests": 5,
-      "file_lines": 752,
+      "file_lines": 770,
       "subject": "What is in the reflection scan universe of the architecture suite, and what is not.",
       "checks": "Walks the trees, loads the assemblies and compares the non-product members and the blind projects with two written-down baselines.",
       "defect_signal": "Nothing by its own header: it is 'a MEASUREMENT, not a fix'.",
@@ -3289,7 +3331,7 @@
       "kind": "guard",
       "note": null,
       "tests": 6,
-      "file_lines": 891,
+      "file_lines": 928,
       "subject": "A session's token cell has one shape, and the set of writers is frozen.",
       "checks": "Source-scans for the token formatting shapes and compares the writers with the frozen set (the notation is deliberately not chosen here).",
       "defect_signal": "#788: five renderings of one magnitude existed; ADR-010 counted six writers and stopped because its inventory walked src/ only.",

@@ -2,7 +2,6 @@
 # https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-banned-api-analyzer
 
 # Ban Newtonsoft.Json — use System.Text.Json only.
-#
 # RS0030 covers SOURCE CODE: it fires on a use of the symbol in our code, and
 # on nothing else. The package graph is a different question, and the `N:`
 # entry is what answers it: tools/check-test-packages.py reads the banned

@@ -1,7 +1,9 @@
 # Architecture rules: what each one catches, and what it only nags about
 
-> Status (2026-10-21): an audit of the architecture rule set of `dev`, on the tree at
-> `c75dbfdd`. A dated record, not a normative claim about the current tree. The machine-readable
+> Status (2026-10-22): an audit of the architecture rule set of `dev`, re-counted on the tree this
+> branch merges into (`dev` at `a019e928` plus #1725 and #1730). The first count was made on
+> `c75dbfdd` (2026-10-21) and every number below was recomputed after the merge. A dated
+> record, not a normative claim about the current tree. The machine-readable
 > form of everything below is [`tests/Harbor.Architecture.Tests/rule-tiers.json`](../tests/Harbor.Architecture.Tests/rule-tiers.json);
 > this page is the argument, the JSON is the data.
 
@@ -24,15 +26,15 @@ from the tree, not from a hand-kept list.
 
 | | count | what it is |
 |---|---:|---|
-| `.cs` files in the tree | 181 | |
-| top-level classes | 239 | |
-| classes with at least one `[Test]` | 167 | |
+| `.cs` files in the tree | 185 | |
+| top-level classes | 244 | |
+| classes with at least one `[Test]` | 169 | |
 | **rules (guards about the repository)** | **160** | the population of this audit |
-| instrument self-tests | 7 | the guard machinery proving it can fail, not a rule about the product |
+| instrument self-tests | 9 | the guard machinery proving it can fail, not a rule about the product |
 | engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
-| helper classes without tests | 72 | probes, fixtures, records, planted controls |
-| `[Test]` attributes | 1107 | |
-| lines in the tree | 107,568 | |
+| helper classes without tests | 75 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1115 | |
+| lines in the tree | 109,342 | |
 
 ### The "110" of the issue
 
@@ -41,8 +43,8 @@ ends in `Rule` or `Rules`:
 
 ```
 commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
-this tree (2026-10-21)         ->  129 classes named *Rule / *Rules
-this tree, the real population  ->  160 rules (167 test-bearing classes, minus 7 self-tests)
+this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
+this tree, the real population  ->  160 rules (169 test-bearing classes, minus 9 self-tests)
 ```
 
 Two corrections turn that into the real number. **19** `*Rule`-named classes were added since,
@@ -210,7 +212,7 @@ full text of every cell, and the evidence behind each row, is in the JSON.
 | `FullLayerMatrixTests` | `FullLayerMatrixTests.cs` | Reads the matrix, compares each row's declared reference set against the assembly's real references, and checks that the rows cover exactly the src/… | Harbor.Registries had no matrix row, so no layer rule constrained that assembly (run 39114828129). A row could also permit an edge the product does n… | The matrix is the written-down table: every assembly that is added or moved needs a row, and the allowed-edge set is a ledger whose stale rows fire (… | 2 |
 | `HandRolledResultShapeTests` | `HandRolledResultShapeTests.cs` | Source-scans for the hand-rolled Result shapes and grades each site against the canonical construction. | A second implementation of a library member, written out longhand at every call site, is a drift source: 64 copies of Result.Failure<K>(other.Error). | The exemption table names fourteen real paths; a rename invalidates a row. | 1 |
 | `HostingCompositionNullabilityRules` | `HostingCompositionNullabilityRules.cs` | Source-scans src/Harbor.Hosting for the null-forgiving operator and grades each site. | A module was handed a null service and the DI order decided whether it worked. | The scope is a directory, so it re-points; the composition context's path is named. | 1 |
-| `HttpClientReuseRules` | `HttpClientReuseRules.cs` | Source-scans for `new HttpClient(` and compares the call sites with the declared owner set. | A per-call HttpClient exhausted the socket pool under load; #1854 measured it. | The owner set names five real paths; a rename invalidates a row. | 1 |
+| `HttpClientReuseRules` | `HttpClientReuseRules.cs` | Reads the verdicts of the analyzer that asks the same two questions by symbol (HARCH005 and HARCH006), and compares the creation sites with the decla… | A per-call HttpClient exhausted the socket pool under load; #1854 measured it. The text matcher could only see an expression-bodied lambda, and a blo… | The owner set names five real paths; a rename invalidates a row. The creation itself is resolved through the semantic model now, so a rename of the c… | 1 |
 | `IdeAbandonObserveRule` | `IdeAbandonObserveRule.cs` | Source-scans src/Harbor.Ipc.Client/Ide for the discard-and-forget shapes and grades the class. | A fault on the abandon path of the IDE bridge was swallowed, so the session hung with no log line. | The scope is a directory and the bridge's file is named; a move invalidates it. | 1 |
 | `InnerExceptionRules` | `InnerExceptionRules.cs` | Reads the catch blocks through a Roslyn parse of the guarded files and grades each catch: a caught exception must be rethrown with its inner exceptio… | A catch flattened the exception into a message string, so the stack and the cause were lost. | The scope is a tree scan; two real paths are named as the known sites. | 1 |
 | `KeyGateFamilyRules` | `KeyGateFamilyRules.cs` | Source-scans the product tree for the key-routing call sites and compares the set of sites with the family table. | BindingsMap routed keys and was absent from the family table, so it never declared its family (run 38264879229). | The family table names forty-eight real paths and the key-type vocabulary. Every renamed widget, every moved routing site and every new key type need… | 2 |
@@ -316,16 +318,16 @@ This is the preparation for #1724, and the JSON names the shape per rule
 
 | shape | what it means | rules |
 |---|---|---:|
-| `roslyn-analyzer` | the rule grades source **text** today; a Roslyn analyzer over the product tree decides the same question by **type**. This is the #1729 pilot shape | 74 |
+| `roslyn-analyzer` | the rule grades source **text** today; a Roslyn analyzer over the product tree decides the same question by **type**. This is the #1729 pilot shape | 73 |
 | `derived-value` | the instrument is bound to form: it compares a live measurement with a written-down number or list. The repair is to **derive** the value, so the check survives the change | 4 |
-| `il-probe` | the rule **already** decides by symbol (reflection over the loaded assembly, or Mono.Cecil over the IL). No conversion is needed -- this is the shape the others should move to | 42 |
+| `il-probe` | the rule **already** decides by symbol (reflection over the loaded assembly, Mono.Cecil over the IL, or a Roslyn analyzer over the syntax tree). No conversion is needed -- this is the shape the others should move to | 43 |
 
-**120 rules** are candidates for a semantic check, and the estimate for the code that comes off
-the tree is **18 040 lines**, which is **16.8%** of the 107 568 lines in the architecture tree.
-The estimate is a projection: it is the mechanism (the file walk, the comment stripper, the
-regex matcher, the baseline subtraction, the planted controls) that a symbol-level question does
-not need, and the prose that states the rule stays. It is not measured, and it is marked as a
-projection in the JSON.
+**120 rules** are in the semantic family — 77 to convert, 43 already there — and the estimate for
+the code that comes off the tree is **17 840 lines**, which is **16.3%** of the 109 342 lines in
+the architecture tree. The estimate is a projection: it is the mechanism (the file walk, the
+comment stripper, the regex matcher, the baseline subtraction, the planted controls) that a
+symbol-level question does not need, and the prose that states the rule stays. It is not
+measured, and it is marked as a projection in the JSON.
 
 The twelve largest candidates:
 
@@ -346,19 +348,21 @@ The twelve largest candidates:
 
 The last row is the proof that the conversion is not a theory: `UnguardedResultReadRules` has
 **already been converted once**, and what remains in the tree is the differential oracle that
-the analyzer is measured against. That is the shape every conversion ends in.
+the analyzer is measured against. `HttpClientReuseRules` is the second one: since #2148 it asks
+the same two questions through the analyzer (`HARCH005` and `HARCH006`), and its text matcher
+survives as the oracle of the differential. That is the shape every conversion ends in.
 
 ## What was not analysed, and why
 
-- **Only the architecture suite.** The other 37 test projects carry their own guards, and they
+- **Only the architecture suite.** The other 47 test projects carry their own guards, and they
   are not in this population. #1726 measured the architecture suite's firings; the other
   projects' firings were not harvested.
 - **Only the test tree.** The build-time analyzers in `src/Harbor.Arch.Analyzers/` (HARCH001
   dynamic code, HARCH003 unobserved task) are product-side rules. Only HARCH003 is graded from
   here, by `UnobservedTaskRuleTests`.
-- **The python gates are a different population.** The 51 tools in `tools/` and the gate jobs in
-  the workflows are a separate guard set with a separate measurement; they are not in this
-  census.
+- **The python gates are a different population.** The 25 python scripts in `tools/` and the 27
+  compiled gates of `tools/bin/harbor-gates-linux-*`, and the gate jobs in the workflows, are a
+  separate guard set with a separate measurement; they are not in this census.
 - **The tier is per class; the measurement is per method.** Seven classes hold both a
   defect-catcher and a noise-firing sub-rule (for example `ReflectionConventionRule` and
   `TuiReadLineContractRules`). The class tier is the WORSE of the two, and the JSON names the
@@ -377,7 +381,18 @@ The census is a computation over the tree, not a list anyone maintains:
 
 ```bash
 # the population: one entry per class with at least one [Test]
-grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1107 test attributes
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1115 test attributes
+
+# the files and the lines of the tree
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 185 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 109342 lines
+
+# the classes, and the ones that carry a [Test]. A [Test] method belongs to
+# the type that encloses it, so the last declaration before it is its class.
+awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
+    tests/Harbor.Architecture.Tests/*.cs
+# top-level classes: 244
+# classes with a [Test]: 169
 
 # the tiers
 python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"
