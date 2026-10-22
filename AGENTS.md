@@ -17,7 +17,7 @@
 > - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 40 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
-> - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `seam graph` CI job fails when the committed copy is stale.
+> - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `tree gates` CI job fails when the committed copy is stale.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
 > - [docs/ARCH_RULES.md](./docs/ARCH_RULES.md) — the architecture rule set, classified: 160 guards into tiers A (catches a defect and is cheap) / B (catches a defect but nags) / C (catches the tree's shape), with the false-positive cost of each and the commits that proved the tier. The machine-readable form is `tests/Harbor.Architecture.Tests/rule-tiers.json`.
 > - [docs/GUARD_VACUITY.md](./docs/GUARD_VACUITY.md) — the vacuity sweep (#1730): which architecture and security guards can actually fail, what proves it, and what is still unguarded. The 160 architecture guards, the 8 that declare no positive control and no discovery floor, and the banned-API suppression catalogue the new `banned-api-exemptions` gate now holds.
@@ -686,6 +686,19 @@ measured JIT `--version` spawn-to-exit is ~138 ms / ~42 MB RSS peak, AOT binary
 Do not quote these on a hot-path PR without re-measuring — historical
 spot-checks from other machines live in BENCHMARKS.md §5 and are not
 comparable to the CI-short rows above.
+
+**What a pull request COSTS is measured too, and it is not in that table**
+(that table is microbenchmarks only). It is in
+[docs/BENCHMARKS.md](./docs/BENCHMARKS.md) §11, measured over twelve pull
+requests on 2026-10-21: **23.5 runner-minutes** and **814 s of wall**
+(median), of which the wall is **29 % queue wait**. The bill: 27 % test
+shards, 25 % the compile, 19 % the SECOND compile of the reference trimmer,
+16 % the docs gates. The instrument is `harbor-gates pr-cost`, and it reads
+the Actions API rather than a hand-written table: the wall is the maximum
+of the two parallel workflows, not their sum. The twelve are a tree of
+2026-10-21 and the lane has moved since: the same instrument reads **19.0
+runner-minutes** for a pull request on the tree of 2026-10-22 (§11.6).
+Quote §11, not this paragraph, and re-measure before quoting either.
 
 ### Adding a benchmark
 

@@ -67,13 +67,10 @@
             "context": "normative citations"
           },
           {
-            "context": "guarded project dependencies"
+            "context": "tree gates"
           },
           {
             "context": "test project coverage"
-          },
-          {
-            "context": "xml-doc coverage"
           }
         ],
         "strict_required_status_checks_policy": false,

@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
 	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
@@ -67,6 +68,7 @@ import (
 	"harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	prcost "harbor.local/gates/pr-cost"
 	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
@@ -98,6 +100,11 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "all",
+		summary: "every gate that needs nothing but the tree, in one command",
+		run:     all.Run,
 	},
 	{
 		name:    "aot-publish-gate",
@@ -228,6 +235,11 @@ var registry = []registered{
 		name:    "pack-validate",
 		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
 		run:     packvalidate.Run,
+	},
+	{
+		name:    "pr-cost",
+		summary: "what one pull request costs: the runner-minutes, the wall, the critical path and the peak width",
+		run:     prcost.Run,
 	},
 	{
 		name:    "run-e2e-avalonia-shards",
