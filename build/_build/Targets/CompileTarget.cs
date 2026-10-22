@@ -86,7 +86,11 @@ public static class CompileTarget
         var configuration = settings.ConfigurationString;
         var solutionPath = solution.Path.ToString();
         var maxCpuCount = Environment.ProcessorCount;
-        output.Cmd("Compile", ["dotnet", "msbuild", solutionPath, "/target:Build", "/property:Configuration=" + configuration, "/property:ContinuousInstallationBuild=true", "/maxcpucount:" + maxCpuCount, "/nodeReuse:false"]);
+        // The SAME argv the tool below runs, switch for switch. The property
+        // name is spelled the way MSBuild spells it — a typo here would
+        // print a command that sets a property nobody reads, and the print
+        // is the only record of what the build did.
+        output.Cmd("Compile", ["dotnet", "msbuild", solutionPath, "/target:Build", "/property:Configuration=" + configuration, "/property:ContinuousIntegrationBuild=true", "/maxcpucount:" + maxCpuCount, "/nodeReuse:false"]);
         if (output.IsDryRun)
         {
             return;

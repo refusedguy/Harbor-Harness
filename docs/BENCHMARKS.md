@@ -2911,9 +2911,10 @@ told from the baseline: 1.08 on the wall, 1.04 after the speed
 normalisation, the same 112 `Csc` tasks, the same 3.3..3.6 busy cores. MSBuild
 reads the `-maxcpucount` SWITCH; the `MaxCpuCount` property appears in no
 MSBuild target and in no global-property lookup. The repository's own
-`-p:MaxCpuCount=0` (`build/_build/Targets/CompileTarget.cs:22` and `:34`) is
-a no-op for the same reason: `dotnet build` is parallel on its own, which is
-why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy cores.
+`-p:MaxCpuCount=0` (what `build/_build/Targets/CompileTarget.cs` used to
+pass) was a no-op for the same reason: `dotnet build` is parallel on its own,
+which is why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy
+cores. #2111 replaced that line with the real switches — see §6.7.2.
 
 **Practical conclusion: two jobs are worth it, but not for the reason in the
 issue, and not for the number in the issue.**
@@ -3132,7 +3133,7 @@ and it is subtracted in the "compile phase" column.
 
 | arm | the command | n | wall (s) | median | compile phase (wall − gate), median | `Csc` task time, median | speed-normalized wall ratio |
 |-----|-------------|--:|----------|--------|--------------------------------------|--------------------------|-----------------------------|
-| A | `dotnet build … -p:MaxCpuCount=0` (what CI runs today) | 3 | 253.0..409.6 | 319.4 | 202.6 s | 266.2 s | 1.00 |
+| A | `dotnet build … -p:MaxCpuCount=0` (what CI ran before #2111) | 3 | 253.0..409.6 | 319.4 | 202.6 s | 266.2 s | 1.00 |
 | E | `dotnet msbuild … -maxcpucount:4 -nodeReuse:false` | 3 | 237.4..376.6 | 304.2 | **189.7 s** | 265.7 s | **0.9** |
 | F | E, plus `-graphBuild` | 3 | 282.7..447.2 | 412.1 | **253.9 s** | **858.2 s** | 1.0 |
 
