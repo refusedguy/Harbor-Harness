@@ -3776,7 +3776,396 @@ python scanning: about 55 s of scanning and 13 s of git. The full port is
 therefore worth roughly 619 s to 60 s, and the batching is worth 619 s to
 117 s on its own.
 
-## 11. How to reproduce
+## 11. What a pull request costs
+
+**The question this section answers.** Three numbers about the pull-request
+lane were known, and none of them was the price of a pull request:
+
+* issue [#2108](https://github.com/refusedguy/Harbor-Harness/issues/2108)
+  measured the bill of ONE lane run: 19.4 runner-minutes, 17 jobs, run
+  `39556560488`;
+* issue [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110)
+  measured what CLOSES the lane (the arch shard);
+* §10 measured the gate set, on a laptop, one gate at a time.
+
+What nobody had was the whole bill: the runner-minutes, the wall, the
+critical path and the peak width of one pull request, and the split of that
+bill by what the seconds buy. A decision about the lane needs all four,
+because they are four different numbers and only one of them is a sum.
+
+**THE INSTRUMENT.** `tools/gates/pr-cost` is a compiled gate, the same binary
+the repository already ships (`tools/bin/harbor-gates-linux-x64 pr-cost`).
+It reads what the Actions REST API returns and prints the tables below; its
+input is the job list of a run, so no number in this section was transcribed
+by hand. It is REPORTING: it never fails a build. Its own proof that it can
+fail is its `--self-test`, which plants a stripe whose wall, busy time and
+peak width are known, and a timestamp that cannot be parsed (that one must
+be an ERROR, because an unreadable timestamp read as "no time" would report
+a bill of zero, and zero is the number that looks like good news).
+
+### 11.1 The sample, and what it is
+
+Twelve pull requests, the last twelve of 2026-10-21 that built the tree and
+ran the five test shards, 16:47:08 to 17:22:51 UTC. The criterion is
+mechanical and is in the data: the `build` job of `ci.yml` ran, all five
+shards ran, and every job of both workflows finished. A pull request that
+touches only `docs/` or only `tools/` never starts the .NET build: its bill
+is 4.8 runner-minutes, and it is a different shape, not a cheaper pull
+request.
+
+| | |
+|---|---|
+| the twelve runs | `39637885344`, `39638416505`, `39638565635`, `39638603945`, `39638705616`, `39639468264`, `39640369150`, `39640971168`, `39641227183`, `39641476017`, `39641977262`, `39643272476` |
+| their head commits | `eee6a5b1`, `f7257f8d`, `6d47858e`, `90e1c345`, `9c4853d7`, `938ae03c`, `f25f2075`, `372d0285`, `b854599b`, `dbd9f9a0`, `a828bed6`, `222fa198` |
+| their `docs.yml` twins | the runs started in the same second on the same branch |
+| the workflows | `ci.yml` (13-14 live jobs) and `docs.yml` (21 live jobs; 22 on the one branch that adds the `workflow files` gate) |
+| the pool | `ubuntu-latest`, `ubuntu-24.04`, `ubuntu-24.04-arm` |
+| dev's tip that day | `13961b71` and `bb9c76b9` (dev moved twice inside the sample window) |
+
+**WHICH ATTEMPT THE TABLES READ.** Four of the twelve had a flaky shard and
+were re-run. Every table in this section reads the FIRST attempt of each run,
+because that is one pass of the lane, and a second pass is a separate bill
+(§11.2 names its price). The Actions API serves the LAST attempt by default
+(`filter=latest`), and for those four runs the two differ: the re-run
+replaces the failed job's timestamps with later ones, so the default view is
+a mixture of two attempts, and its wall is 393 to 745 s longer. Reading the
+first attempt needs `filter=all` and a pick of the lowest `run_attempt`
+(§11.8).
+
+**THE TREE THE TWELVE RAN ON, AND WHAT CHANGED IN THE LANE SINCE.** The
+`ci.yml` of all twelve heads has the SAME job list as dev's `ci.yml` today:
+the same thirteen jobs, in the same order, and the `reference-trimmer` job is
+still in it. Four things changed inside the lane since:
+
+| change | what it does to the pull-request lane |
+|---|---|
+| [#2123](https://github.com/refusedguy/Harbor-Harness/pull/2123) | three `DIAGNOSTIC` steps in the `build` job. They run only when the build-output cache matched, and it never matched in the twelve, so they cost 0 s there and 7 s in the run of 2026-10-22 below |
+| [#2134](https://github.com/refusedguy/Harbor-Harness/pull/2134) | the `aot-publish` job's gate is the compiled binary now, not the python script. Same job, same lane |
+| [#2153](https://github.com/refusedguy/Harbor-Harness/pull/2153) | the ILLink analyzer and the vs-threading family leave the ordinary build: 801.3 analyzer-seconds become 491.4, the change's own measurement. Its WALL effect was inside the 28 s noise floor of the harness that measured it, so the compile is cheaper by an amount the harness could not resolve |
+| [#2155](https://github.com/refusedguy/Harbor-Harness/pull/2155), [#2158](https://github.com/refusedguy/Harbor-Harness/pull/2158) | `MSBUILDDISABLENODEREUSE=1` in the `build` job, and `HarborArchGate: 'false'` for every event. The pull-request lane already had the architecture gate off, so the second half of that change does not touch it |
+
+Two more changed the lane's shape since, one of them still in flight. The
+`go-quality` gate of PR #2162 joined the `docs.yml` gate lane: that lane
+runs twenty-two jobs today, and the sample's twenty-one had no such job. The
+unused-reference analyzer moves into the ordinary compile in PR #2138, and
+the `reference-trimmer` job is deleted with it. That pull request is not
+merged yet: the job is still in dev's `ci.yml`, and §11.6 measures the
+lane it will produce.
+
+**THE WALL IS NOT THE SUM, AND THAT IS THE POINT.** `ci.yml` and `docs.yml`
+have no `needs:` between them, so they start together, and the pull request
+waits for the LONGER of the two. The bill is their sum and the wall is
+their maximum. A table that adds the two columns to get the wall is wrong,
+and the wrongness is the expensive kind: it says every new job costs the
+whole wall.
+
+### 11.2 What one pull request costs
+
+| pull request | runs | jobs | runner-min | wall (s) | critical path (s) | peak width | busy (s) | idle (s) | mean concurrency | the tail |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| PR #39637885344 (feat/workflow-parse-gate) | 2 | 35 | **23.4** | 787 | 787 | 5 | 626 | 161 | 1.78 | `gate` |
+| PR #39638416505 (test/1812-e2e-framework) | 2 | 35 | **23.8** | 796 | 796 | 5 | 582 | 214 | 1.79 | `gate` |
+| PR #39638565635 (test/1553-ensure-guards) | 2 | 35 | **27.1** | 718 | 718 | 6 | 578 | 140 | 2.27 | `gate` |
+| PR #39638603945 (feat/gates-a) | 2 | 34 | **23.5** | 1018 | 1018 | 4 | 707 | 311 | 1.38 | `gate` |
+| PR #39638705616 (fix/ci-duplicate-yaml-key) | 2 | 34 | **23.4** | 724 | 724 | 5 | 640 | 84 | 1.94 | `gate` |
+| PR #39639468264 (refactor/1569-testkit-scaffold) | 2 | 35 | **25.4** | 962 | 962 | 6 | 667 | 295 | 1.58 | `gate` |
+| PR #39640369150 (refactor/1569-testkit-scaffold-b) | 2 | 35 | **24.1** | 832 | 832 | 6 | 582 | 250 | 1.74 | `gate` |
+| PR #39640971168 (feat/gates-d-3) | 2 | 34 | **22.7** | 790 | 790 | 5 | 663 | 127 | 1.73 | `gate` |
+| PR #39641227183 (feat/2111-msbuild-switches) | 2 | 34 | **23.1** | 983 | 983 | 6 | 641 | 342 | 1.41 | `gate` |
+| PR #39641476017 (feat/gates-a) | 2 | 34 | **21.9** | 915 | 915 | 5 | 635 | 280 | 1.44 | `gate` |
+| PR #39641977262 (arch/1724-semantic-guards) | 2 | 34 | **23.5** | 925 | 925 | 6 | 632 | 293 | 1.52 | `gate` |
+| PR #39643272476 (feat/gates-d-3) | 2 | 34 | **21.2** | 742 | 742 | 5 | 599 | 143 | 1.72 | `gate` |
+
+**THE HEADLINE.** A pull request in this repository costs **23.5
+runner-minutes** (median; min 21.2, max 27.1) and **814 s of wall**
+(median; min 718, max 1018). The critical path is the wall by definition,
+from the first job's start to the last job's end, and it is always the
+`gate` job that ends it.
+
+**THE FOUR THAT NEEDED A SECOND ATTEMPT.** The re-run is a second pass of
+the lane, and it is not in the tables above. Its price is WALL, not runner
+time: the re-run replaces the failed shard's seconds with a new shard's
+seconds, so the bill barely moves, and what it adds is the wait for a runner
+and for the lane to be checked again.
+
+| pull request | the shard that failed | first attempt: wall / runner-min | last attempt: wall / runner-min | the re-run costs |
+|---|---|---|---|---|
+| PR #39639468264 | `test (ui)` | 962 s / 25.4 | 1355 s / 25.4 | 393 s of wall, 0.0 runner-min |
+| PR #39640369150 | `test (ui)` | 832 s / 24.1 | 1573 s / 24.1 | 741 s of wall, 0.0 runner-min |
+| PR #39641227183 | `test (core)` | 983 s / 23.1 | 1728 s / 23.0 | 745 s of wall, 0.1 runner-min |
+| PR #39641476017 | `test (platform)` | 915 s / 21.9 | 1306 s / 22.1 | 391 s of wall, 0.2 runner-min |
+
+**THE ANCHOR RUN, READ BY THE SAME INSTRUMENT.** Issue #2108's number,
+19.4 runner-minutes and 17 jobs, is the `ci.yml` LANE of run `39556560488`,
+and the instrument reads it back exactly: ci.yml 19.4 runner-minutes over
+13 live jobs (the 17 are the jobs the lane declares; four of them were
+skipped). The WHOLE stripe of that run, ci.yml plus its `docs.yml` twin, is
+**23.0 runner-minutes** and 909 s of wall, against the twelve's median 23.5
+and 814 s, and the decomposition agrees with the twelve to within a point
+per article: build 29 % against 25 %, reference trim 19 % against 19 %, test
+shards 26 % against 27 %, docs gates 15 % against 16 %. The reference run
+and the twelve are the same lane.
+
+**THE TWO WORKFLOWS, SEPARATELY.** The median `ci.yml` lane is 19.3
+runner-minutes over 13 jobs; the median `docs.yml` lane is 3.8
+runner-minutes over 21 jobs. The `docs.yml` lane is 16 % of the bill and it
+is ENTIRELY off the critical path: in all twelve runs the `ci.yml` lane is
+the longer one, so the gate lane never set the wall. It starts with
+`ci.yml`, runs its twenty-one gates in parallel, and finishes long before
+the build does.
+
+| pull request | workflow | jobs | runner-min | wall (s) | wait before the first job (s) |
+|---|---|---:|---:|---:|---:|
+| PR #39637885344 | ci.yml | 13 | 19.4 | 747 | 55 |
+| PR #39637885344 | docs.yml | 22 | 4.0 | 407 | 15 |
+| PR #39638416505 | ci.yml | 14 | 20.1 | 784 | 61 |
+| PR #39638416505 | docs.yml | 21 | 3.6 | 693 | 49 |
+| PR #39638565635 | ci.yml | 14 | 23.6 | 718 | 49 |
+| PR #39638565635 | docs.yml | 21 | 3.5 | 372 | 96 |
+| PR #39638603945 | ci.yml | 13 | 19.1 | 871 | 213 |
+| PR #39638603945 | docs.yml | 21 | 4.4 | 835 | 66 |
+| PR #39638705616 | ci.yml | 13 | 19.7 | 724 | 13 |
+| PR #39638705616 | docs.yml | 21 | 3.8 | 389 | 48 |
+| PR #39639468264 | ci.yml | 14 | 21.3 | 962 | 33 |
+| PR #39639468264 | docs.yml | 21 | 4.0 | 648 | 88 |
+| PR #39640369150 | ci.yml | 14 | 20.3 | 774 | 124 |
+| PR #39640369150 | docs.yml | 21 | 3.8 | 526 | 66 |
+| PR #39640971168 | ci.yml | 13 | 18.9 | 762 | 148 |
+| PR #39640971168 | docs.yml | 21 | 3.8 | 294 | 120 |
+| PR #39641227183 | ci.yml | 13 | 19.3 | 793 | 394 |
+| PR #39641227183 | docs.yml | 21 | 3.8 | 427 | 204 |
+| PR #39641476017 | ci.yml | 13 | 18.1 | 872 | 245 |
+| PR #39641476017 | docs.yml | 21 | 3.8 | 339 | 202 |
+| PR #39641977262 | ci.yml | 13 | 19.3 | 723 | 296 |
+| PR #39641977262 | docs.yml | 21 | 4.2 | 541 | 94 |
+| PR #39643272476 | ci.yml | 13 | 17.6 | 742 | 43 |
+| PR #39643272476 | docs.yml | 21 | 3.6 | 265 | 71 |
+
+### 11.3 The bill, article by article
+
+The twelve pull requests together: **283.1 runner-minutes**.
+
+| article | runner-min | share |
+|---|---:|---:|
+| build (compile) | 69.4 | **25 %** |
+| build (reference trim) | 53.9 | **19 %** |
+| test shards | 75.2 | **27 %** |
+| docs.yml gates | 46.3 | **16 %** |
+| packaging | 18.1 | 6 % |
+| ci.yml gates | 13.8 | 5 % |
+| aot publish | 3.6 | 1 % |
+| orchestration (`changes`, `gate`) | 2.5 | 1 % |
+| **total** | **283.1** | **100 %** |
+
+**THE TWO FULL BUILDS ARE A THIRD OF THE BILL.** The `build` job compiles the
+tree once (median 250 s of compile); the `unused references
+(ReferenceTrimmer)` job compiles it AGAIN, from scratch, in its own job
+(`.github/workflows/ci.yml:726`), and its own median wall is 274 s. Two
+full compiles per pull request: 470 s of the 1410 s of a median pull
+request's bill, **33 %**, and the two jobs' own walls (358 s and 274 s) are
+632 s of the `ci.yml` lane's 1158 s, **55 % of the lane**, and 45 % of the
+whole stripe's bill. Issue #2108 measured the same two builds as 660 s and
+44 % of the bill on run `39556560488`; the shape is unchanged, and the share
+grew because the gate lane got cheaper around it.
+
+**THE BUILD JOB, STEP BY STEP** (median of the twelve; the job's own wall is
+358 s, min 291, max 392):
+
+| step | seconds |
+|---|---:|
+| **NUKE compile (Release, zero warnings, docs, deterministic)** | **250** (min 184, max 273) |
+| setup .NET 10 (+ the NuGet cache) | 26 |
+| stash the pack inputs (the `pack` job's slice) | 20 |
+| stash the build outputs, core and ui shards | 10 each |
+| checkout | 8 |
+| the TUnit-analyzer and installer gates | 2 each |
+
+**The ReferenceTrimmer job** (median wall 274 s): its own `dotnet build` is
+**220 s** (min 161, max 265), the restore with the analyzer is 11 s, setup
+.NET is 32 s.
+
+**THE SHARDS** (median wall): `test (arch)` **124 s** (min 86, max 148),
+`test (ui)` 78 s, `test (core)` 68 s, `test (platform)` 64 s, `test (e2e)`
+46 s. The `pack` job's own wall is 90 s. The arch shard is the LONGEST of
+the five in 12 of the 12 runs, and the last one to FINISH in 7 of the 12,
+which is what issue #2110's reading of the lane's tail is confirmed by: the
+lane's tail is a shard.
+
+**THE CRITICAL PATH, STAGE BY STAGE** (median): `changes` to `build` to
+shards to `gate` = **725 s** (min 640, max 883). The `gate` job itself is
+2 to 4 s of work; it waits a median of **95 s** for a runner after the last
+shard ends (min 32 s, max 213 s), because it is the one job that can only
+start when everything else has finished.
+
+### 11.4 What each known fix is worth
+
+| fix | what it is | runner-minutes per pull request | wall | issue |
+|---|---|---:|---:|---|
+| the ReferenceTrimmer is a second full build | merging it into the main compile, or reusing the build's outputs | **not measured as a delta.** The job is still in dev and still 19 % of the sample's bill. On the lanes of 2026-10-22 the stripe costs 19.0 runner-minutes with the job and 18.5 without it, but those are two different runs with different cache states, so the difference is not the merge's price | **0 measured** | [#2108](https://github.com/refusedguy/Harbor-Harness/issues/2108) |
+| the commit sha in `AssemblyInformationalVersion` | `IncludeSourceRevisionInInformationalVersion=false` (`Directory.Build.props:72`) | **0 on the runs of 2026-10-21, and that is now a fact about the cache, not about the fix.** The compile step of those twelve is 184 to 273 s (median 250 s), and the build-output cache did not fire: the "Restore the build outputs (obj/ + bin/)" step took 0 s in eight runs and 1 s in four, and the log of the newest of them says `Cache not found for input keys: msbuild-v1-…`. On the pull-request run of 2026-10-22 the cache DID fire (24 s of restore) and the compile took 45 s. The lever is the cache; the fix is what makes a restored tree valid | **0 measured**; 205 s of compile on the runs where the cache fires | [#2137](https://github.com/refusedguy/Harbor-Harness/issues/2137) |
+| the arch shard is ONE project | splitting `Harbor.Architecture.Tests` into 3-4 shards | **+2.5**, three more shard jobs, each with its own setup, download and teardown. It is a COST, not a saving | **≤ 46 s**, the arch shard's 124 s minus the next-longest shard's 78 s. That difference is the ceiling; a four-way split is a projection, not a measurement | [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110) |
+| the architecture gate runs twice on a dev push | switching it off inside the build, as the PR path already does | **0 on the PR lane** | **0 on the PR lane**; 132 s of the dev push's build, which #2158 has since removed | [#2114](https://github.com/refusedguy/Harbor-Harness/issues/2114) |
+| the gate set | the `docs.yml` gate lane (21 gates in the sample, 22 today) and the `ci.yml` gates | **5.0** (3.8 + 1.2), 21 % of the bill | **0**, the gate lane runs in parallel with `ci.yml` | §10.2 |
+
+**WHY THE #2108 FIX IS 19 % OF THE BILL AND 0 % OF THE WALL.** The
+ReferenceTrimmer job runs in parallel with the `build` job, both need only
+`changes`, and it is NOT in the `gate` job's `needs:` list
+(`.github/workflows/ci.yml:3376`). The `gate` job is what the pull request
+waits for, and it never waits for the trimmer. So the trimmer's 274 s are
+274 s of runner time and not one second of wall. It does hold a runner of
+the `ubuntu-24.04` pool for 274 s, concurrently with the build, so it is a
+candidate for the queue wait below, which is a statement about the pool,
+not about the job.
+
+### 11.5 The 4 vCPU question, and the width of the lane
+
+**The hypothesis is already falsified for the build, by measurement.**
+§6.7 is the falsification: one MSBuild node is not slower than four
+(ratio 1.02 on the wall, 0.95 without the architecture gate), because a
+SINGLE compilation already uses 3.3 to 3.6 of the runner's four cores,
+Roslyn's parallel analyzer driver inside one `CoreCompile`. More MSBuild
+nodes buy nothing; more CORES do.
+
+**What this section adds is the width of the lane itself.** The peak width
+of the twelve pull requests is **4 to 6 jobs** (median 5), and the mean
+concurrency over the wall is **1.38 to 2.27** (median 1.72). The lane is
+not short of parallelism at its peak: the burst after the build runs the
+`pack` job and five shards at once, on three runner pools.
+
+**AND THE RUNNERS ARE NOT IDLE BECAUSE THE LANE HAS TOO FEW JOBS, THEY ARE
+IDLE BECAUSE THE POOL IS QUEUED.** The idle column of §11.2 is the time the
+pull request spent with NO job running: a median of **232 s of the 814 s
+wall (29 %)**. That is the queue wait, and the queue is the repository's own
+load: during the measured window **11 to 32 `ci.yml` and `docs.yml` runs
+were in flight at once (median 20)**, against 0 to 5 (median 1) in the hour
+around the runs of 2026-10-22 below. A pull request in this repository is
+queued behind the merge train, and the wall is a property of the
+repository's throughput, not of the lane's shape.
+
+**SO WHAT IS THE LEVER.** Not "more parallel jobs in the lane": the lane
+already fans out to six after the build, and the runner is not waiting for a
+job. The two levers that the measurements point at are:
+
+1. **the compile, on a second runner**, 250 s of the 358 s build job, and
+   the build is on the critical path. §6.7 estimates ~1.4x for two
+   independent clusters of the project graph, and this measurement says the
+   term is 250 s of a 725 s chain;
+2. **the queue**, which is not a lane property: the wall is 29 % queue, and
+   §6.9's three paired runs are the same finding from the other side.
+
+### 11.6 The same measurement on the tree of 2026-10-22
+
+The twelve are a measurement of 2026-10-21. The lane has moved since, and
+the two pull-request runs of 2026-10-22 are the same instrument read on the
+tree of today. Both are pull-request runs, and the first one ran the
+`ci.yml` of dev's tip as it stands now.
+
+| pull request | tree | ci.yml jobs | ci.yml runner-min | docs.yml runner-min | the whole stripe | wall (s) | idle (s) | peak width |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| PR #39719039714 (feat/2111-msbuild-switches) | dev's `ci.yml` of 2026-10-22 | 13 | 15.8 | 3.2 | **19.0** | 326 | 2 | 13 |
+| PR #39718825965 (ci/2108-merge-reference-trimmer) | the same lane with the `reference-trimmer` job removed (PR #2138) | 13 | 15.0 | 3.5 | **18.5** | 472 | 5 | 16 |
+
+**WHAT MOVED.** The stripe's bill went from the sample's 23.5
+runner-minutes to 19.0, and the bill of the PR lane of 2026-10-22 splits
+this way: build (compile) 3.0 runner-min (16 %), build (reference trim) 4.2
+(22 %), packaging 1.6 (8 %), test shards 6.1 (32 %), ci.yml gates 0.6 (3 %),
+docs.yml gates 3.2 (17 %), orchestration 0.2 (1 %). Two things moved, and
+they are not the same thing:
+
+* **the compile.** On the run of 2026-10-22 the build-output cache FIRED
+  (24 s of restore) and the compile took 45 s against the sample's 250 s.
+  On the run of PR #2138's lane it did not fire and the compile took 208 s.
+  The cache is the lever, and it fires on some pull-request runs and not on
+  others;
+* **the queue.** The idle time of the two runs is 2 s and 5 s, against the
+  sample's 232 s, and the repository had 0 to 5 `ci.yml` and `docs.yml` runs
+  in flight at once (median 1) against the sample's median 20. The wall of
+  326 s and 472 s is a wall with no queue in it, and it is not comparable
+  with the sample's 814 s as a price of the lane: the lane's own work was
+  324 s and 467 s, against the sample's median 634 s.
+
+**THE PR #2138 LANE, AS MEASURED.** The `reference-trimmer` job is gone and
+the analyzer runs inside the ordinary compile. The stripe bills 18.5
+runner-minutes against 19.0 with the job, and the "build (reference trim)"
+article is 0. The difference between the two runs is NOT the merge's price:
+the compile was 208 s in one and 45 s in the other, because the cache fired
+in one and not in the other. A paired measurement of that merge is still
+missing.
+
+**THE DEV-PUSH LANE, FOR THE RECORD.** The same measurement on the push to
+dev of run `39717885532` (dev's tip `a019e928`, 2026-10-22 03:37 UTC) reads
+16 live ci.yml jobs, 24.8 runner-minutes and 509 s of wall, with the
+compile at 183 s and the trimmer's own build at 207 s. It is the push lane
+and not the pull-request lane: it saves the build outputs after the compile
+and it resolves the build-output cache from the previous commit, so its
+compile is not the pull-request lane's compile.
+
+### 11.7 What this section does NOT measure
+
+* **The nightly lane and the dev-push lane.** Both are measured elsewhere
+  (§6.8 for the coverage lane); the numbers here are the pull-request lane
+  only. The architecture suite does not run inside the build on any lane any
+  more: `HarborArchGate` is `'false'` for every event since #2158
+  (`.github/workflows/ci.yml:887`), so the 132 s that #2114 measured on a
+  dev push is gone from the dev push as well.
+* **The pull request that does not build.** A pull request that touches only
+  `docs/` or only `tools/` never starts the .NET build; its bill is 4.8
+  runner-minutes (measured on run `39641146271`, the same day) and its wall
+  is 542 s of gate lane. This section's own pull request is one of them:
+  PR #2169 touches no `src/`, `apps/` or `tests/` file, and its own run
+  `39722580870` billed 4.5 runner-minutes over 27 jobs and a 38 s wall,
+  which is five ci.yml jobs and the 22-job gate lane.
+* **The cost of the queue wait.** The idle time is measured; the share of
+  it that belongs to a given job is not.
+* **A pull request whose build fails.** The lane then runs fewer jobs (the
+  shards never start): measured on run `39639464986`, whose ci.yml lane ran
+  eight jobs and 16.7 runner-minutes, and whose whole stripe is 21.5
+  runner-minutes and a 1053 s wall, of which 167 s is queue.
+* **The runner speed.** The spread of the compile step across the twelve
+  runs (184 to 273 s) is the runner's, not the tree's; §6.4 says the same
+  about the lane's own numbers.
+* **The price of PR #2138.** Two lanes, two runs, two cache states. The
+  merge's own price is not measured here.
+
+### 11.8 How to reproduce this section
+
+```bash
+# One file per pull request: the runs of BOTH workflows, as the API reports
+# them. `filter=all` returns the jobs of EVERY attempt, and the first attempt
+# is the one this section reads: the lowest `run_attempt` of the run.
+stripe () {                             # $1 = run id, $2 = workflow name
+  local id="$1" wf="$2" created
+  created=$(gh api "repos/:owner/:repo/actions/runs/$1" --jq .created_at)
+  gh api "repos/:owner/:repo/actions/runs/$1/jobs?per_page=100&filter=all" \
+    | jq -s --argjson id "$1" --arg wf "$wf" --arg created "$created" \
+        '([.[].jobs[]] | map(.run_attempt) | min) as $first
+         | {id:$id, workflow:$wf, created_at:$created,
+            jobs: [.[].jobs[] | select(.run_attempt == $first)]}'
+}
+{ stripe "$CI_RUN" ci; stripe "$DOCS_RUN" docs; } | jq -s '.' > run-$PR.json
+
+# the instrument
+tools/bin/harbor-gates-linux-x64 pr-cost run-*.json
+tools/bin/harbor-gates-linux-x64 pr-cost --steps run-*.json   # step by step
+tools/bin/harbor-gates-linux-x64 pr-cost --self-test            # the proof
+```
+
+**WHY THE FILTER IS PART OF THE RECIPE.** The Actions API serves the LAST
+attempt of a run by default (`filter=latest`), and for the four runs of
+§11.2 that needed a second attempt the last attempt is a mixture: the jobs
+that were not re-run keep their first-attempt timestamps, and the re-run
+jobs carry later ones. Dropping `--filter=all` and the pick of the lowest
+`run_attempt` moves the wall of those four runs by 393 to 745 s, and the
+median wall of the twelve with them.
+
+**WHY THE RECIPE PUTS BOTH RUNS IN ONE FILE.** A pull request's bill is the
+STRIPE of its two workflows, and the instrument's per-pull-request table is
+a table of stripes: a file with the `ci.yml` run alone measures the lane,
+and a file with both measures the pull request. The `created_at` of the run
+is what the "wait before the first job" column reads, so the recipe fetches
+it from the run itself.
+
+## 12. How to reproduce
 
 All numbers in this doc are reproducible from the repo:
 
@@ -3812,7 +4201,7 @@ dotnet build -c Release
 dotnet run --project tests/Harbor.Core.Tests -c Release --no-build -- --minimum-expected-tests 1
 ```
 
-## 12. See also
+## 13. See also
 
 - [Architecture layers](./ARCHITECTURE_LAYERS.md) — why the project is split this way
 - [Code principles audit](./CODE_PRINCIPLES_AUDIT.md) — performance findings and fixes
