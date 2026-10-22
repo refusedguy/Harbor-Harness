@@ -130,7 +130,7 @@ one bad day must not silently stop receiving events.
 1. **Store seam (the convention).** An `AgentEvent` enters UI state through
    `ChatAppMsg.Agent` → `ChatAppReducer` → `UiStore`, and a renderer reads the
    result **as data**. Canonical:
-   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`
+   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`
    (`_ = ActiveStore.Dispatch(new ChatAppMsg.Agent(@event));`).
 2. **Handler seam (for imperative side effects).** A renderer that must act on an
    event outside the state fold registers an `IAgentEventHandler` via
@@ -154,12 +154,12 @@ objects across 5 renderer families, one hand-written 21-arm
 `switch (AgentEvent)` in `ChatScreenBridge`, and 5 renderers routing through
 `UiStore.Dispatch` + `ChatAppReducer`.
 
-`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:127`,
+`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:131`,
 15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
 at `:174-189`) receives events through its **own** subscription
 (`src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
 is registered as a **singleton** with `autoSubscribe: false`
-(`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101-106`).
+(`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:102-107`).
 
 > The counts in this paragraph were `18` / `:129-314` / `4` until #840 touched
 > the arm set and forced a recount — 18 was 14 outer + 4 nested, i.e. the total,
@@ -422,7 +422,7 @@ Two more live instances of the banned direction:
   `BaseTuiRenderer` only calls `view.RenderAsync`
   (`BaseTuiRenderer.cs:318-330`). Key and event handling moved to the reducer
   (`AppMsg.KeyInput` via `src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs:23`,
-  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
+  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:351`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
   they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
   (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
@@ -587,7 +587,7 @@ consistent throughout:
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
 | store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
-| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:290` `PumpProjection()` — the renderer reads the fold **as data** |
+| consumption | `CellForgeTuiRenderer.cs:351` dispatch, `:291` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
 focus, quit) and the chat half plugs in through `IAppReducerPlugin`, so a
@@ -604,7 +604,7 @@ is on screen for the current session") with two owners:
   `:68` `_parentSessionId`, `:72` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
 - the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
-- the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
+- the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:102` registers it
   `AddSingleton`, over a per-process `ChatScreen` (`:77-79`, also a singleton).
 
 Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:226`
@@ -738,7 +738,7 @@ the result failed.*
 
 | Anti-convention | Where it lives today | Rule |
 |---|---|---|
-| Visitor as the UI event mechanism | `ChatScreenBridge.cs:127` (21-arm switch) | Use store + reducer (§1) |
+| Visitor as the UI event mechanism | `ChatScreenBridge.cs:131` (21-arm switch) | Use store + reducer (§1) |
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
 | Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |

@@ -51,6 +51,7 @@ import (
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	dupjscpd "harbor.local/gates/check-dup-jscpd"
+	eventtopology "harbor.local/gates/check-event-topology"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	checknotestsdk "harbor.local/gates/check-no-test-sdk"
 	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
@@ -140,6 +141,11 @@ var registry = []registered{
 		name:    "check-dup-jscpd",
 		summary: "the second duplication detector, against the committed baseline",
 		run:     dupjscpd.Run,
+	},
+	{
+		name:    "check-event-topology",
+		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
+		run:     eventtopology.Run,
 	},
 	{
 		name:    "check-local-merge-loss",
