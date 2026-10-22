@@ -159,7 +159,6 @@
 //      reports zero hand-offs and reads as clean.
 
 using System.Collections.Immutable;
-using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -266,28 +265,43 @@ internal enum TypeScanStrategy
 {
     /// <summary>
     ///     One whole-file match collection per file, enumerated — the way the
-    ///     rule has always built the map.
+    ///     rule built the map until the measurement named the cost.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The pattern's lazy type part can grow across the WHOLE file: its
+    ///         character class holds whitespace and word characters, so nothing
+    ///         stops it at a line boundary. Every match attempt therefore
+    ///         walks the rest of the file, and the scan is quadratic in the
+    ///         file's length.
+    ///     </para>
+    ///     <para>
+    ///         MEASURED over the product tree: 26 537 ms. That is the whole
+    ///         rule's wall: the scan took 74 253 ms in the shard, and 74 072 ms
+    ///         of it was this map.
+    ///     </para>
+    /// </remarks>
     WholeText,
 
     /// <summary>
-    ///     One match per line. The pattern is anchored per line by design (the
-    ///     header says the multiline flag is load-bearing), so this is the same
-    ///     shape of scan over the same bytes.
+    ///     One match per line: the same pattern over the same bytes, with the
+    ///     line as the unit the pattern is written for.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The pattern is anchored per line BY DESIGN — the header says the
+    ///         multiline flag is load-bearing — so a line is the unit it is
+    ///         written for, and the lazy type part can only grow inside the
+    ///         line.
+    ///     </para>
+    ///     <para>
+    ///         MEASURED over the product tree: 225 ms, 118 times less than the
+    ///         whole-file collection, for the SAME map: the equivalence test
+    ///         compares the two over the whole tree, and the difference count
+    ///         is zero.
+    ///     </para>
+    /// </remarks>
     PerLine,
-
-    /// <summary>
-    ///     The whole text, matched by hand: one <c>Match(text, position)</c> at
-    ///     a time, each starting where the last one ended.
-    /// </summary>
-    ManualLoop,
-
-    /// <summary>
-    ///     The whole text through the span-based enumerator, which yields
-    ///     matches without materialising a <c>Match</c> per hit.
-    /// </summary>
-    EnumerateMatches,
 }
 
 /// <summary>
@@ -538,19 +552,6 @@ internal static class PanelKeyRouteProbe
     /// <summary>
     ///     Finds every hand-off and decides which of them product code can reach.
     /// </summary>
-    /// <remarks>
-    ///     The reachability test is two hops out from the hand-off, for the reason
-    ///     in the file header: one hop cannot distinguish a wired router from a
-    ///     router wired into another dead one, and that pair is the #857 shape.
-    /// </remarks>
-    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
-    /// <returns>What the scan found, including the orphans it could not place.</returns>
-    internal static KeyRouteReport Scan(IReadOnlyList<SourceTreeFile> sources) =>
-        Scan(sources, TypeScanStrategy.WholeText);
-
-    /// <summary>
-    ///     Finds every hand-off and decides which of them product code can reach.
-    /// </summary>
     /// <param name="sources">Product sources as the shared snapshot's file views.</param>
     /// <param name="strategy">How the type→file map is built.</param>
     /// <returns>What the scan found, including the orphans it could not place.</returns>
@@ -785,18 +786,49 @@ internal static class PanelKeyRouteProbe
                 case TypeScanStrategy.PerLine:
                     AddTypesPerLine(typeOwner, file, source);
                     break;
-                case TypeScanStrategy.ManualLoop:
-                    AddTypesManualLoop(typeOwner, file, source.StrippedText);
-                    break;
-                case TypeScanStrategy.EnumerateMatches:
-                    AddTypesEnumerateMatches(typeOwner, file, source.StrippedText);
-                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "unknown type-scan strategy.");
             }
         }
 
         return typeOwner;
+    }
+
+    /// <summary>
+    ///     The differences between two type→file maps, one per difference.
+    /// </summary>
+    /// <param name="oracle">The map the rule's verdicts were computed with.</param>
+    /// <param name="candidate">The map to compare against it.</param>
+    /// <returns>One message per difference; empty when the maps agree.</returns>
+    internal static List<string> CompareTypeMaps(
+        IReadOnlyDictionary<string, List<string>> oracle,
+        IReadOnlyDictionary<string, List<string>> candidate)
+    {
+        var differences = new List<string>();
+
+        foreach ((string type, List<string> files) in oracle)
+        {
+            if (!candidate.TryGetValue(type, out List<string>? other))
+            {
+                differences.Add($"{type}: missing from the candidate");
+                continue;
+            }
+
+            if (!files.SequenceEqual(other, StringComparer.Ordinal))
+            {
+                differences.Add($"{type}: [{string.Join(",", files)}] vs [{string.Join(",", other)}]");
+            }
+        }
+
+        foreach (string type in candidate.Keys)
+        {
+            if (!oracle.ContainsKey(type))
+            {
+                differences.Add($"{type}: not in the oracle");
+            }
+        }
+
+        return differences;
     }
 
     /// <summary>
@@ -886,135 +918,6 @@ internal static class PanelKeyRouteProbe
             }
         }
     }
-
-    /// <summary>
-    ///     The whole text, matched by hand: one match at a time, each starting
-    ///     where the last one ended.
-    /// </summary>
-    /// <remarks>
-    ///     The same matches as the whole-file collection, in the same order,
-    ///     found without materialising a collection per file.
-    /// </remarks>
-    /// <param name="typeOwner">The map to add to.</param>
-    /// <param name="file">The file that declares the type.</param>
-    /// <param name="text">The file's comment-stripped text.</param>
-    private static void AddTypesManualLoop(
-        Dictionary<string, List<string>> typeOwner,
-        string file,
-        string text)
-    {
-        int position = 0;
-        while (position <= text.Length)
-        {
-            Match type = TypeDeclaration.Match(text, position);
-            if (!type.Success)
-            {
-                return;
-            }
-
-            if (type.Groups["name"].Value is { Length: > 0 } typeName)
-            {
-                AddTypeOwner(typeOwner, file, typeName);
-            }
-
-            position = type.Index + type.Length;
-        }
-    }
-
-    /// <summary>
-    ///     The whole text through the span-based enumerator, which yields the
-    ///     matches without materialising a <c>Match</c> per hit.
-    /// </summary>
-    /// <remarks>
-    ///     The enumerator's <see cref="ValueMatch" /> carries the match's
-    ///     position and length and nothing else — no group collection, no
-    ///     <c>Match</c> object — so the declared name is read out of the
-    ///     matched text itself. The pattern's name group is
-    ///     <c>[A-Za-z_]\w*</c> and it is followed by optional whitespace and a
-    ///     bracket, so the name is the identifier that ends the match.
-    /// </remarks>
-    /// <param name="typeOwner">The map to add to.</param>
-    /// <param name="file">The file that declares the type.</param>
-    /// <param name="text">The file's comment-stripped text.</param>
-    private static void AddTypesEnumerateMatches(
-        Dictionary<string, List<string>> typeOwner,
-        string file,
-        string text)
-    {
-        foreach (ValueMatch match in TypeDeclaration.EnumerateMatches(text))
-        {
-            if (!TryReadDeclaredName(text, match.Index, match.Length, out string? typeName))
-            {
-                continue;
-            }
-
-            AddTypeOwner(typeOwner, file, typeName);
-        }
-    }
-
-    /// <summary>
-    ///     The name a match of the type-declaration pattern declares.
-    /// </summary>
-    /// <remarks>
-    ///     The pattern ends with <c>name \s* (</c>, so the name is the
-    ///     identifier that ends the match: walk back over the bracket, over the
-    ///     whitespace, and over the identifier. The identifier's first
-    ///     character has to be an ASCII letter or an underscore, because the
-    ///     pattern's name group says so.
-    /// </remarks>
-    /// <param name="text">The text the match was found in.</param>
-    /// <param name="index">Where the match starts.</param>
-    /// <param name="length">How long the match is.</param>
-    /// <param name="typeName">The declared name, when the match declares one.</param>
-    /// <returns><c>true</c> when the match declares a name.</returns>
-    private static bool TryReadDeclaredName(string text, int index, int length, out string? typeName)
-    {
-        typeName = null;
-
-        int bracket = index + length - 1;
-        if (bracket < index || text[bracket] != '(')
-        {
-            return false;
-        }
-
-        int nameEnd = bracket;
-        while (nameEnd > index && char.IsWhiteSpace(text[nameEnd - 1]))
-        {
-            nameEnd--;
-        }
-
-        int nameStart = nameEnd;
-        while (nameStart > index && IsWordCharacter(text[nameStart - 1]))
-        {
-            nameStart--;
-        }
-
-        if (nameStart == nameEnd || !IsAsciiLetterOrUnderscore(text[nameStart]))
-        {
-            return false;
-        }
-
-        typeName = text[nameStart..nameEnd];
-        return true;
-    }
-
-    /// <summary>
-    ///     Whether a character is a word character, the way the pattern's
-    ///     <c>\w</c> says.
-    /// </summary>
-    /// <param name="c">The character to test.</param>
-    /// <returns><c>true</c> when the character is a word character.</returns>
-    private static bool IsWordCharacter(char c) =>
-        char.IsLetterOrDigit(c)
-        || char.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark or UnicodeCategory.ConnectorPunctuation;
-
-    /// <summary>
-    ///     Whether a character can start the pattern's name group.
-    /// </summary>
-    /// <param name="c">The character to test.</param>
-    /// <returns><c>true</c> when the character is an ASCII letter or an underscore.</returns>
-    private static bool IsAsciiLetterOrUnderscore(char c) =>
-        c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or '_';
 
     /// <summary>
     ///     Every product method that calls <paramref name="target" />.
@@ -1472,7 +1375,7 @@ public sealed class PanelKeyRouteReachabilityRule
             IReadOnlyList<SourceTreeFile> sources = PanelKeyRouteProbe.ReadProductTrees();
             long readMs = watch.ElapsedMilliseconds;
 
-            KeyRouteReport report = PanelKeyRouteProbe.Scan(sources);
+            KeyRouteReport report = PanelKeyRouteProbe.Scan(sources, TypeScanStrategy.PerLine);
 
             PanelKeyRouteProbe.RecordReadMs(readMs);
 
