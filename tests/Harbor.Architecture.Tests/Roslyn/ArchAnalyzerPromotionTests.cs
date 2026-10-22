@@ -68,9 +68,19 @@ public sealed class ArchAnalyzerPromotionTests
     ///     reuses them: compiling the tree once per analyzer would double the
     ///     cost of the slowest test project in the repository (#1791 measured
     ///     738 s of the 1 128 s of test time inside this project).
+    ///     <para>
+    ///         The set is the PROCESS-WIDE one, keyed by the usings-variant, so
+    ///         the HTTP-client rule — which grades the same 64 projects over
+    ///         compilations WITH the implicit global usings — shares the PARSE
+    ///         with this set instead of parsing the tree a second time. The
+    ///         variant is different on purpose: the rules graded here were
+    ///         measured against a compilation WITHOUT the implicit usings, and
+    ///         moving them onto the full one is a separate piece of work with
+    ///         its own findings (see <c>docs/SEMANTIC_GUARDS.md</c>).
+    ///     </para>
     /// </remarks>
     internal static readonly Lazy<IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)>>
-        LiveCompilations = new(BuildLiveCompilations);
+        LiveCompilations = new(() => RoslynProjectCompilation.Compilations(null));
 
     /// <summary>
     ///     The planted OFFENDERS. Every construct here is a way to load or
@@ -665,9 +675,11 @@ public sealed class ArchAnalyzerPromotionTests
     /// </summary>
     private static List<string> TextRuleFiles()
     {
-        List<ScanHit> hits = ScanRunner.Collect(
+        List<ScanHit> hits = ScanRunner.CollectStripped(
             ReflectionConventionRule.Rule,
-            ScanRunner.ReadSources(ScanRunner.ScopeFiles(ReflectionConventionRule.Rule)));
+            ScanRunner.ReadStrippedSources(
+                ReflectionConventionRule.Rule,
+                ScanRunner.ScopeFiles(ReflectionConventionRule.Rule)));
 
         return
         [
