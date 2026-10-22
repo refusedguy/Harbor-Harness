@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
@@ -26,7 +27,7 @@ internal sealed class ProvidersCommand : IReplCommand
 
     public async Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
 
         var seeds = new List<ProviderSeed>(ProviderPresets.All.Count);

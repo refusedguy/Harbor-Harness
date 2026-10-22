@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Git;
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
@@ -76,7 +77,7 @@ internal sealed class JumpCommand : IReplCommand
 
     public async Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         var store = host.SessionStore;
         if (store is null)

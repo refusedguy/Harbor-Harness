@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Abstractions.Providers;
 using Harbor.Application.Configuration;
@@ -20,7 +21,7 @@ internal sealed class ModelCommand : IReplCommand
 
     public async Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         if (host.Agent.IsRunning())
         {
