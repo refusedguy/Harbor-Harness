@@ -34,6 +34,8 @@
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
   href: CITATION_DRIFT_MEASUREMENT.md
+- name: Ci As Code
+  href: CI_AS_CODE.md
 - name: Ci Gates
   href: CI_GATES.md
 - name: Ci Ui Tests
@@ -82,6 +84,8 @@
   href: GETTING_STARTED.md
 - name: Generic Layout
   href: GENERIC_LAYOUT.md
+- name: Guard Vacuity
+  href: GUARD_VACUITY.md
 - name: Guard Value Measurement
   href: GUARD_VALUE_MEASUREMENT.md
 - name: I18N String Inventory

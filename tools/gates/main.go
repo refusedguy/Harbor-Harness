@@ -42,12 +42,14 @@ import (
 	"harbor.local/gates/aggregate-build-vcpu"
 	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
+	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/check-event-topology"
+	benchset "harbor.local/gates/check-gate-bench-set"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
@@ -63,6 +65,7 @@ import (
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	genplugininventory "harbor.local/gates/gen-plugin-inventory"
 	"harbor.local/gates/gen-seam-graph"
+	genworkflows "harbor.local/gates/gen-workflows"
 	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
@@ -114,6 +117,11 @@ var registry = []registered{
 		run:     aotpublish.Run,
 	},
 	{
+		name:    "banned-api-exemptions",
+		summary: "every banned-API suppression in the product tree is justified by the catalogue",
+		run:     bannedapiexemptions.Run,
+	},
+	{
 		name:    "changelog-assemble",
 		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
 		run:     changelog.Run,
@@ -142,6 +150,11 @@ var registry = []registered{
 		name:    "check-event-topology",
 		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
 		run:     eventtopology.Run,
+	},
+	{
+		name:    "check-gate-bench-set",
+		summary: "the measured gate set is the set the workflows run",
+		run:     benchset.Run,
 	},
 	{
 		name:    "check-local-merge-loss",
@@ -217,6 +230,11 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "gen-workflows",
+		summary: "the generated workflow files still match their Go models",
+		run:     genworkflows.Run,
 	},
 	{
 		name:    "go-quality",

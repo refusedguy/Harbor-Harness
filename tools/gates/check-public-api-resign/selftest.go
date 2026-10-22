@@ -183,6 +183,14 @@ func selfTestRun() int {
 		"findings="+strings.Join(findings, ", "))
 	git(root, "reset", "-q", "--hard", "HEAD~1")
 
+	// The base is printed as its first twelve characters. A python slice of
+	// a SHORT string is the whole string, and this port took that as a Go
+	// slice, which PANICS on a short one. The benchmark passes `--base
+	// HEAD~1`, CI passes a SHA, and the gate crashed on the short one.
+	check("a short base is printed whole, not cut",
+		shortSHA("HEAD~1") == "HEAD~1" && shortSHA("0123456789abcdef0123") == "0123456789ab",
+		"shortSHA(HEAD~1)="+shortSHA("HEAD~1"))
+
 	if ok {
 		fmt.Println("\nself-test PASS")
 		return gate.Green
