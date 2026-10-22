@@ -65,6 +65,7 @@ import (
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	genplugininventory "harbor.local/gates/gen-plugin-inventory"
 	"harbor.local/gates/gen-seam-graph"
+	genworkflows "harbor.local/gates/gen-workflows"
 	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
@@ -229,6 +230,11 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "gen-workflows",
+		summary: "the generated workflow files still match their Go models",
+		run:     genworkflows.Run,
 	},
 	{
 		name:    "go-quality",
