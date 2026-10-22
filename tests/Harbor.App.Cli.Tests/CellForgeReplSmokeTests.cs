@@ -290,13 +290,10 @@ public class CellForgeReplSmokeTests
                     continue;
                 }
 
-                // The CHARACTER, not a one-character string: `((char)cell.Rune)
-                // .ToString()` allocated a heap string per cell, and a 80x24
-                // grid is 1 920 of them. Same characters, no garbage.
                 sb.Append(cell.Rune is >= 0x20 and <= 0x7E or >= 0xA0 and <= 0xFFFD
                           && !char.IsSurrogate((char)cell.Rune)
-                    ? (char)cell.Rune
-                    : '?');
+                    ? ((char)cell.Rune).ToString()
+                    : "?");
             }
 
             sb.Append('\n');

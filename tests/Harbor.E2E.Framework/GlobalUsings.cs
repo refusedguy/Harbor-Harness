@@ -2,7 +2,6 @@
 // Global usings for the Harbor.E2E.Framework assembly.
 // Centralised so each driver/source file stays focused on its own logic.
 global using System;
-global using System.Buffers;
 global using System.Collections.Generic;
 global using System.Diagnostics;
 global using System.IO;

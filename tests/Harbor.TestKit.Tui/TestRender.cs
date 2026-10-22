@@ -99,24 +99,6 @@ public static class TestRender
     /// control cells shown as <c>?</c>. The byte-for-byte shape the golden
     /// fixtures were recorded against.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The art is built by APPENDING CHARACTERS, and it used to append
-    /// STRINGS: <c>((char)rune).ToString()</c> allocated a one-character
-    /// string for every cell of every grid. An 80x24 grid is 1 920 cells, so
-    /// one call allocated 1 920 short-lived strings — about 46 KiB of garbage
-    /// for a picture that is 2 KiB long. <c>Art</c> is called by every widget
-    /// test in the CellForge suite and once per frame by the golden frames,
-    /// so the garbage was paid thousands of times over in the <c>ui</c> shard.
-    /// </para>
-    /// <para>
-    /// The rendering is unchanged: a char appended to the builder and a
-    /// one-character string appended to it produce the SAME characters, so the
-    /// art is byte-for-byte what it was and the golden fixtures still match.
-    /// <c>TestRenderArtParityTests</c> in <c>Harbor.TestKit.Tests</c> pins
-    /// that against the old shape, and measures what it cost.
-    /// </para>
-    /// </remarks>
     public static string Art(ScreenBuffer buffer)
     {
         var sb = new StringBuilder();
@@ -139,19 +121,9 @@ public static class TestRender
         return sb.ToString();
     }
 
-    /// <summary>
-    /// The character a cell renders as: the rune itself when it is printable,
-    /// and <c>?</c> for a control cell or a lone surrogate.
-    /// </summary>
-    /// <remarks>
-    /// A <c>char</c>, not a <c>string</c>. The old shape returned
-    /// <c>((char)rune).ToString()</c> — one heap string per cell — and the
-    /// builder only ever wanted the character. See
-    /// <see cref="Art(ScreenBuffer)" /> for the measurement.
-    /// </remarks>
-    private static char ArtChar(int rune) => rune switch
+    private static string ArtChar(int rune) => rune switch
     {
-        >= 0x20 and <= 0x7E or >= 0xA0 and <= 0xFFFD when !char.IsSurrogate((char)rune) => (char)rune,
-        _ => '?',
+        >= 0x20 and <= 0x7E or >= 0xA0 and <= 0xFFFD when !char.IsSurrogate((char)rune) => ((char)rune).ToString(),
+        _ => "?",
     };
 }
