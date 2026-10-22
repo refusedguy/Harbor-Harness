@@ -22,6 +22,19 @@
 // file GitHub read had three mappings with `if:` twice, `shell:` twice and
 // `run:` twice.
 //
+// WHAT THE GATE READS
+// ===================
+// Three shapes make a file that GitHub will not read, and all three are
+// silent in the same way:
+//
+//  1. a MAPPING that declares the same key twice — in the block form
+//     (`if:` twice in one step) and in the flow form (`with: {a: 1, a: 2}`);
+//  2. a QUOTED key (`"if":` twice) — the same defect with a different
+//     spelling of the key;
+//  3. a BLOCK SEQUENCE that holds a line which is not a list item — the arm64
+//     twin written at the indent of the list instead of at the indent of the
+//     step, which YAML reads as a mapping where a list item must be.
+//
 // WHY A GATE, AND WHY IT LIVES WHERE IT LIVES
 // ============================================
 // The check has to run in a workflow that is NOT the broken one: a gate that
@@ -55,33 +68,55 @@ import (
 // root.
 const workflowDir = ".github/workflows"
 
-// keyRe matches a mapping key at the start of a line: a bare name, a colon,
-// and then the value or the end of the line.
+// The kinds of finding the gate reports.
+const (
+	// kindDuplicate is a mapping that declares the same key twice.
+	kindDuplicate = "duplicate"
+	// kindStructure is a line that stands where a list item must stand.
+	kindStructure = "structure"
+)
+
+// The three spellings of a mapping key.
 //
-// The colon must be followed by a space or by the end of the line, because
-// that is what YAML requires: `run:echo` is the scalar "run:echo", not the
-// key "run" with the value "echo".
+// A key is a plain name, a double-quoted name, or a single-quoted name. The
+// colon must be followed by a space or by the end of the line, because that
+// is what YAML requires: `run:echo` is the scalar "run:echo", not the key
+// "run" with the value "echo".
 //
-// The key is a SIMPLE key — a bare name. GitHub's workflow syntax uses bare
-// names everywhere, and a quoted key is not something this repository writes.
-var keyRe = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*):(?:[ \t]+(.*))?$`)
+// The plain name may not start with a YAML indicator, and it may not contain
+// a colon, so the FIRST colon of the line is the separator.
+var (
+	dquotedKeyRe = regexp.MustCompile(`^"([^"\n]*)":([ \t]+(.*))?$`)
+	squotedKeyRe = regexp.MustCompile(`^'([^'\n]*)':([ \t]+(.*))?$`)
+	plainKeyRe   = regexp.MustCompile(`^([A-Za-z0-9_][A-Za-z0-9_.\-+/]*):([ \t]+(.*))?$`)
+)
 
 // blockScalarRe matches the value of a block scalar: `|`, `>`, and the
 // indicators that may follow them (`|-`, `|+`, `>2`, and so on).
 var blockScalarRe = regexp.MustCompile(`^[|>][0-9]*[-+]?$|^[|>][-+]?[0-9]*$`)
 
-// finding is one duplicate key, with the evidence to act on it.
+// finding is one defect, with the evidence to act on it.
 type finding struct {
 	path      string
 	line      int
+	kind      string
 	key       string
 	firstLine int
+	note      string
 }
 
 // String is the one-line form of a finding.
 func (f finding) String() string {
-	return fmt.Sprintf("%s:%d  duplicate key %q (first declared at line %d)",
-		f.path, f.line, f.key, f.firstLine)
+	switch f.kind {
+	case kindDuplicate:
+		if f.note != "" {
+			return fmt.Sprintf("%s:%d  duplicate key %q %s", f.path, f.line, f.key, f.note)
+		}
+		return fmt.Sprintf("%s:%d  duplicate key %q (first declared at line %d)",
+			f.path, f.line, f.key, f.firstLine)
+	default:
+		return fmt.Sprintf("%s:%d  %s: %s", f.path, f.line, f.kind, f.note)
+	}
 }
 
 // scope is one mapping: the keys it declares, and the line each was
@@ -93,42 +128,64 @@ func (f finding) String() string {
 type scope struct {
 	indent int
 	keys   map[string]int
-	broken bool
 }
 
-// scanWorkflow reads one workflow file and reports the mappings that declare
-// the same key twice.
+// sequence is one open block sequence: the indent of its "-" markers, and the
+// indent of the mapping that owns it.
+//
+// The two indents are what tell an INDENTED sequence from a COMPACT one. A
+// compact sequence sits at the same indent as the key that owns it:
+//
+//	steps:            <- the key, at indent 0
+//	- name: Build     <- the sequence, at indent 0
+//
+// and a key at that indent afterwards is a SIBLING of `steps:`, which is
+// legal YAML. An indented sequence sits deeper than the key that owns it:
+//
+//	steps:            <- the key, at indent 0
+//	  - name: Build   <- the sequence, at indent 2
+//
+// and a key at indent 2 afterwards is NOT a list item — it is a mapping
+// where the file says there must be a list, and YAML will not read the file.
+type sequence struct {
+	indent int
+	parent int
+	line   int
+}
+
+// scanWorkflow reads one workflow file and reports the shapes that make it a
+// file GitHub will not read.
 //
 // The scanner walks the block structure of the file by indentation, which is
 // what YAML block mappings and block sequences are:
 //
-//   * a line whose trimmed text starts with "-" is a SEQUENCE ITEM, and the
+//   - a line whose trimmed text starts with "-" is a SEQUENCE ITEM, and the
 //     mapping it opens (if any) starts at the column of the text after the
 //     dash;
-//   * a line that is `name:` is a KEY of the mapping that owns its indent;
-//   * the lines of a BLOCK SCALAR (the `run: |` body) are content, not
+//   - a line that is `name:` is a KEY of the mapping that owns its indent;
+//   - the lines of a BLOCK SCALAR (the `run: |` body) are content, not
 //     structure, and are skipped: a line of shell script that happens to look
 //     like `foo: bar` is not a mapping key.
 //
 // The scanner does not read YAML. It reads the SHAPE a YAML reader reads,
-// and the shape is enough to answer the one question this gate asks: does
-// any mapping declare the same key twice?
+// and the shape is enough to answer the questions this gate asks.
 func scanWorkflow(path string, lines []string) []finding {
 	var findings []finding
 	var scopes []scope
+	var sequences []sequence
 	skipIndent := -1
 
-	// pop removes the scopes that are deeper than the given indent: they
-	// ended, and the next line belongs to an outer mapping.
-	pop := func(indent int) {
+	// popScopes removes the mappings that are deeper than the given indent:
+	// they ended, and the next line belongs to an outer mapping.
+	popScopes := func(indent int) {
 		for len(scopes) > 0 && scopes[len(scopes)-1].indent > indent {
 			scopes = scopes[:len(scopes)-1]
 		}
 	}
 
-	// popTo removes the scopes at or deeper than the given indent. A
+	// popScopesTo removes the mappings at or deeper than the given indent. A
 	// sequence item closes the mapping of the item before it.
-	popTo := func(indent int) {
+	popScopesTo := func(indent int) {
 		for len(scopes) > 0 && scopes[len(scopes)-1].indent >= indent {
 			scopes = scopes[:len(scopes)-1]
 		}
@@ -152,14 +209,32 @@ func scanWorkflow(path string, lines []string) []finding {
 		}
 
 		if trimmed == "-" || strings.HasPrefix(trimmed, "- ") {
+			// A SEQUENCE ITEM. The mapping it opens starts at the column of
+			// the text after the dash.
 			after := trimmed[1:]
-			rest := strings.TrimLeft(after, " ")
-			column := indent + 1 + (len(after) - len(rest))
-			popTo(column)
+			content := strings.TrimLeft(after, " ")
+			column := indent + 1 + (len(after) - len(content))
+			popScopesTo(column)
+
+			// The sequences deeper than this one ended: this item belongs to
+			// an outer list.
+			for len(sequences) > 0 && sequences[len(sequences)-1].indent > indent {
+				sequences = sequences[:len(sequences)-1]
+			}
+			if len(sequences) == 0 || sequences[len(sequences)-1].indent != indent {
+				// A NEW sequence. Its owner is the mapping the key that
+				// opened it belongs to.
+				parent := -1
+				if len(scopes) > 0 {
+					parent = scopes[len(scopes)-1].indent
+				}
+				sequences = append(sequences, sequence{indent: indent, parent: parent, line: lineNo})
+			}
+
 			current := scope{indent: column, keys: map[string]int{}}
-			if match := keyRe.FindStringSubmatch(rest); match != nil {
-				current.keys[match[1]] = lineNo
-				if blockScalarRe.MatchString(match[2]) {
+			if key, value, ok := matchKey(content); ok {
+				current.keys[key] = lineNo
+				if blockScalarRe.MatchString(value) {
 					skipIndent = column
 				}
 			}
@@ -167,39 +242,84 @@ func scanWorkflow(path string, lines []string) []finding {
 			continue
 		}
 
-		match := keyRe.FindStringSubmatch(trimmed)
-		if match == nil {
+		key, value, isKey := matchKey(trimmed)
+		if !isKey {
+			// Not a key and not a list item: a plain scalar, the closing
+			// brace of a flow mapping, or a line the scanner has no use for.
+			// A YAML reader would have its own opinion about some of these;
+			// the gate does not guess.
 			continue
 		}
-		key, value := match[1], match[2]
-		pop(indent)
+
+		// The sequences deeper than this indent ended.
+		for len(sequences) > 0 && sequences[len(sequences)-1].indent > indent {
+			sequences = sequences[:len(sequences)-1]
+		}
+		popScopes(indent)
+
 		if len(scopes) > 0 && scopes[len(scopes)-1].indent == indent {
+			// A key of the mapping that owns this indent.
 			current := &scopes[len(scopes)-1]
 			if first, seen := current.keys[key]; seen {
-				if !current.broken {
-					current.broken = true
-					findings = append(findings, finding{
-						path:      path,
-						line:      lineNo,
-						key:       key,
-						firstLine: first,
-					})
-				}
+				findings = append(findings, finding{
+					path:      path,
+					line:      lineNo,
+					kind:      kindDuplicate,
+					key:       key,
+					firstLine: first,
+				})
 			} else {
 				current.keys[key] = lineNo
 			}
 		} else {
+			// This line opens a mapping of its own. If it stands at the
+			// indent of an open INDENTED sequence, it is not a list item,
+			// and the file is not a file YAML will read.
+			for _, seq := range sequences {
+				if seq.indent == indent && seq.indent > seq.parent {
+					findings = append(findings, finding{
+						path: path,
+						line: lineNo,
+						kind: kindStructure,
+						note: fmt.Sprintf("a block sequence starts at line %d and its entries must start with \"-\": this line is not one",
+							seq.line),
+					})
+					break
+				}
+			}
 			scopes = append(scopes, scope{
 				indent: indent,
 				keys:   map[string]int{key: lineNo},
 			})
 		}
+
+		// The value of a key may be a flow collection, and a flow mapping
+		// may declare the same key twice.
+		findings = append(findings, flowFindings(value, path, lineNo)...)
+
 		if blockScalarRe.MatchString(value) {
 			skipIndent = indent
 		}
 	}
 
 	return findings
+}
+
+// matchKey reads a mapping key from the start of a line.
+//
+// It returns the key's text, the value's text, and whether the line is a key
+// at all.
+func matchKey(text string) (string, string, bool) {
+	if match := dquotedKeyRe.FindStringSubmatch(text); match != nil {
+		return match[1], match[3], true
+	}
+	if match := squotedKeyRe.FindStringSubmatch(text); match != nil {
+		return match[1], match[3], true
+	}
+	if match := plainKeyRe.FindStringSubmatch(text); match != nil {
+		return match[1], match[3], true
+	}
+	return "", "", false
 }
 
 // analyse reads every tracked workflow file and reports the findings.
@@ -322,6 +442,9 @@ func Run(args []string) int {
 		fmt.Println("  is SILENT: the run is created with ZERO jobs and closes as a")
 		fmt.Println("  failure, so the lane is not red — it is absent — and every pull")
 		fmt.Println("  request that waits for it waits forever.")
+		fmt.Println()
+		fmt.Println("  A block sequence's entries must start with \"-\". A line that stands")
+		fmt.Println("  where an entry must stand is a file GitHub will not read either.")
 		fmt.Println()
 		fmt.Println("  Fix: make the two declarations two STEPS, not two sets of keys in")
 		fmt.Println("  one step. Two steps with the same name are two steps; two `if:`")
