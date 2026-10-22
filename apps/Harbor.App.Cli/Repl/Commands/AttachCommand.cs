@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Extensions;
 using Harbor.Application.Attachments;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -24,7 +25,7 @@ internal sealed class AttachCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
 
         if (host.Attachments is not { } stash)
