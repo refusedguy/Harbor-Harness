@@ -612,6 +612,17 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
       - name: E2E shard runner still refuses a plan it cannot run
         run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
+      # #2112. The compile-cost instrument: what every project of the tree
+      # costs the compiler, and what a change in one of them costs everybody
+      # who depends on it. Its failure path is the point, and it is tested
+      # here for the same reason as the others: an instrument that cannot say
+      # "this project grew past its budget" cannot keep anybody from splitting
+      # a project on a guess. The load-bearing fixture is the INFLATED
+      # PROJECT — the self-test writes a build log in which one project costs
+      # sixty seconds more than it did, and the gate MUST go red on it, and
+      # MUST stay green on the same log without the inflation.
+      - name: Compile-cost gate fails on an inflated project
+        run: tools/bin/harbor-gates-linux-x64 measure-compile-cost --self-test
       # The pull-request cost measurement: the runner-minutes, the wall, the
       # critical path, the peak width, and the bill split by article. It is a
       # tool a human runs over the job list of a CI run, and no workflow runs
