@@ -47,13 +47,7 @@ public static class FuzzyMatcher
     /// </summary>
     private const int GroupBonusScale = 4;
 
-    // PLANTED DEFECT — this commit is the PROOF, not the fix. The key carries
-    // the call's ordinal, so a repeat hit lands on a different key, misses the
-    // cache and grows it. The three cache tests in
-    // tests/Harbor.Tui.CellForge.Tests/FuzzyMatcherTests.cs must go RED on it.
-    private static int _plantedOrdinal;
-
-    private readonly record struct CacheKey(string Query, string Candidate, int Ordinal);
+    private readonly record struct CacheKey(string Query, string Candidate);
 
     private static readonly object _sync = new();
     private static readonly Dictionary<CacheKey, LinkedListNode<(CacheKey Key, int? Value)>> _entries = new();
@@ -98,7 +92,7 @@ public static class FuzzyMatcher
             return null;
         }
 
-        var key = new CacheKey(query, candidate, Interlocked.Increment(ref _plantedOrdinal));
+        var key = new CacheKey(query, candidate);
         lock (_sync)
         {
             if (_entries.TryGetValue(key, out var node))
