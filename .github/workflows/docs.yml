@@ -97,7 +97,7 @@ on:
       # sample plugins and the product's own JSON writer, and compares the
       # result with the committed snapshot. A PR that edits any of them has to
       # run it, or the snapshot drifts from the tree it describes.
-      - 'tools/gen-plugin-inventory.py'
+      - 'tools/gates/gen-plugin-inventory/**'
       - 'docs/PLUGIN_INVENTORY.json'
       # #1778. The duplicate-body gate scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
@@ -574,7 +574,7 @@ jobs:
       # member - the gate MUST fail on both, and MUST stay quiet on a tree
       # that matches.
       - name: Plugin-inventory gate fails on a stale snapshot
-        run: python3 tools/gen-plugin-inventory.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --self-test
       # The changelog assembler glues the per-pull-request fragments into the
       # [Unreleased] section of CHANGELOG.md at release time, so a PR that
       # adds a fragment must NOT edit CHANGELOG.md itself. The gate over the
@@ -1522,7 +1522,7 @@ jobs:
       # stopped matching". Measured on this tree: 7 axes, 7 route verdicts,
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
-        run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+        run: tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --check --min-axes 7 --min-routes 7 --min-plugins 6
 
   # The workflow gate. A workflow file with a DUPLICATE KEY in a mapping is a
   # file GitHub refuses to parse, and the refusal is silent from the

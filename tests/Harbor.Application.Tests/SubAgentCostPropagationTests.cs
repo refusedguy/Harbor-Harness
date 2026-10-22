@@ -254,7 +254,7 @@ public class SubAgentCostPropagationTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.ChildUsage!).IsEqualTo(new Usage(130, 70, 7, 11, null));
         await Assert.That(result.Value.HasUsage).IsTrue();
     }
@@ -273,7 +273,7 @@ public class SubAgentCostPropagationTests
             AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var reread = await store.GetMessagesAsync(parent.Id);
         AssistantMessage? updated = null;
         foreach (var message in reread.Value)
@@ -296,7 +296,7 @@ public class SubAgentCostPropagationTests
 
         var result = await store.UpdateMessageAsync(parent.Id, ghost);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo($"Message 'msg-ghost' not found in session '{parent.Id}'.");
         await Assert.That(store.UpdatedMessages.Count).IsEqualTo(0);
     }
@@ -312,7 +312,7 @@ public class SubAgentCostPropagationTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(store.UpdatedStats.Count).IsEqualTo(1);
         await Assert.That(store.UpdatedStats[0].SessionId).IsEqualTo(parent.Id);
         await Assert.That(store.UpdatedStats[0].Metadata.TokensInput).IsEqualTo(100);
@@ -333,9 +333,9 @@ public class SubAgentCostPropagationTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var stats = await store.GetStatsAsync(parent.Id);
-        await Assert.That(stats.IsSuccess).IsTrue();
+        await Assert.That(stats).IsSuccessful();
         // #1105: the child's priced total crosses into the parent — the old
         // Pricing.Unknown fold left Cost 0 with IsCostKnown=false.
         await Assert.That(stats.Value.Cost).IsEqualTo(pricing.CalculateCost(childUsage));
@@ -355,7 +355,7 @@ public class SubAgentCostPropagationTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(store.CreatedSessions.Count).IsEqualTo(1);
         string childId = store.CreatedSessions[0].Id;
         await Assert.That(result.Error).Contains($"[resume-session:{childId}]");
@@ -381,7 +381,7 @@ public class SubAgentCostPropagationTests
             AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         var reread = await store.GetMessagesAsync(parent.Id);
         AssistantMessage? updated = null;
         foreach (var message in reread.Value)
@@ -408,7 +408,7 @@ public class SubAgentCostPropagationTests
             AgentFixtures.SubAgent(),
             new SubAgentRunRequest("go", ParentSessionId: parent.Id, ParentMessageId: parentMsg.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.HasUsage).IsFalse();
         await Assert.That(store.UpdatedMessages.Count).IsEqualTo(0);
         await Assert.That(store.UpdatedStats.Count).IsEqualTo(0);
@@ -431,7 +431,7 @@ public class SubAgentCostPropagationTests
         Result<SubAgentRunResult>[] outcomes = await Task.WhenAll(tasks).ConfigureAwait(false);
 
         for (int i = 0; i < outcomes.Length; i++)
-            await Assert.That(outcomes[i].IsSuccess).IsTrue();
+            await Assert.That(outcomes[i]).IsSuccessful();
         var reread = await store.GetMessagesAsync(parent.Id);
         AssistantMessage? updated = null;
         foreach (var message in reread.Value)
@@ -475,7 +475,7 @@ public class SubAgentCostPropagationTests
             store, capture, new FakeEventBus(), NullLogger<DefaultAgent>.Instance);
         agent.Initialize(parent, TestAgents.AllowAll());
         var prompt = await agent.PromptAsync("go");
-        await Assert.That(prompt.IsSuccess).IsTrue();
+        await Assert.That(prompt).IsSuccessful();
         ISessionContext? parentContext = capture.Captured;
         await Assert.That(parentContext).IsNotNull();
 
@@ -487,7 +487,7 @@ public class SubAgentCostPropagationTests
         var turn = parentContext!.UpdateStatsAsync(new Usage(7, 3), Pricing.Unknown);
         var propagation = runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
         await Task.WhenAll(turn, propagation);
-        await Assert.That(propagation.Result.IsSuccess).IsTrue();
+        await Assert.That(propagation.Result).IsSuccessful();
         var stats = await store.GetStatsAsync(parent.Id);
         await Assert.That(stats.Value.TokensInput).IsEqualTo(107);
         await Assert.That(stats.Value.TokensOutput).IsEqualTo(53);
@@ -506,7 +506,7 @@ public class SubAgentCostPropagationTests
                 Harbor.TestKit.TestTempDirs.NewDirectory("harbor-gate-" + i), "code", "test", "test-model");
             store.Seed(parent);
             var outcome = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
-            await Assert.That(outcome.IsSuccess).IsTrue();
+            await Assert.That(outcome).IsSuccessful();
         }
 
         // #1105: gate storage must be fixed stripes, not one entry per parent session.

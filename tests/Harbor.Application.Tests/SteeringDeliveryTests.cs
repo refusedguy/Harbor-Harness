@@ -133,7 +133,7 @@ public class SteeringDeliveryTests
 
         var result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // The steered message must be part of the SECOND request of THIS run.
         string secondRequestText = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(secondRequestText).Contains("use --verbose next time");
@@ -222,7 +222,7 @@ public class SteeringDeliveryTests
         // exit through the cancellation path (failure), not hang or succeed.
         var result = await loop.RunAsync(session, agent, cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("cancel");
     }
 
@@ -248,13 +248,13 @@ public class SteeringDeliveryTests
         // B1: while running, this must SUCCEED immediately and route to Steer().
         Result second = await subject.PromptAsync("use --verbose please");
 
-        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(second).IsSuccessful();
         // #559: the unbound-agent case is decided once, by AgentStateProbe.
         await Assert.That(subject.IsRunning()).IsTrue();
 
         releaseRun.TrySetResult();
         Result first = await firstRun;
-        await Assert.That(first.IsSuccess).IsTrue();
+        await Assert.That(first).IsSuccessful();
         // The blocking loop drained the steering channel when its run finished.
         await Assert.That(blockingLoop.SteeredTexts.Count).IsEqualTo(1);
     }

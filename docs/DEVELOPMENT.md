@@ -180,7 +180,8 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
-| `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
+| `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
+| `plugin inventory snapshot` | `harbor-gates gen-plugin-inventory --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 | `tree gates` | `tools/bin/harbor-gates-linux-x64 all` — every gate that needs nothing but the tree, in one command, with the floors the list of the runner carries: the seam graph (#1731), the XML-doc coverage, the dependency contract and the repo-map counts among them (#2122) |
 
 Three things make this a real gate rather than decoration:

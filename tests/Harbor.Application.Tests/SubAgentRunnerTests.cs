@@ -80,7 +80,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("find the todos", ParentSessionId: "parent-1"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("found 3 TODOs in src/");
         await Assert.That(result.Value.AgentName).IsEqualTo("explore");
         await Assert.That(result.Value.NewMessages).IsEqualTo(2); // user prompt + assistant answer
@@ -97,7 +97,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("first line\nsecond line", "parent-9"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // The context handed to the loop carries the parent linkage + generated title.
         await Assert.That(loop.LastContext!.Session.ParentSessionId).IsEqualTo("parent-9");
         await Assert.That(loop.LastContext.Session.Title).StartsWith("task(explore): first line");
@@ -126,7 +126,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(MainAgent(), new SubAgentRunRequest("nope"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("not a sub-agent");
         await Assert.That(loop.LastContext).IsNull();
         await Assert.That(store.Appends).IsEqualTo(0);
@@ -141,7 +141,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("failed: model exploded");
         await Assert.That(result.Error).Contains(loop.LastContext!.Session.Id);
     }
@@ -155,7 +155,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("without producing a final assistant message");
     }
 
@@ -172,7 +172,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput.Length).IsLessThan(longText.Length);
         await Assert.That(result.Value.FinalOutput).Contains("[truncated 500 chars]");
     }
@@ -200,9 +200,9 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("outer task"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(canSpawnInside).IsFalse();
-        await Assert.That(nestedOutcome!.Value.IsFailure).IsTrue();
+        await Assert.That(nestedOutcome!.Value).IsFailed();
         await Assert.That(nestedOutcome.Value.Error).Contains("Nesting limit reached");
         // Depth must be restored once the outer run exits its guard scope.
         await Assert.That(runner.CanSpawn).IsTrue();
@@ -229,7 +229,7 @@ public class SubAgentRunnerTests
                     canSpawnInBackground = innerRunner.CanSpawn;
                     return innerRunner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("bg task"), ct);
                 }, CancellationToken.None);
-                await Assert.That(started.IsSuccess).IsTrue();
+                await Assert.That(started).IsSuccessful();
 
                 // Wait for the detached run through the registry's own seam
                 // (#2093): the run is dispatched on its own thread, so this
@@ -248,10 +248,10 @@ public class SubAgentRunnerTests
 
         var result = await outer.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("outer task"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(canSpawnInBackground).IsTrue();
         await Assert.That(bgOutcome).IsNotNull();
-        await Assert.That(bgOutcome!.Value.IsSuccess).IsTrue();
+        await Assert.That(bgOutcome!.Value).IsSuccessful();
         await Assert.That(bgOutcome.Value.Value.FinalOutput).IsEqualTo("bg done");
     }
 
@@ -324,7 +324,7 @@ public class SubAgentRunnerTests
         await Assert.That(deferred.CanSpawn).IsFalse();
 
         var result = await deferred.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("not initialized yet");
     }
 
@@ -339,7 +339,7 @@ public class SubAgentRunnerTests
 
         await Assert.That(deferred.CanSpawn).IsTrue();
         var result = await deferred.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("hi from real");
     }
 
@@ -376,7 +376,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("the real answer");
     }
 
@@ -389,7 +389,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput).IsEqualTo($"part one\npart two");
     }
 
@@ -408,7 +408,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.FinalOutput).IsEqualTo("final prose");
     }
 
@@ -449,7 +449,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(store.LastCreatedDirectory).IsEqualTo(parent.Directory);
     }
 
@@ -474,7 +474,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("task it", "parent-1"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(loop.LastContext!.Session.Kind).IsEqualTo(SessionKind.Subagent);
         await Assert.That(loop.LastContext.Session.Status).IsEqualTo(SessionStatus.Working);
         await Assert.That(loop.LastContext.Session.IsSubagent()).IsTrue();
@@ -490,7 +490,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Done);
     }
 
@@ -503,7 +503,7 @@ public class SubAgentRunnerTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go"));
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(store.UpdatedSessions[^1].Status).IsEqualTo(SessionStatus.Error);
     }
 }

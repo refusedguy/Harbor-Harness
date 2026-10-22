@@ -655,8 +655,8 @@ finally
 
 Use `Harbor.TestKit.TestMessages` to build realistic `AgentMessage` instances
 without hand-rolling constructors (#1816 — the tree builds every message
-through this factory, and `tools/gates/codemod-test-events/` moved the call
-sites over):
+through this factory, and `tools/codemod-test-events.py` moved the call sites
+over):
 
 ```csharp
 var userMsg    = TestMessages.User("Hello", sessionId: "session-1");
@@ -833,6 +833,52 @@ so the failure shows up as a slow shard rather than a failed test.
 Keep a manual CTS only when the test drives the cancellation itself: a
 pre-cancelled token, a token the test cancels mid-run, or a bounded negative
 probe whose window is the assertion.
+
+#### The three CTS shapes, and which one owns what
+
+The scan of `tests/` on this tree counts **63 hand-rolled
+`new CancellationTokenSource(...)` sites in 42 files**. The count is the grep
+`new CancellationTokenSource(` over `tests/**/*.cs`, with the four matches
+that are string literals inside architecture scan controls (they quote the
+shape they forbid) left out, and with the helper's own file left out. The
+shapes below are classified from the same lines: a source built with a time
+span is a BOUND, a source whose variable is cancelled on a LATER line of the
+same file is the test's own instrument, and a source whose variable is handed
+to something other than `.Token` is a collaborator's.
+
+| Shape | Count | Where it lives |
+|---|---|---|
+| the source is a BOUND (`TimeSpan`) | 8 | a negative probe whose window IS the assertion — the manual source is the point |
+| the test cancels the source LATER | 44 | the test's own instrument — write it out |
+| the source is handed to a collaborator that cancels it | 6 | the test's own instrument — write it out |
+| neither (long test, cancel further down) | 5 | the test's own instrument — write it out |
+
+Issue #1837 already moved the sites that were a pure DEADLINE to `[Timeout]`.
+What is left is the test's own instrument: the source has to stay writable,
+because the test (or the code under test) cancels it.
+
+The one shape worth a shared name is the **already-cancelled** token, which
+the tree wrote as two lines:
+
+```csharp
+// WRONG — the fact ("already cancelled") is spread over two lines
+using var cts = new CancellationTokenSource();
+await cts.CancelAsync();
+... cts.Token ...
+```
+
+```csharp
+// RIGHT — one factory, one name
+using var cts = TestCancellation.Cancelled();
+... cts.Token ...
+```
+
+`TestCancellation.Cancelled()` lives in `tests/Harbor.TestKit.Support/`
+(namespace `Harbor.TestKit`), because it needs no product assembly and no
+TUnit package — it is the BCL's `CancellationTokenSource` and nothing else.
+Issue #1569 migrated the 13 such sites in `Harbor.Application.Tests` (the
+project held 30 sites before the migration and 17 after it, measured on this
+tree).
 
 ### Parallelism: what each `[NotInParallel]` form actually guarantees
 
@@ -1011,6 +1057,7 @@ dotnet run --project tests/Harbor.Core.Tests -c Release -- --minimum-expected-te
 await Assert.That(result).IsSuccessful();
 await Assert.That(result).IsFailed();
 await Assert.That(toolResult).HasSucceeded();
+await Assert.That(toolResult).HasFailed();
 
 // Equality
 await Assert.That(value).IsEqualTo("expected");
@@ -1078,6 +1125,37 @@ await Assert.That(toolResult).HasSucceeded();
 `Result` and `Result<T>` are two unrelated types — `Result<T>` does not derive
 from `Result` — so each has its own pair, and the compiler picks by the
 receiver's type.
+
+**The two families that live next door.** Two more shapes carry the same flag,
+and they get the same chain links. They are in the sibling file
+`tests/Harbor.TestKit.Support/ResultAssertions.More.cs`, which is part of the
+same `partial` class — one `using Harbor.TestKit;` reaches all seven:
+
+| the type | the assertion |
+|---|---|
+| `Result<TValue, TError>` (the value-shaped retry verdict) | `IsSuccessful()` / `IsFailed()` |
+| `ToolExecutionEndEvent` (the bus event that carries a tool's error flag) | `HasSucceeded()` / `HasFailed()` |
+
+**The migration is mechanical.** The old spelling maps onto the new one by the
+flag it reads:
+
+| Old | New |
+|---|---|
+| `Assert.That(x.IsSuccess).IsTrue()` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsSuccess).IsFalse()` | `Assert.That(x).IsFailed()` |
+| `Assert.That(x.IsSuccess).IsEqualTo(true)` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsFailure).IsTrue()` | `Assert.That(x).IsFailed()` |
+| `Assert.That(x.IsFailure).IsFalse()` | `Assert.That(x).IsSuccessful()` |
+| `Assert.That(x.IsError).IsFalse()` | `Assert.That(x).HasSucceeded()` |
+| `Assert.That(x.IsError).IsTrue()` | `Assert.That(x).HasFailed()` |
+
+`LlmToolResultMessage` and `LlmToolResultBlock` are deliberately NOT in the
+table: they are the wire the model sees, not a result the tree owns, and
+their sites assert a different thing. Keep the plain boolean form there.
+
+Issue #1569 is migrating the tree one project per PR. The
+`Harbor.Application.Tests` block — 284 sites in 63 files — is the one this
+change carries; the rest is still open.
 
 **The trap inside the trap.** Do NOT put the error text in
 `.Because(result.Error)`: `Because` takes its argument eagerly, and
