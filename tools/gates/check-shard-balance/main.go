@@ -276,8 +276,8 @@ func readCosts(path string) (*costData, string) {
 		source = value
 	}
 	return &costData{
-		projects:   projects,
-		overhead:   overhead,
+		projects: projects,
+		overhead: overhead,
 		// The run id is a NUMBER in the file and a string in the message,
 		// so the fields are rendered the way python's f-string renders
 		// whatever it finds, and not read as strings.

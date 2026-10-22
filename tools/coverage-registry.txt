@@ -1,7 +1,7 @@
 # coverage-registry — the product files the nightly coverage lane does not
 # cover, and why each one is allowed to stay that way.
 #
-# OWNER: issue #1753. Read by tools/check-coverage-registry.py, on every
+# OWNER: issue #1753. Read by tools/gates/check-coverage-registry/, on every
 # nightly run.
 #
 # THIS IS A RATCHET, NOT A TARGET. The gate passes only when the set of
@@ -70,6 +70,13 @@
 # Measured on run 39627786424 of the nightly workflow, on dev at 259d0a5d:
 # 1328 product files, 554 of them covered, 588 holes — 378 the measurement
 # saw and never ran, 210 in the two projects the lane does not load.
+#
+# The tree grew by ONE product file after that run —
+# src/Harbor.Arch.Analyzers/HttpClientCreationAnalyzer.cs (#2148) — and the
+# lane's arch suite drives it in process
+# (tests/Harbor.Architecture.Tests/Roslyn/HttpClientCreationAnalyzerTests.cs),
+# so no row is due for it and the rows below still hold. The next run of the
+# lane re-measures the file set.
 #
 # The rows below are the measured state of the tree, not a wish list. A file
 # that gets covered has to have its row deleted in the same diff that
@@ -143,9 +150,9 @@ src/Harbor.Hosting/RuntimeRendererSwapMiddleware.cs | NEVER-RAN | The middleware
 src/Harbor.Logging/LoggerSetup.cs | NEVER-RAN | The logging is configured by the application hosts, and no suite of the lane starts a host. | @refusedguy
 src/Harbor.Plugins.Abstractions/IPluginAuditLog.cs | NEVER-RAN | The audit log contract is implemented by the plugin host, which no suite of the lane starts. | @refusedguy
 src/Harbor.Plugins.Host/ConfigFilePluginConfigSource.cs | NEVER-RAN | The source is read by the plugin host when it starts, and no suite of the lane starts the out-of-process host. | @refusedguy
+src/Harbor.Plugins.Host/PluginInventoryPublisher.cs | NEVER-RAN | The publisher is called by the plugin host after its load and after every activation pass, and no suite of the lane starts the host. | @refusedguy
 src/Harbor.Plugins.Hosting/LazyPluginCompiler.cs | NEVER-RAN | The lazy compiler runs when a CS-source plugin is loaded, and no suite of the lane loads one. | @refusedguy
 src/Harbor.Plugins.Host/NullEventBus.cs | NEVER-RAN | The null bus is the fallback the plugin host wires, and no suite of the lane starts the host. | @refusedguy
-src/Harbor.Plugins.Host/PluginInventoryPublisher.cs | NEVER-RAN | The publisher is called by the plugin host after its load and after every activation pass, and no suite of the lane starts the host. | @refusedguy
 src/Harbor.Plugins.Host/Program.cs | NEVER-RAN | The plugin host is an out-of-process executable that speaks MCP over stdout; no suite of the lane starts it. | @refusedguy
 src/Harbor.Plugins.Storage/EmbeddedResourcePluginSource.cs | NEVER-RAN | The embedded-resource plugin source is read when the plugin host starts, and no suite of the lane starts it. | @refusedguy
 src/Harbor.Telemetry.Otlp/HarborOtlpExporter.cs | NEVER-RAN | The OTLP exporter is wired by the application hosts, and no suite of the lane runs a host. | @refusedguy

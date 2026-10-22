@@ -19,7 +19,7 @@ public class JsonlSessionStoreTests
         try
         {
             var result = await store.CreateAsync("/test/dir", "code", "anthropic", "claude-opus-4");
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Id).IsNotNull();
             await Assert.That(result.Value.Directory).IsEqualTo("/test/dir");
             await Assert.That(result.Value.Agent).IsEqualTo("code");
@@ -43,10 +43,10 @@ public class JsonlSessionStoreTests
             var userMsg = TestMessages.User("Hello", id: "msg-1", sessionId: session.Id, model: "claude-opus-4");
 
             var appendResult = await store.AppendMessageAsync(session.Id, userMsg);
-            await Assert.That(appendResult.IsSuccess).IsTrue();
+            await Assert.That(appendResult).IsSuccessful();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("Hello");
         }
@@ -90,7 +90,7 @@ public class JsonlSessionStoreTests
             await store.CreateAsync("/test2", "code", "openai", "gpt-4o");
 
             var list = await store.ListAsync();
-            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list).IsSuccessful();
             await Assert.That(list.Value.Count).IsEqualTo(2);
         }
         finally
@@ -112,13 +112,13 @@ public class JsonlSessionStoreTests
             await store.AppendMessageAsync(session.Id, TestMessages.Assistant("hi", id: "m2", sessionId: session.Id, usage: new Usage(10, 5), model: "claude-opus-4"));
 
             var list = await store.ListAsync();
-            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list).IsSuccessful();
             await Assert.That(list.Value.Count).IsEqualTo(1);
             await Assert.That(list.Value[0].Id).IsEqualTo(session.Id);
             await Assert.That(list.Value[0].Metadata).IsEqualTo(SessionMetadata.Empty);
 
             var got = await store.GetAsync(session.Id);
-            await Assert.That(got.IsSuccess).IsTrue();
+            await Assert.That(got).IsSuccessful();
             await Assert.That(got.Value.Metadata.MessageCount).IsEqualTo(1);
         }
         finally
@@ -136,10 +136,10 @@ public class JsonlSessionStoreTests
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
 
             var deleteResult = await store.DeleteAsync(session.Id);
-            await Assert.That(deleteResult.IsSuccess).IsTrue();
+            await Assert.That(deleteResult).IsSuccessful();
 
             var getResult = await store.GetAsync(session.Id);
-            await Assert.That(getResult.IsSuccess).IsFalse();
+            await Assert.That(getResult).IsFailed();
         }
         finally
         {
@@ -154,7 +154,7 @@ public class JsonlSessionStoreTests
         try
         {
             var result = await store.DeleteAsync("nonexistent");
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -170,7 +170,7 @@ public class JsonlSessionStoreTests
         {
             var msg = TestMessages.User("Hello", id: "msg-1", sessionId: "nonexistent", model: "claude-opus-4");
             var result = await store.UpdateMessageAsync("nonexistent", msg);
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -187,10 +187,10 @@ public class JsonlSessionStoreTests
             var session = (await store.CreateAsync("/test", "code", "anthropic", "claude-opus-4")).Value;
             var ghost = TestMessages.User("Ghost", id: "msg-ghost", sessionId: session.Id, model: "claude-opus-4");
             var result = await store.UpdateMessageAsync(session.Id, ghost);
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(0);
         }
         finally
@@ -252,7 +252,7 @@ public class JsonlSessionStoreCancellationTests
             try
             {
                 var result = await store.CreateAsync("/dir", "code", "anthropic", "claude-opus-4", cts.Token);
-                await Assert.That(result.IsSuccess).IsTrue();
+                await Assert.That(result).IsSuccessful();
             }
             catch (OperationCanceledException)
             {
@@ -318,7 +318,7 @@ public class JsonlSessionStoreCancellationTests
         try
         {
             var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -342,7 +342,7 @@ public class JsonlSessionStoreCancellationTests
         try
         {
             var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -367,7 +367,7 @@ public class JsonlSessionStoreCancellationTests
         try
         {
             var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -393,7 +393,7 @@ public class JsonlSessionStoreCancellationTests
         try
         {
             var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -418,7 +418,7 @@ public class JsonlSessionStoreCancellationTests
         try
         {
             var created = await store.CreateAsync(tempDir, "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -457,8 +457,8 @@ public class JsonlSessionStoreCancellationTests
             var first = await store.GetAsync(sessionId);
             var second = await store.GetAsync(sessionId);
 
-            await Assert.That(first.IsSuccess).IsTrue();
-            await Assert.That(second.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
+            await Assert.That(second).IsSuccessful();
             await Assert.That(first.Value.CreatedAt).IsEqualTo(created);
             // The fabricated-UtcNow defect made this assertion flaky by design:
             // the timestamp must be identical across consecutive reads.
@@ -484,8 +484,8 @@ public class JsonlSessionStoreCancellationTests
             var updated = await store.UpdateAsync(renamed);
             var reread = await store.GetAsync(created.Id);
 
-            await Assert.That(updated.IsSuccess).IsTrue();
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(updated).IsSuccessful();
+            await Assert.That(reread).IsSuccessful();
             await Assert.That(reread.Value.Title).IsEqualTo("Renamed");
             await Assert.That(reread.Value.UpdatedAt).IsGreaterThanOrEqualTo(renamed.CreatedAt);
         }
@@ -511,10 +511,10 @@ public class JsonlSessionStoreCancellationTests
             // never disappears" means — and the surface shows the new one.
             var original = TestMessages.User("before", id: "msg-1", sessionId: sessionId, agent: "user", model: "claude-opus-4");
             var appendResult = await store.AppendMessageAsync(sessionId, original);
-            await Assert.That(appendResult.IsSuccess).IsTrue();
+            await Assert.That(appendResult).IsSuccessful();
 
             var editResult = await store.UpdateMessageAsync(sessionId, TestMessages.User("after", id: "msg-1", sessionId: sessionId, createdAt: original.CreatedAt, agent: "user", model: "claude-opus-4"));
-            await Assert.That(editResult.IsSuccess).IsTrue();
+            await Assert.That(editResult).IsSuccessful();
 
             string[] lines = await File.ReadAllLinesAsync(Path.Combine(tempDir, $"{sessionId}.jsonl"));
             int occurrences = lines.Count(l => l.Contains("\"msg-1\"", StringComparison.Ordinal));

@@ -52,6 +52,49 @@ internal static class RoslynProjectCompilation
     internal static ImmutableArray<MetadataReference> References => LazyReferences.Value;
 
     /// <summary>
+    ///     The implicit global usings the SDK gives every project whose
+    ///     <c>ImplicitUsings</c> is enabled — and every project in this
+    ///     repository has it (the root <c>Directory.Build.props</c> sets it).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         A compilation WITHOUT them is not the project's compilation. A
+    ///         file that writes <c>HttpClient</c> and never says
+    ///         <c>using System.Net.Http;</c> relies on the SDK's implicit
+    ///         usings, and in a compilation that lacks them the name does not
+    ///         resolve: the semantic model answers "error type", and every rule
+    ///         that asks about the TYPE is blind to that file.
+    ///     </para>
+    ///     <para>
+    ///         This was MEASURED, not reasoned: the HTTP-client rule
+    ///         (<c>HttpClientReuseRules</c>) found the two creations in
+    ///         <c>McpHttpClientFactory.cs</c> — the one file that says
+    ///         <c>using System.Net.Http;</c> — and none of the five in the
+    ///         files that rely on the implicit using. The set is the SDK's
+    ///         default for <c>Microsoft.NET.Sdk</c>; no project in this
+    ///         repository declares a <c>&lt;Using Include&gt;</c> item of its
+    ///         own.
+    ///     </para>
+    ///     <para>
+    ///         It is a PARAMETER and not a default, on purpose: the rules that
+    ///         already run over these compilations were measured against a
+    ///         compilation without the implicit usings, and moving them onto
+    ///         the full one is a separate piece of work with its own findings
+    ///         (see <c>docs/SEMANTIC_GUARDS.md</c>).
+    ///     </para>
+    /// </remarks>
+    internal static ImmutableArray<string> ImplicitGlobalUsings { get; } =
+    [
+        "System",
+        "System.Collections.Generic",
+        "System.IO",
+        "System.Linq",
+        "System.Net.Http",
+        "System.Threading",
+        "System.Threading.Tasks",
+    ];
+
+    /// <summary>
     ///     Every product project: the <c>src/</c> projects and the <c>apps/</c>
     ///     entry points, in a stable order.
     /// </summary>
@@ -94,7 +137,15 @@ internal static class RoslynProjectCompilation
     ///     The compilation of one product project: its own sources plus the
     ///     shared-source folders its csproj links into it.
     /// </summary>
-    internal static CSharpCompilation ForProject(Project project)
+    /// <param name="project">The project to compile.</param>
+    /// <param name="globalUsings">
+    ///     The implicit global usings the project inherits. Null means the
+    ///     compilation carries none — which is what the rules that were
+    ///     measured against this harness expect; see
+    ///     <see cref="ImplicitGlobalUsings" /> for why that is a finding and
+    ///     not a default.
+    /// </param>
+    internal static CSharpCompilation ForProject(Project project, IEnumerable<string>? globalUsings = null)
     {
         var trees = new List<SyntaxTree>();
 
@@ -117,7 +168,8 @@ internal static class RoslynProjectCompilation
             trees,
             References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithNullableContextOptions(NullableContextOptions.Enable));
+                .WithNullableContextOptions(NullableContextOptions.Enable)
+                .WithUsings(globalUsings));
     }
 
     /// <summary>

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Gate the architecture suite's execution count on the pull-request lane.
+"""Gate the architecture suite's execution count on every lane of ci.yml.
 
 Stdlib only - no pip, no network, no dotnet. Wired into the `build` job of
 .github/workflows/ci.yml, and it guards ONE thing:
 
-    on a pull request, the architecture suite runs EXACTLY ONCE.
+    on every lane of this workflow, the architecture suite runs EXACTLY ONCE.
 
 WHAT THE SUITE IS
 -----------------
@@ -28,41 +28,58 @@ lane, so the suite runs once now, in the `arch` shard #1781 gave it a shard
 of its own, and the pull-request lane pays 59.9 s for it (measured on run
 39508977362: 1094 tests, 59.9 s).
 
+The push lane kept the second execution, and issue #2114 measured it on the
+dev push of 165813bf (run 39613662649):
+
+    87.9 s   inside the build job (the `[arch-gate]` Exec: 14:10:04.64 ->
+              14:11:32.4, inside a 270.5 s compile)
+    107 s    in the `arch` shard (117 s job wall)
+
+The same 1118 rules, twice, for one answer. #2114 switched the build-time
+gate off in this workflow for EVERY event, so the shard is the one execution
+on every lane - the pull-request shape, which has been the shape since
+#1928.
+
 WHAT THIS FILE GUARDS, AND WHY SOMETHING ELSE WAS NOT ENOUGH
 --------------------------------------------------------------
 Nothing held that count. The build-time gate is one environment variable
-(`HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}`),
-and a coverage-like job on the pull-request lane is one block of YAML. Both
-are easy to bring back by accident, and nothing else in the repository would
-say so: the suite would run twice, slowly, and the pull request would still
-be green.
+(`HarborArchGate: 'false'`), and a coverage-like job on a lane is one block
+of YAML. Both are easy to bring back by accident, and nothing else in the
+repository would say so: the suite would run twice, slowly, and the lane
+would still be green.
 
 So this gate reads the workflow files and asks five questions.
 
-  EXEC-ONCE      the suite is executed exactly once on the pull-request
-                 lane, by the shard whose project list carries it, and by
-                 nothing else. Zero is a finding too: a lane that runs the
-                 suite nowhere has no architecture gate at all. A `run:`
-                 block that only NAMES the suite — the guard-triage reporter
-                 passes `--project Harbor.Architecture.Tests` to another tool
-                 — is not an execution; see `runs_the_suite`.
-  GATE-OFF-PR    every job that compiles the solution switches the
-                 build-time gate off for `pull_request` events, either with
-                 `-p:HarborArchGate=false` on the command line or with a
-                 job-level `HarborArchGate` environment variable whose
-                 expression yields `'false'` for that event.
-  GATE-ON-MERGE  at least one of those jobs still runs the gate for a
-                 `push` event, so a merge into dev/master keeps failing the
-                 BUILD on a layering regression. The gate is worth keeping;
-                 it is the DUPLICATION that costs.
-  GATE-DEFAULT   `Directory.Build.props` defaults `HarborArchGate` to
-                 `true`, so the gate is on unless a workflow says otherwise.
-  GATE-CONDITION the target's own condition still asks the property before
-                 it runs. Everything above rests on one sentence: the
-                 target runs only when `HarborArchGate` is `true`, and an
-                 environment variable of that name IS an MSBuild property.
-                 A target that stopped asking would run inside every
-                 Release build, and every other rule here would be green.
+  EXEC-ONCE       the suite is executed exactly once on the lane, by the
+                   shard whose project list carries it, and by nothing else.
+                   Zero is a finding too: a lane that runs the suite nowhere
+                   has no architecture gate at all. A `run:` block that only
+                   NAMES the suite — the guard-triage reporter passes
+                   `--project Harbor.Architecture.Tests` to another tool —
+                   is not an execution; see `runs_the_suite`.
+  GATE-OFF-PR     every job that compiles the solution switches the
+                   build-time gate off for `pull_request` events, either with
+                   `-p:HarborArchGate=false` on the command line or with a
+                   job-level `HarborArchGate` environment variable whose
+                   expression yields `'false'` for that event.
+  GATE-OFF-PUSH   the same for `push` events. This rule used to be the
+                   opposite (GATE-ON-MERGE: "at least one job still runs the
+                   gate for a push, so a merge into dev/master keeps failing
+                   the BUILD"). Issue #2114 measured the merge path paying
+                   for the same rules twice and took the second execution
+                   out; the merge path runs the suite in the `arch` shard,
+                   exactly like the pull-request path. A rule that demanded
+                   the duplication back would have been a rule against the
+                   change this file now holds.
+  GATE-DEFAULT    `Directory.Build.props` defaults `HarborArchGate` to
+                   `true`, so the gate is on unless a workflow says otherwise.
+                   A developer's own Release build still runs it.
+  GATE-CONDITION  the target's own condition still asks the property before
+                   it runs. Everything above rests on one sentence: the
+                   target runs only when `HarborArchGate` is `true`, and an
+                   environment variable of that name IS an MSBuild property.
+                   A target that stopped asking would run inside every
+                   Release build, and every other rule here would be green.
 
 WHAT IT CANNOT SEE, AND SAYS SO
 -------------------------------
@@ -70,9 +87,14 @@ The two executions are the same assembly and the same rules, but they are
 not the same ENVIRONMENT: the shard runs on a fresh checkout with only its
 own slice of the build output, so a rule that reads the built tree (the
 Release/Debug copy check in `ReleaseBuildConfigurationRule`) has no tree to
-read there and passes vacuously. That is why the gate stays ON for the merge
-path: it is the only execution that sees the build output. This file counts
-executions; it does not claim the two are interchangeable.
+read there and passes vacuously. That was already true of the pull-request
+lane before #2114, and it is why the byte half of that claim is evaluated
+where the tree is - the nightly lane's coverage job, which builds the tree
+itself and runs the suite in that workspace. That lane's per-suite failures
+are recorded, not fatal (the coverage job is report-only by contract, #99),
+so the byte half is a REPORT there, not a gate. This file counts
+executions; it does not claim the two environments are interchangeable, and
+it does not claim the nightly lane holds a claim it only reports.
 
 WHY A TEXT SCAN AND NOT A YAML PARSE
 ------------------------------------
@@ -228,12 +250,17 @@ def compiles_the_solution(block: str) -> bool:
 def gate_value(expression: str, event: str) -> str | None:
     """The value of a `HarborArchGate` expression for one event.
 
-    The shape the workflows use is the GitHub expression
+    The shape the workflow uses is the literal
+
+        HarborArchGate: 'false'
+
+    and the shape it USED to use is the GitHub expression
 
         ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
 
     which is read here as "the condition, the value when it holds, the value
-    when it does not". A literal is a literal. Anything else is `None`: the
+    when it does not" — the shape a regression would take, and the one the
+    self-test plants. A literal is a literal. Anything else is `None`: the
     gate cannot tell, and a gate that cannot tell treats that as a finding
     rather than as a pass.
     """
@@ -278,7 +305,7 @@ def runs_the_suite(block: str) -> bool:
 
 
 def check_once(workflow: str, shards: dict[str, list[str]]) -> list[str]:
-    """EXEC-ONCE: the suite is executed exactly once on the pull-request lane."""
+    """EXEC-ONCE: the suite is executed exactly once on the lane."""
     executions: list[str] = []
     for shard, projects in sorted(shards.items()):
         if SUITE in projects:
@@ -291,17 +318,17 @@ def check_once(workflow: str, shards: dict[str, list[str]]) -> list[str]:
         return []
     if not executions:
         return [
-            f"EXEC-ONCE: the pull-request lane runs `{SUITE}` NOWHERE - the "
-            f"architecture gate would not run at all on a pull request"
+            f"EXEC-ONCE: the lane runs `{SUITE}` NOWHERE - the "
+            f"architecture gate would not run at all"
         ]
     return [
-        f"EXEC-ONCE: the pull-request lane runs `{SUITE}` {len(executions)} "
+        f"EXEC-ONCE: the lane runs `{SUITE}` {len(executions)} "
         f"times - it must run exactly once: " + "; ".join(executions)
     ]
 
 
 def check_gate(workflow: str) -> list[str]:
-    """GATE-OFF-PR and GATE-ON-MERGE: the gate's placement on the lane."""
+    """GATE-OFF-PR and GATE-OFF-PUSH: the gate's placement on the lane."""
     problems: list[str] = []
     compiling: list[tuple[str, str]] = []
     for job, job_text in sorted(split_jobs(workflow).items()):
@@ -321,51 +348,34 @@ def check_gate(workflow: str) -> list[str]:
         if any(FLAG_OFF in block for block in blocks):
             # The command line says so, for every event. That is a job that
             # never runs the gate (the reference-trimmer job), which is
-            # allowed: the build job is the one that has to keep it.
+            # allowed: the build job is the one that has to switch it off.
             continue
         value = job_env(job_text).get(GATE_PROPERTY)
         if value is None:
+            for code, event in (("GATE-OFF-PR", "pull_request"),
+                                ("GATE-OFF-PUSH", "push")):
+                problems.append(
+                    f"{code}: the `{job}` job compiles the solution and says "
+                    f"nothing about `{GATE_PROPERTY}` - the suite would run "
+                    f"inside that build as well as in the shard"
+                )
+            continue
+        for event in ("pull_request", "push"):
+            code = "GATE-OFF-PR" if event == "pull_request" else "GATE-OFF-PUSH"
+            switched_off = gate_value(value, event)
+            if switched_off == "false":
+                continue
+            if switched_off == "true":
+                problems.append(
+                    f"{code}: the `{job}` job's `{GATE_PROPERTY}` is `{value}` "
+                    f"- the suite runs inside that build AND in the shard"
+                )
+                continue
             problems.append(
-                f"GATE-OFF-PR: the `{job}` job compiles the solution and says "
-                f"nothing about `{GATE_PROPERTY}` - the suite would run inside "
-                f"that build as well as in the shard"
+                f"{code}: the `{job}` job's `{GATE_PROPERTY}` is `{value}`, and "
+                f"this checker cannot tell what it yields for a {event} event "
+                f"- expected `'false'`"
             )
-            continue
-        on_pull_request = gate_value(value, "pull_request")
-        if on_pull_request == "false":
-            continue
-        if on_pull_request == "true":
-            problems.append(
-                f"GATE-OFF-PR: the `{job}` job's `{GATE_PROPERTY}` is `{value}` "
-                f"- the suite runs inside that build AND in the shard"
-            )
-            continue
-        problems.append(
-            f"GATE-OFF-PR: the `{job}` job's `{GATE_PROPERTY}` is `{value}`, and "
-            f"this checker cannot tell what it yields for a pull_request event "
-            f"- expected `${{{{ github.event_name == 'pull_request' && 'false' "
-            f"|| 'true' }}`"
-        )
-
-    # The merge path keeps the gate.
-    keeps_it = False
-    for job, job_text in compiling:
-        blocks = run_blocks(job_text)
-        if any(FLAG_OFF in block for block in blocks):
-            continue
-        value = job_env(job_text).get(GATE_PROPERTY)
-        if value is None:
-            keeps_it = True
-            break
-        if gate_value(value, "push") == "true":
-            keeps_it = True
-            break
-    if not keeps_it:
-        problems.append(
-            "GATE-ON-MERGE: no job in this workflow runs the architecture gate "
-            "for a push event - a merge into dev/master would no longer fail "
-            "the BUILD on a layering regression"
-        )
     return problems
 
 
@@ -431,7 +441,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     env:
-      HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      HarborArchGate: 'false'
     steps:
       - uses: actions/checkout@v7
       - name: Build solution via NUKE
@@ -544,8 +554,7 @@ def self_test() -> int:
             "a build job that says nothing about the gate runs it",
             lambda w: _edit(
                 w,
-                "      HarborArchGate: ${{ github.event_name == 'pull_request' "
-                "&& 'false' || 'true' }}\n",
+                "      HarborArchGate: 'false'\n",
                 ""),
         ),
         (
@@ -553,8 +562,8 @@ def self_test() -> int:
             "a build job whose gate is on for every event runs it twice",
             lambda w: _edit(
                 w,
-                "${{ github.event_name == 'pull_request' && 'false' || 'true' }}",
-                "'true'"),
+                "      HarborArchGate: 'false'\n",
+                "      HarborArchGate: 'true'\n"),
         ),
         (
             "GATE-OFF-PR",
@@ -565,12 +574,13 @@ def self_test() -> int:
                 ""),
         ),
         (
-            "GATE-ON-MERGE",
-            "a gate that is off for every event leaves the merge path bare",
+            "GATE-OFF-PUSH",
+            "a gate that is on for a push runs the suite twice on the merge path",
             lambda w: _edit(
                 w,
-                "${{ github.event_name == 'pull_request' && 'false' || 'true' }}",
-                "'false'"),
+                "      HarborArchGate: 'false'\n",
+                "      HarborArchGate: ${{ github.event_name == 'pull_request' "
+                "&& 'false' || 'true' }}\n"),
         ),
     ]
 
