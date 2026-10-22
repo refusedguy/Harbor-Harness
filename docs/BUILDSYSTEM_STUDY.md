@@ -471,7 +471,8 @@ grep покажет. Проверено: `build/_build.csproj` упоминае�
 | из них меняются (правка `using`-ов) | **20** | `grep -rl Nuke build/_build/` |
 | из них не меняются | **12** | `find build/_build -name '*.cs'` минус те, что содержат `Nuke` |
 | таргетов | **15** | `grep -cE 'private (new )?Target [A-Za-z]+' build/_build/Build.cs`; столько же записей в `TargetCatalog` |
-| мета-команд (`List`, `Doctor`, `What`) | 3 | там же |
+| из них таргетов сборки | **11** | `Clean`, `Restore`, `Compile`, `Test`, `ArchitectureTests`, `Publish`, `PublishArchive`, `Release`, `Pack`, `PublishIpcServer`, `PublishIpcClient` |
+| из них мета-команд | **4** | `Help` (скрывает член базового класса — `private new Target Help`), `List`, `Doctor`, `What` |
 | файлов конфигурации сборщика | **5** | `_build.csproj`, `build/Directory.Build.props`, `build/build.sh`, `build/build.ps1`, `.nuke/` |
 | строк в `_build.csproj` | 105 | `wc -l` |
 | distinct NuKE-идентификаторов, которые мы используем | **7** | `grep -rho "Nuke\.[A-Za-z.]*"` |
