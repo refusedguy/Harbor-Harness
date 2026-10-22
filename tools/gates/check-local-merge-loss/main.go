@@ -31,6 +31,15 @@ var marker = regexp.MustCompile(
 
 // Run is the gate's entry point.
 func Run(args []string) int {
+	return runGate(args, false)
+}
+
+// runGate is the gate, with the count of git processes either printed or
+// not.
+//
+// The self-test calls the gate itself, and the number of processes a
+// throwaway fixture needs is noise there.
+func runGate(args []string, quiet bool) int {
 	rangeRev := "origin/dev"
 	tip := "HEAD"
 	var onlyMerges []string
@@ -40,6 +49,15 @@ func Run(args []string) int {
 	exceptions := ""
 	asJSON := false
 	selfTest := false
+
+	defer func() {
+		if !quiet {
+			// The count of the processes of git is how the gate's own
+			// growth is seen: a run that starts 67 processes is not a run
+			// that starts 1547.
+			fmt.Fprintln(os.Stderr, gitCallsSummary())
+		}
+	}()
 
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
@@ -99,6 +117,9 @@ func Run(args []string) int {
 	}
 
 	if selfTest {
+		// The self-test's own processes of git are the fixture's, and the
+		// count of them is not what a reader of the log is looking for.
+		quiet = true
 		return selfTestRun()
 	}
 
@@ -148,10 +169,27 @@ func Run(args []string) int {
 	for _, item := range allMerges {
 		squashMerges[item.sha] = true
 	}
-	cache := newCaches("", tip, squashMerges)
+	// ONE process for every object of the whole run: the file at the
+	// parent, the file at the merge, the file at the tip, the parent of
+	// the merge and the pull request head.
+	batch, err := newObjectBatch("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: the object reader could not start: %v\n", err)
+		return gate.Broken
+	}
+	defer batch.close()
+
+	cache := newCaches("", tip, squashMerges, batch)
 	var reports []*mergeReport
 	for _, item := range merges {
-		reports = append(reports, checkMerge(item, tip, squashMerges, reportAll, cache))
+		reports = append(reports, checkMerge(item, cache))
+	}
+	if !reportAll {
+		// A loss is only a loss while it is missing: the tree may have it
+		// again, or a NORMAL commit may have removed it on purpose. Both
+		// answers are the same for every merge, so they are asked once,
+		// after every merge has said which lines it dropped.
+		cache.resolveRestored(reports)
 	}
 
 	var live []loss
@@ -382,18 +420,18 @@ type caches struct {
 	dir          string
 	tip          string
 	squashMerges map[string]bool
+	batch        *objectBatch
 	tipLines     map[string]map[string]int
-	tipMissing   map[string]bool
 	deliberate   map[string]map[string]bool
 }
 
-func newCaches(dir string, tip string, squashMerges map[string]bool) *caches {
+func newCaches(dir string, tip string, squashMerges map[string]bool, batch *objectBatch) *caches {
 	return &caches{
 		dir:          dir,
 		tip:          tip,
 		squashMerges: squashMerges,
+		batch:        batch,
 		tipLines:     map[string]map[string]int{},
-		tipMissing:   map[string]bool{},
 		deliberate:   map[string]map[string]bool{},
 	}
 }
@@ -401,9 +439,8 @@ func newCaches(dir string, tip string, squashMerges map[string]bool) *caches {
 // tipLines is the tip's version of a file, as a count per normalized line.
 func (c *caches) tipLinesOf(path string) (map[string]int, bool) {
 	if _, seen := c.tipLines[path]; !seen {
-		lines, ok := fileLinesAt(c.dir, c.tip, path)
+		lines, ok := c.batch.fileLines(c.tip, path)
 		if !ok {
-			c.tipMissing[path] = true
 			c.tipLines[path] = nil
 		} else {
 			counts := map[string]int{}
@@ -417,12 +454,46 @@ func (c *caches) tipLinesOf(path string) (map[string]int, bool) {
 	return counts, ok
 }
 
-// deliberateLines are the lines that NORMAL commits removed from a path.
-func (c *caches) deliberateLines(path string) map[string]bool {
-	if _, seen := c.deliberate[path]; !seen {
-		c.deliberate[path] = deliberateRemovalsAt(c.dir, path, c.tip, c.squashMerges)
+// resolveRestored marks every loss that is not a loss any more.
+//
+// A line a squash-merge dropped is not a loss when the tree has it again
+// (the tip's version of the file holds it) or when a NORMAL commit removed
+// it on purpose (somebody asked for it to go). The two answers are the same
+// for every merge, so they are computed once, over every path that has a
+// loss, and not once per merge.
+func (c *caches) resolveRestored(reports []*mergeReport) {
+	paths := []string{}
+	seen := map[string]bool{}
+	for _, report := range reports {
+		for _, item := range report.losses {
+			if !seen[item.path] {
+				seen[item.path] = true
+				paths = append(paths, item.path)
+			}
+		}
 	}
-	return c.deliberate[path]
+	if len(paths) == 0 {
+		return
+	}
+	for _, path := range paths {
+		c.tipLinesOf(path)
+	}
+	c.deliberate = deliberateRemovalsFor(c.dir, paths, c.tip, c.squashMerges)
+	for _, report := range reports {
+		for index := range report.losses {
+			item := &report.losses[index]
+			key := normalize(item.line)
+			tipNorm, tipOk := c.tipLinesOf(item.path)
+			restored := tipOk && tipNorm[key] >= 1
+			if !restored && c.deliberate[item.path][key] {
+				// A normal commit removed this line on purpose. The file may
+				// even be gone from the tree now — a commit that deleted the
+				// file removed every line in it.
+				restored = true
+			}
+			item.restored = restored
+		}
+	}
 }
 
 // normalize makes two lines that differ only in whitespace the same line.
@@ -459,23 +530,21 @@ func shortSHA(sha string) string {
 }
 
 // checkMerge compares one squash-merge against the pull request it squashed.
-func checkMerge(item merge, tip string, squashMerges map[string]bool, reportAll bool,
-	cache *caches) *mergeReport {
-	return checkMergeAt("", item, tip, squashMerges, reportAll, cache)
+func checkMerge(item merge, cache *caches) *mergeReport {
+	return checkMergeAt("", item, cache)
 }
 
 // checkMergeAt compares one squash-merge against the pull request it
 // squashed, in a directory.
-func checkMergeAt(dir string, item merge, tip string, squashMerges map[string]bool,
-	reportAll bool, cache *caches) *mergeReport {
-	parent := strings.TrimSpace(gitTextOrEmptyAt(dir, "rev-parse", item.sha+"^"))
+func checkMergeAt(dir string, item merge, cache *caches) *mergeReport {
+	parent := cache.batch.firstParent(item.sha)
 	report := &mergeReport{merge: item.sha, pr: item.pr, subject: item.subject, head: item.head}
 
 	if parent == "" {
 		report.skipped = "the merge commit has no parent to compare against"
 		return report
 	}
-	if !objectExistsAt(dir, item.head) {
+	if !cache.batch.hasCommit(item.head) {
 		report.skipped = "the pull request head " + shortSHA(item.head) +
 			" is not in the local object store"
 		return report
@@ -488,35 +557,21 @@ func checkMergeAt(dir string, item merge, tip string, squashMerges map[string]bo
 	}
 	report.base = base
 
-	names, ok := gitTextAt(dir, "diff", "--name-status", "--no-renames", base, item.head)
+	// ONE diff for the whole pull request: the lines are the same lines
+	// the per-file diff carried, and the file a line belongs to is the
+	// file the header names.
+	out, ok := gitTextAt(dir, "diff", "--unified=0", "--no-color", "--no-renames", base, item.head)
 	if !ok {
 		report.skipped = "the pull request diff could not be read"
 		return report
 	}
+	diff := parseDiff(out)
 
-	var paths []string
-	for _, raw := range strings.Split(names, "\n") {
-		if strings.TrimSpace(raw) == "" {
-			continue
-		}
-		parts := strings.Split(raw, "\t")
-		if len(parts) < 2 {
-			continue
-		}
-		status, path := parts[0], parts[len(parts)-1]
-		if strings.HasPrefix(status, "D") {
-			// The pull request deleted the file. That is the pull request's
-			// decision, not a loss.
-			continue
-		}
-		paths = append(paths, path)
-	}
-
-	for _, path := range paths {
+	for _, path := range diff.examined() {
 		report.files++
-		ours := fileLinesOrEmptyAt(dir, parent, path)
-		merged := fileLinesOrEmptyAt(dir, item.sha, path)
-		added, removed := diffAddedRemovedAt(dir, base, item.head, path)
+		ours := cache.batch.fileLinesOrEmpty(parent, path)
+		merged := cache.batch.fileLinesOrEmpty(item.sha, path)
+		added, removed := diff.file(path).added, diff.file(path).removed
 
 		mergedNorm := map[string]int{}
 		for _, line := range merged {
@@ -532,14 +587,6 @@ func checkMergeAt(dir string, item merge, tip string, squashMerges map[string]bo
 			if key == "" {
 				return
 			}
-			tipNorm, tipOk := cache.tipLinesOf(path)
-			restored := tipOk && tipNorm[key] >= 1
-			if !restored && cache.deliberateLines(path)[key] {
-				// A normal commit removed this line on purpose. The file may
-				// even be gone from the tree now — a commit that deleted the
-				// file removed every line in it.
-				restored = true
-			}
 			report.losses = append(report.losses, loss{
 				pr:           item.pr,
 				merge:        item.sha,
@@ -547,7 +594,6 @@ func checkMergeAt(dir string, item merge, tip string, squashMerges map[string]bo
 				path:         path,
 				line:         line,
 				side:         side,
-				restored:     restored,
 			})
 		}
 
@@ -588,11 +634,6 @@ func checkMergeAt(dir string, item merge, tip string, squashMerges map[string]bo
 		}
 	}
 
-	if reportAll {
-		for index := range report.losses {
-			report.losses[index].restored = false
-		}
-	}
 	return report
 }
 
@@ -635,37 +676,6 @@ func findMergesAt(dir string, tip string) []merge {
 	return found
 }
 
-// diffAddedRemoved is the lines the pull request added and removed for one
-// file.
-//
-// The diff is the pull request's own (`base..head`), never the diff of the
-// merge commit: the merge commit's diff is against `dev` and therefore says
-// nothing about what the pull request intended.
-func diffAddedRemoved(base, head, path string) ([]string, []string) {
-	return diffAddedRemovedAt("", base, head, path)
-}
-
-// diffAddedRemovedAt is the lines the pull request added and removed for one
-// file, in a directory.
-func diffAddedRemovedAt(dir string, base, head, path string) ([]string, []string) {
-	out, ok := gitTextAt(dir, "diff", "--unified=0", "--no-color", base, head, "--", path)
-	if !ok {
-		return nil, nil
-	}
-	var added, removed []string
-	for _, raw := range pycompat.SplitLines(out) {
-		if strings.HasPrefix(raw, "+++") || strings.HasPrefix(raw, "---") {
-			continue
-		}
-		if strings.HasPrefix(raw, "+") {
-			added = append(added, raw[1:])
-		} else if strings.HasPrefix(raw, "-") {
-			removed = append(removed, raw[1:])
-		}
-	}
-	return added, removed
-}
-
 // mergeBase is the commit the pull request head and dev share.
 func mergeBase(head, parent string) string {
 	return mergeBaseAt("", head, parent)
@@ -675,46 +685,6 @@ func mergeBase(head, parent string) string {
 // directory.
 func mergeBaseAt(dir string, head, parent string) string {
 	return strings.TrimSpace(gitTextOrEmptyAt(dir, "merge-base", head, parent))
-}
-
-// deliberateRemovals are the lines that NORMAL commits removed from a path.
-//
-// A normal commit is one that did not come through this repository's local
-// squash-merge procedure: a pull request merged through the GitHub API, or a
-// direct commit. When such a commit removes a line, somebody asked for it to
-// go, and the gate must not call that a loss.
-//
-// The local squash-merges are excluded on purpose: their removals are
-// exactly what this gate is looking for.
-func deliberateRemovals(path, tip string, squashMerges map[string]bool) map[string]bool {
-	return deliberateRemovalsAt("", path, tip, squashMerges)
-}
-
-// deliberateRemovalsAt are the lines that NORMAL commits removed from a
-// path, in a directory.
-func deliberateRemovalsAt(dir string, path, tip string, squashMerges map[string]bool) map[string]bool {
-	out, ok := gitTextAt(dir, "log", "--first-parent", "-p", "--format=@@COMMIT %H", tip, "--", path)
-	if !ok {
-		return map[string]bool{}
-	}
-	removed := map[string]bool{}
-	commit := ""
-	for _, raw := range pycompat.SplitLines(out) {
-		if strings.HasPrefix(raw, "@@COMMIT ") {
-			commit = strings.TrimSpace(raw[len("@@COMMIT "):])
-			continue
-		}
-		if commit != "" && squashMerges[commit] {
-			continue
-		}
-		if strings.HasPrefix(raw, "---") || strings.HasPrefix(raw, "+++") {
-			continue
-		}
-		if strings.HasPrefix(raw, "-") {
-			removed[normalize(raw[1:])] = true
-		}
-	}
-	return removed
 }
 
 // loadExceptions reads the accepted losses from the exceptions file.
@@ -798,47 +768,6 @@ func allFilled(fields []string) bool {
 	return true
 }
 
-// fileLines is the lines of `path` at `rev`, or nothing when the file is not
-// there.
-//
-// A file that does not exist at that revision is not an error: a pull
-// request that adds a file has no "before" version of it.
-func fileLines(rev, path string) ([]string, bool) {
-	return fileLinesAt("", rev, path)
-}
-
-// fileLinesAt is the lines of `path` at `rev` in a directory.
-func fileLinesAt(dir string, rev, path string) ([]string, bool) {
-	out, ok := gitTextAt(dir, "show", rev+":"+path)
-	if !ok {
-		return nil, false
-	}
-	return pycompat.SplitLines(out), true
-}
-
-// fileLinesOrEmpty is the lines of `path` at `rev`, or nothing.
-func fileLinesOrEmpty(rev, path string) []string {
-	return fileLinesOrEmptyAt("", rev, path)
-}
-
-// fileLinesOrEmptyAt is the lines of `path` at `rev` in a directory, or
-// nothing.
-func fileLinesOrEmptyAt(dir string, rev, path string) []string {
-	lines, _ := fileLinesAt(dir, rev, path)
-	return lines
-}
-
-// objectExists reports whether the commit is in the object store.
-func objectExists(sha string) bool {
-	return objectExistsAt("", sha)
-}
-
-// objectExistsAt reports whether the commit is in the object store of a
-// directory.
-func objectExistsAt(dir string, sha string) bool {
-	return gitOKAt(dir, "cat-file", "-e", sha+"^{commit}")
-}
-
 // gitEnv is the environment for the gate's own `git` calls: never prompt,
 // never inherit a pager, and never take a lock the checkout does not want.
 func gitEnv() []string {
@@ -866,6 +795,7 @@ func gitAt(dir string, args ...string) (int, string, string) {
 	command := exec.Command("git", args...)
 	command.Dir = dir
 	command.Env = gitEnv()
+	gitCall(args)
 	var stdout, stderr strings.Builder
 	command.Stdout = &stdout
 	command.Stderr = &stderr
