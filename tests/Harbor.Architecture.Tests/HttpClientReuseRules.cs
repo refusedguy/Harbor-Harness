@@ -461,17 +461,31 @@ public class HttpClientReuseRules
     ///     Runs the analyzer over the product tree and reads its verdicts.
     /// </summary>
     /// <remarks>
-    ///     The pass over the 64 product compilations runs CONCURRENTLY, at most
-    ///     <see cref="Environment.ProcessorCount" /> at a time, and the merge is
-    ///     SEQUENTIAL: the passes ran concurrently and each of them produced
-    ///     its own lists, because a <c>List&lt;T&gt;</c> that four threads append
-    ///     to at once is a corrupted list, not a fast one.
     ///     <para>
-    ///         The merge is in PROJECT order, so the census is the same list,
-    ///         in the same order, as the sequential pass produced. That is not a
-    ///         nicety: the rule reports its offenders in that order, and a
-    ///         report that reorders itself between runs is a report nobody can
-    ///         diff.
+    ///         The pass is SEQUENTIAL, and that is a MEASURED decision, not a
+    ///         default. The census used to be a four-way fan-out over the 64
+    ///         product compilations, and the measurement said the fan-out
+    ///         LOSES: the census's own family of tests fell from 239.8 s to
+    ///         118.5 s, but the other 1 135 tests rose by 146 s, for a net
+    ///         +27 s over the whole shard (runs 39724342525 and 39734618143,
+    ///         both on d0242260).
+    ///     </para>
+    ///     <para>
+    ///         The reason is that the runner's four cores are already busy.
+    ///         The shard runs fourteen lanes, and the summed test time is
+    ///         about 3.2x the CPU the shard actually spends — so a fan-out
+    ///         does not create capacity, it only moves the same work onto four
+    ///         threads at once. And four threads binding the tree at the same
+    ///         time allocate four times as fast, which on a workstation GC
+    ///         costs MORE CPU than the one-threaded pass it replaced: the
+    ///         census's wall fell from 40.2 s to 24.0 s, the shard's CPU rose
+    ///         by about 45 core-seconds, and 45 core-seconds is 146 s of
+    ///         summed test time.
+    ///     </para>
+    ///     <para>
+    ///         The per-project contributions are still recorded, so one
+    ///         project's share of the census can be recomputed and compared
+    ///         with what this pass recorded.
     ///     </para>
     /// </remarks>
     private static async Task<ClientCreationCensus> BuildCensus()
@@ -482,16 +496,11 @@ public class HttpClientReuseRules
             LazyCompilations.Value;
 
         var results = new ProjectCensus[compilations.Count];
-        using var gate = new SemaphoreSlim(Math.Max(1, Environment.ProcessorCount));
-        var passes = new List<Task>(compilations.Count);
 
         for (int index = 0; index < compilations.Count; index++)
         {
-            int captured = index;
-            passes.Add(CensusOneAsync(compilations[captured].Compilation, results, captured, gate));
+            results[index] = await CensusFor(compilations[index].Compilation).ConfigureAwait(false);
         }
-
-        await Task.WhenAll(passes).ConfigureAwait(false);
 
         var creations = new List<ClientCreationSite>();
         var inDelegate = new List<ClientCreationSite>();
@@ -582,26 +591,6 @@ public class HttpClientReuseRules
         }
 
         return new ProjectCensus(creations, inDelegate, scopeFiles);
-    }
-
-    /// <summary>
-    ///     The census of one product project, as part of the concurrent pass.
-    /// </summary>
-    private static async Task CensusOneAsync(
-        CSharpCompilation compilation,
-        ProjectCensus[] results,
-        int index,
-        SemaphoreSlim gate)
-    {
-        await gate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            results[index] = await CensusFor(compilation).ConfigureAwait(false);
-        }
-        finally
-        {
-            gate.Release();
-        }
     }
 
     /// <summary>Runs the analyzer over one compilation.</summary>
@@ -730,26 +719,27 @@ public class HttpClientReuseRules
     }
 
     /// <summary>
-    ///     The concurrent pass says what the sequential one said.
+    ///     The recorded census says what a fresh computation says.
     /// </summary>
     /// <remarks>
-    ///     The census used to be computed by walking the 64 product
-    ///     compilations one after another, on ONE thread, while the rest of the
-    ///     shard's tests sat waiting for it — forty seconds of one core, and
-    ///     two hundred and forty seconds of summed test time. It is now a
-    ///     concurrent fan-out over the same 64 compilations.
     ///     <para>
-    ///         A concurrent pass over the same inputs can only differ from a
-    ///         sequential one if it computes something different, so this test
-    ///         recomputes ONE project's share of the census on this thread and
-    ///         compares it with what the fan-out recorded for that project.
-    ///         The project is the one that owns the OAuth handler — the file
-    ///         #1854's defect lived in — so the comparison is over a project
-    ///         that actually has a verdict to get wrong.
+    ///         The census is a memoised answer about a tree that does not
+    ///         change while the suite runs, so a memoised answer is only worth
+    ///         having if it is the SAME answer a fresh computation gives. This
+    ///         test recomputes ONE project's share of the census — the project
+    ///         that owns the OAuth handler, the file #1854's defect lived in, so
+    ///         the comparison is over a project that actually has a verdict to
+    ///         get wrong — and compares it with what the census recorded.
+    ///     </para>
+    ///     <para>
+    ///         The per-project records are also compared with the merged
+    ///         census, because a merge that lost a project or reordered the
+    ///         list would be a census that reports a different set of sites
+    ///         than the pass found.
     ///     </para>
     /// </remarks>
     [Test]
-    public async Task The_Concurrent_Census_Says_What_The_Sequential_One_Says()
+    public async Task The_Recorded_Census_Says_What_A_Fresh_Computation_Says()
     {
         const string OwnedFile = "src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs";
 
@@ -775,7 +765,7 @@ public class HttpClientReuseRules
             + "comparison below has nothing to compare.");
 
         // The ORACLE: the same computation, over the same compilation, on this
-        // thread, with no fan-out and no sharing.
+        // thread, with no memo to read from.
         IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
             LazyCompilations.Value;
         ProjectCensus fresh = await CensusFor(compilations[index].Compilation);
