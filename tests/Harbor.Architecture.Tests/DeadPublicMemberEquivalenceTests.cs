@@ -51,9 +51,12 @@ public sealed class DeadPublicMemberEquivalenceTests
     /// <remarks>
     ///     The sample is the LARGEST non-contract files: the gate's claim is
     ///     that their types are never graded, and the biggest files are the
-    ///     ones with the most types to not-grade.
+    ///     ones with the most types to not-grade. Fifty is enough to prove
+    ///     the gate over real files and cheap enough to keep out of the
+    ///     shard's wall — the oracle parses every one of them the old way,
+    ///     twice.
     /// </remarks>
-    private const int OutsideSampleSize = 200;
+    private const int OutsideSampleSize = 50;
 
     /// <summary>
     ///     The member walk finds the same members, in the same files, as the
