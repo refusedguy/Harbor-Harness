@@ -48,6 +48,27 @@
 // The gate reads the FILES the build left behind, so it works where the
 // build ran and needs neither the SDK nor a log parser.
 //
+// # WHICH TREE THE LANE WAS GIVEN
+//
+// The gate is told the commit the RESTORED OUTPUTS were built from, and that
+// commit is the tree the lane was given. The cache has two mechanisms that
+// decide which record that is, and both of them are the cache service's, not
+// the gate's:
+//
+//   - the PREFIX: the key names the toolchain, the SDK, the package graph
+//     and the props files, so a record written under another prefix is a
+//     record of another build environment and the service never serves it.
+//
+//   - the VERSION: the hash of the path list, so a record written under
+//     another list is not served either.
+//
+// So the lane either has the outputs of the tree it was given, or it compiles
+// from scratch, and the commit the gate compares against is the commit of
+// the record that was ACTUALLY restored — the key that MATCHED, not the key
+// the resolve step named. A record of another version or another prefix is
+// never under the lane's feet, so the gate is never asked to certify a tree
+// it cannot see.
+//
 // # WHAT IS IN SCOPE, AND WHY
 //
 // The scope is the C# sources a project compiles, and nothing else. A
