@@ -122,8 +122,27 @@ internal static class CommentStripperOracle
     /// </remarks>
     /// <param name="source">The text to strip.</param>
     /// <returns>The text with its comments blanked out.</returns>
-    internal static string StripCommentsLegacy(string source) =>
-        LineComment.Replace(BlockComment.Replace(source, BlankOutCommentLegacy), " ");
+    internal static string StripCommentsLegacy(string source)
+    {
+        Interlocked.Increment(ref _legacyCalls);
+        return LineComment.Replace(BlockComment.Replace(source, BlankOutCommentLegacy), " ");
+    }
+
+    /// <summary>
+    ///     How many times the quadratic implementation has been called.
+    /// </summary>
+    /// <remarks>
+    ///     The counter is what makes the budget of
+    ///     <c>ParseCostMeasurement</c> checkable: the legacy stripper is
+    ///     quadratic, so a file with a 75 497-character comment costs 11.4 GB
+    ///     in ONE call, and the measurement that measures the cost of that
+    ///     implementation must not RUN it on the files it has decided not to
+    ///     count. The number of calls is the evidence that it did not.
+    /// </remarks>
+    internal static long LegacyCalls => Interlocked.Read(ref _legacyCalls);
+
+    /// <summary>How many times the quadratic implementation has been called.</summary>
+    private static long _legacyCalls;
 
     /// <summary>
     ///     The old implementation with the quadratic read replaced by a linear

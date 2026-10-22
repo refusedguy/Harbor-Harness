@@ -100,6 +100,7 @@ public sealed class ParseCostMeasurement
         var legacy = new TreeCost("legacy-quadratic");
         var oracle = new TreeCost("oracle-linear");
         var scanner = new TreeCost("scanner");
+        long legacyCallsBefore = CommentStripperOracle.LegacyCalls;
 
         foreach (string directory in new[] { "src", "apps", "tests" })
         {
@@ -107,10 +108,34 @@ public sealed class ParseCostMeasurement
             {
                 string text = File.ReadAllText(file);
                 string relative = SourceScan.Relative(file);
+                long projected = CommentStripperOracle.ProjectedLegacyBytes(text);
 
-                legacy.Add(relative, text.Length, CommentStripperOracle.ProjectedLegacyBytes(text), Measure(text, CommentStripperOracle.StripCommentsLegacy));
-                oracle.Add(relative, text.Length, CommentStripperOracle.ProjectedLegacyBytes(text), Measure(text, CommentStripperOracle.StripCommentsOracleText));
-                scanner.Add(relative, text.Length, CommentStripperOracle.ProjectedLegacyBytes(text), Measure(text, SourceCommentBlanker.Blank));
+                // THE BUDGET IS CHECKED BEFORE THE MEASUREMENT, NOT AFTER IT
+                // (the allocation census, #2136).
+                //
+                // `TreeCost.Add` decides what to COUNT, and it used to be given
+                // the measured cost of the legacy stripper as an ARGUMENT — so
+                // the legacy stripper RAN on every file, including the ones
+                // whose projected cost is over the budget, and its result was
+                // then thrown away. The budget bounded what the measurement
+                // REPORTED and nothing about what it DID.
+                //
+                // The price of that is the largest single allocation in the
+                // whole test tree: the legacy stripper is quadratic, and
+                // `tests/Harbor.Architecture.Tests/ProcessEnvIsolationRule.cs`
+                // carries a 75 497-character comment, which is 2 · L² =
+                // 11.4 GB of garbage in ONE call. The measurement's own
+                // report says the budget kept it affordable, and it did not.
+                //
+                // The two linear implementations are still measured on every
+                // file — they are affordable, and their numbers are counted.
+                (long AllocatedBytes, long Ticks) legacyCost = projected > LegacyBudgetBytes
+                    ? default
+                    : Measure(text, CommentStripperOracle.StripCommentsLegacy);
+
+                legacy.Add(relative, text.Length, projected, legacyCost);
+                oracle.Add(relative, text.Length, projected, Measure(text, CommentStripperOracle.StripCommentsOracleText));
+                scanner.Add(relative, text.Length, projected, Measure(text, SourceCommentBlanker.Blank));
             }
         }
 
@@ -136,6 +161,26 @@ public sealed class ParseCostMeasurement
             $"[arch-cost] stripper ratio legacy/scanner "
             + $"measured={(double)legacy.MeasuredBytes / Math.Max(1, scanner.MeasuredBytes):F1} "
             + $"projected={(double)legacy.ProjectedBytes / Math.Max(1, scanner.ProjectedBytes):F1}");
+
+        // THE BUDGET, PROVED. The legacy stripper is quadratic, and the files
+        // over the budget are the ones it must not be RUN on: running it on
+        // `ProcessEnvIsolationRule.cs` alone costs 11.4 GB in one call. The
+        // number of calls is the evidence, and the assertion is what stops the
+        // budget from going back to being a REPORT rather than a bound.
+        //
+        // TWO calls per measured file: `Measure` warms the code path on a
+        // tiny input before it measures the real one, and the warm-up is one
+        // call of the implementation. The class is [NotInParallel], so no
+        // other test is running while the counter is read.
+        long legacyCalls = CommentStripperOracle.LegacyCalls - legacyCallsBefore;
+        long expectedCalls = 2L * (legacy.Files - legacy.NotRun);
+
+        await Assert.That(legacyCalls).IsEqualTo(expectedCalls)
+            .Because(
+                $"the legacy stripper must be called only for the files the measurement counted, and "
+                + $"only for those: it is quadratic, and a file with a 75 497-character comment costs "
+                + $"11.4 GB in ONE call. It was called {legacyCalls} time(s) and {expectedCalls} "
+                + $"call(s) were expected (two per file under the budget).");
 
         Console.WriteLine(
             $"[arch-cost] stripper meter calls={StripCommentsMeter.Calls} input-chars={StripCommentsMeter.InputChars} "
