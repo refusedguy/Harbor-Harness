@@ -148,7 +148,6 @@
 // System.Text.RegularExpressions is not a global using in this project. The
 // other rule files import it explicitly and so does this one.
 
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -644,11 +643,16 @@ internal static class DeadPublicInterfaceProbe
             // Identifiers used as types. Reflection-only mentions are removed:
             // `typeof(IFoo)` and `nameof(IFoo)` are not uses of the type.
             string typeUse = ReflectionMention.Replace(code, static m => new string(' ', m.Length));
-            var words = new HashSet<string>(StringComparer.Ordinal);
-            foreach (Match id in Identifier.Matches(typeUse))
-            {
-                words.Add(id.Value);
-            }
+
+            // The identifiers, counted through the substrate. The legacy form
+            // walked the matches of a regex and materialised a `Match` AND a
+            // `string` for every identifier of every file in the tree; the
+            // substrate counts them through a span lookup, so a string exists
+            // only for a token the dictionary has not seen. The tokens are the
+            // regex's own, so the set is the same set.
+            var identifierCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            SourceParse.CountIdentifiers(typeUse, identifierCounts);
+            var words = new HashSet<string>(identifierCounts.Keys, StringComparer.Ordinal);
 
             (int[] lineStarts, int[] depths) = ComputeFrames(code);
             int baseDepth = nsIsBlock ? 1 : 0;
@@ -830,167 +834,24 @@ internal static class DeadPublicInterfaceProbe
     ///         has no state for a raw string literal (<c>"""..."""</c>), and the tree
     ///         has dozens of files that use them. A <c>//</c> inside a raw string
     ///         would end the "string" early and desynchronise the rest of the file.
-    ///         So this file carries its own small lexer that blanks comments and
+    ///         So the suite carries one small lexer that blanks comments and
     ///         literal contents in one pass, including verbatim and raw strings. The
     ///         trade is one lexer instead of the shared one, and it buys a frame that
     ///         a brace in a literal cannot move.
     ///     </para>
+    ///     <para>
+    ///         The lexer itself moved to
+    ///         <see cref="SourceParse.BlankLiteralsAndComments" /> with the rest of
+    ///         the parsing substrate, and it writes into a buffer it already owns
+    ///         instead of appending to a <c>StringBuilder</c> one character
+    ///         at a time. The output is byte for byte the output of the form that
+    ///         was here, and the parity test compares the two over every file of
+    ///         the repository.
+    ///     </para>
     /// </remarks>
     /// <param name="source">The raw source.</param>
-    internal static string BlankLiteralsAndComments(string source)
-    {
-        var output = new StringBuilder(source.Length);
-        int i = 0;
-        int n = source.Length;
-
-        while (i < n)
-        {
-            char c = source[i];
-            char next = i + 1 < n ? source[i + 1] : '\0';
-
-            if (c == '/' && next == '/')
-            {
-                while (i < n && source[i] != '\n')
-                {
-                    output.Append(' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (c == '/' && next == '*')
-            {
-                output.Append("  ");
-                i += 2;
-
-                while (i < n)
-                {
-                    if (source[i] == '*' && i + 1 < n && source[i + 1] == '/')
-                    {
-                        output.Append("  ");
-                        i += 2;
-                        break;
-                    }
-
-                    output.Append(source[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (c == '@' && next == '"')
-            {
-                output.Append("  ");
-                i += 2;
-
-                while (i < n)
-                {
-                    if (source[i] == '"')
-                    {
-                        if (i + 1 < n && source[i + 1] == '"')
-                        {
-                            output.Append("  ");
-                            i += 2;
-                            continue;
-                        }
-
-                        output.Append(' ');
-                        i++;
-                        break;
-                    }
-
-                    output.Append(source[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (c == '"' && next == '"' && i + 2 < n && source[i + 2] == '"')
-            {
-                output.Append("   ");
-                i += 3;
-
-                while (i < n)
-                {
-                    if (source[i] == '"' && i + 2 < n && source[i + 1] == '"' && source[i + 2] == '"')
-                    {
-                        output.Append("   ");
-                        i += 3;
-                        break;
-                    }
-
-                    output.Append(source[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (c == '"')
-            {
-                output.Append(' ');
-                i++;
-
-                while (i < n)
-                {
-                    if (source[i] == '\\' && i + 1 < n)
-                    {
-                        output.Append("  ");
-                        i += 2;
-                        continue;
-                    }
-
-                    if (source[i] == '"')
-                    {
-                        output.Append(' ');
-                        i++;
-                        break;
-                    }
-
-                    output.Append(source[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            if (c == '\'')
-            {
-                output.Append(' ');
-                i++;
-
-                while (i < n)
-                {
-                    if (source[i] == '\\' && i + 1 < n)
-                    {
-                        output.Append("  ");
-                        i += 2;
-                        continue;
-                    }
-
-                    if (source[i] == '\'')
-                    {
-                        output.Append(' ');
-                        i++;
-                        break;
-                    }
-
-                    output.Append(source[i] == '\n' ? '\n' : ' ');
-                    i++;
-                }
-
-                continue;
-            }
-
-            output.Append(c);
-            i++;
-        }
-
-        return output.ToString();
-    }
+    internal static string BlankLiteralsAndComments(string source) =>
+        SourceParse.BlankLiteralsAndComments(source);
 }
 
 /// <summary>
