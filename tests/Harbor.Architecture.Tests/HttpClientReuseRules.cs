@@ -873,15 +873,15 @@ public class HttpClientReuseRules
         // The MEMO: the same project, as the census recorded it.
         ProjectCensus recorded = await ProjectCensusAsync(owners[0]);
 
-        await Assert.That(string.Join(" | ", fresh.Creations.Select(static c => c.File + ":" + c.Line)))
-            .IsEqualTo(string.Join(" | ", recorded.Creations.Select(static c => c.File + ":" + c.Line)))
+        await Assert.That(Sorted(fresh.Creations))
+            .IsEqualTo(Sorted(recorded.Creations))
             .Because(
                 "the memoised census and a fresh computation run the same analyzer over the same "
-                + "compilation, so they must name the same creations in the same order. A difference "
-                + "means the memo changed a verdict, which is the one thing it must not do.");
+                + "compilation, so they must name the same creations. A difference means the memo "
+                + "changed a verdict, which is the one thing it must not do.");
 
-        await Assert.That(string.Join(" | ", fresh.InDelegate.Select(static c => c.File + ":" + c.Line)))
-            .IsEqualTo(string.Join(" | ", recorded.InDelegate.Select(static c => c.File + ":" + c.Line)))
+        await Assert.That(Sorted(fresh.InDelegate))
+            .IsEqualTo(Sorted(recorded.InDelegate))
             .Because(
                 "the per-call shape is a SECOND verdict of the same pass, and a memo that kept the "
                 + "first one while losing the second would be a pass that reports half of what it saw.");
@@ -891,6 +891,26 @@ public class HttpClientReuseRules
             + "client. A comparison over a project with no creations proves that two empty lists "
             + "agree with each other.");
     }
+
+    /// <summary>
+    ///     The creations as a sorted, distinct list of <c>path:line</c>.
+    /// </summary>
+    /// <remarks>
+    ///     SORTED, because the ORDER is not part of the verdict: the analyzer
+    ///     driver enables concurrent execution, so the diagnostics of one pass
+    ///     come back in whatever order the analysis finished them, and two
+    ///     passes over the same compilation can differ in that order while
+    ///     naming the same sites. A comparison that demanded the order would
+    ///     be a comparison of the scheduler, not of the rule.
+    /// </remarks>
+    /// <param name="sites">The sites to order.</param>
+    private static string Sorted(IEnumerable<ClientCreationSite> sites) =>
+        string.Join(
+            " | ",
+            sites
+                .Select(static c => c.File + ":" + c.Line)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static s => s, StringComparer.Ordinal));
 
     /// <summary>
     ///     Rule 2: no client is created inside a delegate.
