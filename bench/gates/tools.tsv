@@ -34,7 +34,7 @@ check-abstractions-contract.py	python3 tools/check-abstractions-contract.py --mi
 check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40
 check-string-switch-report.py	python3 tools/check-string-switch.py --report
 check-result-chains-report.py	python3 tools/check-result-chains.py --report
-check-test-json-reflection.py	python3 tools/check-test-json-reflection.py
+check-test-json-reflection.py	python3 tools/check-test-json-reflection.py	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
 check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
 gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
