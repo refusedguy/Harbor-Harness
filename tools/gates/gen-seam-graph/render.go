@@ -78,7 +78,7 @@ func render(g *graph) string {
 	w("tools/bin/harbor-gates-linux-x64 gen-seam-graph --write")
 	w("```")
 	w("")
-	w("Every row below is read out of the C# sources at the moment of generation. Nothing here is a hand-maintained claim, which is the point: the graph cannot drift away from the code, and the CI job `seamgraph` fails the build when it does.")
+	w("Every row below is read out of the C# sources at the moment of generation. Nothing here is a hand-maintained claim, which is the point: the graph cannot drift away from the code, and the CI gate fails the build when it does.")
 	w("")
 	w("The graph answers four questions about a seam: **who implements it**, **who extends what implements it**, **who consumes it**, and **who is registered in the container**. It also reports the question nobody asks, which is the one that finds bugs: **where the seam is bypassed**, the places that name the concrete type where the interface was the contract.")
 	w("")
