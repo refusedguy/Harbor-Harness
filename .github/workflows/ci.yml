@@ -894,6 +894,22 @@ jobs:
       # the key, so a runner that moves the folder gets a cold build
       # instead of a wrong one.
       NUGET_PACKAGES: /home/runner/.nuget/packages
+      # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
+      #
+      # MSBuild nodes are kept alive between builds by default, and a
+      # reused node carries the PREVIOUS build's state (its evaluation
+      # caches, its loaded assemblies). A build that reuses a node is
+      # therefore not the same build as a build that does not, and on CI
+      # there is nothing to reuse: this job compiles once.
+      #
+      # `MSBUILDDISABLENODEREUSE=1` is the environment switch MSBuild
+      # reads (Microsoft.Build.CommandLine.XMake,
+      # ProcessNodeReuseSwitch); dotnet/arcade sets it for the same
+      # reason. The NUKE Compile target ALSO passes `/nodeReuse:false`,
+      # which is the same decision as a switch — the switch wins over the
+      # environment variable, so a local `./build.sh Compile` and this
+      # job compile the identical graph.
+      MSBUILDDISABLENODEREUSE: '1'
     steps:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
@@ -1177,6 +1193,166 @@ jobs:
           fi
           exit "$rc"
 
+      # ── DIAGNOSTIC (issue #2100): what does the restored tree look like? ──
+      #
+      # The compile is a full 112-project rebuild on every run even when the
+      # cache is restored and only ONE file changed. MSBuild decides that with
+      # one rule: a target is up to date when every output is newer than every
+      # input. So the question is a fact about the disk, and the disk is
+      # printed here: which of the files MSBuild compares exists, and what
+      # are their mtimes.
+      #
+      # The CoreCompile target's OUTPUTS (SDK: Roslyn/Microsoft.CSharp.Core.targets):
+      #   @(DocFileItem)              bin/Release/net10.0/<T>.xml
+      #   @(IntermediateAssembly)      obj/Release/net10.0/<T>.dll
+      #   @(IntermediateRefAssembly)  obj/Release/net10.0/refint/<T>.dll
+      #   @(_DebugSymbolsIntermediatePath)  obj/Release/net10.0/<T>.pdb
+      # and its INPUTS of interest:
+      #   $(MSBuildAllProjects)        every imported .props/.targets, among them
+      #                                obj/<T>.csproj.nuget.g.props
+      #   @(Compile)                   the sources
+      #   @(Analyzer)                  the analyzer assemblies in the NuGet folder
+      #   @(ReferencePathWithRefAssemblies)  the references, the project ones in bin/
+      - name: "DIAGNOSTIC: the restored tree, file by file"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== the pdb files under obj/ and bin/ (count) ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "all pdb count:      $(find . -name '*.pdb' | wc -l)"
+          echo "=== the CoreCompile OUTPUTS of $p ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.pdb" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the CoreCompile INPUTS of $p ==="
+          for f in \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.props" \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.targets" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.GeneratedMSBuildEditorConfig.editorconfig" \
+            "$p/Harbor.Abstractions.Contracts.csproj" \
+            "$p/Permissions/PermissionRuleset.cs" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the analyzers (an INPUT of every CoreCompile) ==="
+          find /home/runner/.nuget/packages -name '*.dll' -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | head -3 || true
+          echo "=== now ==="
+          date -u +%s
+          exit 0
+
+      # ── DIAGNOSTIC (issue #2100): MSBuild's own verdict ──
+      #
+      # Everything on the disk says the projects are up to date: every output
+      # of CoreCompile exists and carries the stamping timestamp, every input
+      # is older. And yet every project is rebuilt. So ask MSBuild: it says
+      # why, at DETAILED verbosity:
+      #
+      #   "Building target \"CoreCompile\" completely."        (detailed)
+      #   "Input file \"X\" is newer than output file \"Y\"."   (detailed)
+      #   "Output file \"X\" does not exist."                   (detailed)
+      #
+      # ONE project, and with BuildProjectReferences=false so that the
+      # references are used as they are and not rebuilt first (a rebuild would
+      # make their outputs newer and change the question).
+      #
+      # The second half asks the same question of the disk directly: WHICH
+      # files are newer than the stamped outputs? MSBuild compares the newest
+      # input against the oldest output, so the answer is a list of files.
+      - name: "DIAGNOSTIC: MSBuild's own verdict for one project"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "=== MSBuild's up-to-date decision (one project, detailed) ==="
+          dotnet build src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj \
+            -c Release --no-restore -v:detailed -m:1 -nologo \
+            -p:BuildProjectReferences=false 2>&1 \
+            | grep -B 1 -A 4 'Building target' | head -60 || true
+          echo "=== the stamping timestamp (the newest file under obj/) ==="
+          # `sed -n '1p'` and NOT `head -1` here, and the reason is the shell.
+          #
+          # GitHub runs `shell: bash` as `bash -eo pipefail {0}`, and this
+          # script adds -u on top. `head` closes the pipe after its first
+          # line, so `sort` dies of SIGPIPE (status 141) on its next write,
+          # `pipefail` makes the whole pipeline 141, and the assignment
+          # `now=$(...)` carries that status -- so `-e` aborts the STEP. The
+          # step then reports the failure of a diagnostic, and the diagnostic
+          # itself never prints.
+          #
+          # `sed -n '1p'` reads the whole stream and prints the first line,
+          # so nothing is killed by a closed pipe and the status is 0.
+          now=$(find . -path '*/obj/*' -type f -printf '%T@\n' 2>/dev/null | sort -rn | sed -n '1p' | cut -d. -f1)
+          echo "now=$now  ($(date -u -d "@$now" +%H:%M:%S))"
+          echo "=== the files under obj/ and bin/ NEWER than the stamping ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -newermt "@$now" 2>/dev/null | head -20 || true
+          echo "=== the files in the NuGet folder NEWER than the stamping ==="
+          find /home/runner/.nuget/packages -type f -newermt "@$now" 2>/dev/null | head -20 || true
+          echo "=== the newest files in the NuGet folder ==="
+          find /home/runner/.nuget/packages -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | tail -5 || true
+          echo "=== the newest analyzer in the NuGet folder ==="
+          find /home/runner/.nuget/packages -type f -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | tail -5 || true
+          exit 0
+
+      # The same question, asked of the tree the COMPILE leaves behind: does
+      # the compile produce the .pdb that CoreCompile lists as its output, and
+      # what is the newest file under obj/ and bin/ afterwards?
+      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        id: compile
+        run: bash build/build.sh Compile --configuration Release
+
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+
+
+      - name: "DIAGNOSTIC: what the compile produced"
+        if: always() && steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== after the compile ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "obj+bin file count: $(find . -path '*/obj/*' -type f | wc -l)"
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the newest file under obj/ and bin/ ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | head -5 || true
+          echo "=== the oldest OUTPUT of $p (the one MSBuild compares against) ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" ; do
+            if [ -e "$f" ]; then stat -c '%Y %y  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          exit 0
+
       # Release build == zero-warning gate. Building Harbor.Architecture.Tests
       # also COMPILES the 47-rule architecture gate embedded in
       # Directory.Build.props (HarborArchGate); the gate's EXECUTION is
@@ -1224,27 +1400,6 @@ jobs:
       # configuration, same ContinuousIntegrationBuild property
       # (CompileTarget carries it). The bootstrap also compiles
       # build/_build.csproj, so NUKE build-code edits validate here too.
-      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
-        id: compile
-        run: bash build/build.sh Compile --configuration Release
-
-      # The zero-test guard is only a guard if it can go red (#1795). This
-      # step proves it: it runs one suite with a filter that matches NO test
-      # and requires the runner to exit with one of MTP's "nothing ran"
-      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
-      # Without it, a guard that had been neutered — an option renamed, a
-      # policy that stopped applying, a filter that silently matched nothing
-      # — would keep every job green while checking nothing.
-      #
-      # It lives in the BUILD job, not in the `test` job, for a reason that
-      # is not about runners: the test-project completeness gate reads
-      # "--treenode-filter" as "this list applies a partition to the projects
-      # it runs", and a filter in the `test` job would make it believe that
-      # the Avalonia E2E project's own shard partition is wired — a finding
-      # that is TRUE today (CI runs that project once, without a filter) and
-      # that #1946 closes. The check is a property of the test platform, not
-      # of the image, so proving it here proves it for the test job too.
-
       - name: The zero-test guard can go red (issue #1795)
         shell: bash
         run: |
@@ -3099,13 +3254,26 @@ jobs:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+
+      # The SDK install stays; the NuGet cache does NOT. This job runs the
+      # binaries the build job already produced (the "Download build outputs"
+      # step below), so nothing here restores into the default global-packages
+      # folder and the cache it would save is always empty.
+      # actions/setup-dotnet's post step throws ("Cache folder path is
+      # retrieved for .NET CLI but doesn't exist on disk") when that folder
+      # was never created — and it throws AFTER the measurement, in the
+      # job's cleanup, so the band goes red on a step that measures nothing:
+      # the receipts are run 39638763894 and run 39599923626, where "Run
+      # renderer performance gate" succeeded and "Post Setup .NET 10" failed
+      # with that exact error. Same fix as the test shard job and the codeql
+      # job (#1244): keep the SDK install, drop the cache.
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          # The exact SDK global.json asks for — see the build job.
+          # The exact SDK global.json asks for — see the build job. The NuGet
+          # cache is deliberately NOT restored here (see the comment above):
+          # this job runs prebuilt binaries and never restores into it.
           dotnet-version: "10.0.402"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
       - name: Download build outputs (renderer perf only)
         uses: actions/download-artifact@v7
         with:

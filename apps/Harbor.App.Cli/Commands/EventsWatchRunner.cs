@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Ipc;
 
 namespace Harbor.App.Cli.Commands;
@@ -19,7 +20,7 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
     /// <returns>True when parsing succeeded.</returns>
     public static bool TryParse(string[] args, out EventsWatchOptions? options, out string? error)
     {
-        ArgumentNullException.ThrowIfNull(args);
+        Ensure.NotNull(args);
         bool watch = false;
         int? count = null;
         int i = 0;
@@ -97,7 +98,7 @@ public sealed record EventsWatchOptions(bool Watch, int? Count, bool ShowHelp)
     /// <param name="output">Where usage goes.</param>
     public static void PrintUsage(TextWriter output)
     {
-        ArgumentNullException.ThrowIfNull(output);
+        Ensure.NotNull(output);
         output.WriteLine("""
                          harbor events — inspect the daemon's event stream.
 
@@ -138,10 +139,10 @@ public static class EventsWatchRunner
         EventsWatchOptions options,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(error);
-        ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(options);
+        Ensure.NotNull(output);
+        Ensure.NotNull(error);
+        Ensure.NotNull(client);
+        Ensure.NotNull(options);
         if (options.ShowHelp || !options.Watch)
         {
             EventsWatchOptions.PrintUsage(output);
