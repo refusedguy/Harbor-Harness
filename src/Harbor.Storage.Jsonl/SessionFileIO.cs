@@ -274,12 +274,35 @@ internal static class SessionFileIO
     ///     bytes plus the trailing newline (#177 — no intermediate string, no
     ///     <c>Serialize + newline</c> concat).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         ONE array, not two. The old path asked the serializer for the
+    ///         payload bytes and then copied them into a second array, one
+    ///         byte longer, to carry the newline: two allocations and a full
+    ///         copy of the payload for every message the log keeps. The
+    ///         payload is now written into a POOLED buffer and copied once,
+    ///         into the array that goes to disk.
+    ///     </para>
+    ///     <para>
+    ///         The bytes are the same bytes: the same source-generated type
+    ///         info, the same encoder, the same writer options — the ones
+    ///         the serializer itself uses. The on-disk line is pinned against
+    ///         <c>JsonSerializer.SerializeToUtf8Bytes</c> by
+    ///         <c>JsonlAppendEncodingTests</c>.
+    ///     </para>
+    /// </remarks>
     internal static byte[] EncodeLine<T>(T value, JsonTypeInfo<T> typeInfo)
     {
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(value, typeInfo);
-        var line = new byte[payload.Length + 1];
-        Buffer.BlockCopy(payload, 0, line, 0, payload.Length);
-        line[payload.Length] = (byte)'\n';
+        using var buffer = PooledLineBuffer.Rent();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            JsonSerializer.Serialize(writer, value, typeInfo);
+        }
+
+        int payloadLength = buffer.WrittenLength;
+        var line = new byte[payloadLength + 1];
+        buffer.WrittenSpan.CopyTo(line);
+        line[payloadLength] = (byte)'\n';
         return line;
     }
 

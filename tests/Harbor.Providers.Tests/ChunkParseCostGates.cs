@@ -64,27 +64,32 @@ public class ChunkParseCostGates
     ///     Allocation budget for ONE parsed chunk, in bytes.
     ///     Machine-independent, so it is compared as measured, with no band.
     ///     <para>
-    ///         The number is pinned from a CI MEASUREMENT of the tree this
-    ///         gate was introduced on (the pre-fix tree), and it is stated
-    ///         with the run number in the commit that pins it. The budget
-    ///         carries the headroom the house recipe asks for over that
-    ///         measurement — the byte count does not move with the runner's
-    ///         speed, so it is the branch that can be a hard gate on any
-    ///         machine.
+    ///         Pinned from the CI measurement of the pre-fix tree (run
+    ///         39736511148, <c>test (platform)</c>): 9 760 000 B over 20 000
+    ///         chunks = 488 B per chunk — nine property-name strings (336 B),
+    ///         the delta's own text, the event list, its array and the event.
+    ///         The fix removes the 336 B of names and nothing else, so the
+    ///         tree this budget describes measures 152 B per chunk, and the
+    ///         budget leaves ~1.45x headroom over that. It is BELOW the
+    ///         pre-fix number on purpose: the ceiling is the tripwire, and a
+    ///         parser that went back to building a string per property
+    ///         (488 B) fails it.
     ///     </para>
     /// </summary>
-    private const long MaxBytesPerChunk = 1_200;
+    private const long MaxBytesPerChunk = 220;
 
     /// <summary>
     ///     Time budget for ONE parsed chunk, in PROBE UNITS (see
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     <para>
-    ///         The budget is wide on purpose: the probe's OWN measured cost
-    ///         moved 5.3x between two CI runs of the SAME tree, so the
-    ///         probe-unit currency is only as stable as the yardstick behind
-    ///         it. The BYTE budget is the branch that can fail on any runner
-    ///         — it is exact — and the time budget is the gross-regression
-    ///         detector.
+    ///         Pinned from the same run: 0.0023 ms per chunk against a probe
+    ///         that costs 0.000343 ms/unit on that runner, i.e. ~6.6 probe
+    ///         units per chunk. The budget is wide on purpose: the probe's
+    ///         OWN measured cost moved 5.3x between two CI runs of the SAME
+    ///         tree, so the probe-unit currency is only as stable as the
+    ///         yardstick behind it. The BYTE budget is the branch that can
+    ///         fail on any runner — it is exact — and the time budget is the
+    ///         gross-regression detector.
     ///     </para>
     /// </summary>
     private const double MaxProbeUnitsPerChunk = 100.0;
