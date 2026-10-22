@@ -657,6 +657,14 @@ jobs:
       # catches.
       - name: The tree-gate runner fails on a planted defect
         run: tools/bin/harbor-gates-linux-x64 all --self-test
+      # #2113. The instrument that measures the two contract roots: which
+      # projects use which type, which groups of types have a consumer set
+      # of their own, and whether the cut that moves a group out crosses a
+      # dependency. Its failure path is the CHECK path: a committed census
+      # that does not match the tree must make the instrument go red, or
+      # the "before and after" of a split has nothing to compare against.
+      - name: Contract-domain census fails on a moved snapshot
+        run: tools/bin/harbor-gates-linux-x64 contract-domains --self-test
 
   # The tree gates, in ONE command.
   #
