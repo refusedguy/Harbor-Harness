@@ -45,14 +45,19 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
+	archanchors "harbor.local/gates/check-arch-anchors"
+	archsuiteonce "harbor.local/gates/check-arch-suite-once"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/check-event-topology"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
+	mdlinks "harbor.local/gates/check-md-links"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
+	resultchains "harbor.local/gates/check-result-chains"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	stringswitch "harbor.local/gates/check-string-switch"
 	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
@@ -61,7 +66,9 @@ import (
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
 	goquality "harbor.local/gates/go-quality"
+	guardtriage "harbor.local/gates/guard-triage"
 	"harbor.local/gates/internal/gate"
+	mdlint "harbor.local/gates/md-lint"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
 	"harbor.local/gates/msbuild-evaluation-cost"
@@ -126,6 +133,16 @@ var registry = []registered{
 		run:     checkanalyzerscope.Run,
 	},
 	{
+		name:    "check-arch-anchors",
+		summary: "may an architecture rule anchor on a line number",
+		run:     archanchors.Run,
+	},
+	{
+		name:    "check-arch-suite-once",
+		summary: "the architecture suite runs exactly once on every lane",
+		run:     archsuiteonce.Run,
+	},
+	{
 		name:    "check-coverage-registry",
 		summary: "the registry of consciously uncovered files still matches the measurement",
 		run:     registrygate.Run,
@@ -146,6 +163,11 @@ var registry = []registered{
 		run:     mergeloss.Run,
 	},
 	{
+		name:    "check-md-links",
+		summary: "every internal link, anchor and file:line reference resolves",
+		run:     mdlinks.Run,
+	},
+	{
 		name:    "check-no-test-sdk",
 		summary: "no project file declares the VSTest host that stops TUnit's discovery",
 		run:     checknotestsdk.Run,
@@ -161,9 +183,19 @@ var registry = []registered{
 		run:     checkreferencetrimmer.Run,
 	},
 	{
+		name:    "check-result-chains",
+		summary: "the chain candidates among the if (x.IsFailure) guard sites",
+		run:     resultchains.Run,
+	},
+	{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-string-switch",
+		summary: "does a switch compare a string literal, and is every ladder listed",
+		run:     stringswitch.Run,
 	},
 	{
 		name:    "check-workflows",
@@ -204,6 +236,16 @@ var registry = []registered{
 		name:    "go-quality",
 		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
 		run:     goquality.Run,
+	},
+	{
+		name:    "guard-triage",
+		summary: "what each architecture-guard firing MEANT: defect, style, noise or unknown",
+		run:     guardtriage.Run,
+	},
+	{
+		name:    "md-lint",
+		summary: "the tracked markdown obeys the invariants the repository claims",
+		run:     mdlint.Run,
 	},
 	{
 		name:    "measure-build-cpu",

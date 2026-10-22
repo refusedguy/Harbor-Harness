@@ -207,7 +207,7 @@ jobs:
               # file, so an edit to the workflow must run it — and an edit to
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
-              - 'tools/check-arch-suite-once.py'
+              - 'tools/gates/check-arch-suite-once/**'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -229,7 +229,7 @@ jobs:
               # the tool, or the registry that says what a firing MEANT,
               # must run the job that executes them, or the edit lands
               # unvalidated.
-              - 'tools/guard-triage.py'
+              - 'tools/gates/guard-triage/**'
               - 'tools/guard-triage-classes.json'
               # The AOT gate's instrument and its committed inventory (#413).
               # The same argument as the line above, one step further: editing
@@ -876,6 +876,10 @@ jobs:
       # report-only by contract (#99) — so the byte half is a REPORT there,
       # not a gate. Closing that last gap is a separate change and is not
       # this one.
+      # The count is not a convention: the check-arch-suite-once gate reads
+      # this file and fails the build when the PR lane runs the suite more
+      # than once, or not at all, or when this variable stops switching the
+      # gate off for pull_request events.
       #
       # The ASSEMBLY is still built here — the `arch` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
@@ -935,11 +939,23 @@ jobs:
       # The debug symbols are NOT excluded: the `.pdb` is not an output of
       # CoreCompile in Release (Directory.Build.props sets DebugType=none
       # there), so excluding it changes nothing but the payload.
+      #
+      #   !tools/bin/**         `tools/bin/` holds the COMPILED GATE BINARY,
+      #                          and it is not a build output: it is committed
+      #                          to the repository, and the gates-binary
+      #                          workflow rebuilds it from the sources. A
+      #                          cache entry that carried it would restore
+      #                          the OLD binary over the NEW one, and a gate
+      #                          that moved into the binary would then run a
+      #                          build that does not know it. The first
+      #                          compiled gate to run in this job is what
+      #                          found it.
       HARBOR_BUILD_OUTPUT_CACHE_PATHS: |
         **/obj
         **/bin
         !**/runtimes/**
         !**/*.resources.dll
+        !tools/bin/**
       # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
       #
       # MSBuild nodes are kept alive between builds by default, and a
@@ -1169,6 +1185,10 @@ jobs:
           # is NOT an output of CoreCompile there and there is no `.pdb` in
           # the payload to keep or to drop. (The exclusion of `!**/*.pdb`
           # that #2117 removed was never the reason a project looked stale.)
+          #
+          # The list itself, and the reason each of its lines is in it, live
+          # in the env var above: ONE list, read by the restore step and by
+          # the save step, so the two cannot drift.
           path: ${{ env.HARBOR_BUILD_OUTPUT_CACHE_PATHS }}
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
@@ -1692,9 +1712,9 @@ jobs:
       # here has one: a checker edited until it matches nothing is
       # indistinguishable from a checker that found nothing.
       - name: The architecture-once gate still fails on a planted duplicate
-        run: python3 tools/check-arch-suite-once.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --self-test
       - name: The architecture suite runs once on every lane (#1920, #2114)
-        run: python3 tools/check-arch-suite-once.py --min-shards 4
+        run: tools/bin/harbor-gates-linux-x64 check-arch-suite-once --min-shards 4
 
       # The evaluation-cost instrument's own failure path (issue #1919).
       # Same argument as the aot gate's self-test below and docs.yml's
@@ -2707,13 +2727,12 @@ jobs:
       # `shell: bash` is explicit because the OS matrix (test-os.yml) reuses
       # this step on windows-latest, where the default shell is pwsh and a
       # trailing `\` is a ParserError, not a line continuation.
-      - name: Report test measurements (issue #618)
+      - name: Report test measurements (issue #618) (x64)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-measurements "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
-
       - name: Report test measurements (issue #618, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
@@ -2734,13 +2753,12 @@ jobs:
       #
       # Reporting only, never a gate: the script exits 0 on a missing or
       # corrupt TRX set, and it prints its own one-line summary to the log.
-      - name: Report the test census (issue #1884)
+      - name: Report the test census (issue #1884) (x64)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-census "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY" --top 15
-
       - name: Report the test census (issue #1884, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
@@ -2754,13 +2772,12 @@ jobs:
       # running half its tests stayed green until somebody counted by hand
       # (that is how the 20 skipped Avalonia golden tests were found).
       # Reporting only, never a gate: the script exits 0 on a missing TRX.
-      - name: Report skipped tests (issue #1795)
+      - name: Report skipped tests (issue #1795) (x64)
         if: always() && runner.arch == 'X64'
         shell: bash
         run: |
           tools/bin/harbor-gates-linux-x64 test-skips "TestResults/${{ matrix.shard }}" \
             --summary "$GITHUB_STEP_SUMMARY"
-
       - name: Report skipped tests (issue #1795, ARM64)
         if: always() && runner.arch == 'ARM64'
         shell: bash
@@ -2797,14 +2814,38 @@ jobs:
         if: always() && matrix.shard == 'core'
         shell: bash
         run: |
-          python3 tools/guard-triage.py \
-            --trx "TestResults/${{ matrix.shard }}/*.trx" \
-            --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
-            --project Harbor.Architecture.Tests \
-            --repo-root . \
-            --min-guard-files 100 \
-            --out "guard-firings-${{ matrix.shard }}.json" \
-            --summary "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          # The compiled gate binary is PER-ARCHITECTURE, and the test
+          # shards run on arm64. The python original was architecture-
+          # agnostic; the binary is not, and an x64 binary on an arm runner
+          # is "Exec format error". The repository ships one binary per
+          # platform (tools/bin/harbor-gates-linux-{x64,arm64}), and the
+          # gates-binary workflow rebuilds both.
+          #
+          # The command is written out twice because the gate policy
+          # checker reads the LITERAL command out of the workflow, and a
+          # command behind a shell variable is a command it cannot see.
+          # The table in docs/CI_GATES.md names the x64 one, for the same
+          # reason: the checker reads the literal out of the workflow.
+          if [ "$(uname -m)" = "x86_64" ]; then
+            tools/bin/harbor-gates-linux-x64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          else
+            tools/bin/harbor-gates-linux-arm64 guard-triage \
+              --trx "TestResults/${{ matrix.shard }}/*.trx" \
+              --trx "tests/**/TestResults/${{ matrix.shard }}/*.trx" \
+              --project Harbor.Architecture.Tests \
+              --repo-root . \
+              --min-guard-files 100 \
+              --out "guard-firings-${{ matrix.shard }}.json" \
+              --summary "$GITHUB_STEP_SUMMARY"
+          fi
 
       # The tool's own failure path runs in `docs.yml`'s selftest job, with
       # the other python tools: a rule edited until it matches nothing is

@@ -3818,20 +3818,21 @@ workflows run, with the arguments the workflows pass.
 | `gen-seam-graph.py` | 15.9 | — | **1.0** | 120.0 MB | 78.0 MB |
 | `check-test-dup.py` | 10.7 | 11.7 | — | 53.2 MB | |
 | `check-test-projects.py` | 8.6 | 8.8 | — | 24.3 MB | |
-| `check-string-switch.py` | 7.5 | 5.7 | — | 18.6 MB | |
-| `check-string-switch-report.py` | 7.4 | 6.9 | — | 18.7 MB | |
-| `check-result-chains.py` | 7.5 | 4.2 | — | 18.7 MB | |
-| `guard-triage.py` | 1.8 | 0.9 | — | 31.3 MB | |
-| `check-md-links.py` | 1.9 | 1.3 | — | 20.4 MB | |
+| `check-string-switch.py` | 7.5 | 5.7 | **1.6** | 18.6 MB | 11.6 MB |
+| `check-string-switch-report.py` | 7.4 | 6.9 | **1.5** | 18.7 MB | 11.6 MB |
+| `check-result-chains.py` | 7.5 | 4.2 | **0.7** | 18.7 MB | 19.1 MB |
+| `guard-triage.py` | 1.8 | 0.9 | **0.5** | 31.3 MB | 15.4 MB |
+| `check-md-links.py` | 1.9 | 1.3 | **1.0** | 20.4 MB | 17.0 MB |
 | `check-abstractions-contract.py` | 1.6 | 1.6 | — | 17.5 MB | |
-| `md-lint.py` | 1.4 | 0.8 | — | 19.7 MB | |
-| `check-arch-anchors.py` | 1.1 | 1.0 | — | 17.8 MB | |
+| `md-lint.py` | 1.4 | 0.8 | **0.1** | 19.7 MB | 10.4 MB |
+| `check-arch-anchors.py` | 1.1 | 1.0 | **0.1** | 17.8 MB | 10.1 MB |
+| `check-arch-suite-once.py` | — | — | **0.02** | 17.9 MB | 7.9 MB |
 | `check-test-json-reflection.py` | 0.8 | 0.8 | — | 17.4 MB | |
 | `check-xml-doc-coverage.py` | 0.6 | 0.7 | — | 16.7 MB | |
 | `check-doc-facts.py` | 0.5 | 0.3 | — | 17.9 MB | |
 | `check-analyzer-scope.py` | 0.6 | 0.3 | — | 18.4 MB | |
 | `check-gate-policy.py` | 0.7 | 0.4 | — | 19.6 MB | |
-| `check-result-chains-report.py` | 0.3 | 0.3 | — | 17.3 MB | |
+| `check-result-chains-report.py` | 0.3 | 0.3 | **0.01** | 17.3 MB | 5.0 MB |
 | `check-tunit-analyzer-gate.py` | 0.3 | 0.3 | — | 16.6 MB | |
 | `check-coverage-registry.py` | 0.3 | 0.3 | — | 17.7 MB | |
 | `check-shard-balance.py` | 0.3 | 0.3 | — | 17.0 MB | |
@@ -3843,6 +3844,51 @@ workflows run, with the arguments the workflows pass.
 | `test-measurements.py` | 0.2 | 0.3 | — | 16.6 MB | |
 | `pack-validate.py` | 0.2 | 0.2 | — | 16.1 MB | |
 | **the whole set** | **619.2 s** | **116.7 s** | **117.6 s** | | |
+
+### 10.2.1 The compiled column, and how it was measured
+
+The compiled column of the gates that moved into `harbor-gates` was
+measured with the same harness (`bench/gates/measure.sh`, the `maxrss`
+parent) on the same tree, with the TWO VARIANTS INTERLEAVED: one python
+run, one binary run, twelve times each, and the MINIMUM of each.
+
+The interleaving is the point. The box is shared, and its load drifts over
+minutes — a batch measurement of the python column and a batch measurement
+of the binary column land in different weather, and the difference between
+them is then the weather. Interleaving puts both variants under the same
+load, and the minimum of each is the least foreign work each variant had
+to do.
+
+| gate | python (s) | the binary (s) | RSS python | RSS the binary |
+|---|---:|---:|---:|---:|
+| `check-string-switch.py` | 3.424 | 1.621 | 18.1 MB | 11.6 MB |
+| `check-string-switch-report.py` | 3.451 | 1.534 | 18.1 MB | 11.6 MB |
+| `check-result-chains.py` | 4.171 | 0.744 | 18.3 MB | 19.1 MB |
+| `check-md-links.py` | 1.005 | 1.048 | 20.4 MB | 17.0 MB |
+| `md-lint.py` | 0.654 | 0.132 | 19.3 MB | 10.4 MB |
+| `check-arch-anchors.py` | 0.659 | 0.088 | 17.2 MB | 10.1 MB |
+| `check-arch-suite-once.py` | 0.190 | 0.024 | 17.5 MB | 7.9 MB |
+| `guard-triage.py` | 1.218 | 0.501 | 30.6 MB | 15.4 MB |
+
+Six of the eight are two to eight times faster. The two that are not are
+the two whose cost is not python:
+
+* **`check-md-links.py` is a wash** (1.005 s against 1.048 s). The gate
+  reads 398 documents and matches 1428 links in them, and both
+  implementations spend that on the same two things: the regular
+  expression that finds a link and the file reads. The port paid for
+  RE2's slower scan with a cheaper pattern — dropping the optional `!`
+  from the link pattern gives RE2 the `[` as a literal prefix, and that
+  one change is 446 ms to 35 ms over the tracked markdown.
+* **`check-result-chains.py` uses MORE resident memory** as a binary
+  (19.1 MB against 18.3 MB). The census keeps every guard site of the
+  tree in memory, and the Go runtime maps more of the heap than the
+  interpreter does for the same data.
+
+The python column of the MAIN table above is an older measurement, taken
+on another machine, and the two columns of a row are therefore not from
+one moment. The table of this section is the one to compare: same tree,
+same moment, same box, both variants interleaved.
 
 Three numbers, and they are the whole answer to "what does the language
 buy":

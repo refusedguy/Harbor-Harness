@@ -2,7 +2,7 @@
 #
 # WHY THIS FILE EXISTS (issue #509)
 #
-#   `tools/check-md-links.py` has been in the repo since #39 hygiene and has
+#   The internal-links gate has been in the repo since #39 hygiene and has
 #   never run in CI. ci.yml lists `**.md` and `docs/**` in `paths-ignore` for
 #   both `push` and `pull_request`, so a docs-only PR never starts a build and
 #   therefore never reached the checker. A gate in a workflow that cannot
@@ -78,20 +78,16 @@ on:
       # Directory.Packages.props, which is where a version is pinned.
       - 'src/**/*.csproj'
       - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
       - 'tools/gates/check-abstractions-contract/**'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
       # #1726. The guard triage reads the TRX of the `test` job, and its
       # self-test runs here with the other python tools. A PR that edits the
       # tool, or the registry that says what a firing MEANT, must run the
       # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
       - 'tools/guard-triage-classes.json'
       # #1722. The plugin-inventory gate reads the two plugin registries, the
       # sample plugins and the product's own JSON writer, and compares the
@@ -143,9 +139,7 @@ on:
       # the gate or the exceptions must run it, and so must a PR that edits
       # the tree it measures. The rewrites file is the reviewed record of what
       # the gate's own `--apply` mode replays, so it is a trigger too.
-      - 'tools/check-string-switch.py'
       - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. The two reporters (the measurement table and the wall census)
       # and their self-tests: a PR that edits either must run them, for the
       # same reason the gates above are triggered by their own sources.
@@ -184,11 +178,10 @@ on:
       # verdict about the tree depends on what those files say.
       - 'tools/check-gate-policy.py'
       - 'tools/gates/test-skips/**'
-      # #1558. `check-result-chains.py` scans `src/` and `apps/` for the
+      # #1558. The result-chain census scans `src/` and `apps/` for the
       # `if (x.IsFailure)` guard sites and ratchets the count of chain
       # candidates, so a PR that edits the gate or the baseline must run it —
       # and so must a PR that edits the tree it measures (the .cs paths above).
-      - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
       # #1781. The shard-balance gate reads the shard lists in ci.yml and the
       # recorded cost of every project, so a PR that edits the gate, the
@@ -223,20 +216,16 @@ on:
       # Directory.Packages.props, which is where a version is pinned.
       - 'src/**/*.csproj'
       - 'Directory.Packages.props'
-      - 'tools/check-md-links.py'
-      - 'tools/md-lint.py'
       - 'tools/check-doc-cites.py'
       - 'tools/md_gate.py'
       - 'tools/gates/check-abstractions-contract/**'
       # #1728. The arch-anchor gate reads the architecture rule tree and its own
       # exceptions file, so a PR that edits the gate itself has to run it.
-      - 'tools/check-arch-anchors.py'
       - 'tools/arch-anchor-exceptions.txt'
       # #1726. The guard triage reads the TRX of the `test` job, and its
       # self-test runs here with the other python tools. A PR that edits the
       # tool, or the registry that says what a firing MEANT, must run the
       # self-test, or the edit lands unvalidated.
-      - 'tools/guard-triage.py'
       - 'tools/guard-triage-classes.json'
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
@@ -270,9 +259,7 @@ on:
       # #1575. Same trigger as above: the string-switch gate reads `src/` and
       # `apps/` and compares the result against its committed exceptions
       # file, so a PR that edits the gate or the exceptions must run it.
-      - 'tools/check-string-switch.py'
       - 'tools/string-switch-exceptions.txt'
-      - 'tools/string-switch-rewrites.py'
       # #1884. Same trigger as above: the two reporters and their self-tests.
       - 'tools/gates/test-measurements/**'
       - 'tools/gates/test-census/**'
@@ -302,7 +289,6 @@ on:
       # #1558. Same trigger as above: the chain census measures `src/` and
       # `apps/` (the .cs paths above), so a PR that edits the gate or the
       # baseline must run it.
-      - 'tools/check-result-chains.py'
       - 'tools/result-chains-baseline.json'
       # #1781. Same trigger as above: the shard-balance gate reads the shard
       # lists in ci.yml and the recorded cost of every project, so a PR that
@@ -337,9 +323,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Link checker fails on a broken link
-        run: python3 tools/check-md-links.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-md-links --self-test
       - name: Markdown lint fails on a malformed document
-        run: python3 tools/md-lint.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 md-lint --self-test
       # The changelog assembler glues the per-pull-request fragments into
       # CHANGELOG.md. Its failure path is tested here for the same reason as
       # the others: a script edited until it assembles nothing is
@@ -358,7 +344,7 @@ jobs:
       # is tested here for the same reason as the others: a rule edited until it
       # matches nothing is indistinguishable from a rule that found nothing.
       - name: Architecture-anchor gate fails on a planted line-number anchor
-        run: python3 tools/check-arch-anchors.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-arch-anchors --self-test
       # #933. The fourth gate is the only one that asks whether a COUNT the
       # onboarding documents state still equals the count of tracked files.
       # Its failure path is tested for the same reason as the other three: the
@@ -465,7 +451,7 @@ jobs:
       # "unknown". The load-bearing fixtures are both: a failure it must
       # find, and a firing it must refuse to classify.
       - name: Guard triage finds a failure and refuses to guess its class
-        run: python3 tools/guard-triage.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 guard-triage --self-test
       # #1822. The tenth gate is the only one that asks whether a test
       # serializes through the SOURCE-GENERATED path or the reflection one.
       # Its failure path is tested here for the same reason as the others: a
@@ -515,7 +501,7 @@ jobs:
       # the rewrite itself — the census MUST produce the Bind call it says
       # it produces.
       - name: Chain census finds every planted guard shape and rewrites the one it promises
-        run: python3 tools/check-result-chains.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-result-chains --self-test
       # #1575. The string-switch gate is the only one that asks whether the
       # product dispatches on a string literal with a `case` ladder. Its
       # failure path is tested here for the same reason as the others: a rule
@@ -523,7 +509,7 @@ jobs:
       # found nothing, and the load-bearing fixtures are the planted string
       # switch, the unlisted switch, the stale row and the floor.
       - name: String-switch gate fails on an unlisted string switch
-        run: python3 tools/check-string-switch.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-string-switch --self-test
       # #1731. The seam-graph gate is the only one that GENERATES a document
       # and then compares it with the committed one. Its failure path is the
       # whole point: a generator whose output drifts from the tree is a
@@ -728,7 +714,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every internal link and anchor
-        run: python3 tools/check-md-links.py --min-files 250 --min-refs 600
+        run: tools/bin/harbor-gates-linux-x64 check-md-links --min-files 250 --min-refs 600
 
   # #664. Same reasoning as the two jobs above, third question: not "does the
   # link resolve" and not "is the file shaped right" but "does the `file:line`
@@ -811,7 +797,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that no architecture rule anchors on a line number
-        run: python3 tools/check-arch-anchors.py --min-files 40
+        run: tools/bin/harbor-gates-linux-x64 check-arch-anchors --min-files 40
 
   lint:
     name: markdown lint
@@ -822,7 +808,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check markdown invariants
-        run: python3 tools/md-lint.py --min-files 250 --min-lines 60000
+        run: tools/bin/harbor-gates-linux-x64 md-lint --min-files 250 --min-lines 60000
 
   # #933. Fourth question, and the only one a copy-consistency gate could not
   # answer honestly: not "do the links resolve", not "is the file shaped
@@ -1199,7 +1185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that every string-dispatched switch is listed
-        run: python3 tools/check-string-switch.py --check --min-labels 280
+        run: tools/bin/harbor-gates-linux-x64 check-string-switch --check --min-labels 280
 
   # #1823. Ninth question, and the only one about the LISTS rather than
   # about the test bodies: does every test project in the solution actually
@@ -1457,7 +1443,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The chain-candidate count has not gone up
-        run: python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
+        run: tools/bin/harbor-gates-linux-x64 check-result-chains --check --baseline tools/result-chains-baseline.json
 
   # #428 (first slice) — GONE as a job, kept as a gate (#1845).
   #

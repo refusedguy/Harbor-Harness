@@ -2,12 +2,12 @@
 """Duplicate-test-body detector and CI gate for the tests/ tree (#1778).
 
 Stdlib only — no pip, no network, no dotnet. It lives in `tools/` next to
-check-md-links.py / md-lint.py / check-doc-cites.py / check-doc-facts /
+the check-md-links and md-lint gates / check-doc-cites.py / check-doc-facts /
 check-abstractions-contract.py / check-public-api-resign.py, and it asks a
 question none of them asks:
 
-  check-md-links.py             does the link resolve?
-  md-lint.py                    is the file shaped the way the repo says it is?
+  check-md-links                 does the link resolve?
+  md-lint                        is the file shaped the way the repo says it is?
   check-doc-cites.py            does a `file:line` still point at a line?
   check-doc-facts              does a COUNT a document states still equal the
                                 count of tracked files it is counting?
