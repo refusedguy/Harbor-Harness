@@ -655,6 +655,15 @@ jobs:
       # a job that cannot start cannot prove anything.
       - name: Workflow gate fails on a duplicate key and stays quiet on a legal repeat
         run: tools/bin/harbor-gates-linux-x64 check-workflows --self-test
+      # #2086. The demo gate moved into the compiled binary, and its self-test
+      # runs here for the same reason as the others: a rule edited until it
+      # matches nothing is indistinguishable from a rule that found nothing.
+      # The demo workflow runs the gate on real recordings, but that workflow
+      # fires on a pull request only for `assets/demo/**`, so a pull request
+      # that edits the GATE itself would never reach a self-test placed there.
+      # The fixtures are hand-made and need neither ffmpeg nor a recording.
+      - name: Demo gate still reads a recording and names a missing baseline field
+        run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
       # #1730. The banned-API exemption gate compares the catalogue in
       # BannedSymbols.txt with the RS0030 suppressions the product tree
       # carries. Its self-test plants an unjustified suppression, a stale

@@ -59,6 +59,7 @@ import (
 	codemodtestevents "harbor.local/gates/codemod-test-events"
 	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	coveragereport "harbor.local/gates/coverage-report"
+	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
 	goquality "harbor.local/gates/go-quality"
@@ -195,6 +196,11 @@ var registry = []registered{
 		name:    "coverage-report",
 		summary: "the per-project and per-file coverage report of a run",
 		run:     coveragereport.Run,
+	},
+	{
+		name:    "demo-repro",
+		summary: "the demo GIFs are reproducible, and the baseline manifest is well-formed",
+		run:     demorepro.Run,
 	},
 	{
 		name:    "gen-e2e-shards",
