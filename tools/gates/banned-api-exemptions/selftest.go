@@ -96,7 +96,7 @@ internal sealed class SettingsViewModel
 // suppression each, and two rows naming them.
 func cleanFiles() map[string]string {
 	return map[string]string{
-		"src/Harbor.Hosting/Modules/ConfigurationModule.cs":     suppression,
+		"src/Harbor.Hosting/Modules/ConfigurationModule.cs":    suppression,
 		"apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs": suppression,
 		"src/Harbor.Other/Other.cs":                            "namespace Harbor.Other;\n",
 	}
@@ -121,17 +121,17 @@ func selfTestRun() int {
 			files:     cleanFiles(),
 		},
 		{
-			name: "a suppression with no row is unjustified",
+			name:      "a suppression with no row is unjustified",
 			catalogue: catalogueFixture,
 			files: map[string]string{
-				"src/Harbor.Hosting/Modules/ConfigurationModule.cs":     suppression,
+				"src/Harbor.Hosting/Modules/ConfigurationModule.cs":    suppression,
 				"apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs": suppression,
 				"src/Harbor.Rogue/Rogue.cs":                            suppression,
 			},
 			wantRule: "EXEMPTION-UNJUSTIFIED",
 		},
 		{
-			name: "a row whose file carries no suppression is stale",
+			name:      "a row whose file carries no suppression is stale",
 			catalogue: catalogueFixture,
 			files: map[string]string{
 				"apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs": suppression,
@@ -145,10 +145,10 @@ func selfTestRun() int {
 			wantRule:  "EXEMPTION-STALE",
 		},
 		{
-			name: "two suppressions under one row is a count mismatch",
+			name:      "two suppressions under one row is a count mismatch",
 			catalogue: catalogueFixture,
 			files: map[string]string{
-				"src/Harbor.Hosting/Modules/ConfigurationModule.cs":     twoSuppressions,
+				"src/Harbor.Hosting/Modules/ConfigurationModule.cs":    twoSuppressions,
 				"apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs": suppression,
 			},
 			wantRule: "EXEMPTION-COUNT",
