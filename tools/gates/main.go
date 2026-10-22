@@ -44,6 +44,7 @@ import (
 
 	aggregateanalyzercost "harbor.local/gates/aggregate-analyzer-cost"
 	aggregatebuildvcpu "harbor.local/gates/aggregate-build-vcpu"
+	all "harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	checkabstractionscontract "harbor.local/gates/check-abstractions-contract"
@@ -110,6 +111,11 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "all",
+		summary: "every gate that needs nothing but the tree, in one command",
+		run:     all.Run,
 	},
 	{
 		name:    "aot-publish-gate",

@@ -180,8 +180,8 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
-| `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
 | `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
+| `tree gates` | `tools/bin/harbor-gates-linux-x64 all` — every gate that needs nothing but the tree, in one command, with the floors the list of the runner carries: the seam graph (#1731), the XML-doc coverage, the dependency contract and the repo-map counts among them (#2122) |
 
 Three things make this a real gate rather than decoration:
 
@@ -567,14 +567,14 @@ because a graph that hides its blind spots is a decoration: DI registrations
 written without a type argument, extension methods, reflection-reached seams,
 and a base list reached only through an alias.
 
-**The gate.** `docs.yml`'s `seam graph` job regenerates the document and fails
+**The gate.** `docs.yml`'s `tree gates` job regenerates the document and fails
 if the committed one differs, with `--min-files 2523 --min-interfaces 191` as
 the anti-vacuity floors. The `--self-test` in the `checker self-test` job
 plants a stale document and requires the check to fail, and separately
 requires the route grader to tell a registering route from a refusing one.
 
 **After changing the tree.** If you add, remove or change a type under
-`src/` or `apps/`, the committed graph is stale and the `seam graph` job will
+`src/` or `apps/`, the committed graph is stale and the `tree gates` job will
 say so. Regenerate and commit it in the same change:
 
 ```bash
