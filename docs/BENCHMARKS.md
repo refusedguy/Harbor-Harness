@@ -3947,8 +3947,9 @@ compile is not the pull-request lane's compile.
   `docs/` or only `tools/` never starts the .NET build; its bill is 4.8
   runner-minutes (measured on run `39641146271`, the same day) and its wall
   is 542 s of gate lane. This section's own pull request is one of them:
-  PR #2169 touches no `src/`, `apps/` or `tests/` file, and its ci.yml lane
-  of run `39720461156` ran five jobs.
+  PR #2169 touches no `src/`, `apps/` or `tests/` file, and its own run
+  `39722580870` billed 4.5 runner-minutes over 27 jobs and a 38 s wall,
+  which is five ci.yml jobs and the 22-job gate lane.
 * **The cost of the queue wait.** The idle time is measured; the share of
   it that belongs to a given job is not.
 * **A pull request whose build fails.** The lane then runs fewer jobs (the
