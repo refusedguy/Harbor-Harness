@@ -2907,7 +2907,85 @@ content differs), and the rewrite makes it newer than the outputs. Measured on
 run 39723477934, the diff was exactly that one line. The diagnostic therefore
 rebuilt the very project it was measuring and named a cause the lane does not
 have; the step now passes `-p:SolutionDir="$GITHUB_WORKSPACE/"`, so its
-verdict is the lane's own.
+verdict is the lane's own. Measured on run 39725284841, after that fix: the
+editorconfig's hash is the same before and after the diagnostic's own build
+(`e68c5f62…`), the diff is empty, and MSBuild answers **"Skipping target
+"CoreCompile" because all output files are up-to-date with respect to the
+input files."** — the tree is incremental, said by MSBuild itself.
+
+#### 6.4.3 The cache hits in 78 % of the pull-request runs, and every miss has a name
+
+The cache does not "sometimes work": it hits on **14 of the 18** pull-request
+runs measured on 2026-10-22, and each of the four misses has a cause that is
+in the pull request's own diff. The table is every pull-request run of
+`.github/workflows/ci.yml` in the last 60 runs that had a build job; the
+compile is the NUKE `Compile` phase and the wall is the `build` job's.
+
+| run | lane | cache | why | NUKE compile | `build` job |
+|---|---|---|---|---:|---:|
+| [39725284841](https://github.com/refusedguy/Harbor-Harness/actions/runs/39725284841) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 185 s |
+| [39724322981](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724322981) | PR `perf/arch-parser` | HIT | — | 52.3 s | 210 s |
+| [39723562597](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723562597) | PR `fix/2061b` | HIT | — | 213.6 s | 389 s |
+| [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934) | PR `ci/2107-incremental` | HIT | — | 36.7 s | 180 s |
+| [39723469087](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723469087) | PR `perf/arch-parser` | HIT | — | 55.2 s | 217 s |
+| [39723207604](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723207604) | PR `ci/2107-incremental` | HIT | — | 29.6 s | 151 s |
+| [39722755948](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722755948) | PR `perf/arch-parser` | HIT | — | 60.3 s | 230 s |
+| [39721927302](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721927302) | PR `feat/gates-d-5` | HIT | — | 65.4 s | 251 s |
+| [39721911469](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721911469) | PR `perf/arch-parser` | HIT | — | 55.4 s | 219 s |
+| [39721827406](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721827406) | PR `perf/arch-parser` | HIT | — | (not measured) | 80 s |
+| [39721223746](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721223746) | PR `feat/gates-d-6` | HIT | — | 57.9 s | 207 s |
+| [39721154583](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721154583) | PR `perf/arch-parser` | HIT | — | 53.2 s | 212 s |
+| [39720669054](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720669054) | PR `fix/2119-event-topology` | HIT | — | 39.0 s | 207 s |
+| [39720312442](https://github.com/refusedguy/Harbor-Harness/actions/runs/39720312442) | PR `fix/2119-event-topology` | HIT | — | 32.2 s | 199 s |
+| [39724256147](https://github.com/refusedguy/Harbor-Harness/actions/runs/39724256147) | PR `feat/gates-a` | **MISS** | the path list | 147.9 s | 241 s |
+| [39722793701](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722793701) | PR `feat/gates-a` | **MISS** | the path list | 223.0 s | 344 s |
+| [39721596368](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721596368) | PR `feat/gates-a` | **MISS** | the path list | 219.8 s | 346 s |
+| [39721996221](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721996221) | PR `ci/2108-merge-reference-trimmer` | **MISS** | the props hash | 221.5 s | 356 s |
+
+**14 hits, 4 misses: 78 %.** The three `feat/gates-a` runs are one branch (it
+was pushed three times), so per branch the sample is 8 branches that hit on
+every run and 2 that missed on every run. The three dev pushes of the same
+window hit as well (39723714473, 39724342525, 39725519389).
+
+**WHAT THE KEY IS, AND WHAT A HIT DEPENDS ON.** The key is
+
+```
+msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+```
+
+and the parts that decide a hit are:
+
+| part | what it is | a miss when |
+|---|---|---|
+| `<props hash>` | `hashFiles` over `Directory.Packages.props`, `Directory.Build.props`, `Directory.Build.targets`, `global.json` | the pull request touches one of the four — the prefix names an entry no branch has (run 39721996221: the lane's prefix ended in `1de69dbd…`, the base branch's in `61e83d62…`) |
+| the VERSION | the SHA-256 of the cache action's `path` input: the lines joined with a pipe, plus the compression method and the salt `1.0` | the pull request's `path` list differs from the base branch's — the service is asked for "the entry with this key AND this version", and the base branch never wrote that version (runs 39721596368, 39722793701, 39724256147) |
+| the scope | the service serves a run the entries of its own branch, of the branches below it and — for a pull request — of the base branch | the run is not a pull request and not a push to `dev`: a manual dispatch on a feature branch sees none of `dev`'s entries (run 39658451546) |
+
+**THERE IS NO RACE IN IT.** The key is not computed from the pull request's
+commit: the resolve step names the base branch's newest entry with the prefix
+(it sorts the REST API's list by `created_at` and takes the last), and the
+`restore-keys` fallback asks the service for "the newest entry with this
+prefix" among the scopes the run can read. So a base branch whose newest push
+has not saved its entry yet costs the lane FRESHNESS, not the hit — the
+stamper's diff covers the delta, and an entry that is one push older is still
+a valid base.
+
+**A HIT DOES NOT MEAN A FAST COMPILE, AND THAT IS A FOURTH, NAMED CASE.** Run
+39723562597 hit the cache and still compiled in 213.6 s. Its diff against the
+base carries `BannedSymbols.txt` and the analyzer that reads it: the analyzer
+is rebuilt, its output assembly is an INPUT of every `CoreCompile`, so every
+project is out of date and the whole tree compiles again. Same shape as a
+props change: the cache hit, and the tree still full.
+
+**WHAT A MISS COSTS.** The `build` job's wall, same lane shape: 185 s on a
+hit (run 39725284841) and 297 s on a miss (run 39725420279) — **112 s**, or
+1.9 runner-minutes. The whole pull-request lane costs 15.0 runner-minutes on a
+hit and 17.1 on a miss (the sum of the job durations, measured on those two
+runs), of which the `build` job is 3.1 and 5.0 minutes and the
+`unused references (ReferenceTrimmer)` job — a SECOND, full compile, because
+the analyzer has to run in every project — is 4.1 minutes either way. At the
+measured 78 % hit rate the misses cost 0.22 × 112 s = **25 s per lane**, and a
+lane that hit every time would cost 15.0 runner-minutes instead of 15.4.
 
 ### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
 
