@@ -515,11 +515,26 @@ public sealed class ArchAnalyzerPromotionTests
     private static int _sweepRuns;
 
     /// <summary>
+    ///     How long the ONE sweep took, in milliseconds.
+    /// </summary>
+    /// <remarks>
+    ///     The number is recorded BY the sweep, not measured by the reader:
+    ///     a reader that times its own <c>await</c> on a memoised lazy
+    ///     measures the wait, and the wait is zero when the sweep already
+    ///     ran. A measurement that reports zeros because it looked at
+    ///     nothing is worse than no measurement.
+    /// </remarks>
+    internal static long SweepMilliseconds => Volatile.Read(ref _sweepMilliseconds);
+
+    private static long _sweepMilliseconds;
+
+    /// <summary>
     ///     Runs the three analyzers over every product project, once.
     /// </summary>
     private static async Task<LiveAnalyzerSweep> BuildLiveAnalyzerSweep()
     {
         Interlocked.Increment(ref _sweepRuns);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
 
         IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
             LiveCompilations.Value;
@@ -555,6 +570,9 @@ public sealed class ArchAnalyzerPromotionTests
             namespaceOwnership.AddRange(result.NamespaceOwnership);
             unguardedResult.AddRange(result.UnguardedResult);
         }
+
+        watch.Stop();
+        Volatile.Write(ref _sweepMilliseconds, watch.ElapsedMilliseconds);
 
         return new LiveAnalyzerSweep(
             [.. dynamicCode],

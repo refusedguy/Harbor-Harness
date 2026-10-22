@@ -2515,6 +2515,97 @@ count measures the code. The shared snapshot
 > The `coverage` job re-runs the architecture suite a second time (report-only,
 > no gate), so the suite's cost per PR is currently paid twice.
 
+### 6.5.2 The architecture suite's parser and its Roslyn sweep (#2110) — measured
+
+The `arch` shard's wall was set by the layer UNDER the rules: the text
+parser every rule reads the tree through, and the Roslyn analyzer driver,
+which used to walk the same 64 product compilations FOUR times.
+
+**The wall**, one CI run each, `ubuntu-24.04-arm`, the numbers from the
+`arch` shard's TRX:
+
+| | dev (run 39717885532) | the branch (run 39718941803) | |
+|---|---:|---:|---|
+| tests discovered / passed | 1129 / 1129 | 1136 / 1136 | |
+| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | −23.2 % |
+| sum of the per-test durations | 1325.38 s | 1010.60 s | −23.7 % |
+| parallelism factor | 12.43× | 12.34× | |
+| the `test (arch)` job | 127 s | 98 s | −23 % |
+
+**What moved**, the class spans (last end − first start) and the single
+tests, from the same two TRX sets:
+
+| class | dev | the branch | |
+|---|---:|---:|---|
+| `ArchAnalyzerPromotionTests` | 92.0 s | **31.0 s** | the sweep runs once, concurrently |
+| `PanelKeyRouteReachabilityRule` | 84.0 s | 46.0 s | |
+| `HttpClientCreationAnalyzerTests` | 60.0 s | 45.0 s | |
+| `HttpClientReuseRules` | 60.0 s | 45.0 s | |
+| `TokenCellSingleHomeRules` | 37.0 s | 26.0 s | |
+| `UnguardedResultReadAnalyzerTests` | 27.0 s | 0.7 s | |
+
+| test | dev | the branch | |
+|---|---:|---:|---|
+| `ArchAnalyzerPromotionTests.The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap` | 90.80 s | 30.28 s | |
+| `ArchAnalyzerPromotionTests.The_Analyzer_Sees_Every_File_The_Text_Rule_Sees` | 64.0 s | 30.28 s | |
+| `UnguardedResultReadAnalyzerTests.The_Analyzer_Sees_Every_Site_The_Text_Rule_Sees` | 27.14 s | 0.74 s | |
+| `DeadPublicMemberRule.Scan_IsLive` (the rule's own scan) | 2.40 s | 1.79 s | |
+
+**The Roslyn sweep, measured inside the run.** The line the sweep prints
+itself:
+
+| | dev | the branch | |
+|---|---:|---:|---|
+| one driver pass over 64 product compilations | 63 372 ms | **30 208 ms** | −52 % |
+| passes over the same compilations | 4 | **1** | |
+
+**The parser, measured on its own.** The corpus is every `.cs` file of
+`src/`, `apps/` and `tests/` — 2 676 files, 25 114 074 characters. The
+sample is the 300 LARGEST of them (9 668 817 B), because a per-byte cost
+measured on the biggest files is the worst case. The allocations are the
+thread's own, read with `GC.GetAllocatedBytesForCurrentThread()`.
+
+| | legacy | the substrate | |
+|---|---:|---:|---|
+| the identifier counter, allocations | 334 716 816 B | **27 149 048 B** | −91.9 % |
+| the identifier counter, time | 278 ms | 155 ms | |
+| the literal blanker, allocations | 38 705 376 B | **19 738 512 B** | −49.0 % |
+| the literal blanker, time | 30 ms | 22 ms | |
+
+**Roslyn is the modern API, and it does not pay.** On the same sample, the
+text scan costs 15 ms and a Roslyn parse of the same bytes costs 629 ms —
+**41.9× more**, and 141 696 136 B of garbage against 31 174 712 B. The
+projection for the whole tree is 1 633 ms for the parse against a text pass
+over the same tree. It also changes the VERDICTS: on all 40 of the largest
+sampled files the text stripper and the Roslyn one disagree, because the
+text stripper cannot tell a comment from a `//` inside a string literal and
+eats the rest of such a line. The rules are written against that behaviour,
+so a real parse is not an option here.
+
+**The equivalence, and where it is proved.** The parser's own bytes are
+proved identical to the previous implementation's over the whole corpus
+(2 676 files, `blank-diffs=0`, `count-diffs=0`), and the rule whose inputs
+the rewrite changed proves the same VERDICTS over the live tree against the
+scan from before the rewrite. Neither proof is "the tests are still green":
+a rule that finds nothing reports nothing.
+
+**What holds the wall now.** Not the parsing. The class spans that remain:
+`PanelKeyRouteReachabilityRule` 46.0 s (the backtracking `MemberDeclaration`
+pattern over the product trees), `HttpClientReuseRules` and
+`HttpClientCreationAnalyzerTests` 45.0 s each (the HTTP-client rule of
+issue 1724), and the Roslyn sweep 31.0 s. The stripper is no longer a term:
+the comment stripper's own cost is measured in `ParseCostMeasurement`, and
+the scanner allocates 78.2 MB over the whole tree against the legacy
+form's 12 587 MB.
+
+> The `arch` shard's runner is noisy: a run whose `/run/user/<uid>/.dotnet`
+> state is wrong fails the NuGet first-use migration of the probe that
+> `CfeControlPositiveControlTests` spawns, and the NuGet cache that
+> migration populates is what `BannedApiProbe` reads its analyzer from — so
+> four unrelated tests go red together. Run 39718941803 failed that way on
+> its first attempt and passed on the re-run of the same job with the same
+> artifacts; the numbers above are from the green run.
+
 ### 6.4 CI lane walls: the build job, the compile step, the artifact transfer ✅ measured
 
 The test shards are half of the CI bill. The `build` job compiles everything once
