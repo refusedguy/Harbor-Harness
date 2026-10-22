@@ -1,52 +1,70 @@
 # The gate suite CI runs, with the arguments CI passes.
 #
-# Column 1: the gate's name.
-# Column 2: the command that runs it, the way the workflow runs it.
-# Column 3: the command that runs the compiled port, once the port exists.
-#           Empty means "not ported yet"; the measurement says so instead of
-#           pretending the python number stands for the port.
+# COLUMN 1: the gate's name. A python gate is the script's file name; a
+#           compiled gate is the subcommand of the binary.
+# COLUMN 2: the command the harness runs, with the arguments the workflow
+#           passes. The VALUE of an artifact path is the harness's business
+#           (an empty directory of the right shape, see the README); the
+#           FLAGS are the gate's business, and the gate that checks this
+#           file compares them with the workflow's.
 #
-# The flags are the ones the workflows pass, taken from .github/workflows,
-# not from the documentation. A flag that only asserts a floor does not
-# change the work, and a floor that the tree does not meet would make the
-# gate exit 1 without changing the time; the exit code is recorded anyway.
+# The rows are the gates a workflow really runs. A gate CI runs only as its
+# own self-test, a gate that needs the .NET SDK and a gate that needs the
+# network are NOT here: they are in bench/gates/excluded.tsv, with the reason
+# each of them is out. The set is checked by the gate
+# `harbor-gates check-gate-bench-set`, which reads this file, the exclusion
+# list and the workflow files, and fails when they disagree.
 #
-# The gates that read an artifact the build produced (TRX files, packed
-# NuGet packages, the analyzer's log) are measured against an empty
+# The order is the order CI runs them in, roughly: the cheap text gates
+# first, the gates that walk the git history last. The gates that read an
+# artifact the build produced (the TRX files, the packed NuGet packages, the
+# coverage report, the analyzer's log) are measured against an EMPTY
 # directory of the right shape, so their number is the cost of walking the
-# tree, not the cost of parsing a real artifact. They are the cheap gates,
-# and the difference does not move the total.
+# tree, not the cost of parsing a real artifact. The README says so, and the
+# README says which artifact belongs to which row.
 #
-# msbuild-evaluation-cost.py is NOT here: it measures a `dotnet build`, and
-# this box has no SDK. It is listed in the README with the reason.
+# The last row rewrites the mtimes of the tree, so it is last.
 
-# gate	python command	go command
-check-gate-policy.py	python3 tools/check-gate-policy.py --min-gates 42
-check-reference-trimmer.py	python3 tools/check-reference-trimmer.py --min-projects 100
-check-no-test-sdk.py	python3 tools/check-no-test-sdk.py --min-files 150
-check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280
-check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
-check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600
-md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
-check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
-check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
-check-abstractions-contract.py	python3 tools/check-abstractions-contract.py --min-packages 19 --min-namespaces 7 --min-files 141
+# gate	command
+aggregate-analyzer-cost	tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost meas --summary meas/summary.md
+aggregate-build-vcpu	tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu meas --baseline a-prop0
+aot-publish-gate	tools/bin/harbor-gates-linux-x64 aot-publish-gate --log publish/aot-publish.log --baseline .github/aot-warning-baseline.txt --expect-rid linux-x64 --expect-recipe fulltree --expect-status published
+banned-api-exemptions	tools/bin/harbor-gates-linux-x64 banned-api-exemptions --min-exemptions 6
+changelog-assemble	tools/bin/harbor-gates-linux-x64 changelog-assemble --check
+check-abstractions-contract	tools/bin/harbor-gates-linux-x64 check-abstractions-contract --min-packages 19 --min-namespaces 7 --min-files 141
+check-analyzer-scope	tools/bin/harbor-gates-linux-x64 check-analyzer-scope --min-files 150
 check-arch-anchors.py	python3 tools/check-arch-anchors.py --min-files 40
-check-string-switch-report.py	python3 tools/check-string-switch.py --report
-check-result-chains-report.py	python3 tools/check-result-chains.py --report
-check-test-json-reflection.py	python3 tools/check-test-json-reflection.py	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
-check-xml-doc-coverage.py	python3 tools/check-xml-doc-coverage.py --min-members 493 --min-documented 478 --min-coverage 0.96
-gen-seam-graph.py	python3 tools/gen-seam-graph.py --check --min-files 2523 --min-interfaces 191	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
+check-arch-suite-once.py	python3 tools/check-arch-suite-once.py --min-shards 4
+check-coverage-registry	tools/bin/harbor-gates-linux-x64 check-coverage-registry --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --status Coverage/status.tsv --min-files 1200 --min-covered 400
 check-doc-cites.py	python3 tools/check-doc-cites.py --min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2
-check-doc-facts.py	python3 tools/check-doc-facts.py --min-facts 5
-check-analyzer-scope.py	python3 tools/check-analyzer-scope.py --min-files 150
-check-tunit-analyzer-gate.py	python3 tools/check-tunit-analyzer-gate.py	tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate
-check-coverage-registry.py	python3 tools/check-coverage-registry.py
-check-shard-balance.py	python3 tools/check-shard-balance.py --min-projects 37 --max-skew 4.0	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
+check-doc-facts	tools/bin/harbor-gates-linux-x64 check-doc-facts --min-facts 5
+check-event-topology	tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
+check-gate-bench-set	tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 42
+check-gate-policy.py	python3 tools/check-gate-policy.py --min-gates 42
+check-local-merge-loss	tools/bin/harbor-gates-linux-x64 check-local-merge-loss --range origin/dev --tip HEAD --min-merges 1 --allow-missing-heads
+check-md-links.py	python3 tools/check-md-links.py --min-files 250 --min-refs 600
+check-no-test-sdk	tools/bin/harbor-gates-linux-x64 check-no-test-sdk --min-files 150
+check-public-api-resign	tools/bin/harbor-gates-linux-x64 check-public-api-resign --base HEAD~1 --min-rows src/Harbor.Abstractions.Contracts=1896 --min-rows src/Harbor.Abstractions=1269
+check-reference-trimmer	tools/bin/harbor-gates-linux-x64 check-reference-trimmer --findings rt-warnings.log --coverage rt-coverage.txt --min-projects 100
+check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
+check-shard-balance	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
+check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280
+check-test-dup	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+check-test-json-reflection	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
+check-test-packages	tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
+check-test-projects	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+check-tool-schema-pin	tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
+check-workflows	tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
+check-xml-doc-coverage	tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
-test-census.py	python3 tools/test-census.py TestResults
-test-skips.py	python3 tools/test-skips.py TestResults
-test-measurements.py	python3 tools/test-measurements.py TestResults
-pack-validate.py	python3 tools/pack-validate.py out/packages	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
-guard-triage.py	python3 tools/guard-triage.py
-check-event-topology.py		tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
+coverage-report	tools/bin/harbor-gates-linux-x64 coverage-report --coverage-dir Coverage --source-root . --registry tools/coverage-registry.txt --summary Coverage/summary.md --out Coverage/coverage-per-file.md --uncovered-out Coverage/coverage-uncovered-locations.txt --min-files 1200
+demo-repro	tools/bin/harbor-gates-linux-x64 demo-repro check-manifest
+gen-plugin-inventory	tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --check --min-axes 7 --min-routes 7 --min-plugins 6
+gen-seam-graph	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
+guard-triage.py	python3 tools/guard-triage.py --trx "TestResults/*.trx" --trx "tests/**/TestResults/*.trx" --project Harbor.Architecture.Tests --repo-root . --min-guard-files 100 --out guard-firings.json --summary TestResults/summary.md
+md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
+normalize-mtimes	tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo . --base HEAD~1
+pack-validate	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
+test-census	tools/bin/harbor-gates-linux-x64 test-census TestResults --summary TestResults/summary.md --top 15
+test-measurements	tools/bin/harbor-gates-linux-x64 test-measurements TestResults --summary TestResults/summary.md
+test-skips	tools/bin/harbor-gates-linux-x64 test-skips TestResults --summary TestResults/summary.md

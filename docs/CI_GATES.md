@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `bfa1c99d` plus this branch's commits),
+Measured on this branch (`dev` at `ff1e2955` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 21 files, 21 893 lines |
-| of them, the `check-*.py` family | 14 files, 17 663 lines |
+| python tools in `tools/` | 20 files, 21 297 lines |
+| of them, the `check-*.py` family | 13 files, 17 067 lines |
 | workflows that run a python tool | 2: `ci.yml`, `docs.yml` |
-| gates that block a build | 33 |
+| gates that block a build | 35 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
-| reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 50 |
-| tools with a ratchet | 21 |
-| tools with a floor | 29 |
+| reporters, helpers, libraries | 9 reporters, 9 helpers, 3 libraries |
+| tools with a self-test | 52 |
+| tools with a ratchet | 22 |
+| tools with a floor | 31 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -326,6 +326,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 gen-plugin-inventory` | compiled: `tools/gates/gen-plugin-inventory` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest, tree | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 | `tools/bin/harbor-gates-linux-x64 check-test-json-reflection` | compiled: `tools/gates/check-test-json-reflection` | no test serializes through the reflection resolver | docs.yml | reflection-json, selftest, tree | gate | `--self-test` | `tools/test-json-reflection-exceptions.txt` | — |
 | `tools/bin/harbor-gates-linux-x64 banned-api-exemptions` | compiled: `tools/gates/banned-api-exemptions` | the catalogue of every `#pragma warning disable RS0030` the product tree carries matches the suppressions the tree actually has: the ban is a security control, and the suppression catalogue is the one switch that turns it off, so a stale row or an unjustified suppression is a hole in it | docs.yml | selftest, tree | gate | `--self-test` | `BannedSymbols.txt` | `--min-exemptions 6` |
+| `tools/bin/harbor-gates-linux-x64 check-gate-bench-set` | compiled: `tools/gates/check-gate-bench-set` | the measured gate set is the set CI runs: every gate a workflow runs is in `bench/gates/tools.tsv` or in `bench/gates/excluded.tsv`, the exclusions carry a reason, and the measured row passes the arguments the workflow passes | docs.yml | benchset, selftest | gate | `--self-test` | — | `--min-gates 42` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a
