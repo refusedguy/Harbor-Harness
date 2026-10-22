@@ -39,7 +39,8 @@ tests/Harbor.E2E.Framework/
 ├── MockLlmServer.cs                # HttpListener; OpenAI-compatible SSE mock
 ├── E2eTestBase.cs                  # TUnit base; per-test MockLlmServer + temp HOME
 ├── HarborAppLocator.cs             # Walk up to repo root; locate dotnet host
-├── AnsiStripper.cs                 # Regex-based ANSI escape remover for TUI screens
+├── AnsiStripper.cs                 # ANSI escape remover for TUI screens
+├── AnsiTerminalBuffer.cs           # 2D terminal emulator; the screen is read from it
 └── GlobalUsings.cs                 # Framework-wide using directives
 ```
 
@@ -50,6 +51,18 @@ would run once per referencing project. The framework's own tests live in
 `tests/Harbor.E2E.Framework.Tests/`, a project nothing references, so they run
 exactly once. `tests/Harbor.Architecture.Tests/TestProjectReferenceRules.cs`
 enforces both halves of that rule.
+
+Those tests cover the helpers the other E2E projects depend on at run time:
+the ANSI scrubber (`AnsiStripper`) and the 2D terminal emulator
+(`AnsiTerminalBuffer`), which is what every PTY scenario in
+`Harbor.Tui.CellForge.PtyTests` asserts on. They are pure — no PTY, no display
+server, no mock LLM server — so they cost a fraction of a second in the `e2e`
+shard.
+
+The framework used to carry `StateTestRunner`, a state-based E2E harness whose
+`UiState` factories and text extractor no scenario ever called. Its 26 tests
+were green and guarded a helper nobody used, so both the harness and the tests
+are gone (issue #1812).
 
 The Avalonia desktop driver is **not** here: it lives with the app it drives,
 in `tests/Harbor.E2E.App.Avalonia/HeadlessAvaloniaDriver.cs`, because it needs

@@ -880,6 +880,19 @@ covers a family (`System.IO.File` also covers `FileStream`, `FileInfo`, `FileAcc
 Because this is IL-level it catches a `File.ReadAllText` that no assembly-reference check
 can see.
 
+**The instrumented copy.** The nightly coverage lane instruments every assembly it
+measures, and the instrumentation **injects** a tracker into each one: a generated
+`Microsoft.CodeCoverage.Instrumentation.Static.Tracker.*` class whose job is to record
+which lines ran, which it does by writing files. The probe therefore skips the
+instrumenter's own types: they are absent from an uninstrumented build and say nothing
+about the architecture, and the product's calls **into** the tracker are still read (the
+tracker is not a `System.IO` type, so such a call matches no rule prefix). The engine is
+recognised by its namespace **and** by the stamped type name, because its namespace is a
+configurable value — one engine bump away from a probe that blames the product for the
+instrumenter's I/O is one bump too far (#2089). When the binary the probe read carries
+the instrumenter's marker, the failure message says so: the verdict is still the
+product's, but the file it was read from was not the product's own build.
+
 **Scope.** The Presentation set is not a second hand-maintained list — it is read from
 `FullLayerMatrixTests.Matrix` via `PresentationLayerAssemblies()`, so a new Presentation
 src project becomes capability-enforced the moment it gets a matrix row.
@@ -1278,7 +1291,7 @@ published with NativeAOT and the SDK is not AOT-shaped. On the pinned versions
   with NativeAOT and its pass criterion is that the publish **SUCCEEDS** — not "zero
   IL2026". Its inventory is a ratchet in **both** directions: a new diagnostic id, a
   changed count, a new first-party site **or** a vanished row is red
-  ([`tools/aot-publish-gate.py`](../tools/aot-publish-gate.py)). So "just add the
+  ([`harbor-gates aot-publish-gate`](../tools/gates/aot-publish-gate)). So "just add the
   package" cannot land unnoticed — but the gate reports *"the inventory moved"*, not
   *"you broke the telemetry boundary"*, and a reader who does not know the boundary
   cannot tell which of the two happened.

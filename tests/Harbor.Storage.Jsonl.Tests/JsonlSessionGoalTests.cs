@@ -66,7 +66,7 @@ public class JsonlSessionGoalTests
                 session.Id,
                 TestGoals.NewGoal($"fix the {Marker}", GoalPhase.Active, maxRounds: 5, roundsStarted: 2));
 
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
             await Assert.That(appended.Value.Objective).IsEqualTo($"fix the {Marker}");
             await Assert.That(appended.Value.Phase).IsEqualTo(GoalPhase.Active);
             await Assert.That(appended.Value.MaxRounds).IsEqualTo(5);
@@ -81,7 +81,7 @@ public class JsonlSessionGoalTests
 
             var read = await reopened.GetGoalAsync(session.Id);
 
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.HasValue).IsTrue();
             await Assert.That(read.Value.Value.Objective).IsEqualTo($"fix the {Marker}");
             await Assert.That(read.Value.Value.Phase).IsEqualTo(GoalPhase.Active);
@@ -104,7 +104,7 @@ public class JsonlSessionGoalTests
 
             var read = await store.GetGoalAsync(session.Id);
 
-            await Assert.That(read.IsSuccess).IsTrue()
+            await Assert.That(read).IsSuccessful()
                 .Because("a session without a goal is a state, not an error");
             await Assert.That(read.Value.HasNoValue).IsTrue();
         }
@@ -162,7 +162,7 @@ public class JsonlSessionGoalTests
                 session.Id,
                 TestGoals.NewGoal($"stale {Marker}", GoalPhase.Complete, revision: 1));
 
-            await Assert.That(stale.IsFailure).IsTrue()
+            await Assert.That(stale).IsFailed()
                 .Because("a stale revision is refused; the loser of a race re-reads and decides again");
 
             var read = await store.GetGoalAsync(session.Id);
@@ -188,7 +188,7 @@ public class JsonlSessionGoalTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1)
                 .Because("the goal lives in its own records; the message read path skips them");
 

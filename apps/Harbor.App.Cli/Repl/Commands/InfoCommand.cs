@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>Read-only info commands (providers/plugins/permissions) via the slash dispatcher.</summary>
@@ -11,7 +12,7 @@ internal sealed class InfoCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         string text = ctx.RawInput ?? '/' + ctx.RawId;
         return ctx.Host.ExecuteInfoAsync(text, ct);
     }

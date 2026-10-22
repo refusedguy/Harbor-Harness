@@ -198,20 +198,6 @@
       "reason": "Not a Roslyn analyzer: it reads the MSBuild project files. Proj0037, Proj0040 and Proj0041 are errors and they are about the project files themselves, so they have to run wherever a project file is compiled."
     },
     {
-      "id": "Microsoft.VisualStudio.Threading.Analyzers",
-      "property": "HarborAnalyzerVsThreading",
-      "declared_in": [
-        "src/Directory.Build.props",
-        "apps/Directory.Build.props"
-      ],
-      "scopes": [
-        "src",
-        "apps"
-      ],
-      "mode": "scope",
-      "reason": "29 rules, exactly one of them on (VSTHRD110, at 'suggestion'). The gate that decides 'is this an unobserved Task?' is HARCH003, a house analyzer, not this package (#1852). The test tree has its own async culture, so the package is not there."
-    },
-    {
       "id": "Excubo.Analyzers.DependencyInjectionValidation",
       "property": "HarborAnalyzerExcubo",
       "declared_in": [
