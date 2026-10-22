@@ -200,6 +200,52 @@ internal sealed record KeyRouteReport(
     IReadOnlyList<OrphanHandOff> Orphans);
 
 /// <summary>
+///     What one scan of the product trees cost, split into its phases, and how
+///     much work each phase did.
+/// </summary>
+/// <remarks>
+///     <para>
+///         The rule's class span is measured on the CI runner's TRX, and a span
+///         is a WALL number: it says the rule held the shard for that long, and
+///         it does not say which part of the rule did it. These phases are the
+///         decomposition, and they are recorded INSIDE the scan — in the thread
+///         that computed it, under the shard's real contention — so the numbers
+///         are the ones the class span is made of and not a clean-room
+///         re-measurement of them.
+///     </para>
+///     <para>
+///         The counters are there because a millisecond without a count cannot
+///         be acted on: "the member-declaration pattern ran 11 000 times" says
+///         which line of the rule to change, and "the scan took 50 s" does not.
+///     </para>
+/// </remarks>
+/// <param name="ReadMs">How long reading the product trees took.</param>
+/// <param name="HandOffScanMs">How long collecting the hand-off sites took.</param>
+/// <param name="CallersMs">How long the reachability passes took.</param>
+/// <param name="TotalMs">How long the whole scan took.</param>
+/// <param name="Files">How many product files were read.</param>
+/// <param name="Lines">How many lines were scanned.</param>
+/// <param name="HandOffSites">How many hand-off sites were found.</param>
+/// <param name="EnclosingWalks">How many times the enclosing-method walk ran.</param>
+/// <param name="CallersPasses">How many times the whole product tree was walked for callers.</param>
+/// <param name="MemberMatches">How many times the member-declaration pattern ran.</param>
+/// <param name="CallSiteMatches">How many times the call-site pattern ran.</param>
+/// <param name="HandOffMatches">How many times the hand-off pattern ran.</param>
+internal sealed record ScanPhases(
+    long ReadMs,
+    long HandOffScanMs,
+    long CallersMs,
+    long TotalMs,
+    int Files,
+    int Lines,
+    int HandOffSites,
+    int EnclosingWalks,
+    int CallersPasses,
+    long MemberMatches,
+    long CallSiteMatches,
+    long HandOffMatches);
+
+/// <summary>
 ///     One unreachable router the project is carrying ON PURPOSE, and the issue that
 ///     owns the decision to wire or delete it.
 /// </summary>
@@ -211,6 +257,36 @@ internal readonly record struct AcknowledgedDebt(string File, string Name, strin
     /// <summary>The identity the scan reports orphans under.</summary>
     /// <returns>The (file, name) pair.</returns>
     internal ProductMethod Method => new(File, Name);
+}
+
+/// <summary>
+///     The work one scan of the product trees did, counted.
+/// </summary>
+/// <remarks>
+///     A millisecond without a count cannot be acted on: "the member-declaration
+///     pattern ran 11 000 times" says which line of the rule to change, and
+///     "the scan took fifty seconds" does not. The counters are incremented
+///     around the work, never instead of it, so they cannot change a verdict.
+/// </remarks>
+internal sealed class ScanCounters
+{
+    /// <summary>How many lines the scan read.</summary>
+    internal int Lines;
+
+    /// <summary>How many times the enclosing-method walk ran.</summary>
+    internal int EnclosingWalks;
+
+    /// <summary>How many times the whole product tree was walked for callers.</summary>
+    internal int CallersPasses;
+
+    /// <summary>How many times the member-declaration pattern ran.</summary>
+    internal long MemberMatches;
+
+    /// <summary>How many times the call-site pattern ran.</summary>
+    internal long CallSiteMatches;
+
+    /// <summary>How many times the hand-off pattern ran.</summary>
+    internal long HandOffMatches;
 }
 
 /// <summary>
@@ -229,6 +305,32 @@ internal static class PanelKeyRouteProbe
 
     /// <summary>How far upward <see cref="EnclosingMethod" /> will look for a declaration.</summary>
     internal const int MaxEnclosingWalk = 400;
+
+    /// <summary>
+    ///     The phases and the work counters of the LAST scan of the product
+    ///     trees, for the measurement to print.
+    /// </summary>
+    /// <remarks>
+    ///     The scan is memoised by the rule, so this is the ONE scan the rule
+    ///     did — the one whose wall time the class span on the CI runner is made
+    ///     of. A measurement that re-ran the scan would report a clean-room
+    ///     number instead, and the difference between the two is the contention
+    ///     the rule actually lives under.
+    /// </remarks>
+    internal static ScanPhases? LastPhases { get; private set; }
+
+    /// <summary>
+    ///     Adds the time the product-tree READ took to the phases of the scan
+    ///     that followed it.
+    /// </summary>
+    /// <param name="readMs">How long the read took.</param>
+    internal static void RecordReadMs(long readMs)
+    {
+        if (LastPhases is { } phases)
+        {
+            LastPhases = phases with { ReadMs = readMs };
+        }
+    }
 
     /// <summary>
     ///     The debt ledger: unreachable routers this project is carrying on purpose,
@@ -330,7 +432,6 @@ internal static class PanelKeyRouteProbe
     /// <returns>The snapshot's view of each product file; unreadable files are skipped.</returns>
     internal static IReadOnlyList<SourceTreeFile> ReadProductTrees() =>
         Read(SourceScan.EnumerateCsFiles(SourceScan.ProductTrees));
-
     /// <summary>
     ///     Reads the TEST tree, which <see cref="SourceScan" /> cannot see at all.
     /// </summary>
@@ -404,6 +505,14 @@ internal static class PanelKeyRouteProbe
         var typeOwner = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var handOffs = new List<KeyHandOff>();
 
+        // The counters and the phase clock. Both are MEASUREMENT, not
+        // behaviour: they count the work the scan did and time each phase, and
+        // the counts are what say which part of the rule to change. The scan
+        // this class has always done is untouched — the numbers are recorded
+        // around it.
+        var counters = new ScanCounters();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
         foreach (SourceTreeFile source in sources)
         {
             string file = SourceScan.Relative(source.Path);
@@ -414,6 +523,7 @@ internal static class PanelKeyRouteProbe
             // it looked up — so the tree was split once per hand-off, over
             // every file, on every scan. One split per file, shared.
             ImmutableArray<string> lines = source.StrippedNewlineLines;
+            counters.Lines += lines.Length;
 
             foreach (Match type in TypeDeclaration.Matches(text))
             {
@@ -438,7 +548,9 @@ internal static class PanelKeyRouteProbe
             {
                 foreach (Match site in HandOffSite.Matches(lines[i]))
                 {
-                    if (EnclosingMethod(lines, i) is not { } enclosing)
+                    counters.HandOffMatches++;
+
+                    if (EnclosingMethod(lines, i, counters) is not { } enclosing)
                     {
                         continue;
                     }
@@ -455,11 +567,13 @@ internal static class PanelKeyRouteProbe
         var performers = new HashSet<ProductMethod>(
             handOffs.Select(h => new ProductMethod(h.File, h.Performer)));
 
+        long handOffScanMs = watch.ElapsedMilliseconds;
+
         var orphans = new List<OrphanHandOff>();
         foreach (KeyHandOff handOff in handOffs)
         {
             var performer = new ProductMethod(handOff.File, handOff.Performer);
-            CallerSet callers = Callers(sources, performer, typeOwner);
+            CallerSet callers = Callers(sources, performer, typeOwner, counters);
 
             if (callers.Unattributed)
             {
@@ -487,7 +601,7 @@ internal static class PanelKeyRouteProbe
             // Second hop: the way in must itself be called product code, or the
             // router is merely wired into something else that is equally dead.
             bool entered = wayIn
-                .Select(c => Callers(sources, c, typeOwner))
+                .Select(c => Callers(sources, c, typeOwner, counters))
                 .Any(second => second.Unattributed || second.Candidates.Count > 0);
 
             if (entered)
@@ -503,6 +617,22 @@ internal static class PanelKeyRouteProbe
                     + "themselves — the chain never reaches a host",
                 chain));
         }
+
+        long callersMs = watch.ElapsedMilliseconds - handOffScanMs;
+
+        LastPhases = new ScanPhases(
+            ReadMs: 0,
+            HandOffScanMs: handOffScanMs,
+            CallersMs: callersMs,
+            TotalMs: watch.ElapsedMilliseconds,
+            Files: sources.Count,
+            Lines: counters.Lines,
+            HandOffSites: handOffs.Count,
+            EnclosingWalks: counters.EnclosingWalks,
+            CallersPasses: counters.CallersPasses,
+            MemberMatches: counters.MemberMatches,
+            CallSiteMatches: counters.CallSiteMatches,
+            HandOffMatches: counters.HandOffMatches);
 
         return new KeyRouteReport(sources.Count, handOffs, orphans);
     }
@@ -529,14 +659,17 @@ internal static class PanelKeyRouteProbe
     /// <param name="sources">Product sources.</param>
     /// <param name="target">The method whose callers are wanted.</param>
     /// <param name="typeOwner">Type simple name → the files declaring it.</param>
+    /// <param name="counters">The work counters, for the measurement.</param>
     /// <returns>The identified callers, and whether any call went unattributed.</returns>
     private static CallerSet Callers(
         IReadOnlyList<SourceTreeFile> sources,
         ProductMethod target,
-        IReadOnlyDictionary<string, List<string>> typeOwner)
+        IReadOnlyDictionary<string, List<string>> typeOwner,
+        ScanCounters counters)
     {
         var found = new HashSet<ProductMethod>();
         bool unattributed = false;
+        counters.CallersPasses++;
 
         foreach (SourceTreeFile source in sources)
         {
@@ -558,9 +691,12 @@ internal static class PanelKeyRouteProbe
 
                 bool isDeclaration = MemberDeclaration.Match(line) is { Success: true } declaration
                     && declaration.Groups["name"].Value == target.Name;
+                counters.MemberMatches++;
 
                 foreach (Match call in CallSite.Matches(line))
                 {
+                    counters.CallSiteMatches++;
+
                     if (call.Groups["name"].Value != target.Name || isDeclaration)
                     {
                         continue;
@@ -590,7 +726,7 @@ internal static class PanelKeyRouteProbe
                         continue;
                     }
 
-                    if (EnclosingMethod(lines, i) is not { } enclosing
+                    if (EnclosingMethod(lines, i, counters) is not { } enclosing
                         || string.Equals(enclosing.Name, target.Name, StringComparison.Ordinal))
                     {
                         // A recursive self-call, or a call this scan cannot place.
@@ -644,13 +780,21 @@ internal static class PanelKeyRouteProbe
     /// </summary>
     /// <param name="lines">The comment-stripped lines of one file.</param>
     /// <param name="index">Zero-based line index to start from.</param>
+    /// <param name="counters">The work counters, for the measurement.</param>
     /// <returns>The declared name and its one-based line, or <c>null</c>.</returns>
-    private static (string Name, int Line)? EnclosingMethod(IReadOnlyList<string> lines, int index)
+    private static (string Name, int Line)? EnclosingMethod(
+        IReadOnlyList<string> lines,
+        int index,
+        ScanCounters counters)
     {
         int floor = Math.Max(0, index - MaxEnclosingWalk);
+        counters.EnclosingWalks++;
+
         for (int i = index; i >= floor; i--)
         {
             Match declaration = MemberDeclaration.Match(lines[i]);
+            counters.MemberMatches++;
+
             if (declaration.Success)
             {
                 return (declaration.Groups["name"].Value, i + 1);
@@ -771,7 +915,170 @@ internal static class PanelKeyRouteProbe
 
         return false;
     }
+
+    /// <summary>
+    ///     What each PATTERN of the scan costs, measured on its own over the
+    ///     product tree.
+    /// </summary>
+    /// <remarks>
+    ///     The scan's phases say WHERE the time went; these say WHAT it went
+    ///     into. Each pattern is run over the whole tree on its own, so the
+    ///     numbers are the cost of that pattern at tree scale, and the call
+    ///     counts say how often the scan actually pays it.
+    /// </remarks>
+    /// <param name="sources">Product sources as the shared snapshot's file views.</param>
+    /// <returns>The per-pattern costs, the call counts and the cold read cost.</returns>
+    internal static ScanComponentCosts MeasureComponents(IReadOnlyList<SourceTreeFile> sources)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        long memberCalls = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            foreach (string line in source.StrippedNewlineLines)
+            {
+                _ = MemberDeclaration.Match(line);
+                memberCalls++;
+            }
+        }
+
+        long memberMs = watch.ElapsedMilliseconds;
+
+        watch.Restart();
+        long handOffCalls = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            foreach (string line in source.StrippedNewlineLines)
+            {
+                _ = HandOffSite.Matches(line);
+                handOffCalls++;
+            }
+        }
+
+        long handOffMs = watch.ElapsedMilliseconds;
+
+        watch.Restart();
+        long callSiteCalls = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            foreach (string line in source.StrippedNewlineLines)
+            {
+                _ = CallSite.Matches(line);
+                callSiteCalls++;
+            }
+        }
+
+        long callSiteMs = watch.ElapsedMilliseconds;
+
+        watch.Restart();
+        long typeCalls = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            _ = TypeDeclaration.Matches(source.StrippedText);
+            typeCalls++;
+        }
+
+        long typeMs = watch.ElapsedMilliseconds;
+
+        // The cold read: the same bytes the shared snapshot holds, read from
+        // the disk again, because the snapshot's own read is already paid for
+        // by the time this measurement runs and would report zero. The
+        // blanker is called directly, not through `SourceScan.StripComments`,
+        // so the measurement does not move the stripper meter the other
+        // measurement prints.
+        watch.Restart();
+        long readBytes = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            string raw = File.ReadAllText(source.Path);
+            readBytes += raw.Length;
+            _ = SourceCommentBlanker.Blank(raw);
+        }
+
+        long coldReadMs = watch.ElapsedMilliseconds;
+
+        // The cold WALK: the directory enumeration the rule's tree read starts
+        // with. It is measured over the same directories the rule walks, and
+        // it counts every file the walk SEES — including the build output the
+        // filter rejects afterwards, because the walk pays for those too.
+        watch.Restart();
+        long walked = 0;
+        if (RepoPaths.RepoRoot is { } root)
+        {
+            foreach (string tree in SourceScan.ProductTrees)
+            {
+                string dir = Path.Combine(root, tree);
+                if (!Directory.Exists(dir))
+                {
+                    continue;
+                }
+
+                foreach (string _ in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+                {
+                    walked++;
+                }
+            }
+        }
+
+        long coldWalkMs = watch.ElapsedMilliseconds;
+
+        int lines = 0;
+        foreach (SourceTreeFile source in sources)
+        {
+            lines += source.StrippedNewlineLines.Length;
+        }
+
+        return new ScanComponentCosts(
+            MemberPatternMs: memberMs,
+            MemberPatternCalls: memberCalls,
+            HandOffPatternMs: handOffMs,
+            HandOffPatternCalls: handOffCalls,
+            CallSitePatternMs: callSiteMs,
+            CallSitePatternCalls: callSiteCalls,
+            TypePatternMs: typeMs,
+            TypePatternCalls: typeCalls,
+            ColdReadMs: coldReadMs,
+            ColdReadChars: readBytes,
+            ColdWalkMs: coldWalkMs,
+            ColdWalkFiles: walked,
+            Files: sources.Count,
+            Lines: lines);
+    }
 }
+
+/// <summary>
+///     What each pattern of the key-route scan costs at tree scale, and how
+///     often the scan pays it.
+/// </summary>
+/// <param name="MemberPatternMs">The member-declaration pattern over every line of the tree.</param>
+/// <param name="MemberPatternCalls">How many lines it ran over.</param>
+/// <param name="HandOffPatternMs">The hand-off pattern over every line of the tree.</param>
+/// <param name="HandOffPatternCalls">How many lines it ran over.</param>
+/// <param name="CallSitePatternMs">The call-site pattern over every line of the tree.</param>
+/// <param name="CallSitePatternCalls">How many lines it ran over.</param>
+/// <param name="TypePatternMs">The type-declaration pattern over every file of the tree.</param>
+/// <param name="TypePatternCalls">How many files it ran over.</param>
+/// <param name="ColdReadMs">Reading the tree from the disk again, and stripping it.</param>
+/// <param name="ColdReadChars">How many characters that read was.</param>
+/// <param name="ColdWalkMs">Walking the product directories again.</param>
+/// <param name="ColdWalkFiles">How many files that walk saw, build output included.</param>
+/// <param name="Files">How many files the tree holds.</param>
+/// <param name="Lines">How many lines the tree holds.</param>
+internal sealed record ScanComponentCosts(
+    long MemberPatternMs,
+    long MemberPatternCalls,
+    long HandOffPatternMs,
+    long HandOffPatternCalls,
+    long CallSitePatternMs,
+    long CallSitePatternCalls,
+    long TypePatternMs,
+    long TypePatternCalls,
+    long ColdReadMs,
+    long ColdReadChars,
+    long ColdWalkMs,
+    long ColdWalkFiles,
+    int Files,
+    int Lines);
 
 /// <summary>
 ///     Guard for issue #857: a key hand-off into the panel/overlay input seam must
@@ -781,7 +1088,22 @@ internal static class PanelKeyRouteProbe
 public sealed class PanelKeyRouteReachabilityRule
 {
     private static readonly Lazy<KeyRouteReport> Report = new(
-        () => PanelKeyRouteProbe.Scan(PanelKeyRouteProbe.ReadProductTrees()));
+        () =>
+        {
+            // The read is timed apart from the scan: the read is the shared
+            // snapshot's work (every rule in this assembly reads the same
+            // bytes once), and the scan is this rule's own. A measurement that
+            // does not separate them cannot say which of the two to work on.
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            IReadOnlyList<SourceTreeFile> sources = PanelKeyRouteProbe.ReadProductTrees();
+            long readMs = watch.ElapsedMilliseconds;
+
+            KeyRouteReport report = PanelKeyRouteProbe.Scan(sources);
+
+            PanelKeyRouteProbe.RecordReadMs(readMs);
+
+            return report;
+        });
 
     private static readonly Lazy<IReadOnlyList<SourceTreeFile>> Tests = new(
         () => PanelKeyRouteProbe.ReadTestTrees());
