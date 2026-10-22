@@ -102,3 +102,41 @@ an explicit, reviewable change.
    network.
 5. **The self-test still fails on a planted divergence.** A gate that cannot
    say no is a gate that enforces nothing.
+
+## The gates
+
+One directory per gate, and the directory name is the subcommand that runs
+it. `harbor-gates --list` prints the same table.
+
+| Gate | What it does |
+|---|---|
+| `aggregate-analyzer-cost` | the analyzer cost table: what each analyzer pack costs the compiler |
+| `aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the ratios |
+| `aot-publish-gate` | the AOT publish's outcome and diagnostics match the committed record |
+| `changelog-assemble` | the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent |
+| `check-abstractions-contract` | every dependency the five guarded src/ projects declare is load-bearing |
+| `check-analyzer-scope` | where each analyzer package is allowed to run |
+| `check-coverage-registry` | the registry of consciously uncovered files still matches the measurement |
+| `check-doc-facts` | a count a document states still equals the count of tracked files |
+| `check-event-topology` | the event-topology document's producer rows name the tree's real PublishAsync call sites |
+| `check-local-merge-loss` | a local squash-merge into dev dropped no content |
+| `check-no-test-sdk` | no project file declares the VSTest host that stops TUnit's discovery |
+| `check-public-api-resign` | a change to the frozen surface is re-signed in the same commit |
+| `check-reference-trimmer` | does any project in the tree reference a package the compiler never uses |
+| `check-shard-balance` | are the CI test shards balanced by what their projects cost |
+| `check-xml-doc-coverage` | every public member of the frozen contract assembly carries an XML doc |
+| `codemod-test-events` | the hand-built test events and messages move onto the shared builders |
+| `codemod-tool-names` | the tool-name literals move onto the WellKnownTools catalog |
+| `coverage-report` | the per-project and per-file coverage report of a run |
+| `gen-e2e-shards` | the process plan of the headless Avalonia E2E suite |
+| `gen-seam-graph` | the committed seam graph still matches the tree |
+| `go-quality` | the Go sources of the gates: formatted, vet-clean, and registered |
+| `measure-build-cpu` | what a build command costs: the wall time and the CPU utilisation |
+| `measure-project-graph` | the shape of the project dependency graph |
+| `msbuild-evaluation-cost` | what a Release compile spends on MSBuild project evaluation |
+| `normalize-mtimes` | the source mtimes tell the truth, so MSBuild can skip what did not change |
+| `pack-validate` | every packed Harbor.* package carries its metadata, its README and its lib |
+| `run-e2e-avalonia-shards` | the headless Avalonia E2E plan, one process per shard |
+| `test-census` | the per-test and per-project wall census of a CI run |
+| `test-measurements` | the per-test measurements a CI run printed |
+| `test-skips` | the tests a run skipped, and the reason each declared |

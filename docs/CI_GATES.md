@@ -15,21 +15,21 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `ec2d38e9` plus this branch's commits),
+Measured on this branch (`dev` at `bfa1c99d` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 30 553 lines |
-| of them, the `check-*.py` family | 17 files, 19 055 lines |
-| workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
-| gates that block a build | 29 |
+| python tools in `tools/` | 23 files, 23 115 lines |
+| of them, the `check-*.py` family | 14 files, 17 130 lines |
+| workflows that run a python tool | 3: `ci.yml`, `demo.yml`, `docs.yml` |
+| gates that block a build | 31 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 42 |
+| tools with a self-test | 46 |
 | tools with a ratchet | 21 |
-| tools with a floor | 26 |
+| tools with a floor | 28 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -243,13 +243,12 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (16 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (14 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 12 tools are run by a workflow; the other four are `md_gate.py` and
-`string-switch-rewrites.py`, which are loaded by other tools rather than run,
-and `codemod-test-events.py` and `codemod-tool-names.py`, which rewrite
-hand-built sources, because a tool that
-is not listed is a tool nobody
+tree. 12 tools are run by a workflow; the other two are `md_gate.py` and
+`string-switch-rewrites.py`, which are loaded by other tools rather than
+run. All of them are listed, because a tool
+that is not listed is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
@@ -287,7 +286,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 check-tool-schema-pin` | compiled: `tools/gates/check-tool-schema-pin` | the parameter schema of every builtin tool still is the one that was pinned: the schema is the tool's contract with the model, and a schema that moved while the pin did not is a model that may send something the tool does not accept | docs.yml | selftest, tool-schema | gate | `--selftest` | — | `--min-tools 25` |
 | `tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate` | compiled: `tools/gates/check-tunit-analyzer-gate` | the control for the TUnit analyzer gate: the analyzer must report a planted offender, and a waiver must suppress exactly its own site | ci.yml | build | control | `--selftest` | — | — |
 | `tools/ci-shard-slices.py` | python | the CI project lists have ONE source (`tools/ci-project-lists.json`), and every place that names a test project to run it says what the source says: the `test` job's matrix, the build job's upload slices, the coverage list and the OS matrix. `--write` regenerates them; the gate is what runs in CI | ci.yml | build | gate | `--self-test` | — | `--min-shards 4 --min-projects 37` |
-| `tools/codemod-test-events.py` | python | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/bin/harbor-gates-linux-x64 codemod-test-events` | compiled: `tools/gates/codemod-test-events` | rewrites the hand-built test events and test messages in `tests/` into the shared `TestEvents` and `TestMessages` builders, and reports the forms it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 codemod-tool-schemas` | compiled: `tools/gates/codemod-tool-schemas` | rewrites the hand-written JSON parameter schemas of the builtin tools into the [ToolParam] declarations the generator renders, and writes the pin they are hashed into. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/demo_repro.py` | python | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | python | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
@@ -296,7 +295,7 @@ The modes are:
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
-| `tools/codemod-tool-names.py` | python | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
+| `tools/bin/harbor-gates-linux-x64 codemod-tool-names` | compiled: `tools/gates/codemod-tool-names` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu` | compiled: `tools/gates/aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | contract, selftest | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
 | `tools/bin/harbor-gates-linux-x64 check-no-test-sdk` | compiled: `tools/gates/check-no-test-sdk` | no project file declares `Microsoft.NET.Test.Sdk`, the VSTest host that stops TUnit's discovery | ci.yml | test-sdk-absent | gate | `--self-test` | — | `--min-files 150` |
@@ -323,6 +322,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/bin/harbor-gates-linux-x64 go-quality` | compiled: `tools/gates/go-quality` | the Go sources of the gates themselves: every file under `tools/gates/` parses and is gofmt-clean, the module vets and builds, every package the table calls a gate carries a `selftest.go`, and the registry in `tools/gates/main.go` names exactly the packages that exist, once each. The formatting rule needs no toolchain (go/format is the code gofmt is built on); the vet and the build do, and the gate exits 2 rather than green when they cannot run | docs.yml, gates-binary.yml | go-quality, selftest | gate | `--self-test` | — | `--min-files 75 --min-packages 28` |
 | `tools/bin/harbor-gates-linux-x64 check-event-topology` | compiled: `tools/gates/check-event-topology` | the producer table of `docs/EVENT_TOPOLOGY.md` names the tree's real `PublishAsync` call sites: every cited line holds a publish, every publish in the file is cited, and every file under `src/` and `apps/` that publishes has a row. The citation fence asks whether a line exists; in that table the line number is the content of the row, so the fence passed a table that named four sites where the file had seven | docs.yml | eventtopology, selftest | gate | `--self-test` | — | `--min-producers 8 --min-sites 39 --min-subscribers 24` |
+| `tools/bin/harbor-gates-linux-x64 check-workflows` | compiled: `tools/gates/check-workflows` | no workflow file declares the same key twice in one mapping — in the block form (`if:` twice in one step), behind a quoted key (`"if":` twice) or inside a flow mapping (`with: {a: 1, a: 2}`) — and no line stands where a block sequence's entry must stand (the arm64 twin written at the indent of the list instead of the indent of the step). YAML forbids all of it, and GitHub refuses to parse a file that does it — SILENTLY: the run is created with ZERO jobs and closes as a failure, so the lane is not red, it is absent, and every pull request that waits for it waits forever. It happened here: the `ci` workflow had no jobs at all on runs 39627731779 and 39627783779, and sixteen on the run before them | docs.yml | selftest, workflows | gate | `--self-test` | — | `--min-files 17` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

@@ -63,7 +63,10 @@ import (
 	testprojects "harbor.local/gates/check-test-projects"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
 	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
+	checkworkflows "harbor.local/gates/check-workflows"
 	checkxmldoccoverage "harbor.local/gates/check-xml-doc-coverage"
+	codemodtestevents "harbor.local/gates/codemod-test-events"
+	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
@@ -203,9 +206,24 @@ var registry = []registered{
 		run:     tunitanalyzer.Run,
 	},
 	{
+		name:    "check-workflows",
+		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
+		run:     checkworkflows.Run,
+	},
+	{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "codemod-test-events",
+		summary: "the hand-built test events and messages move onto the shared builders",
+		run:     codemodtestevents.Run,
+	},
+	{
+		name:    "codemod-tool-names",
+		summary: "the tool-name literals move onto the WellKnownTools catalog",
+		run:     codemodtoolnames.Run,
 	},
 	{
 		name:    "codemod-tool-schemas",

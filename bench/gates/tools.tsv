@@ -49,3 +49,4 @@ test-skips.py	python3 tools/test-skips.py TestResults
 test-measurements.py	python3 tools/test-measurements.py TestResults
 pack-validate.py	python3 tools/pack-validate.py out/packages	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
 guard-triage.py	python3 tools/guard-triage.py
+check-event-topology.py		tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
