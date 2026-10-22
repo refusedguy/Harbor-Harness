@@ -61,7 +61,7 @@ internal static class ScreenSearch
     /// <param name="needle">The text to look for.</param>
     /// <returns><c>true</c> when the needle occurs in the haystack.</returns>
     internal static bool ContainsOrdinal(ReadOnlySpan<char> haystack, ReadOnlySpan<char> needle) =>
-        MemoryExtensions.Contains(haystack, needle);
+        haystack.IndexOf(needle) >= 0;
 
     /// <summary>
     ///     The tear-tolerant matcher: the haystack with its whitespace
@@ -98,14 +98,14 @@ internal static class ScreenSearch
         {
             // The old helper returned its input unchanged here, so the search
             // runs over the haystack itself.
-            return MemoryExtensions.Contains(haystack, needle);
+            return haystack.IndexOf(needle) >= 0;
         }
 
         char[] buffer = ArrayPool<char>.Shared.Rent(haystack.Length);
         try
         {
             int length = StripWhitespace(haystack, buffer);
-            return MemoryExtensions.Contains(buffer.AsSpan(0, length), needle);
+            return buffer.AsSpan(0, length).IndexOf(needle) >= 0;
         }
         finally
         {

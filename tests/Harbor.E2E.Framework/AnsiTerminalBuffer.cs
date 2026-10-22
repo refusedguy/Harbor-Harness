@@ -859,7 +859,7 @@ internal sealed class AnsiTerminalBuffer
                 }
             }
 
-            return MemoryExtensions.Contains(buffer.AsSpan(0, written), needle.AsSpan());
+            return buffer.AsSpan(0, written).IndexOf(needle.AsSpan()) >= 0;
         }
         finally
         {

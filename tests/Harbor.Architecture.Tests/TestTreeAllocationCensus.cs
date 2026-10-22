@@ -56,6 +56,7 @@
 // working would fail here — and it asserts nothing about the sizes, because a
 // budget on a byte count is a budget on the JIT, the runner and the machine.
 
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
