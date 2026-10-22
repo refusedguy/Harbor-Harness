@@ -6,7 +6,40 @@ namespace Harbor.Tui.CellForge.Tests;
 /// Fuzzy matcher contract for the command palette: subsequence matching,
 /// boundary/consecutive bonuses, stable ranking, empty-query passthrough.
 /// </summary>
-[NotInParallel("fuzzy-cache")]
+/// <remarks>
+/// <para>
+/// <b>The bare <c>[NotInParallel]</c> is load-bearing, and the keyed form it
+/// replaces could not do the job.</b> The score cache is a process-global LRU
+/// inside <see cref="FuzzyMatcher" />, and three of the tests below assert on
+/// its SIZE. A named key is a mutex over same-key peers only — see
+/// <c>docs/TEST_PATTERNS.md</c>, "What each <c>[NotInParallel]</c> form
+/// actually guarantees" — so the <c>("fuzzy-cache")</c> key this class used to
+/// carry excluded nothing that matters: the command palette, the file picker
+/// and the autocomplete palette all score through the same static cache, and
+/// their tests carry no key at all. On the dev run 39724342525 the assertion
+/// <c>afterFirst == 1</c> read 2 — one entry was ours, the other belonged to a
+/// neighbour that scored a candidate in the same millisecond.
+/// </para>
+/// <para>
+/// The competitor set cannot be enumerated (every palette in this assembly
+/// writes to the cache), so the decision procedure in
+/// <c>docs/TEST_PATTERNS.md</c> picks the BARE form — "completely alone" —
+/// the same one <c>UiStageCounterTests</c> and
+/// <c>StorePathSkipsMarkdownParseTests</c> already carry for their
+/// process-global counters. TUnit runs the global bucket LAST and one test at
+/// a time, so these tests are measured against a quiet process, and what they
+/// cost the shard is their own duration.
+/// </para>
+/// <para>
+/// The counter assertions are DELTAS — the count before and after the test's
+/// own call — so they state the invariant ("a repeat hit adds nothing")
+/// instead of an absolute number that only a quiet process could produce.
+/// The delta also makes the tests self-checking: a neighbour that slipped into
+/// the window shows up as a non-zero delta instead of as a silently passed
+/// assertion.
+/// </para>
+/// </remarks>
+[NotInParallel]
 public class FuzzyMatcherTests
 {
     [Test]
@@ -133,36 +166,47 @@ public class FuzzyMatcherTests
     }
 
     [Test]
-    [NotInParallel("fuzzy-cache")]
     public async Task Score_RepeatHit_DoesNotGrowCache()
     {
         FuzzyMatcher.ClearCache();
 
+        int before = FuzzyMatcher.CacheCount;
         int? first = FuzzyMatcher.Score("t5cache-q", "t5cache-candidate");
         int afterFirst = FuzzyMatcher.CacheCount;
         int? second = FuzzyMatcher.Score("t5cache-q", "t5cache-candidate");
+        int afterSecond = FuzzyMatcher.CacheCount;
 
         await Assert.That(second).IsEqualTo(first);
-        await Assert.That(afterFirst).IsEqualTo(1);
-        await Assert.That(FuzzyMatcher.CacheCount).IsEqualTo(1);
+        await Assert.That(afterFirst - before)
+            .IsEqualTo(1)
+            .Because("the first hit must cache exactly one (query, candidate) pair");
+        await Assert.That(afterSecond - afterFirst)
+            .IsEqualTo(0)
+            .Because("a repeat hit must be served from the cache, not add a second entry");
     }
 
     [Test]
-    [NotInParallel("fuzzy-cache")]
     public async Task Score_Miss_IsCachedAsNull()
     {
         FuzzyMatcher.ClearCache();
 
+        int before = FuzzyMatcher.CacheCount;
         int? first = FuzzyMatcher.Score("zzz", "abc");
+        int afterFirst = FuzzyMatcher.CacheCount;
         int? second = FuzzyMatcher.Score("zzz", "abc");
+        int afterSecond = FuzzyMatcher.CacheCount;
 
         await Assert.That(first).IsNull();
         await Assert.That(second).IsNull();
-        await Assert.That(FuzzyMatcher.CacheCount).IsEqualTo(1);
+        await Assert.That(afterFirst - before)
+            .IsEqualTo(1)
+            .Because("a miss is cached too: one (query, candidate) pair, one entry");
+        await Assert.That(afterSecond - afterFirst)
+            .IsEqualTo(0)
+            .Because("the cached miss must be served, not re-inserted");
     }
 
     [Test]
-    [NotInParallel("fuzzy-cache")]
     public async Task Filter_LargeCatalog_SecondPassUsesCache()
     {
         // Deterministic perf proof for the 4096-entry (query, candidate) LRU:
@@ -176,12 +220,19 @@ public class FuzzyMatcherTests
         }
 
         FuzzyMatcher.ClearCache();
+        int before = FuzzyMatcher.CacheCount;
         List<string> first = FuzzyMatcher.Filter("ses", catalog, static s => s);
         int afterFirst = FuzzyMatcher.CacheCount;
         List<string> second = FuzzyMatcher.Filter("ses", catalog, static s => s);
+        int afterSecond = FuzzyMatcher.CacheCount;
 
         await Assert.That(first.Count).IsGreaterThan(0);
-        await Assert.That(FuzzyMatcher.CacheCount).IsEqualTo(afterFirst);
+        await Assert.That(afterFirst - before)
+            .IsGreaterThan(0)
+            .Because("the first pass must fill the cache — otherwise the second pass proves nothing");
+        await Assert.That(afterSecond - afterFirst)
+            .IsEqualTo(0)
+            .Because("every Score call on the second pass must be a cache hit");
         await Assert.That(second.Count).IsEqualTo(first.Count);
         await Assert.That(second.SequenceEqual(first)).IsTrue();
     }
