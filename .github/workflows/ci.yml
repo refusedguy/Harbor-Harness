@@ -894,6 +894,52 @@ jobs:
       # the key, so a runner that moves the folder gets a cold build
       # instead of a wrong one.
       NUGET_PACKAGES: /home/runner/.nuget/packages
+      # ── THE BUILD-OUTPUT CACHE'S PATH LIST: ONE COPY (#2107) ────────────
+      #
+      # The cache's VERSION is a hash of the `path` input, and the restore
+      # asks the service for "the entry with this key AND this version". The
+      # restore step and the save step therefore have to carry THE SAME list,
+      # byte for byte, or they are two different versions and the restore can
+      # never find the entry the save wrote. That is how the cache of #1927
+      # never fired at all (the two lists differed by nine comment lines),
+      # and it is how it stops firing again: MEASURED on run 39721596368 (a
+      # pull-request run, the branch feat/gates-a), the branch's restore list
+      # carried `!tools/bin/**` and the seven comment lines above it, while
+      # the entry it asked for was written by dev's save step with the four
+      # plain lines. The REST API found that entry (it lists every scope and
+      # every version), the restore asked for it with a version dev never
+      # wrote, and the answer was "Cache not found for input keys" — 219.8 s
+      # of compile where the same branch's lane with a matching list spends
+      # 65.4 s.
+      #
+      # ONE env var, used by both steps, is what makes the two lists the same
+      # list BY CONSTRUCTION: there is no second copy to drift. And the
+      # comments live HERE, in the YAML, and not inside the value: the hash is
+      # over the LINES of the value, so a comment inside it would be a line
+      # of the hash, and editing a comment would change the version and cost
+      # the lane its cache.
+      #
+      # What the list is, and why each line is in it:
+      #   **/obj                 the intermediate outputs — the dll, the
+      #                           refint dll, the xml, the generated sources.
+      #                           These are what MSBuild compares to decide
+      #                           whether a project has to be compiled again.
+      #   **/bin                 the copies of those outputs.
+      #   !**/runtimes/**        the runtime assets of every RID: copies of
+      #                           what the NuGet folder already holds, and
+      #                           the bulk of the payload (the repository's
+      #                           10 GB cache budget cannot hold them).
+      #   !**/*.resources.dll    the satellite assemblies, for the same
+      #                           reason.
+      #
+      # The debug symbols are NOT excluded: the `.pdb` is not an output of
+      # CoreCompile in Release (Directory.Build.props sets DebugType=none
+      # there), so excluding it changes nothing but the payload.
+      HARBOR_BUILD_OUTPUT_CACHE_PATHS: |
+        **/obj
+        **/bin
+        !**/runtimes/**
+        !**/*.resources.dll
       # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
       #
       # MSBuild nodes are kept alive between builds by default, and a
@@ -1077,85 +1123,53 @@ jobs:
         id: cache-restore
         uses: actions/cache/restore@v6
         with:
-          # THE PATH INPUT BELOW MUST BE BYTE-FOR-BYTE THE PATH INPUT OF THE
-          # SAVE STEP. The cache's VERSION is a hash of that input, and the
-          # restore asks the cache service for "the entry with this key AND
-          # this version". Two path inputs that differ by even one character
-          # are two versions, and then the restore can never find the entry
-          # the save wrote.
+          # THE PATH LIST IS THE JOB'S ENV VAR, AND THE SAVE STEP READS THE
+          # SAME ONE (HARBOR_BUILD_OUTPUT_CACHE_PATHS). There is no second
+          # copy to drift.
+          #
+          # WHY IT HAS TO BE ONE LIST: the cache's VERSION is a hash of the
+          # `path` input, and the restore asks the cache service for "the
+          # entry with this key AND this version". Two lists that differ by
+          # even one line are two versions, and then the restore can never
+          # find the entry the save wrote.
           #
           # WHAT THE VERSION IS, since it decides whether the cache works at
-          # all: upstream, `getCacheVersion(paths, ...)` is the SHA-256 of
-          # the path LINES (trimmed, empties dropped) joined with "|", plus
-          # the compression method and the salt "1.0". The comment lines are
-          # lines, so they are in the hash.
+          # all: upstream, `getCacheVersion(paths, ...)` is the SHA-256 of the
+          # path LINES (trimmed, empties dropped) joined with "|", plus the
+          # compression method ("zstd-without-long" on the runner image) and
+          # the salt "1.0". The COMMENT lines are lines, so they are in the
+          # hash — which is why the list lives in an env var with its comments
+          # OUTSIDE the value, and why the two steps read the one var.
           #
-          # They differed by NINE COMMENT lines, which is how the cache never
-          # fired: the restore's block explained why the runtime assets and
-          # the symbols are left out, the save's block did not, and the two
-          # strings hashed to two different versions. Replaying that hash
-          # over the two path inputs of the tree that failed (sha 7c7a13e1):
-          # the restore's 14 lines (9 of them comments) hash to bcff3b41...,
-          # the save's 5 lines hash to 3dd0d4fb..., and after this fix both
-          # inputs are the same 5 lines and hash to 3dd0d4fb....
+          # THE HASH OF THE FOUR LINES THE VAR HOLDS, measured:
+          #   sha256("**/obj|**/bin|!**/runtimes/**|!**/*.resources.dll|zstd-without-long|1.0")
+          #     = c59a4786cc2123d53e9d1c95486e32a211f9dcf3885f53318b7aedde237d9947
+          # and that is the `version` the REST API reports for every entry the
+          # dev lane has written since #2117 (measured 2026-10-22 on entries
+          # 9318303404, 9318108740, 9317538762). A branch whose list differs
+          # asks for a version dev never wrote, and the service answers
+          # "Cache not found for input keys" — MEASURED on the pull-request
+          # run 39721596368 (the branch feat/gates-a, whose list carried
+          # `!tools/bin/**` and seven comment lines): the resolve step named
+          # dev's entry, the restore asked for it with a version dev never
+          # wrote, and the lane compiled 219.8 s instead of the 65.4 s the
+          # same branch spends with a matching list.
           #
-          # Measured: the restore printed "Cache not found for input keys" on
-          # every pull-request run (nine of them, 39533897704 ..
-          # 39538764502), on every dev push of that day, and on the manual
-          # dispatches 39541292620 and 39542435400, while the save step wrote
-          # the entry every time.
-          #
-          # Dispatch 39542435400 is the proof in one run: its resolve step
-          # found the entry that dispatch 39541292620 had saved under the EXACT
-          # key ...-7c7a13e1, and the restore still refused that key —
-          # "Cache not found for input keys: msbuild-v1-...-7c7a13e1,
-          # msbuild-v1-...". Same key, SAME scope, other version: the entry
-          # was there and the restore could not see it. The comments are
-          # here, ABOVE the key, for that reason.
-          #
-          # The runtime assets (the native libraries of every RID) and the
-          # satellite assemblies are COPIES of what the NuGet folder already
-          # holds: nothing in MSBuild's up-to-date check reads them, and the
-          # build re-copies them from the packages. They are the bulk of the
+          # THE RUNTIME ASSETS AND THE SATELLITE ASSEMBLIES are excluded
+          # because they are COPIES of what the NuGet folder already holds:
+          # nothing in MSBuild's up-to-date check reads them, and the build
+          # re-copies them from the packages. They are the bulk of the
           # payload, and the repository's 10 GB cache budget cannot hold them
           # — the first version of this cache (1,921 MiB per entry) was
           # evicted within minutes of being written, because the NuGet caches
           # already fill the budget.
           #
-          # THE DEBUG SYMBOLS STAY (issue #2100). They used to go with the
-          # runtime assets, for a reason that was about the ARTIFACTS and not
-          # about the cache: the uploaded slices do not carry a .pdb. But the
-          # cache is not the artifacts, and the exclusion broke MSBuild's
-          # up-to-date check for EVERY project:
-          #
-          #   obj/Release/net10.0/<Target>.pdb is
-          #   @(_DebugSymbolsIntermediatePath), and that item is one of the
-          #   OUTPUTS of the `CoreCompile` target (SDK:
-          #   Roslyn/Microsoft.CSharp.Core.targets, CoreCompile's Outputs
-          #   list; the item is created in
-          #   Microsoft.Common.CurrentVersion.targets, inside an ItemGroup
-          #   conditioned on '$(_DebugSymbolsProduced)' == 'true', which
-          #   Directory.Build.props makes true with <DebugType>portable</DebugType>).
-          #
-          #   MSBuild treats a MISSING OUTPUT as "must build" (dotnet/msbuild,
-          #   src/Build/BackEnd/Components/RequestBuilder/TargetUpToDateChecker.cs:
-          #   "First output is missing: we must build the target" / "An output
-          #   is missing: we must build the target"). So with the pdb absent
-          #   from the restored tree, CoreCompile was out of date for every
-          #   project on every run, whatever the mtimes said: the compile was
-          #   always the full 112-project rebuild. That is the measured reason
-          #   the wall did not fall after #2047.
-          #
-          # The cost of keeping them is one more file per project per
-          # configuration; the measured size is in the PR body. The path list
-          # below and the save step's list MUST stay byte-for-byte identical:
-          # the cache's VERSION is a hash of these lines, and two different
-          # lists are two different versions.
-          path: |
-            **/obj
-            **/bin
-            !**/runtimes/**
-            !**/*.resources.dll
+          # THE DEBUG SYMBOLS STAY (issue #2100), and they cost nothing: in
+          # Release, Directory.Build.props sets DebugType=none, so the `.pdb`
+          # is NOT an output of CoreCompile there and there is no `.pdb` in
+          # the payload to keep or to drop. (The exclusion of `!**/*.pdb`
+          # that #2117 removed was never the reason a project looked stale.)
+          path: ${{ env.HARBOR_BUILD_OUTPUT_CACHE_PATHS }}
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
           # then the prefix.
@@ -1283,10 +1297,24 @@ jobs:
           echo "=== the generated editorconfig BEFORE the build ==="
           if [ -e "$ec" ]; then stat -c '%y  %s  %n' "$ec"; sha256sum "$ec"; cp "$ec" "$RUNNER_TEMP/ec-before"; else echo "MISSING            $ec"; fi
           echo "=== MSBuild's up-to-date decision (one project, detailed) ==="
+          # `SolutionDir` is the property the lane's own build has, and the
+          # generated editorconfig carries it: `build_property.SolutionDir`.
+          # A project-level build without it writes `*Undefined*` into that
+          # file, the file's CONTENT differs from the one the solution build
+          # wrote, the SDK rewrites it (it writes only when the content
+          # differs), and the rewrite makes it NEWER than the outputs — so
+          # the diagnostic used to rebuild the very project it was measuring
+          # and report a cause the lane does not have. MEASURED on run
+          # 39723477934: the diff was one line,
+          #   < build_property.SolutionDir = /home/runner/work/Harbor-Harness/Harbor-Harness/
+          #   > build_property.SolutionDir = *Undefined*
+          # With the property passed, the content matches, the file is not
+          # rewritten, and the verdict below is the lane's own verdict.
           dotnet build "$p/Harbor.Abstractions.Contracts.csproj" \
             -c Release --no-restore -v:detailed -m:1 -nologo \
+            -p:SolutionDir="$GITHUB_WORKSPACE/" \
             -p:BuildProjectReferences=false 2>&1 \
-            | grep -B 1 -A 4 'Building target' | head -60 || true
+            | grep -B 1 -A 4 'Building target\|Skipping target' | head -60 || true
           echo "=== the generated editorconfig AFTER the build ==="
           if [ -e "$ec" ]; then stat -c '%y  %s  %n' "$ec"; sha256sum "$ec"; else echo "MISSING            $ec"; fi
           echo "=== what changed in it (if anything) ==="
@@ -2036,18 +2064,18 @@ jobs:
           || github.event_name == 'workflow_dispatch')
         uses: actions/cache/save@v6
         with:
-          # BYTE-FOR-BYTE the restore step's path list. The cache's VERSION is
-          # a hash of these lines, and the restore asks for the entry with this
+          # THE SAME ENV VAR THE RESTORE STEP READS
+          # (HARBOR_BUILD_OUTPUT_CACHE_PATHS). The cache's VERSION is a hash
+          # of the path LINES, and the restore asks for the entry with this
           # key AND this version: two different lists are two different
           # versions, and then the restore can never find the entry the save
-          # wrote (that is how #2047's predecessor never fired at all).
-          # The debug symbols STAY in the list - see the restore step for why
-          # excluding them made every project look out of date (issue #2100).
-          path: |
-            **/obj
-            **/bin
-            !**/runtimes/**
-            !**/*.resources.dll
+          # wrote (that is how #2047's predecessor never fired at all, and
+          # how the pull-request run 39721596368 restored nothing: the
+          # branch's list carried seven comment lines and one exclusion the
+          # entry it asked for did not have).
+          #
+          # One var, two steps, no second copy to drift.
+          path: ${{ env.HARBOR_BUILD_OUTPUT_CACHE_PATHS }}
           key: ${{ steps.cache-key.outputs.key }}
 
   # ── pack ───────────────────────────────────────────────────────────────────

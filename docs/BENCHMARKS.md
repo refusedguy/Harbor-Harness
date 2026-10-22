@@ -2703,6 +2703,97 @@ already measured why it is hard: it is analyzer-bound and throughput-bound on
 the runner's four cores, so more MSBuild nodes buy nothing and only the
 analyzers themselves (or a second runner) do.
 
+#### 6.4.2 The tree IS incremental: the compile rebuilds 3 of 117 projects (#2107)
+
+Issue [#2107](https://github.com/refusedguy/Harbor-Harness/issues/2107) asked
+whether the build-output cache pays off, and its own measurement said it does
+not: the lane restored the tree and then recompiled **117 of 117** projects,
+with the compile at 247-260 s — the cache buying 21 s of download and nothing
+else. Measured again on 2026-10-22, on the tree of `dev` @ `bfa1c99d`, the tree
+IS incremental: the compile rebuilds **three** projects and costs **36.7 s**.
+
+The count is a fact about the disk, not a reading of the log: a project the
+compile rebuilt has an intermediate assembly (`obj/Release/net10.0/<T>.dll`)
+NEWER than the moment the compile started, and a project it skipped keeps the
+stamping timestamp the restore gave it. The step that measures it is the
+`build` job's "DIAGNOSTIC: how many projects the compile rebuilt" in
+`.github/workflows/ci.yml`.
+
+| run | lane | build-output cache | NUKE compile | projects rebuilt |
+|---|---|---|---:|---:|
+| [39723477934](https://github.com/refusedguy/Harbor-Harness/actions/runs/39723477934) | PR `ci/2107-incremental` | **HIT** (`…-bfa1c99d`, 1 841 MB, 36.8 s) | **36.7 s** | **3** of 117 |
+| [39719039714](https://github.com/refusedguy/Harbor-Harness/actions/runs/39719039714) | PR `feat/2111-msbuild-switches` | HIT (`…-a019e928`) | 31.2 s | not measured |
+| [39721963101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721963101) | push `dev` | HIT (`…-6e6b0da9`) | 30.9 s | not measured |
+| [39718825965](https://github.com/refusedguy/Harbor-Harness/actions/runs/39718825965) | PR `ci/2108-merge-reference-trimmer` | **MISS** — the props hash differs | 190.8 s | 117 (a cold compile) |
+| [39721596368](https://github.com/refusedguy/Harbor-Harness/actions/runs/39721596368) | PR `feat/gates-a` | **MISS** — the path list differs | 219.8 s | 117 (a cold compile) |
+| [39722582254](https://github.com/refusedguy/Harbor-Harness/actions/runs/39722582254) | manual dispatch | **MISS** — the scope | 183.1 s | 117 (a cold compile) |
+
+**Three reasons the cache misses, and they are three different things.** The
+restore step prints "Cache not found for input keys" in all three cases, and
+the reason is a different one each time.
+
+1. **The props hash.** The key carries a hash of `Directory.Packages.props`,
+   `Directory.Build.props`, `Directory.Build.targets` and `global.json`. A pull
+   request that touches one of them has a prefix the base branch has no entry
+   for, and the restore finds nothing at all. Measured on run 39718825965: the
+   lane's prefix ended in `1de69dbd…`, the base branch's in `61e83d62…`.
+   **This miss is correct and cannot be bought back**: `$(MSBuildAllProjects)` —
+   every imported `.props`/`.targets`, the props files among them — is an
+   INPUT of `CoreCompile` (SDK: `Roslyn/Microsoft.CSharp.Core.targets`), so a
+   changed props file is newer than the outputs and every project that imports
+   it has to be compiled again. The compile is full either way; what the miss
+   costs is the 10-37 s the restore would have cost.
+2. **The path list.** The cache's VERSION is a hash of the `path` input, and
+   the restore asks the service for "the entry with this key AND this
+   version". A branch whose path list differs from the base branch's asks for
+   a version the base branch never wrote. Measured on run 39721596368 (the
+   branch `feat/gates-a`, whose list carried `!tools/bin/**` and seven comment
+   lines that `dev`'s list did not): the resolve step named `dev`'s entry
+   `…-6e6b0da9` — the REST API lists every scope and every version — and the
+   restore refused it. **Fixed here**: the list is one env var
+   (`HARBOR_BUILD_OUTPUT_CACHE_PATHS`) that the restore step and the save step
+   both read, so there is no second copy to drift, and the comments live in the
+   YAML and not inside the value (a comment inside the value is a LINE of the
+   hash, so editing one used to change the version and cost the lane its
+   cache). The hash of the four lines the var holds is
+   `c59a4786cc2123d53e9d1c95486e32a211f9dcf3885f53318b7aedde237d9947`
+   (`sha256` of the lines joined with `|`, plus `zstd-without-long` and the
+   salt `1.0`), and that is the `version` the REST API reports for every entry
+   `dev` has written since #2117.
+3. **The scope.** The cache service serves a run the entries of its own
+   branch, of the branches below it, and — for a pull request — of the base
+   branch. A manual dispatch on a feature branch gets none of `dev`'s
+   entries, and the run the issue quotes (39658451546) is such a dispatch: its
+   resolve step found `dev`'s entry through the REST API and the restore could
+   not see it. Nothing in the workflow can change that; the scope is the
+   service's rule.
+
+**What the issue prescribed, and what the measurement says.** The issue asked
+for the restore to be moved before the stamping. It is already where it has to
+be: the restore inside the compile is a NO-OP — it does not rewrite the
+NuGet-generated files, and those files (`obj/<T>.csproj.nuget.g.props`) are in
+`$(MSBuildAllProjects)`, so a rewrite would make every project look stale
+again. The measurement says they are not rewritten: three projects rebuilt,
+not 117. The issue's other candidate — the `.pdb` — is not an output of
+`CoreCompile` in Release at all (`Directory.Build.props` sets
+`DebugType=none` there, so `_DebugSymbolsProduced` is false and the `.pdb`
+leaves the target's output list), which is why excluding it from the payload
+changed nothing.
+
+**And the cause the merged diagnostic reported was the diagnostic's own.**
+The step merged with #2123 asks MSBuild for its verdict on one project, and it
+answered
+"Input file `…GeneratedMSBuildEditorConfig.editorconfig` is newer than output
+file `…xml`". The step builds that project on its own, and a project-level
+build has no `$(SolutionDir)`, so the generated editorconfig gets
+`build_property.SolutionDir = *Undefined*` instead of the solution build's
+path — the content differs, the SDK rewrites the file (it writes only when the
+content differs), and the rewrite makes it newer than the outputs. Measured on
+run 39723477934, the diff was exactly that one line. The diagnostic therefore
+rebuilt the very project it was measuring and named a cause the lane does not
+have; the step now passes `-p:SolutionDir="$GITHUB_WORKSPACE/"`, so its
+verdict is the lane's own.
+
 ### 6.5 The same rules in Release and Debug: the axis that is NOT measured yet
 
 The architecture gate runs in **Release** in CI: `Directory.Build.props`
