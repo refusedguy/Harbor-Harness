@@ -87,9 +87,8 @@ whose name never appears leaves the pull request waiting forever.
 | `internal links` | `docs.yml` | Broken internal links and anchors. |
 | `markdown lint` | `docs.yml` | Markdown invariants. |
 | `normative citations` | `docs.yml` | Documentation that cites a file, line or type that moved. |
-| `guarded project dependencies` | `docs.yml` | The dependency contract of the four guarded projects. |
 | `test project coverage` | `docs.yml` | A test project that no CI run would execute. |
-| `xml-doc coverage` | `docs.yml` | Undocumented members on the frozen contract surface. |
+| `tree gates` | `docs.yml` | Every gate that needs nothing but the tree, in one command: `harbor-gates all`. It absorbed the `guarded project dependencies` and `xml-doc coverage` jobs, and it runs their gates with the same floors. |
 
 Verify the list against a pull request head at any time:
 
@@ -104,13 +103,13 @@ gh api "repos/refusedguy/Harbor-Harness/commits/$SHA/check-runs?per_page=100" \
 The list above is the list in the two files, and it is the list to enforce
 once the workflow change in this pull request is on `dev`. The `gate` job
 does not exist on `dev` until then, and a required check whose name does not
-exist blocks every pull request, so the rulesets are applied with the seven
+exist blocks every pull request, so the rulesets are applied with the six
 documentation gates only:
 
 | | Required checks now | Required checks after the workflow change lands |
 |---|---|---|
-| `dev` (25476493) | the seven documentation gates | `gate`, `public-api freeze` and the seven documentation gates |
-| `master` (25476506) | the seven documentation gates | `gate`, `public-api freeze` and the seven documentation gates |
+| `dev` (25476493) | the six documentation gates | `gate`, `public-api freeze` and the six documentation gates |
+| `master` (25476506) | the six documentation gates | `gate`, `public-api freeze` and the six documentation gates |
 
 One command per branch turns the `gate` on, and it is the same command as
 "Applying them" above:
@@ -122,7 +121,7 @@ gh api --method PUT repos/refusedguy/Harbor-Harness/rulesets/25476506 \
   --input .github/rulesets/master.json
 ```
 
-The seven documentation gates are reported on every pull request as soon as
+The six documentation gates are reported on every pull request as soon as
 the `docs.yml` trigger change in this pull request lands. Before that, a
 pull request that touches none of the documentation paths (a change to
 `tools/`, `samples/` or `providers/` only) does not report them, and the
@@ -142,10 +141,25 @@ condition on it.
 | `public-api snapshot (Abstractions)` | The old name of the public-API job. Open pull request #1944 renamed it to `public-api freeze` and deleted the second copy of it from `docs.yml`. The name settled on `public-api freeze` after that, so that is the required name. |
 | `coverage` | Report-only by contract, with no thresholds. Open pull request #1923 also moves it off the pull request path. |
 | `test duplication` | The gate runs with `--warn-only`, so it cannot fail and cannot gate anything. |
-| `repo-map counts` | Counts drift whenever a file is added to the tree. A nuisance gate rather than a defect gate. |
 | `publish`, `publish to GitHub Pages` | Only run on `master` or on tags. |
 | `docs site assembly` | Builds an artifact. It is not a gate. |
 | `test-os (windows-latest)`, `test-os (macos-latest)` | `test-os.yml` only triggers on pull requests to `master`, never on pull requests to `dev`. It is also the single most expensive lane (19.5 runner-minutes) and issue #1787 is moving it to `push` and `schedule`. Requiring it would either hang every pull request or cost the whole budget. |
+
+Two of the names that were required are GONE as jobs: `guarded project
+dependencies` and `xml-doc coverage` were absorbed by the `tree gates` job of
+`docs.yml`, which runs their gates (and the rest of the tree gates) with the
+same floors, and the list names `tree gates` instead. A required check whose
+name is never reported blocks every pull request forever, so the ruleset has
+to be re-applied with the new name.
+
+The consolidation has one consequence worth naming: `check-doc-facts` — the
+repo-map count gate that was deliberately NOT required, because a count that
+drifts on every added file is a nuisance rather than a defect — now runs
+inside a required job, so a drifting count blocks a merge. The same is true
+of `changelog-assemble --check` and of `check-local-merge-loss`, which the
+`tree gates` job also runs. That is a policy change and it comes from the
+consolidation, not from the gates: each of them was a gate before and each of
+them was reported.
 
 ## A required check that never reports blocks the pull request forever
 
@@ -255,7 +269,7 @@ the measurement and closed again; the code one is this pull request.
 |---|---|---|
 | `gate` | `failure` | `success` |
 | `build`, `test`, `aot-publish`, `test/sample package set`, `perf-gate` | ran or skipped per the filter | `skipped`, the filter says the .NET tree was not touched |
-| The seven documentation gates | `success` | `success` |
+| The six documentation gates | `success` | `success` |
 | Every required context present on the head | yes, none missing | yes, none missing |
 | Verdict with the list above | `MERGEABLE / BLOCKED`, the gate caught a failing build | `MERGEABLE / CLEAN` |
 
@@ -320,6 +334,23 @@ The step that is still open is applying the whole list, which needs the
 `gate` job on `dev`, which needs the workflow change in this pull request:
 
 ```bash
+gh api --method PUT repos/refusedguy/Harbor-Harness/rulesets/25476493 \
+  --input .github/rulesets/dev.json
+gh api --method PUT repos/refusedguy/Harbor-Harness/rulesets/25476506 \
+  --input .github/rulesets/master.json
+```
+
+There is a second one, and it has an ORDER. The `tree gates` job of
+`docs.yml` absorbs the `guarded project dependencies` and `xml-doc coverage`
+jobs, so the two files name `tree gates` where they named those two. The
+ruleset that is applied RIGHT NOW still names the old two, and a required
+check whose name is never reported blocks every pull request forever. So the
+rulesets are re-applied AFTER the change is on `dev` — before it, the name
+`tree gates` does not exist yet, and applying the new list would block every
+pull request in exactly the same way.
+
+```bash
+# AFTER the pull request that removes the two jobs is on `dev`:
 gh api --method PUT repos/refusedguy/Harbor-Harness/rulesets/25476493 \
   --input .github/rulesets/dev.json
 gh api --method PUT repos/refusedguy/Harbor-Harness/rulesets/25476506 \
