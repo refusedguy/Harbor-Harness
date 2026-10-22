@@ -1103,18 +1103,54 @@ jobs:
           scope="refs/heads/${base_ref}"
           echo "cache prefix:    ${prefix}"
           echo "looking in scope: ${scope}"
+          #
+          # THIS LANE'S OWN VERSION of the cache. The cache action computes it
+          # from the `path` input — the LINES joined with "|", plus the
+          # compression method and the salt "1.0" — and the service serves an
+          # entry only when the key AND the version agree. The version is
+          # therefore the SECOND thing that can differ between this lane and
+          # the base branch, and it is invisible in the log until the restore
+          # says "Cache not found for input keys" for a key the REST API has
+          # just named. Printing it here tells the two apart:
+          #
+          #   * the versions agree and the restore still misses → the entry is
+          #     in a scope this lane cannot read (a manual dispatch on a
+          #     feature branch sees none of dev's entries);
+          #   * the versions differ → the two lanes' path lists differ, and
+          #     the base branch never wrote this lane's version.
+          #
+          # The algorithm is the action's own (actions/toolkit,
+          # packages/cache/src/internal/cacheUtils.ts, getCacheVersion), and
+          # the number it produces for the four lines the list holds is the
+          # `version` the REST API reports for every entry dev has written
+          # since #2117: c59a4786cc2123d53e9d1c95486e32a211f9dcf3885f53318b7aedde237d9947.
+          paths="$(printf '%s' "$HARBOR_BUILD_OUTPUT_CACHE_PATHS" | sed '/^[[:space:]]*#/d;/^[[:space:]]*$/d')"
+          compression="zstd-without-long"
+          if [ -z "$(zstd --quiet --version 2>/dev/null)" ]; then
+            compression="gzip"
+          fi
+          version="$( { printf '%s' "$paths" | paste -sd'|' - | tr -d '\n'; printf '|%s|1.0' "$compression"; } | sha256sum | cut -d' ' -f1 )"
+          echo "this lane's cache version: ${version}"
           key="$(curl -fsSL --max-time 60 \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
-            | jq -r --arg prefix "$prefix" --arg scope "$scope" '
+            | jq -r --arg prefix "$prefix" --arg scope "$scope" --arg version "$version" '
                 [ .actions_caches[] | select(.key | startswith($prefix)) ]
-                | ( (map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                | ( (map(select(.version == $version)) | map(select(.ref == $scope)) | sort_by(.created_at) | last)
+                    // (map(select(.version == $version)) | sort_by(.created_at) | last)
+                    // (map(select(.ref == $scope)) | sort_by(.created_at) | last)
                     // (sort_by(.created_at) | last) )
-                | .key // empty' 2>/dev/null)"
-          if [ -n "$key" ]; then
-            echo "key=${key}" >> "$GITHUB_OUTPUT"
-            echo "cache entry to restore: ${key}"
+                | if . == null then "" else (.key + " " + .version) end' 2>/dev/null)"
+          entry_key="${key%% *}"
+          entry_version="${key##* }"
+          if [ -n "$entry_key" ]; then
+            echo "key=${entry_key}" >> "$GITHUB_OUTPUT"
+            echo "cache entry to restore: ${entry_key}"
+            echo "the entry's own version: ${entry_version}"
+            if [ "$entry_version" != "$version" ]; then
+              echo "::warning::the entry was written with another path list (its version is ${entry_version}, this lane's is ${version}); the service serves it only when the versions agree"
+            fi
           else
             echo "no build-output cache entry for this prefix — this lane compiles from scratch"
           fi
