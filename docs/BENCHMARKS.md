@@ -3678,15 +3678,17 @@ still in it. Four things changed inside the lane since:
 
 | change | what it does to the pull-request lane |
 |---|---|
-| [#2123](https://github.com/refusedguy/Harbor-Harness/pull/2123) | three `DIAGNOSTIC` steps in the `build` job. They run only when the build-output cache matched, and it never matched in the twelve, so they cost 0 s there and 9 s in the run of 2026-10-22 below |
+| [#2123](https://github.com/refusedguy/Harbor-Harness/pull/2123) | three `DIAGNOSTIC` steps in the `build` job. They run only when the build-output cache matched, and it never matched in the twelve, so they cost 0 s there and 7 s in the run of 2026-10-22 below |
 | [#2134](https://github.com/refusedguy/Harbor-Harness/pull/2134) | the `aot-publish` job's gate is the compiled binary now, not the python script. Same job, same lane |
 | [#2153](https://github.com/refusedguy/Harbor-Harness/pull/2153) | the ILLink analyzer and the vs-threading family leave the ordinary build: 801.3 analyzer-seconds become 491.4, the change's own measurement. Its WALL effect was inside the 28 s noise floor of the harness that measured it, so the compile is cheaper by an amount the harness could not resolve |
 | [#2155](https://github.com/refusedguy/Harbor-Harness/pull/2155), [#2158](https://github.com/refusedguy/Harbor-Harness/pull/2158) | `MSBUILDDISABLENODEREUSE=1` in the `build` job, and `HarborArchGate: 'false'` for every event. The pull-request lane already had the architecture gate off, so the second half of that change does not touch it |
 
-Two more are in flight and change the lane's shape: PR #2138 moves the
-unused-reference analyzer into the ordinary compile and deletes the
-`reference-trimmer` job, and PR #2162 adds the `go-quality` gate to the
-`docs.yml` gate lane.
+Two more changed the lane's shape since, one of them still in flight. PR
+#2162's `go-quality` gate joined the `docs.yml` gate lane: that lane runs
+twenty-two jobs today, and the sample's twenty-one had no such job. PR
+#2138 moves the unused-reference analyzer into the ordinary compile and
+deletes the `reference-trimmer` job, and it is not merged yet: the job is
+still in dev's `ci.yml`, and §11.6 measures the lane it will produce.
 
 **THE WALL IS NOT THE SUM, AND THAT IS THE POINT.** `ci.yml` and `docs.yml`
 have no `needs:` between them, so they start together, and the pull request
@@ -3799,10 +3801,10 @@ tree once (median 250 s of compile); the `unused references
 (`.github/workflows/ci.yml:726`), and its own median wall is 274 s. Two
 full compiles per pull request: 470 s of the 1410 s of a median pull
 request's bill, **33 %**, and the two jobs' own walls (358 s and 274 s) are
-632 s of the `ci.yml` lane's 1158 s, **55 % of the lane**. Issue #2108
-measured the same two builds as 660 s and 44 % of the bill on run
-`39556560488`; the shape is unchanged, and the share grew because the gate
-lane got cheaper around it.
+632 s of the `ci.yml` lane's 1158 s, **55 % of the lane**, and 45 % of the
+whole stripe's bill. Issue #2108 measured the same two builds as 660 s and
+44 % of the bill on run `39556560488`; the shape is unchanged, and the share
+grew because the gate lane got cheaper around it.
 
 **THE BUILD JOB, STEP BY STEP** (median of the twelve; the job's own wall is
 358 s, min 291, max 392):
@@ -3840,8 +3842,8 @@ start when everything else has finished.
 | the ReferenceTrimmer is a second full build | merging it into the main compile, or reusing the build's outputs | **not measured as a delta.** The job is still in dev and still 19 % of the sample's bill. On the lanes of 2026-10-22 the stripe costs 19.0 runner-minutes with the job and 18.5 without it, but those are two different runs with different cache states, so the difference is not the merge's price | **0 measured** | [#2108](https://github.com/refusedguy/Harbor-Harness/issues/2108) |
 | the commit sha in `AssemblyInformationalVersion` | `IncludeSourceRevisionInInformationalVersion=false` (`Directory.Build.props:72`) | **0 on the runs of 2026-10-21, and that is now a fact about the cache, not about the fix.** The compile step of those twelve is 184 to 273 s (median 250 s), and the build-output cache did not fire: the "Restore the build outputs (obj/ + bin/)" step took 0 s in eight runs and 1 s in four, and the log of the newest of them says `Cache not found for input keys: msbuild-v1-…`. On the pull-request run of 2026-10-22 the cache DID fire (24 s of restore) and the compile took 45 s. The lever is the cache; the fix is what makes a restored tree valid | **0 measured**; 205 s of compile on the runs where the cache fires | [#2137](https://github.com/refusedguy/Harbor-Harness/issues/2137) |
 | the arch shard is ONE project | splitting `Harbor.Architecture.Tests` into 3-4 shards | **+2.5**, three more shard jobs, each with its own setup, download and teardown. It is a COST, not a saving | **≤ 46 s**, the arch shard's 124 s minus the next-longest shard's 78 s. That difference is the ceiling; a four-way split is a projection, not a measurement | [#2110](https://github.com/refusedguy/Harbor-Harness/issues/2110) |
-| the architecture gate runs twice on a dev push | switching it off inside the build, as the PR path already does | **0 on the PR lane** | **0 on the PR lane**; 132 s of the dev push's build | [#2114](https://github.com/refusedguy/Harbor-Harness/issues/2114) |
-| the gate set | the 21 `docs.yml` gates and the `ci.yml` gates | **5.0** (3.8 + 1.2), 21 % of the bill | **0**, the gate lane runs in parallel with `ci.yml` | §10.2 |
+| the architecture gate runs twice on a dev push | switching it off inside the build, as the PR path already does | **0 on the PR lane** | **0 on the PR lane**; 132 s of the dev push's build, which #2158 has since removed | [#2114](https://github.com/refusedguy/Harbor-Harness/issues/2114) |
+| the gate set | the `docs.yml` gate lane (21 gates in the sample, 22 today) and the `ci.yml` gates | **5.0** (3.8 + 1.2), 21 % of the bill | **0**, the gate lane runs in parallel with `ci.yml` | §10.2 |
 
 **WHY THE #2108 FIX IS 19 % OF THE BILL AND 0 % OF THE WALL.** The
 ReferenceTrimmer job runs in parallel with the `build` job, both need only
@@ -3940,9 +3942,10 @@ compile is not the pull-request lane's compile.
 
 * **The nightly lane and the dev-push lane.** Both are measured elsewhere
   (§6.8 for the coverage lane); the numbers here are the pull-request lane
-  only. The dev push runs the architecture gate inside the build
-  (`HarborArchGate`, `.github/workflows/ci.yml:887`), which is why #2114's
-  132 s is not in this section's bill.
+  only. The architecture suite does not run inside the build on any lane any
+  more: `HarborArchGate` is `'false'` for every event since #2158
+  (`.github/workflows/ci.yml:887`), so the 132 s that #2114 measured on a
+  dev push is gone from the dev push as well.
 * **The pull request that does not build.** A pull request that touches only
   `docs/` or only `tools/` never starts the .NET build; its bill is 4.8
   runner-minutes (measured on run `39641146271`, the same day) and its wall
