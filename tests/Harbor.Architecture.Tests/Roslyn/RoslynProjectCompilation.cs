@@ -31,6 +31,7 @@
 // project whose generated code is missing (the Avalonia app's XAML-generated
 // members, for instance) still resolves every BCL symbol.
 
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -50,6 +51,150 @@ internal static class RoslynProjectCompilation
 
     /// <summary>The references every compilation is built against.</summary>
     internal static ImmutableArray<MetadataReference> References => LazyReferences.Value;
+
+    // =====================================================================
+    // THE PARSED TREE OF EVERY PRODUCT FILE, ONCE FOR THE WHOLE PROCESS
+    // =====================================================================
+    //
+    // WHY THIS EXISTS
+    // --------------
+    // The measured cost of parsing the whole product tree is 843.9 ms
+    // (`[arch-cost] roslyn parse files=1329 chars=10132286 ms=843.9`, run
+    // 39724342525). That is not the expensive part — the SEMANTIC pass over
+    // the tree is — but it was paid more than once: the analyzer sweep built
+    // its own 64 compilations, the HTTP-client census built its own 64, and
+    // the unobserved-task rule built its own again. Each set re-read every
+    // file and re-parsed it.
+    //
+    // The TREE is what the parse produces, and the tree is a pure function of
+    // (text, parse options, path). It does not depend on the compilation's
+    // usings, so the SAME tree can serve the compilation with the implicit
+    // global usings and the one without them. Caching it is therefore not a
+    // cache of a verdict — it is a cache of a parse.
+    //
+    // THE CONTRACT
+    // ------------
+    //   1. ONE tree per file path, for the whole process. The key is the
+    //      ABSOLUTE path, and the parse options are ONE shared immutable
+    //      instance, so the tree is the tree every caller used to build.
+    //   2. The tree is never mutated: a `SyntaxTree` is immutable, and the
+    //      compilation that holds it holds a reference, not a copy.
+    //   3. A file that cannot be read yields no tree — the same answer
+    //      `SourceScan.TryReadAllText` gave, so the file set of every
+    //      compilation is unchanged.
+
+    /// <summary>
+    ///     The parse options every product tree is parsed with — ONE instance,
+    ///     shared, because the options are immutable and a tree carries the
+    ///     instance it was parsed with.
+    /// </summary>
+    private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Preview);
+
+    /// <summary>
+    ///     The parsed tree of every file, once for the whole process.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Lazy<SyntaxTree?>> TreeCache =
+        new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The parsed tree of one file, or <c>null</c> when the file cannot be
+    ///     read.
+    /// </summary>
+    /// <param name="path">Absolute path of the file.</param>
+    internal static SyntaxTree? TreeFor(string path)
+    {
+        Lazy<SyntaxTree?> lazy = TreeCache.GetOrAdd(
+            path,
+            static p => new Lazy<SyntaxTree?>(
+                () => ParseFile(p),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        return lazy.Value;
+    }
+
+    /// <summary>Reads and parses one file. Runs at most once per path.</summary>
+    private static SyntaxTree? ParseFile(string path)
+    {
+        string? text = SourceScan.TryReadAllText(path);
+        return text is null ? null : CSharpSyntaxTree.ParseText(text, ParseOptions, path: path);
+    }
+
+    // =====================================================================
+    // THE PRODUCT COMPILATIONS, ONCE FOR THE WHOLE PROCESS
+    // =====================================================================
+    //
+    // WHY THIS EXISTS
+    // --------------
+    // Two consumers each wanted their own set of 64 product compilations:
+    // the analyzer sweep (`ArchAnalyzerPromotionTests`) and the HTTP-client
+    // census (`HttpClientReuseRules`). They differ in ONE thing — whether the
+    // compilation carries the project's implicit global usings — and they were
+    // each building their own set from scratch, in their own way: the sweep's
+    // set was built concurrently, the census's set SEQUENTIALLY, and the
+    // census's analyzer pass ran SEQUENTIALLY too. The census was therefore
+    // one core busy for forty seconds while three cores had nothing to do,
+    // and six tests sat waiting for it.
+    //
+    // THE VARIANTS ARE THE KEY
+    // ------------------------
+    // The key is the usings-variant, so the two consumers keep their OWN
+    // compilation — the verdicts of the sweep are computed over compilations
+    // without the implicit usings, and the HTTP-client rule's are computed
+    // over compilations WITH them, exactly as before. What they now share is
+    // the PARSE, and the build's concurrency.
+    //
+    // The ORDER of the result is the order of the projects, not the order the
+    // threads finished in: the result array is indexed, so a consumer that
+    // merges the projects in order gets the same list it got before.
+
+    private static readonly ConcurrentDictionary<string, Lazy<IReadOnlyList<(Project Project, CSharpCompilation Compilation)>>>
+        CompilationSets = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The product compilations for one usings-variant: built once for the
+    ///     whole process, concurrently, and shared by every consumer.
+    /// </summary>
+    /// <param name="globalUsings">
+    ///     The implicit global usings the compilation carries. Null means the
+    ///     compilation carries none.
+    /// </param>
+    internal static IReadOnlyList<(Project Project, CSharpCompilation Compilation)> Compilations(
+        IReadOnlyList<string>? globalUsings)
+    {
+        string key = globalUsings is null ? string.Empty : string.Join(";", globalUsings);
+
+        Lazy<IReadOnlyList<(Project Project, CSharpCompilation Compilation)>> lazy =
+            CompilationSets.GetOrAdd(
+                key,
+                _ => new Lazy<IReadOnlyList<(Project Project, CSharpCompilation Compilation)>>(
+                    () => BuildCompilations(globalUsings),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
+
+        return lazy.Value;
+    }
+
+    /// <summary>
+    ///     Compiles every product project once, CONCURRENTLY: a runner with
+    ///     four cores should not parse 64 projects one after another while
+    ///     three of its cores are idle.
+    /// </summary>
+    private static IReadOnlyList<(Project Project, CSharpCompilation Compilation)> BuildCompilations(
+        IReadOnlyList<string>? globalUsings)
+    {
+        IReadOnlyList<Project> projects = ProductProjects();
+        var result = new (Project Project, CSharpCompilation Compilation)[projects.Count];
+
+        Parallel.For(
+            0,
+            projects.Count,
+            index =>
+            {
+                Project project = projects[index];
+                result[index] = (project, ForProject(project, globalUsings));
+            });
+
+        return result;
+    }
 
     /// <summary>
     ///     The implicit global usings the SDK gives every project whose
@@ -151,16 +296,17 @@ internal static class RoslynProjectCompilation
 
         foreach (string path in SourceFilesOf(project))
         {
-            string? text = SourceScan.TryReadAllText(path);
-            if (text is null)
+            // The tree is parsed ONCE for the whole process and shared by every
+            // compilation that holds this file — the tree does not depend on the
+            // compilation's usings, so the two variants of a product project
+            // parse it once between them.
+            SyntaxTree? tree = TreeFor(path);
+            if (tree is null)
             {
                 continue;
             }
 
-            trees.Add(CSharpSyntaxTree.ParseText(
-                text,
-                new CSharpParseOptions(LanguageVersion.Preview),
-                path: path));
+            trees.Add(tree);
         }
 
         return CSharpCompilation.Create(

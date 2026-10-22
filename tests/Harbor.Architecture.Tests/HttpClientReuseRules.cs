@@ -386,32 +386,60 @@ public class HttpClientReuseRules
     ///     sees nothing in those files. That was measured, not reasoned: the
     ///     first run of this rule found the two creations in the one file that
     ///     DOES say <c>using System.Net.Http;</c>, and none of the other five.
+    ///     <para>
+    ///         The set is the PROCESS-WIDE one, keyed by the usings-variant: the
+    ///         analyzer sweep grades the same 64 projects over compilations
+    ///         WITHOUT the implicit usings, and the two sets used to be built
+    ///         from scratch — the census's SEQUENTIALLY, which is why six tests
+    ///         sat waiting for forty seconds while one core was busy.
+    ///     </para>
     /// </remarks>
     private static readonly Lazy<IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)>>
-        LazyCompilations = new(BuildCompilations);
-
-    /// <summary>Compiles every product project once, with the implicit usings.</summary>
-    private static IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> BuildCompilations()
-    {
-        var result = new List<(RoslynProjectCompilation.Project, CSharpCompilation)>();
-
-        foreach (RoslynProjectCompilation.Project project in RoslynProjectCompilation.ProductProjects())
-        {
-            result.Add((project, RoslynProjectCompilation.ForProject(
-                project,
-                RoslynProjectCompilation.ImplicitGlobalUsings)));
-        }
-
-        return result;
-    }
+        LazyCompilations = new(() => RoslynProjectCompilation.Compilations(RoslynProjectCompilation.ImplicitGlobalUsings));
 
     /// <summary>
-    ///     Runs the analyzer over the product tree and reads its verdicts.
+    ///     The files the analyzer's scope covers, read off the product
+    ///     compilations — WITHOUT running the analyzer over them.
     /// </summary>
-    private static async Task<ClientCreationCensus> BuildCensus()
+    /// <remarks>
+    ///     The scope is a fact about the COMPILATIONS, not about the analyzer's
+    ///     verdict, and it used to be read out of the census — so the test that
+    ///     checks the scope waited for the whole analyzer pass to finish. The
+    ///     scope is now its own lazy, and the scope test no longer waits for
+    ///     the pass it does not need.
+    /// </remarks>
+    private static readonly Lazy<IReadOnlyList<string>> LazyScopeFiles = new(BuildScopeFiles);
+
+    /// <summary>
+    ///     One product project's contribution to the census.
+    /// </summary>
+    /// <param name="Creations">Every client creation the analyzer found in this project.</param>
+    /// <param name="InDelegate">The creations that sit inside a delegate.</param>
+    /// <param name="ScopeFiles">The repo-relative files this project contributes to the scope.</param>
+    internal sealed record ProjectCensus(
+        IReadOnlyList<ClientCreationSite> Creations,
+        IReadOnlyList<ClientCreationSite> InDelegate,
+        IReadOnlyList<string> ScopeFiles);
+
+    /// <summary>
+    ///     The per-project contributions of the ONE census pass, in project
+    ///     order.
+    /// </summary>
+    /// <remarks>
+    ///     Kept so a reader can compare ONE of them against a fresh
+    ///     computation over the same compilation — the parity proof that the
+    ///     concurrent pass says what the sequential one said.
+    /// </remarks>
+    internal static IReadOnlyList<ProjectCensus> CensusProjects => Volatile.Read(ref _censusProjects);
+
+    private static IReadOnlyList<ProjectCensus> _censusProjects = [];
+
+    /// <summary>
+    ///     The files the analyzer's scope covers: the syntax trees of the
+    ///     product compilations, deduped and sorted.
+    /// </summary>
+    private static IReadOnlyList<string> BuildScopeFiles()
     {
-        var creations = new List<ClientCreationSite>();
-        var inDelegate = new List<ClientCreationSite>();
         var scopeFiles = new List<string>();
 
         foreach ((_, CSharpCompilation compilation) in LazyCompilations.Value)
@@ -424,37 +452,156 @@ public class HttpClientReuseRules
                     scopeFiles.Add(SourceScan.Relative(path));
                 }
             }
+        }
 
-            List<Diagnostic> diagnostics = await RunAnalyzerAsync(compilation);
-            foreach (Diagnostic diagnostic in diagnostics)
+        return [.. scopeFiles.Distinct(StringComparer.Ordinal).OrderBy(static f => f, StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    ///     Runs the analyzer over the product tree and reads its verdicts.
+    /// </summary>
+    /// <remarks>
+    ///     The pass over the 64 product compilations runs CONCURRENTLY, at most
+    ///     <see cref="Environment.ProcessorCount" /> at a time, and the merge is
+    ///     SEQUENTIAL: the passes ran concurrently and each of them produced
+    ///     its own lists, because a <c>List&lt;T&gt;</c> that four threads append
+    ///     to at once is a corrupted list, not a fast one.
+    ///     <para>
+    ///         The merge is in PROJECT order, so the census is the same list,
+    ///         in the same order, as the sequential pass produced. That is not a
+    ///         nicety: the rule reports its offenders in that order, and a
+    ///         report that reorders itself between runs is a report nobody can
+    ///         diff.
+    ///     </para>
+    /// </remarks>
+    private static async Task<ClientCreationCensus> BuildCensus()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
+            LazyCompilations.Value;
+
+        var results = new ProjectCensus[compilations.Count];
+        using var gate = new SemaphoreSlim(Math.Max(1, Environment.ProcessorCount));
+        var passes = new List<Task>(compilations.Count);
+
+        for (int index = 0; index < compilations.Count; index++)
+        {
+            int captured = index;
+            passes.Add(CensusOneAsync(compilations[captured].Compilation, results, captured, gate));
+        }
+
+        await Task.WhenAll(passes).ConfigureAwait(false);
+
+        var creations = new List<ClientCreationSite>();
+        var inDelegate = new List<ClientCreationSite>();
+
+        foreach (ProjectCensus result in results)
+        {
+            creations.AddRange(result.Creations);
+            inDelegate.AddRange(result.InDelegate);
+        }
+
+        Volatile.Write(ref _censusProjects, results);
+
+        watch.Stop();
+        Volatile.Write(ref _censusMilliseconds, watch.ElapsedMilliseconds);
+
+        // The cost, printed rather than asserted: a measurement that fails a
+        // build on a slow runner is a gate that gets switched off. The number
+        // is the CENSUS's own — the wait a test sees is the wait, and the wait
+        // is what this number measures.
+        Console.WriteLine(
+            $"[arch-cost] http-client-census compilations={compilations.Count} "
+            + $"ms={watch.ElapsedMilliseconds} creations={creations.Count} "
+            + $"in-delegate={inDelegate.Count} scope-files={LazyScopeFiles.Value.Count}");
+
+        return new ClientCreationCensus(creations, inDelegate, LazyScopeFiles.Value);
+    }
+
+    /// <summary>
+    ///     How long the ONE census pass took, in milliseconds.
+    /// </summary>
+    /// <remarks>
+    ///     Recorded BY the pass, not measured by the reader: a reader that
+    ///     times its own wait on a memoised lazy measures the wait, and the
+    ///     wait is zero when the pass already ran.
+    /// </remarks>
+    internal static long CensusMilliseconds => Volatile.Read(ref _censusMilliseconds);
+
+    private static long _censusMilliseconds;
+
+    /// <summary>
+    ///     The census of ONE product project: the analyzer's verdicts over that
+    ///     project's compilation, and the files it contributes to the scope.
+    /// </summary>
+    /// <remarks>
+    ///     This is the OLD implementation, kept as the ORACLE of the concurrent
+    ///     pass: the fan-out above calls exactly this method, one project at a
+    ///     time, so a reader can recompute one project's share of the census
+    ///     on this thread and compare it with what the fan-out recorded.
+    /// </remarks>
+    private static async Task<ProjectCensus> CensusFor(CSharpCompilation compilation)
+    {
+        var creations = new List<ClientCreationSite>();
+        var inDelegate = new List<ClientCreationSite>();
+        var scopeFiles = new List<string>();
+
+        foreach (SyntaxTree tree in compilation.SyntaxTrees)
+        {
+            string? path = tree.FilePath;
+            if (path is not null)
             {
-                string? path = diagnostic.Location.SourceTree?.FilePath;
-                if (path is null)
-                {
-                    continue;
-                }
-
-                var creation = new ClientCreationSite(
-                    SourceScan.Relative(path),
-                    diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1);
-
-                if (diagnostic.Id == HttpClientCreationAnalyzer.DelegateDiagnosticId)
-                {
-                    inDelegate.Add(creation);
-                    continue;
-                }
-
-                if (diagnostic.Id == HttpClientCreationAnalyzer.CreationDiagnosticId)
-                {
-                    creations.Add(creation);
-                }
+                scopeFiles.Add(SourceScan.Relative(path));
             }
         }
 
-        return new ClientCreationCensus(
-            creations,
-            inDelegate,
-            [.. scopeFiles.Distinct(StringComparer.Ordinal).OrderBy(static f => f, StringComparer.Ordinal)]);
+        List<Diagnostic> diagnostics = await RunAnalyzerAsync(compilation).ConfigureAwait(false);
+        foreach (Diagnostic diagnostic in diagnostics)
+        {
+            string? path = diagnostic.Location.SourceTree?.FilePath;
+            if (path is null)
+            {
+                continue;
+            }
+
+            var creation = new ClientCreationSite(
+                SourceScan.Relative(path),
+                diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1);
+
+            if (diagnostic.Id == HttpClientCreationAnalyzer.DelegateDiagnosticId)
+            {
+                inDelegate.Add(creation);
+                continue;
+            }
+
+            if (diagnostic.Id == HttpClientCreationAnalyzer.CreationDiagnosticId)
+            {
+                creations.Add(creation);
+            }
+        }
+
+        return new ProjectCensus(creations, inDelegate, scopeFiles);
+    }
+
+    /// <summary>
+    ///     The census of one product project, as part of the concurrent pass.
+    /// </summary>
+    private static async Task CensusOneAsync(
+        CSharpCompilation compilation,
+        ProjectCensus[] results,
+        int index,
+        SemaphoreSlim gate)
+    {
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            results[index] = await CensusFor(compilation).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     /// <summary>Runs the analyzer over one compilation.</summary>
@@ -474,9 +621,11 @@ public class HttpClientReuseRules
     /// </summary>
     internal static List<string> TextRuleSites()
     {
-        List<ScanHit> hits = ScanRunner.Collect(
+        List<ScanHit> hits = ScanRunner.CollectStripped(
             CreationOracle,
-            ScanRunner.ReadSources(ScanRunner.ScopeFiles(CreationOracle)));
+            ScanRunner.ReadStrippedSources(
+                CreationOracle,
+                ScanRunner.ScopeFiles(CreationOracle)));
 
         return
         [
@@ -508,6 +657,22 @@ public class HttpClientReuseRules
     // =====================================================================
 
     /// <summary>
+    ///     Rule 1 as a FUNCTION of the census: the creations the table does not
+    ///     name.
+    /// </summary>
+    /// <remarks>
+    ///     The rule's verdict is a function, not a paragraph inside a test, so
+    ///     that the same function can be handed a PLANTED census and be seen to
+    ///     go red — see
+    ///     <c>The_Rule_Goes_Red_On_A_Client_Created_Outside_The_Table</c>. A
+    ///     verdict that only ever runs over the live tree cannot be shown to
+    ///     fail, and a guard that cannot be shown to fail is a comment.
+    /// </remarks>
+    /// <param name="census">The census to grade.</param>
+    internal static List<ClientCreationSite> CreationViolations(ClientCreationCensus census) =>
+        [.. census.Creations.Where(static c => AllowedCreators.All(row => row.Path != c.File))];
+
+    /// <summary>
     ///     Rule 1: a client is created only where the table says it may be.
     /// </summary>
     [Test]
@@ -515,10 +680,7 @@ public class HttpClientReuseRules
     {
         ClientCreationCensus census = await LazyCensus.Value;
 
-        List<ClientCreationSite> violations =
-        [
-            .. census.Creations.Where(static c => AllowedCreators.All(row => row.Path != c.File))
-        ];
+        List<ClientCreationSite> violations = CreationViolations(census);
 
         await Assert.That(violations.ToArray()).IsEmpty().Because(
             "An HTTP client may be built only by a named owner, in the files this rule's table names, "
@@ -528,6 +690,127 @@ public class HttpClientReuseRules
             + "for a provider, the shared McpHttpClientFactory for a remote MCP transport, or the "
             + "process-wide client the table names. Offenders:"
             + $"{Environment.NewLine}{string.Join(Environment.NewLine, violations.Select(static v => v.File + ":" + v.Line))}");
+    }
+
+    /// <summary>
+    ///     The rule goes RED on a client created outside the table.
+    /// </summary>
+    /// <remarks>
+    ///     The control for the rule above. It is planted on purpose: the census
+    ///     is handed one creation in a file the table does not name, and the
+    ///     rule's own verdict function has to report it. Without this, the
+    ///     green above says nothing — a rule that reports nothing is green, and
+    ///     a census that never saw a creation would also be green.
+    /// </remarks>
+    [Test]
+    public async Task The_Rule_Goes_Red_On_A_Client_Created_Outside_The_Table()
+    {
+        const string Offender = "src/Harbor.Example/NotInTheTable.cs";
+
+        var planted = new ClientCreationCensus(
+            [new ClientCreationSite(Offender, 42)],
+            [],
+            [Offender]);
+
+        List<ClientCreationSite> violations = CreationViolations(planted);
+
+        await Assert.That(violations.Count).IsEqualTo(1).Because(
+            "the planted census holds one creation in a file the allowance table does not name, and "
+            + "the rule's verdict has to report exactly that one site. A rule that reports nothing "
+            + "here is a rule that cannot fail, and the green over the live tree says nothing about "
+            + "a guard that cannot be shown to fail.");
+
+        await Assert.That(violations[0].File).IsEqualTo(Offender).Because(
+            "the violation has to name the file it is about; a verdict that reported an unidentifiable "
+            + "site would be a verdict nobody could act on.");
+
+        await Assert.That(violations[0].Line).IsEqualTo(42).Because(
+            "the violation has to name the LINE it is about, so that the report points at the "
+            + "construction rather than at the file.");
+    }
+
+    /// <summary>
+    ///     The concurrent pass says what the sequential one said.
+    /// </summary>
+    /// <remarks>
+    ///     The census used to be computed by walking the 64 product
+    ///     compilations one after another, on ONE thread, while the rest of the
+    ///     shard's tests sat waiting for it — forty seconds of one core, and
+    ///     two hundred and forty seconds of summed test time. It is now a
+    ///     concurrent fan-out over the same 64 compilations.
+    ///     <para>
+    ///         A concurrent pass over the same inputs can only differ from a
+    ///         sequential one if it computes something different, so this test
+    ///         recomputes ONE project's share of the census on this thread and
+    ///         compares it with what the fan-out recorded for that project.
+    ///         The project is the one that owns the OAuth handler — the file
+    ///         #1854's defect lived in — so the comparison is over a project
+    ///         that actually has a verdict to get wrong.
+    ///     </para>
+    /// </remarks>
+    [Test]
+    public async Task The_Concurrent_Census_Says_What_The_Sequential_One_Says()
+    {
+        const string OwnedFile = "src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs";
+
+        ClientCreationCensus census = await LazyCensus.Value;
+        IReadOnlyList<ProjectCensus> projects = CensusProjects;
+
+        await Assert.That(projects.Count).IsGreaterThan(0).Because(
+            "the census recorded nothing per project, so there is no share to compare against, and "
+            + "the comparison below would be comparing two empty sets and proving nothing.");
+
+        int index = -1;
+        for (int i = 0; i < projects.Count; i++)
+        {
+            if (projects[i].ScopeFiles.Contains(OwnedFile, StringComparer.Ordinal))
+            {
+                index = i;
+                break;
+            }
+        }
+
+        await Assert.That(index).IsGreaterThanOrEqualTo(0).Because(
+            $"the project that owns {OwnedFile} is not in the census's per-project record, so the "
+            + "comparison below has nothing to compare.");
+
+        // The ORACLE: the same computation, over the same compilation, on this
+        // thread, with no fan-out and no sharing.
+        IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
+            LazyCompilations.Value;
+        ProjectCensus fresh = await CensusFor(compilations[index].Compilation);
+
+        ProjectCensus recorded = projects[index];
+
+        await Assert.That(string.Join(" | ", fresh.Creations.Select(static c => c.File + ":" + c.Line)))
+            .IsEqualTo(string.Join(" | ", recorded.Creations.Select(static c => c.File + ":" + c.Line)))
+            .Because(
+                "the concurrent pass and the sequential pass run the same analyzer over the same "
+                + "compilation, so they must name the same creations in the same order. A difference "
+                + "means the fan-out changed a verdict, which is the one thing it must not do.");
+
+        await Assert.That(string.Join(" | ", fresh.InDelegate.Select(static c => c.File + ":" + c.Line)))
+            .IsEqualTo(string.Join(" | ", recorded.InDelegate.Select(static c => c.File + ":" + c.Line)))
+            .Because(
+                "the per-call shape is a SECOND verdict of the same pass, and a fan-out that kept "
+                + "the first one while losing the second would be a pass that reports half of what "
+                + "it saw.");
+
+        // The MERGE: the census is the projects' contributions, in project order.
+        string merged = string.Join(" | ", census.Creations.Select(static c => c.File + ":" + c.Line));
+        string perProject = string.Join(
+            " | ",
+            projects.SelectMany(static p => p.Creations).Select(static c => c.File + ":" + c.Line));
+
+        await Assert.That(merged).IsEqualTo(perProject).Because(
+            "the census is the projects' contributions concatenated in PROJECT order, and a merge "
+            + "that lost a project or reordered the list would be a census that reports a different "
+            + "set of sites than the pass found.");
+
+        await Assert.That(recorded.Creations.Count).IsGreaterThan(0).Because(
+            "the project compared above is the one that owns the OAuth handler, and it creates a "
+            + "client. A comparison over a project with no creations proves that two empty lists "
+            + "agree with each other.");
     }
 
     /// <summary>
@@ -582,28 +865,35 @@ public class HttpClientReuseRules
     ///     file the table names. A scope that stopped seeing them enforces
     ///     nothing.
     /// </summary>
+    /// <remarks>
+    ///     The scope is read off the product COMPILATIONS, not out of the
+    ///     census: it is a fact about which files the analyzer grades, and
+    ///     reading it out of the verdict meant this test waited for the whole
+    ///     analyzer pass to finish before it could say anything about the
+    ///     scope.
+    /// </remarks>
     [Test]
     public async Task The_Scan_Finds_The_Product_Tree_And_Every_Named_File()
     {
-        ClientCreationCensus census = await LazyCensus.Value;
+        IReadOnlyList<string> scopeFiles = LazyScopeFiles.Value;
         var failures = new List<string>();
 
-        if (census.ScopeFiles.Count < 500)
+        if (scopeFiles.Count < 500)
         {
             failures.Add(
-                $"the analyzer's scope yields {census.ScopeFiles.Count} file(s); the floor is 500 — the "
+                $"the analyzer's scope yields {scopeFiles.Count} file(s); the floor is 500 — the "
                 + "scope is broken rather than the code clean");
         }
 
         foreach (var row in AllowedCreators)
         {
-            if (!census.ScopeFiles.Contains(row.Path, StringComparer.Ordinal))
+            if (!scopeFiles.Contains(row.Path, StringComparer.Ordinal))
             {
                 failures.Add($"{row.Path} is in this rule's table and the scope stopped seeing it");
             }
         }
 
-        if (!census.ScopeFiles.Contains("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", StringComparer.Ordinal))
+        if (!scopeFiles.Contains("src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs", StringComparer.Ordinal))
         {
             failures.Add(
                 "src/Harbor.Hosting/Modules/JsonProviderDiscovery.cs is the file #1854's second finding "
