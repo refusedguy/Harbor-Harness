@@ -159,6 +159,7 @@
 //      reports zero hand-offs and reads as clean.
 
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Harbor.Architecture.Tests;
@@ -924,6 +925,14 @@ internal static class PanelKeyRouteProbe
     ///     The whole text through the span-based enumerator, which yields the
     ///     matches without materialising a <c>Match</c> per hit.
     /// </summary>
+    /// <remarks>
+    ///     The enumerator's <see cref="ValueMatch" /> carries the match's
+    ///     position and length and nothing else — no group collection, no
+    ///     <c>Match</c> object — so the declared name is read out of the
+    ///     matched text itself. The pattern's name group is
+    ///     <c>[A-Za-z_]\w*</c> and it is followed by optional whitespace and a
+    ///     bracket, so the name is the identifier that ends the match.
+    /// </remarks>
     /// <param name="typeOwner">The map to add to.</param>
     /// <param name="file">The file that declares the type.</param>
     /// <param name="text">The file's comment-stripped text.</param>
@@ -932,14 +941,80 @@ internal static class PanelKeyRouteProbe
         string file,
         string text)
     {
-        foreach (ValueMatch type in TypeDeclaration.EnumerateMatches(text))
+        foreach (ValueMatch match in TypeDeclaration.EnumerateMatches(text))
         {
-            if (type.Groups["name"].ValueSpan is { Length: > 0 } nameSpan)
+            if (!TryReadDeclaredName(text, match.Index, match.Length, out string? typeName))
             {
-                AddTypeOwner(typeOwner, file, new string(nameSpan));
+                continue;
             }
+
+            AddTypeOwner(typeOwner, file, typeName);
         }
     }
+
+    /// <summary>
+    ///     The name a match of the type-declaration pattern declares.
+    /// </summary>
+    /// <remarks>
+    ///     The pattern ends with <c>name \s* (</c>, so the name is the
+    ///     identifier that ends the match: walk back over the bracket, over the
+    ///     whitespace, and over the identifier. The identifier's first
+    ///     character has to be an ASCII letter or an underscore, because the
+    ///     pattern's name group says so.
+    /// </remarks>
+    /// <param name="text">The text the match was found in.</param>
+    /// <param name="index">Where the match starts.</param>
+    /// <param name="length">How long the match is.</param>
+    /// <param name="typeName">The declared name, when the match declares one.</param>
+    /// <returns><c>true</c> when the match declares a name.</returns>
+    private static bool TryReadDeclaredName(string text, int index, int length, out string? typeName)
+    {
+        typeName = null;
+
+        int bracket = index + length - 1;
+        if (bracket < index || text[bracket] != '(')
+        {
+            return false;
+        }
+
+        int nameEnd = bracket;
+        while (nameEnd > index && char.IsWhiteSpace(text[nameEnd - 1]))
+        {
+            nameEnd--;
+        }
+
+        int nameStart = nameEnd;
+        while (nameStart > index && IsWordCharacter(text[nameStart - 1]))
+        {
+            nameStart--;
+        }
+
+        if (nameStart == nameEnd || !IsAsciiLetterOrUnderscore(text[nameStart]))
+        {
+            return false;
+        }
+
+        typeName = text[nameStart..nameEnd];
+        return true;
+    }
+
+    /// <summary>
+    ///     Whether a character is a word character, the way the pattern's
+    ///     <c>\w</c> says.
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    /// <returns><c>true</c> when the character is a word character.</returns>
+    private static bool IsWordCharacter(char c) =>
+        char.IsLetterOrDigit(c)
+        || char.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark or UnicodeCategory.ConnectorPunctuation;
+
+    /// <summary>
+    ///     Whether a character can start the pattern's name group.
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    /// <returns><c>true</c> when the character is an ASCII letter or an underscore.</returns>
+    private static bool IsAsciiLetterOrUnderscore(char c) =>
+        c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or '_';
 
     /// <summary>
     ///     Every product method that calls <paramref name="target" />.
