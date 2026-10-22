@@ -40,6 +40,7 @@
 // so the number is the work's.
 
 using System.Diagnostics;
+using System.Text;
 
 namespace Harbor.Architecture.Tests;
 
@@ -59,6 +60,8 @@ public sealed class PanelKeyRouteCostMeasurement
                 "every rule in this project reads the tree from RepoPaths.RepoRoot, and with no "
                 + "root this measurement would report zeros that look like a clean tree.");
 
+        var summary = new StringBuilder();
+
         // ── the scan the rule actually did, under the shard's contention ─────
         //
         // Touching the rule's memoised report makes sure the scan has happened
@@ -71,12 +74,12 @@ public sealed class PanelKeyRouteCostMeasurement
 
         if (phases is { } seen)
         {
-            Console.WriteLine(
+            Line(summary,
                 $"[arch-cost] panel-key-route insitu read-ms={seen.ReadMs} "
                 + $"type-map-ms={seen.TypeMapMs} handoff-scan-ms={seen.HandOffScanMs} "
                 + $"callers-ms={seen.CallersMs} total-ms={seen.TotalMs}");
 
-            Console.WriteLine(
+            Line(summary,
                 $"[arch-count] panel-key-route insitu files={seen.Files} lines={seen.Lines} "
                 + $"handoffs={seen.HandOffSites} enclosing-walks={seen.EnclosingWalks} "
                 + $"callers-passes={seen.CallersPasses} member-matches={seen.MemberMatches} "
@@ -102,7 +105,7 @@ public sealed class PanelKeyRouteCostMeasurement
 
             maps[strategy] = map;
 
-            Console.WriteLine(
+            Line(summary,
                 $"[arch-cost] panel-key-route type-map strategy={strategy} "
                 + $"ms={watch.ElapsedMilliseconds} bytes={mapBytes} types={map.Count}");
         }
@@ -120,7 +123,7 @@ public sealed class PanelKeyRouteCostMeasurement
             }
 
             List<string> differences = CompareTypeMaps(oracle, map);
-            Console.WriteLine(
+            Line(summary,
                 $"[arch-count] panel-key-route type-map strategy={strategy} "
                 + $"differences={differences.Count} "
                 + $"sample={(differences.Count == 0 ? "(none)" : string.Join(" | ", differences.Take(3)))}");
@@ -131,34 +134,34 @@ public sealed class PanelKeyRouteCostMeasurement
         KeyRouteReport report = PanelKeyRouteProbe.ScanWithTypeOwner(sources, oracle);
         scanWatch.Stop();
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route isolated-scan-without-map-ms={scanWatch.ElapsedMilliseconds} "
             + $"handoffs={report.HandOffs.Count} orphans={report.Orphans.Count}");
 
         // ── each pattern of the scan, alone, over the whole tree ───────────
         ScanComponentCosts components = PanelKeyRouteProbe.MeasureComponents(sources);
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route pattern member ms={components.MemberPatternMs} "
             + $"calls={components.MemberPatternCalls}");
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route pattern handoff ms={components.HandOffPatternMs} "
             + $"calls={components.HandOffPatternCalls}");
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route pattern callsite ms={components.CallSitePatternMs} "
             + $"calls={components.CallSitePatternCalls}");
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route pattern type ms={components.TypePatternMs} "
             + $"calls={components.TypePatternCalls}");
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route cold-read ms={components.ColdReadMs} "
             + $"chars={components.ColdReadChars} files={components.Files} lines={components.Lines}");
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route cold-walk ms={components.ColdWalkMs} "
             + $"files={components.ColdWalkFiles}");
 
@@ -172,10 +175,23 @@ public sealed class PanelKeyRouteCostMeasurement
         deadWatch.Stop();
         long deadTestBytes = GC.GetAllocatedBytesForCurrentThread() - beforeTest;
 
-        Console.WriteLine(
+        Line(summary,
             $"[arch-cost] panel-key-route isolated-dead-test-ms={deadWatch.ElapsedMilliseconds} "
             + $"bytes={deadTestBytes} hits={deadRouteTests.Count} "
             + $"test-files={testSources.Count}");
+
+        await Assert.That(summary.ToString())
+            .IsEqualTo("the measurement is not a gate")
+            .Because(summary.ToString());
+    }
+
+    /// <summary>Prints one line and keeps it in the summary.</summary>
+    /// <param name="summary">The summary being built.</param>
+    /// <param name="line">The line to print and to keep.</param>
+    private static void Line(StringBuilder summary, string line)
+    {
+        Console.WriteLine(line);
+        summary.AppendLine(line);
     }
 
     /// <summary>
