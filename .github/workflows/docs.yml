@@ -657,6 +657,17 @@ jobs:
       # catches.
       - name: The tree-gate runner fails on a planted defect
         run: tools/bin/harbor-gates-linux-x64 all --self-test
+      # #2100. The gate that proves the lane compiled the tree it was given.
+      # Its failure path is tested here for the same reason as the others: a
+      # gate edited until it matches nothing is indistinguishable from a gate
+      # that found nothing. The load-bearing fixture is the PLANTED ERROR — a
+      # project whose changed source does not compile, with the outputs the
+      # cache left behind. Nothing about that tree says "this will not
+      # compile" except the compiler itself, and the compiler never ran,
+      # because the compile SKIPPED the project. The gate MUST fail on it, or
+      # a green lane proves nothing.
+      - name: Compiled-tree gate fails on a cached project that was skipped
+        run: tools/bin/harbor-gates-linux-x64 check-compiled-tree --self-test
 
   # The tree gates, in ONE command.
   #

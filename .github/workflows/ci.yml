@@ -120,6 +120,31 @@ on:
     paths-ignore: ['**.md', 'docs/**', 'evals/tasks/**', 'assets/demo/**', 'tools/bin/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      # The non-vacuity control of the compiled-tree gate (issue #2139).
+      #
+      # A gate that stops firing is indistinguishable from a clean tree, so
+      # the gate needs a way to be shown FAILING on the real lane, not only
+      # a self-test on a synthetic tree. This input plants the shape of
+      # issue #2100 in the working tree — a source file of a project the
+      # build-output cache holds, carrying a compile error, and IDENTICAL
+      # in the cached base and in HEAD — so the mtime normalisation
+      # believes the project unchanged, MSBuild skips it, and the error
+      # never reaches the compiler. The compile stays GREEN; the
+      # compiled-tree gate must turn the lane RED. A valid change is
+      # planted next to it, in a project the compile DOES rebuild, and the
+      # gate must stay quiet about that one: the two cases in one run are
+      # what show the gate discriminates.
+      #
+      # It needs the cache: without a restored output there is nothing to
+      # skip, and the compile itself would catch the error. So the demo is
+      # a PAIR of dispatches — the first one warms the cache (a manual
+      # dispatch is a lane that WRITES the cache), the second one plants
+      # the error.
+      plant_compile_error:
+        description: 'Plant a compile error in a project the build-output cache holds, and require the compiled-tree gate to catch it (issue #2139)'
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -844,6 +869,26 @@ jobs:
         **/bin
         !**/runtimes/**
         !**/*.resources.dll
+        !tools/bin
+        !tools/bin/**
+      # `tools/bin` IS EXCLUDED, and it is the reason the exclusion is here.
+      # The glob `**/bin` matches `tools/bin` as well as every project's own
+      # output directory, so the cache carried the COMMITTED gate binary, and
+      # the restore unpacked the BASE COMMIT's copy of it over the one the
+      # checkout had just written. The lane then ran a gate that does not
+      # exist in the tree it was checking — the build job of pull request
+      # 2170 (run 39659933127) died with "unknown gate: check-compiled-tree"
+      # while the tree it checked carried exactly that gate.
+      #
+      # A cache of BUILD OUTPUTS must never carry a COMMITTED artifact: the
+      # committed bytes belong to the commit, and the only thing that may
+      # replace them is the commit itself. The step right after the restore
+      # proves that, on every lane.
+      #
+      # The two lines are part of the cache's VERSION (it is a hash of the
+      # path lines), so the entries written under the list without them
+      # become invisible to the restore — the first runs after this change
+      # are cold, and the log says so.
       # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
       #
       # MSBuild nodes are kept alive between builds by default, and a
@@ -900,7 +945,7 @@ jobs:
       # The key is deliberately COARSE — it names the TOOLCHAIN, not the
       # source tree:
       #
-      #   msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+      #   msbuild-v2-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
       #
       #   * <os>-<arch>      the runner family (this job is pinned to
       #                      ubuntu-24.04: a label that moves would move the
@@ -923,6 +968,14 @@ jobs:
       # restore-keys holds the same prefix WITHOUT the sha, so a run that
       # finds no entry for its own commit restores the most recent entry
       # built from the same toolchain — the base branch's cache.
+      #
+      # The `v2` in the prefix is the HUMAN version of the cache, and it
+      # moves when the path list moves: the path list is part of the
+      # cache's own version (a hash of its lines), so a changed list
+      # already hides the entries written under the old one. Naming it in
+      # the key makes the cold start READABLE — "no build-output cache
+      # entry for this prefix — this lane compiles from scratch" — instead
+      # of a restore that silently misses.
       - name: Compute the build-output cache key
         id: cache-key
         shell: bash
@@ -932,7 +985,7 @@ jobs:
           # The RESOLVED version, not the requested one: global.json decides
           # which SDK actually runs, and the outputs are that SDK's bytes.
           sdk="$(dotnet --version | tail -n 1 | tr -d '[:space:]')"
-          prefix="msbuild-v1-${{ runner.os }}-${{ runner.arch }}-sdk${sdk}-nuget${NUGET_PACKAGES}-${props}"
+          prefix="msbuild-v2-${{ runner.os }}-${{ runner.arch }}-sdk${sdk}-nuget${NUGET_PACKAGES}-${props}"
           echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
           echo "key=${prefix}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
           echo "cache prefix: ${prefix}"
@@ -1117,6 +1170,40 @@ jobs:
           restore-keys: |
             ${{ steps.cache-key.outputs.prefix }}-
 
+      # The gate binary the lane runs MUST be the one the commit carries.
+      #
+      # The cache's path list is `**/obj` and `**/bin`, and `tools/bin` IS a
+      # `bin`: the cache carried the COMMITTED gate binary, and the restore
+      # unpacked the BASE COMMIT's copy of it over the one the checkout had
+      # just written. The lane then ran a gate that does not exist in the
+      # tree it was checking — the build job of pull request 2170 (run
+      # 39659933127) died with "unknown gate: check-compiled-tree" while
+      # the tree it checked carried exactly that gate.
+      #
+      # Two things close that hole, and this step is the second one: the
+      # cache does not carry `tools/bin` any more (the path list above),
+      # and the lane PROVES that the binary it is about to run is the
+      # committed one. A cache of build outputs must never be able to
+      # replace a committed artifact, and this step is what makes that a
+      # fact on every lane instead of a hope.
+      - name: The gate binary is the one the commit carries
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="tools/bin/harbor-gates-linux-x64"
+          expected="$(git rev-parse "HEAD:${binary}")"
+          actual="$(git hash-object "${binary}")"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::the gate binary in the tree is not the one the commit carries (the commit has ${expected}, the tree has ${actual}) — the build-output cache replaced it. The committed bytes are restored." >&2
+            git checkout -- tools/bin
+          fi
+          restored="$(git hash-object "${binary}")"
+          if [ "$expected" != "$restored" ]; then
+            echo "::error::the committed gate binary does not match the commit it was taken from" >&2
+            exit 1
+          fi
+          echo "the gate binary is the one the commit carries (${expected})"
+
       # The checkout gave every source file the CURRENT clock, so every
       # restored output looks stale and MSBuild would rebuild the whole
       # solution — the trap #1927 names. This step puts the mtimes back
@@ -1152,6 +1239,7 @@ jobs:
             find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
             exit 0
           fi
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
           exit "$rc"
 
       # ── DIAGNOSTIC (issue #2100): what does the restored tree look like? ──
@@ -1284,6 +1372,147 @@ jobs:
           find /home/runner/.nuget/packages -type f -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | tail -5 || true
           exit 0
 
+      # The instant the compile begins, on the file system.
+      #
+      # The mtime normalisation above is allowed to lie about the mtimes of
+      # the sources, so a gate cannot ask "is this source newer than that
+      # output?" and get a trustworthy answer. The build start is a fact the
+      # normalisation cannot reach: it is written HERE, after the
+      # normalisation, and nothing the normalisation does can move it.
+      #
+      # Every output the compile produces is newer than this file; every
+      # output the compile did NOT produce is older than it. That is what
+      # the gate below reads.
+      #
+      # The marker is written on EVERY lane, cache or no cache: the gate
+      # below asks the same question either way, and a question that is
+      # only asked when the cache fired is a question with an answer that
+      # depends on the cache.
+      - name: Mark the start of the compile
+        shell: bash
+        run: |
+          set -uo pipefail
+          touch "$RUNNER_TEMP/harbor-build-start"
+          echo "build start marker: $RUNNER_TEMP/harbor-build-start"
+
+      # The non-vacuity control of the compiled-tree gate (issue #2139).
+      #
+      # A gate that stops firing is indistinguishable from a clean tree, so
+      # the gate needs to be shown FAILING on the real lane, and not only
+      # on the synthetic trees of its self-test. This step plants the shape
+      # of issue #2100 in the WORKING TREE, and it plants a control next to
+      # it:
+      #
+      #   * the SKIPPED project: a source file with a compile error in it,
+      #     IDENTICAL in the cached base and in HEAD, so the mtime
+      #     normalisation — which compares the base with HEAD — believes it
+      #     unchanged and gives it the base commit's time. The compile
+      #     skips the project, the error never reaches the compiler, and
+      #     the lane is GREEN — until the gate reads the facts and finds
+      #     the project that was not compiled. The gate must go RED.
+      #
+      #   * the COMPILED project: the same treatment, but with a VALID
+      #     change and a fresh mtime, so the compile really rebuilds it.
+      #     The gate must stay QUIET about this one: a gate that reports
+      #     everything is as useless as a gate that reports nothing, and the
+      #     two cases in one run are what show the gate DISCRIMINATES.
+      #
+      # It needs the cache: without a restored output there is nothing to
+      # skip, and the compile itself would catch the error. So the demo is
+      # a PAIR of dispatches — the first one warms the cache (a manual
+      # dispatch is a lane that WRITES the cache), the second one plants
+      # the error.
+      - name: PLANT a compile error in a project the cache holds (issue #2139)
+        if: inputs.plant_compile_error == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The commit the restored outputs were built from: the last field
+          # of the cache key that matched.
+          key="${{ steps.cache-restore.outputs.cache-matched-key }}"
+          base="${key##*-}"
+          if [ -z "$key" ]; then
+            echo "::error::the demo needs the build-output cache: without a restored output there is nothing for the compile to skip, and the compile itself would catch the planted error. Run the workflow twice — the first dispatch warms the cache, the second one plants the error." >&2
+            exit 1
+          fi
+          if ! git rev-parse --verify --quiet "${base}^{commit}" >/dev/null 2>&1; then
+            echo "::error::the demo needs the commit the restored outputs were built from (${base}), and this clone cannot resolve it" >&2
+            exit 1
+          fi
+          skipped="src/Harbor.Diagnostics.Abstractions/TelemetryContracts.cs"
+          skipped_out="src/Harbor.Diagnostics.Abstractions/obj/Release/net10.0/Harbor.Diagnostics.Abstractions.dll"
+          built="src/Harbor.Logging/LoggerSetup.cs"
+          built_out="src/Harbor.Logging/obj/Release/net10.0/Harbor.Logging.dll"
+          for output in "$skipped_out" "$built_out"; do
+            if [ ! -f "$output" ]; then
+              echo "::error::the demo needs the restored output $output, and it is not in the tree" >&2
+              exit 1
+            fi
+          done
+          printf '\nthis line is not valid C#, and the compiler would say so\n' >> "$skipped"
+          touch -d "@$(git log -1 --format=%ct "$base")" "$skipped"
+          printf '\n// a valid change, planted by the compiled-tree gate non-vacuity control\n' >> "$built"
+          echo "planted a compile error in $skipped, with the mtime of the base commit $base"
+          echo "planted a valid change in $built, with a fresh mtime, so the compile rebuilds it"
+
+      # The commit the tree under test is compared against.
+      #
+      # With a restored cache, that is the commit the restored outputs were
+      # built from: the changed set is "what changed since then", which is
+      # exactly the set the mtime normalisation above blessed. Without a
+      # cache there is no such commit — the lane compiled the tree from
+      # scratch — and the comparison is against the base branch, so the
+      # gate still asks "did the lane compile the tree it was given?"
+      # instead of skipping the question on the lanes where the cache did
+      # not fire.
+      - name: The commit the tree under test is compared against
+        id: compiled-base
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The commit the RESTORED OUTPUTS were built from: the last field
+          # of the cache key that MATCHED.
+          #
+          # It is the key that matched, not the key the resolve step named:
+          # the restore asks for the resolved key and falls back to the
+          # prefix, so the record that was actually restored can be another
+          # one — and it is that record's commit, and nothing else, that the
+          # outputs under the lane's feet belong to.
+          #
+          # The key carries the PREFIX (the toolchain, the SDK, the package
+          # graph) and the cache service serves a record only when the key
+          # AND the version (the hash of the path list) agree, so a record
+          # of another prefix or another version is never restored: the lane
+          # either has the outputs of the tree it was given, or it compiles
+          # from scratch.
+          key="${{ steps.cache-restore.outputs.cache-matched-key }}"
+          base=""
+          if [ -n "$key" ]; then
+            candidate="${key##*-}"
+            if git rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null 2>&1; then
+              base="$candidate"
+            else
+              # The normalisation could not resolve that commit either, so it
+              # DISCARDED the restored outputs and the lane rebuilds from
+              # scratch. There is nothing to compare against: the comparison
+              # is against the base branch.
+              echo "the restored outputs were built from ${candidate}, which this clone cannot resolve; the normalisation discards them and the lane rebuilds from scratch"
+            fi
+          fi
+          if [ -z "$base" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              base="$(git merge-base HEAD "origin/${{ github.base_ref }}" || true)"
+            fi
+          fi
+          if [ -z "$base" ]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -z "$base" ]; then
+            echo "::error::the tree cannot be compared against any commit, so the changed set is unknown" >&2
+            exit 1
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "the tree under test is compared against $base"
       # The same question, asked of the tree the COMPILE leaves behind: does
       # the compile produce the .pdb that CoreCompile lists as its output, and
       # what is the newest file under obj/ and bin/ afterwards?
@@ -1355,6 +1584,42 @@ jobs:
           done
           exit 0
 
+      # The lane compiled the tree it was given (issue #2100).
+      #
+      # The build-output cache restores obj/ and bin/ from a commit, and the
+      # mtime normalisation makes MSBuild skip the projects that did not
+      # change. That is what makes the compile incremental, and it is also
+      # what can make a COMPILE ERROR invisible: a project that is skipped
+      # is never handed to the compiler, so the error in it never reaches
+      # the build. That is the #2100 incident, and it is why this step
+      # exists.
+      #
+      # The gate asks the question the mtimes cannot answer: for every
+      # project whose SOURCES changed since the commit the restored outputs
+      # were built from, was the project COMPILED in this run? The evidence
+      # is the build's own output file: the compile writes it, and a skipped
+      # project keeps the one the cache carried. The build start marker
+      # above is the line between the two.
+      #
+      # It is a gate and not a report, because the failure it catches is a
+      # GREEN build on a tree that does not compile.
+      #
+      # The gate runs on EVERY lane, with or without a cache: the question
+      # it asks does not depend on the cache, and a gate that only runs
+      # when the cache fired would be a gate whose coverage depends on
+      # the cache.
+      - name: The lane compiled the tree it was given (issue #2100)
+        shell: bash
+        run: |
+          set -uo pipefail
+          tools/bin/harbor-gates-linux-x64 check-compiled-tree \
+            --root "$GITHUB_WORKSPACE" \
+            --base "${{ steps.compiled-base.outputs.base }}" \
+            --build-start "$RUNNER_TEMP/harbor-build-start" \
+            --solution Harbor.slnx \
+            --config Release \
+            --min-projects 100
+
       # The zero-test guard is only a guard if it can go red (#1795). This
       # step proves it: it runs one suite with a filter that matches NO test
       # and requires the runner to exit with one of MTP's "nothing ran"
@@ -1373,6 +1638,9 @@ jobs:
       # of the image, so proving it here proves it for the test job too.
 
 
+      # The same question, asked of the tree the COMPILE leaves behind: does
+      # the compile produce the .pdb that CoreCompile lists as its output, and
+      # what is the newest file under obj/ and bin/ afterwards?
       - name: "DIAGNOSTIC: what the compile produced"
         if: always() && steps.cache-restore.outputs.cache-matched-key != ''
         shell: bash

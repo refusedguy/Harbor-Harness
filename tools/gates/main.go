@@ -45,6 +45,7 @@ import (
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
+	checkcompiledtree "harbor.local/gates/check-compiled-tree"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	"harbor.local/gates/check-event-topology"
@@ -127,6 +128,11 @@ var registry = []registered{
 		name:    "check-analyzer-scope",
 		summary: "where each analyzer package is allowed to run",
 		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-compiled-tree",
+		summary: "every project whose sources changed was compiled in this run, not skipped",
+		run:     checkcompiledtree.Run,
 	},
 	{
 		name:    "check-coverage-registry",
