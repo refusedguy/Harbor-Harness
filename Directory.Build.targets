@@ -45,4 +45,36 @@
     <EmbeddedResource Include="$(MSBuildThisFileDirectory)providers\*.json"/>
   </ItemGroup>
 
+  <!--
+    THE PER-TEST ALLOCATION CENSUS (tests/AllocationCensus.cs).
+
+    TUnit's generator discovers a hook in the compilation it generates FOR, so
+    a measurement that lives in a helper ASSEMBLY is never discovered and never
+    runs. The census therefore has to be COMPILED INTO every test project, and
+    this is the line that does it.
+
+    The condition is `$(IsTestProject) == 'true'` — the SAME condition that
+    injects the TUnit package reference above, and for the same reason: the
+    census is TUnit code, so it belongs in exactly the projects that got TUnit.
+    A condition that asked "does this project reference TUnit?" instead would
+    MISS every project that receives TUnit through the injection — which is
+    most of them: `Harbor.Config.Tests` and `Harbor.Tui.Tests` declare no
+    TUnit reference of their own and get one from this file. Asking the same
+    question the injection asks is what keeps the two sets identical.
+
+    The projects that opt OUT of TUnit (`IsTestProject=false`:
+    `Harbor.TestKit.Generators`, `Harbor.Benchmarks`, `Harbor.Telemetry.Fixtures`
+    and the analyzer canary) therefore do not carry the census either.
+
+    The file is INTERNAL, so no test assembly's public surface grows, and two
+    assemblies that both carry it never collide.
+
+    The census is OFF unless HARBOR_ALLOC_CENSUS=1 is set: the file reads no
+    counter and writes no line without that variable, so a normal run pays
+    nothing for it.
+  -->
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
+    <Compile Include="$(MSBuildThisFileDirectory)tests\AllocationCensus.cs" Link="AllocationCensus.cs"/>
+  </ItemGroup>
+
 </Project>

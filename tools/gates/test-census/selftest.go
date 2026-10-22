@@ -20,7 +20,8 @@ const sampleTRX = `<?xml version="1.0" encoding="utf-8"?>
   <Times creation="2026-10-20T12:00:00.0000000+00:00" queuing="2026-10-20T12:00:00.0000000+00:00" start="2026-10-20T12:00:00.1000000+00:00" finish="2026-10-20T12:00:10.0000000+00:00" />
   <Results>
     <UnitTestResult testId="a" testName="Measures_Thing" outcome="Passed" duration="00:00:02.0000000">
-      <Output><StdOut>alloc: 42 B</StdOut></Output>
+      <Output><StdOut>alloc: 42 B
+[alloc-census] bytes=1048576 process=2097152 scope=thread</StdOut></Output>
     </UnitTestResult>
     <UnitTestResult testId="b" testName="Silent" outcome="Passed" duration="00:00:03.0000000" />
     <UnitTestResult testId="c" testName="Broken" outcome="Failed" duration="00:00:01.0000000" />
@@ -128,6 +129,54 @@ func selfTestRun() int {
 			}
 			problems = append(problems, fmt.Sprintf("the slowest test is %q, must be ThingTests.Silent (3.0 s)", name))
 		}
+
+		// ── THE ALLOCATION CENSUS ──────────────────────────────────────
+		//
+		// The census is read out of the test's OWN output block, and the
+		// three facts it has to get right are: the number, the scope, and
+		// the fact that a test WITHOUT a measurement is not a test that
+		// allocated zero. The last one is the one that would make a census
+		// quietly wrong, so it is asserted here.
+		if record.allocCount != 1 {
+			problems = append(problems, fmt.Sprintf("allocCount = %d (must be 1: only the test that printed a census line carries a measurement)", record.allocCount))
+		}
+		allocated, hasAlloc := record.allocated()
+		if !hasAlloc || allocated != 1048576 {
+			problems = append(problems, fmt.Sprintf("allocated = %d (has=%v), must be 1048576", allocated, hasAlloc))
+		}
+		greediest := greediestTests(projects, 5)
+		if len(greediest) != 1 || greediest[0].name != "ThingTests.Measures_Thing" {
+			name := ""
+			if len(greediest) > 0 {
+				name = greediest[0].name
+			}
+			problems = append(problems, fmt.Sprintf("the greediest test is %q, must be ThingTests.Measures_Thing", name))
+		}
+		if len(greediest) == 1 && greediest[0].allocScope != "thread" {
+			problems = append(problems, fmt.Sprintf("the scope is %q, must be thread", greediest[0].allocScope))
+		}
+		for _, t := range record.tests {
+			if t.name == "ThingTests.Silent" && t.hasAlloc {
+				problems = append(problems, "the silent test carries an allocation measurement: a test with no census line is not a test that allocated zero")
+			}
+		}
+		allocTable := renderAllocTable(greediest)
+		if !strings.Contains(allocTable, "1.0 MiB") {
+			problems = append(problems, "the allocation table does not render the measured bytes")
+		}
+		csvText = renderCSV(projects, ",")
+		if !strings.Contains(csvText, "alloc_bytes") {
+			problems = append(problems, "the csv does not carry the allocation column")
+		}
+	}
+
+	// A census line the probe did not write reads as "no measurement", never
+	// as zero: zero is what an allocation-free path legitimately measures.
+	if bytes, scope, ok := parseAlloc("alloc: 42 B"); ok || bytes != 0 || scope != "" {
+		problems = append(problems, "a text that is not a census line must not read as a measurement")
+	}
+	if bytes, scope, ok := parseAlloc("[alloc-census] bytes=0 process=0 scope=thread"); !ok || bytes != 0 || scope != "thread" {
+		problems = append(problems, "a census line that measured zero bytes must read as a measurement of zero")
 	}
 
 	// A corrupt TRX is a fact to print, never a failure.
@@ -146,6 +195,6 @@ func selfTestRun() int {
 	if len(problems) > 0 {
 		return gate.Red
 	}
-	fmt.Println("self-test OK: every result counted (silent and failed included), duration summed, wall and parallelism read, corrupt TRX skipped.")
+	fmt.Println("self-test OK: every result counted (silent and failed included), duration summed, wall and parallelism read, the allocation census read (and a test without a measurement is not a test that allocated zero), corrupt TRX skipped.")
 	return gate.Green
 }
