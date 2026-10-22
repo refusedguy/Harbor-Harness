@@ -118,6 +118,7 @@ it. `harbor-gates --list` prints the same table.
 | `check-analyzer-scope` | where each analyzer package is allowed to run |
 | `check-coverage-registry` | the registry of consciously uncovered files still matches the measurement |
 | `check-doc-facts` | a count a document states still equals the count of tracked files |
+| `check-event-topology` | the event-topology document's producer rows name the tree's real PublishAsync call sites |
 | `check-local-merge-loss` | a local squash-merge into dev dropped no content |
 | `check-no-test-sdk` | no project file declares the VSTest host that stops TUnit's discovery |
 | `check-public-api-resign` | a change to the frozen surface is re-signed in the same commit |
