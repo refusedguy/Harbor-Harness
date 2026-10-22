@@ -3904,7 +3904,7 @@ workflows run, with the arguments the workflows pass.
 | `check-abstractions-contract.py` | 1.6 | 1.6 | — | 17.5 MB | |
 | `md-lint.py` | 1.4 | 0.8 | — | 19.7 MB | |
 | `check-arch-anchors.py` | 1.1 | 1.0 | — | 17.8 MB | |
-| `check-test-json-reflection.py` | 0.8 | 0.8 | — | 17.4 MB | |
+| `check-test-json-reflection.py` | 0.8 | 0.8 | **0.2** | 17.4 MB | 14.5 MB |
 | `check-xml-doc-coverage.py` | 0.6 | 0.7 | — | 16.7 MB | |
 | `check-doc-facts.py` | 0.5 | 0.3 | — | 17.9 MB | |
 | `check-analyzer-scope.py` | 0.6 | 0.3 | — | 18.4 MB | |
@@ -3921,6 +3921,27 @@ workflows run, with the arguments the workflows pass.
 | `test-measurements.py` | 0.2 | 0.3 | — | 16.6 MB | |
 | `pack-validate.py` | 0.2 | 0.2 | — | 16.1 MB | |
 | **the whole set** | **619.2 s** | **116.7 s** | **117.6 s** | | |
+
+**The reflection-JSON row was measured on its own, and here is its
+provenance.** The table above is one snapshot: the same harness, the same
+tree, the same moment. The port of this gate (#2122) landed after that
+snapshot, so its number was measured separately, with the same harness
+(`bench/gates/measure.sh`, `RUNS=5`, the minimum wall time kept) on the tree
+of the port, the python gate measured before its original was deleted and the
+compiled gate after. Four rounds of five runs each, because this host is
+shared:
+
+| | python | compiled |
+|---|---:|---:|
+| the wall time, the best round | 0.714 s | 0.194 s |
+| the spread of the four rounds | 0.714-0.965 s | 0.194-0.339 s |
+| the peak RSS | 17 796-17 808 KB | 14 500-16 588 KB |
+
+The gate scans `tests/**/*.cs` and the scan is the whole of its work, so the
+two numbers are the same work measured twice: **3.7x** faster as a binary on
+the best round of each. The set's sum falls by the difference of the two
+best rounds, 0.520 s; the sum was not re-measured, and a sum that mixes two
+snapshots is not a number, only the delta is.
 
 Three numbers, and they are the whole answer to "what does the language
 buy":
