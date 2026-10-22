@@ -20,6 +20,22 @@
 // a failure. A gate whose exception list only grows is a gate that stops
 // being a gate.
 //
+// WHAT A "USED EXCEPTION" IS
+//
+// One rule, and every path of this gate counts the same way (#2122): an
+// exception is USED when a reflection finding matched THAT exception -- the
+// finding's path is the exception's path, and the exception's text appears
+// in the call the finding names. An exception that no finding matched is
+// STALE, and a stale exception fails the gate.
+//
+// The python original had two counters and said so nowhere: its plain path
+// marked every exception used as soon as one of them was used, and its
+// report path counted per exception. On a tree where one exception was used
+// and another was stale, the plain path said green and the report path said
+// red. The rule here is the report path's -- the one the exceptions file
+// states -- and the plain path, `--report` and `--json-out` answer with the
+// same verdict on the same tree.
+//
 // The text this prints is the text the python original printed, and the
 // exit codes are the contract of the binary: 0 green, 1 red, 2 the gate
 // could not run.
@@ -120,36 +136,5 @@ func Run(args []string) int {
 		return report(os.Stdout, findings, loaded, jsonOut)
 	}
 
-	violations, _, _ := partition(findings, loaded)
-	used := gateUsed(findings, loaded)
-	var stale []exception
-	for _, item := range loaded {
-		if !used[item.line] {
-			stale = append(stale, item)
-		}
-	}
-	if len(violations) > 0 {
-		fmt.Fprintf(os.Stderr,
-			"reflection JSON in tests/: %d call(s) do not name a source-generated type info.\n",
-			len(violations))
-		for _, violation := range violations {
-			fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", violation.path, violation.line, truncate(violation.call, 110))
-		}
-		fmt.Fprintf(os.Stderr,
-			"\nPass the type info from a source-generated context (JsonSerializer.Serialize(value, SomeContext.Default.SomeType)), or add a documented exception to %s.\n",
-			exceptionsFile)
-	}
-	if len(stale) > 0 {
-		fmt.Fprintf(os.Stderr,
-			"reflection JSON in tests/: %d exception(s) no longer apply — delete them.\n",
-			len(stale))
-		for _, item := range stale {
-			fmt.Fprintf(os.Stderr, "  %s (%s:%d)\n", item.path, exceptionsFile, item.line)
-		}
-	}
-
-	if len(violations) > 0 || len(stale) > 0 {
-		return gate.Red
-	}
-	return gate.Green
+	return gateVerdict(os.Stderr, findings, loaded)
 }

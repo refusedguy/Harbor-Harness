@@ -3,8 +3,8 @@ package jsonreflection
 // scan.go -- the C# reading.
 //
 // The question the gate asks is about SOURCE TEXT: does a `JsonSerializer`
-// call under `tests/` name a source-generated type info, or does it take the
-// reflection resolver?
+// call under `tests/` name a source-generated type info, or does it take
+// the reflection resolver?
 //
 // The hard part is telling CODE from TEXT. A `JsonSerializer.Serialize(...)`
 // inside a comment is not a call, and a call inside the interpolation hole
@@ -471,6 +471,10 @@ func loadExceptions(path string) ([]exception, error) {
 }
 
 // matchException returns the exception that covers a finding, or nil.
+//
+// The FIRST exception in the file whose path is the finding's path and whose
+// text is inside the finding's call. The order is the file's order, and the
+// python original takes the first match too.
 func matchException(found finding, exceptions []exception) *exception {
 	for i := range exceptions {
 		if exceptions[i].path != found.path {

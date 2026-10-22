@@ -1,6 +1,7 @@
 package jsonreflection
 
-// selftest.go -- prove the gate still fails on a planted reflection call.
+// selftest.go -- prove the gate still fails on a planted reflection call,
+// and that every path counts a used exception the same way.
 //
 // The fixture is a throwaway tree with four files:
 //
@@ -14,8 +15,17 @@ package jsonreflection
 //
 // The gate must see three calls, of which two are reflection calls, and the
 // two must be the planted ones.
+//
+// The second fixture is the COUNTER (#2122): the same tree with an
+// exceptions file that carries one row the tree still produces and one row
+// it no longer produces. The plain path, the report path and the JSON path
+// must answer the SAME verdict on it, and they must name the same stale
+// exception. Before the fix the plain path answered green and the report
+// path answered red.
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,6 +59,14 @@ const archSource = "namespace Harbor.Architecture.Tests;\n" +
 	"{\n" +
 	"    public string Reflect() => JsonSerializer.Serialize(payload);\n" +
 	"}\n"
+
+// The rows of the counter fixture: two the tree produces, one it does not.
+const divergenceRows = "tests/Harbor.Sample.Tests/Sample.cs | Serialize(payload) | " +
+	"the row the tree still produces\n" +
+	"tests/Harbor.Sample.Tests/Hole.cs | Serialize(path) | " +
+	"the other row the tree still produces\n" +
+	"tests/Harbor.Sample.Tests/Gone.cs | Serialize(payload) | " +
+	"the row the tree no longer produces\n"
 
 func selfTestRun() int {
 	tmp, err := os.MkdirTemp("", "test-json-reflection-gate-")
@@ -98,8 +116,7 @@ func selfTestRun() int {
 	}
 	names := make([]string, 0, len(violations))
 	for _, violation := range violations {
-		parts := splitLast(violation.path, "/")
-		names = append(names, parts)
+		names = append(names, splitLast(violation.path, "/"))
 	}
 	sort.Strings(names)
 	if len(names) != 2 || names[0] != "Hole.cs" || names[1] != "Sample.cs" {
@@ -107,7 +124,67 @@ func selfTestRun() int {
 		return gate.Red
 	}
 
-	fmt.Println("self-test ok: the gate still fails on a planted reflection call.")
+	// The counter. The tree produces TWO reflection calls, so TWO
+	// exceptions are used and a THIRD one -- a row for a file the tree does
+	// not have -- is stale. Before the fix the plain path marked all three
+	// used and answered green while the report path answered red.
+	divergence := filepath.Join(tmp, "divergence.txt")
+	if err := os.WriteFile(divergence, []byte(divergenceRows), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return gate.Broken
+	}
+	exceptions, err := loadExceptions(divergence)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return gate.Broken
+	}
+	var plainText bytes.Buffer
+	plain := gateVerdict(&plainText, findings, exceptions)
+	var reportText bytes.Buffer
+	reported := report(&reportText, findings, exceptions, false)
+	var jsonText bytes.Buffer
+	asJSON := report(&jsonText, findings, exceptions, true)
+	if plain != reported || plain != asJSON {
+		fmt.Printf("self-test FAILED: the paths disagree on the same tree (plain %d, report %d, json %d)\n",
+			plain, reported, asJSON)
+		return gate.Red
+	}
+	if plain != 1 {
+		fmt.Printf("self-test FAILED: a stale exception must fail the gate, the paths answered %d\n", plain)
+		return gate.Red
+	}
+	const stalePath = "tests/Harbor.Sample.Tests/Gone.cs"
+	if !bytes.Contains(plainText.Bytes(), []byte(stalePath)) {
+		fmt.Println("self-test FAILED: the plain path did not name the stale exception")
+		return gate.Red
+	}
+	if !bytes.Contains(reportText.Bytes(), []byte(stalePath)) {
+		fmt.Println("self-test FAILED: the report path did not name the stale exception")
+		return gate.Red
+	}
+	var shape struct {
+		Violations []struct {
+			Path string `json:"path"`
+		} `json:"violations"`
+		Stale []struct {
+			Path string `json:"path"`
+		} `json:"stale_exceptions"`
+	}
+	if err := json.Unmarshal(jsonText.Bytes(), &shape); err != nil {
+		fmt.Println("self-test FAILED: the json path did not print a census:", err.Error())
+		return gate.Red
+	}
+	if len(shape.Violations) != 0 {
+		fmt.Println("self-test FAILED: the json path named a violation")
+		return gate.Red
+	}
+	if len(shape.Stale) != 1 || shape.Stale[0].Path != stalePath {
+		fmt.Printf("self-test FAILED: the json path named the stale exceptions %v\n", shape.Stale)
+		return gate.Red
+	}
+
+	fmt.Println("self-test ok: the gate still fails on a planted reflection call, " +
+		"and every path counts a used exception the same way.")
 	return gate.Green
 }
 

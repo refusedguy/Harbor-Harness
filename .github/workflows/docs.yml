@@ -117,7 +117,9 @@ on:
       # the result against its committed exceptions file, so a PR that edits
       # the gate or the exceptions must run it — and so must a PR that edits
       # the tree it measures. The gate is compiled now; its sources are under
-      # `tools/gates/`, which the trigger below already covers.
+      # `tools/gates/`, and the trigger below names the gate's own directory
+      # as well, so an edit of either runs the job.
+      - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. The completeness gate reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
@@ -258,7 +260,9 @@ on:
       # the result against its committed exceptions file, so a PR that edits
       # the gate or the exceptions must run it — and so must a PR that edits
       # the tree it measures. The gate is compiled now; its sources are under
-      # `tools/gates/`, which the trigger below already covers.
+      # `tools/gates/`, and the trigger below names the gate's own directory
+      # as well, so an edit of either runs the job.
+      - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
