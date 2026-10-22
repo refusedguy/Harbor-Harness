@@ -485,21 +485,26 @@ public sealed class UnguardedResultReadAnalyzerTests
     /// </summary>
     private static async Task<List<string>> AnalyzerSitesAsync()
     {
+        // The ONE sweep of the product tree, not a sweep of its own: the
+        // sweep runs all three analyzers over every product project at once,
+        // and running it again for this analyzer alone would walk the same
+        // 64 compilations a second time to learn what the first pass already
+        // knows.
+        ArchAnalyzerPromotionTests.LiveAnalyzerSweep sweep =
+            await ArchAnalyzerPromotionTests.LiveAnalyzerSweepResult.Value.ConfigureAwait(false);
+
         var sites = new List<string>();
 
-        foreach ((_, CSharpCompilation compilation) in ArchAnalyzerPromotionTests.LiveCompilations.Value)
+        foreach (Diagnostic diagnostic in sweep.UnguardedResult)
         {
-            foreach (Diagnostic diagnostic in await RunAsync(compilation, new UnguardedResultReadAnalyzer()))
+            string? path = diagnostic.Location.SourceTree?.FilePath;
+            if (path is null)
             {
-                string? path = diagnostic.Location.SourceTree?.FilePath;
-                if (path is null)
-                {
-                    continue;
-                }
-
-                int line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1;
-                sites.Add(SourceScan.Relative(path) + ":" + line);
+                continue;
             }
+
+            int line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1;
+            sites.Add(SourceScan.Relative(path) + ":" + line);
         }
 
         return
