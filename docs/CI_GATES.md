@@ -15,19 +15,19 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `ec2d38e9` plus this branch's commits),
+Measured on this branch (`dev` at `a019e928` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 35 files, 30 553 lines |
-| of them, the `check-*.py` family | 17 files, 19 055 lines |
-| workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
+| python tools in `tools/` | 23 files, 23 115 lines |
+| of them, the `check-*.py` family | 14 files, 17 130 lines |
+| workflows that run a python tool | 3: `ci.yml`, `demo.yml`, `docs.yml` |
 | gates that block a build | 29 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 42 |
+| tools with a self-test | 44 |
 | tools with a ratchet | 21 |
 | tools with a floor | 26 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
@@ -243,17 +243,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (25 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (23 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 19 tools are run by a workflow; the other six are
-`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
-other tools rather than run, `measure-project-graph.py`, which a human runs to
-read the project graph, `codemod-test-events.py`, `codemod-tool-schemas.py`
-and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool that
-is not listed is a tool nobody
-reviews. is a tool nobody
-reviews. is a tool nobody
+tree. 19 tools are run by a workflow; the other four are
+`md_gate.py`, `string-switch-rewrites.py` and `tool_schema_model.py`, which
+are loaded by other tools rather than run, and `codemod-tool-schemas.py`,
+which rewrites hand-built sources. All of them are listed, because a tool
+that is not listed is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
@@ -320,13 +316,12 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 normalize-mtimes` | compiled: `tools/gates/normalize-mtimes` | the source mtimes tell the truth, so MSBuild can skip what did not change | ci.yml, docs.yml | build, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-shard-balance` | compiled: `tools/gates/check-shard-balance` | are the CI test shards balanced by what their projects cost: the heaviest shard's wall against the lightest one's, from the shard lists of the one source and the recorded cost of every project | docs.yml | selftest, shardbalance | gate | `--self-test` | `tools/shard-costs.json` | `--min-projects 37` |
 | `tools/bin/harbor-gates-linux-x64 changelog-assemble` | compiled: `tools/gates/changelog-assemble` | the changelog fragments are not already in the `[Unreleased]` section of `CHANGELOG.md` (the release would write them twice), and the assembly is idempotent. A RELEASE-time tool, not a gate on the pull-request path: a pull request owns its own `changelog/fragments/<pr-number>.md` and never edits `CHANGELOG.md` itself, so two pull requests never touch the same bytes | docs.yml | selftest | helper | `--self-test` | — | — |
-| `tools/bin/harbor-gates-linux-x64 coverage-report` | compiled: `tools/gates/coverage-report` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | coverage, selftest | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
-| `tools/bin/harbor-gates-linux-x64 check-coverage-registry` | compiled: `tools/gates/check-coverage-registry` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | coverage, selftest | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
+| `tools/bin/harbor-gates-linux-x64 coverage-report` | compiled: `tools/gates/coverage-report` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | selftest, coverage | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
+| `tools/bin/harbor-gates-linux-x64 check-coverage-registry` | compiled: `tools/gates/check-coverage-registry` | the coverage registry (which file is deliberately uncovered, and why) still matches the tree | docs.yml, nightly.yml | selftest, coverage | gate | `--self-test` | `tools/coverage-registry.txt` | `--min-covered 400 --min-files 1200` |
 | `tools/bin/harbor-gates-linux-x64 gen-e2e-shards` | compiled: `tools/gates/gen-e2e-shards` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | docs.yml | selftest | helper | `--self-test` | — | — |
-| `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | selftest, test | helper | `--self-test` | — | — |
+| `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
-| `tools/bin/harbor-gates-linux-x64 coverage-report` | compiled: `tools/gates/coverage-report` | the per-project and per-file coverage report of a run | docs.yml, nightly.yml | coverage, selftest | reporter | `--self-test` | `tools/coverage-registry.txt` | `--min-files 1200` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

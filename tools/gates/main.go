@@ -52,6 +52,8 @@ import (
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	"harbor.local/gates/check-xml-doc-coverage"
+	codemodtestevents "harbor.local/gates/codemod-test-events"
+	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
@@ -124,11 +126,6 @@ var registry = []registered{
 		run:     docfacts.Run,
 	},
 	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
-	},
-	{
 		name:    "check-local-merge-loss",
 		summary: "a local squash-merge into dev dropped no content",
 		run:     mergeloss.Run,
@@ -159,6 +156,16 @@ var registry = []registered{
 		run:     checkxmldoccoverage.Run,
 	},
 	{
+		name:    "codemod-test-events",
+		summary: "the hand-built test events and messages move onto the shared builders",
+		run:     codemodtestevents.Run,
+	},
+	{
+		name:    "codemod-tool-names",
+		summary: "the tool-name literals move onto the WellKnownTools catalog",
+		run:     codemodtoolnames.Run,
+	},
+	{
 		name:    "coverage-report",
 		summary: "the per-project and per-file coverage report of a run",
 		run:     coveragereport.Run,
@@ -167,11 +174,6 @@ var registry = []registered{
 		name:    "gen-e2e-shards",
 		summary: "the process plan of the headless Avalonia E2E suite",
 		run:     gene2eshards.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
 	},
 	{
 		name:    "gen-seam-graph",
