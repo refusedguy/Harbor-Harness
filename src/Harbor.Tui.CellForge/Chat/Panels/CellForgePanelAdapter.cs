@@ -88,6 +88,17 @@ public static class CellForgePanelAdapter
         return WidgetToRows(provider.Build(ctx), ctx);
     }
 
+    /// <summary>
+    ///     PLANTED DEFECT (the proof that the rule still catches its defect): a
+    ///     key hand-off whose router nothing calls. Nothing in the product tree
+    ///     reaches this method, so the hand-off is unreachable and the rule
+    ///     must report it. This edit exists for one CI run and is reverted.
+    /// </summary>
+    private static bool RoutePlantedPanelKey(IPanelProvider provider, UiKey key, PanelContext ctx)
+    {
+        return provider.OnKey(key, ctx);
+    }
+
     /// <summary>Route a key to the focused panel's <see cref="IPanelProvider.OnKey" />.</summary>
     public static bool RouteKey(IPanelProvider provider, UiKey key, PanelContext ctx)
     {
