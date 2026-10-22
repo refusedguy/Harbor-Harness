@@ -1385,8 +1385,14 @@ public class ProcessEnvIsolationRule
     ///     proof is `ProcessEnvIsolationParityTests`.
     /// </remarks>
     /// <param name="line">The line to ask about.</param>
-    internal static bool IsTypeDeclaration(string line) =>
-        MentionsTypeKeyword(line) && TypeDeclaration.IsMatch(line);
+    /// <returns>
+    ///     The match, or <c>null</c> when the line does not even name a type
+    ///     keyword. The match is returned rather than a boolean so that the
+    ///     caller does not have to run the pattern a SECOND time to get the
+    ///     name.
+    /// </returns>
+    internal static Match? TypeDeclarationMatch(string line) =>
+        MentionsTypeKeyword(line) ? TypeDeclaration.Match(line) : null;
 
     /// <summary>
     ///     Every test class that writes the process environment.
@@ -1528,13 +1534,8 @@ public class ProcessEnvIsolationRule
             // The cheap necessary condition comes first (the allocation census,
             // #2136): the pattern is a regular expression, and this loop runs
             // over EVERY line of EVERY test project — the whole tree, once.
-            if (!IsTypeDeclaration(code[i]))
-            {
-                continue;
-            }
-
-            Match match = TypeDeclaration.Match(code[i]);
-            if (match.Success)
+            Match? match = TypeDeclarationMatch(code[i]);
+            if (match is { Success: true })
             {
                 declarations.Add((i, LeadingWhitespace(code[i]), match.Groups["name"].Value));
             }

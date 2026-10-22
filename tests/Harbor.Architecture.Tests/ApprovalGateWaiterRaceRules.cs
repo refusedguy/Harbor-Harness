@@ -810,10 +810,10 @@ public class ApprovalGateWaiterRaceRules
         // a string of the result), a method-header scan over it, and two regex
         // passes per method body.
         //
-        // The tree holds 770 source files and eleven of them mention the call,
-        // so the check skips the other 759 whole. Measured on the tree of
-        // 2026-10-22, the skipped files were 96 % of the bytes the rule
-        // processed.
+        // The tree holds hundreds of source files and a handful of them mention
+        // the call, so the check skips the rest whole. The parity test below
+        // reports how many files it skipped and what the two scans cost, so
+        // the number is measured rather than asserted here.
         //
         // IT CANNOT NARROW THE RULE'S SCOPE, and the reason is structural: the
         // two patterns can only match text that contains the literal, and

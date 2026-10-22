@@ -201,7 +201,7 @@ public sealed class TestTreeAllocationMeasurement
         long splitTicks = 0;
         foreach (string text in stripped)
         {
-            (string[] _, long bytes, long ticks) = Measure(() => text.Split('\n'));
+            (long bytes, long ticks) = MeasureCost(() => text.Split('\n'));
             splitBytes += bytes;
             splitTicks += ticks;
         }
@@ -215,7 +215,7 @@ public sealed class TestTreeAllocationMeasurement
         long readLineTicks = 0;
         foreach (string text in stripped)
         {
-            (string[] _, long bytes, long ticks) = Measure(() => SourceTreeLines.SplitLikeReadLine(text));
+            (long bytes, long ticks) = MeasureCost(() => SourceTreeLines.SplitLikeReadLine(text));
             readLineBytes += bytes;
             readLineTicks += ticks;
         }
@@ -230,10 +230,10 @@ public sealed class TestTreeAllocationMeasurement
         long idiomTicks = 0;
         foreach (string file in files)
         {
-            (string[] _, long bytes, long ticks) = Measure(() =>
+            (long bytes, long ticks) = MeasureCost(() =>
             {
                 string[] lines = File.ReadAllLines(file);
-                return SourceScan.StripComments(string.Join('\n', lines)).Split('\n');
+                _ = SourceScan.StripComments(string.Join('\n', lines)).Split('\n');
             });
             idiomBytes += bytes;
             idiomTicks += ticks;
@@ -266,6 +266,22 @@ public sealed class TestTreeAllocationMeasurement
         long after = GC.GetAllocatedBytesForCurrentThread();
 
         return (value, after - before, finished - started);
+    }
+
+    /// <summary>
+    ///     Measures one synchronous call whose result is not needed: the bytes
+    ///     it allocated on this thread and the ticks it took.
+    /// </summary>
+    /// <param name="body">The call to measure.</param>
+    private static (long Bytes, long Ticks) MeasureCost(Action body)
+    {
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        long started = Stopwatch.GetTimestamp();
+        body();
+        long finished = Stopwatch.GetTimestamp();
+        long after = GC.GetAllocatedBytesForCurrentThread();
+
+        return (after - before, finished - started);
     }
 
     /// <summary>Ticks to milliseconds.</summary>

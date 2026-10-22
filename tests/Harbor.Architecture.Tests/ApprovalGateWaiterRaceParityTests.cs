@@ -93,7 +93,7 @@ public sealed class ApprovalGateWaiterRaceParityTests
                 "the pre-check is supposed to skip the files that do not mention the call, and if it "
                 + "skipped nothing it bought nothing — the proof would be about a scan that does not "
                 + "exist.");
-        await Assert.That(mismatches).IsEmpty()
+        await Assert.That(mismatches.ToArray()).IsEmpty()
             .Because(
                 "the pre-check may only skip a file the scan would have reported nothing for: "
                 + string.Join(" | ", mismatches));
