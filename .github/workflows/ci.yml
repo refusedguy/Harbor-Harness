@@ -1271,11 +1271,19 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          ec="$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.GeneratedMSBuildEditorConfig.editorconfig"
+          echo "=== the generated editorconfig BEFORE the build ==="
+          if [ -e "$ec" ]; then stat -c '%y  %s  %n' "$ec"; sha256sum "$ec"; cp "$ec" "$RUNNER_TEMP/ec-before"; else echo "MISSING            $ec"; fi
           echo "=== MSBuild's up-to-date decision (one project, detailed) ==="
-          dotnet build src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj \
+          dotnet build "$p/Harbor.Abstractions.Contracts.csproj" \
             -c Release --no-restore -v:detailed -m:1 -nologo \
             -p:BuildProjectReferences=false 2>&1 \
             | grep -B 1 -A 4 'Building target' | head -60 || true
+          echo "=== the generated editorconfig AFTER the build ==="
+          if [ -e "$ec" ]; then stat -c '%y  %s  %n' "$ec"; sha256sum "$ec"; else echo "MISSING            $ec"; fi
+          echo "=== what changed in it (if anything) ==="
+          if [ -e "$RUNNER_TEMP/ec-before" ] && [ -e "$ec" ]; then diff "$RUNNER_TEMP/ec-before" "$ec" | sed -n '1,40p' || true; fi
           echo "=== the stamping timestamp (the newest file under obj/) ==="
           # `sed -n '1p'` and NOT `head -1` here, and the reason is the shell.
           #
@@ -1306,7 +1314,39 @@ jobs:
       # what is the newest file under obj/ and bin/ afterwards?
       - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
         id: compile
-        run: bash build/build.sh Compile --configuration Release
+        run: |
+          date +%s > "$RUNNER_TEMP/harbor-compile-start"
+          bash build/build.sh Compile --configuration Release
+
+      # ── DIAGNOSTIC (issue #2107): how many projects did the compile rebuild? ──
+      #
+      # The cache restores obj/ and bin/, the stamper puts the mtimes back
+      # where the truth is, and MSBuild is supposed to skip every project
+      # whose sources did not change. The number of projects it ACTUALLY
+      # rebuilt is the fact issue #2107 is about, and it is a fact about the
+      # disk: a project the compile rebuilt has an intermediate assembly
+      # (obj/Release/net10.0/<T>.dll) that is NEWER than the moment the
+      # compile started. A project it skipped keeps the stamping timestamp.
+      #
+      # The anchor is the compile start, not the source mtimes: the stamper is
+      # allowed to move the sources around, and the build start is a fact it
+      # cannot reach.
+      - name: "DIAGNOSTIC: how many projects the compile rebuilt"
+        if: always() && steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          start="$(cat "$RUNNER_TEMP/harbor-compile-start" 2>/dev/null || echo 0)"
+          echo "=== the compile started at $start ($(date -u -d "@$start" +%H:%M:%S)) ==="
+          total="$(find . -path '*/obj/Release/net10.0/*.dll' -type f -not -path '*/refint/*' | wc -l)"
+          rebuilt="$(find . -path '*/obj/Release/net10.0/*.dll' -type f -not -path '*/refint/*' -newermt "@$start" | wc -l)"
+          echo "projects with an intermediate assembly: $total"
+          echo "projects REBUILT by this compile:       $rebuilt"
+          echo "=== the projects it rebuilt (the first 20) ==="
+          find . -path '*/obj/Release/net10.0/*.dll' -type f -not -path '*/refint/*' -newermt "@$start" | sort | sed -n '1,20p'
+          echo "=== the newest file under obj/ and bin/ (the compile's own writes) ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | sed -n '1,10p'
+          exit 0
 
       # The zero-test guard is only a guard if it can go red (#1795). This
       # step proves it: it runs one suite with a filter that matches NO test
