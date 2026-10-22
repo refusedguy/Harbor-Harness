@@ -1,7 +1,7 @@
 # Architecture rules: what each one catches, and what it only nags about
 
 > Status (2026-10-22): an audit of the architecture rule set of `dev`, re-counted on the tree this
-> branch merges into (`dev` at `d0242260` plus #1725 and #1730). The first count was made on
+> branch merges into (`dev` at `a55ea18c` plus #1725 and #1730). The first count was made on
 > `c75dbfdd` (2026-10-21) and every number below was recomputed after the merge. A dated
 > record, not a normative claim about the current tree. The machine-readable
 > form of everything below is [`tests/Harbor.Architecture.Tests/rule-tiers.json`](../tests/Harbor.Architecture.Tests/rule-tiers.json);

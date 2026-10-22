@@ -1,7 +1,7 @@
 # Can each guard fail? The vacuity sweep of issue #1730
 
 > Status (2026-10-22): an audit, re-run on the tree this branch merges into (`dev` at
-> `d0242260` plus #1725 and #1730). The first sweep was made on the tree at `550b5969`
+> `a55ea18c` plus #1725 and #1730). The first sweep was made on the tree at `550b5969`
 > (2026-10-21); every self-test in the table below was **executed** again on the merged tree,
 > and its verdict recorded. A dated record, not a normative claim about the current tree. Every
 > "умеет падать" verdict below was **executed**, not read: the self-test of every gate in scope
