@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
@@ -55,6 +56,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
@@ -92,6 +94,11 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
 	},
 	{
 		name:    "changelog-assemble",
@@ -169,9 +176,9 @@ var registry = []registered{
 		run:     genseamgraph.Run,
 	},
 	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "measure-build-cpu",

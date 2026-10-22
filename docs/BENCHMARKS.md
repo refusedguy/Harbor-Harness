@@ -1143,6 +1143,53 @@ each line's tabs through a `StringBuilder`, and the measurement of that cut read
 line costs the object, its chunk buffer and the string it hands back). The
 expansion now goes through a pooled buffer, and the commit that fixes it says so.
 
+#### The yardstick has a price, and the gate now pays it (run 39633684054)
+
+The time branch is in **probe units**, so the runner's speed is supposed to
+cancel: the numerator and the denominator are both measured on the same runner
+in the same run. It cancels only while the yardstick IS the yardstick. The probe
+is a fixed workload, so its cost is a property of the machine — and the machine
+has a price: **0.000343-0.000353 ms/unit** in the nineteen measured
+`test (ui)` runs of the fleet that read it (the oldest, run 39372950798, read
+0.000380).
+
+Three runs read **0.000041 ms/unit** instead — 8.5x below — while the workload
+the probe was supposed to normalize was UNCHANGED:
+
+| Run | probe ms/unit | frame ms/unit | frame probe units | verdict |
+|---|---|---|---|---|
+| 39633684054 | 0.000041 | 0.0815 | **1992.3** (budget 700) | red |
+| 39609285153 | 0.000041 | 0.0816 | **1990.3** (budget 700) | red |
+| 39619582982 | 0.000041 | — | — | red (patch split only) |
+| 39639468264 (healthy) | 0.000350 | 0.0827 | 236.5 | green |
+| 39654104203 (healthy, this branch) | 0.000348 | 0.0814 | 234.1 | green |
+
+The numerator's spread was 1.01x in the red run — "reproducible" — so the
+helper trusted the measurement and the ratio it asserted was 8.5x the cost the
+runner actually produced. **A gate that fails on a number its runner never
+produced is a red light, not a measurement.**
+
+So the gate now declares the band the yardstick has to stay in
+(`0.000150-0.000600 ms/unit` — 2.3x below and 1.6x above what the fleet
+produces, so a slower or a faster machine still measures inside it). Outside
+the band the time branch **reports and stands down** and the byte branch — the
+machine-independent one, the branch that can be a hard gate — still asserts. The
+budgets are untouched: the byte budgets (8 B / 4 KiB / 128 KiB) are the real
+limits, and the time budgets stay in the currency the fleet is calibrated in.
+
+The band also catches the other direction: run 39599923626 read 0.00072 ms/unit
+in one of its six gates — 2x the fleet's price — and that gate stood down (its
+own spread was 6.25x). A yardstick that reads 2x slow deflates every ratio
+built on it, and a gate that passes because its yardstick was slow measures
+nothing.
+
+The warm-up of the patch split grew from 3 to 32 iterations at the same time:
+the call-counting threshold is 30 calls, the measured window drives 8 splits
+per round, and the short warm-up left the first measured rounds running tier-0
+code. The measurement of run 39654104203 therefore reads **397.1** probe units
+per split (0.1379 ms/unit against a probe of 0.000347 ms/unit) where the old
+warm-up read 505.2 — the same code, measured honestly.
+
 > The `[perf-gate] tool-start-event-cost: measured …` report lines print into
 > the `test (ui)` job log on every run, and the compiled `test-measurements` gate lifts
 > them into the job summary (#618) — cite THAT run's values when filling a
@@ -1717,17 +1764,18 @@ Machine: Linux x64, .NET 10 Release JIT, in-process (no tty, no render loop).
 
 ### 6.1 Per-project results — CI, Release ✅ measured
 
-**Source: CI run [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758)**
-(push to `dev`, sha `07769e7e`, 2026-10-20 13:51 UTC), the four `test` shards of
-`.github/workflows/ci.yml` on `ubuntu-24.04`, .NET SDK 10.0.402, Release binaries
-built by the same run's `build` job.
+**Source: CI run [39648943782](https://github.com/refusedguy/Harbor-Harness/actions/runs/39648943782)**
+(pull request #2143, sha `64f9825b`, 2026-10-21 18:01 UTC), the five `test` shards of
+`.github/workflows/ci.yml` on `ubuntu-24.04-arm`, .NET SDK 10.0.402, Release
+binaries built by the same run's `build` job.
 
-This is the first `dev` push whose shards ran on the current tree. The `dev`
-pushes before it (2026-10-20 09:17 to 13:25) failed in the `build` job, on an
-analyzer diagnostic (`Proj0040`, then `Proj0037` and a duplicate local in
-`tests/Harbor.Tools.Builtin.Tests/McpOAuthTests.cs`) that the
-`dotnet-project-file-analyzers` package upgrade brought in; `07769e7e` fixed
-those three, and this is the run after the fix.
+This is the first run of the `ci` lane since #2115 broke the workflow FILE
+itself: the arm64 reporting steps had lost their list marker, so `ci.yml` was
+not a workflow and every run of it created no jobs at all, on `dev` and on
+every branch alike (#2146 fixed it). The run before it on the same tree
+(39643565186) failed in the `core` shard on
+`ParentCancel_StopsBackgroundChildren`; the re-run of that job passed, and
+this run is green end to end.
 
 Every number below is **MEASURED**, and none of it is a projection:
 
@@ -1740,56 +1788,57 @@ Every number below is **MEASURED**, and none of it is a projection:
 
 | Test project | shard | Discovered | Passed | Failed | Skipped | Duration |
 |---|---|---:|---:|---:|---:|---:|
-| `Harbor.Architecture.Tests` | core | 1 032 | 1 032 | 0 | 0 | 78.75 s |
-| `Harbor.Application.Tests` | core | 578 | 578 | 0 | 0 | 16.09 s |
-| `Harbor.Abstractions.Tests` | core | 257 | 257 | 0 | 0 | 18.24 s |
-| `Harbor.Core.Tests` | core | 239 | 238 | 0 | 1 | 6.40 s |
-| `Harbor.ChangeTracking.Tests` | core | 126 | 126 | 0 | 0 | 4.64 s |
-| `Harbor.Hosting.Tests` | core | 112 | 112 | 0 | 0 | 0.80 s |
-| `Harbor.Config.Tests` | core | 105 | 105 | 0 | 0 | 0.50 s |
-| `Harbor.Registries.Tests` | core | 104 | 104 | 0 | 0 | 1.46 s |
-| `Harbor.TestKit.Tests` | core | 55 | 55 | 0 | 0 | 0.44 s |
-| `Harbor.Domain.Tests` | core | 51 | 51 | 0 | 0 | 3.03 s |
-| `Harbor.Lsp.Tests` | core | 35 | 35 | 0 | 0 | 1.05 s |
-| `Harbor.Telemetry.Tests` | core | 25 | 25 | 0 | 0 | 0.53 s |
-| `Harbor.Terminal.Pty.Tests` | core | 14 | 14 | 0 | 0 | 0.44 s |
-| `Harbor.TestKit.Generators.Tests` | core | 4 | 4 | 0 | 0 | 1.06 s |
-| `Harbor.Tui.CellForge.Tests` | ui | 2 425 | 2 425 | 0 | 0 | 8.05 s |
-| `Harbor.Ui.Framework.Tests` | ui | 627 | 627 | 0 | 0 | 23.94 s |
-| `Harbor.App.Avalonia.Tests` | ui | 356 | 349 | 0 | 7 | 2.25 s |
-| `Harbor.Tui.Tests` | ui | 244 | 244 | 0 | 0 | 0.74 s |
-| `Harbor.Tui.CellForge.PtyTests` | ui | 61 | 61 | 0 | 0 | 35.42 s |
-| `Harbor.Terminal.Abstractions.Tests` | ui | 76 | 76 | 0 | 0 | 0.87 s |
-| `Harbor.DesignSystem.Tests` | ui | 53 | 53 | 0 | 0 | 0.82 s |
-| `Harbor.Tui.RendererTests` | ui | 37 | 37 | 0 | 0 | 0.75 s |
-| `Harbor.Tools.Builtin.Tests` | platform | 469 | 467 | 0 | 2 | 5.16 s |
-| `Harbor.Storage.Tests` | platform | 147 | 147 | 0 | 0 | 3.29 s |
-| `Harbor.Providers.Tests` | platform | 144 | 144 | 0 | 0 | 3.68 s |
-| `Harbor.Storage.Jsonl.Tests` | platform | 130 | 130 | 0 | 0 | 7.49 s |
-| `Harbor.Plugins.Runtime.Tests` | platform | 105 | 105 | 0 | 0 | 3.84 s |
-| `Harbor.Ipc.Tests` | platform | 132 | 128 | 0 | 4 | 4.48 s |
-| `Harbor.Transport.Remote.Tests` | platform | 17 | 17 | 0 | 0 | 0.54 s |
-| `Harbor.Plugins.Abstractions.Tests` | platform | 17 | 17 | 0 | 0 | 0.40 s |
-| `Harbor.Plugins.Host.Tests` | platform | 14 | 14 | 0 | 0 | 0.43 s |
-| `Harbor.App.Cli.Tests` | e2e | 361 | 361 | 0 | 0 | 1.48 s |
-| `Harbor.E2E.App.Avalonia` | e2e | 107 | 86 | 1 | 20 | 25.86 s |
-| `Harbor.Tui.E2E.Tests` | e2e | 30 | 29 | 0 | 1 | 0.54 s |
-| `Harbor.E2E.Framework.Tests` | e2e | 26 | 26 | 0 | 0 | 0.52 s |
-| `Harbor.LoadTests` | e2e | 16 | 16 | 0 | 0 | 1.24 s |
-| `Harbor.E2E.Cli` | e2e | 11 | 11 | 0 | 0 | 3.72 s |
-| **Total (37 projects, 4 shards)** | | **8 342** | **8 306** | **1** | **35** | **268.9 s** |
+| `Harbor.Application.Tests` | core | 671 | 671 | 0 | 0 | 7.36 s |
+| `Harbor.Core.Tests` | core | 285 | 285 | 0 | 0 | 9.66 s |
+| `Harbor.Abstractions.Tests` | core | 280 | 280 | 0 | 0 | 2.59 s |
+| `Harbor.ChangeTracking.Tests` | core | 126 | 126 | 0 | 0 | 5.19 s |
+| `Harbor.Registries.Tests` | core | 124 | 124 | 0 | 0 | 1.90 s |
+| `Harbor.Config.Tests` | core | 122 | 122 | 0 | 0 | 1.99 s |
+| `Harbor.TestKit.Tests` | core | 121 | 121 | 0 | 0 | 0.79 s |
+| `Harbor.Hosting.Tests` | core | 118 | 118 | 0 | 0 | 1.40 s |
+| `Harbor.Domain.Tests` | core | 58 | 58 | 0 | 0 | 2.26 s |
+| `Harbor.Lsp.Tests` | core | 35 | 35 | 0 | 0 | 1.29 s |
+| `Harbor.Telemetry.Tests` | core | 25 | 25 | 0 | 0 | 0.76 s |
+| `Harbor.Terminal.Pty.Tests` | core | 14 | 14 | 0 | 0 | 0.60 s |
+| `Harbor.CodeGen.Tests` | core | 9 | 9 | 0 | 0 | 1.56 s |
+| `Harbor.TestKit.Generators.Tests` | core | 4 | 4 | 0 | 0 | 1.80 s |
+| `Harbor.Tools.Builtin.Tests` | platform | 533 | 531 | 0 | 2 | 4.86 s |
+| `Harbor.Storage.Jsonl.Tests` | platform | 211 | 211 | 0 | 0 | 4.91 s |
+| `Harbor.Plugins.Runtime.Tests` | platform | 196 | 196 | 0 | 0 | 5.00 s |
+| `Harbor.Storage.Tests` | platform | 157 | 157 | 0 | 0 | 3.71 s |
+| `Harbor.Providers.Tests` | platform | 154 | 154 | 0 | 0 | 2.45 s |
+| `Harbor.Ipc.Tests` | platform | 133 | 129 | 0 | 4 | 4.89 s |
+| `Harbor.Plugins.Abstractions.Tests` | platform | 33 | 33 | 0 | 0 | 0.54 s |
+| `Harbor.Plugins.Host.Tests` | platform | 19 | 19 | 0 | 0 | 0.57 s |
+| `Harbor.Transport.Remote.Tests` | platform | 17 | 17 | 0 | 0 | 0.80 s |
+| `Harbor.Tui.CellForge.Tests` | ui | 2 480 | 2 480 | 0 | 0 | 6.75 s |
+| `Harbor.Ui.Framework.Tests` | ui | 637 | 637 | 0 | 0 | 5.38 s |
+| `Harbor.App.Avalonia.Tests` | ui | 377 | 370 | 0 | 7 | 2.05 s |
+| `Harbor.Tui.Tests` | ui | 248 | 248 | 0 | 0 | 0.64 s |
+| `Harbor.Terminal.Abstractions.Tests` | ui | 76 | 76 | 0 | 0 | 0.80 s |
+| `Harbor.Tui.CellForge.PtyTests` | ui | 64 | 64 | 0 | 0 | 34.30 s |
+| `Harbor.DesignSystem.Tests` | ui | 53 | 53 | 0 | 0 | 0.78 s |
+| `Harbor.Tui.RendererTests` | ui | 37 | 37 | 0 | 0 | 0.53 s |
+| `Harbor.App.Cli.Tests` | e2e | 370 | 370 | 0 | 0 | 1.48 s |
+| `Harbor.Tui.E2E.Tests` | e2e | 30 | 29 | 0 | 1 | 0.55 s |
+| `Harbor.E2E.Framework.Tests` | e2e | 30 | 30 | 0 | 0 | 0.51 s |
+| `Harbor.LoadTests` | e2e | 16 | 16 | 0 | 0 | 1.41 s |
+| `Harbor.E2E.Cli` | e2e | 11 | 11 | 0 | 0 | 3.78 s |
+| `Harbor.E2E.App.Avalonia` | e2e | 107 | 100 | 0 | 7 | 15.30 s † |
+| `Harbor.Architecture.Tests` | arch | 1 118 | 1 118 | 0 | 0 | 97.46 s |
+| **Total (38 projects, 5 shards)** | | **9 099** | **9 078** | **0** | **21** | **238.6 s** |
 
-**Shard walls, same run** (`Run shard <shard>` step): `core` **140 s**, `ui`
-**78 s**, `platform` **36 s**, `e2e` **37 s**. The PR wall is the maximum
-shard, not the sum, so `core` is the binding shard on this run.
+† `Harbor.E2E.App.Avalonia` runs as three processes
+(`tests/Harbor.E2E.App.Avalonia/e2e-shards.json`), so its row is the CRITICAL
+PATH of those processes (15.3 s of 12.4 / 15.3 / 4.9 s), not a sum.
+**Shard walls, same run** (`Run shard <shard>` step): `arch` **99 s**, `core`
+**48 s**, `ui` **56 s**, `platform` **33 s**, `e2e` **27 s**. The PR wall is the
+maximum shard, not the sum, so `arch` is the binding shard on this run — it
+has been since the architecture suite got a shard of its own (#1781).
 
-**One test failed in the baseline run**: `Harbor.E2E.App.Avalonia`'s
-`Chat_ShowToolCallCard` ("expected rendered 'read', but the visible tree never
-showed it"), which is why the `e2e` shard is red on it and that run's
-conclusion is `failure`. It does not change any count above (the test was
-discovered and it failed, which is what the Failed column says), and it is why
-the run is quoted as a measurement rather than as a green one. The same test
-passed on run 39438762137, so the flake is one flake and not a broken suite.
+**The `e2e` shard costs 27 s**, and the E2E framework's own project is 0.51 s
+of it (`Harbor.E2E.Framework.Tests`, 30 tests): the framework is not the
+shard's cost, the Avalonia app is (15.3 s of the 27 s, as three processes).
 
 **How to reproduce the table.** The counts and the per-assembly durations are in
 the run's job log (the "Test run summary" block per project). They are also in
@@ -1797,19 +1846,19 @@ the TRX files, and the compiled `test-census` gate turns those into exactly this
 per project and per test:
 
 ```bash
-gh run download 39438762137 --name test-results-core --dir TestResults/core
-python3 tools/test-census.py TestResults/core          # the table above
-python3 tools/test-census.py TestResults/core --format csv > census.csv
+gh run download 39648943782 --name test-results-core --dir TestResults/core
+tools/bin/harbor-gates-linux-x64 test-census TestResults/core          # the table above
+tools/bin/harbor-gates-linux-x64 test-census TestResults/core --format csv > census.csv
 ```
 
 The census reads every result the runner produced, including the ~99% of tests
 that printed nothing, so its `discovered` column is the number of tests the
 suite has, and its `wall` column is the runner's per-assembly duration read
-from the TRX `<Times>` window. On run 39438762137 the census and the job log
-agree to the test: 8 342 discovered, 8 307 passed, 35 skipped, 0 failed, in the
-same 37 projects.
+from the TRX `<Times>` window. On run 39648943782 the census and the job log
+agree to the test: 9 099 discovered, 9 078 passed, 21 skipped, 0 failed, in the
+same 38 projects.
 the compiled `test-measurements` gate cannot do this: it renders only the tests that
-printed a measurement, which on a full run is 88 rows out of 8 342.
+printed a measurement, which on a full run is 88 rows out of 9 099.
 
 > **The TRX artifacts came back in this PR.** They were gone from every run
 > between 2026-10-20 11:17 and this one. The TUnit 1.75 upgrade (`b6fcc333`)
@@ -1845,8 +1894,8 @@ printed a measurement, which on a full run is 88 rows out of 8 342.
 > | `Harbor.Tui.E2E.Tests` | (requires terminal) | — | — | — |
 > | **Total (measured)** | **~493** | **0** | **2** | **~12 s** |
 >
-> The suite grew from ~493 to 8 342 discovered tests (17x) and the architecture
-> suite from 45 to 1 032 (23x) between that measurement and this one. A number
+> The suite grew from ~493 to 9 099 discovered tests (18x) and the architecture
+> suite from 45 to 1 118 (25x) between that measurement and this one. A number
 > measured on a tree that no longer exists cannot be a baseline: a spike has
 > nothing to compare against, and a diff against 45 says nothing about 1 032.
 
@@ -1860,17 +1909,19 @@ different runner loads:
 | [39399653820](https://github.com/refusedguy/Harbor-Harness/actions/runs/39399653820) (dev, `2435d26d`, 09:17) | before #1791 | 977 | 977 | 95.47 s | 992 |
 | [39421864352](https://github.com/refusedguy/Harbor-Harness/actions/runs/39421864352) (dev, `86b52adc`, 12:23) | with #1868 | 998 | 998 | 122.10 s | 1 013 |
 | [39423289101](https://github.com/refusedguy/Harbor-Harness/actions/runs/39423289101) (PR #1939 branch, `27114126`, 12:34) | with #1789 | 1 002 | 1 002 | 119.20 s | 1 018 |
-| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | the baseline row of §6.1 | **1 032** | **1 032** | **78.75 s** | 1 053 |
+| [39434075758](https://github.com/refusedguy/Harbor-Harness/actions/runs/39434075758) (dev, `07769e7e`, 13:51) | the §6.1 baseline run before this one | **1 032** | **1 032** | **78.75 s** | 1 053 |
 | [39450959681](https://github.com/refusedguy/Harbor-Harness/actions/runs/39450959681) (PR branch, `f2491032`, 15:5x) | after #1791's shared tree snapshot | 1 068 | 1 068 | 89.43 s | 1 089 |
+| [39648943782](https://github.com/refusedguy/Harbor-Harness/actions/runs/39648943782) (PR #2143, `64f9825b`, 18:01) | the §6.1 baseline run now | **1 118** | **1 118** | **97.46 s** | 1 143 |
 
 The last column is the source-level `[Test]` count in
-`tests/Harbor.Architecture.Tests/`, which runs 15-21 above the discovered
+`tests/Harbor.Architecture.Tests/`, which runs 15-25 above the discovered
 count on every one of those trees (the difference is `[Test]` occurrences that
 the runner does not discover). It is a check on the measurement, not a
 substitute for it.
 
 **Read the count, not the wall.** The runs above discovered 966, 977, 998,
-1 002, 1 032 and 1 068 tests, and the wall ranged from 65.88 s to 122.10 s for
+1 002, 1 032, 1 068 and 1 118 tests, and the wall ranged from 65.88 s to
+122.10 s for
 nearly the same suite. The wall moved by 2x between runs on trees that differ
 by 4 % in test count, because a shared runner's load moves it and because the
 architecture suite's wall is set by a handful of long tests (§ below). The
@@ -2860,9 +2911,10 @@ told from the baseline: 1.08 on the wall, 1.04 after the speed
 normalisation, the same 112 `Csc` tasks, the same 3.3..3.6 busy cores. MSBuild
 reads the `-maxcpucount` SWITCH; the `MaxCpuCount` property appears in no
 MSBuild target and in no global-property lookup. The repository's own
-`-p:MaxCpuCount=0` (`build/_build/Targets/CompileTarget.cs:22` and `:34`) is
-a no-op for the same reason: `dotnet build` is parallel on its own, which is
-why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy cores.
+`-p:MaxCpuCount=0` (what `build/_build/Targets/CompileTarget.cs` used to
+pass) was a no-op for the same reason: `dotnet build` is parallel on its own,
+which is why arm A, arm B and the CI-exact calibration all read 3.3..3.6 busy
+cores. #2111 replaced that line with the real switches — see §6.7.2.
 
 **Practical conclusion: two jobs are worth it, but not for the reason in the
 issue, and not for the number in the issue.**
@@ -2924,6 +2976,192 @@ runs a command and meters it, the compiled `aggregate-build-vcpu` gate turns the
 into the table, the compiled `measure-project-graph` gate parses the graph), and the
 nightly lane's analysis step can read the same measurements instead of
 growing a second parser.
+
+### 6.7.1 The analyzer profile: what each family costs the compile
+
+**The instrument.** The analyzer-cost harness
+(`.github/workflows/meas-analyzer-cost.yml`) builds the Release compile of
+`Harbor.slnx` twice in one job — the baseline and its own arm — and the
+compiler's own `-p:ReportAnalyzer=true` report says, for every
+compilation, the elapsed time per analyzer assembly. The numbers below are
+that report, summed over the 117 compilations of the build; the reader is
+the compiled `aggregate-analyzer-cost` gate, and its table is the artifact
+`analyzer-cost-table`.
+
+**The two runs.** The before/after pair of issue #2109, on the same day,
+on the same runner image (`ubuntu-24.04`, 4 vCPU, .NET SDK 10.0.402):
+
+| run | branch | tree | `narrowed-report` arm |
+|-----|--------|------|----------------------|
+| [39633281684](https://github.com/refusedguy/Harbor-Harness/actions/runs/39633281684) | `ci/2109-baseline` | `dev` as it was | 117 compilations, 841.6 analyzer-seconds |
+| [39633295157](https://github.com/refusedguy/Harbor-Harness/actions/runs/39633295157) | `ci/2109-profile` | with the ILLink analyzer and the vs-threading family removed | 117 compilations, 518.3 analyzer-seconds |
+
+#### The profile, family by family
+
+| family | analyzer seconds | share | on by default? | decision |
+|--------|------------------|-------|----------------|----------|
+| `SonarAnalyzer.CSharp` | 249.5 | 48.1 % | `tests/` only | KEPT — the only family whose 324 findings the repository reads, and all of them are in the test tree |
+| `DependencyInjection.Lifetime.Analyzers` | 67.8 | 13.1 % | `src/` + `apps/` | KEPT — DI003/DI015/DI017/DI019 are errors on the composition root's registrations |
+| `ILLink.RoslynAnalyzer` (the SDK's own) | 48.2 | 9.3 % | 7 projects | NARROWED — 302.2 s in 105 projects before |
+| `Meziantou.Analyzer` | 48.0 | 9.3 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.NetAnalyzers` | 17.0 | 3.3 % | solution-wide | KEPT — the base layer |
+| `Roslynator.Analyzers` | 13.0 | 2.5 % | solution-wide | KEPT |
+| `AsyncFixer` | 11.7 | 2.3 % | `src/` + `apps/` | KEPT — all five rules are `suggestion`, so it cannot fail a build |
+| `Microsoft.CodeAnalysis.BannedApiAnalyzers` | 10.7 | 2.1 % | solution-wide | KEPT — RS0030 is a build error over `BannedSymbols.txt` |
+| `Harbor.Arch.Analyzers` (the repository's own) | 8.8 | 1.7 % | `src/` + `apps/` | KEPT — HARCH001/HARCH002, in the build, over every product project |
+| `ReflectionAnalyzers` | 5.9 | 1.1 % | solution-wide | KEPT |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 2.7 | 0.5 % | two frozen assemblies | KEPT |
+| `DotNetProjectFile.Analyzers` | 2.1 | 0.4 % | solution-wide | KEPT |
+| `Microsoft.VisualStudio.Threading.Analyzers` | **0** | **0 %** | **REMOVED** | REMOVED — 114.4 s, of which 93.6 s was VSTHRD010, a rule at `severity = none` |
+| **everything together** | **518.3** | | | **−323.3 s against 841.6 s** |
+
+The source generators and the SDK's own analyzer assemblies make up the
+rest of the 518.3 s (`TUnit.Core.SourceGenerator` 6.3,
+`CommunityToolkit.Mvvm.SourceGenerators` 4.1, `Harbor.CodeGen` 1.4, and
+the `Microsoft.Interop.*` generators 3.3 among them).
+
+#### The before/after, and the two things that make it hard to read
+
+**The runner is not the same machine twice.** The analyzer report is CPU
+time, and the second run's runner was the slower one: the 22 families
+this change did not touch came out **6.3 % slower** there (the median of
+their per-family ratios; the spread is 0.59x..1.30x). Normalized by that
+factor:
+
+| | before | after | delta |
+|---|---:|---:|---:|
+| `ILLink.RoslynAnalyzer` | 302.2 s (105 projects) | 45.3 s (7 projects) | **−85 %** |
+| `Microsoft.VisualStudio.Threading.Analyzers` | 114.4 s (60 projects) | 0 s | **−100 %** |
+| everything together | 841.6 s | 487.4 s | **−354.2 s (−42.1 %)** |
+
+**The wall cannot resolve an effect of this size, and the harness says so
+in its own table.** Every paired arm — the same tree, twice, in one job,
+on the same runner — came out inside the noise floor, which the control
+arms (the baseline against itself) put at **28.0 s** in the first run and
+**28.4 s** in the second:
+
+| arm | before run: difference (s) | after run: difference (s) | the family it switches off |
+|------|--------------------------:|-------------------------:|----------------------------|
+| `no-illink` | **+1.4** | −14.0 | the SDK's ILLink analyzer — 302.2 s of analyzer time |
+| `no-vs-threading` | **+8.7** | −2.6 | 114.4 s of analyzer time, 93.6 s of it in one silenced rule |
+| `no-roslynator` | −6.7 | **+46.1** | 12.3 s of analyzer time |
+| `no-publicapi` | +19.2 | +25.2 | 3.3 s of analyzer time |
+| `no-sonar` | +9.6 | +4.6 | 232.4 s of analyzer time |
+
+A 3-second family reads +19.2 s and +25.2 s, a 232-second family reads
++9.6 s, and the largest arm in either run is a 12-second family at
++46.1 s. **The wall-time arms measure the runner, not the analyzer.** The
+controlled number is the compiler's own report, and it is what the table
+above is read from.
+
+#### What the two removed families were
+
+**`ILLink.RoslynAnalyzer` (302.2 s → 48.2 s).** The SDK's own AOT/trim
+analyzer, in 105 of the tree's 117 compilations, because the
+repository-root `Directory.Build.props` set `PublishSingleFile=true`
+repo-wide and the SDK pulls the ILLink pack into every project that
+enables the single-file analyzer. The property now lives in
+`apps/Harbor.App.Cli`, and the analyzer runs where it has something to
+say: the CLI's own compilation, the six `IsAotCompatible=true` projects,
+and the `aot-publish` job (`-p:EnableSingleFileAnalyzer=true`), which is
+where the product tree's `IL3000` coverage went. The mechanism and the
+proof are in [docs/ANALYZERS.md §The ILLink analyzer](./ANALYZERS.md#the-illink-analyzer).
+
+**`Microsoft.VisualStudio.Threading.Analyzers` (114.4 s → 0 s).** 93.6 s
+of the 114.4 s — 82 % — is `VSTHRD010MainThreadUsageAnalyzer`, the rule
+`.editorconfig` sets to `severity = none`. A silenced rule still runs: the
+analyzer is invoked, the diagnostic is dropped, and the time is paid. The
+only rule the repository asked for is VSTHRD110, at `suggestion`, which
+`TreatWarningsAsErrors` does not promote — so no rule of the family could
+fail a build. The gate that decides "is this an unobserved Task?" is
+HARCH003, a house analyzer that resolves the TYPE rather than matching a
+call's spelling, and it is a Warning, so it fails the build where
+VSTHRD110 only suggested.
+
+#### The zero-warning gate did not get weaker
+
+The ILLink analyzer's only findings in the ordinary build were four
+`IL3000` warnings — `Assembly.Location` in
+`tests/Harbor.CodeGen.Tests/ObservedGeneratorDriverTests.cs:233`,
+`tests/Harbor.Plugins.Runtime.Tests/Compilation/PluginReferenceContractTests.cs:364`,
+`tests/Harbor.Plugins.Runtime.Tests/Security/SandboxAlcTests.cs:92` and
+`tests/Harbor.TestKit.Generators.Tests/FakeGeneratorDriverTests.cs:164` —
+all under `tests/`, where `TreatWarningsAsErrors` is off, so none of them
+could fail a build. The product tree's own `IL3000`
+site is a `#pragma warning disable IL3000` in
+`src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs`, and the
+proof that the gate moved rather than disappeared is a run with that
+pragma removed:
+
+| run | tree | the band |
+|-----|------|----------|
+| [39637090212](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637090212) | before | the **build** job is red — the IL3000 warning is an error under `TreatWarningsAsErrors=true` |
+| [39637286644](https://github.com/refusedguy/Harbor-Harness/actions/runs/39637286644) | after | the **build** job is green and the **aot-publish** job is red — the check is in the job that owns it |
+### 6.7.2 The real MSBuild switches: `/maxcpucount`, `/nodeReuse`, `/graphBuild`
+
+**What the NUKE Compile target passed, and why it was nothing.**
+`build/_build/Targets/CompileTarget.cs` ran
+
+```
+dotnet build Harbor.slnx -c Release --no-restore -p:MaxCpuCount=0 -p:ContinuousIntegrationBuild=true
+```
+
+`-p:MaxCpuCount=0` is a PROPERTY. MSBuild reads the node count as the
+SWITCH `-maxcpucount`, and the `MaxCpuCount` property appears in no
+MSBuild target and in no global-property lookup — §6.7 measured that
+property as indistinguishable from the baseline (wall ratio 1.08). The
+line read like "use all CPUs" and did nothing at all. Worse, the
+"0 means all CPUs" spelling is not even a legal value: MSBuild's
+`ProcessMaxCPUCountSwitch` throws `InvalidMaxCPUCountValueOutsideRange`
+for anything outside 1..1024.
+
+**What replaced it.** `dotnet build` is `dotnet msbuild -restore -t:Build`
+plus the SDK's own defaults, and the node count is one of the switches
+only MSBuild's own command line carries. Going through `dotnet msbuild`
+is what makes the switches reachable at all:
+
+```
+dotnet msbuild Harbor.slnx -t:Build -p:Configuration=Release \
+  -p:ContinuousIntegrationBuild=true -maxcpucount:4 -nodeReuse:false
+```
+
+**The measurement** (CI run 39634501061, `meas-build-vcpu.yml`, three
+replicates per arm, the same runner: `ubuntu-24.04` image
+`ubuntu24/20261018.339.1`, 4 vCPU, .NET SDK 10.0.402). The architecture
+gate is ON in this harness, so its duration is the runner's speed proxy
+and it is subtracted in the "compile phase" column.
+
+| arm | the command | n | wall (s) | median | compile phase (wall − gate), median | `Csc` task time, median | speed-normalized wall ratio |
+|-----|-------------|--:|----------|--------|--------------------------------------|--------------------------|-----------------------------|
+| A | `dotnet build … -p:MaxCpuCount=0` (what CI ran before #2111) | 3 | 253.0..409.6 | 319.4 | 202.6 s | 266.2 s | 1.00 |
+| E | `dotnet msbuild … -maxcpucount:4 -nodeReuse:false` | 3 | 237.4..376.6 | 304.2 | **189.7 s** | 265.7 s | **0.9** |
+| F | E, plus `-graphBuild` | 3 | 282.7..447.2 | 412.1 | **253.9 s** | **858.2 s** | 1.0 |
+
+**Arm E is what the build now runs.** The same build, the real switches:
+the compile phase is 6 % shorter and the speed-normalized wall ratio is
+0.9. The `Csc` task time is the same (265.7 s against 266.2 s) — the
+wall difference is in how the work is scheduled, not in how much of it
+there is.
+
+**Arm F is NOT adopted, and the reason is measured.** `/graphBuild`
+WORKS on this solution — 118 compilations, exit 0, the same project set,
+so a `.slnx` with a solution-level metaproject is not a shape the graph
+build refuses. But it costs **1.3x the wall** (412.1 s against 304.2 s
+at the median) and **3.2x the compiler's own task time** (858.2 s
+against 265.7 s): the graph is constructed once, but every project is
+then evaluated in a graph node, and the analyzers run again. The arm
+stays in the harness, so the number can be re-read when the tree's shape
+changes.
+
+**Node reuse goes off on CI, the way dotnet/arcade does it.** The
+`build` job sets `MSBUILDDISABLENODEREUSE=1`, the environment variable
+MSBuild's `ProcessNodeReuseSwitch` reads, and the NUKE target passes
+`/nodeReuse:false`, which is the same decision as a switch (the switch
+wins over the environment variable). The reason is not speed: a reused
+node carries the previous build's state — its evaluation caches, its
+loaded assemblies — so a build that reuses a node is not the same build
+as a build that does not. On CI there is nothing to reuse: this job
+compiles once.
 
 ### 6.8 Coverage per project (#1753) ✅ measured in the nightly lane
 
@@ -3158,16 +3396,16 @@ carries five shards with 347 s of service time, and it is the pool the
 
 > "Reality (this doc)" points at the section each figure lives in, so every row inherits that
 > section's provenance — §3/§4 (§1 environment, 2026-07-18) for binary size, RSS and cold start;
-> §6.1 (CI run 39434075758, dev, 2026-10-20) for the test rows.
+> §6.1 (CI run 39648943782, PR #2143, 2026-10-21) for the test rows.
 
 | Metric | Old claim | Reality (this doc) | Why differed |
 |---|---:|---:|---|
 | Binary size | 5 MB | 109 MB (publish folder) | Old was Debug DLL alone, not publish folder |
 | RSS idle | 28 MB | ~80-120 MB (estimated) | Old was Debug `--version` exit, not real session |
 | Cold start | 38 ms | 966 ms | Old was Debug incremental, not Release from cold cache |
-| Test count | 242 | **8 342 discovered** (§6.1, run 39434075758) | Old was outdated; suite grew with new features |
-| Test duration | 12 s | **268.9 s** of test time, `core` shard 140 s (§6.1) | Old was after warm build, 12 projects, Debug, no-build; the suite is now 37 projects and runs in four Release shards in parallel |
-| Architecture suite | 45 tests / 2.19 s (local Debug, 2026-07-18) | **1 032 discovered / 78.75 s** (CI, Release, §6.1) | Same: the old row measured a tree 23x smaller, in Debug, without the CI gate |
+| Test count | 242 | **9 099 discovered** (§6.1, run 39648943782) | Old was outdated; suite grew with new features |
+| Test duration | 12 s | **238.6 s** of test time, `arch` shard 99 s (§6.1) | Old was after warm build, 12 projects, Debug, no-build; the suite is now 38 projects and runs in five Release shards in parallel |
+| Architecture suite | 45 tests / 2.19 s (local Debug, 2026-07-18) | **1 118 discovered / 97.46 s** (CI, Release, §6.1) | Same: the old row measured a tree 25x smaller, in Debug, without the CI gate |
 
 ## 8. Per-app assessment
 
@@ -3176,7 +3414,7 @@ carries five shards with 347 s of service time, and it is the pool the
 | Aspect | Status | Notes |
 |---|---|---|
 | Build | ✅ green | 0 warnings, 0 errors |
-| Tests | ✅ 8 306 passed of 8 342 discovered | CI, Release, four shards (§6.1); 35 skipped, 1 failed (an E2E Avalonia test, §6.1) |
+| Tests | ✅ 9 078 passed of 9 099 discovered | CI, Release, five shards (§6.1); 21 skipped, 0 failed |
 | Binary | 109 MB publish | Roslyn + Spectre dominate |
 | AOT | ✅ publishes (`fulltree`) | 29 MB self-contained binary, §4.4 |
 | Cold start | 18 ms AOT / 138 ms JIT (`--version`) | Measured §4.4 |
@@ -3219,7 +3457,7 @@ carries five shards with 347 s of service time, and it is the pool the
 ### What's actually fast
 
 - **Microbenchmarks**: hot paths (`ProviderRegistry.GetClient`, `ToolRegistry.ResolveTools`, `PermissionRuleset.Evaluate`, `UiStore.Dispatch`) are sub-microsecond with zero allocations — the `ArrayPool`/`StringBuilderPool`/`FrozenDictionary`/`StringPool` strategy works.
-- **Test suite**: 8 342 discovered tests, 268.9 s of test time, `core` shard 140 s (§6.1). TUnit source-gen is fast, and the four shards run in parallel.
+- **Test suite**: 9 099 discovered tests, 238.6 s of test time, `arch` shard 99 s (§6.1). TUnit source-gen is fast, and the four shards run in parallel.
 - **Lock-free `UiStore.Dispatch`**: 0.15 µs via CAS loop, no contention.
 
 ### What's actually slow / bloated

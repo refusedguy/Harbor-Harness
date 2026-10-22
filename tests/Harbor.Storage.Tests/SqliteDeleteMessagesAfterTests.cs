@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Tests;
@@ -31,7 +32,7 @@ public class SqliteDeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync(session.Id, ids[1]);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsEqualTo(2);
 
         var read = await store.GetMessagesAsync(session.Id);
@@ -48,6 +49,6 @@ public class SqliteDeleteMessagesAfterTests
 
         var result = await store.DeleteMessagesAfterAsync(session.Id, "no-such-message");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 }

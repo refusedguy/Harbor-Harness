@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Text;
 using System.Text.Json;
+using Harbor.Abstractions.Extensions;
 using Harbor.Ipc;
 
 namespace Harbor.App.Cli.Commands;
@@ -26,7 +27,7 @@ public static class HarborEventJson
     /// <returns>One line of JSON (no trailing newline).</returns>
     public static string Format(HarborEvent evt)
     {
-        ArgumentNullException.ThrowIfNull(evt);
+        Ensure.NotNull(evt);
         var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(buffer))
         {
@@ -114,8 +115,8 @@ public static class HarborEventJson
         int? maxEvents,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(events);
-        ArgumentNullException.ThrowIfNull(output);
+        Ensure.NotNull(events);
+        Ensure.NotNull(output);
         int written = 0;
         try
         {

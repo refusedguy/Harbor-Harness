@@ -55,7 +55,7 @@ public class SqliteIsoStampRoundTripTests
 
             // Re-read through the store: the domain record survives intact.
             var fetched = await store.GetAsync(session.Id);
-            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched).IsSuccessful();
             await Assert.That(fetched.Value.CreatedAt).IsEqualTo(session.CreatedAt);
             await Assert.That(fetched.Value.UpdatedAt).IsEqualTo(session.UpdatedAt);
         }
@@ -74,7 +74,7 @@ public class SqliteIsoStampRoundTripTests
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             var message = TestMessages.User("round trip", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
-            await Assert.That((await store.AppendMessageAsync(session.Id, message)).IsSuccess).IsTrue();
+            await Assert.That((await store.AppendMessageAsync(session.Id, message))).IsSuccessful();
 
             var (createdAtText, _) = await ReadStampColumnsAsync(dbPath, messages: true);
 
@@ -86,7 +86,7 @@ public class SqliteIsoStampRoundTripTests
 
             // ... and the message read path decodes the payload stamp exactly.
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(messages.Value[0].CreatedAt).IsEqualTo(OddStamp);
 
@@ -107,17 +107,17 @@ public class SqliteIsoStampRoundTripTests
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             var original = TestMessages.User("before", id: "umsg-1", sessionId: session.Id, model: "claude-opus-4");
-            await Assert.That((await store.AppendMessageAsync(session.Id, original)).IsSuccess).IsTrue();
+            await Assert.That((await store.AppendMessageAsync(session.Id, original))).IsSuccessful();
 
             var edited = TestMessages.User("after", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
-            await Assert.That((await store.UpdateMessageAsync(session.Id, edited)).IsSuccess).IsTrue();
+            await Assert.That((await store.UpdateMessageAsync(session.Id, edited))).IsSuccessful();
 
             var (createdAtText, _) = await ReadStampColumnsAsync(dbPath, messages: true);
             await Assert.That(createdAtText).IsEqualTo(OddStamp.ToString("O"));
             await Assert.That(DateTimeOffset.Parse(createdAtText)).IsEqualTo(OddStamp);
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value[0].CreatedAt).IsEqualTo(OddStamp);
         }
         finally
@@ -135,13 +135,13 @@ public class SqliteIsoStampRoundTripTests
         {
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             var message = TestMessages.User("anchor", id: "umsg-1", sessionId: session.Id, createdAt: OddStamp, model: "claude-opus-4");
-            await Assert.That((await store.AppendMessageAsync(session.Id, message)).IsSuccess).IsTrue();
+            await Assert.That((await store.AppendMessageAsync(session.Id, message))).IsSuccessful();
 
             var checkpointResult = await store.CreateCheckpointAsync(session.Id, "umsg-1", "label");
-            await Assert.That(checkpointResult.IsSuccess).IsTrue();
+            await Assert.That(checkpointResult).IsSuccessful();
             var checkpoint = checkpointResult.Value;
             var listed = await store.ListCheckpointsAsync(session.Id);
-            await Assert.That(listed.IsSuccess).IsTrue();
+            await Assert.That(listed).IsSuccessful();
             await Assert.That(listed.Value.Count).IsEqualTo(1);
             await Assert.That(listed.Value[0].CreatedAt).IsEqualTo(checkpoint.CreatedAt);
         }

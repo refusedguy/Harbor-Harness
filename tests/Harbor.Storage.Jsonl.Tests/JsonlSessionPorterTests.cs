@@ -54,15 +54,15 @@ public class JsonlSessionPorterTests
 
             var payload = new StringWriter();
             var export = await porter.ExportAsync(source, fixture.Id, payload);
-            await Assert.That(export.IsSuccess).IsTrue();
+            await Assert.That(export).IsSuccessful();
 
             var import = await porter.ImportAsync(target, new StringReader(payload.ToString()));
-            await Assert.That(import.IsSuccess).IsTrue();
+            await Assert.That(import).IsSuccessful();
             string newId = import.Value;
             await Assert.That(newId).IsNotEqualTo(fixture.Id); // fresh id minted
 
             var messages = await target.GetMessagesAsync(newId);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(3);
             await Assert.That((messages.Value[0] as UserMessage)!.Content).IsEqualTo("list files");
             await Assert.That(messages.Value[1].Role).IsEqualTo("assistant");
@@ -72,12 +72,12 @@ public class JsonlSessionPorterTests
                 .IsEqualTo("a.txt\nb.txt");
 
             var created = await target.GetAsync(newId);
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
             await Assert.That(created.Value.Title).IsEqualTo("porter fixture");
             await Assert.That(created.Value.ParentSessionId).IsEqualTo("parent-x");
 
             var stats = await target.GetStatsAsync(newId);
-            await Assert.That(stats.IsSuccess).IsTrue();
+            await Assert.That(stats).IsSuccessful();
             // The JSONL SOURCE derives stats from ASSISTANT messages only on read
             // (UpdateStatsAsync is a documented no-op there): 1 assistant msg
             // with in=10 out=5 → those are the exported metadata values.
@@ -108,7 +108,8 @@ public class JsonlSessionPorterTests
             var first = await porter.ImportAsync(target, new StringReader(text));
             var second = await porter.ImportAsync(target, new StringReader(text));
 
-            await Assert.That(first.IsSuccess && second.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
+            await Assert.That(second).IsSuccessful();
             await Assert.That(first.Value).IsNotEqualTo(second.Value);
             var list = await target.ListAsync();
             await Assert.That(list.Value.Count).IsEqualTo(2);
@@ -124,7 +125,7 @@ public class JsonlSessionPorterTests
     {
         var porter = CreatePorter();
         var result = await porter.ImportAsync(CreateMemoryStore(), new StringReader(""));
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("empty");
     }
 
@@ -133,7 +134,7 @@ public class JsonlSessionPorterTests
     {
         var porter = CreatePorter();
         var result = await porter.ImportAsync(CreateMemoryStore(), new StringReader("{\"unrelated\":true}\n"));
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("$harbor-session-export");
     }
 
@@ -146,7 +147,7 @@ public class JsonlSessionPorterTests
 
         var result = await porter.ExportAsync(target, "no-such-session", payload);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("Cannot export");
     }
 
@@ -168,7 +169,7 @@ public class JsonlSessionPorterTests
             string corrupted = string.Join('\n', lines);
 
             var import = await porter.ImportAsync(target, new StringReader(corrupted));
-            await Assert.That(import.IsSuccess).IsTrue(); // diagnostics-preserving skip policy
+            await Assert.That(import).IsSuccessful(); // diagnostics-preserving skip policy
 
             var messages = await target.GetMessagesAsync(import.Value);
             await Assert.That(messages.Value.Count).IsEqualTo(2); // 3 minus the corrupt one
@@ -203,10 +204,10 @@ public class JsonlSessionPorterTests
                 .Replace("\"results\"", "\"Results\"");
 
             var import = await porter.ImportAsync(target, new StringReader(legacy));
-            await Assert.That(import.IsSuccess).IsTrue();
+            await Assert.That(import).IsSuccessful();
 
             var messages = await target.GetMessagesAsync(import.Value);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(3);
             await Assert.That((messages.Value[2] as ToolResultMessage)!.Results[0].Output)
                 .IsEqualTo("a.txt\nb.txt");

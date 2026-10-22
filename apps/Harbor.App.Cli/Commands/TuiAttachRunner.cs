@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Ipc;
 
 namespace Harbor.App.Cli.Commands;
@@ -22,7 +23,7 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
     /// <returns>True when parsing succeeded.</returns>
     public static bool TryParse(string[] args, out TuiAttachOptions? options, out string? error)
     {
-        ArgumentNullException.ThrowIfNull(args);
+        Ensure.NotNull(args);
         string? sessionId = null;
         ulong? since = null;
         int i = 0;
@@ -113,7 +114,7 @@ public sealed record TuiAttachOptions(string? SessionId, ulong? SinceSequence, b
     /// <param name="output">Where usage goes.</param>
     public static void PrintUsage(TextWriter output)
     {
-        ArgumentNullException.ThrowIfNull(output);
+        Ensure.NotNull(output);
         output.WriteLine("""
                          harbor tui — attach to a live daemon and stream its events.
 
@@ -155,10 +156,10 @@ public static class TuiAttachRunner
         TuiAttachOptions options,
         CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(output);
-        ArgumentNullException.ThrowIfNull(error);
-        ArgumentNullException.ThrowIfNull(client);
-        ArgumentNullException.ThrowIfNull(options);
+        Ensure.NotNull(output);
+        Ensure.NotNull(error);
+        Ensure.NotNull(client);
+        Ensure.NotNull(options);
         if (options.ShowHelp)
         {
             TuiAttachOptions.PrintUsage(output);

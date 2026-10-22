@@ -106,7 +106,7 @@ public class JsonlTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Messages).IsEmpty();
             await Assert.That(transcript.Value.Integrity.UnreadableRecordCount).IsEqualTo(0);
             await Assert.That(transcript.Value.Integrity.IsTailTruncated).IsFalse();
@@ -141,7 +141,7 @@ public class JsonlTranscriptIntegrityTests
             var transcript = await store.GetTranscriptAsync(session.Id);
 
             // The read does NOT fail on the cut record.
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             // The whole record is delivered; the cut one is not invented.
             await Assert.That(transcript.Value.Messages.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)transcript.Value.Messages[0]).Content).IsEqualTo("kept");
@@ -181,7 +181,7 @@ public class JsonlTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             // Both whole records survive; the broken one in the middle does not
             // take the rest of the log with it.
             await Assert.That(transcript.Value.Messages.Count).IsEqualTo(2);
@@ -218,7 +218,7 @@ public class JsonlTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Messages.Count).IsEqualTo(2);
             await Assert.That(transcript.Value.Integrity.UnreadableRecordCount).IsEqualTo(0);
             await Assert.That(transcript.Value.Integrity.IsTailTruncated).IsFalse();
@@ -249,7 +249,7 @@ public class JsonlTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             // The call is NAMED — the transcript is not silently "complete".
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls.Count).IsEqualTo(1);
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls[0].Id).IsEqualTo("call-1");
@@ -262,13 +262,13 @@ public class JsonlTranscriptIntegrityTests
             await Assert.That(closers.Count).IsEqualTo(1);
             await Assert.That(closers[0].Results.Count).IsEqualTo(1);
             await Assert.That(closers[0].Results[0].ToolCallId).IsEqualTo("call-1");
-            await Assert.That(closers[0].Results[0].IsError).IsTrue();
+            await Assert.That(closers[0].Results[0]).HasFailed();
             await Assert.That(closers[0].Results[0].Output).Contains(UnresolvedToolCall.OutcomeUnknownCode);
 
             // Nothing was written back: the LOG still holds the two records
             // and no closer.
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
             await Assert.That(messages.Value.OfType<ToolResultMessage>()).IsEmpty();
         }
@@ -297,7 +297,7 @@ public class JsonlTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls).IsEmpty();
             await Assert.That(transcript.Value.Integrity.IsComplete).IsTrue();
             await Assert.That(transcript.Value.Messages.OfType<ToolResultMessage>().Count()).IsEqualTo(1);

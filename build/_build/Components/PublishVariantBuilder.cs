@@ -40,11 +40,15 @@ public sealed class PublishVariantBuilder
             .SetConfiguration(_settings.ConfigurationString)
             .SetOutput(outputDir)
             .SetProperty("TargetFramework", _settings.TargetFramework)
-            // Directory.Build.props sets <PublishSingleFile>true</PublishSingleFile>
-            // globally. We must explicitly disable it for variants that aren't
-            // single-file (FrameworkDependent, SelfContained, AOT, Trimmed);
-            // otherwise the bundler kicks in unconditionally and fails on
-            // non-PE files like Spectre.Console's embedded resources.
+            // PublishSingleFile is NOT set repo-wide any more (#2109): the
+            // root Directory.Build.props used to set it globally, which made
+            // the SDK pull the ILLink pack into every project of the tree
+            // (212.2 analyzer-seconds, 32 % of the build's analyzer time).
+            // The property now lives in apps/Harbor.App.Cli, the app that
+            // ships single-file, and every variant below states it
+            // explicitly — so the bundler never kicks in unconditionally and
+            // never fails on non-PE files like Spectre.Console's embedded
+            // resources.
             .SetProperty("PublishSingleFile", "false");
 
         settings = ApplyVariant(settings, variant);
