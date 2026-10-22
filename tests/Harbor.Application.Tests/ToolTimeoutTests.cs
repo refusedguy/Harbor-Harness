@@ -101,7 +101,7 @@ public class ToolTimeoutTests
         var result = await loop.RunAsync(session, agent).ConfigureAwait(false);
         long elapsedMs = Environment.TickCount64 - started;
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         // Turn 2 request carries the timeout error result for the hanging call.
         string secondRequestText = TestMessages.RenderText(client.Requests[1]);
@@ -149,6 +149,6 @@ public class ToolTimeoutTests
 
         var result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
     }
 }

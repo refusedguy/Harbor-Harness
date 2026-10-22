@@ -20,16 +20,16 @@ the tree the table was last reconciled against:
 
 | | |
 |---|---|
-| python tools in `tools/` | 23 files, 23 115 lines |
-| of them, the `check-*.py` family | 14 files, 17 130 lines |
-| workflows that run a python tool | 3: `ci.yml`, `demo.yml`, `docs.yml` |
+| python tools in `tools/` | 21 files, 21 893 lines |
+| of them, the `check-*.py` family | 14 files, 17 663 lines |
+| workflows that run a python tool | 2: `ci.yml`, `docs.yml` |
 | gates that block a build | 33 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 46 |
+| tools with a self-test | 50 |
 | tools with a ratchet | 21 |
-| tools with a floor | 28 |
+| tools with a floor | 29 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -243,9 +243,9 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (23 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (21 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 19 tools are run by a workflow; the other four are
+tree. 17 tools are run by a workflow; the other four are
 `md_gate.py`, `string-switch-rewrites.py` and `tool_schema_model.py`, which
 are loaded by other tools rather than run, and `codemod-tool-schemas.py`,
 which rewrites hand-built sources. All of them are listed, because a tool
@@ -295,7 +295,6 @@ The modes are:
 | `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on every lane of ci.yml: the build job switches the build-time gate off for pull_request AND push events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a lane that switched the gate back on | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | selftest, tree | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
-| `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 | `tools/bin/harbor-gates-linux-x64 codemod-tool-names` | compiled: `tools/gates/codemod-tool-names` | rewrites the tool-name string literals in `src/` and `apps/` onto the `WellKnownTools` catalog (#1564), and reports the literals it will not touch. A tool a human runs, and no workflow runs it | — | — | helper | — | — | — |
 | `tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu` | compiled: `tools/gates/aggregate-build-vcpu` | the measurement table: the wall time, the CPU utilisation and the task aggregates of the runs, pooled per arm and divided by the baseline. The nightly lane's measurement job runs it over its two arms | nightly.yml | measurement | reporter | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-abstractions-contract` | compiled: `tools/gates/check-abstractions-contract` | every dependency the five guarded `src/` projects declare is load-bearing | docs.yml | selftest, tree | gate | `--self-test` | — | `--min-packages 19 --min-namespaces 7 --min-files 141` |
@@ -321,12 +320,13 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | selftest, test | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest, tree | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
-| `tools/bin/harbor-gates-linux-x64 go-quality` | compiled: `tools/gates/go-quality` | the Go sources of the gates themselves: every file under `tools/gates/` parses and is gofmt-clean, the module vets and builds, every package the table calls a gate carries a `selftest.go`, and the registry in `tools/gates/main.go` names exactly the packages that exist, once each. The formatting rule needs no toolchain (go/format is the code gofmt is built on); the vet and the build do, and the gate exits 2 rather than green when they cannot run | docs.yml, gates-binary.yml | go-quality, selftest | gate | `--self-test` | — | `--min-files 75 --min-packages 28` |
+| `tools/bin/harbor-gates-linux-x64 go-quality` | compiled: `tools/gates/go-quality` | the Go sources of the gates themselves: every file under `tools/gates/` parses and is gofmt-clean, the module vets and builds, every package the table calls a gate carries a `selftest.go`, and the registry in `tools/gates/main.go` names exactly the packages that exist, once each. The formatting rule needs no toolchain (go/format is the code gofmt is built on); the vet and the build do, and the gate exits 2 rather than green when they cannot run | docs.yml, gates-binary.yml | go-quality, selftest | gate | `--self-test` | — | `--min-files 97 --min-packages 35` |
 | `tools/bin/harbor-gates-linux-x64 pr-cost` | compiled: `tools/gates/pr-cost` | what one pull request costs: the runner-minutes, the wall, the critical path, the peak width, and the bill split by article, read from the job list of a CI run. The wall is the MAXIMUM of the parallel workflows and not their sum, the busy time excludes the wait for a runner, and a timestamp that cannot be parsed is an error rather than a bill of zero. A measurement a human runs; only its self-test is called by CI | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-event-topology` | compiled: `tools/gates/check-event-topology` | the producer table of `docs/EVENT_TOPOLOGY.md` names the tree's real `PublishAsync` call sites: every cited line holds a publish, every publish in the file is cited, and every file under `src/` and `apps/` that publishes has a row. The citation fence asks whether a line exists; in that table the line number is the content of the row, so the fence passed a table that named four sites where the file had seven | docs.yml | eventtopology, selftest | gate | `--self-test` | — | `--min-producers 8 --min-sites 39 --min-subscribers 24` |
 | `tools/bin/harbor-gates-linux-x64 check-workflows` | compiled: `tools/gates/check-workflows` | no workflow file declares the same key twice in one mapping — in the block form (`if:` twice in one step), behind a quoted key (`"if":` twice) or inside a flow mapping (`with: {a: 1, a: 2}`) — and no line stands where a block sequence's entry must stand (the arm64 twin written at the indent of the list instead of the indent of the step). YAML forbids all of it, and GitHub refuses to parse a file that does it — SILENTLY: the run is created with ZERO jobs and closes as a failure, so the lane is not red, it is absent, and every pull request that waits for it waits forever. It happened here: the `ci` workflow had no jobs at all on runs 39627731779 and 39627783779, and sixteen on the run before them | docs.yml | selftest, workflows | gate | `--self-test` | — | `--min-files 17` |
 | `tools/bin/harbor-gates-linux-x64 all` | compiled: `tools/gates/all` | every gate of this repository that needs nothing but the tree, in ONE command: the compiled tree gates start in parallel and print one table (gate, exit code, time, first line of the output). The list of them is in `tools/gates/all/gates.go`, and it is checked against the workflows, so a gate that needs what the build produces cannot be in it | docs.yml | selftest, tree | gate | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 demo-repro` | compiled: `tools/gates/demo-repro` | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml, docs.yml | demo-gifs, demo-reproducibility, selftest | gate | `--self-test` | `assets/demo/baseline.json` | — |
+| `tools/bin/harbor-gates-linux-x64 gen-plugin-inventory` | compiled: `tools/gates/gen-plugin-inventory` | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest, tree | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
 | `tools/bin/harbor-gates-linux-x64 banned-api-exemptions` | compiled: `tools/gates/banned-api-exemptions` | the catalogue of every `#pragma warning disable RS0030` the product tree carries matches the suppressions the tree actually has: the ban is a security control, and the suppression catalogue is the one switch that turns it off, so a stale row or an unjustified suppression is a hole in it | docs.yml | selftest, tree | gate | `--self-test` | `BannedSymbols.txt` | `--min-exemptions 6` |
 Two things the table says that are easy to miss:
 

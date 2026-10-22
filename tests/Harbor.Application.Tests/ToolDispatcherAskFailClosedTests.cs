@@ -69,7 +69,7 @@ public class ToolDispatcherAskFailClosedTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
     }
 
     [Test]
@@ -80,7 +80,7 @@ public class ToolDispatcherAskFailClosedTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(0);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
     }
 
     [Test]
@@ -91,6 +91,6 @@ public class ToolDispatcherAskFailClosedTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(0);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
     }
 }
