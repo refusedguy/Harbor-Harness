@@ -47,10 +47,10 @@ public class MarkupSendRoundTripTests
             var message = TestMessages.User(preamble, id: "msg-markup-send", sessionId: session.Id, model: "kilo-auto/free", attachments: [new ImageAttachment("/shots/broken.annotated.png", "image/png", 1, 1, png)]);
 
             var appended = await store.AppendMessageAsync(session.Id, message);
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
 
             var reloaded = (UserMessage)messages.Value[0];

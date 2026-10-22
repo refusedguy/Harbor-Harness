@@ -82,7 +82,7 @@ public class JsonlMessagePayloadShapeTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var assistant = (AssistantMessage)back.Value;
         await Assert.That(assistant.Parts).IsEmpty();
         await Assert.That(assistant.StopReason).IsEqualTo(StopReason.Stop);
@@ -103,7 +103,7 @@ public class JsonlMessagePayloadShapeTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var assistant = (AssistantMessage)back.Value;
         await Assert.That(assistant.Parts.Count).IsEqualTo(3);
         await Assert.That(assistant.Parts[0]).IsEqualTo(new TextPart("thinking-out"));
@@ -153,13 +153,13 @@ public class JsonlMessagePayloadShapeTests
 
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var toolResult = (ToolResultMessage)back.Value;
         await Assert.That(toolResult.Results.Count).IsEqualTo(2);
         await Assert.That(toolResult.Results[0].Output).IsEqualTo("first");
-        await Assert.That(toolResult.Results[0].IsError).IsFalse();
+        await Assert.That(toolResult.Results[0]).HasSucceeded();
         await Assert.That(toolResult.Results[1].Output).IsEqualTo("second");
-        await Assert.That(toolResult.Results[1].IsError).IsTrue();
+        await Assert.That(toolResult.Results[1]).HasFailed();
     }
 
     [Test]
@@ -174,7 +174,7 @@ public class JsonlMessagePayloadShapeTests
         using var doc = JsonDocument.Parse(json);
         var back = JsonlMessageCodec.DeserializeMessage("sess-1", doc.RootElement.Clone());
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         await Assert.That(((ToolResultMessage)back.Value).Results).IsEmpty();
     }
 }

@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Jsonl;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Storage.Jsonl.Tests;
@@ -48,7 +49,7 @@ public class JsonlCheckpointsTests
             var anchor = (await store.GetMessagesAsync(session.Id)).Value[1];
 
             var marked = await store.CreateCheckpointAsync(session.Id, anchor.Id, "before-refactor");
-            await Assert.That(marked.IsSuccess).IsTrue();
+            await Assert.That(marked).IsSuccessful();
             await Assert.That(marked.Value.MessageId).IsEqualTo(anchor.Id);
             await Assert.That(marked.Value.MessageIndex).IsEqualTo(1);
             await Assert.That(marked.Value.Label).IsEqualTo("before-refactor");
@@ -79,7 +80,7 @@ public class JsonlCheckpointsTests
             var checkpoint = (await store.CreateCheckpointAsync(session.Id, anchor.Id)).Value;
 
             var rewound = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value.Removed).IsEqualTo(2);
             await Assert.That(rewound.Value.Remaining).IsEqualTo(2);
 
@@ -103,7 +104,7 @@ public class JsonlCheckpointsTests
 
             // The restored checkpoint survived, so rewinding there twice works.
             var rewoundAgain = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewoundAgain.IsSuccess).IsTrue();
+            await Assert.That(rewoundAgain).IsSuccessful();
             await Assert.That(rewoundAgain.Value.Removed).IsEqualTo(1);
             await Assert.That(rewoundAgain.Value.Remaining).IsEqualTo(2);
         }
@@ -132,7 +133,7 @@ public class JsonlCheckpointsTests
             var late = await store.CreateCheckpointAsync(session.Id, messages[2].Id, "late");
 
             var rewound = await store.RewindToCheckpointAsync(session.Id, early.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
             await Assert.That(rewound.Value.Removed).IsEqualTo(3);
             await Assert.That(rewound.Value.Remaining).IsEqualTo(1);
 
@@ -163,7 +164,7 @@ public class JsonlCheckpointsTests
             var result = await store.RewindToCheckpointAsync(session.Id, "no-such-checkpoint");
             long after = File.GetLastWriteTimeUtc(store.GetRootDirectory()).Ticks;
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("no-such-checkpoint");
             await Assert.That(after).IsEqualTo(before);
 
@@ -191,19 +192,19 @@ public class JsonlCheckpointsTests
             var checkpoint = (await store.CreateCheckpointAsync(session.Id, anchor.Id)).Value;
 
             var rewound = await store.RewindToCheckpointAsync(session.Id, checkpoint.Id);
-            await Assert.That(rewound.IsSuccess).IsTrue();
+            await Assert.That(rewound).IsSuccessful();
 
             // The trail marker exists already; a new capture over the new tail
             // anchors at index 1 (the tail itself) in the truncated order.
             var afterRewind = (await store.GetMessagesAsync(session.Id)).Value;
             var recaptured = await store.CreateCheckpointAsync(session.Id, anchor.Id, "post-rewind");
-            await Assert.That(recaptured.IsSuccess).IsTrue();
+            await Assert.That(recaptured).IsSuccessful();
             await Assert.That(recaptured.Value.MessageIndex).IsEqualTo(afterRewind.Count - 1);
             await Assert.That(recaptured.Value.MessageId).IsEqualTo(anchor.Id);
             await Assert.That(recaptured.Value.Label).IsEqualTo("post-rewind");
 
             var rewoundAgain = await store.RewindToCheckpointAsync(session.Id, recaptured.Value.Id);
-            await Assert.That(rewoundAgain.IsSuccess).IsTrue();
+            await Assert.That(rewoundAgain).IsSuccessful();
             await Assert.That(rewoundAgain.Value.Removed).IsEqualTo(0);
             await Assert.That(rewoundAgain.Value.Remaining).IsEqualTo(2);
 

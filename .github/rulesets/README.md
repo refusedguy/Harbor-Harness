@@ -308,7 +308,7 @@ So the AOT gate does not need an always-running job of its own. The `gate`
 job already asserts that the lane which should have run did run, which is
 the same class of check with a wider reach. And the AOT gate still gates:
 the path filter that decides whether it runs includes `src/**`,
-`tools/aot-publish-gate.py` and `.github/aot-warning-baseline.txt`, so a
+`harbor-gates aot-publish-gate` and `.github/aot-warning-baseline.txt`, so a
 change to the AOT surface always turns it on, and when it is on it compares
 the published binary against the committed record. On a pull request that
 does not touch the AOT surface it is skipped, it reports success, and there

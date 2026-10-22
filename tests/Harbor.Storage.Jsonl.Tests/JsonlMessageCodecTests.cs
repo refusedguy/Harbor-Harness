@@ -26,7 +26,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode(ValidUserLine);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var user = (UserMessage)result.Value;
         await Assert.That(user.Id).IsEqualTo("m1");
         await Assert.That(user.SessionId).IsEqualTo("sess-1");
@@ -38,7 +38,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode("""{"createdAt":"2026-01-01T00:00:00Z","role":"user","payload":{}}""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).StartsWith("missing 'id':");
     }
 
@@ -47,7 +47,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode("""{"id":"","createdAt":"2026-01-01T00:00:00Z","role":"user","payload":{}}""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("'id' is null or empty");
     }
 
@@ -56,7 +56,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode("""{"id":"m1","role":"user","payload":{"content":"x","agent":"code","model":"p/m"}}""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("missing/invalid 'createdAt'");
     }
 
@@ -65,7 +65,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode("""{"id":"m1","createdAt":"2026-01-01T00:00:00Z","payload":{}}""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("message m1: missing 'role'");
     }
 
@@ -74,7 +74,7 @@ public class JsonlMessageCodecTests
     {
         var result = Decode("""{"id":"m1","createdAt":"2026-01-01T00:00:00Z","role":"system","payload":{}}""");
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("message m1: unknown role 'system'");
     }
 
@@ -86,7 +86,7 @@ public class JsonlMessageCodecTests
              "payload":{"parts":[],"stopReason":"not-a-reason","model":"p/m"}}
             """);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("invalid stopReason");
     }
 
@@ -98,7 +98,7 @@ public class JsonlMessageCodecTests
              "payload":{"parts":[],"stopReason":"stop"}}
             """);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("assistant message a1: missing 'model'");
     }
 
@@ -120,12 +120,12 @@ public class JsonlMessageCodecTests
         string line = JsonSerializer.Serialize(entry, JsonlCodecContext.Default.MessageEntry);
 
         var parsed = JsonlLineParser.Parse(System.Text.Encoding.UTF8.GetBytes(line), "sess-1");
-        await Assert.That(parsed.IsSuccess).IsTrue();
+        await Assert.That(parsed).IsSuccessful();
         var back = (ToolResultMessage)parsed.Value;
         await Assert.That(back.Results.Count).IsEqualTo(2);
         await Assert.That(back.Results[0].Output).IsEqualTo("ok");
-        await Assert.That(back.Results[0].IsError).IsFalse();
+        await Assert.That(back.Results[0]).HasSucceeded();
         await Assert.That(back.Results[1].Output).IsEqualTo("denied");
-        await Assert.That(back.Results[1].IsError).IsTrue();
+        await Assert.That(back.Results[1]).HasFailed();
     }
 }

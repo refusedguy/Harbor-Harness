@@ -13,8 +13,8 @@
 > **Связанные документы:**
 > - [docs/ROADMAP.md](./docs/ROADMAP.md) — full roadmap with priorities + tech-debt backlog
 > - [docs/COMPONENT_CATALOG.md](./docs/COMPONENT_CATALOG.md) — reusable UI components (Avalonia/Blazor/WPF)
-> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 8 pattern catalog with real code.
-> - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 39 antipatterns we forbid.
+> - [docs/PATTERNS.md](./docs/PATTERNS.md) — 9 pattern catalog with real code.
+> - [docs/ANTIPATTERNS.md](./docs/ANTIPATTERNS.md) — 40 antipatterns we forbid.
 > - [docs/EXAMPLES.md](./docs/EXAMPLES.md) — 40+ recipes ("How do I...?").
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
 > - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `seam graph` CI job fails when the committed copy is stale.
@@ -95,7 +95,8 @@ src/Harbor.Ipc.{Abstractions,InProcess,Client,Server}/ — daemon/remote IPC
 src/Harbor.Transport.Remote/, Harbor.Telemetry.{Core,Otlp}/, Harbor.CodeGen/, Harbor.Logging/,
 src/Harbor.Extensions/, Harbor.Diagnostics.Abstractions/
 src/Harbor.Arch.Analyzers/           — the repository's OWN architecture rules as build-time analyzers
-                                       (HARCH001 dynamic code, HARCH002 namespace ownership); the compiler
+                                       (HARCH001 dynamic code, HARCH002 namespace ownership,
+                                       HARCH005/HARCH006 HTTP-client creation); the compiler
                                        runs them over src/ and apps/; procedure: docs/ANALYZERS_AUTHORING.md
 
 apps/Harbor.App.Cli/                  — CLI entry point, slash commands, REPL, HostBuilder DI root
@@ -124,7 +125,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 82 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 83 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
@@ -265,11 +266,11 @@ I want to...
 │      Drop a .cs in ~/.harbor/plugins/, restart Harbor.
 │
 ├── ...understand the codebase
-│   └─→ docs/PATTERNS.md (8 patterns with real code)
+│   └─→ docs/PATTERNS.md (9 patterns with real code)
 │      Then docs/ARCHITECTURE.md (concrete code flow + sequence diagrams)
 │
 ├── ...understand what NOT to do
-│   └─→ docs/ANTIPATTERNS.md (39 antipatterns with before/after code)
+│   └─→ docs/ANTIPATTERNS.md (40 antipatterns with before/after code)
 │      Then docs/CODE_PRINCIPLES_AUDIT.md (45 known violations to not repeat)
 │
 ├── ...add / move / rename a document, or fix a broken doc link

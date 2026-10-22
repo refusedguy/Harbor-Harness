@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 namespace Harbor.App.Cli.Repl.Commands;
 
 /// <summary>Local (non-slash) command: toggles the vim editing layer.</summary>
@@ -11,7 +12,7 @@ internal sealed class VimCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         ctx.Host.ToggleVimMode();
         ctx.Host.WakeUp();
         return Task.CompletedTask;
