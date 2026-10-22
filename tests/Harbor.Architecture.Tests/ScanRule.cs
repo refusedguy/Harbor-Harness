@@ -158,6 +158,14 @@ internal sealed class ScanRule
     internal Func<string, string, IEnumerable<ScanHit>>? CustomParse { get; init; }
 }
 
+/// <summary>
+///     One file handed to the collector ALREADY comment-stripped: the path it
+///     is reported under, and its stripped lines.
+/// </summary>
+/// <param name="DisplayPath">Repo-relative forward-slashed path.</param>
+/// <param name="Lines">The comment-stripped lines, one per source line.</param>
+internal readonly record struct StrippedSource(string DisplayPath, IReadOnlyList<string> Lines);
+
 /// <summary>The single runner every <see cref="ScanRule" /> executes through.</summary>
 internal static class ScanRunner
 {
@@ -200,6 +208,76 @@ internal static class ScanRunner
     }
 
     /// <summary>
+    ///     On-disk scope files as (display path, comment-stripped LINES) pairs,
+    ///     read through the shared snapshot.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         This is the CACHE the text rules were missing. Every
+    ///         <see cref="Evaluate" /> used to re-read every file of the
+    ///         product tree and re-strip its comments, and the suite does that
+    ///         hundreds of times: the meter in
+    ///         <see cref="StripCommentsMeter" /> counted 950 251 strip calls
+    ///         over 651 571 350 characters in one shard run — the tree read
+    ///         and stripped about twenty-six times over.
+    ///     </para>
+    ///     <para>
+    ///         The bytes are the bytes: the snapshot strips with the same
+    ///         <see cref="SourceScan.StripComments" /> the rules used to strip
+    ///         with, and its line view is that text split on '\n' — the shape
+    ///         <see cref="Collect" /> produced. The equivalence is proved over
+    ///         the live tree by
+    ///         <c>ScanRuleTests.The_Snapshot_Path_Says_What_The_Raw_Path_Says</c>.
+    ///     </para>
+    ///     <para>
+    ///         A rule that has a <see cref="ScanRule.CustomParse" /> is NOT
+    ///         routed here: the escape hatch is handed the RAW source and
+    ///         strips it itself.
+    ///     </para>
+    /// </remarks>
+    /// <param name="rule">The rule whose scope is read.</param>
+    /// <param name="relativePaths">The scope's repo-relative paths.</param>
+    internal static List<StrippedSource> ReadStrippedSources(ScanRule rule, IReadOnlyList<string> relativePaths)
+    {
+        if (rule.CustomParse is not null)
+        {
+            throw new InvalidOperationException(
+                "[scan-runner] a rule with a custom parser reads the RAW source; read it with ReadSources.");
+        }
+
+        var sources = new List<StrippedSource>(relativePaths.Count);
+
+        foreach (string relative in relativePaths)
+        {
+            string full = Path.Combine(
+                RepoPaths.RepoRoot ?? ".",
+                relative.Replace('/', Path.DirectorySeparatorChar));
+
+            if (rule.Glob == "*.axaml")
+            {
+                // Markup is not C#: the markup stripper is the only one that
+                // knows an <!-- --> comment, and the snapshot strips C#.
+                if (SourceScan.TryReadAllText(full) is { } markup)
+                {
+                    sources.Add(new StrippedSource(
+                        relative,
+                        SourceScan.StripMarkupComments(markup).Split('\n')));
+                }
+
+                continue;
+            }
+
+            SourceTreeFile? file = SharedSourceTreeSnapshot.Shared.Get(full);
+            if (file is not null)
+            {
+                sources.Add(new StrippedSource(relative, file.StrippedNewlineLines));
+            }
+        }
+
+        return sources;
+    }
+
+    /// <summary>
     ///     Every hit of <paramref name="rule" /> over already-read sources,
     ///     baseline included. Controls drive this directly with synthetic
     ///     source — the only way "it can fail" means anything.
@@ -218,21 +296,56 @@ internal static class ScanRunner
             string stripped = rule.Glob == "*.axaml"
                 ? SourceScan.StripMarkupComments(rawSource)
                 : SourceScan.StripComments(rawSource);
-            string[] lines = stripped.Split('\n');
-            foreach (ScanForbidden banned in rule.Forbidden)
-            {
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    Match match = banned.Pattern.Match(lines[i]);
-                    if (match.Success)
-                    {
-                        hits.Add(new ScanHit(banned.SubId, displayPath, i + 1, match.Value.Trim()));
-                    }
-                }
-            }
+
+            MatchLines(rule, displayPath, stripped.Split('\n'), hits);
         }
 
         return hits;
+    }
+
+    /// <summary>
+    ///     Every hit of <paramref name="rule" /> over sources that are ALREADY
+    ///     comment-stripped and split into lines.
+    /// </summary>
+    /// <remarks>
+    ///     The same matcher as <see cref="Collect" />, over the same lines —
+    ///     which is what makes the two comparable, and what the parity test
+    ///     over the live tree checks.
+    /// </remarks>
+    internal static List<ScanHit> CollectStripped(ScanRule rule, IEnumerable<StrippedSource> sources)
+    {
+        if (rule.CustomParse is not null)
+        {
+            throw new InvalidOperationException(
+                "[scan-runner] a rule with a custom parser reads the RAW source; collect it with Collect.");
+        }
+
+        var hits = new List<ScanHit>();
+        foreach (StrippedSource source in sources)
+        {
+            MatchLines(rule, source.DisplayPath, source.Lines, hits);
+        }
+
+        return hits;
+    }
+
+    /// <summary>
+    ///     Every line of one file, matched against every banned shape of the
+    ///     rule.
+    /// </summary>
+    private static void MatchLines(ScanRule rule, string displayPath, IReadOnlyList<string> lines, List<ScanHit> hits)
+    {
+        foreach (ScanForbidden banned in rule.Forbidden)
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                Match match = banned.Pattern.Match(lines[i]);
+                if (match.Success)
+                {
+                    hits.Add(new ScanHit(banned.SubId, displayPath, i + 1, match.Value.Trim()));
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -240,14 +353,27 @@ internal static class ScanRunner
     ///     every hit the baseline does not excuse, as printable lines.
     /// </summary>
     internal static List<string> Evaluate(ScanRule rule) =>
-        EvaluateOver(ReadSources(ScopeFiles(rule)), rule);
+        rule.CustomParse is null
+            ? EvaluateOverStripped(ReadStrippedSources(rule, ScopeFiles(rule)), rule)
+            : EvaluateOver(ReadSources(ScopeFiles(rule)), rule);
 
     /// <summary>The failures over explicit sources (the control path).</summary>
     internal static List<string> EvaluateOver(
-        IEnumerable<(string DisplayPath, string Source)> sources, ScanRule rule)
+        IEnumerable<(string DisplayPath, string Source)> sources, ScanRule rule) =>
+        Failures(rule, Collect(rule, sources));
+
+    /// <summary>The failures over explicit STRIPPED sources.</summary>
+    internal static List<string> EvaluateOverStripped(
+        IEnumerable<StrippedSource> sources, ScanRule rule) =>
+        Failures(rule, CollectStripped(rule, sources));
+
+    /// <summary>
+    ///     The hits the baseline does not excuse, as printable lines.
+    /// </summary>
+    private static List<string> Failures(ScanRule rule, IEnumerable<ScanHit> hits)
     {
         var failures = new List<string>();
-        foreach (ScanHit hit in Collect(rule, sources))
+        foreach (ScanHit hit in hits)
         {
             if (rule.Baseline.Any(row => row.Covers(hit)))
             {
