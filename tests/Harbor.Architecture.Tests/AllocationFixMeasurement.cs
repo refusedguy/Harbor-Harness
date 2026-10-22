@@ -68,8 +68,8 @@ public sealed class AllocationFixMeasurement
             files++;
             chars += text.Length;
 
-            before.Add(SourceCommentBlanker.BlankUnpooled(text));
-            after.Add(SourceCommentBlanker.Blank(text));
+            before.Add(() => SourceCommentBlanker.BlankUnpooled(text));
+            after.Add(() => SourceCommentBlanker.Blank(text));
         }
 
         Report("comment-stripper-buffer", before, after, files, chars);

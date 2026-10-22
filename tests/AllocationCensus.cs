@@ -197,11 +197,12 @@ internal static class AllocationCensus
                 CultureInfo.InvariantCulture,
                 $"{LinePrefix} bytes={bytes} process={processBytes} scope={scope}"));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // A measurement must never turn a green test red. The line is the
             // measurement; a sink that refuses it costs a row in the census,
             // not a verdict on the test.
+            _ = ex;
         }
     }
 }
