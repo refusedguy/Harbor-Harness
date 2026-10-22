@@ -382,9 +382,11 @@ workflow takes a `plant_compile_error` input, and a dispatch with it plants
 the shape of #2100 in the working tree — a source file of a project the cache
 holds, carrying a compile error, identical in the cached base and in `HEAD`,
 with the base commit's mtime. The compile then skips the project and stays
-green, and the gate turns the lane red. It needs the cache, so the demo is a
-pair of dispatches: the first one warms the cache, the second one plants the
-error.
+green, and the gate turns the lane red. A valid change is planted next to it,
+in a project the compile does rebuild, and the gate stays quiet about that
+one: the two cases in one run are what show the gate discriminates. It needs
+the cache, so the demo is a pair of dispatches: the first one warms the
+cache, the second one plants the error.
 
 ### Who writes, who only reads
 

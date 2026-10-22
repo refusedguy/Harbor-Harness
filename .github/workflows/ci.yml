@@ -126,12 +126,15 @@ on:
       # A gate that stops firing is indistinguishable from a clean tree, so
       # the gate needs a way to be shown FAILING on the real lane, not only
       # a self-test on a synthetic tree. This input plants the shape of
-      # issue #2100 in the working tree: a source file of a project the
+      # issue #2100 in the working tree — a source file of a project the
       # build-output cache holds, carrying a compile error, and IDENTICAL
       # in the cached base and in HEAD — so the mtime normalisation
       # believes the project unchanged, MSBuild skips it, and the error
       # never reaches the compiler. The compile stays GREEN; the
-      # compiled-tree gate must turn the lane RED.
+      # compiled-tree gate must turn the lane RED. A valid change is
+      # planted next to it, in a project the compile DOES rebuild, and the
+      # gate must stay quiet about that one: the two cases in one run are
+      # what show the gate discriminates.
       #
       # It needs the cache: without a restored output there is nothing to
       # skip, and the compile itself would catch the error. So the demo is
@@ -1413,20 +1416,22 @@ jobs:
       # A gate that stops firing is indistinguishable from a clean tree, so
       # the gate needs to be shown FAILING on the real lane, and not only
       # on the synthetic trees of its self-test. This step plants the shape
-      # of issue #2100 in the WORKING TREE:
+      # of issue #2100 in the WORKING TREE, and it plants a control next to
+      # it:
       #
-      #   * a source file of a project the build-output cache holds, with a
-      #     compile error in it that the compiler would reject;
-      #   * the file IDENTICAL in the cached base and in HEAD, so the mtime
+      #   * the SKIPPED project: a source file with a compile error in it,
+      #     IDENTICAL in the cached base and in HEAD, so the mtime
       #     normalisation — which compares the base with HEAD — believes it
-      #     unchanged and gives it the base commit's time;
-      #   * the file's mtime set to that same base commit's time, so the
-      #     restored output stays NEWER than the source and MSBuild skips
-      #     the project.
+      #     unchanged and gives it the base commit's time. The compile
+      #     skips the project, the error never reaches the compiler, and
+      #     the lane is GREEN — until the gate reads the facts and finds
+      #     the project that was not compiled. The gate must go RED.
       #
-      # The compile then skips the project, the error never reaches the
-      # compiler, and the lane is GREEN — until the gate reads the facts and
-      # finds the project that was not compiled. The gate must go RED.
+      #   * the COMPILED project: the same treatment, but with a VALID
+      #     change and a fresh mtime, so the compile really rebuilds it.
+      #     The gate must stay QUIET about this one: a gate that reports
+      #     everything is as useless as a gate that reports nothing, and the
+      #     two cases in one run are what show the gate DISCRIMINATES.
       #
       # It needs the cache: without a restored output there is nothing to
       # skip, and the compile itself would catch the error. So the demo is
@@ -1443,15 +1448,21 @@ jobs:
             echo "::error::the demo needs the build-output cache: without a restored output there is nothing for the compile to skip, and the compile itself would catch the planted error. Run the workflow twice — the first dispatch warms the cache, the second one plants the error." >&2
             exit 1
           fi
-          target="src/Harbor.Diagnostics.Abstractions/TelemetryContracts.cs"
-          output="src/Harbor.Diagnostics.Abstractions/obj/Release/net10.0/Harbor.Diagnostics.Abstractions.dll"
-          if [ ! -f "$output" ]; then
-            echo "::error::the demo needs the restored output $output, and it is not in the tree" >&2
-            exit 1
-          fi
-          printf '\nthis line is not valid C#, and the compiler would say so\n' >> "$target"
-          touch -d "@$(git log -1 --format=%ct "$base")" "$target"
-          echo "planted a compile error in $target, with the mtime of the base commit $base"
+          skipped="src/Harbor.Diagnostics.Abstractions/TelemetryContracts.cs"
+          skipped_out="src/Harbor.Diagnostics.Abstractions/obj/Release/net10.0/Harbor.Diagnostics.Abstractions.dll"
+          built="src/Harbor.Logging/LoggerSetup.cs"
+          built_out="src/Harbor.Logging/obj/Release/net10.0/Harbor.Logging.dll"
+          for output in "$skipped_out" "$built_out"; do
+            if [ ! -f "$output" ]; then
+              echo "::error::the demo needs the restored output $output, and it is not in the tree" >&2
+              exit 1
+            fi
+          done
+          printf '\nthis line is not valid C#, and the compiler would say so\n' >> "$skipped"
+          touch -d "@$(git log -1 --format=%ct "$base")" "$skipped"
+          printf '\n// a valid change, planted by the compiled-tree gate non-vacuity control\n' >> "$built"
+          echo "planted a compile error in $skipped, with the mtime of the base commit $base"
+          echo "planted a valid change in $built, with a fresh mtime, so the compile rebuilds it"
 
       # The commit the tree under test is compared against.
       #
