@@ -2522,60 +2522,67 @@ parser every rule reads the tree through, and the Roslyn analyzer driver,
 which used to walk the same 64 product compilations FOUR times.
 
 **The wall**, one CI run each, `ubuntu-24.04-arm`, the numbers from the
-`arch` shard's TRX:
+`arch` shard's TRX. The two runs in the first two columns are on the SAME
+base commit (`a019e928`), so the difference is the branch's work and
+nothing else:
 
-| | dev (run 39717885532) | the branch (run 39718941803) | |
-|---|---:|---:|---|
-| tests discovered / passed | 1129 / 1129 | 1136 / 1136 | |
-| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | −23.2 % |
-| sum of the per-test durations | 1325.38 s | 1010.60 s | −23.7 % |
-| parallelism factor | 12.43× | 12.34× | |
-| the `test (arch)` job | 127 s | 98 s | −23 % |
+| | dev @ `a019e928` (run 39717885532) | the branch @ `a019e928` (run 39718941803) | the branch's final (run 39721154583) | |
+|---|---:|---:|---:|---|
+| tests discovered / passed | 1129 / 1129 | 1136 / 1136 | 1136 / 1136 | |
+| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | **85.00 s** | −23.2 % / −20.3 % |
+| sum of the per-test durations | 1325.38 s | 1010.60 s | 1037.64 s | −23.7 % / −21.7 % |
+| parallelism factor | 12.43× | 12.34× | 12.21× | |
+| the `test (arch)` job | 127 s | 98 s | 99 s | −23 % / −22 % |
+
+The third column is the branch's final green run; its base is two commits
+ahead of `a019e928` (the real MSBuild switches of #2111 and the Go-source
+gate of #2078), and neither touches the architecture suite. The two branch
+runs differ by 3.8 % of the wall, which is the runner's own spread.
 
 **What moved**, the class spans (last end − first start) and the single
-tests, from the same two TRX sets:
+tests, from the same TRX sets:
 
 | class | dev | the branch | |
 |---|---:|---:|---|
 | `ArchAnalyzerPromotionTests` | 92.0 s | **31.0 s** | the sweep runs once, concurrently |
-| `PanelKeyRouteReachabilityRule` | 84.0 s | 46.0 s | |
+| `PanelKeyRouteReachabilityRule` | 84.0 s | 49.0 s | |
 | `HttpClientCreationAnalyzerTests` | 60.0 s | 45.0 s | |
 | `HttpClientReuseRules` | 60.0 s | 45.0 s | |
-| `TokenCellSingleHomeRules` | 37.0 s | 26.0 s | |
-| `UnguardedResultReadAnalyzerTests` | 27.0 s | 0.7 s | |
+| `TokenCellSingleHomeRules` | 37.0 s | 23.0 s | |
+| `UnguardedResultReadAnalyzerTests` | 27.0 s | 0.5 s | |
 
 | test | dev | the branch | |
 |---|---:|---:|---|
-| `ArchAnalyzerPromotionTests.The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap` | 90.80 s | 30.28 s | |
-| `ArchAnalyzerPromotionTests.The_Analyzer_Sees_Every_File_The_Text_Rule_Sees` | 64.0 s | 30.28 s | |
-| `UnguardedResultReadAnalyzerTests.The_Analyzer_Sees_Every_Site_The_Text_Rule_Sees` | 27.14 s | 0.74 s | |
-| `DeadPublicMemberRule.Scan_IsLive` (the rule's own scan) | 2.40 s | 1.79 s | |
+| `ArchAnalyzerPromotionTests.The_Namespace_Rule_Is_Clean_On_The_Live_Tree_And_The_Analyzer_Is_Cheap` | 90.80 s | 31.31 s | |
+| `ArchAnalyzerPromotionTests.The_Analyzer_Sees_Every_File_The_Text_Rule_Sees` | 64.02 s | 31.34 s | |
+| `UnguardedResultReadAnalyzerTests.The_Analyzer_Sees_Every_Site_The_Text_Rule_Sees` | 27.14 s | 0.52 s | |
+| `DeadPublicMemberRule.EveryScopedPublicMember_IsReferencedOrTolerated` (the rule's own scan) | 2.44 s | 1.69 s | |
 
 **The Roslyn sweep, measured inside the run.** The line the sweep prints
 itself:
 
 | | dev | the branch | |
 |---|---:|---:|---|
-| one driver pass over 64 product compilations | 63 372 ms | **30 208 ms** | −52 % |
+| one driver pass over 64 product compilations | 63 372 ms | **31 301 ms** | −51 % |
 | passes over the same compilations | 4 | **1** | |
 
 **The parser, measured on its own.** The corpus is every `.cs` file of
-`src/`, `apps/` and `tests/` — 2 676 files, 25 114 074 characters. The
-sample is the 300 LARGEST of them (9 668 817 B), because a per-byte cost
+`src/`, `apps/` and `tests/` — 2 676 files, 25 115 393 characters. The
+sample is the 300 LARGEST of them (9 669 584 B), because a per-byte cost
 measured on the biggest files is the worst case. The allocations are the
 thread's own, read with `GC.GetAllocatedBytesForCurrentThread()`.
 
 | | legacy | the substrate | |
 |---|---:|---:|---|
-| the identifier counter, allocations | 334 716 816 B | **27 149 048 B** | −91.9 % |
-| the identifier counter, time | 278 ms | 155 ms | |
-| the literal blanker, allocations | 38 705 376 B | **19 738 512 B** | −49.0 % |
-| the literal blanker, time | 30 ms | 22 ms | |
+| the identifier counter, allocations | 334 742 320 B | **27 149 664 B** | −91.9 % |
+| the identifier counter, time | 257 ms | 188 ms | |
+| the literal blanker, allocations | 38 708 448 B | **19 740 048 B** | −49.0 % |
+| the literal blanker, time | 30 ms | 23 ms | |
 
 **Roslyn is the modern API, and it does not pay.** On the same sample, the
-text scan costs 15 ms and a Roslyn parse of the same bytes costs 629 ms —
-**41.9× more**, and 141 696 136 B of garbage against 31 174 712 B. The
-projection for the whole tree is 1 633 ms for the parse against a text pass
+text scan costs 24 ms and a Roslyn parse of the same bytes costs 668 ms —
+**27.8× more**, and 141 761 584 B of garbage against 31 176 944 B. The
+projection for the whole tree is 1 735 ms for the parse against a text pass
 over the same tree. It also changes the VERDICTS: on all 40 of the largest
 sampled files the text stripper and the Roslyn one disagree, because the
 text stripper cannot tell a comment from a `//` inside a string literal and
@@ -2590,7 +2597,7 @@ scan from before the rewrite. Neither proof is "the tests are still green":
 a rule that finds nothing reports nothing.
 
 **What holds the wall now.** Not the parsing. The class spans that remain:
-`PanelKeyRouteReachabilityRule` 46.0 s (the backtracking `MemberDeclaration`
+`PanelKeyRouteReachabilityRule` 49.0 s (the backtracking `MemberDeclaration`
 pattern over the product trees), `HttpClientReuseRules` and
 `HttpClientCreationAnalyzerTests` 45.0 s each (the HTTP-client rule of
 issue 1724), and the Roslyn sweep 31.0 s. The stripper is no longer a term:
