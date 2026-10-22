@@ -52,7 +52,10 @@ import (
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
+	codemodtestevents "harbor.local/gates/codemod-test-events"
+	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
@@ -64,6 +67,7 @@ import (
 	"harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	prcost "harbor.local/gates/pr-cost"
 	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
@@ -157,9 +161,24 @@ var registry = []registered{
 		run:     shardbalance.Run,
 	},
 	{
+		name:    "check-workflows",
+		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
+		run:     checkworkflows.Run,
+	},
+	{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "codemod-test-events",
+		summary: "the hand-built test events and messages move onto the shared builders",
+		run:     codemodtestevents.Run,
+	},
+	{
+		name:    "codemod-tool-names",
+		summary: "the tool-name literals move onto the WellKnownTools catalog",
+		run:     codemodtoolnames.Run,
 	},
 	{
 		name:    "coverage-report",
@@ -210,6 +229,11 @@ var registry = []registered{
 		name:    "pack-validate",
 		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
 		run:     packvalidate.Run,
+	},
+	{
+		name:    "pr-cost",
+		summary: "what one pull request costs: the runner-minutes, the wall, the critical path and the peak width",
+		run:     prcost.Run,
 	},
 	{
 		name:    "run-e2e-avalonia-shards",

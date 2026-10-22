@@ -154,7 +154,7 @@ objects across 5 renderer families, one hand-written 21-arm
 `switch (AgentEvent)` in `ChatScreenBridge`, and 5 renderers routing through
 `UiStore.Dispatch` + `ChatAppReducer`.
 
-`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:131`,
+`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:129`,
 15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
 at `:174-189`) receives events through its **own** subscription
 (`src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
@@ -229,7 +229,7 @@ ids fail fast" (`SessionStoreRegistry.cs:11`).
 
 Provider factories follow the same shape without the id index, because a
 provider is looked up by a strong id rather than a raw string:
-`src/Harbor.Hosting/Modules/ProviderFactories.cs:76`, `:94`, `:114`, `:136` —
+`src/Harbor.Hosting/Modules/ProviderFactories.cs:115`, `:134`, `:155` —
 each `IProviderFactory` with `ProviderId` and `CreateClient(ILoggerFactory)`.
 
 ### The known trap
@@ -425,7 +425,7 @@ Two more live instances of the banned direction:
   `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:351`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
   they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
-  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
+  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:132`, and note `:11`: that whole
   seam is closed as of #564) implements `OnEventAsync`, sees no exception, and
   ships a view that never updates.
 
@@ -586,7 +586,7 @@ consistent throughout:
 | state | `State/UiState.cs` (immutable record) |
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
-| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
+| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:180` `Dispatch` → `:216` `Notify`, with a revision ledger and a stale-drop guard |
 | consumption | `CellForgeTuiRenderer.cs:351` dispatch, `:291` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
@@ -603,7 +603,7 @@ is on screen for the current session") with two owners:
   `_context`, `_gates`, `_displayedMessageIds`; plus `:59` `_toolRetryShown`,
   `:68` `_parentSessionId`, `:72` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
-- the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
+- the transition: `HandleEvent` at `:129`, 21 arms mutating those fields directly;
 - the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:102` registers it
   `AddSingleton`, over a per-process `ChatScreen` (`:77-79`, also a singleton).
 
