@@ -49,7 +49,7 @@ public class JsonlSessionStoreConcurrencyTests
             foreach (var sid in sessionIds)
             {
                 var messages = await store.GetMessagesAsync(sid);
-                await Assert.That(messages.IsSuccess).IsTrue();
+                await Assert.That(messages).IsSuccessful();
                 await Assert.That(messages.Value.Count).IsEqualTo(messagesPerSession);
             }
         }
@@ -89,7 +89,7 @@ public class JsonlSessionStoreConcurrencyTests
             await Task.WhenAll(tasks);
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(taskCount * messagesPerTask);
         }
         finally
@@ -112,7 +112,7 @@ public class JsonlSessionStoreConcurrencyTests
             await store.AppendMessageAsync(session.Id, msg);
 
             var deleteResult = await store.DeleteAsync(session.Id);
-            await Assert.That(deleteResult.IsSuccess).IsTrue();
+            await Assert.That(deleteResult).IsSuccessful();
 
             var locks = GetSessionLocks(store);
             await Assert.That(locks.ContainsKey(session.Id)).IsFalse();

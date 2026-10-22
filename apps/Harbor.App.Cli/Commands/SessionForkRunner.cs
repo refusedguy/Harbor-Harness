@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Application.Sessions;
 namespace Harbor.App.Cli.Commands;
@@ -15,7 +16,7 @@ public sealed class SessionForkRunner
 
     /// <summary>Construct over any backend — branching is store-generic by design.</summary>
     public SessionForkRunner(ISessionStore store) =>
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _store = Ensure.NotNull(store);
 
     /// <summary>
     ///     Fork <paramref name="sessionId" /> at <paramref name="messageId" />.

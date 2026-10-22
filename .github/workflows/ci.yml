@@ -238,7 +238,7 @@ jobs:
               # silences the gate would also be the edit that stops the gate
               # from running — unvalidated, which is the #618 defect again with
               # a different payload. Editing the tool has the same problem.
-              - 'tools/aot-publish-gate.py'
+              - 'tools/gates/aot-publish-gate/**'
               - '.github/aot-warning-baseline.txt'
               # The TUnit analyzer gate's instrument (#1836). The same #618
               # argument as the lines above: editing the tool that proves the
@@ -819,40 +819,72 @@ jobs:
       # capability agree.
       actions: write
     env:
-      # ── The architecture gate, off the PR path only ──────────────────────
+      # ── The architecture gate: OFF for every event in this file ───────────
       #
       # HarborArchitectureGate (Directory.Build.props) runs the WHOLE
       # Harbor.Architecture.Tests assembly with `dotnet exec` after
-      # Harbor.Architecture.Tests builds: 68.0 s of work measured on run
-      # 39389070999 (the [arch-gate] message at +309.70 s, the suite's own
-      # summary at +377.71 s, the compile's last project at +387.83 s).
+      # Harbor.Architecture.Tests builds. It is a good gate and it stays a
+      # gate — but it does not run HERE, on any event.
       #
-      # It is a good gate and it stays a gate: on a push to dev/master (and
-      # on every non-pull_request event, which includes the nightly lane and
-      # workflow_dispatch) a layering regression still fails the BUILD
-      # itself. What changes is the PR lane, where the same suite ran THREE
-      # times for one result (issue #1920, measured on run 39389070999:
-      # 68.0 s here, 65.9 s in the `core` shard, 63.3 s in `coverage`).
-      # #1923 moved the coverage collection to the nightly lane and this
-      # variable switched the gate off here, so the PR lane runs the suite
-      # ONCE now — in the `arch` shard (#1781 gave the suite a shard of its
-      # own). It ran TWICE for a day: the local squash #1987 brought the
-      # `coverage` job back into this file, and the lane paid the second
-      # execution for a report-only number until #1783 took it out again.
+      # WHY (issue #2114, measured on the dev push of 165813bf, run
+      # 39613662649 — the `build` job's log, the `[arch-gate]` message and
+      # the compile's own "Time Elapsed"):
+      #
+      #   the build job          430 s wall
+      #     of which the compile 270.5 s (NUKE's own "Compile: done
+      #                          (270548 ms)")
+      #     of which the arch-gate Exec  87.9 s (14:10:04.64 -> 14:11:32.4)
+      #   the `arch` shard        117 s wall — the SAME 1118 rules again
+      #
+      # A push to dev/master paid for the same suite TWICE: once inside the
+      # build and once in the `arch` shard (#1781 gave the suite a shard of
+      # its own). The PR lane already ran it ONCE — #1928 switched the gate
+      # off here for pull_request events, and #1923 moved the coverage
+      # collection to the nightly lane. This block makes the push lane the
+      # SAME shape as the PR lane: the shard is the one execution, and this
+      # job only COMPILES the suite (the shard needs the DLL).
+      #
+      # The issue's baseline run 39483960190 measured the same duplication
+      # larger: the gate's Exec 132.4 s of a 411.4 s compile, 32 % of it.
       #
       # The count is not a convention: tools/check-arch-suite-once.py reads
-      # this file and fails the build when the PR lane runs the suite more
-      # than once, or not at all, or when this variable stops switching the
-      # gate off for pull_request events.
+      # this file and fails the build when a lane runs the suite more than
+      # once, or not at all, or when this variable stops switching the gate
+      # off.
+      #
+      # WHAT THE BUILD-TIME EXECUTION WAS HOLDING, AND WHERE IT WENT
+      # -----------------------------------------------------------
+      # One rule of the suite reads the BUILD OUTPUT:
+      # ReleaseBuildConfigurationRule's second claim — "no Release output
+      # directory holds a copy of a project's own Debug output" — compares
+      # each project's `bin/Debug` against the copies in the dependents'
+      # `bin/Release`. The shard downloads only its own slice of the build
+      # output, so there is no `bin/Debug` anywhere in it and that claim
+      # passes for the wrong reason THERE. It was already the case on the PR
+      # lane, where the gate has been off since #1928.
+      #
+      # The claim's SOURCE half — "every project a Release build pulls in
+      # through a <ProjectReference> is built in the configuration of the
+      # build that asks for it" — reads the props and the solution graph, so
+      # the shard checks it on every lane.
+      #
+      # The byte half is evaluated where the tree is: the nightly lane's
+      # coverage job builds the tree itself and runs the suite in that
+      # workspace (.github/workflows/nightly.yml runs on every push to
+      # dev/master, and on the schedule its build-time gate is ON as well).
+      # Its per-suite failures are recorded, not fatal — the coverage job is
+      # report-only by contract (#99) — so the byte half is a REPORT there,
+      # not a gate. Closing that last gap is a separate change and is not
+      # this one.
       #
       # The ASSEMBLY is still built here — the `arch` shard needs the DLL —
       # only the EXECUTION moves to the shard. The property is read by
       # MSBuild, and an environment variable of the same name IS an MSBuild
       # property (Directory.Build.props only defaults it when it is empty),
       # so it reaches the `dotnet build` that NUKE runs without touching
-      # build/_build. To put the gate back on the PR path, delete this env
-      # block: the value is the only thing that turns it off.
-      HarborArchGate: ${{ github.event_name == 'pull_request' && 'false' || 'true' }}
+      # build/_build. To put the gate back on, delete this env block: the
+      # value is the only thing that turns it off.
+      HarborArchGate: 'false'
       # The NuGet global-packages folder is PINNED (#1927). The restored
       # obj/*.csproj.nuget.g.props and obj/project.assets.json carry
       # ABSOLUTE paths into it, so a cached build is only valid for the
@@ -1145,14 +1177,171 @@ jobs:
           fi
           exit "$rc"
 
-      # Release build == zero-warning gate. Building Harbor.Architecture.Tests
-      # also re-runs the 47-rule architecture gate embedded in
-      # Directory.Build.props (HarborArchGate) — any layering regression
-      # fails the build itself.
+      # ── DIAGNOSTIC (issue #2100): what does the restored tree look like? ──
       #
-      # On the PR path that EXECUTION is switched off by the job-level
-      # HarborArchGate env var above (the suite still runs in the `core`
-      # shard); on a push to dev/master the gate runs exactly as before.
+      # The compile is a full 112-project rebuild on every run even when the
+      # cache is restored and only ONE file changed. MSBuild decides that with
+      # one rule: a target is up to date when every output is newer than every
+      # input. So the question is a fact about the disk, and the disk is
+      # printed here: which of the files MSBuild compares exists, and what
+      # are their mtimes.
+      #
+      # The CoreCompile target's OUTPUTS (SDK: Roslyn/Microsoft.CSharp.Core.targets):
+      #   @(DocFileItem)              bin/Release/net10.0/<T>.xml
+      #   @(IntermediateAssembly)      obj/Release/net10.0/<T>.dll
+      #   @(IntermediateRefAssembly)  obj/Release/net10.0/refint/<T>.dll
+      #   @(_DebugSymbolsIntermediatePath)  obj/Release/net10.0/<T>.pdb
+      # and its INPUTS of interest:
+      #   $(MSBuildAllProjects)        every imported .props/.targets, among them
+      #                                obj/<T>.csproj.nuget.g.props
+      #   @(Compile)                   the sources
+      #   @(Analyzer)                  the analyzer assemblies in the NuGet folder
+      #   @(ReferencePathWithRefAssemblies)  the references, the project ones in bin/
+      - name: "DIAGNOSTIC: the restored tree, file by file"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== the pdb files under obj/ and bin/ (count) ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "all pdb count:      $(find . -name '*.pdb' | wc -l)"
+          echo "=== the CoreCompile OUTPUTS of $p ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.pdb" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the CoreCompile INPUTS of $p ==="
+          for f in \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.props" \
+            "$p/obj/Harbor.Abstractions.Contracts.csproj.nuget.g.targets" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.GeneratedMSBuildEditorConfig.editorconfig" \
+            "$p/Harbor.Abstractions.Contracts.csproj" \
+            "$p/Permissions/PermissionRuleset.cs" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the analyzers (an INPUT of every CoreCompile) ==="
+          find /home/runner/.nuget/packages -name '*.dll' -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | head -3 || true
+          echo "=== now ==="
+          date -u +%s
+          exit 0
+
+      # ── DIAGNOSTIC (issue #2100): MSBuild's own verdict ──
+      #
+      # Everything on the disk says the projects are up to date: every output
+      # of CoreCompile exists and carries the stamping timestamp, every input
+      # is older. And yet every project is rebuilt. So ask MSBuild: it says
+      # why, at DETAILED verbosity:
+      #
+      #   "Building target \"CoreCompile\" completely."        (detailed)
+      #   "Input file \"X\" is newer than output file \"Y\"."   (detailed)
+      #   "Output file \"X\" does not exist."                   (detailed)
+      #
+      # ONE project, and with BuildProjectReferences=false so that the
+      # references are used as they are and not rebuilt first (a rebuild would
+      # make their outputs newer and change the question).
+      #
+      # The second half asks the same question of the disk directly: WHICH
+      # files are newer than the stamped outputs? MSBuild compares the newest
+      # input against the oldest output, so the answer is a list of files.
+      - name: "DIAGNOSTIC: MSBuild's own verdict for one project"
+        if: steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "=== MSBuild's up-to-date decision (one project, detailed) ==="
+          dotnet build src/Harbor.Abstractions.Contracts/Harbor.Abstractions.Contracts.csproj \
+            -c Release --no-restore -v:detailed -m:1 -nologo \
+            -p:BuildProjectReferences=false 2>&1 \
+            | grep -B 1 -A 4 'Building target' | head -60 || true
+          echo "=== the stamping timestamp (the newest file under obj/) ==="
+          # `sed -n '1p'` and NOT `head -1` here, and the reason is the shell.
+          #
+          # GitHub runs `shell: bash` as `bash -eo pipefail {0}`, and this
+          # script adds -u on top. `head` closes the pipe after its first
+          # line, so `sort` dies of SIGPIPE (status 141) on its next write,
+          # `pipefail` makes the whole pipeline 141, and the assignment
+          # `now=$(...)` carries that status -- so `-e` aborts the STEP. The
+          # step then reports the failure of a diagnostic, and the diagnostic
+          # itself never prints.
+          #
+          # `sed -n '1p'` reads the whole stream and prints the first line,
+          # so nothing is killed by a closed pipe and the status is 0.
+          now=$(find . -path '*/obj/*' -type f -printf '%T@\n' 2>/dev/null | sort -rn | sed -n '1p' | cut -d. -f1)
+          echo "now=$now  ($(date -u -d "@$now" +%H:%M:%S))"
+          echo "=== the files under obj/ and bin/ NEWER than the stamping ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -newermt "@$now" 2>/dev/null | head -20 || true
+          echo "=== the files in the NuGet folder NEWER than the stamping ==="
+          find /home/runner/.nuget/packages -type f -newermt "@$now" 2>/dev/null | head -20 || true
+          echo "=== the newest files in the NuGet folder ==="
+          find /home/runner/.nuget/packages -type f -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | tail -5 || true
+          echo "=== the newest analyzer in the NuGet folder ==="
+          find /home/runner/.nuget/packages -type f -path '*analyzers*' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort | tail -5 || true
+          exit 0
+
+      # The same question, asked of the tree the COMPILE leaves behind: does
+      # the compile produce the .pdb that CoreCompile lists as its output, and
+      # what is the newest file under obj/ and bin/ afterwards?
+      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
+        id: compile
+        run: bash build/build.sh Compile --configuration Release
+
+      # The zero-test guard is only a guard if it can go red (#1795). This
+      # step proves it: it runs one suite with a filter that matches NO test
+      # and requires the runner to exit with one of MTP's "nothing ran"
+      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
+      # Without it, a guard that had been neutered — an option renamed, a
+      # policy that stopped applying, a filter that silently matched nothing
+      # — would keep every job green while checking nothing.
+      #
+      # It lives in the BUILD job, not in the `test` job, for a reason that
+      # is not about runners: the test-project completeness gate reads
+      # "--treenode-filter" as "this list applies a partition to the projects
+      # it runs", and a filter in the `test` job would make it believe that
+      # the Avalonia E2E project's own shard partition is wired — a finding
+      # that is TRUE today (CI runs that project once, without a filter) and
+      # that #1946 closes. The check is a property of the test platform, not
+      # of the image, so proving it here proves it for the test job too.
+
+
+      - name: "DIAGNOSTIC: what the compile produced"
+        if: always() && steps.cache-restore.outputs.cache-matched-key != ''
+        shell: bash
+        run: |
+          set -uo pipefail
+          p=src/Harbor.Abstractions.Contracts
+          echo "=== after the compile ==="
+          echo "obj+bin pdb count: $(find . -path '*/obj/*' -name '*.pdb' | wc -l)"
+          echo "obj+bin file count: $(find . -path '*/obj/*' -type f | wc -l)"
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.csproj.CoreCompileInputs.cache" ; do
+            if [ -e "$f" ]; then stat -c '%y  %s  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          echo "=== the newest file under obj/ and bin/ ==="
+          find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | head -5 || true
+          echo "=== the oldest OUTPUT of $p (the one MSBuild compares against) ==="
+          for f in \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/refint/Harbor.Abstractions.Contracts.dll" \
+            "$p/obj/Release/net10.0/Harbor.Abstractions.Contracts.pdb" \
+            "$p/bin/Release/net10.0/Harbor.Abstractions.Contracts.xml" ; do
+            if [ -e "$f" ]; then stat -c '%Y %y  %n' "$f"; else echo "MISSING            $f"; fi
+          done
+          exit 0
+
+      # Release build == zero-warning gate. Building Harbor.Architecture.Tests
+      # also COMPILES the 47-rule architecture gate embedded in
+      # Directory.Build.props (HarborArchGate); the gate's EXECUTION is
+      # switched off by the job-level HarborArchGate env var above, on every
+      # event (issue #2114) — the suite runs once, in the `arch` shard.
       # The suite is still COMPILED here — the shard needs the DLL.
       #
       # #701 — the master/dev fork is GONE, and the reason it existed was not
@@ -1195,27 +1384,6 @@ jobs:
       # configuration, same ContinuousIntegrationBuild property
       # (CompileTarget carries it). The bootstrap also compiles
       # build/_build.csproj, so NUKE build-code edits validate here too.
-      - name: Build solution via NUKE (Release, zero warnings, docs, deterministic)
-        id: compile
-        run: bash build/build.sh Compile --configuration Release
-
-      # The zero-test guard is only a guard if it can go red (#1795). This
-      # step proves it: it runs one suite with a filter that matches NO test
-      # and requires the runner to exit with one of MTP's "nothing ran"
-      # verdicts (8 = zero tests, 9 = fewer than --minimum-expected-tests).
-      # Without it, a guard that had been neutered — an option renamed, a
-      # policy that stopped applying, a filter that silently matched nothing
-      # — would keep every job green while checking nothing.
-      #
-      # It lives in the BUILD job, not in the `test` job, for a reason that
-      # is not about runners: the test-project completeness gate reads
-      # "--treenode-filter" as "this list applies a partition to the projects
-      # it runs", and a filter in the `test` job would make it believe that
-      # the Avalonia E2E project's own shard partition is wired — a finding
-      # that is TRUE today (CI runs that project once, without a filter) and
-      # that #1946 closes. The check is a property of the test platform, not
-      # of the image, so proving it here proves it for the test job too.
-
       - name: The zero-test guard can go red (issue #1795)
         shell: bash
         run: |
@@ -1406,21 +1574,27 @@ jobs:
       # runs ONCE now, in the `arch` shard (#1781 gave the suite a shard of
       # its own).
       #
+      # Issue #2114 measured the SAME duplication on the push path: the gate
+      # ran inside this build (87.9 s of a 270.5 s compile, run 39613662649)
+      # and the `arch` shard ran the same suite again. The gate is now off
+      # for every event, so the shard is the one execution on every lane.
+      #
       # Nothing held that count. The gate is ONE environment variable (see
       # the job's env block above), and a coverage-like job on this lane is
-      # one block of YAML; either can come back by accident, and the pull
-      # request would still be green while the suite ran twice.
+      # one block of YAML; either can come back by accident, and the lane
+      # would still be green while the suite ran twice.
       #
       # So the gate below reads this file and fails when the lane runs the
       # suite more than once (or not at all), when a job that compiles the
       # solution stops switching the build-time gate off for pull_request
-      # events, and when the merge path loses the gate altogether. Its own
+      # events, when it switches it back on for a push, and when the
+      # MSBuild target stops asking the property at all. Its own
       # failure path is proved first, for the same reason every other gate
       # here has one: a checker edited until it matches nothing is
       # indistinguishable from a checker that found nothing.
       - name: The architecture-once gate still fails on a planted duplicate
         run: python3 tools/check-arch-suite-once.py --self-test
-      - name: The architecture suite runs once on the pull-request lane (#1920)
+      - name: The architecture suite runs once on every lane (#1920, #2114)
         run: python3 tools/check-arch-suite-once.py --min-shards 4
 
       # The evaluation-cost instrument's own failure path (issue #1919).
@@ -2772,7 +2946,7 @@ jobs:
       # truncated log, absent log), so a matcher that matches nothing cannot
       # pass them. No publish, no network, ~1s.
       - name: Self-test the gate tool (synthetic, guaranteed-hit fixtures)
-        run: python3 tools/aot-publish-gate.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 aot-publish-gate --selftest
 
       - name: Publish Harbor.App.Cli (NativeAOT, linux-x64, full tree)
         id: publish
@@ -2816,12 +2990,36 @@ jobs:
           # not silently depend on that file: Directory.Build.props sets
           # SelfContained=false repo-wide and NETSDK1102 is the first thing a
           # reshaped AOT block would hit.
+          #
+          # `-p:EnableSingleFileAnalyzer=true` is the SWITCH THAT KEEPS THE
+          # ILLink ANALYZER IN THIS PUBLISH (#2109). The repository-root
+          # Directory.Build.props used to set PublishSingleFile=true, which
+          # made the SDK pull the ILLink pack into every project of the tree
+          # and put the SDK's own AOT/trim analyzer into all 113
+          # compilations of the ordinary build — 212.2 analyzer-seconds, 32 %
+          # of the build's analyzer time, for three IL3000 warnings that are
+          # all under tests/ and cannot fail a build. The property moved to
+          # apps/Harbor.App.Cli (the app that ships single-file), so the
+          # LIBRARIES no longer carry the analyzer in an ordinary build.
+          #
+          # THIS JOB IS WHERE THAT COVERAGE WENT. The global property reaches
+          # every project of the publish graph, so the ILLink analyzer runs
+          # over the whole product tree here — which is what makes the three
+          # `#pragma warning disable IL3000` in
+          # src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs
+          # load-bearing, and what makes a NEW Assembly.Location in the
+          # product tree a red publish instead of a silent one.
+          #
+          # EnableSingleFileAnalyzer is the switch, NOT PublishSingleFile:
+          # the first turns the ANALYZER on, the second turns the BUNDLER on,
+          # and an AOT publish must not ask for the bundler.
           # The log is the gate's evidence, so it is captured in full rather
           # than relying on the step's own console scrollback.
           dotnet publish apps/Harbor.App.Cli \
             -c Release -r "$RID" \
             --self-contained true \
             -p:HarborWithAot=true \
+            -p:EnableSingleFileAnalyzer=true \
             -p:ContinuousIntegrationBuild=true \
             -o publish/aot 2>&1 | tee publish/aot-publish.log
           status=${PIPESTATUS[0]}
@@ -2939,7 +3137,7 @@ jobs:
 
       - name: Compare the publish against the committed record
         run: |
-          python3 tools/aot-publish-gate.py \
+          tools/bin/harbor-gates-linux-x64 aot-publish-gate \
             --log publish/aot-publish.log \
             --baseline .github/aot-warning-baseline.txt \
             --expect-rid linux-x64 \
@@ -3040,13 +3238,26 @@ jobs:
       # No `submodules: recursive`: the vendored ConsoleEx submodule left the
       # product (ADR-019); nothing in this workflow builds contrib/external/.
       - uses: actions/checkout@v7
+
+      # The SDK install stays; the NuGet cache does NOT. This job runs the
+      # binaries the build job already produced (the "Download build outputs"
+      # step below), so nothing here restores into the default global-packages
+      # folder and the cache it would save is always empty.
+      # actions/setup-dotnet's post step throws ("Cache folder path is
+      # retrieved for .NET CLI but doesn't exist on disk") when that folder
+      # was never created — and it throws AFTER the measurement, in the
+      # job's cleanup, so the band goes red on a step that measures nothing:
+      # the receipts are run 39638763894 and run 39599923626, where "Run
+      # renderer performance gate" succeeded and "Post Setup .NET 10" failed
+      # with that exact error. Same fix as the test shard job and the codeql
+      # job (#1244): keep the SDK install, drop the cache.
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v6
         with:
-          # The exact SDK global.json asks for — see the build job.
+          # The exact SDK global.json asks for — see the build job. The NuGet
+          # cache is deliberately NOT restored here (see the comment above):
+          # this job runs prebuilt binaries and never restores into it.
           dotnet-version: "10.0.402"
-          cache: true
-          cache-dependency-path: "Directory.Packages.props"
       - name: Download build outputs (renderer perf only)
         uses: actions/download-artifact@v7
         with:
