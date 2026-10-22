@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 namespace Harbor.App.Cli.Commands;
 
 /// <summary>
@@ -16,7 +17,7 @@ public sealed record ServeOptions(bool ShowHelp)
     /// <returns>The parsed options.</returns>
     public static ServeOptions Parse(string[] args)
     {
-        ArgumentNullException.ThrowIfNull(args);
+        Ensure.NotNull(args);
         bool help = args.Any(a => a is "--help" or "-h");
         return new ServeOptions(help);
     }
@@ -25,7 +26,7 @@ public sealed record ServeOptions(bool ShowHelp)
     /// <param name="output">Where usage goes.</param>
     public static void PrintUsage(TextWriter output)
     {
-        ArgumentNullException.ThrowIfNull(output);
+        Ensure.NotNull(output);
         output.WriteLine("""
                          harbor serve — run the Harbor daemon in the foreground.
 

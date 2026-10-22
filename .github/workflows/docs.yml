@@ -599,6 +599,17 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
       - name: E2E shard runner still refuses a plan it cannot run
         run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
+      # The gate over the Go sources of the gates themselves. Its failure path
+      # is tested here for the same reason as the others: a rule edited until
+      # it matches nothing is indistinguishable from a rule that found
+      # nothing. The load-bearing fixtures are the three shapes -- an
+      # unformatted file, a package the registry does not name, and a package
+      # without a self-test -- and the fixture that needs the Go toolchain
+      # (a printf `go vet` must reject) says it did not run when the
+      # toolchain is absent, which is the case HERE: this workflow installs
+      # no Go. The toolchain's own fixtures run in gates-binary.yml.
+      - name: Go-quality gate fails on an unformatted file and a diverged registry
+        run: tools/bin/harbor-gates-linux-x64 go-quality --self-test
       # #2100. The gate that proves the lane compiled the tree it was given.
       # Its failure path is tested here for the same reason as the others: a
       # gate edited until it matches nothing is indistinguishable from a gate

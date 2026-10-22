@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models;
 
 namespace Harbor.App.Cli.Repl;
@@ -30,7 +31,7 @@ internal sealed class ImageAttachmentStash
     /// </summary>
     public bool TryStage(ImageAttachment image)
     {
-        ArgumentNullException.ThrowIfNull(image);
+        Ensure.NotNull(image);
 
         if (_pending.Count >= MaxPending)
             return false;
