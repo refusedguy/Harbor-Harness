@@ -16,6 +16,7 @@ using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Jsonl;
 using Harbor.Storage.Memory;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions;
@@ -64,11 +65,11 @@ public class CompactionEventStoreTests
     private static async Task AssertTheContractAsync(ICompactionEventStore store, string sessionId)
     {
         Result<IReadOnlyList<SessionCompactionEvent>> empty = await store.GetCompactionEventsAsync(sessionId);
-        await Assert.That(empty.IsSuccess).IsTrue();
+        await Assert.That(empty).IsSuccessful();
         await Assert.That(empty.Value).IsEmpty();
 
         Result appended = await store.AppendCompactionEventAsync(sessionId, StartRecord(3));
-        await Assert.That(appended.IsSuccess).IsTrue();
+        await Assert.That(appended).IsSuccessful();
 
         Result<IReadOnlyList<SessionCompactionEvent>> afterStart = await store.GetCompactionEventsAsync(sessionId);
         await Assert.That(afterStart.Value.Count).IsEqualTo(1);
@@ -82,7 +83,7 @@ public class CompactionEventStoreTests
         await Assert.That(open!.Turn).IsEqualTo(3);
 
         Result ended = await store.AppendCompactionEventAsync(sessionId, EndRecord(3, "the summarizer exploded"));
-        await Assert.That(ended.IsSuccess).IsTrue();
+        await Assert.That(ended).IsSuccessful();
 
         Result<IReadOnlyList<SessionCompactionEvent>> afterEnd = await store.GetCompactionEventsAsync(sessionId);
         await Assert.That(afterEnd.Value.Count).IsEqualTo(2);
@@ -100,11 +101,11 @@ public class CompactionEventStoreTests
     private static async Task AssertTheMissingSessionFailsAsync(ICompactionEventStore store)
     {
         Result missing = await store.AppendCompactionEventAsync("no-such-session", StartRecord(1));
-        await Assert.That(missing.IsFailure).IsTrue();
+        await Assert.That(missing).IsFailed();
         await Assert.That(missing.Error).IsEqualTo("Session 'no-such-session' not found.");
 
         Result<IReadOnlyList<SessionCompactionEvent>> read = await store.GetCompactionEventsAsync("no-such-session");
-        await Assert.That(read.IsFailure).IsTrue();
+        await Assert.That(read).IsFailed();
         await Assert.That(read.Error).IsEqualTo("Session 'no-such-session' not found.");
     }
 

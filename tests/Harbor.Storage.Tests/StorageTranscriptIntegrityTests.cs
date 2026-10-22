@@ -69,7 +69,7 @@ public class StorageTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls.Count).IsEqualTo(1);
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls[0].Id).IsEqualTo("call-1");
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls[0].ToolName).IsEqualTo("read");
@@ -78,12 +78,12 @@ public class StorageTranscriptIntegrityTests
             var closers = transcript.Value.Messages.OfType<ToolResultMessage>().ToList();
             await Assert.That(closers.Count).IsEqualTo(1);
             await Assert.That(closers[0].Results[0].ToolCallId).IsEqualTo("call-1");
-            await Assert.That(closers[0].Results[0].IsError).IsTrue();
+            await Assert.That(closers[0].Results[0]).HasFailed();
             await Assert.That(closers[0].Results[0].Output).Contains(UnresolvedToolCall.OutcomeUnknownCode);
 
             // The log is untouched: the closer lives in memory only.
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
             await Assert.That(messages.Value.OfType<ToolResultMessage>()).IsEmpty();
         }
@@ -108,7 +108,7 @@ public class StorageTranscriptIntegrityTests
 
         var transcript = await store.GetTranscriptAsync(session.Id);
 
-        await Assert.That(transcript.IsSuccess).IsTrue();
+        await Assert.That(transcript).IsSuccessful();
         await Assert.That(transcript.Value.Integrity.UnreadableRecordCount).IsEqualTo(0);
         await Assert.That(transcript.Value.Integrity.IsTailTruncated).IsFalse();
         await Assert.That(transcript.Value.Integrity.UnclosedToolCalls.Count).IsEqualTo(1);
@@ -136,7 +136,7 @@ public class StorageTranscriptIntegrityTests
 
             var transcript = await store.GetTranscriptAsync(session.Id);
 
-            await Assert.That(transcript.IsSuccess).IsTrue();
+            await Assert.That(transcript).IsSuccessful();
             await Assert.That(transcript.Value.Integrity.IsComplete).IsTrue();
             await Assert.That(transcript.Value.Integrity.UnclosedToolCalls).IsEmpty();
             await Assert.That(transcript.Value.Messages.Count).IsEqualTo(3);

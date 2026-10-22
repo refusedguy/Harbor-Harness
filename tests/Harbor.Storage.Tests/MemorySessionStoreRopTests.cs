@@ -1,5 +1,6 @@
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Memory;
+using Harbor.TestKit;
 
 namespace Harbor.Storage.Tests;
 
@@ -46,7 +47,7 @@ public class MemorySessionStoreRopTests
 
         var messages = await store.GetMessagesAsync(session.Id);
 
-        await Assert.That(messages.IsSuccess).IsTrue();
+        await Assert.That(messages).IsSuccessful();
         await Assert.That(messages.Value.Count).IsEqualTo(0);
     }
 
@@ -59,7 +60,7 @@ public class MemorySessionStoreRopTests
 
         var result = await store.UpdateMessageAsync(session.Id, ghost);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains(ghost.Id);
         await Assert.That(result.Error).Contains(session.Id);
     }

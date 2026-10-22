@@ -42,7 +42,7 @@ public class SqliteSourceGenCodecTests
         string json = SqliteMappers.SerializeMessage(original);
         var back = SqliteMappers.TryDeserializeMessage("user", json);
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var user = (UserMessage)back.Value;
         await Assert.That(user.Id).IsEqualTo(original.Id);
         await Assert.That(user.SessionId).IsEqualTo(original.SessionId);
@@ -60,7 +60,7 @@ public class SqliteSourceGenCodecTests
         string json = SqliteMappers.SerializeMessage(original);
         var back = SqliteMappers.TryDeserializeMessage("assistant", json);
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var assistant = (AssistantMessage)back.Value;
         await Assert.That(assistant.Id).IsEqualTo("a1");
         await Assert.That(assistant.Parts.Count).IsEqualTo(4);
@@ -94,12 +94,12 @@ public class SqliteSourceGenCodecTests
         string json = SqliteMappers.SerializeMessage(original);
         var back = SqliteMappers.TryDeserializeMessage("tool_result", json);
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var toolResult = (ToolResultMessage)back.Value;
         await Assert.That(toolResult.Results.Count).IsEqualTo(2);
         await Assert.That(toolResult.Results[0].Output).IsEqualTo("file contents");
-        await Assert.That(toolResult.Results[0].IsError).IsFalse();
-        await Assert.That(toolResult.Results[1].IsError).IsTrue();
+        await Assert.That(toolResult.Results[0]).HasSucceeded();
+        await Assert.That(toolResult.Results[1]).HasFailed();
     }
 
     [Test]
@@ -133,7 +133,7 @@ public class SqliteSourceGenCodecTests
         string json = SqliteMappers.SerializeMessage(original);
         var back = SqliteMappers.TryDeserializeMessage("tool_result", json);
 
-        await Assert.That(back.IsSuccess).IsTrue();
+        await Assert.That(back).IsSuccessful();
         var toolResult = (ToolResultMessage)back.Value;
         await Assert.That(toolResult.Results[0].Output).IsEqualTo("file contents");
         await Assert.That(toolResult.Results[0].Metadata).IsNull();
@@ -158,7 +158,7 @@ public class SqliteSourceGenCodecTests
 
             var read = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Count).IsEqualTo(3);
             await Assert.That(read.Value[0]).IsTypeOf<UserMessage>();
             await Assert.That(((UserMessage)read.Value[0]).Content).IsEqualTo("hello");

@@ -25,12 +25,31 @@
         test methods at all.
 
     The second half is the one this project exists to satisfy: the framework
-    is referenced by six projects, so it may hold helpers but not tests.
+    is referenced by five projects, so it may hold helpers but not tests.
 
-    The tests themselves are pure: they exercise `StateTestRunner`'s state
-    factories and its `ExtractExpectedText` mapper, with no PTY, no display
-    server and no mock LLM server. That is why they are a separate project
-    rather than one more class in an E2E suite.
+    WHAT IS UNDER TEST NOW (issue #1812)
+    ====================================
+    The tests that moved here in #1943 asserted on `StateTestRunner`, and
+    `StateTestRunner` had no consumer anywhere in the tree: the state-based
+    E2E harness it was written for was never wired to a scenario, so the 26
+    tests were green and guarded a helper nobody called. `StateTestRunner` is
+    gone, and the tests here now cover the helpers the OTHER five E2E
+    projects depend on at run time:
+
+      * AnsiStripper       — the scrubber that turns a renderer's raw ANSI
+                             bytes into the plain text a test searches for
+                             (TuiDriver calls it on every chunk).
+      * AnsiTerminalBuffer — the 2D terminal emulator the screen is read out
+                             of. Every PTY scenario in
+                             Harbor.Tui.CellForge.PtyTests asserts on its
+                             rows, and TuiDriver searches the same buffer.
+
+    Both are `internal`, so the framework declares
+    `<InternalsVisibleTo Include="Harbor.E2E.Framework.Tests"/>`.
+
+    The tests are pure: no PTY, no display server, no mock LLM server. That
+    is why they are a separate project rather than one more class in an E2E
+    suite.
   -->
 
   <PropertyGroup>
@@ -44,18 +63,6 @@
   <ItemGroup>
     <!-- The subject under test. Declared explicitly, not leaned on transitively. -->
     <ProjectReference Include="..\Harbor.E2E.Framework\Harbor.E2E.Framework.csproj"/>
-    <!--
-      The types the assertions are written against: ChatRole/ChatLine live in
-      Harbor.Abstractions.Contracts, UiState/TerminalUiState/ChatDomainState in
-      Harbor.Ui.Framework.State, TuiPanelState/FocusMode in
-      Harbor.Ui.Framework.State too. The framework references the
-      Harbor.Ui.Framework meta-package, so these would compile without the two
-      lines below, but "would compile" is not "is declared", and the repo's own
-      rule (see tests/Harbor.TestKit/Harbor.TestKit.csproj) is that a
-      load-bearing reference is written down rather than inherited by luck.
-    -->
-    <ProjectReference Include="..\..\src\Harbor.Abstractions.Contracts\Harbor.Abstractions.Contracts.csproj"/>
-    <ProjectReference Include="..\..\src\Harbor.Ui.Framework.State\Harbor.Ui.Framework.State.csproj"/>
   </ItemGroup>
 
 </Project>

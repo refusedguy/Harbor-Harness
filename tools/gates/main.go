@@ -40,12 +40,13 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
 	registrygate "harbor.local/gates/check-coverage-registry"
-	docanchors "harbor.local/gates/check-doc-anchors"
 	docfacts "harbor.local/gates/check-doc-facts"
+	"harbor.local/gates/check-event-topology"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
@@ -55,6 +56,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	"harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
@@ -94,6 +96,11 @@ var registry = []registered{
 		run:     aggregatebuildvcpu.Run,
 	},
 	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
+	},
+	{
 		name:    "changelog-assemble",
 		summary: "the changelog fragments are not already in CHANGELOG.md, and the assembly is idempotent",
 		run:     changelog.Run,
@@ -114,14 +121,14 @@ var registry = []registered{
 		run:     registrygate.Run,
 	},
 	{
-		name:    "check-doc-anchors",
-		summary: "a file:line in a normative document still points at code, and at the symbol it names",
-		run:     docanchors.Run,
-	},
-	{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-event-topology",
+		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
+		run:     eventtopology.Run,
 	},
 	{
 		name:    "check-local-merge-loss",
@@ -167,6 +174,11 @@ var registry = []registered{
 		name:    "gen-seam-graph",
 		summary: "the committed seam graph still matches the tree",
 		run:     genseamgraph.Run,
+	},
+	{
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "measure-build-cpu",

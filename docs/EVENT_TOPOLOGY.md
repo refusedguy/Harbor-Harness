@@ -12,15 +12,12 @@
 > builds — and both existing docs gates passed it, because they check form, not
 > content.
 >
-> A fence is not enough, and #2119 is what it cost: a `file:line` resolves
-> perfectly while naming the WRONG line. The file is there, the line is inside
-> the file, the line is not empty — and the thing this document says is on
-> that line is not there. So a citation here may carry the **anchor** it
-> expects to find — `src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305#PublishAsync` — and the compiled gate
-> `check-doc-anchors` then holds the document to it: the cited line must
-> carry code, and the symbol must be on it. The producer and subscriber tables
-> below are anchored; a citation without an anchor is the citation gate's
-> business alone.
+> The fence is not enough for §1's tables, where the line number is the
+> CONTENT of a row rather than a pointer to a place. §1.1 states the criterion
+> those rows follow, and
+> `tools/bin/harbor-gates-linux-x64 check-event-topology` enforces it: it
+> compares every cited line with the file's real `PublishAsync` call sites and
+> every `Subscribe` call site with the subscriber list, in both directions.
 >
 > Related: #27 (CellForge TUI epic — the renderer that consumes most of this),
 > #33 (`Ui.Framework` into reusable layers — the reducer/TEA refactor §2
@@ -36,10 +33,14 @@ snapshot of subscribers in the publisher's own call stack**.
 
 ```
 producers (await PublishAsync directly)
-  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305,389,442,456,471,482#PublishAsync
-  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035#PublishAsync
-  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:199,235,528#PublishAsync
-  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214#PublishAsync
+  AgentLoop ..................... src/Harbor.AgentRuntime/Agents/AgentLoop.cs:305,389,442,456,471,482
+  ToolDispatcher ................ src/Harbor.AgentRuntime/Agents/ToolDispatcher.cs:596,644,743,762,779,915,1035
+  CompactionBehavior ............ src/Harbor.AgentRuntime/Agents/Pipeline/CompactionBehavior.cs:199,235,528
+  SandboxedPluginTool ........... src/Harbor.Plugins.Registration/SandboxedPluginTool.cs:214
+  TurnRunner .................... src/Harbor.AgentRuntime/Agents/TurnRunner.cs:239,336,433,440,445,459,504,533,588,668,789,846,882,1148
+  ToolRetryPolicy ............... src/Harbor.AgentRuntime/Agents/ToolRetryPolicy.cs:131,215,262,287,307,329
+  UpdateCoalescer ............... src/Harbor.AgentRuntime/Agents/UpdateCoalescer.cs:238
+  DefaultSessionContext ......... src/Harbor.AgentRuntime/Agents/DefaultSessionContext.cs:253
         │ await _eventBus.PublishAsync(evt, ct)
         ▼
 InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.cs:353
@@ -54,40 +55,75 @@ InMemoryEventBus.PublishAsync ... src/Harbor.Registries/Events/InMemoryEventBus.
         │ same event reference to every subscriber in the snapshot, in subscription order
         ▼
 subscribers (all in-process, each owns its IDisposable — see §6)
-  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303#Subscribe
-  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106-107#Subscribe
-  EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129#Subscribe
-  InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104#Subscribe
-  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:162-166#Subscribe
-  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474#Subscribe + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238#Subscribe
-  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18#Subscribe + InlineAgentStreamBridge.cs:35#Subscribe
-  Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61#Subscribe
+  DefaultAgent listeners (per caller) ....... src/Harbor.AgentRuntime/Agents/DefaultAgent.cs:300-303
+  DiagnosticsAggregator (tool/agent errors) . src/Harbor.Application/Diagnostics/DiagnosticsAggregator.cs:106,107
+  EventBroadcaster → IPC clients ............ src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:129
+  InProcessHarborClient ..................... src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:104
+  CellForge REPL event pump ................. apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:163
+  TUI renderers (ReplRunner ×2, DemoCommand) apps/Harbor.App.Cli/Repl/ReplRunner.cs:312,474 + apps/Harbor.App.Cli/Commands/DemoCommand.cs:238
+  CellForge bridges ......................... src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18 + InlineAgentStreamBridge.cs:35
+  Avalonia UiEventRouter → UiStore .......... apps/Harbor.App.Avalonia/Hosting/UiEventRouter.cs:61
+  DemoCellForgeScreen (demo scene) .......... apps/Harbor.App.Cli/Demo/DemoCellForgeScreen.cs:278
+  TurnChangeOracle (turn summary) ........... src/Harbor.Application/Observability/TurnChangeOracle.cs:133,134,135,136
 ```
 
+### 1.1 The rows' criterion
+
+**Producer rows.** A producer row names a file and lists every call site of
+`IEventBus.PublishAsync` in that file, in ascending order, with none left out
+and none invented. The producer list is exhaustive over `src/` and `apps/`:
+every file in those two trees that calls `IEventBus.PublishAsync` has a row,
+and no row names a file that does not.
+
+Three things are not call sites, and a row that lists one of them is wrong:
+
+- the declaration of the method. `src/Harbor.Abstractions/Events/IEventBus.cs:37`
+  declares it, `src/Harbor.Registries/Events/InMemoryEventBus.cs:353` and
+  `src/Harbor.Plugins.Host/NullEventBus.cs:13` implement it. The bus row of the
+  diagram cites the declaration, not a call site, and the gate checks it as the
+  declaration it is.
+- a call on a receiver that is not an `IEventBus`.
+- a helper whose name ends in `PublishAsync` but which does not call the bus.
+  `CompactionBehavior.CompactAndPublishAsync` is such a helper; its row cites
+  the three call sites it makes, not the helper's own line.
+
+**Subscriber rows.** A subscriber row lists the lines on which the subscriber
+calls `IEventBus.Subscribe`, in ascending order. The list is exhaustive over
+`src/` and `apps/`, and every row's line must hold a `Subscribe` call.
+
+**Why this is written down.** `tools/check-doc-cites.py` asks whether a cited
+line exists, which is the right question for a linear citation and the wrong
+one for this table. Here the line number is the content of the row, not a
+pointer to a place, so a row that names four sites where the file has seven
+passes the fence. The rule the fence cannot see is the one above: the row and
+the file must agree on the set of call sites, in both directions.
+
+`tools/bin/harbor-gates-linux-x64 check-event-topology` enforces what can be
+decided from the text of a line. For the producer rows it compares the cited
+lines with the file's real `PublishAsync` call sites, in both directions, and
+it reports a producer file that has no row. For the subscriber rows it checks
+that every cited line holds a `Subscribe` call.
+
+One thing the gate does **not** decide, and why: whether a `.Subscribe(` call
+is a bus subscription or an `IAgent` subscription. Both interfaces have a
+`Subscribe` method, and the two are told apart by the TYPE OF THE RECEIVER,
+which no line of text states. `src/Harbor.Telemetry.Core/TracingAgentProxy.cs:32`
+is the live example: `inner.Subscribe(listener)` forwards to `IAgent.Subscribe`,
+not to the bus, so it stays out of the list above. The exhaustiveness of the
+subscriber list is therefore a claim a reader checks by reading, and the gate
+checks the rows it can check.
+
 Every entry in that subscriber list is a live `IEventBus.Subscribe` on a shipped
-code path, and the list is exhaustive for `src/` + `apps/`. It is exhaustive
-without exception: until #664 it was not — `EventBusAppStoreDispatcher` was
-listed here while no composition root constructed it, and a type nothing builds
-is not topology. #594 then deleted that branch (with the `AppStore` /
-`Harbor.Ui.Framework.Reducers` it fed), so the list is now complete because
-there is nothing left off it.
-
-**The criterion for the producer table** (it is CONTENT, not a pointer, so it
-has to say what it lists): a row is a producer when it holds a **direct**
-`await <bus>.PublishAsync(...)` call, and every such call is a row. A helper
-that publishes on the caller's behalf would not be a producer row — there is
-none today, and if one appears the table says so rather than the helper's
-callers listing it. By that criterion the counts are: `AgentLoop` 6 (one
-`AgentStartEvent`, three `AgentEndEvent`, one `AgentErrorEvent` — the third
-`AgentEndEvent` is the cancelled one, published twice from two different
-branches), `ToolDispatcher` 7 (five `ToolExecutionEndEvent` — abandoned,
-cancelled, deadline, failed, hook-denied — one `ToolExecutionStartEvent` and
-one `ToolExecutionUpdateEvent`), `CompactionBehavior` 3 (started, completed,
-failed) and `SandboxedPluginTool` 1.
-
-The numbers above were re-measured on `dev` at `13961b71` (the lines the
-table names are the lines the tree has; #2119 replaced a table whose numbers
-had drifted — the file moved, the numbers did not).
+code path, and the list is exhaustive for `src/` + `apps/`. It was not
+exhaustive until #2119: it named eight subscribers while the tree had eleven
+bus subscriptions, because `TurnRunner`, `ToolRetryPolicy`,
+`UpdateCoalescer` and `DefaultSessionContext` were publishing with no row
+above, and `TurnChangeOracle` was subscribing with no row here. The list was
+exhaustive without exception before that: until #664 it was not —
+`EventBusAppStoreDispatcher` was listed here while no composition root
+constructed it, and a type nothing builds is not topology. #594 then deleted
+that branch (with the `AppStore` / `Harbor.Ui.Framework.Reducers` it fed), so
+the list is now complete because there is nothing left off it.
 
 `Channel<T>` exists **only at the edges**, never in the core bus:
 
@@ -96,8 +132,8 @@ had drifted — the file moved, the numbers did not).
 | Per-client outbound queue, bounded 4096, `SingleReader = true` | `src/Harbor.Ipc.Server/Protocol/EventBroadcaster.cs:446-451` | replay-before-live per client; writer never silently drops |
 | RPC client frame queue, bounded 4096, `DropOldest` | `src/Harbor.Ipc.Client/Protocol/MessagePackRpcClient.cs:36-41` | wire frames arriving from the server; not a bus subscriber |
 | In-process client queue, bounded 1024, `DropOldest` | `src/Harbor.Ipc.InProcess/InProcessHarborClient.cs:97-102` | latest-events-visible TUI semantics |
-| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92-93`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:165`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:270` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
-| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-17` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
+| CellForge REPL event pump, unbounded, `SingleReader = true` | declared `apps/Harbor.App.Cli/Repl/CellForgeReplRunner.cs:92`, written `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:165`, drained `apps/Harbor.App.Cli/Repl/ReplLifecycle.cs:270` | marshals bus events onto the frame-loop thread. The only `Channel<AgentEvent>` in the repo, and it is **downstream of** `Subscribe`, not inside the bus |
+| Steering queues (agent control, **not** events) | `src/Harbor.AgentRuntime/Agents/AgentSteeringQueue.cs:13-18` (held by `DefaultAgent.cs:34`), `src/Harbor.AgentRuntime/Agents/SubAgentRunner.cs:179` | agent steering messages, unrelated to the bus |
 | Provider LLM stream channels | `src/Harbor.Providers.*/…LlmClient.cs` | raw LLM deltas before they become `MessageUpdateEvent`s |
 
 ## 2. Who updates the store
@@ -110,7 +146,7 @@ is the subscriber's business, and the live branches are:
   renderer dispatches into a `UiStore`
   (`src/Harbor.Tui.AnsiPlain/AnsiPlainTuiRenderer.cs:74`,
   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`), which reduces it
-  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:188`).
+  through `ChatAppReducer` (`src/Harbor.Ui.Framework.State/State/UiStore.cs:175-183`).
   The CellForge REPL takes the same route via its `_events` pump
   (`ReplLifecycle.cs:270-274`).
 - **Avalonia desktop** — `UiEventRouter` resolves the session-scoped store and
@@ -194,7 +230,7 @@ is the subscriber's business, and the live branches are:
   `PublishAsync` calls honour the caller's `CancellationToken` — cancellation
   abandons the remaining fan-out (tail loss by design).
 - **Late subscribers get future events only.** `Subscribe` never replays
-  (`InMemoryEventBus.cs:533-542`); history is available only as an explicit
+  (`InMemoryEventBus.cs:542-551`); history is available only as an explicit
   pull via `GetScrollback` (repeatable point-in-time copy,
   `src/Harbor.Registries/Events/EventBusScrollbackStore.cs:127-171`). Tested:
   `EventTopologySemanticsTests.LateSubscriber_SeesFutureOnly_ScrollbackIsSnapshot`.
@@ -261,13 +297,13 @@ is the subscriber's business, and the live branches are:
 ## 6. Subscription lifecycle
 
 - Every `Subscribe` returns an `IDisposable`; disposal CAS-removes that exact
-  `Subscription` record (`InMemoryEventBus.cs:533-542,568-583`). Disposal is
+  `Subscription` record (`InMemoryEventBus.cs:542-551,568-583`). Disposal is
   idempotent (`_action = null` after first invoke,
   `InMemoryEventBus.cs:1164-1178`).
 - Holders responsible for disposal: `EventBroadcaster.DisposeAsync`,
   `InProcessHarborClient`, the CellForge REPL pump (`using var busPump`,
-  `ReplLifecycle.cs:98-104`), CellForge bridges
-  (`Subscription` property, `ChatScreenBridge.cs:105,108`),
+  `ReplLifecycle.cs:162-168`), CellForge bridges
+  (`Subscription` property, `ChatScreenBridge.cs:108,110`),
   `DiagnosticsAggregator`, and the REPL runners / `DemoCommand`
   (process-lifetime, never disposed — acceptable, bus is process-lifetime too).
 - `DefaultAgent` holds no bus subscription of its own (#1561). `IAgent.Subscribe`
@@ -332,17 +368,22 @@ is the subscriber's business, and the live branches are:
    `DispatchToSubscribersAsync`), gated on its own allocation measurement — not a
    public interface edit smuggled in under a performance heading.
 
-   Blast radius, searched rather than recalled (issue criterion #3): 315
-   `PublishAsync` call sites repo-wide, of which **29 are product code**
-   (`src/Harbor.Application` 28, `src/Harbor.Plugins.Registration` 1) and the rest
-   are tests and benchmarks; **5 implementors** (`InMemoryEventBus`, `NullEventBus`,
-   `FakeEventBus`, `RecordingEventBus`, `BenchEventBus`); `contrib/` has **zero**
-   call sites, which is also why an interface change there would have gone
-   unverified — CI does not compile it. All 29 product sites await exactly once
-   (290 awaited / 15 pass-through / 5 sync-waited / 1 expression-bodied helper
-   whose 5 call sites all await), so the `Task`→`ValueTask` single-await hazard
-   would not have broken anything today — and would still be a hazard, silently,
-   at the seam 29 call sites would be re-pointed at.
+   Blast radius, searched rather than recalled (issue criterion #3), measured on
+   `origin/dev` at `259d0a5d`: **392** `PublishAsync` call sites repo-wide, of
+   which **39 are product code** (`src/Harbor.AgentRuntime` 38,
+   `src/Harbor.Plugins.Registration` 1) and the rest are tests and benchmarks
+   (`tests/` 353); **8 implementors** of `IEventBus` (`InMemoryEventBus`,
+   `NullEventBus`, and six test doubles: `CancelHonoringBus`,
+   `CancelOnTurnStartBus`, `ThrowingUpdateBus`, `FakeEventBus`,
+   `RecordingEventBus`, `BenchEventBus`); `contrib/` has **zero** call sites,
+   which is also why an interface change there would have gone unverified, CI
+   does not compile it. Of the 392 sites, 361 are awaited, 26 hand the `Task`
+   to a caller that awaits it (25 of them in `tests/`, and one product site,
+   `src/Harbor.AgentRuntime/Agents/TurnRunner.cs:882`, an expression-bodied
+   helper whose callers all await), and 5 are sync-waited in the benchmarks. All
+   39 product sites await exactly once, so the `Task`→`ValueTask` single-await
+   hazard would not have broken anything today, and would still be a hazard,
+   silently, at the seam 39 call sites would be re-pointed at.
 
    Enforced by `tests/Harbor.Registries.Tests/EventBusPublishShapeTests.cs`,
    which pins the shared-instance property on the fast path and on the

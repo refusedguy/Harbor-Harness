@@ -71,13 +71,13 @@ public class RunLimitOutcomeTests
     {
         var store = new MemorySessionStore();
         var session = await store.CreateAsync("/proj", "code", "kilocode", "kilo-auto");
-        await Assert.That(session.IsSuccess).IsTrue();
+        await Assert.That(session).IsSuccessful();
 
         foreach (AgentMessage message in CappedRunHistory(session.Value.Id))
             await store.AppendMessageAsync(session.Value.Id, message);
 
         var stored = await store.GetMessagesAsync(session.Value.Id);
-        await Assert.That(stored.IsSuccess).IsTrue();
+        await Assert.That(stored).IsSuccessful();
         return (session.Value.Id, stored.Value);
     }
 

@@ -168,8 +168,8 @@ public class SessionFileReaderScalingTests
             // the reads the gate measured are whole reads.
             var small = await SessionFileReader.ParseMessagesFromDiskAsync(smallFile, "s", NullLogger.Instance, CancellationToken.None);
             var large = await SessionFileReader.ParseMessagesFromDiskAsync(largeFile, "s", NullLogger.Instance, CancellationToken.None);
-            await Assert.That(small.IsSuccess).IsTrue();
-            await Assert.That(large.IsSuccess).IsTrue();
+            await Assert.That(small).IsSuccessful();
+            await Assert.That(large).IsSuccessful();
             await Assert.That(small.Value.Messages.Count).IsEqualTo(Messages);
             await Assert.That(large.Value.Messages.Count).IsEqualTo(MeasuredMessages);
             await Assert.That(small.Value.IsStable).IsTrue()
@@ -213,7 +213,7 @@ public class SessionFileReaderScalingTests
             Path.Combine(TestTempDirs.NewDirectory("harbor-1533-inorder"), "inorder.jsonl"), sessionId, 5);
 
         var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
-        await Assert.That(read.IsSuccess).IsTrue();
+        await Assert.That(read).IsSuccessful();
 
         // TUnit's IsEqualTo on collections compares by reference (both
         // List<string> and string[] degrade to reference equality — CI logs
@@ -254,7 +254,7 @@ public class SessionFileReaderScalingTests
             await File.WriteAllBytesAsync(file, ToLineBytes(sessionId, ToDated(records)));
 
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             // Order proof per index (IsEqualTo is reference-based on
             // collections in this TUnit version — see the comment in
             // InOrderRecords_ParseInArrivalOrder_WithoutAnyResort).
@@ -301,7 +301,7 @@ public class SessionFileReaderScalingTests
             await File.WriteAllBytesAsync(file, ToLineBytes(sessionId, ToDated(records)));
 
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(file, sessionId, NullLogger.Instance, CancellationToken.None);
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
 
             var messages = read.Value.Messages.ToList();
             await Assert.That(messages.Count).IsEqualTo(2);

@@ -13,12 +13,14 @@ package pycompat
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"unicode"
 	"unicode/utf8"
 )
@@ -62,7 +64,13 @@ func SplitLines(s string) []string {
 		}
 		start = index + 1
 	}
-	out = append(out, s[start:])
+	// A text that ends with a line boundary has no last line: python's
+	// splitlines() drops the empty element the trailing newline would
+	// otherwise produce, and a gate that counts lines must count the same
+	// lines python counts.
+	if start < len(s) {
+		out = append(out, s[start:])
+	}
 	return out
 }
 
@@ -371,4 +379,45 @@ func escapeNonASCII(data []byte) []byte {
 		index += size
 	}
 	return out.Bytes()
+}
+
+// PyOSError renders a file-system error the way python's OSError renders it.
+//
+// The gate messages quote the error, and the quote is part of the output a
+// reader sees: python says "[Errno 2] No such file or directory: '/x'",
+// and the port has to say the same thing, not Go's "open /x: no such file
+// or directory". The errno numbers and the messages are the ones the C
+// library uses, and they are the same on every platform the gate runs on.
+func PyOSError(err error) string {
+	var errno syscall.Errno
+	if !errors.As(err, &errno) {
+		return err.Error()
+	}
+	message, known := errnoMessages[errno]
+	if !known {
+		return err.Error()
+	}
+	return fmt.Sprintf("[Errno %d] %s", int(errno), message)
+}
+
+// errnoMessages are the messages python's os.strerror gives for the errnos
+// a gate can meet.
+var errnoMessages = map[syscall.Errno]string{
+	syscall.ENOENT:       "No such file or directory",
+	syscall.EACCES:       "Permission denied",
+	syscall.EISDIR:       "Is a directory",
+	syscall.ENOTDIR:      "Not a directory",
+	syscall.ENOTEMPTY:    "Directory not empty",
+	syscall.ELOOP:        "Too many levels of symbolic links",
+	syscall.ENAMETOOLONG: "File name too long",
+	syscall.EPERM:        "Operation not permitted",
+	syscall.EEXIST:       "File exists",
+	syscall.EXDEV:        "Invalid cross-device link",
+	syscall.EROFS:        "Read-only file system",
+	syscall.ENOSPC:       "No space left on device",
+	syscall.EMFILE:       "Too many open files",
+	syscall.ENFILE:       "Too many open files in system",
+	syscall.EIO:          "Input/output error",
+	syscall.EBUSY:        "Device or resource busy",
+	syscall.EINVAL:       "Invalid argument",
 }
