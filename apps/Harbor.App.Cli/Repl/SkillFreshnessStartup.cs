@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Tui;
 using Harbor.Application.Skills;
 using Harbor.Terminal.Abstractions;
@@ -109,7 +110,7 @@ internal static class SkillFreshnessStartup
     /// </summary>
     internal static IReadOnlyList<SkillFreshnessEntry> Refresh(SkillFreshnessModel model, string workingDirectory)
     {
-        ArgumentNullException.ThrowIfNull(model);
+        Ensure.NotNull(model);
         try
         {
             string projectSkills = ResolveProjectSkillsDir(workingDirectory);
@@ -173,7 +174,7 @@ internal static class SkillFreshnessStartup
         IReadOnlyList<string>? names,
         string workingDirectory)
     {
-        ArgumentNullException.ThrowIfNull(model);
+        Ensure.NotNull(model);
 
         var entries = model.GetEntries();
         var targets = new List<string>(names?.Count ?? entries.Count);

@@ -296,6 +296,13 @@
   <!-- ── Always-referenced core ───────────────────────────────────────────── -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Harbor.Abstractions\Harbor.Abstractions.csproj"/>
+    <!-- #1553: the CLI's argument guards call the shared Ensure helper, which
+         lives in the Harbor.Extensions leaf under the namespace
+         Harbor.Abstractions.Extensions. Explicit over transitive:
+         Harbor.Application carries the same assembly, but the CLI binds
+         Ensure itself, and a reference that is load-bearing is written down
+         rather than inherited by luck. -->
+    <ProjectReference Include="..\..\src\Harbor.Extensions\Harbor.Extensions.csproj"/>
     <!-- #451: the deleted Harbor.Core facade forwarded to exactly these two
          assemblies (Harbor.Application use cases + Harbor.Registries impls);
          reference the real owners directly. -->
