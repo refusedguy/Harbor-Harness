@@ -161,13 +161,9 @@ public sealed class TestTreeAllocationCensus
         IReadOnlyList<AllocSite> sites = FindSites();
         IReadOnlyDictionary<AllocMechanism, long> costs = MeasureUnitCosts();
 
-        foreach (AllocSite site in sites)
-        {
-            Console.WriteLine(
-                $"[alloc-census] project={site.Project} file={site.File} line={site.Line} "
-                + $"test={site.Test} mechanism={site.Mechanism}");
-        }
-
+        // The COSTS and the RANKING first, and the sites after them: the
+        // summary table keeps the FIRST rows, and the two tables are the
+        // answer while the site list is the evidence.
         foreach (AllocMechanism mechanism in costs.Keys.OrderBy(m => m.ToString(), StringComparer.Ordinal))
         {
             Console.WriteLine($"[alloc-cost] mechanism={mechanism} bytes-per-call={costs[mechanism]}");
@@ -181,6 +177,13 @@ public sealed class TestTreeAllocationCensus
             Console.WriteLine(
                 $"[alloc-rank] project={project.Key} sites={project.Count()} mechanisms={mechanisms} "
                 + $"tests={project.Select(s => s.Test).Distinct().Count()} est-bytes={estimate}");
+        }
+
+        foreach (AllocSite site in sites)
+        {
+            Console.WriteLine(
+                $"[alloc-census] project={site.Project} file={site.File} line={site.Line} "
+                + $"test={site.Test} mechanism={site.Mechanism}");
         }
 
         await Assert.That(sites.Count).IsGreaterThan(0)
