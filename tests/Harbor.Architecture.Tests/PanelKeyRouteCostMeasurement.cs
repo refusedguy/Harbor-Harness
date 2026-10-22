@@ -159,8 +159,9 @@ public sealed class PanelKeyRouteCostMeasurement
             + $"bytes={deadTestBytes} hits={deadRouteTests.Count} "
             + $"test-files={testSources.Count}");
 
-        await Assert.That(summary.Length).IsGreaterThan(0)
-            .Because("a measurement that printed nothing measured nothing.");
+        await Assert.That(summary.ToString())
+            .IsEqualTo("the measurement is not a gate")
+            .Because(summary.ToString());
     }
 
     /// <summary>Prints one line and keeps it in the summary.</summary>
