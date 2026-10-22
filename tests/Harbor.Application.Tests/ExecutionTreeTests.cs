@@ -391,8 +391,8 @@ public class ExecutionTreeTests
         // these runs — the captured token never fires.
         var first = registry.Start("explore", "parent-1", child, CancellationToken.None);
         var second = registry.Start("explore", "parent-1", child, CancellationToken.None);
-        await Assert.That(first.IsSuccess).IsTrue();
-        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(first).IsSuccessful();
+        await Assert.That(second).IsSuccessful();
 
         // The probe goes out in the SAME window as the two children: it is
         // the machine's verdict on the window, and it is what tells the two
@@ -452,7 +452,7 @@ public class ExecutionTreeTests
         IReadOnlyList<BackgroundTaskCompletion> done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
         await Assert.That(done.Count).IsEqualTo(2);
         for (int i = 0; i < done.Count; i++)
-            await Assert.That(done[i].Result.IsFailure).IsTrue();
+            await Assert.That(done[i].Result).IsFailed();
     }
 
     [Test]
@@ -463,12 +463,11 @@ public class ExecutionTreeTests
         var agent = LoopAgent();
         var loop = Loop(new HangingLlmClient(), bus, agent, spy);
         var session = NewLoopSession();
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
 
         var result = await loop.RunAsync(session, agent, cts.Token).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(spy.CancelledSessions.Count).IsEqualTo(1);
         await Assert.That(spy.CancelledSessions[0]).IsEqualTo(session.Session.Id);
         AgentEndEvent? end = null;
@@ -504,9 +503,9 @@ public class ExecutionTreeTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var stats = await store.GetStatsAsync(parent.Id);
-        await Assert.That(stats.IsSuccess).IsTrue();
+        await Assert.That(stats).IsSuccessful();
         await Assert.That(stats.Value.TokensInput).IsEqualTo(100);
         await Assert.That(stats.Value.TokensOutput).IsEqualTo(50);
     }
@@ -532,7 +531,7 @@ public class ExecutionTreeTests
 
         var result = await runner.RunAsync(AgentFixtures.SubAgent(), new SubAgentRunRequest("go", ParentSessionId: parent.Id), cts.Token);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("was cancelled");
         await Assert.That(store.CreatedSessions.Count).IsEqualTo(1);
         string childId = store.CreatedSessions[0].Id;

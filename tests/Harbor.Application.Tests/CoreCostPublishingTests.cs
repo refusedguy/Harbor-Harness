@@ -101,7 +101,7 @@ public class CoreCostPublishingTests
 
         var (bus, store, run) = await RunOneTurnAsync(Priced, usage);
 
-        await Assert.That(run.IsSuccess).IsTrue();
+        await Assert.That(run).IsSuccessful();
 
         SessionMetadata? published = Published(bus);
         await Assert.That(published).IsNotNull()
@@ -137,7 +137,7 @@ public class CoreCostPublishingTests
     {
         var (bus, _, run) = await RunOneTurnAsync(Priced, new Usage(2_000_000, 1_000_000));
 
-        await Assert.That(run.IsSuccess).IsTrue();
+        await Assert.That(run).IsSuccessful();
         SessionMetadata? published = Published(bus);
         await Assert.That(published).IsNotNull();
         await Assert.That(published!.Cost).IsEqualTo(21m);
@@ -156,7 +156,7 @@ public class CoreCostPublishingTests
             Pricing.Unknown,
             new Usage(61_600, 196, null, 10_000, 5_000));
 
-        await Assert.That(run.IsSuccess).IsTrue();
+        await Assert.That(run).IsSuccessful();
         SessionMetadata? published = Published(bus);
         await Assert.That(published).IsNotNull();
         await Assert.That(published!.Cost).IsEqualTo(0m);
@@ -180,7 +180,7 @@ public class CoreCostPublishingTests
     {
         var (bus, _, run) = await RunOneTurnAsync(new Pricing(0m, 0m), new Usage(61_600, 196));
 
-        await Assert.That(run.IsSuccess).IsTrue();
+        await Assert.That(run).IsSuccessful();
         SessionMetadata? published = Published(bus);
         await Assert.That(published).IsNotNull();
         await Assert.That(published!.Cost).IsEqualTo(0m);

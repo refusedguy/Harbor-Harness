@@ -30,7 +30,7 @@ public class ErrorRouting259Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.StreamCalls).IsGreaterThan(3);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(1);
     }
@@ -47,7 +47,7 @@ public class ErrorRouting259Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(client.StreamCalls).IsEqualTo(1);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(1);
     }
@@ -65,7 +65,7 @@ public class ErrorRouting259Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.StreamCalls).IsEqualTo(2);
         await Assert.That(bus.Events.OfType<AgentErrorEvent>().Count()).IsEqualTo(0);
     }

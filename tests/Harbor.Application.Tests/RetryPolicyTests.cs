@@ -29,8 +29,7 @@ public class RetryPolicyTests
     [Test]
     public async Task IsTransient_CallerCancellation_IsFatal()
     {
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
         var oce = new OperationCanceledException(cts.Token);
 
         await Assert.That(RetryPolicy.IsTransient(oce, out _)).IsFalse();
@@ -334,7 +333,7 @@ public class RetryPolicySafeAdapterTests
         var result = await new RetryPolicy().ExecuteSafeAsync(
             _ => Task.FromResult(42), Opts(3), CancellationToken.None);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value).IsEqualTo(42);
     }
 
@@ -353,7 +352,7 @@ public class RetryPolicySafeAdapterTests
             },
             Opts(max: 5), CancellationToken.None);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(calls).IsEqualTo(3);
     }
 
@@ -370,7 +369,7 @@ public class RetryPolicySafeAdapterTests
             },
             Opts(max: 5), CancellationToken.None);
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).IsEqualTo("401");
         await Assert.That(calls).IsEqualTo(1);
     }
@@ -378,8 +377,7 @@ public class RetryPolicySafeAdapterTests
     [Test]
     public async Task ExecuteSafeAsync_CallerCancellation_Propagates()
     {
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        using var cts = TestCancellation.Cancelled();
 
         await Assert.That(async () => await new RetryPolicy().ExecuteSafeAsync<string>(
             _ => Task.FromResult("unused"), Opts(3), cts.Token)
