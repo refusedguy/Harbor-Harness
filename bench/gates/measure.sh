@@ -61,8 +61,12 @@ while IFS=$'\t' read -r name cmd; do
     peak=0
     rc=0
     for _ in $(seq 1 "$RUNS"); do
+        # The gate's stdin is /dev/null, not this loop's: the loop reads the
+        # tool list from a file, and every gate it starts inherits that file
+        # as its standard input. A gate that reads stdin eats the rest of the
+        # list, and the set is then measured with rows missing from it.
         # shellcheck disable=SC2086
-        line=$("$MAXRSS" "$name" $cmd 2>/dev/null)
+        line=$("$MAXRSS" "$name" $cmd 2>/dev/null </dev/null)
         rc="$(printf '%s' "$line" | cut -f6)"
         walls+=("$(printf '%s' "$line" | cut -f2)")
         v="$(printf '%s' "$line" | cut -f4)"
