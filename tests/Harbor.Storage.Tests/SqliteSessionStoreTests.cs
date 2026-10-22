@@ -37,7 +37,7 @@ public class SqliteSessionStoreTests
         {
             var result = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(string.IsNullOrEmpty(result.Value.Id)).IsFalse();
             await Assert.That(result.Value.Directory).IsEqualTo("/proj");
             await Assert.That(result.Value.Agent).IsEqualTo("code");
@@ -61,7 +61,7 @@ public class SqliteSessionStoreTests
 
             var fetched = await store.GetAsync(created.Value.Id);
 
-            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched).IsSuccessful();
             await Assert.That(fetched.Value.Id).IsEqualTo(created.Value.Id);
             await Assert.That(fetched.Value.ProviderId).IsEqualTo("openai");
             await Assert.That(fetched.Value.Model).IsEqualTo("gpt-4o");
@@ -80,7 +80,7 @@ public class SqliteSessionStoreTests
         try
         {
             var result = await store.GetAsync("nonexistent-id");
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             // П.24: absence reads as a clean "not found" outcome, not a raw provider error.
             await Assert.That(result.Error).IsEqualTo("Session 'nonexistent-id' not found.");
         }
@@ -123,7 +123,7 @@ public class SqliteSessionStoreTests
 
             var list = await store.ListAsync();
 
-            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list).IsSuccessful();
             await Assert.That(list.Value.Count).IsEqualTo(3);
         }
         finally
@@ -144,7 +144,7 @@ public class SqliteSessionStoreTests
 
             var list = await store.ListAsync(s1.Value.ProjectId);
 
-            await Assert.That(list.IsSuccess).IsTrue();
+            await Assert.That(list).IsSuccessful();
             await Assert.That(list.Value.Count).IsEqualTo(1);
             await Assert.That(list.Value[0].ProjectId).IsEqualTo(s1.Value.ProjectId);
         }
@@ -165,10 +165,10 @@ public class SqliteSessionStoreTests
             var msg = NewUserMessage(session.Id, "hello", "1");
 
             var appendResult = await store.AppendMessageAsync(session.Id, msg);
-            await Assert.That(appendResult.IsSuccess).IsTrue();
+            await Assert.That(appendResult).IsSuccessful();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("hello");
         }
@@ -196,7 +196,7 @@ public class SqliteSessionStoreTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(3);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("first");
             await Assert.That(((UserMessage)messages.Value[1]).Content).IsEqualTo("second-inserted-first-ts");
@@ -221,16 +221,16 @@ public class SqliteSessionStoreTests
             await store.AppendMessageAsync(session.Id, NewUserMessage(session.Id, "msg3", "c"));
 
             var deleteResult = await store.DeleteAsync(session.Id);
-            await Assert.That(deleteResult.IsSuccess).IsTrue();
+            await Assert.That(deleteResult).IsSuccessful();
 
             // Session itself is gone.
             var fetched = await store.GetAsync(session.Id);
-            await Assert.That(fetched.IsFailure).IsTrue();
+            await Assert.That(fetched).IsFailed();
 
             // Messages are also gone: the session no longer exists, so the
             // read surfaces Failure instead of a silent empty list (#84).
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsFailure).IsTrue();
+            await Assert.That(messages).IsFailed();
         }
         finally
         {
@@ -272,7 +272,7 @@ public class SqliteSessionStoreTests
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             var stats = await store.GetStatsAsync(session.Id);
 
-            await Assert.That(stats.IsSuccess).IsTrue();
+            await Assert.That(stats).IsSuccessful();
             await Assert.That(stats.Value.MessageCount).IsEqualTo(0);
         }
         finally
@@ -292,7 +292,7 @@ public class SqliteSessionStoreTests
 
             var newMeta = new SessionMetadata(0.99m, 200, 100, 50, 5, 2, 4, null);
             var updateResult = await store.UpdateStatsAsync(session.Id, newMeta);
-            await Assert.That(updateResult.IsSuccess).IsTrue();
+            await Assert.That(updateResult).IsSuccessful();
 
             var stats = await store.GetStatsAsync(session.Id);
             await Assert.That(stats.Value.Cost).IsEqualTo(0.99m);
@@ -315,7 +315,7 @@ public class SqliteSessionStoreTests
         try
         {
             var result = await store.DeleteAsync("nonexistent");
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -333,10 +333,10 @@ public class SqliteSessionStoreTests
             var session = (await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4")).Value;
             var ghost = NewUserMessage(session.Id, "ghost");
             var result = await store.UpdateMessageAsync(session.Id, ghost);
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
 
             var messages = await store.GetMessagesAsync(session.Id);
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(0);
         }
         finally
@@ -354,7 +354,7 @@ public class SqliteSessionStoreTests
         {
             var msg = NewUserMessage("nonexistent", "hello");
             var result = await store.UpdateMessageAsync("nonexistent", msg);
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -370,7 +370,7 @@ public class SqliteSessionStoreTests
         try
         {
             var result = await store.GetMessagesAsync("nonexistent");
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -386,7 +386,7 @@ public class SqliteSessionStoreTests
         try
         {
             var result = await store.UpdateStatsAsync("nonexistent", SessionMetadata.Empty);
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
         }
         finally
         {
@@ -408,8 +408,8 @@ public class SqliteSessionStoreTests
             var r1 = await store.AppendMessageAsync(s1.Id, TestMessages.User("session-one", id: "shared-id", sessionId: s1.Id, model: "claude"));
             var r2 = await store.AppendMessageAsync(s2.Id, TestMessages.User("session-two", id: "shared-id", sessionId: s2.Id, model: "claude"));
 
-            await Assert.That(r1.IsSuccess).IsTrue();
-            await Assert.That(r2.IsSuccess).IsTrue();
+            await Assert.That(r1).IsSuccessful();
+            await Assert.That(r2).IsSuccessful();
 
             var m1 = await store.GetMessagesAsync(s1.Id);
             var m2 = await store.GetMessagesAsync(s2.Id);
@@ -420,7 +420,7 @@ public class SqliteSessionStoreTests
 
             // Same-session duplicate is still a PK violation.
             var dup = await store.AppendMessageAsync(s1.Id, TestMessages.User("dup", id: "shared-id", sessionId: s1.Id, model: "claude"));
-            await Assert.That(dup.IsFailure).IsTrue();
+            await Assert.That(dup).IsFailed();
 
             // Updates stay scoped to their own session.
             var edited = (UserMessage)m1.Value[0] with { Content = "session-one-edited" };
@@ -449,7 +449,7 @@ public class SqliteSessionStoreTests
             await store.AppendMessageAsync(session.Id, NewUserMessage(session.Id, "hello"));
 
             var fetched = await store.GetAsync(session.Id);
-            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched).IsSuccessful();
             await Assert.That(fetched.Value.UpdatedAt).IsGreaterThan(originalUpdatedAt);
         }
         finally
@@ -478,7 +478,7 @@ public class SqliteSessionStoreTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages.IsSuccess).IsTrue();
+            await Assert.That(messages).IsSuccessful();
             await Assert.That(messages.Value.Count).IsEqualTo(2);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("first-instant");
             await Assert.That(((UserMessage)messages.Value[1]).Content).IsEqualTo("second-instant");
@@ -505,7 +505,7 @@ public class SqliteSessionStoreTests
             // First use initializes lazily.
             var store = new SqliteSessionStore(dbPath, NullLogger<SqliteSessionStore>.Instance);
             var created = await store.CreateAsync("/proj", "code", "anthropic", "claude-opus-4");
-            await Assert.That(created.IsSuccess).IsTrue();
+            await Assert.That(created).IsSuccessful();
             await Assert.That(File.Exists(dbPath)).IsTrue();
         }
         finally
@@ -532,10 +532,10 @@ public class SqliteSessionStoreTests
                 ParentSessionId = "parentsessionid",
             };
             var update = await store.UpdateAsync(marked);
-            await Assert.That(update.IsSuccess).IsTrue();
+            await Assert.That(update).IsSuccessful();
 
             var fetched = await store.GetAsync(session.Id);
-            await Assert.That(fetched.IsSuccess).IsTrue();
+            await Assert.That(fetched).IsSuccessful();
             await Assert.That(fetched.Value.Title).IsEqualTo("task(code): do thing");
             await Assert.That(fetched.Value.Status).IsEqualTo(SessionStatus.Working);
             await Assert.That(fetched.Value.Kind).IsEqualTo(SessionKind.Subagent);
@@ -543,9 +543,9 @@ public class SqliteSessionStoreTests
 
             // Terminal write clears back to Done — the stamp must move, not stick.
             var done = await store.UpdateAsync(fetched.Value with { Status = SessionStatus.Done });
-            await Assert.That(done.IsSuccess).IsTrue();
+            await Assert.That(done).IsSuccessful();
             var refetched = await store.GetAsync(session.Id);
-            await Assert.That(refetched.IsSuccess).IsTrue();
+            await Assert.That(refetched).IsSuccessful();
             await Assert.That(refetched.Value.Status).IsEqualTo(SessionStatus.Done);
             await Assert.That(refetched.Value.Kind).IsEqualTo(SessionKind.Subagent);
         }
@@ -606,7 +606,7 @@ public class SqliteSessionStoreTests
 
             // The legacy row survives migration with benign defaults.
             var before = await store.GetAsync("legacy-session");
-            await Assert.That(before.IsSuccess).IsTrue();
+            await Assert.That(before).IsSuccessful();
             await Assert.That(before.Value.Title).IsEqualTo("legacy");
             await Assert.That(before.Value.Status).IsEqualTo(SessionStatus.Idle);
             await Assert.That(before.Value.Kind).IsEqualTo(SessionKind.User);
@@ -619,10 +619,10 @@ public class SqliteSessionStoreTests
                 Kind = SessionKind.Subagent,
                 ParentSessionId = "parent-1",
             });
-            await Assert.That(update.IsSuccess).IsTrue();
+            await Assert.That(update).IsSuccessful();
 
             var after = await store.GetAsync("legacy-session");
-            await Assert.That(after.IsSuccess).IsTrue();
+            await Assert.That(after).IsSuccessful();
             await Assert.That(after.Value.Status).IsEqualTo(SessionStatus.Working);
             await Assert.That(after.Value.Kind).IsEqualTo(SessionKind.Subagent);
             await Assert.That(after.Value.ParentSessionId).IsEqualTo("parent-1");

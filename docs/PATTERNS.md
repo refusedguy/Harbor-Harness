@@ -34,7 +34,7 @@
 > (`file:line`)**, and **the known trap**.
 
 Связанные документы:
-- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 39 вещей, которые мы НЕ делаем.
+- [ANTIPATTERNS.md](./ANTIPATTERNS.md) — 40 вещей, которые мы НЕ делаем.
 - [CODE_PRINCIPLES_AUDIT.md](./CODE_PRINCIPLES_AUDIT.md) — известные нарушения.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — high-level дизайн.
 - [EVENT_BUS_SINKS.md](./EVENT_BUS_SINKS.md) — нормативная таблица sink-вердиктов.
@@ -55,6 +55,7 @@
 | a REPL slash command | §4 Command | — |
 | a plugin extension point | §5 Extension points | — |
 | a stateful projection of the event stream | §8 State + lifetime | — |
+| a test that checks a result | §9 Result assertions | `ResultAssertionsTests` |
 
 **The guard column exists because of #555's sequencing rule.** Guards land
 *before or with* the rewrite, and a refactor without a guard gets undone by the
@@ -129,7 +130,7 @@ one bad day must not silently stop receiving events.
 1. **Store seam (the convention).** An `AgentEvent` enters UI state through
    `ChatAppMsg.Agent` → `ChatAppReducer` → `UiStore`, and a renderer reads the
    result **as data**. Canonical:
-   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:314`
+   `src/Harbor.Tui.CellForge/Chat/CellForgeTuiRenderer.cs:351`
    (`_ = ActiveStore.Dispatch(new ChatAppMsg.Agent(@event));`).
 2. **Handler seam (for imperative side effects).** A renderer that must act on an
    event outside the state fold registers an `IAgentEventHandler` via
@@ -153,12 +154,12 @@ objects across 5 renderer families, one hand-written 21-arm
 `switch (AgentEvent)` in `ChatScreenBridge`, and 5 renderers routing through
 `UiStore.Dispatch` + `ChatAppReducer`.
 
-`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:127`,
+`ChatScreenBridge.HandleEvent` (`src/Harbor.Tui.CellForge/Chat/Streaming/ChatScreenBridge.cs:129`,
 15 outer arms at `:131-390` plus a nested `switch (update.LlmEvent)` with 6 more
 at `:174-189`) receives events through its **own** subscription
 (`src/Harbor.Tui.CellForge/Chat/Streaming/EventSubscription.cs:18`), not the base class's dispatcher, and
 is registered as a **singleton** with `autoSubscribe: false`
-(`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101-106`).
+(`apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:102-107`).
 
 > The counts in this paragraph were `18` / `:129-314` / `4` until #840 touched
 > the arm set and forced a recount — 18 was 14 outer + 4 nested, i.e. the total,
@@ -228,7 +229,7 @@ ids fail fast" (`SessionStoreRegistry.cs:11`).
 
 Provider factories follow the same shape without the id index, because a
 provider is looked up by a strong id rather than a raw string:
-`src/Harbor.Hosting/Modules/ProviderFactories.cs:76`, `:94`, `:114`, `:136` —
+`src/Harbor.Hosting/Modules/ProviderFactories.cs:115`, `:134`, `:155` —
 each `IProviderFactory` with `ProviderId` and `CreateClient(ILoggerFactory)`.
 
 ### The known trap
@@ -421,10 +422,10 @@ Two more live instances of the banned direction:
   `BaseTuiRenderer` only calls `view.RenderAsync`
   (`BaseTuiRenderer.cs:318-330`). Key and event handling moved to the reducer
   (`AppMsg.KeyInput` via `src/Harbor.Ui.Framework.State/State/KeyEventAdapter.cs:23`,
-  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:314`), but the old hooks stayed
+  `ChatAppMsg.Agent` via `CellForgeTuiRenderer.cs:351`), but the old hooks stayed
   on the interface with a no-op default, so the compiler will not tell anyone
   they are dead. A plugin author following `ITuiPlugin`'s `RegisterTui`
-  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:124`, and note `:11`: that whole
+  (`src/Harbor.Terminal.Abstractions/Plugins/ITuiPlugin.cs:132`, and note `:11`: that whole
   seam is closed as of #564) implements `OnEventAsync`, sees no exception, and
   ships a view that never updates.
 
@@ -585,8 +586,8 @@ consistent throughout:
 | state | `State/UiState.cs` (immutable record) |
 | messages | `State/AppMsg.cs`, `State/ChatAppMsg.cs` |
 | transitions | `State/AppReducer.cs`, `State/ChatAppReducer.cs` |
-| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:175` `Dispatch` → `:211` `Notify`, with a revision ledger and a stale-drop guard |
-| consumption | `CellForgeTuiRenderer.cs:314` dispatch, `:290` `PumpProjection()` — the renderer reads the fold **as data** |
+| store / lifecycle | `src/Harbor.Ui.Framework.State/State/UiStore.cs:180` `Dispatch` → `:216` `Notify`, with a revision ledger and a stale-drop guard |
+| consumption | `CellForgeTuiRenderer.cs:351` dispatch, `:291` `PumpProjection()` — the renderer reads the fold **as data** |
 
 The split is deliberate: `AppReducer` is domain-free (panels, scroll, input,
 focus, quit) and the chat half plugs in through `IAppReducerPlugin`, so a
@@ -602,8 +603,8 @@ is on screen for the current session") with two owners:
   `_context`, `_gates`, `_displayedMessageIds`; plus `:59` `_toolRetryShown`,
   `:68` `_parentSessionId`, `:72` `_runHadError`, `:74` `_errorCardSeq` —
   **~11 pieces of mutable state**;
-- the transition: `HandleEvent` at `:127`, 21 arms mutating those fields directly;
-- the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:101` registers it
+- the transition: `HandleEvent` at `:129`, 21 arms mutating those fields directly;
+- the lifetime: `apps/Harbor.App.Cli/Hosting/CellForgeModule.cs:102` registers it
   `AddSingleton`, over a per-process `ChatScreen` (`:77-79`, also a singleton).
 
 Meanwhile the reducer side *is* per session: `CellForgeTuiRenderer.cs:226`
@@ -647,11 +648,97 @@ the transition and the lifecycle are the same code path rather than two.*
 
 ---
 
-## 9. Anti-convention summary — read before you design
+## 9. Result assertions — assert the Result, not its boolean
+
+**The convention.** A test that checks a result asserts the RESULT, through one
+shared chain, and the failure message carries the reason. Asserting the boolean
+property is the form this section replaces.
+
+### The canonical implementation
+
+`tests/Harbor.TestKit.Support/ResultAssertions.cs:127`:
+
+```csharp
+public static AssertionResult IsSuccessful<T>(this Result<T> result) =>
+    result.IsSuccess
+        ? AssertionResult.Passed
+        : AssertionResult.Failed($"it failed with: {result.Error}");
+```
+
+Each `[GenerateAssertion]` method becomes one link of the `Assert.That(...)`
+chain, so the call site reads as one sentence:
+
+```csharp
+// ✅ RIGHT — the failure names the result and its error
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+```
+
+The helper lives in the SUPPORT part (`tests/Harbor.TestKit.Support/`), not in
+the core kit, because it needs no product assembly beyond the two contract
+assemblies — and 24 test projects take only the support part. The namespace is
+`Harbor.TestKit` either way, so a consumer's `using` line does not change.
+
+The five families, one pair each:
+
+| the type | the flag | the assertion |
+|---|---|---|
+| `Result<T>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `Result` (non-generic) | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
+| `ToolResult` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolResultEntry` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+| `ToolCallLink` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+
+`Result` and `Result<T>` are two unrelated types in
+CSharpFunctionalExtensions — `Result<T>` does not derive from `Result` — so
+each needs its own pair, and the compiler picks by the receiver's type.
+
+### The known trap (#1569): the boolean form reports a `bool`, and the "just add
+the error text" advice is a landmine
+
+Measured on `origin/dev@259d0a5d`, the old form stood at **1888 sites** across
+**35 test projects** (`Assert.That(x.IsSuccess).IsTrue()` and its relatives),
+while the chain form was used in **78**. The old form is not wrong — it
+asserts the same thing — but it reports the failure at the `bool`:
+
+```
+Expected to be true but found False
+```
+
+which answers neither "which result failed" nor "why". The chain form reports
+the result, and the helper puts the reason in the message, so the failure
+reads:
+
+```
+Expected to be successful but it failed with: Session 's1' not found.
+```
+
+The census is a regex over `tests/**/*.cs`, and it has to be MULTI-LINE
+aware: an assertion that spans three lines
+(`Assert.That((await store.Append(...)).IsSuccess).IsTrue();`) is invisible
+to a line-based scan, and a line-based count of this tree answers 1846
+instead of 1888 — 42 sites short.
+
+The second half of the trap is the advice that used to sit in the helper's own
+doc comment: *put the error text in `.Because(result.Error)`*. `Because` takes
+its argument EAGERLY, and `Result.Error` **throws** on a successful result
+(`ErrorIsInaccessibleForSuccess` in CSharpFunctionalExtensions 3.7.0), so that
+advice turns every passing test into an exception. The error text is read on
+the failure path only, inside the helper, where the result is known to have
+failed.
+
+**The rule:** *assert the result, not its boolean; and the reason belongs in
+the failure message, which means the helper reads `.Error` only after it knows
+the result failed.*
+
+---
+
+## 10. Anti-convention summary — read before you design
 
 | Anti-convention | Where it lives today | Rule |
 |---|---|---|
-| Visitor as the UI event mechanism | `ChatScreenBridge.cs:127` (21-arm switch) | Use store + reducer (§1) |
+| Visitor as the UI event mechanism | `ChatScreenBridge.cs:131` (21-arm switch) | Use store + reducer (§1) |
 | Third mechanism for one event stream | handler registry + switch + store, all at once | Pick one of the two seams (§1) |
 | Lifecycle promised ≠ lifecycle provided | `CellForgeModule.cs:32` vs `:101` | Doc comment promising an unprovided lifetime is a defect (§8) |
 | Cleanup as a caller convention | `SessionSwitchManager.cs:245-247` | The state object resets itself (§8) |
@@ -664,6 +751,7 @@ the transition and the lifecycle are the same code path rather than two.*
 | Hand-maintained name list as a union | `PathArgExtractionPolicy.cs:53` (`DefaultTools`), `[JsonDerivedType]` tables | It IS a union — test it by reflection (§7) |
 | Unknown id → silent default | fixed in `SessionStoreRegistry`/`HarborModeRegistry` | `Resolve` returns `Maybe.None`; caller fails loudly (§2) |
 | A fake metric | see `TelemetryModule.cs:25-33` for the right shape | Absent surface beats plausible zero (§3) |
+| Asserting a result through its boolean | 1888 sites across 35 test projects, measured on `origin/dev@259d0a5d` | Assert the result; the reason goes in the failure message (§9) |
 
 ---
 

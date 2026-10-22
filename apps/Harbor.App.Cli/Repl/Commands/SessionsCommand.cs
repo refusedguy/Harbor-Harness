@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Sessions;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Overlays;
@@ -15,7 +16,7 @@ internal sealed class SessionsCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         if (host.SessionStore is null)
         {

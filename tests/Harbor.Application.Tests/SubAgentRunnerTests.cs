@@ -231,15 +231,17 @@ public class SubAgentRunnerTests
                 }, CancellationToken.None);
                 await Assert.That(started).IsSuccessful();
 
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                while (bgOutcome is null && !timeout.IsCancellationRequested)
-                {
-                    var done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
-                    if (done.Count > 0)
-                        bgOutcome = done[0].Result;
-                    else
-                        await Task.Delay(20).ConfigureAwait(false);
-                }
+                // Wait for the detached run through the registry's own seam
+                // (#2093): the run is dispatched on its own thread, so this
+                // waits for the RUN and not for a thread-pool slot, and the
+                // drain below takes the completion instead of polling for it.
+                await Assert.That(
+                        await registry.WaitForIdleAsync("parent-1", TimeSpan.FromSeconds(30)).ConfigureAwait(false))
+                    .IsTrue()
+                    .Because("the detached run must finish: it was launched with a live token and nothing cancels it.");
+                var done = await registry.DrainCompletedAsync("parent-1").ConfigureAwait(false);
+                await Assert.That(done.Count).IsEqualTo(1);
+                bgOutcome = done[0].Result;
             }
         };
         var outer = new SubAgentRunner(store, outerLoop, NullLogger<SubAgentRunner>.Instance);

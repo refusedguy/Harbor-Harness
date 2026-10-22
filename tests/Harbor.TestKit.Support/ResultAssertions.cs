@@ -2,11 +2,17 @@
 //
 // WHAT THIS IS
 // ------------
-// The tree asserts results in two spellings, and the losing one is everywhere:
+// The tree asserts results in two spellings today, and the losing one is
+// everywhere:
 //
-//     await Assert.That(result.IsSuccess).IsTrue();     ← 1910 sites (measured)
-//     await Assert.That(result).IsSuccessful();          ← 78 sites
+//     await Assert.That(result.IsSuccess).IsTrue();     ← 1178 sites (measured)
+//     await Assert.That(result).IsSuccessful();          ← 817 sites
 //
+// (both counted on this tree by scanning `tests/**/*.cs`: the first shape is
+// an `Assert.That(<recv>.IsSuccess|IsFailure|Error)` followed by `.IsTrue()`,
+// `.IsFalse()` or `.IsEqualTo(true|false)`, walked with balanced parentheses
+// so an assertion that spans three lines is counted too.)
+
 // The first spelling asserts a BOOL, so the failure says "found False" and
 // the reader is left with two questions the assertion cannot answer: WHICH
 // result failed, and WHY. The second spelling asserts the RESULT, so the
@@ -17,10 +23,11 @@
 // -------------------------------------------
 // `bool` is the shape TUnit's own assertions use, and the generated failure
 // message is then "found <value>" — where <value> is the asserted value's
-// ToString(). The Result structs carry no useful ToString, so that message
-// would name the TYPE, not the reason. Returning `AssertionResult` lets the
-// helper put the reason in the message itself, and the reason is only read on
-// the failure path — `Result.Error` THROWS on a successful result
+// ToString(). `Result` and `Result<T>` are readonly structs with NO ToString
+// override (CSharpFunctionalExtensions 3.7.0), so that message is the TYPE
+// NAME, not the reason. Returning `AssertionResult` lets the helper put the
+// reason in the message itself, and the reason is only read on the failure
+// path — `Result.Error` THROWS on a successful result
 // (`ErrorIsInaccessibleForSuccess`), so the helper must not touch it before
 // it knows the result failed.
 //
@@ -43,19 +50,22 @@
 // `Harbor.Abstractions.Contracts`.
 //
 // The core kit (tests/Harbor.TestKit) is where it sat before, and that is
-// exactly why the 24 test projects that take only the support part could not
+// exactly why the 14 test projects that take only the support part could not
 // use it: they would have had to pull the whole core kit (the doubles, the
 // two cost gates — 1400 lines they do not need) into their closure to reach
 // one assertion helper. The core kit still reaches this file (it references
-// the support part), so the thirteen projects that take the core keep it too,
-// and the NAMESPACE is still Harbor.TestKit — a consumer's `using` line does
-// not change.
+// the support part), so the 18 projects that take the core keep it too, and
+// the NAMESPACE is still Harbor.TestKit — a consumer's `using` line does not
+// change.
+//
+// (the counts are the ProjectReference edges of this tree: 14 test projects
+// reference the support part and not the core, 18 reference the core.)
 //
 // The `TestKitCompositionRules` closure pin is unaffected: the two new
 // dependencies are PACKAGE references, and the rule walks ProjectReferences.
 //
-// THE FAMILIES
-// ------------
+// THE FIVE FAMILIES
+// -----------------
 // The types in this tree that carry a success/failure flag:
 //
 //   Result<T>          IsSuccess / IsFailure   → IsSuccessful / IsFailed
@@ -68,12 +78,16 @@
 // CSharpFunctionalExtensions (`Result<T>` does not derive from `Result`), so
 // each needs its own pair.
 //
-// The value-shaped `Result<TValue, TError>` and the tool-execution event live
-// in `ResultAssertions.More.cs`, next to this one.
+// TWO MORE FAMILIES LIVE NEXT DOOR
+// --------------------------------
+// The class is PARTIAL: `ResultAssertions.More.cs` holds the two families
+// that only a few sites reach — the value-shaped `Result<TValue, TError>`
+// and the `ToolExecutionEndEvent` — and they get the same chain links, so
+// one `using Harbor.TestKit;` reaches all seven.
 //
 // `LlmToolResultBlock` and `LlmToolResultMessage` also carry an `IsError`,
-// and they are deliberately NOT here: they are the WIRE the model sees, not a
-// result the tree owns, and their sites assert a different thing (that the
+// and they are deliberately NOT here: they are the WIRE the model sees, not
+// a result the tree owns, and their sites assert a different thing (that the
 // MODEL was told the call failed).
 
 using System.ComponentModel;
@@ -109,7 +123,7 @@ public static partial class ResultAssertions
 {
     /// <summary>Asserts a <see cref="Result{T}" /> succeeded.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to be successful")]
     public static AssertionResult IsSuccessful<T>(this Result<T> result) =>
         result.IsSuccess
             ? AssertionResult.Passed
@@ -117,7 +131,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="Result{T}" /> failed.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to be failed")]
     public static AssertionResult IsFailed<T>(this Result<T> result) =>
         result.IsFailure
             ? AssertionResult.Passed
@@ -125,7 +139,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a non-generic <see cref="Result" /> succeeded.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to be successful")]
     public static AssertionResult IsSuccessful(this Result result) =>
         result.IsSuccess
             ? AssertionResult.Passed
@@ -133,7 +147,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a non-generic <see cref="Result" /> failed.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to be failed")]
     public static AssertionResult IsFailed(this Result result) =>
         result.IsFailure
             ? AssertionResult.Passed
@@ -141,7 +155,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="ToolResult" /> is not an error.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have succeeded")]
     public static AssertionResult HasSucceeded(this ToolResult result) =>
         result.IsError
             ? AssertionResult.Failed("it carries an error")
@@ -149,7 +163,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="ToolResult" /> is an error.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have failed")]
     public static AssertionResult HasFailed(this ToolResult result) =>
         result.IsError
             ? AssertionResult.Passed
@@ -157,7 +171,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="ToolResultEntry" /> is not an error.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have succeeded")]
     public static AssertionResult HasSucceeded(this ToolResultEntry result) =>
         result.IsError
             ? AssertionResult.Failed("it carries an error")
@@ -165,7 +179,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="ToolResultEntry" /> is an error.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have failed")]
     public static AssertionResult HasFailed(this ToolResultEntry result) =>
         result.IsError
             ? AssertionResult.Passed
@@ -179,7 +193,7 @@ public static partial class ResultAssertions
     ///     error.
     /// </remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have succeeded")]
     public static AssertionResult HasSucceeded(this ToolCallLink result) =>
         result.IsError
             ? AssertionResult.Failed("it carries an error")
@@ -187,7 +201,7 @@ public static partial class ResultAssertions
 
     /// <summary>Asserts a <see cref="ToolCallLink" /> is an error.</summary>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    [GenerateAssertion]
+    [GenerateAssertion(ExpectationMessage = "to have failed")]
     public static AssertionResult HasFailed(this ToolCallLink result) =>
         result.IsError
             ? AssertionResult.Passed

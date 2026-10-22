@@ -58,7 +58,7 @@ public class MyToolTests
 
         var result = tool.ValidateArguments(args);
 
-        await Assert.That(result).IsFailed();
+        await Assert.That(result.IsFailure).IsTrue();
         await Assert.That(result.Error).Contains("my required arg");
     }
 
@@ -70,7 +70,7 @@ public class MyToolTests
 
         var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
-        await Assert.That(result).HasSucceeded();
+        await Assert.That(result.IsError).IsFalse();
         await Assert.That(result.Output).Contains("hello");
     }
 
@@ -82,7 +82,7 @@ public class MyToolTests
 
         var result = await tool.ExecuteAsync(args, TestToolContext.Create());
 
-        await Assert.That(result).HasFailed();
+        await Assert.That(result.IsError).IsTrue();
         await Assert.That(result.Output).Contains("not found");
     }
 }
@@ -271,7 +271,7 @@ public class AgentLoopTests
         var result = await loop.RunAsync(session,
             AgentDefinition.CodeDefault("test-model", "test"));
 
-        await Assert.That(result).IsSuccessful();
+        await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(received.Any(e => e is AgentStartEvent)).IsTrue();
         await Assert.That(received.Any(e => e is TurnStartEvent)).IsTrue();
         await Assert.That(received.Any(e => e is MessageStartEvent)).IsTrue();
@@ -444,7 +444,7 @@ public class MyPermissionTests
         var result = await svc.CheckAsync("code", "my_tool",
             Args(new { path = "/src/foo.cs" }));
 
-        await Assert.That(result).IsSuccessful();
+        await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value.Action).IsEqualTo(PermissionAction.Allow);
     }
 
@@ -574,7 +574,7 @@ public class MyStoreTests
         {
             var result = await store.CreateAsync("/test/dir", "code", "anthropic", "claude-opus-4");
 
-            await Assert.That(result).IsSuccessful();
+            await Assert.That(result.IsSuccess).IsTrue();
             await Assert.That(result.Value.Id).IsNotNull();
             await Assert.That(result.Value.Directory).IsEqualTo("/test/dir");
         }
@@ -597,7 +597,7 @@ public class MyStoreTests
 
             var messages = await store.GetMessagesAsync(session.Id);
 
-            await Assert.That(messages).IsSuccessful();
+            await Assert.That(messages.IsSuccess).IsTrue();
             await Assert.That(messages.Value.Count).IsEqualTo(1);
             await Assert.That(((UserMessage)messages.Value[0]).Content).IsEqualTo("hello");
         }
@@ -836,21 +836,24 @@ probe whose window is the assertion.
 
 #### The three CTS shapes, and which one owns what
 
-The census on `origin/dev` counted **76 hand-rolled
-`new CancellationTokenSource(...)` sites in 51 files** (81 textual matches, 5
-of them string literals inside architecture scan controls). They are NOT one
-shape, and only one of the three is boilerplate:
+The scan of `tests/` on this tree counts **67 hand-rolled
+`new CancellationTokenSource(...)` sites in 43 files**. The count is the grep
+`new CancellationTokenSource(` over `tests/**/*.cs` (the helper's own file
+excluded), and the shapes below are classified from the same lines: a source
+built with a time span is a DEADLINE, a source whose variable is cancelled on
+a LATER line of the same file is the test's own instrument, and a source whose
+variable is handed to something other than `.Token` is a collaborator's.
 
 | Shape | Count | Where it lives |
 |---|---|---|
-| the source is a DEADLINE | 12 | TUnit's `[Timeout(ms)]` + the injected `CancellationToken` |
-| the test cancels the source LATER | 45 | the test's own instrument — write it out |
-| the source is handed to a collaborator that cancels it | 14 | the test's own instrument — write it out |
+| the source is a DEADLINE | 11 | TUnit's `[Timeout(ms)]` + the injected `CancellationToken` |
+| the test cancels the source LATER | 44 | the test's own instrument — write it out |
+| the source is handed to a collaborator that cancels it | 7 | the test's own instrument — write it out |
 | neither (long test, cancel further down) | 5 | the test's own instrument — write it out |
 
-Issue #1837 already moved the 44 sites that were pure deadlines to `[Timeout]`. The
-76 that are left are the test's own instrument: the source has to stay
-writable, because the test (or the code under test) cancels it.
+Issue #1837 already moved the sites that were pure deadlines to `[Timeout]`.
+What is left is the test's own instrument: the source has to stay writable,
+because the test (or the code under test) cancels it.
 
 The one shape worth a shared name is the **already-cancelled** token, which
 the tree wrote as two lines:
@@ -871,8 +874,9 @@ using var cts = TestCancellation.Cancelled();
 `TestCancellation.Cancelled()` lives in `tests/Harbor.TestKit.Support/`
 (namespace `Harbor.TestKit`), because it needs no product assembly and no
 TUnit package — it is the BCL's `CancellationTokenSource` and nothing else.
-Issue #1569 migrated the 13 such sites in `Harbor.Application.Tests`.
-
+Issue #1569 migrated the 13 such sites in `Harbor.Application.Tests` (the
+project held 30 sites before the migration and 17 after it, measured on this
+tree).
 
 ### Parallelism: what each `[NotInParallel]` form actually guarantees
 
@@ -969,25 +973,28 @@ to build), one `$HOME` and one Harbor home. Re-keying the classes apart would
 not make the suite faster; it would make two of them drive the same window.
 The lever is the process, not the attribute: the shards are defined in
 [`e2e-shards.json`](../tests/Harbor.E2E.App.Avalonia/e2e-shards.json) — a
-GENERATED plan, produced by [`tools/gen-e2e-shards.py`](../tools/gen-e2e-shards.py)
+GENERATED plan, produced by [`harbor-gates gen-e2e-shards`](../tools/gates/gen-e2e-shards)
 from the source tree and from a measured CI run — and CI runs them as one
 `dotnet exec` of the same assembly PER SHARD, each with its own
 `--treenode-filter`, through
-[`tools/run-e2e-avalonia-shards.py`](../tools/run-e2e-avalonia-shards.py).
+[`harbor-gates run-e2e-avalonia-shards`](../tools/gates/run-e2e-avalonia-shards).
 
 Two things make that safe, and both are gates rather than comments:
 
 * **A class in no shard is a class CI stops running.** The plan is graded by
   `E2eAvaloniaShardCoverageRules` in
   [`tests/Harbor.Architecture.Tests`](../tests/Harbor.Architecture.Tests/),
-  which re-derives the class universe from the tree — including the classes of
-  the REFERENCED `Harbor.E2E.Framework` project, which TUnit also runs inside
-  every project that references it, and which a filter that forgot them would
-  drop silently — and fails when one is missing. That check is an architecture
-  rule rather than a test inside the E2E assembly on purpose: a new class
-  there is an UNKEYED test, and its presence reshuffles an order-fragile
-  suite. The first version of the shard table shipped such a guard and it cost
-  two real failures before it was removed (PR #1818).
+  which re-derives the class universe from the tree and fails when one is
+  missing. The universe is the classes of `Harbor.E2E.App.Avalonia` ALONE: a
+  REFERENCED test project cannot contribute one, because
+  `TestProjectReferenceRules` forbids a referenced test project to declare
+  test methods at all. The framework's own tests live in
+  `Harbor.E2E.Framework.Tests`, a project nothing references, and they run
+  exactly once. That check is an architecture rule rather than a test inside
+  the E2E assembly on purpose: a new class there is an UNKEYED test, and its
+  presence reshuffles an order-fragile suite. The first version of the shard
+  table shipped such a guard and it cost two real failures before it was
+  removed (PR #1818).
 * **The runner proves what ran.** It enumerates the assembly's tests with
   `--list-tests json`, compares that map against each shard's TRX, and fails
   naming the class and the shard if a filter dropped anything.
@@ -1044,7 +1051,7 @@ dotnet run --project tests/Harbor.Core.Tests -c Release -- --minimum-expected-te
 ### Assertions
 
 ```csharp
-// A RESULT — assert the result, not its boolean flag
+// Results — assert the RESULT, not its boolean (see below)
 await Assert.That(result).IsSuccessful();
 await Assert.That(result).IsFailed();
 await Assert.That(toolResult).HasSucceeded();
@@ -1071,41 +1078,64 @@ await Assert.That(async () => await fragile.Method())
     .Throws<InvalidOperationException>(ex => ex.Message.Contains("expected text"));
 ```
 
-#### The ONE spelling for a result: `Assert.That(result)`, never `Assert.That(result.IsSuccess)`
+### Asserting a result: the Result, not the boolean
 
-Do **not** write the boolean form:
+**What.** `await Assert.That(result.IsSuccess).IsTrue();` — the assertion is made
+on a `bool` the result exposes, instead of on the result.
 
-```csharp
-// WRONG — the old spelling, and the tree's biggest test-side debt
-await Assert.That(result).IsSuccessful();
+**Why.** The boolean form reports the failure at the `bool`:
+
+```
+Expected to be true but found False
 ```
 
-It asserts a `bool`, so the failure says "found False" and leaves the reader
-with two questions the assertion cannot answer: **which** result failed, and
-**why**. The chain form asserts the result, and the kit's helper puts the
-error text into the failure message:
+which answers neither *which* result failed nor *why*. The chain form reports
+the result, and the helper puts the reason in the message:
 
-```csharp
-// RIGHT
-await Assert.That(result).IsSuccessful();
+```
+Expected to be successful but it failed with: Session 's1' not found.
 ```
 
-The helpers live in `tests/Harbor.TestKit.Support/ResultAssertions.cs` (the
-support part, so every test project can reach them without pulling the core
-kit into its closure; the namespace is still `Harbor.TestKit`). The families
-and the method each one gets:
+**Right way.** The helper is `ResultAssertions`, in the `Harbor.TestKit`
+namespace, in `tests/Harbor.TestKit.Support/ResultAssertions.cs`. One
+`using Harbor.TestKit;` and the chain links are there:
 
-| The value you hold | What it carries | Assert it with |
-|---|---|---|
-| `Result<T>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
-| `Result` (no `T`) | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
-| `Result<TValue, TError>` | `IsSuccess` / `IsFailure` | `IsSuccessful()` / `IsFailed()` |
-| `ToolResult` | `IsError` | `HasSucceeded()` / `HasFailed()` |
-| `ToolResultEntry` | `IsError` | `HasSucceeded()` / `HasFailed()` |
-| `ToolCallLink` | `IsError` | `HasSucceeded()` / `HasFailed()` |
-| `ToolExecutionEndEvent` | `IsError` | `HasSucceeded()` / `HasFailed()` |
+```csharp
+// ❌ WRONG — the failure says "found False" and names nothing
+await Assert.That(result.IsSuccess).IsTrue();
+await Assert.That(result.IsFailure).IsTrue();
+await Assert.That(toolResult.IsError).IsFalse();
 
-The mapping is mechanical, and it is what the migration in #1569 did:
+// ✅ RIGHT — the failure names the result and its error
+await Assert.That(result).IsSuccessful();
+await Assert.That(result).IsFailed();
+await Assert.That(toolResult).HasSucceeded();
+```
+
+| the type | the assertion |
+|---|---|
+| `Result<T>` | `IsSuccessful()` / `IsFailed()` |
+| `Result` (the non-generic one) | `IsSuccessful()` / `IsFailed()` |
+| `ToolResult` | `HasSucceeded()` / `HasFailed()` |
+| `ToolResultEntry` | `HasSucceeded()` / `HasFailed()` |
+| `ToolCallLink` | `HasSucceeded()` / `HasFailed()` |
+
+`Result` and `Result<T>` are two unrelated types — `Result<T>` does not derive
+from `Result` — so each has its own pair, and the compiler picks by the
+receiver's type.
+
+**The two families that live next door.** Two more shapes carry the same flag,
+and they get the same chain links. They are in the sibling file
+`tests/Harbor.TestKit.Support/ResultAssertions.More.cs`, which is part of the
+same `partial` class — one `using Harbor.TestKit;` reaches all seven:
+
+| the type | the assertion |
+|---|---|
+| `Result<TValue, TError>` (the value-shaped retry verdict) | `IsSuccessful()` / `IsFailed()` |
+| `ToolExecutionEndEvent` (the bus event that carries a tool's error flag) | `HasSucceeded()` / `HasFailed()` |
+
+**The migration is mechanical.** The old spelling maps onto the new one by the
+flag it reads:
 
 | Old | New |
 |---|---|
@@ -1117,46 +1147,24 @@ The mapping is mechanical, and it is what the migration in #1569 did:
 | `Assert.That(x.IsError).IsFalse()` | `Assert.That(x).HasSucceeded()` |
 | `Assert.That(x.IsError).IsTrue()` | `Assert.That(x).HasFailed()` |
 
-Two things to know before you write one:
+`LlmToolResultMessage` and `LlmToolResultBlock` are deliberately NOT in the
+table: they are the wire the model sees, not a result the tree owns, and
+their sites assert a different thing. Keep the plain boolean form there.
 
-- **`.Because(...)` still works** and is still the place for the reason: the
-  generated assertion derives from TUnit's `Assertion<T>`, so
-  `await Assert.That(result).IsFailed().Because("…")` compiles. Do NOT put
-  `result.Error` inside the `Because` argument: `Because` takes its argument
-  EAGERLY, and `Error` throws on a successful result, so a passing test would
-  fail with an exception. The helper already puts the error text into the
-  message; `Because` is for the reason the assertion matters.
-- **`LlmToolResultMessage` and `LlmToolResultBlock` have no helper on
-  purpose.** They are the wire the model sees, not a result the tree owns, and
-  their sites assert a different thing. Keep the plain boolean form there.
+Issue #1569 is migrating the tree one project per PR. The
+`Harbor.Application.Tests` block — 284 sites in 63 files — is the one this
+change carries; the rest is still open.
 
-**The census on `origin/dev` (measured by scanning `tests/` for
-`Assert.That(<recv>.IsSuccess|IsFailure|Error)` followed by `.IsTrue()`,
-`.IsFalse()` or `.IsEqualTo(true|false)`):**
+**The trap inside the trap.** Do NOT put the error text in
+`.Because(result.Error)`: `Because` takes its argument eagerly, and
+`Result.Error` throws on a SUCCESSFUL result
+(`ErrorIsInaccessibleForSuccess` in CSharpFunctionalExtensions 3.7.0), so that
+turns every passing test into an exception. The error text is already in the
+failure message, because the helper reads `.Error` only on the failure path.
 
-| Shape | Sites |
-|---|---|
-| `Assert.That(x.IsSuccess).IsTrue()` | 1 106 |
-| `Assert.That(x.IsFailure).IsTrue()` | 498 |
-| `Assert.That(x.IsError).IsFalse()` | 134 |
-| `Assert.That(x.IsError).IsTrue()` | 125 |
-| `Assert.That(x.IsSuccess).IsFalse()` | 35 |
-| `Assert.That(x.IsSuccess).IsEqualTo(true)` | 11 |
-| `Assert.That(x.IsFailure).IsFalse()` | 1 |
-| `Assert.That(x.IsError).IsEqualTo(...)` | 1 |
-| **total** | **1 911** |
-
-1 604 of them are the `IsSuccess`/`IsFailure` pair; the issue tracked the
-narrower slice where the receiver is literally named `result` (699 today).
-The biggest blocks: `Harbor.Tools.Builtin.Tests` 314,
-`Harbor.Application.Tests` 286, `Harbor.Storage.Jsonl.Tests` 253,
-`Harbor.Storage.Tests` 184, `Harbor.ChangeTracking.Tests` 169,
-`Harbor.Plugins.Runtime.Tests` 135, `Harbor.Config.Tests` 82,
-`Harbor.Core.Tests` 72, `Harbor.Abstractions.Tests` 70.
-
-Issue #1569 migrated the `Harbor.Application.Tests` block — 286 sites in 63 files.
-The rest is still open, one project per PR.
-
+The full rule, with the measurement behind it, is
+[PATTERNS.md §9](./PATTERNS.md#9-result-assertions--assert-the-result-not-its-boolean);
+the forbidden form is [ANTIPATTERNS.md §40](./ANTIPATTERNS.md#40-asserting-a-result-through-its-boolean-property).
 
 ### The TUnit analyzer gate: an assertion may not be made on a constant
 
@@ -1326,9 +1334,6 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 
 | Helper | What it provides |
 |---|---|
-| `ResultAssertions.IsSuccessful()` / `.IsFailed()` | The chain links for a `Result`, a `Result<T>` and a `Result<TValue, TError>` — assert the result, not its boolean flag. |
-| `ResultAssertions.HasSucceeded()` / `.HasFailed()` | The chain links for a `ToolResult`, a `ToolResultEntry`, a `ToolCallLink` and a `ToolExecutionEndEvent`. |
-| `TestCancellation.Cancelled()` | A `CancellationTokenSource` whose token is ALREADY cancelled — the "the caller was cancelled before we got here" probe. |
 | `FakeAgentRegistry(params AgentDefinition[])` | `IAgentRegistry` with exactly the given agents. |
 | `FakeToolRegistry(params ITool[])` | `IToolRegistry` over the given tools; `Freeze()` is a no-op. |
 | `CountingTool` | `ITool` that counts executions and records raw args — use as a canary for timeout/permission tests. |
@@ -1336,14 +1341,7 @@ All in the `Harbor.TestKit` namespace. Add a `<ProjectReference>` to
 | `ThrowingLlmClient` | `ILlmClient` whose `StreamAsync` always throws. |
 | `TestMessages.*` | Message builders: `User(content, …)`, `Assistant(text, …)`, `AssistantParts(parts, …)`, `ToolResult(entries, …)`. The payload comes first, the rest is named. |
 | `TestSessionContext(Session, seedMessages?)` | `ISessionContext` with `SteeringQueue` + `EnqueueSteering`. |
-
-`ResultAssertions` and `TestCancellation` live in
-`tests/Harbor.TestKit.Support/`, not in the core kit: they need no product
-assembly beyond the two contract assemblies, so every test project can reach
-them without pulling the core kit (the fakes, the two cost gates) into its
-closure. The namespace is `Harbor.TestKit` either way, so a consumer's
-`using` line does not change.
-
+| `ResultAssertions` | The result-assertion chain: `IsSuccessful()` / `IsFailed()` for `Result` and `Result<T>`, `HasSucceeded()` / `HasFailed()` for `ToolResult`, `ToolResultEntry` and `ToolCallLink`. Lives in the SUPPORT part (`tests/Harbor.TestKit.Support/`) — same namespace, so the `using` above finds it. See [Asserting a result](#asserting-a-result-the-result-not-the-boolean). |
 
 ### Example: using TestKit in an agent-loop test
 

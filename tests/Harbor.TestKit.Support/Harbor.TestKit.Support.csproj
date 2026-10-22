@@ -45,23 +45,26 @@
     -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <!--
-      #1569: the shared RESULT ASSERTIONS live here, and they need two
-      packages that are already in the closure of every test project that
-      consumes this part.
+      #1569: the shared RESULT ASSERTIONS moved here from `Harbor.TestKit`.
 
-      Neither is a product assembly, so the closure rule the architecture
-      guard pins (the support part reaches the two contract assemblies and
-      nothing else) is untouched: that rule walks <ProjectReference> edges,
-      and these are <PackageReference> edges.
+      Two packages, neither of them a product assembly — so the closure rule
+      the architecture guard pins (the support part reaches the two contract
+      assemblies and nothing else) is untouched: that rule walks
+      <ProjectReference> edges, and these are <PackageReference> edges.
 
         * TUnit.Assertions — the `[GenerateAssertion]` attribute, the
-          `AssertionResult` the helpers return, and the source generator that
-          turns each helper into an `Assert.That(...)` chain link. The package
-          has no dependencies of its own.
-        * CSharpFunctionalExtensions — `Result`, `Result<T>` and
-          `Result<TValue, TError>`, the types the helpers assert.
-          `Harbor.Abstractions` and `Harbor.Abstractions.Contracts` already
-          carry it in their own closure, so declaring it widens nothing.
+          `AssertionResult` the helpers return, and the SOURCE GENERATOR that
+          turns each helper into an `Assert.That(...)` chain link. The
+          declaration is load-bearing and cannot be leaned on: every project
+          under tests/ already gets the `TUnit` meta-package, and `TUnit`
+          depends on `TUnit.Assertions` with `exclude="Build,Analyzers"` —
+          so the LIBRARY flows in transitively but the GENERATOR DOES NOT. A
+          project that wants the generator has to name the package itself,
+          which is why `Harbor.TestKit` names it too.
+        * CSharpFunctionalExtensions — `Result` and `Result<T>`, the types the
+          helpers assert. The library is already in the closure (both
+          contract assemblies declare it); naming it here states the
+          dependency instead of leaning on the chain.
 
       Why the assertions belong to the SUPPORT part and not to the core kit:
       they need no product assembly beyond the contracts, and the core kit is
