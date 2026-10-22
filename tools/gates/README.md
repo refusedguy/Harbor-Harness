@@ -44,6 +44,40 @@ Each gate keeps the flags its python original had, with the same names and
 the same floors, and prints the same human-readable text, because the
 workflows read those lines and the self-tests compare them.
 
+## The tree gates, in one command
+
+```bash
+harbor-gates all            # every gate that needs nothing but the tree
+harbor-gates all --list     # the list of them, and what each one reads
+harbor-gates all --pending  # the ones that are still python, as commands
+harbor-gates all --self-test
+```
+
+The gates of this repository come in three kinds, and the kind decides where
+a gate can run: a gate that reads what the BUILD produced (a TRX, a publish
+log, a `.nupkg`), a gate that runs `dotnet` itself, and a gate that reads the
+TREE. The third kind is what `all` runs, and it runs them in parallel and
+prints one table:
+
+```
+gate                          code  time       first line of the output
+----------------------------  ----  ---------  --------------------------------
+check-abstractions-contract   0     1.890 s    (no output)
+check-analyzer-scope          0     634 ms     OK: 159 project file(s) scanned, ...
+```
+
+The exit code is the contract above: 0 green, 1 red, 2 could not run. A
+gate that could not run is not a gate that found nothing, and a run where
+one gate could not start is broken even if the others are green.
+
+The list of the tree gates is in [`all/gates.go`](./all/gates.go), and it is
+checked against the workflows: a gate that a workflow runs with a TRX or
+with `dotnet` on the command line is not a tree gate and cannot be in the
+list, and a gate no workflow runs cannot be in it either. The gates that are
+still python are listed as "not run" with the reason, and
+`tools/check-local.sh` runs them, so the local command and the CI command
+cover the same gates.
+
 ## The layout
 
 ```
