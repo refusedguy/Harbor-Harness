@@ -134,7 +134,7 @@ public sealed class PanelKeyRouteEquivalenceTests
         await Assert.That(withCandidate.Orphans).IsEquivalentTo(withOracle.Orphans).Because(
             "the orphans are the rule's verdict: the routers no product code can reach, with the "
             + "same chains. A map that moved an orphan out of the set would be a rule that "
-            "stopped seeing a defect.");
+            + "stopped seeing a defect.");
     }
 
     /// <summary>
