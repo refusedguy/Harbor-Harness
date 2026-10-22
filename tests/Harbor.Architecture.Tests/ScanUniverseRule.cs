@@ -397,6 +397,24 @@ public sealed class ScanUniverseRule
     ///         inventory: the architecture tests do not reference it, so no
     ///         reflection rule built on this helper can see it.
     ///     </para>
+    /// <para>
+    ///         The same issue, later, moves <c>tests=40</c> to <c>tests=39</c>,
+    ///         and the tree that leaves the list is
+    ///         <c>Harbor.E2E.Framework.Tests</c> — the project #1943 created for
+    ///         the E2E framework's own tests. It was blind because it declared
+    ///         two <c>src/</c> references (Harbor.Abstractions.Contracts and
+    ///         Harbor.Ui.Framework.State) for the assertions of the tests it
+    ///         then held, and those tests were about a helper that no scenario
+    ///         ever called. With that helper gone, the tests are about the
+    ///         framework's own live helpers, and neither of those two
+    ///         assemblies is named any more: the project declares ONE
+    ///         reference, to <c>Harbor.E2E.Framework</c>, which is a test
+    ///         project and not a product one. So it stopped reaching into
+    ///         <c>src/</c>, it stopped being blind, and the count of blind test
+    ///         trees is one lower. A tree DISAPPEARING here is either a
+    ///         deletion or a project that became loadable; this one became
+    ///         loadable.
+    ///     </para>
     ///     <para>
     ///         The vendored SharpConsoleUI renderer moving out of <c>src/</c> moved
     ///         <c>contrib=14</c> to <c>contrib=15</c>: the renderer is now a <c>contrib/</c>
@@ -442,7 +460,7 @@ public sealed class ScanUniverseRule
     ///     </para>
     /// </remarks>
     private static readonly string[] MeasuredBlindTrees =
-        ["apps=2", "contrib=15", "samples=5", "tests=40", "tools=1"];
+        ["apps=2", "contrib=15", "samples=5", "tests=39", "tools=1"];
 
     /// <summary>What the two walks found, once.</summary>
     private sealed record UniverseReport(

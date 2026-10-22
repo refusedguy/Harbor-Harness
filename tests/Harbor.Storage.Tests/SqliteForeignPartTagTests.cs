@@ -47,7 +47,7 @@ public class SqliteForeignPartTagTests
     {
         var decoded = SqliteMappers.TryDeserializeMessage("assistant", AssistantPayload(ForeignJson));
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains(ForeignTag);
     }
 
@@ -60,7 +60,7 @@ public class SqliteForeignPartTagTests
         string parts = TextPartJson("before") + "," + ForeignJson + "," + TextPartJson("after");
         var decoded = SqliteMappers.TryDeserializeMessage("assistant", AssistantPayload(parts));
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains(ForeignTag);
     }
 
@@ -70,7 +70,7 @@ public class SqliteForeignPartTagTests
         var decoded = SqliteMappers.TryDeserializeMessage(
             "assistant", AssistantPayload("""{"text":"no discriminator at all"}"""));
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains("type");
     }
 
@@ -83,7 +83,7 @@ public class SqliteForeignPartTagTests
         var decoded = SqliteMappers.TryDeserializeMessage(
             "assistant", AssistantPayload("""{"type":"file","path":"a.png"}"""));
 
-        await Assert.That(decoded.IsFailure).IsTrue();
+        await Assert.That(decoded).IsFailed();
         await Assert.That(decoded.Error).Contains("file");
     }
 
@@ -102,7 +102,7 @@ public class SqliteForeignPartTagTests
             """.ReplaceLineEndings(string.Empty);
 
         var decoded = SqliteMappers.TryDeserializeMessage("assistant", legacy);
-        await Assert.That(decoded.IsSuccess).IsTrue();
+        await Assert.That(decoded).IsSuccessful();
         var assistant = (AssistantMessage)decoded.Value;
         await Assert.That(assistant.Parts.Count).IsEqualTo(1);
         await Assert.That(((TextPart)assistant.Parts[0]).Text).IsEqualTo("pascal case survives");
@@ -130,7 +130,7 @@ public class SqliteForeignPartTagTests
             var read = await store.GetMessagesAsync(session.Id);
 
             // Both good messages survive — a refused row is not a lost session.
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "u1", "a1" });
 
             // And the refusal is not silent.
@@ -198,7 +198,7 @@ public class SqliteForeignPartTagTests
             var decoded = SqliteMappers.TryDeserializeMessage(
                 "assistant", AssistantPayload("{\"type\":\"" + tag + "\",\"payload\":\"x\"}"));
 
-            await Assert.That(decoded.IsFailure).IsTrue();
+            await Assert.That(decoded).IsFailed();
             await Assert.That(decoded.Error).Contains(tag);
         }
     }

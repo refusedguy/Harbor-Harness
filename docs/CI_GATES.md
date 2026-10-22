@@ -243,15 +243,16 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (26 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (25 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 19 tools are run by a workflow; the other seven are
+tree. 19 tools are run by a workflow; the other six are
 `gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
 `string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
 other tools rather than run, `measure-project-graph.py`, which a human runs to
 read the project graph, `codemod-test-events.py`, `codemod-tool-schemas.py`
 and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool that
 is not listed is a tool nobody
+reviews. is a tool nobody
 reviews. is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
@@ -274,7 +275,6 @@ The modes are:
 
 | Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|---|
-| `tools/aot-publish-gate.py` | python | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-arch-anchors.py` | python | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
 | `tools/check-doc-cites.py` | python | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/check-dup-jscpd.py` | python | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
@@ -325,6 +325,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 gen-e2e-shards` | compiled: `tools/gates/gen-e2e-shards` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
+| `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

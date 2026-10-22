@@ -1,6 +1,7 @@
 using Harbor.Abstractions.Models;
 using Harbor.Abstractions.Sessions;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -57,7 +58,7 @@ public class SqliteSessionQueryTests
     private static async Task<Session> SeedAsync(SqliteSessionStore store, string directory = "/proj")
     {
         var created = await store.CreateAsync(directory, "code", "anthropic", "claude-opus-4");
-        await Assert.That(created.IsSuccess).IsTrue();
+        await Assert.That(created).IsSuccessful();
         return created.Value;
     }
 
@@ -85,7 +86,7 @@ public class SqliteSessionQueryTests
                 RecordKinds = [SessionRecordKind.Message]
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(3);
             await Assert.That(result.Value.TotalMatches).IsEqualTo(3);
             await Assert.That(result.Value.Truncated).IsFalse();
@@ -121,7 +122,7 @@ public class SqliteSessionQueryTests
             var query = CreateQuery(dbPath);
             var result = await query.QueryAsync(new SessionQueryOptions { Text = "brown" });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Mode).IsEqualTo(SessionQueryMode.FullText);
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
         }
@@ -150,7 +151,7 @@ public class SqliteSessionQueryTests
             var query = CreateQuery(dbPath, allowFullText: false);
             var result = await query.QueryAsync(new SessionQueryOptions { Text = "uick br" });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Mode).IsEqualTo(SessionQueryMode.Literal);
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             // "uick br" starts at offset 5 of "the quick brown fox".
@@ -186,7 +187,7 @@ public class SqliteSessionQueryTests
                 Roles = ["assistant"]
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].Role).IsEqualTo("assistant");
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo("m-assistant");
@@ -221,7 +222,7 @@ public class SqliteSessionQueryTests
                 SessionIds = [first.Id]
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].SessionId).IsEqualTo(first.Id);
         }
@@ -254,7 +255,7 @@ public class SqliteSessionQueryTests
                 Window = new SessionQueryWindow(BaseInstant, BaseInstant.AddHours(1))
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo("m-first");
         }
@@ -287,7 +288,7 @@ public class SqliteSessionQueryTests
                 Limit = 2
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(2);
             await Assert.That(result.Value.TotalMatches).IsEqualTo(5);
             await Assert.That(result.Value.Truncated).IsTrue();
@@ -323,7 +324,7 @@ public class SqliteSessionQueryTests
                 Limit = 5
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo("m-second");
             await Assert.That(result.Value.TotalMatches).IsEqualTo(2);
@@ -357,7 +358,7 @@ public class SqliteSessionQueryTests
                 Text = "alpha",
                 Rank = SessionQueryRank.OldestFirst
             });
-            await Assert.That(oldest.IsSuccess).IsTrue();
+            await Assert.That(oldest).IsSuccessful();
             await Assert.That(oldest.Value.Hits[0].RecordId).IsEqualTo("m-early");
 
             var newest = await query.QueryAsync(new SessionQueryOptions
@@ -365,7 +366,7 @@ public class SqliteSessionQueryTests
                 Text = "alpha",
                 Rank = SessionQueryRank.NewestFirst
             });
-            await Assert.That(newest.IsSuccess).IsTrue();
+            await Assert.That(newest).IsSuccessful();
             await Assert.That(newest.Value.Hits[0].RecordId).IsEqualTo("m-late");
         }
         finally
@@ -397,7 +398,7 @@ public class SqliteSessionQueryTests
                 Rank = SessionQueryRank.Relevance
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(2);
             // The hit with more occurrences of the term is the better match.
             await Assert.That(result.Value.Hits[0].Score)
@@ -429,7 +430,7 @@ public class SqliteSessionQueryTests
                 SessionIds = []
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits).IsEmpty();
             await Assert.That(result.Value.TotalMatches).IsEqualTo(0);
         }
@@ -452,7 +453,7 @@ public class SqliteSessionQueryTests
             var query = CreateQuery(dbPath);
             var result = await query.QueryAsync(new SessionQueryOptions { Limit = 0 });
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("limit");
         }
         finally
@@ -481,7 +482,7 @@ public class SqliteSessionQueryTests
                 RecordKinds = [SessionRecordKind.Event]
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits).IsEmpty();
             await Assert.That(result.Value.SupportedKinds.Contains(SessionRecordKind.Event)).IsFalse();
             await Assert.That(result.Value.SupportedKinds.Contains(SessionRecordKind.Message)).IsTrue();
@@ -514,7 +515,7 @@ public class SqliteSessionQueryTests
                 RecordKinds = [SessionRecordKind.Session]
             });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].Kind).IsEqualTo(SessionRecordKind.Session);
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo(session.Id);
@@ -556,7 +557,7 @@ public class SqliteSessionQueryTests
             var query = CreateQuery(dbPath);
             var result = await query.QueryAsync(new SessionQueryOptions { Text = "alpha" });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo("m-good");
         }
@@ -578,7 +579,7 @@ public class SqliteSessionQueryTests
         var query = CreateQuery(dbPath);
         var result = await query.QueryAsync(new SessionQueryOptions { Text = "alpha" });
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(result.Value.Hits).IsEmpty();
         await Assert.That(result.Value.TotalMatches).IsEqualTo(0);
         await Assert.That(result.Value.Truncated).IsFalse();
@@ -599,12 +600,12 @@ public class SqliteSessionQueryTests
                 User(session.Id, "alpha", BaseInstant.AddMinutes(1), "m-second"));
 
             var deleted = await store.DeleteMessagesAfterAsync(session.Id, "m-first");
-            await Assert.That(deleted.IsSuccess).IsTrue();
+            await Assert.That(deleted).IsSuccessful();
 
             var query = CreateQuery(dbPath);
             var result = await query.QueryAsync(new SessionQueryOptions { Text = "alpha" });
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.Hits.Count).IsEqualTo(1);
             await Assert.That(result.Value.Hits[0].RecordId).IsEqualTo("m-first");
         }

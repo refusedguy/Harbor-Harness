@@ -16,11 +16,20 @@ public class BackgroundTaskRegistryWaitTests
         string output = "done") =>
         _ => Task.FromResult(Result.Success(new SubAgentRunResult("s", "explore", output, 0)));
 
+    /// <summary>
+    ///     A run that never finishes on its own and stops when its token
+    ///     fires. The completion IS the cancellation (#2093): the run's task
+    ///     is settled by the callback the token fires, so the wait and the
+    ///     drain do not depend on a thread-pool continuation being scheduled
+    ///     on a loaded runner.
+    /// </summary>
     private static Func<CancellationToken, Task<Result<SubAgentRunResult>>> HangingRun() =>
-        async ct =>
+        ct =>
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, ct).ConfigureAwait(false);
-            return Result.Success(new SubAgentRunResult("s", "explore", "unreachable", 0));
+            var completion = new TaskCompletionSource<Result<SubAgentRunResult>>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            ct.Register(() => completion.TrySetCanceled(ct));
+            return completion.Task;
         };
 
     [Test]
