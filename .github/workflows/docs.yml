@@ -620,6 +620,13 @@ jobs:
       # from a rule that found nothing.
       - name: Event-topology gate fails on a drifted producer row
         run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
+      # The workflow gate: a file with a duplicate key in a mapping is a file
+      # GitHub refuses to parse, and the refusal is silent — the run is
+      # created with ZERO jobs. The gate's own proof that it can fail, run
+      # here because the gate itself lives in the `workflows` job below, and
+      # a job that cannot start cannot prove anything.
+      - name: Workflow gate fails on a duplicate key and stays quiet on a legal repeat
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --self-test
 
   # #2119. The event topology of the harness is a normative document: it
   # says which code publishes on the bus and which code subscribes, and every
@@ -1461,6 +1468,38 @@ jobs:
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
         run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+
+  # The workflow gate. A workflow file with a DUPLICATE KEY in a mapping is a
+  # file GitHub refuses to parse, and the refusal is silent from the
+  # repository's point of view: the run is created, it has ZERO jobs, and it
+  # closes as "failure" with the text "This run likely failed because of a
+  # workflow file issue". The lane is not red — it is ABSENT — and every pull
+  # request that waits for it waits forever.
+  #
+  # It happened here. On 2026-10-21 the `ci` workflow stopped running at all:
+  # runs 39627731779 and 39627783779 had zero jobs, and the run before them
+  # (39613662649) had sixteen. The commit that broke it (e7479b9a, #2115)
+  # gave three shard-reporting steps an arm64 twin and wrote the twin as a
+  # second `if:`/`shell:`/`run:` inside the first step's mapping.
+  #
+  # THIS job lives in the documentation lane on purpose: a gate that polices
+  # `ci.yml` cannot live in `ci.yml`, because a broken `ci.yml` takes its own
+  # gate with it. The documentation lane starts on every pull request, with or
+  # without a .NET build.
+  #
+  # The floor is the number of workflow files the tree holds (17), so a scan
+  # that stopped matching the tree drives the number down and this job goes
+  # red instead of reporting a clean tree.
+  workflows:
+    name: workflow files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that no workflow file declares a key twice
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
