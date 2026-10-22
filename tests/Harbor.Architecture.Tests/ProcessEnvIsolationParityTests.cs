@@ -7,7 +7,7 @@
 // `ProcessEnvIsolationRule` walks EVERY line of EVERY test project, and three
 // of its questions are asked per line:
 //
-//   * is this line a type declaration?       (`IsTypeDeclaration`)
+//   * is this line a type declaration?       (`TypeDeclarationMatch`)
 //   * does this line call the env write?     (`IsEnvWrite`)
 //   * does this line name an ambient read?   (`IsAmbientRead`)
 //
@@ -82,7 +82,7 @@ public sealed class ProcessEnvIsolationParityTests
             .Because(
                 "the tree does contain env writes, and a comparison that found none would be a "
                 + "comparison that proved nothing.");
-        await Assert.That(mismatches).IsEmpty()
+        await Assert.That(mismatches.ToArray()).IsEmpty()
             .Because(
                 "the pre-check may only skip a line the strip would have rejected anyway: "
                 + string.Join(" | ", mismatches));
@@ -101,7 +101,7 @@ public sealed class ProcessEnvIsolationParityTests
                 + "and pass for the wrong reason.");
 
         (int lines, int positives, List<string> mismatches) = CompareOverTheTree(
-            ProcessEnvIsolationRule.IsTypeDeclaration,
+            (line) => ProcessEnvIsolationRule.TypeDeclarationMatch(line) is { Success: true },
             (line) => ProcessEnvIsolationRule.TypeDeclaration.IsMatch(line));
 
         Console.WriteLine(
@@ -116,7 +116,7 @@ public sealed class ProcessEnvIsolationParityTests
             .Because(
                 "the tree holds more than a hundred type declarations, and a comparison that found "
                 + "none would be a comparison that proved nothing.");
-        await Assert.That(mismatches).IsEmpty()
+        await Assert.That(mismatches.ToArray()).IsEmpty()
             .Because(
                 "the pre-check may only skip a line the pattern would have rejected anyway: "
                 + string.Join(" | ", mismatches));
@@ -146,7 +146,7 @@ public sealed class ProcessEnvIsolationParityTests
             .Because(
                 "the rule walks every line of every test project, and that is more than fifty thousand "
                 + "lines; a smaller number means the walk broke and the comparison proved nothing.");
-        await Assert.That(mismatches).IsEmpty()
+        await Assert.That(mismatches.ToArray()).IsEmpty()
             .Because(
                 "the pre-check may only skip a line the pattern would have rejected anyway: "
                 + string.Join(" | ", mismatches));
@@ -198,7 +198,7 @@ public sealed class ProcessEnvIsolationParityTests
                 declarationBefore += GC.GetAllocatedBytesForCurrentThread() - mark;
 
                 mark = GC.GetAllocatedBytesForCurrentThread();
-                _ = ProcessEnvIsolationRule.IsTypeDeclaration(line);
+                _ = ProcessEnvIsolationRule.TypeDeclarationMatch(line) is { Success: true };
                 declarationAfter += GC.GetAllocatedBytesForCurrentThread() - mark;
 
                 mark = GC.GetAllocatedBytesForCurrentThread();

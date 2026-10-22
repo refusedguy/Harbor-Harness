@@ -73,6 +73,18 @@ public sealed class AllocationFixMeasurement
         }
 
         Report("comment-stripper-buffer", before, after, files, chars);
+
+        // The measurement must have measured something on BOTH sides: a zero
+        // on one side is indistinguishable from a missing measurement, and a
+        // ratio against it is a number about nothing.
+        await Assert.That(before.Bytes).IsGreaterThan(0L)
+            .Because(
+                "the unpooled stripper must have allocated something: a zero there means the "
+                + "measurement measured nothing and the ratio is a number about nothing.");
+        await Assert.That(after.Bytes).IsGreaterThan(0L)
+            .Because(
+                "the pooled stripper must have allocated something: a zero there means the measurement "
+                + "measured nothing and the ratio is a number about nothing.");
     }
 
     /// <summary>
@@ -91,17 +103,6 @@ public sealed class AllocationFixMeasurement
             $"[arch-cost] fix={name} before-bytes={before.Bytes} after-bytes={after.Bytes} "
             + $"ratio={ratio:F2} files={files} chars={chars} "
             + $"before-ms={before.Milliseconds:F1} after-ms={after.Milliseconds:F1}");
-
-        // The measurement must have measured something on BOTH sides: a zero
-        // on one side is indistinguishable from a missing measurement, and a
-        // ratio against it is a number about nothing.
-        if (before.Bytes <= 0 || after.Bytes <= 0)
-        {
-            throw new InvalidOperationException(
-                $"[alloc-fix] the measurement of {name} produced before={before.Bytes} after={after.Bytes}. "
-                + "One of the two implementations allocated nothing, so the difference is not a "
-                + "measurement.");
-        }
     }
 
     /// <summary>One implementation's cost over the tree.</summary>
