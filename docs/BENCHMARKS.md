@@ -3969,13 +3969,19 @@ compile is not the pull-request lane's compile.
 ### 11.8 How to reproduce this section
 
 ```bash
-# one file per pull request: the runs of both workflows, as the API reports them.
-# `filter=all` returns the jobs of EVERY attempt, and the first attempt is the
-# one this section reads: the lowest `run_attempt` of the run.
-gh api "repos/:owner/:repo/actions/runs/$RUN/jobs?per_page=100&filter=all" \
-  | jq -s --argjson id $RUN --arg wf ci \
-      '([.[].jobs[]] | map(.run_attempt) | min) as $first
-       | {id:$id, workflow:$wf, jobs: [.[].jobs[] | select(.run_attempt == $first)]}'
+# One file per pull request: the runs of BOTH workflows, as the API reports
+# them. `filter=all` returns the jobs of EVERY attempt, and the first attempt
+# is the one this section reads: the lowest `run_attempt` of the run.
+stripe () {                             # $1 = run id, $2 = workflow name
+  local id="$1" wf="$2" created
+  created=$(gh api "repos/:owner/:repo/actions/runs/$1" --jq .created_at)
+  gh api "repos/:owner/:repo/actions/runs/$1/jobs?per_page=100&filter=all" \
+    | jq -s --argjson id "$1" --arg wf "$wf" --arg created "$created" \
+        '([.[].jobs[]] | map(.run_attempt) | min) as $first
+         | {id:$id, workflow:$wf, created_at:$created,
+            jobs: [.[].jobs[] | select(.run_attempt == $first)]}'
+}
+{ stripe "$CI_RUN" ci; stripe "$DOCS_RUN" docs; } | jq -s '.' > run-$PR.json
 
 # the instrument
 tools/bin/harbor-gates-linux-x64 pr-cost run-*.json
@@ -3990,6 +3996,13 @@ that were not re-run keep their first-attempt timestamps, and the re-run
 jobs carry later ones. Dropping `--filter=all` and the pick of the lowest
 `run_attempt` moves the wall of those four runs by 393 to 745 s, and the
 median wall of the twelve with them.
+
+**WHY THE RECIPE PUTS BOTH RUNS IN ONE FILE.** A pull request's bill is the
+STRIPE of its two workflows, and the instrument's per-pull-request table is
+a table of stripes: a file with the `ci.yml` run alone measures the lane,
+and a file with both measures the pull request. The `created_at` of the run
+is what the "wait before the first job" column reads, so the recipe fetches
+it from the run itself.
 
 ## 12. How to reproduce
 
