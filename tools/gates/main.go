@@ -53,6 +53,7 @@ import (
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
@@ -166,6 +167,11 @@ var registry = []registered{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-test-json-reflection",
+		summary: "no test serializes through the reflection resolver",
+		run:     jsonreflection.Run,
 	},
 	{
 		name:    "check-workflows",
