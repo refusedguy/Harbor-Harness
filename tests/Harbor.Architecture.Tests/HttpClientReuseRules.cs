@@ -411,6 +411,98 @@ public class HttpClientReuseRules
     private static readonly Lazy<IReadOnlyList<string>> LazyScopeFiles = new(BuildScopeFiles);
 
     /// <summary>
+    ///     The census of ONE product project, memoised.
+    /// </summary>
+    /// <remarks>
+    ///     The census used to be one memo over the WHOLE tree, so every test
+    ///     that wanted one fact about one file waited for the analyzer to walk
+    ///     all sixty-four projects. The budget rule and the stale-row rule
+    ///     want the census of the THREE projects the allowance table names,
+    ///     and the equivalence proof wants the census of ONE — so the memo is
+    ///     per project, and a test pays for the projects it asks about.
+    ///     <para>
+    ///         The projects' censuses are still computed once each: the whole
+    ///         census is the sixty-four of them, so a test that asks for three
+    ///         and a test that asks for all sixty-four pay for the same three
+    ///         at most once.
+    ///     </para>
+    /// </remarks>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, Lazy<Task<ProjectCensus>>>
+        LazyProjectCensuses = new();
+
+    /// <summary>
+    ///     The census of one product project, computed at most once.
+    /// </summary>
+    /// <param name="index">The project's index in the product compilation set.</param>
+    private static Task<ProjectCensus> ProjectCensusAsync(int index)
+    {
+        Lazy<Task<ProjectCensus>> lazy = LazyProjectCensuses.GetOrAdd(
+            index,
+            i => new Lazy<Task<ProjectCensus>>(
+                () => CensusFor(LazyCompilations.Value[i].Compilation),
+                LazyThreadSafetyMode.ExecutionAndPublication));
+
+        return lazy.Value;
+    }
+
+    /// <summary>
+    ///     The indexes of the product projects that compile the named files.
+    /// </summary>
+    /// <remarks>
+    ///     A file belongs to exactly one product project here — the shared
+    ///     source folders are linked into SEVERAL, and the table's rows name
+    ///     files that are not shared, which is why each row's budget is a
+    ///     count and not a share.
+    /// </remarks>
+    /// <param name="paths">The repo-relative paths to look for.</param>
+    private static IReadOnlyList<int> ProjectsOwning(IEnumerable<string> paths)
+    {
+        var wanted = new HashSet<string>(paths, StringComparer.Ordinal);
+        var found = new List<int>();
+
+        IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
+            LazyCompilations.Value;
+
+        for (int index = 0; index < compilations.Count; index++)
+        {
+            bool owns = false;
+            foreach (SyntaxTree tree in compilations[index].Compilation.SyntaxTrees)
+            {
+                if (tree.FilePath is { } path && wanted.Contains(SourceScan.Relative(path)))
+                {
+                    owns = true;
+                    break;
+                }
+            }
+
+            if (owns)
+            {
+                found.Add(index);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    ///     The census of the projects that compile the given files, and nothing
+    ///     else.
+    /// </summary>
+    /// <param name="paths">The repo-relative paths whose projects are needed.</param>
+    private static async Task<List<ClientCreationSite>> CreationsIn(IEnumerable<string> paths)
+    {
+        var creations = new List<ClientCreationSite>();
+
+        foreach (int index in ProjectsOwning(paths))
+        {
+            ProjectCensus project = await ProjectCensusAsync(index).ConfigureAwait(false);
+            creations.AddRange(project.Creations);
+        }
+
+        return creations;
+    }
+
+    /// <summary>
     ///     One product project's contribution to the census.
     /// </summary>
     /// <param name="Creations">Every client creation the analyzer found in this project.</param>
@@ -499,7 +591,7 @@ public class HttpClientReuseRules
 
         for (int index = 0; index < compilations.Count; index++)
         {
-            results[index] = await CensusFor(compilations[index].Compilation).ConfigureAwait(false);
+            results[index] = await ProjectCensusAsync(index).ConfigureAwait(false);
         }
 
         var creations = new List<ClientCreationSite>();
@@ -664,6 +756,11 @@ public class HttpClientReuseRules
     /// <summary>
     ///     Rule 1: a client is created only where the table says it may be.
     /// </summary>
+    /// <remarks>
+    ///     This is the one test of the family that needs the WHOLE tree: a
+    ///     creation in a file the table does not name is the defect, and only
+    ///     the whole tree can say that there is none.
+    /// </remarks>
     [Test]
     public async Task A_Client_Is_Created_Only_Where_The_Table_Names()
     {
@@ -679,6 +776,23 @@ public class HttpClientReuseRules
             + "for a provider, the shared McpHttpClientFactory for a remote MCP transport, or the "
             + "process-wide client the table names. Offenders:"
             + $"{Environment.NewLine}{string.Join(Environment.NewLine, violations.Select(static v => v.File + ":" + v.Line))}");
+
+        // The MERGE: the census is the projects' contributions, in project
+        // order. A merge that lost a project would make the rule above pass
+        // for the wrong reason — the missing creations are all in the files
+        // the table names, so nothing would be reported.
+        IReadOnlyList<ProjectCensus> projects = CensusProjects;
+
+        string merged = string.Join(" | ", census.Creations.Select(static c => c.File + ":" + c.Line));
+        string perProject = string.Join(
+            " | ",
+            projects.SelectMany(static p => p.Creations).Select(static c => c.File + ":" + c.Line));
+
+        await Assert.That(merged).IsEqualTo(perProject).Because(
+            "the census is the projects' contributions concatenated in PROJECT order, and a merge "
+            + "that lost a project or reordered the list would be a census that reports a different "
+            + "set of sites than the pass found — and the rule above would pass for the wrong "
+            + "reason, because the sites it lost are all in the files the table names.");
     }
 
     /// <summary>
@@ -732,10 +846,10 @@ public class HttpClientReuseRules
     ///         get wrong — and compares it with what the census recorded.
     ///     </para>
     ///     <para>
-    ///         The per-project records are also compared with the merged
-    ///         census, because a merge that lost a project or reordered the
-    ///         list would be a census that reports a different set of sites
-    ///         than the pass found.
+    ///         The comparison is over ONE project on purpose: the census of a
+    ///         project is a memo of its own, so this test costs one project's
+    ///         pass and not the whole tree's. The tree's own pass is what the
+    ///         rule's other tests wait for.
     ///     </para>
     /// </remarks>
     [Test]
@@ -743,59 +857,34 @@ public class HttpClientReuseRules
     {
         const string OwnedFile = "src/Harbor.Tools.Builtin/Tools/Mcp/McpOAuthHandler.cs";
 
-        ClientCreationCensus census = await LazyCensus.Value;
-        IReadOnlyList<ProjectCensus> projects = CensusProjects;
+        IReadOnlyList<int> owners = ProjectsOwning([OwnedFile]);
 
-        await Assert.That(projects.Count).IsGreaterThan(0).Because(
-            "the census recorded nothing per project, so there is no share to compare against, and "
-            + "the comparison below would be comparing two empty sets and proving nothing.");
-
-        int index = -1;
-        for (int i = 0; i < projects.Count; i++)
-        {
-            if (projects[i].ScopeFiles.Contains(OwnedFile, StringComparer.Ordinal))
-            {
-                index = i;
-                break;
-            }
-        }
-
-        await Assert.That(index).IsGreaterThanOrEqualTo(0).Because(
-            $"the project that owns {OwnedFile} is not in the census's per-project record, so the "
-            + "comparison below has nothing to compare.");
+        await Assert.That(owners.Count).IsEqualTo(1).Because(
+            $"the project that owns {OwnedFile} is not in the product compilation set, so the "
+            + "comparison below has nothing to compare. A file that no product project compiles is "
+            + "a file the analyzer cannot see at all.");
 
         // The ORACLE: the same computation, over the same compilation, on this
         // thread, with no memo to read from.
         IReadOnlyList<(RoslynProjectCompilation.Project Project, CSharpCompilation Compilation)> compilations =
             LazyCompilations.Value;
-        ProjectCensus fresh = await CensusFor(compilations[index].Compilation);
+        ProjectCensus fresh = await CensusFor(compilations[owners[0]].Compilation);
 
-        ProjectCensus recorded = projects[index];
+        // The MEMO: the same project, as the census recorded it.
+        ProjectCensus recorded = await ProjectCensusAsync(owners[0]);
 
         await Assert.That(string.Join(" | ", fresh.Creations.Select(static c => c.File + ":" + c.Line)))
             .IsEqualTo(string.Join(" | ", recorded.Creations.Select(static c => c.File + ":" + c.Line)))
             .Because(
-                "the concurrent pass and the sequential pass run the same analyzer over the same "
+                "the memoised census and a fresh computation run the same analyzer over the same "
                 + "compilation, so they must name the same creations in the same order. A difference "
-                + "means the fan-out changed a verdict, which is the one thing it must not do.");
+                + "means the memo changed a verdict, which is the one thing it must not do.");
 
         await Assert.That(string.Join(" | ", fresh.InDelegate.Select(static c => c.File + ":" + c.Line)))
             .IsEqualTo(string.Join(" | ", recorded.InDelegate.Select(static c => c.File + ":" + c.Line)))
             .Because(
-                "the per-call shape is a SECOND verdict of the same pass, and a fan-out that kept "
-                + "the first one while losing the second would be a pass that reports half of what "
-                + "it saw.");
-
-        // The MERGE: the census is the projects' contributions, in project order.
-        string merged = string.Join(" | ", census.Creations.Select(static c => c.File + ":" + c.Line));
-        string perProject = string.Join(
-            " | ",
-            projects.SelectMany(static p => p.Creations).Select(static c => c.File + ":" + c.Line));
-
-        await Assert.That(merged).IsEqualTo(perProject).Because(
-            "the census is the projects' contributions concatenated in PROJECT order, and a merge "
-            + "that lost a project or reordered the list would be a census that reports a different "
-            + "set of sites than the pass found.");
+                "the per-call shape is a SECOND verdict of the same pass, and a memo that kept the "
+                + "first one while losing the second would be a pass that reports half of what it saw.");
 
         await Assert.That(recorded.Creations.Count).IsGreaterThan(0).Because(
             "the project compared above is the one that owns the OAuth handler, and it creates a "
@@ -824,15 +913,23 @@ public class HttpClientReuseRules
     ///     Rule 3: the table is a budget — an allowed file may not grow a
     ///     second creation beside the one its row declares.
     /// </summary>
+    /// <remarks>
+    ///     The table names five files, and those files live in three product
+    ///     projects — so this test asks the census for THOSE THREE projects
+    ///     and not for the whole tree. The rule's verdict is the same either
+    ///     way, and the test no longer waits for a pass it does not need.
+    /// </remarks>
     [Test]
     public async Task The_Table_Is_A_Budget_And_Not_A_Permission()
     {
-        ClientCreationCensus census = await LazyCensus.Value;
+        List<ClientCreationSite> creations =
+            await CreationsIn(AllowedCreators.Select(static row => row.Path));
+
         var failures = new List<string>();
 
         foreach (var row in AllowedCreators)
         {
-            int actual = census.Creations.Count(c => string.Equals(c.File, row.Path, StringComparison.Ordinal));
+            int actual = creations.Count(c => string.Equals(c.File, row.Path, StringComparison.Ordinal));
             if (actual != row.Budget)
             {
                 failures.Add(
@@ -940,15 +1037,23 @@ public class HttpClientReuseRules
     ///     A row whose file stopped creating a client is stale: the table has
     ///     drifted from the tree, and it must be fixed rather than kept.
     /// </summary>
+    /// <remarks>
+    ///     The table names five files in three product projects, and that is
+    ///     what this test asks the census for — the rule's verdict is the same
+    ///     either way, and the test no longer waits for a pass it does not
+    ///     need.
+    /// </remarks>
     [Test]
     public async Task The_Table_Has_No_Stale_Rows()
     {
-        ClientCreationCensus census = await LazyCensus.Value;
+        List<ClientCreationSite> creations =
+            await CreationsIn(AllowedCreators.Select(static row => row.Path));
+
         var stale = new List<string>();
 
         foreach (var row in AllowedCreators)
         {
-            bool any = census.Creations.Any(c => string.Equals(c.File, row.Path, StringComparison.Ordinal));
+            bool any = creations.Any(c => string.Equals(c.File, row.Path, StringComparison.Ordinal));
             if (!any)
             {
                 stale.Add(row.Path);
