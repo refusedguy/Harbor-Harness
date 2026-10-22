@@ -15,7 +15,7 @@ into a table that describes a repository which no longer exists.
 
 ## The measured picture
 
-Measured on this branch (`dev` at `a019e928` plus this branch's commits),
+Measured on this branch (`dev` at `6e6b0da9` plus this branch's commits),
 the tree the table was last reconciled against:
 
 | | |
@@ -23,13 +23,13 @@ the tree the table was last reconciled against:
 | python tools in `tools/` | 23 files, 23 115 lines |
 | of them, the `check-*.py` family | 14 files, 17 130 lines |
 | workflows that run a python tool | 3: `ci.yml`, `demo.yml`, `docs.yml` |
-| gates that block a build | 29 |
+| gates that block a build | 30 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
-| tools with a self-test | 44 |
+| tools with a self-test | 45 |
 | tools with a ratchet | 21 |
-| tools with a floor | 26 |
+| tools with a floor | 27 |
 | tools whose self-test no workflow ran before this change | 3 (`pack-validate.py`, `normalize-mtimes.py`, and `test-skips`, which this change compiles) |
 | gates in a workflow that runs a script that is not in the tree | 0 |
 
@@ -322,6 +322,7 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
 | `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
+| `tools/bin/harbor-gates-linux-x64 go-quality` | compiled: `tools/gates/go-quality` | the Go sources of the gates themselves: every file under `tools/gates/` parses and is gofmt-clean, the module vets and builds, every package the table calls a gate carries a `selftest.go`, and the registry in `tools/gates/main.go` names exactly the packages that exist, once each. The formatting rule needs no toolchain (go/format is the code gofmt is built on); the vet and the build do, and the gate exits 2 rather than green when they cannot run | docs.yml, gates-binary.yml | go-quality, selftest | gate | `--self-test` | — | `--min-files 73 --min-packages 27` |
 Two things the table says that are easy to miss:
 
 - The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a

@@ -129,6 +129,7 @@ it. `harbor-gates --list` prints the same table.
 | `coverage-report` | the per-project and per-file coverage report of a run |
 | `gen-e2e-shards` | the process plan of the headless Avalonia E2E suite |
 | `gen-seam-graph` | the committed seam graph still matches the tree |
+| `go-quality` | the Go sources of the gates: formatted, vet-clean, and registered |
 | `measure-build-cpu` | what a build command costs: the wall time and the CPU utilisation |
 | `measure-project-graph` | the shape of the project dependency graph |
 | `msbuild-evaluation-cost` | what a Release compile spends on MSBuild project evaluation |
