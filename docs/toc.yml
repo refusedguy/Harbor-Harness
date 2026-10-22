@@ -28,6 +28,8 @@
   href: BENCHMARKS_RENDERERS.md
 - name: Build
   href: BUILD.md
+- name: Buildsystem Study
+  href: BUILDSYSTEM_STUDY.md
 - name: Central Package Management
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
@@ -80,6 +82,8 @@
   href: GETTING_STARTED.md
 - name: Generic Layout
   href: GENERIC_LAYOUT.md
+- name: Guard Vacuity
+  href: GUARD_VACUITY.md
 - name: Guard Value Measurement
   href: GUARD_VALUE_MEASUREMENT.md
 - name: I18N String Inventory
@@ -146,6 +150,8 @@
   href: TestKit-Expansion-Report.md
 - name: Verified Change
   href: VERIFIED_CHANGE.md
+- name: Workflow Generation
+  href: WORKFLOW_GENERATION.md
 - name: Xml Doc Audit
   href: XML_DOC_AUDIT.md
 - name: Hotfix Sprint Prompt

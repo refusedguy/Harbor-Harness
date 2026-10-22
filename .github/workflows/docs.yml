@@ -97,7 +97,7 @@ on:
       # sample plugins and the product's own JSON writer, and compares the
       # result with the committed snapshot. A PR that edits any of them has to
       # run it, or the snapshot drifts from the tree it describes.
-      - 'tools/gen-plugin-inventory.py'
+      - 'tools/gates/gen-plugin-inventory/**'
       - 'docs/PLUGIN_INVENTORY.json'
       # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
@@ -112,11 +112,11 @@ on:
       - 'tools/check-dup-jscpd.py'
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
-      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
-      # compares the result against its committed exceptions file, so a PR
-      # that edits the gate or the exceptions must run it — and so must a PR
-      # that edits the tree it measures.
-      - 'tools/check-test-json-reflection.py'
+      # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
+      # the result against its committed exceptions file, so a PR that edits
+      # the gate or the exceptions must run it — and so must a PR that edits
+      # the tree it measures.
+      - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. `check-test-projects.py` reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
@@ -168,6 +168,13 @@ on:
       # squash-merge dropped content. The gate has to run on every such pull
       # request, and on the push that lands it — so the trigger is the
       # workflow files themselves, not the gate's own sources alone.
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A PR
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       - '.github/workflows/**'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. The `gen-seam-graph` gate generates docs/SEAM_GRAPH.md from the C#
@@ -251,11 +258,11 @@ on:
       - 'tools/check-dup-jscpd.py'
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
-      # #1822. `check-test-json-reflection.py` scans `tests/**/*.cs` and
-      # compares the result against its committed exceptions file, so a PR
-      # that edits the gate or the exceptions must run it — and so must a PR
-      # that edits the tree it measures.
-      - 'tools/check-test-json-reflection.py'
+      # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
+      # the result against its committed exceptions file, so a PR that edits
+      # the gate or the exceptions must run it — and so must a PR that edits
+      # the tree it measures.
+      - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
@@ -290,6 +297,13 @@ on:
       # gate has to run on it.
       - '.github/workflows/**'
       - 'tools/merge-loss-exceptions.txt'
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A pull request
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
       - 'tools/gates/**'
@@ -473,7 +487,7 @@ jobs:
       # that found nothing, and the load-bearing fixture is the planted
       # reflection call — the gate MUST fail on it.
       - name: Reflection-JSON gate fails on a planted reflection call
-        run: python3 tools/check-test-json-reflection.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-json-reflection --self-test
       # #1888. The policy checker's failure path. It plants one defect per
       # rule in a synthetic tree and asserts that the rule fires, and that
       # the same tree without the defect is clean. A rule that cannot fire
@@ -571,7 +585,7 @@ jobs:
       # member - the gate MUST fail on both, and MUST stay quiet on a tree
       # that matches.
       - name: Plugin-inventory gate fails on a stale snapshot
-        run: python3 tools/gen-plugin-inventory.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --self-test
       # The changelog assembler glues the per-pull-request fragments into the
       # [Unreleased] section of CHANGELOG.md at release time, so a PR that
       # adds a fragment must NOT edit CHANGELOG.md itself. The gate over the
@@ -650,6 +664,15 @@ jobs:
       # The fixtures are hand-made and need neither ffmpeg nor a recording.
       - name: Demo gate still reads a recording and names a missing baseline field
         run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
+      # #1730. The banned-API exemption gate compares the catalogue in
+      # BannedSymbols.txt with the RS0030 suppressions the product tree
+      # carries. Its self-test plants an unjustified suppression, a stale
+      # row, a count mismatch and an emptied catalogue, and asserts that
+      # each fires - a gate that cannot say no enforces nothing. The gate
+      # itself is run by the `tree` job below, with the list of the tree
+      # runner.
+      - name: Banned-API exemption gate fails on an unjustified suppression
+        run: tools/bin/harbor-gates-linux-x64 banned-api-exemptions --self-test
       # #2122. The runner of the tree gates, and the list it runs. Its failure
       # path is the same shape as every other gate's: a gate that cannot
       # start, a gate that is missing, a report whose order depends on the
@@ -1173,7 +1196,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check that no test serializes through the reflection resolver
-        run: python3 tools/check-test-json-reflection.py
+        run: tools/bin/harbor-gates-linux-x64 check-test-json-reflection
 
   # #1575. Eleventh question, and the only one about DISPATCH: does the
   # product answer a question by comparing a string literal in a `case`
@@ -1468,7 +1491,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check the measured gate set against the workflows
-        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 41
+        run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --min-gates 42
 
   # #1558. The chain census, and the ratchet on it.
   #
@@ -1552,7 +1575,7 @@ jobs:
       # stopped matching". Measured on this tree: 7 axes, 7 route verdicts,
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
-        run: python3 tools/gen-plugin-inventory.py --check --min-axes 7 --min-routes 7 --min-plugins 6
+        run: tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --check --min-axes 7 --min-routes 7 --min-plugins 6
 
   # The workflow gate. A workflow file with a DUPLICATE KEY in a mapping is a
   # file GitHub refuses to parse, and the refusal is silent from the

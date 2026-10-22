@@ -2,6 +2,7 @@ using CSharpFunctionalExtensions;
 using Harbor.Abstractions.Agents;
 using Harbor.Abstractions.Permissions;
 using Harbor.Application.Permissions;
+using Harbor.TestKit;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Application.Tests;
@@ -57,7 +58,7 @@ public class ApprovalCoordinatorTupleTests
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
 
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
@@ -72,7 +73,7 @@ public class ApprovalCoordinatorTupleTests
         await Assert.That(ui.Deny()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
 
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsFalse();
     }
 
@@ -100,7 +101,7 @@ public class ApprovalCoordinatorTupleTests
         // The genuine decision still lands afterwards — the mismatch touched nothing.
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
@@ -118,7 +119,7 @@ public class ApprovalCoordinatorTupleTests
 
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
@@ -141,7 +142,7 @@ public class ApprovalCoordinatorTupleTests
 
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
@@ -166,7 +167,7 @@ public class ApprovalCoordinatorTupleTests
         await Assert.That(coordinator.DecideApproval("g1", new ApprovalResolution(Approved: true, PersistDecision: false)))
             .IsEqualTo(ApprovalDecisionDisposition.Accepted);
         var outcome = await wait;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 
@@ -182,7 +183,7 @@ public class ApprovalCoordinatorTupleTests
         await Assert.That(ui.Approve()).IsEqualTo(ApprovalDecisionDisposition.AlreadyCancelled);
 
         var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
-        await Assert.That(outcome.IsFailure).IsTrue(); // fail closed (cancelled)
+        await Assert.That(outcome).IsFailed(); // fail closed (cancelled)
     }
 
     [Test]
@@ -200,7 +201,7 @@ public class ApprovalCoordinatorTupleTests
 
         // First decision stands: the twin's Deny did not overwrite the slot.
         var outcome = await coordinator.WaitForDecisionAsync("g1", CancellationToken.None);
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(outcome.Value.Approved).IsTrue();
     }
 

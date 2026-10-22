@@ -187,7 +187,7 @@ public class RunBudgetTests
         var result = await loop.RunAsync(NewSession(), agent);
 
         // A limit is terminal, not a failure (#403 doctrine: the WHY rides the event).
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.StreamCalls).IsEqualTo(2);
         // The tripping turn's tools already ran — the modeled overshoot at the
         // boundary, same placement as the MaxSteps check.
@@ -218,7 +218,7 @@ public class RunBudgetTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsEqualTo(RunLimitKind.MaxOutputBytes);
         // The cap is enforced on the delta path: the run stops streaming
@@ -255,7 +255,7 @@ public class RunBudgetTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsNull();
         await Assert.That(end.Cancelled).IsFalse();
@@ -308,7 +308,7 @@ public class RunBudgetTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsEqualTo(RunLimitKind.MaxOutputBytes);
         await Assert.That(client.StreamToken.IsCancellationRequested).IsTrue();
@@ -330,7 +330,7 @@ public class RunBudgetTests
 
         var result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var end = bus.Events.OfType<AgentEndEvent>().Single();
         await Assert.That(end.Limit).IsNull();
         await Assert.That(client.StreamToken.IsCancellationRequested).IsFalse();

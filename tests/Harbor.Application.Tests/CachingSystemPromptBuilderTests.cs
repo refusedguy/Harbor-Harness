@@ -145,7 +145,7 @@ public class CachingSystemPromptBuilderTests
 
         var result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // Two turns resolved an identical tool set → exactly ONE inner build.
         await Assert.That(inner.BuildCalls).IsEqualTo(1);
     }

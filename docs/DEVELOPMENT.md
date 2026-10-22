@@ -178,9 +178,10 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
 | `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
 | `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
-| `reflection JSON` | `check-test-json-reflection.py` — no test serializes through the reflection resolver (#1822) |
+| `reflection JSON` | `harbor-gates check-test-json-reflection` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
-| `plugin inventory snapshot` | `gen-plugin-inventory.py --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
+| `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
+| `plugin inventory snapshot` | `harbor-gates gen-plugin-inventory --check` — the committed plugin inventory still matches the tree, and the two producers agree on the schema (#1722) |
 | `tree gates` | `tools/bin/harbor-gates-linux-x64 all` — every gate that needs nothing but the tree, in one command, with the floors the list of the runner carries: the seam graph (#1731), the XML-doc coverage, the dependency contract and the repo-map counts among them (#2122) |
 
 Three things make this a real gate rather than decoration:
@@ -439,14 +440,14 @@ clone.
 
 ## Reflection-JSON gate — issue 1822
 
-`tools/check-test-json-reflection.py` answers one question about every
+`harbor-gates check-test-json-reflection` answers one question about every
 `JsonSerializer` call under `tests/`: **does it name a source-generated type
 info, or does it take the reflection resolver?**
 
 ```bash
-./tools/check-test-json-reflection.py --report     # the census, exit 0
-./tools/check-test-json-reflection.py --self-test  # prove the gate still fails on a planted call
-./tools/check-test-json-reflection.py             # the gate itself, exit 1 on a violation
+tools/bin/harbor-gates-linux-x64 check-test-json-reflection --report     # the census, exit 1 when it holds something
+tools/bin/harbor-gates-linux-x64 check-test-json-reflection --self-test  # prove the gate still fails on a planted call
+tools/bin/harbor-gates-linux-x64 check-test-json-reflection             # the gate itself, exit 1 on a violation
 ```
 
 **Why it exists.** The product side of System.Text.Json already rides source
@@ -479,6 +480,21 @@ type info takes in this tree.
 The file is a **ratchet**: an exception the tree no longer produces fails the
 gate (`EXCEPTION-STALE`), so a closed hole cannot stay blessed. It can only
 shrink.
+
+**What a "used exception" is, and why it is one rule.** An exception is
+**used** when a reflection finding matched *that* exception — the same path,
+and the exception's text inside the call the finding names. An exception that
+no finding matched is **stale**, and a stale exception fails the gate. The
+rule is per exception, not per file: two exceptions for two different calls
+in one file are two permissions, and closing one of them says nothing about
+the other.
+
+Every path of the gate counts it the same way — the plain one, `--report` and
+`--json-out` answer with the same verdict on the same tree (#2122). Before
+that, the plain path (the one CI ran) marked *every* exception used as soon
+as *one* of them was used, so a stale row in the ratchet was invisible to it
+and the gate was green with a row the tree no longer produced. The
+self-test plants exactly that tree and asserts that the three paths agree.
 
 ## String-switch gate, issue 1575
 

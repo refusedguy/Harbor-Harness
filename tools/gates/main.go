@@ -42,6 +42,7 @@ import (
 	"harbor.local/gates/aggregate-build-vcpu"
 	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
+	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
@@ -54,6 +55,7 @@ import (
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
@@ -61,6 +63,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	genplugininventory "harbor.local/gates/gen-plugin-inventory"
 	"harbor.local/gates/gen-seam-graph"
 	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
@@ -111,6 +114,11 @@ var registry = []registered{
 		name:    "aot-publish-gate",
 		summary: "the AOT publish's outcome and diagnostics match the committed record",
 		run:     aotpublish.Run,
+	},
+	{
+		name:    "banned-api-exemptions",
+		summary: "every banned-API suppression in the product tree is justified by the catalogue",
+		run:     bannedapiexemptions.Run,
 	},
 	{
 		name:    "changelog-assemble",
@@ -173,6 +181,11 @@ var registry = []registered{
 		run:     shardbalance.Run,
 	},
 	{
+		name:    "check-test-json-reflection",
+		summary: "no test serializes through the reflection resolver",
+		run:     jsonreflection.Run,
+	},
+	{
 		name:    "check-workflows",
 		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
 		run:     checkworkflows.Run,
@@ -206,6 +219,11 @@ var registry = []registered{
 		name:    "gen-e2e-shards",
 		summary: "the process plan of the headless Avalonia E2E suite",
 		run:     gene2eshards.Run,
+	},
+	{
+		name:    "gen-plugin-inventory",
+		summary: "the committed plugin inventory snapshot still matches the tree",
+		run:     genplugininventory.Run,
 	},
 	{
 		name:    "gen-seam-graph",

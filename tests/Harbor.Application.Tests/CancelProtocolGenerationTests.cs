@@ -82,13 +82,13 @@ public class CancelProtocolGenerationTests
             // the agent must be usable again.
             gate.TrySetResult(Result.Success());
             var result = await runTask.WaitAsync(TimeSpan.FromSeconds(5));
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
 
             agent.ResetAbortSource();
             await Assert.That(agent.AbortToken.IsCancellationRequested).IsFalse();
 
             var next = await agent.PromptAsync("after reset");
-            await Assert.That(next.IsSuccess).IsTrue();
+            await Assert.That(next).IsSuccessful();
         }
         finally
         {
@@ -104,7 +104,7 @@ public class CancelProtocolGenerationTests
         {
             gate.TrySetResult(Result.Success());
             var first = await agent.PromptAsync("prime");
-            await Assert.That(first.IsSuccess).IsTrue();
+            await Assert.That(first).IsSuccessful();
 
             agent.RequestAbort();
             agent.ResetAbortSource();

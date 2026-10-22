@@ -76,7 +76,7 @@ public class ToolDispatcherFailClosedTests
         var session = NewSession();
         var result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(tool.Executions).IsEqualTo(0);
         string nextRequestText = TestMessages.RenderText(client.Requests[1]);
         await Assert.That(nextRequestText).Contains("Permission check failed");
@@ -119,7 +119,7 @@ public class ToolDispatcherFailClosedTests
         var session = NewSession();
         var result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(tool.Executions).IsEqualTo(1);
     }
 }
