@@ -132,7 +132,7 @@ jobs:
           go-version-file: tools/gates/go.mod
           cache: false
       - name: The gate sources are formatted, vet-clean and registered
-        run: tools/bin/harbor-gates-linux-x64 go-quality --min-files 73 --min-packages 27
+        run: tools/bin/harbor-gates-linux-x64 go-quality --min-files 90 --min-packages 33
       # The self-test runs here as well as in docs.yml, because this is the
       # only place the Go toolchain exists: the fixture that needs it -- a
       # printf `go vet` must reject -- can only run here.

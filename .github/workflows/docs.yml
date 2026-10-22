@@ -610,6 +610,47 @@ jobs:
       # no Go. The toolchain's own fixtures run in gates-binary.yml.
       - name: Go-quality gate fails on an unformatted file and a diverged registry
         run: tools/bin/harbor-gates-linux-x64 go-quality --self-test
+      # #2119. The event-topology gate is the only one that asks whether the
+      # producer table of a normative document still names the tree's real
+      # PublishAsync call sites. The `file:line` fence asks whether a line
+      # EXISTS, and in that table the line number is the content of the row,
+      # so the fence passed a table that named four sites where the file had
+      # seven. Its failure path is tested here for the same reason as the
+      # others: a rule edited until it matches nothing is indistinguishable
+      # from a rule that found nothing.
+      - name: Event-topology gate fails on a drifted producer row
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --self-test
+      # The workflow gate: a file with a duplicate key in a mapping is a file
+      # GitHub refuses to parse, and the refusal is silent — the run is
+      # created with ZERO jobs. The gate's own proof that it can fail, run
+      # here because the gate itself lives in the `workflows` job below, and
+      # a job that cannot start cannot prove anything.
+      - name: Workflow gate fails on a duplicate key and stays quiet on a legal repeat
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --self-test
+
+  # #2119. The event topology of the harness is a normative document: it
+  # says which code publishes on the bus and which code subscribes, and every
+  # one of those claims is a `file:line`. The citation fence that guards
+  # every other normative document asks one question of a citation: does the
+  # line exist? That is the right question for a linear citation and the
+  # wrong one for the producer table, where the line number IS the content of
+  # the row. A row that named four call sites where the file holds seven
+  # passed the fence, and the document said "normative" the whole time.
+  #
+  # So this gate asks the question the fence cannot: the row and the file
+  # must agree on the SET of call sites, in both directions, and every file
+  # that publishes must have a row. The floors are the ratchet: a scan that
+  # measured fewer rows than the tree holds cannot say the tree is fine.
+  eventtopology:
+    name: event topology
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the producer rows name the tree's real call sites
+        run: tools/bin/harbor-gates-linux-x64 check-event-topology --min-producers 8 --min-sites 39 --min-subscribers 24
 
   links:
     name: internal links
@@ -1427,6 +1468,38 @@ jobs:
       # 6 shipped plugins.
       - name: Check the committed plugin inventory against the tree
         run: tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --check --min-axes 7 --min-routes 7 --min-plugins 6
+
+  # The workflow gate. A workflow file with a DUPLICATE KEY in a mapping is a
+  # file GitHub refuses to parse, and the refusal is silent from the
+  # repository's point of view: the run is created, it has ZERO jobs, and it
+  # closes as "failure" with the text "This run likely failed because of a
+  # workflow file issue". The lane is not red — it is ABSENT — and every pull
+  # request that waits for it waits forever.
+  #
+  # It happened here. On 2026-10-21 the `ci` workflow stopped running at all:
+  # runs 39627731779 and 39627783779 had zero jobs, and the run before them
+  # (39613662649) had sixteen. The commit that broke it (e7479b9a, #2115)
+  # gave three shard-reporting steps an arm64 twin and wrote the twin as a
+  # second `if:`/`shell:`/`run:` inside the first step's mapping.
+  #
+  # THIS job lives in the documentation lane on purpose: a gate that polices
+  # `ci.yml` cannot live in `ci.yml`, because a broken `ci.yml` takes its own
+  # gate with it. The documentation lane starts on every pull request, with or
+  # without a .NET build.
+  #
+  # The floor is the number of workflow files the tree holds (17), so a scan
+  # that stopped matching the tree drives the number down and this job goes
+  # red instead of reporting a clean tree.
+  workflows:
+    name: workflow files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that no workflow file declares a key twice
+        run: tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
