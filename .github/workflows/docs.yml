@@ -598,6 +598,21 @@ jobs:
         run: tools/bin/harbor-gates-linux-x64 gen-e2e-shards --self-test
       - name: E2E shard runner still refuses a plan it cannot run
         run: tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards --self-test
+      # The pull-request cost measurement: the runner-minutes, the wall, the
+      # critical path, the peak width, and the bill split by article. It is a
+      # tool a human runs over the job list of a CI run, and no workflow runs
+      # it — but its self-test is called here for the same reason as the
+      # others: an instrument edited until it measures nothing is
+      # indistinguishable from an instrument that measured an empty pull
+      # request. The load-bearing fixtures are the three numbers a hand-
+      # written table gets wrong — the wall (which is the MAXIMUM of two
+      # parallel workflows, not their sum), the busy time (which excludes the
+      # wait for a runner) and the peak width (which counts a job that ends
+      # as the next one starts ONCE, not twice) — and the one refusal: a
+      # timestamp that cannot be parsed must be an error, because a bill of
+      # zero is the number that looks like good news.
+      - name: Pull-request cost measurement still measures a planted pull request
+        run: tools/bin/harbor-gates-linux-x64 pr-cost --self-test
       # The gate over the Go sources of the gates themselves. Its failure path
       # is tested here for the same reason as the others: a rule edited until
       # it matches nothing is indistinguishable from a rule that found
