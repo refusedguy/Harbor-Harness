@@ -2537,8 +2537,8 @@ Four green runs of the branch read 80.00 / 81.91 / 83.00 / 85.00 s against
 the baseline's 106.63 s: a spread of 6.2 % of the wall, which is the
 runner's own noise, and a median of 82.5 s — **−22.6 %**. The later runs
 sit on a base two commits ahead of `a019e928` (the real MSBuild switches of
-#2111 and the Go-source gate of #2078), and neither touches the architecture
-suite.
+issue 2111 and the Go-source gate of issue 2078), and neither touches the
+architecture suite.
 
 **What moved**, the class spans (last end − first start) and the single
 tests, from the same TRX sets:
