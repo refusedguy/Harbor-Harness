@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
@@ -94,6 +95,11 @@ var registry = []registered{
 		run:     aggregatebuildvcpu.Run,
 	},
 	{
+		name:    "all",
+		summary: "every gate that needs nothing but the tree, in one command",
+		run:     all.Run,
+	},
+	{
 		name:    "aot-publish-gate",
 		summary: "the AOT publish's outcome and diagnostics match the committed record",
 		run:     aotpublish.Run,
@@ -117,11 +123,6 @@ var registry = []registered{
 		name:    "check-coverage-registry",
 		summary: "the registry of consciously uncovered files still matches the measurement",
 		run:     registrygate.Run,
-	},
-	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
 	},
 	{
 		name:    "check-doc-facts",
@@ -167,11 +168,6 @@ var registry = []registered{
 		name:    "gen-e2e-shards",
 		summary: "the process plan of the headless Avalonia E2E suite",
 		run:     gene2eshards.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
 	},
 	{
 		name:    "gen-seam-graph",
