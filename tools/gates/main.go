@@ -52,6 +52,7 @@ import (
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	"harbor.local/gates/check-workflows"
 	"harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
 	codemodtoolnames "harbor.local/gates/codemod-tool-names"
@@ -156,6 +157,11 @@ var registry = []registered{
 		name:    "check-shard-balance",
 		summary: "are the CI test shards balanced by what their projects cost",
 		run:     shardbalance.Run,
+	},
+	{
+		name:    "check-workflows",
+		summary: "no workflow file declares a key twice, which is a file GitHub refuses to read",
+		run:     checkworkflows.Run,
 	},
 	{
 		name:    "check-xml-doc-coverage",
