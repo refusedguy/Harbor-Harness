@@ -48,6 +48,7 @@ import (
 	archsuiteonce "harbor.local/gates/check-arch-suite-once"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
+	"harbor.local/gates/check-event-topology"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
 	mdlinks "harbor.local/gates/check-md-links"
 	"harbor.local/gates/check-no-test-sdk"
@@ -140,6 +141,11 @@ var registry = []registered{
 		name:    "check-doc-facts",
 		summary: "a count a document states still equals the count of tracked files",
 		run:     docfacts.Run,
+	},
+	{
+		name:    "check-event-topology",
+		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
+		run:     eventtopology.Run,
 	},
 	{
 		name:    "check-local-merge-loss",
