@@ -71,12 +71,13 @@
 # 1328 product files, 554 of them covered, 588 holes — 378 the measurement
 # saw and never ran, 210 in the two projects the lane does not load.
 #
-# The tree grew by ONE product file after that run —
+# Re-measured on run 39719902323, on the tree of this branch after the merge
+# with dev: 1329 product files, 555 of them covered, 588 holes, 380 rows, 0
+# findings. The tree grew by ONE product file since the first run —
 # src/Harbor.Arch.Analyzers/HttpClientCreationAnalyzer.cs (#2148) — and the
 # lane's arch suite drives it in process
 # (tests/Harbor.Architecture.Tests/Roslyn/HttpClientCreationAnalyzerTests.cs),
-# so no row is due for it and the rows below still hold. The next run of the
-# lane re-measures the file set.
+# so it is covered and no row is due for it.
 #
 # The rows below are the measured state of the tree, not a wish list. A file
 # that gets covered has to have its row deleted in the same diff that
