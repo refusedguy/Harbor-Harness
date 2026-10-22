@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Tui.CellForge.Widgets;
 using Harbor.Ui.Framework.Panels;
 using Harbor.Ui.Framework.State;
@@ -24,7 +25,7 @@ internal sealed class PanelsCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         var registry = host.PanelRegistry;
         if (registry is null)

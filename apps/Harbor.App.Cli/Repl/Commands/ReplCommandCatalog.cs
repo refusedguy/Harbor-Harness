@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Application.Attachments;
 
 namespace Harbor.App.Cli.Repl.Commands;
@@ -13,7 +14,7 @@ internal sealed class ReplCommandCatalog
 
     public void Register(IReplCommand command)
     {
-        ArgumentNullException.ThrowIfNull(command);
+        Ensure.NotNull(command);
         _byId[command.Id] = command;
         foreach (string alias in command.Aliases)
             _byId[alias] = command;

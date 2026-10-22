@@ -1,3 +1,4 @@
+using Harbor.Abstractions.Extensions;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -14,7 +15,7 @@ internal sealed class TuiCommand : IReplCommand
 
     public async Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         var configStore = host.ConfigStore;
         var configResult = await configStore.LoadAsync(ct).ConfigureAwait(false);
