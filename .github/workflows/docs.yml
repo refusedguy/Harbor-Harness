@@ -168,6 +168,13 @@ on:
       # squash-merge dropped content. The gate has to run on every such pull
       # request, and on the push that lands it — so the trigger is the
       # workflow files themselves, not the gate's own sources alone.
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A PR
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       - '.github/workflows/**'
       - 'tools/merge-loss-exceptions.txt'
       # #1731. The `gen-seam-graph` gate generates docs/SEAM_GRAPH.md from the C#
@@ -290,6 +297,13 @@ on:
       # gate has to run on it.
       - '.github/workflows/**'
       - 'tools/merge-loss-exceptions.txt'
+      # #1730. The banned-API exemption gate reads BannedSymbols.txt (the
+      # catalogue of every `#pragma warning disable RS0030` the product tree
+      # carries) and the src/ and apps/ sources it compares against. A pull request
+      # that edits the catalogue has to run it, or the catalogue and the
+      # tree drift apart with nothing noticing - and the ban is a security
+      # control, so a drift is a hole in it.
+      - 'BannedSymbols.txt'
       # #1731. Same trigger as above: the seam-graph gate reads the C# tree
       # and compares the result with the committed document.
       - 'tools/gates/**'
@@ -650,6 +664,15 @@ jobs:
       # The fixtures are hand-made and need neither ffmpeg nor a recording.
       - name: Demo gate still reads a recording and names a missing baseline field
         run: tools/bin/harbor-gates-linux-x64 demo-repro --self-test
+      # #1730. The banned-API exemption gate compares the catalogue in
+      # BannedSymbols.txt with the RS0030 suppressions the product tree
+      # carries. Its self-test plants an unjustified suppression, a stale
+      # row, a count mismatch and an emptied catalogue, and asserts that
+      # each fires - a gate that cannot say no enforces nothing. The gate
+      # itself is run by the `tree` job below, with the list of the tree
+      # runner.
+      - name: Banned-API exemption gate fails on an unjustified suppression
+        run: tools/bin/harbor-gates-linux-x64 banned-api-exemptions --self-test
       # #2122. The runner of the tree gates, and the list it runs. Its failure
       # path is the same shape as every other gate's: a gate that cannot
       # start, a gate that is missing, a report whose order depends on the
