@@ -36,6 +36,8 @@
   href: CITATION_DRIFT_MEASUREMENT.md
 - name: Ci As Code
   href: CI_AS_CODE.md
+- name: Ci Conflict Cost
+  href: CI_CONFLICT_COST.md
 - name: Ci Gates
   href: CI_GATES.md
 - name: Ci Ui Tests
