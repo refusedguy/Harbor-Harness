@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Harbor.Abstractions.Models;
 using Harbor.Storage.Sqlite;
+using Harbor.TestKit;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -206,7 +207,7 @@ public sealed class SqliteAppendCostGate
             foreach (string sessionId in sessions)
             {
                 var rows = await store.GetMessagesAsync(sessionId);
-                await Assert.That(rows.IsSuccess).IsTrue();
+                await Assert.That(rows).IsSuccessful();
                 await Assert.That(rows.Value.Count).IsEqualTo(SeedMessages + MeasuredMessages);
             }
 

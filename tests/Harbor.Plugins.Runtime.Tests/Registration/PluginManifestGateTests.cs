@@ -5,10 +5,7 @@ using Harbor.Abstractions.Permissions;
 using Harbor.Abstractions.Plugins;
 using Harbor.Abstractions.Tools;
 using Harbor.Plugins.Abstractions;
-using Harbor.Plugins.Registration;
 using Harbor.Plugins.Runtime.Tests.TestSupport;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Harbor.Plugins.Runtime.Tests.Registration;
 
@@ -28,11 +25,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestAgreesWithThePlugin_LoadsThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-ok");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest
+            PluginGateFixture.Loaded(plugin, new PluginManifest
             {
                 Name = plugin.Name,
                 Version = plugin.Version,
@@ -54,11 +51,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestNamesThePluginDifferently_RefusesThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-name");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Name = "some-other-plugin" }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Name = "some-other-plugin" }),
             host);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -76,11 +73,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestDeclaresAnotherVersion_RefusesThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-version");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Version = new Version(9, 9, 9) }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Version = new Version(9, 9, 9) }),
             host);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -96,11 +93,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestAxesMatchThePlugin_LoadsThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-axes-ok");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Axes = ["IToolPlugin"] }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Axes = ["IToolPlugin"] }),
             host);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -117,11 +114,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestDeclaresAnAxisThePluginDoesNotImplement_RefusesThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-axes-over");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Axes = ["IToolPlugin", "IProviderPlugin"] }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Axes = ["IToolPlugin", "IProviderPlugin"] }),
             host);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -138,11 +135,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestDeclaresFewerAxesThanThePluginImplements_RefusesThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-axes-under");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Axes = [] }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Axes = [] }),
             host);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -157,11 +154,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestWithoutAxes_LoadsThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-no-axes");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { Name = plugin.Name }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { Name = plugin.Name }),
             host);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -176,11 +173,11 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_ManifestAsksForANewerHarbor_RefusesThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar(new Version(0, 4, 0));
+        var registrar = PluginGateFixture.NewRegistrar(harborVersion: new Version(0, 4, 0));
         var plugin = new ManifestToolPlugin("manifest-harbor");
 
         var result = registrar.Register(
-            Loaded(plugin, new PluginManifest { RequiredHarborVersion = new Version(0, 6, 0) }),
+            PluginGateFixture.Loaded(plugin, new PluginManifest { RequiredHarborVersion = new Version(0, 6, 0) }),
             host);
 
         await Assert.That(result.IsFailure).IsTrue();
@@ -198,36 +195,14 @@ public sealed class PluginManifestGateTests
     public async Task Registrar_PluginWithoutAManifest_LoadsThePlugin()
     {
         var host = new FakePluginLoadHost();
-        var registrar = NewRegistrar();
+        var registrar = PluginGateFixture.NewRegistrar();
         var plugin = new ManifestToolPlugin("manifest-none");
 
-        var result = registrar.Register(Loaded(plugin, null), host);
+        var result = registrar.Register(PluginGateFixture.Loaded(plugin, null), host);
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(host.RegisteredTools.Count).IsEqualTo(1);
     }
-
-    private static PluginRegistrar NewRegistrar(Version? harborVersion = null)
-    {
-        ILogger<PluginRegistrar> logger = NullLogger<PluginRegistrar>.Instance;
-        return new PluginRegistrar(
-            pluginRoot: "/home/me/.harbor/plugins",
-            logger: logger,
-            loggerFactory: NullLoggerFactory.Instance,
-            harborVersion: harborVersion);
-    }
-
-    private static LoadedPlugin Loaded(IPlugin plugin, PluginManifest? manifest)
-        => new(
-            plugin,
-            plugin.Name,
-            plugin.Version,
-            plugin.GetType(),
-            "/home/me/.harbor/plugins/" + plugin.Name + ".cs",
-            "abc",
-            false,
-            new HashSet<PluginCapability>(),
-            manifest);
 
     private sealed class ManifestToolPlugin : IToolPlugin
     {

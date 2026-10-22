@@ -14,11 +14,13 @@ Issue #1842. The pilot that measured the substrate is `tests/Harbor.Architecture
 |------|---------|
 | `NoDynamicCodeAnalyzer.cs` | `HARCH001` — no dynamic-code API (no `Assembly.Load`, no `AssemblyLoadContext`, nothing from the emit namespace) in product code. The compiler-side version of the ban that `BannedSymbols.DynamicCode.txt` states by name, and the analyzer version of the matcher half of `tests/Harbor.Architecture.Tests/ReflectionConventionRule.cs`. |
 | `NamespaceOwnershipAnalyzer.cs` | `HARCH002` — a namespace root belongs to the project that declares it. The analyzer version of the R1/R2 half of `tests/Harbor.Architecture.Tests/AbstractionsNamespaceOwnershipRules.cs`. |
+| `HttpClientCreationAnalyzer.cs` | `HARCH005` and `HARCH006` — where an HTTP client is created, decided by resolving the TYPE instead of matching the spelling. The analyzer version of the detector half of `tests/Harbor.Architecture.Tests/HttpClientReuseRules.cs` (#1854). Not armed on the tree yet: the gate is the architecture suite, which drives it in-process; see [docs/SEMANTIC_GUARDS.md](../../docs/SEMANTIC_GUARDS.md) for the measurement of what the rewrite buys. |
 
 ## Public API summary
 
 - `NoDynamicCodeAnalyzer : DiagnosticAnalyzer` — reports under `HARCH001`.
 - `NamespaceOwnershipAnalyzer : DiagnosticAnalyzer` — reports under `HARCH002`.
+- `HttpClientCreationAnalyzer : DiagnosticAnalyzer` — reports under `HARCH005` (a creation) and `HARCH006` (a creation inside a delegate).
 - One diagnostic id per rule. The ids are per rule rather than per severity because the severity is configured by id: a rule that cannot be switched off without switching off its neighbours gets switched off together with them.
 
 ## Wiring

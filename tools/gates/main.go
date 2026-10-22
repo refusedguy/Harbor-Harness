@@ -38,33 +38,37 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"sort"
-	"strings"
-
-	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
-	docfacts "harbor.local/gates/check-doc-facts"
-	"harbor.local/gates/gen-seam-graph"
-	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/aggregate-analyzer-cost"
 	"harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
+	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
+	registrygate "harbor.local/gates/check-coverage-registry"
+	docfacts "harbor.local/gates/check-doc-facts"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
 	"harbor.local/gates/check-no-test-sdk"
 	"harbor.local/gates/check-public-api-resign"
 	"harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
 	"harbor.local/gates/check-xml-doc-coverage"
+	coveragereport "harbor.local/gates/coverage-report"
+	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	"harbor.local/gates/gen-seam-graph"
+	"harbor.local/gates/internal/gate"
 	"harbor.local/gates/measure-build-cpu"
 	"harbor.local/gates/measure-project-graph"
 	"harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
+	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
 	"harbor.local/gates/test-census"
 	"harbor.local/gates/test-measurements"
 	"harbor.local/gates/test-skips"
-
+	"os"
+	"sort"
+	"strings"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -81,21 +85,6 @@ type registered struct {
 
 var registry = []registered{
 	{
-		name:    "banned-api-exemptions",
-		summary: "every banned-API suppression in the product tree is justified by the catalogue",
-		run:     bannedapiexemptions.Run,
-	},
-	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
-	},
-	{
 		name:    "aggregate-analyzer-cost",
 		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
 		run:     aggregateanalyzercost.Run,
@@ -104,6 +93,16 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
+	},
+	{
+		name:    "banned-api-exemptions",
+		summary: "every banned-API suppression in the product tree is justified by the catalogue",
+		run:     bannedapiexemptions.Run,
 	},
 	{
 		name:    "changelog-assemble",
@@ -119,6 +118,21 @@ var registry = []registered{
 		name:    "check-analyzer-scope",
 		summary: "where each analyzer package is allowed to run",
 		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
 	},
 	{
 		name:    "check-no-test-sdk",
@@ -146,6 +160,21 @@ var registry = []registered{
 		run:     checkxmldoccoverage.Run,
 	},
 	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
+	},
+	{
 		name:    "measure-build-cpu",
 		summary: "what a build command costs: the wall time and the CPU utilisation",
 		run:     measurebuildcpu.Run,
@@ -169,6 +198,11 @@ var registry = []registered{
 		name:    "pack-validate",
 		summary: "every packed Harbor.* package carries its metadata, its README and its lib",
 		run:     packvalidate.Run,
+	},
+	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
 	},
 	{
 		name:    "test-census",

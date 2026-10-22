@@ -2,7 +2,7 @@
 
 Owner: issue #413 (48/S2). The gate is the `aot-publish` job in
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml); the instrument is
-[`tools/aot-publish-gate.py`](../tools/aot-publish-gate.py); the committed
+[`harbor-gates aot-publish-gate`](../tools/gates/aot-publish-gate); the committed
 inventory it compares against is
 [`.github/aot-warning-baseline.txt`](../.github/aot-warning-baseline.txt).
 
@@ -331,7 +331,7 @@ If a duration trend is ever wanted, the right shape is a recorded measurement in
 in a job.
 
 ## What the gate cannot go green on
-`tools/aot-publish-gate.py` returns **exit 0** and **exit 2** as different
+`harbor-gates aot-publish-gate` returns **exit 0** and **exit 2** as different
 values, and exit 2 is not a softened exit 0:
 
 | Exit | Meaning |
@@ -389,7 +389,7 @@ leak into the exit code — were each confirmed to turn the self-test red.
   a publish has nothing to do with a paragraph, and the reason `docs.yml` exists
   as a separate workflow is the same reason (#509). Do not "fix" it by removing
   those entries.
-- **Edits to the gate's own files ARE covered.** `tools/aot-publish-gate.py` and
+- **Edits to the gate's own files ARE covered.** `tools/gates/aot-publish-gate` and
   `.github/aot-warning-baseline.txt` are both listed in the `changes` job's
   `dotnet` filter. Without that, editing the instrument — or the baseline, which
   is the ordinary way to answer a red AOT job — would set `dotnet=false`, skip
