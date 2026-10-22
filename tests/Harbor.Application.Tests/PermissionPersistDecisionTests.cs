@@ -170,7 +170,7 @@ public class PermissionPersistDecisionTests
             await svc.SaveAsync();
 
             var loaded = await store.LoadAsync();
-            await Assert.That(loaded.IsSuccess).IsTrue();
+            await Assert.That(loaded).IsSuccessful();
             await Assert.That(loaded.Value.Permissions).IsNotNull();
         }
         finally

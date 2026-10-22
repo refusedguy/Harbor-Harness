@@ -46,7 +46,7 @@ public class StreamingCoalescerPoolTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(1);
         await Assert.That(counter.ExecutedArgs.Count).IsEqualTo(1);
         await Assert.That(counter.ExecutedArgs[0]).Contains("\"n\":8");
@@ -84,7 +84,7 @@ public class StreamingCoalescerPoolTests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(counter.Executions).IsEqualTo(1);
         await Assert.That(counter.ExecutedArgs.Count).IsEqualTo(1);
         await Assert.That(counter.ExecutedArgs[0]).IsEqualTo(argsJson);

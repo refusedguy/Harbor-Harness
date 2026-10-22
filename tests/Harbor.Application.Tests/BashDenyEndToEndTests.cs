@@ -85,7 +85,7 @@ public class BashDenyEndToEndTests
                 permissions, tool, $"rm -rf {probe}").ConfigureAwait(false);
 
             // The matcher-derived deny fired BEFORE any process spawned.
-            await Assert.That(result.IsError).IsTrue();
+            await Assert.That(result).HasFailed();
             await Assert.That(result.Output).Contains("Permission denied");
             await Assert.That(File.Exists(probe)).IsFalse();
         }
@@ -113,7 +113,7 @@ public class BashDenyEndToEndTests
 
             // IsDestructiveCommand catches flag-swapped compound deletions
             // before rule walking — the directory must still exist.
-            await Assert.That(result.IsError).IsTrue();
+            await Assert.That(result).HasFailed();
             await Assert.That(Directory.Exists(probe)).IsTrue();
         }
         finally
@@ -133,7 +133,7 @@ public class BashDenyEndToEndTests
         var result = await DispatchLike(
             permissions, tool, "cat notes.txt; rm -rf /tmp/x").ConfigureAwait(false);
 
-        await Assert.That(result.IsError).IsTrue();
+        await Assert.That(result).HasFailed();
         await Assert.That(result.Output).Contains("Permission denied");
     }
 
@@ -157,7 +157,7 @@ public class BashDenyEndToEndTests
 
             // Positive control: the allow path REALLY executes a process.
             // (No shell metacharacters here — `>` would escalate to Ask.)
-            await Assert.That(result.IsError).IsFalse();
+            await Assert.That(result).HasSucceeded();
             await Assert.That(File.Exists(probe)).IsTrue();
         }
         finally

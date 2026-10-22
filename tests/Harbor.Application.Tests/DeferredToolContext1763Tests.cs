@@ -193,7 +193,7 @@ public class DeferredToolContext1763Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
 
         var second = client.Requests[1];
@@ -222,7 +222,7 @@ public class DeferredToolContext1763Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
 
         var second = client.Requests[1];
@@ -257,7 +257,7 @@ public class DeferredToolContext1763Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue()
+        await Assert.That(result).IsSuccessful()
             .Because("a context that never arrived is not a reason to fail the run.");
         await Assert.That(client.Requests.Count).IsEqualTo(2)
             .Because("the run continued past the tool turn and reached the text turn.");
@@ -332,7 +332,7 @@ public class DeferredToolContext1763Tests
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         var second2 = client.Requests[1];
         int lastResultIndex = -1;

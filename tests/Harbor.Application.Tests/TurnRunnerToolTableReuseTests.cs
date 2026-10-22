@@ -246,7 +246,7 @@ public class TurnRunnerToolTableReuseTests
 
         Result result = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         // Three streamed turns (tool, tool, text-only stop): the reuse must
         // span real turns, not a single-turn run.
         await Assert.That(client.Requests.Count).IsEqualTo(3);
@@ -269,7 +269,7 @@ public class TurnRunnerToolTableReuseTests
         var loop = NewLoop(client, registry, agent);
 
         Result first = await loop.RunAsync(NewSession(), agent);
-        await Assert.That(first.IsSuccess).IsTrue();
+        await Assert.That(first).IsSuccessful();
         await Assert.That(client.Requests.Count).IsEqualTo(1);
         await Assert.That(client.Requests[0].Tools.Count).IsEqualTo(1);
 
@@ -279,7 +279,7 @@ public class TurnRunnerToolTableReuseTests
         registry.Reset(new NoopTool("noop"), new NoopTool("extra"));
         Result second = await loop.RunAsync(NewSession(), agent);
 
-        await Assert.That(second.IsSuccess).IsTrue();
+        await Assert.That(second).IsSuccessful();
         await Assert.That(client.Requests.Count).IsEqualTo(2);
         await Assert.That(client.Requests[1].Tools.Count).IsEqualTo(2)
             .Because("the rebuilt table must carry the post-freeze set (noop + extra), not the stale 1-tool table.");

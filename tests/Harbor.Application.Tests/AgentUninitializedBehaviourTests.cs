@@ -134,7 +134,7 @@ public sealed class AgentUninitializedBehaviourTests
 
         release.TrySetResult(Result.Success());
         Result outcome = await run;
-        await Assert.That(outcome.IsSuccess).IsTrue();
+        await Assert.That(outcome).IsSuccessful();
         await Assert.That(subject.IsRunning()).IsFalse()
             .Because("The probe must fall back to false again once the run settles.");
     }
@@ -149,7 +149,7 @@ public sealed class AgentUninitializedBehaviourTests
 
         Result result = await subject.PromptAsync("hello");
 
-        await Assert.That(result.IsFailure).IsTrue()
+        await Assert.That(result).IsFailed()
             .Because("An unbound agent has no session to append to and no definition to drive, so the call cannot succeed.");
         await Assert.That(result.Error).Contains("not initialized")
             .Because("The failure text must name the condition, so the operator knows what to do instead of guessing.");
@@ -168,7 +168,7 @@ public sealed class AgentUninitializedBehaviourTests
 
         Result result = await subject.PromptAsync(TestMessages.User("hi", sessionId: session.Id, agent: "user"));
 
-        await Assert.That(result.IsFailure).IsTrue()
+        await Assert.That(result).IsFailed()
             .Because("The UserMessage overload must refuse too — it is the overload the image path and the IPC path use.");
         await Assert.That(result.Error).Contains("not initialized");
         await Assert.That(store.Appends).IsEqualTo(0)

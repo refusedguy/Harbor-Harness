@@ -27,7 +27,7 @@ public class MessageSnapshotTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         AgentStartEvent? start = null;
         foreach (var evt in bus.Events)
         {
@@ -56,7 +56,7 @@ public class MessageSnapshotTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         AgentEndEvent? end = null;
         foreach (var evt in bus.Events)
         {

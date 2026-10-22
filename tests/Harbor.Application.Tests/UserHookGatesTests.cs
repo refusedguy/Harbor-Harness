@@ -98,7 +98,7 @@ public class UserHookGatesTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("nope");
         await Assert.That(hooks.PromptCalls).IsEqualTo(1);
         await Assert.That(hooks.LastPrompt).IsEqualTo("question-0");
@@ -138,7 +138,7 @@ public class UserHookGatesTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(hooks.PromptCalls).IsEqualTo(1);
         await Assert.That(hooks.StartCalls).IsEqualTo(1);
         await Assert.That(hooks.EndCalls).IsEqualTo(1);
@@ -160,7 +160,7 @@ public class UserHookGatesTests
 
         var result = await loop.RunAsync(context, TestAgents.AllowAll());
 
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("Hook execution failed");
         await Assert.That(hooks.StartCalls).IsEqualTo(0);
         await Assert.That(context.Messages.Count).IsEqualTo(1);

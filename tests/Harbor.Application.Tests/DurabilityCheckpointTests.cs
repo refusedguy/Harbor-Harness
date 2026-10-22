@@ -233,7 +233,7 @@ public class DurabilityCheckpointTests
         // The refusal says the tool did NOT run, and why.
         ToolResultMessage results = session.Messages.OfType<ToolResultMessage>().Single();
         ToolResultEntry entry = results.Results.Single();
-        await Assert.That(entry.IsError).IsTrue();
+        await Assert.That(entry).HasFailed();
         await Assert.That(entry.Output).Contains("was NOT executed");
         await Assert.That(entry.Output).Contains(BrokenCheckpoint);
 
@@ -241,7 +241,7 @@ public class DurabilityCheckpointTests
         await Assert.That(entry.Output).Contains(ToolDispatcher.ToolBodyCheckpointReason);
 
         // The run ends on the next checkpoint instead of asking the model again.
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("durability checkpoint");
     }
 
@@ -257,7 +257,7 @@ public class DurabilityCheckpointTests
         var loop = NewLoop(client, tool, agent);
         Result result = await loop.RunAsync(session, agent);
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         await Assert.That(tool.Executions).IsEqualTo(1);
 
         // Both boundaries were protected: the model request and the tool body.
@@ -282,7 +282,7 @@ public class DurabilityCheckpointTests
 
         await Assert.That(client.Requests.Count).IsEqualTo(0);
         await Assert.That(tool.Executions).IsEqualTo(0);
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
         await Assert.That(result.Error).Contains("durability checkpoint");
         // The boundary the failed checkpoint protected is named in the reason
         // the user reads: the run stopped before the model request.
@@ -318,11 +318,11 @@ public class DurabilityCheckpointTests
 
         ToolResultMessage results = session.Messages.OfType<ToolResultMessage>().Single();
         ToolResultEntry entry = results.Results.Single();
-        await Assert.That(entry.IsError).IsTrue();
+        await Assert.That(entry).HasFailed();
         await Assert.That(entry.Output).Contains(ToolDispatcher.AbortedBeforeDispatchCode);
 
         // A cancelled run is not a successful run.
-        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result).IsFailed();
     }
 
     [Test]
@@ -355,12 +355,12 @@ public class DurabilityCheckpointTests
             // The refusal is on the record, and it names the cause.
             ToolResultMessage results = store.Messages.OfType<ToolResultMessage>().Single();
             ToolResultEntry entry = results.Results.Single();
-            await Assert.That(entry.IsError).IsTrue();
+            await Assert.That(entry).HasFailed();
             await Assert.That(entry.Output).Contains("was NOT executed");
             await Assert.That(entry.Output).Contains(BrokenCheckpoint);
 
             // The run ends with a reason the user can read.
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("durability checkpoint");
         }
         finally
@@ -389,7 +389,7 @@ public class DurabilityCheckpointTests
             runner.Initialize(session, agent);
             Result result = await runner.PromptAsync("do the thing");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(tool.Executions).IsEqualTo(1);
         }
         finally

@@ -127,7 +127,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         List<MessageUpdateEvent> textUpdates = TextUpdates(bus);
         int expected = 1 + CeilDiv(DeltaCount - 1, BoundedPolicy.MaxDeltas);
@@ -150,7 +150,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         string published = string.Concat(TextUpdates(bus).Select(DeltaText));
         await Assert.That(published).IsEqualTo(ExpectedText(DeltaCount))
@@ -168,7 +168,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         List<AgentEvent> events = bus.Events;
         int lastUpdate = events.FindLastIndex(e => e is MessageUpdateEvent);
@@ -193,7 +193,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         List<MessageUpdateEvent> textUpdates = TextUpdates(bus);
         string lastBatch = DeltaText(textUpdates[^1]);
@@ -213,7 +213,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         await Assert.That(TextUpdates(bus).Count).IsEqualTo(DeltaCount)
             .Because(
@@ -241,7 +241,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         await Assert.That(TextUpdates(bus).Count).IsEqualTo(DeltaCount)
             .Because(
@@ -270,7 +270,7 @@ public class TurnRunnerUpdateCoalescingTests
 
         Result result = await loop.RunAsync(NewSession(), Agent());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
 
         List<AgentEvent> events = bus.Events;
         int thinking = events.FindIndex(e => e is MessageUpdateEvent { LlmEvent: ThinkingDeltaEvent });

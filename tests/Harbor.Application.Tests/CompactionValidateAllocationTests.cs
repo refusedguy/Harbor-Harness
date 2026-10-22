@@ -156,7 +156,7 @@ public sealed class CompactionValidateAllocationTests
     {
         Result<CompactionConfig> all = new CompactionConfig(0, 0, 0).Validate();
 
-        await Assert.That(all.IsFailure).IsTrue()
+        await Assert.That(all).IsFailed()
             .Because("all three fields are zero, so there is something to report");
 
         await Assert.That(all.Error).Contains("compaction.reserveTokens must be > 0")
@@ -171,14 +171,14 @@ public sealed class CompactionValidateAllocationTests
         // not padded with messages for fields that are fine.
         Result<CompactionConfig> one = new CompactionConfig(0, 20000, 2).Validate();
 
-        await Assert.That(one.IsFailure).IsTrue();
+        await Assert.That(one).IsFailed();
         await Assert.That(one.Error).IsEqualTo("compaction.reserveTokens must be > 0")
             .Because("only one field is invalid, so only one message belongs in the failure");
 
         // The success path is still a success, with the config itself in hand.
         Result<CompactionConfig> good = CompactionConfig.Default.Validate();
 
-        await Assert.That(good.IsSuccess).IsTrue();
+        await Assert.That(good).IsSuccessful();
         await Assert.That(good.Value).IsEqualTo(CompactionConfig.Default);
     }
 

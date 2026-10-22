@@ -176,7 +176,7 @@ public class AcceptedCancellationHoldsTests
                 continue; // the in-flight call: its outcome is the tool's, not the gate's
             }
 
-            await Assert.That(entry.IsError).IsTrue();
+            await Assert.That(entry).HasFailed();
             await Assert.That(entry.Output).Contains("cancelled before start");
         }
     }
@@ -212,7 +212,7 @@ public class AcceptedCancellationHoldsTests
 
         ToolResultEntry second = result.Results[1];
         await Assert.That(second.ToolCallId).IsEqualTo("s2");
-        await Assert.That(second.IsError).IsTrue();
+        await Assert.That(second).HasFailed();
         await Assert.That(second.Output).Contains("cancelled before start");
     }
 
@@ -237,7 +237,7 @@ public class AcceptedCancellationHoldsTests
             TestAgents.AllowAll(), cts.Token);
 
         await Assert.That(tool.Calls).IsEqualTo(0);
-        await Assert.That(refused.Results[0].IsError).IsTrue();
+        await Assert.That(refused.Results[0]).HasFailed();
         await Assert.That(refused.Results[0].Output).Contains("cancelled before start");
     }
 
@@ -251,8 +251,7 @@ public class AcceptedCancellationHoldsTests
     [Test]
     public async Task Synthetic_CancelIsObservedBeforeDispatch_ProvesTestCanSeeTheDefect()
     {
-        using var cts = new CancellationTokenSource();
-        await cts.CancelAsync();
+        using var cts = TestCancellation.Cancelled();
 
         // The precondition every gate in this file relies on.
         await Assert.That(cts.Token.IsCancellationRequested).IsTrue();

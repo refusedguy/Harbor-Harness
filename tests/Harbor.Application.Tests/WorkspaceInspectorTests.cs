@@ -31,7 +31,7 @@ public class WorkspaceInspectorTests
             var result = await WorkspaceInspector.InspectAsync(
                 dir, WorkspaceIsolation.Copy, new WorkspaceLimits(TimeoutSeconds: 600, MaxSteps: 50));
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             var contract = result.Value;
             await Assert.That(contract.RepoRoot).IsEqualTo(dir);
             await Assert.That(contract.BaseRevision).IsEqualTo(expectedSha);
@@ -58,7 +58,7 @@ public class WorkspaceInspectorTests
 
             var result = await WorkspaceInspector.InspectAsync(dir);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Dirty");
             await Assert.That(result.Error).Contains("a.txt");
         }
@@ -76,7 +76,7 @@ public class WorkspaceInspectorTests
         {
             var result = await WorkspaceInspector.InspectAsync(dir);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Not a git repository");
         }
         finally
@@ -96,7 +96,7 @@ public class WorkspaceInspectorTests
 
             var result = await WorkspaceInspector.InspectAsync(dir);
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value.BaseRevision).IsEqualTo(expectedSha);
             await Assert.That(result.Value.TrackedDirt.Count).IsEqualTo(0);
             await Assert.That(result.Value.UntrackedPresent).IsTrue();
@@ -124,7 +124,7 @@ public class WorkspaceInspectorTests
 
             var result = await WorkspaceInspector.InspectAsync(dir);
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(result.Error).Contains("Dirty");
             await Assert.That(result.Error).Contains("more)");
         }

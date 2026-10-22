@@ -60,6 +60,7 @@ import (
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	genplugininventory "harbor.local/gates/gen-plugin-inventory"
 	"harbor.local/gates/gen-seam-graph"
 	goquality "harbor.local/gates/go-quality"
 	"harbor.local/gates/internal/gate"
@@ -201,6 +202,11 @@ var registry = []registered{
 		name:    "gen-e2e-shards",
 		summary: "the process plan of the headless Avalonia E2E suite",
 		run:     gene2eshards.Run,
+	},
+	{
+		name:    "gen-plugin-inventory",
+		summary: "the committed plugin inventory snapshot still matches the tree",
+		run:     genplugininventory.Run,
 	},
 	{
 		name:    "gen-seam-graph",

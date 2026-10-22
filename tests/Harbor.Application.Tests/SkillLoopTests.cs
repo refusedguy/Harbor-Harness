@@ -64,7 +64,7 @@ public class SkillLoopTests : IDisposable
 
         var result = await loop.RunAsync(session, TestAgents.AllowAll());
 
-        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result).IsSuccessful();
         var toolResults = session.Messages.OfType<ToolResultMessage>().ToArray();
         await Assert.That(toolResults.Length).IsEqualTo(1);
         await Assert.That(string.Concat(toolResults[0].Results.Select(r => r.Output)))

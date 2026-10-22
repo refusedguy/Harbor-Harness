@@ -117,7 +117,7 @@ public class ToolDispatcherRetryTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(2);
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         await Assert.That(message.Results[0].Output).IsEqualTo("recovered");
     }
 
@@ -133,7 +133,7 @@ public class ToolDispatcherRetryTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         // #1760: the text leads with the stable code, and the legacy message
         // follows it unchanged (the "log/LLM stability" the attempt-count
         // branch above protects).
@@ -153,7 +153,7 @@ public class ToolDispatcherRetryTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(2);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("after 2 attempts");
     }
 
@@ -169,7 +169,7 @@ public class ToolDispatcherRetryTests
             .ConfigureAwait(false);
 
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
     }
     [Test]
     public async Task CancelDuringBackoff_NoSecondStart()
@@ -196,7 +196,7 @@ public class ToolDispatcherRetryTests
 
         var message = await run.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
         await Assert.That(tool.Executions).IsEqualTo(1);
-        await Assert.That(message.Results[0].IsError).IsTrue();
+        await Assert.That(message.Results[0]).HasFailed();
         await Assert.That(message.Results[0].Output).Contains("cancelled");
     }
 
@@ -214,7 +214,7 @@ public class ToolDispatcherRetryTests
             .WaitAsync(TimeSpan.FromSeconds(10))
             .ConfigureAwait(false);
 
-        await Assert.That(message.Results[0].IsError).IsFalse();
+        await Assert.That(message.Results[0]).HasSucceeded();
         var retry = bus.Events.OfType<ToolExecutionUpdateEvent>().Single(e => e.RetryAttempt.HasValue);
         await Assert.That(retry.ToolCallId).IsEqualTo("tc1");
         await Assert.That(retry.RetryAttempt).IsEqualTo(1);

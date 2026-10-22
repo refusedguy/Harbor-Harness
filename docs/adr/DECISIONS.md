@@ -651,3 +651,51 @@ that really exists in the repository.
 
 - Full text, the six stages, the guard's scope and the open questions for the owner:
   [ADR-022](ADR-022-session-log-append-only.md).
+
+## ADR-023: оркестратор сборки переезжает с NUKE на Fallout
+
+Оркестратор Harbor (проект `build/_build.csproj`, 32 файла `.cs`, 3 718 строк, 13
+таргетов, пакет `Nuke.Common 10.1.0`) переезжает на
+[Fallout](https://github.com/Fallout-build/Fallout) — жёсткий форк NUKE с
+сохранённой историей, MIT-лицензией и сохранённой поддержкой `.slnx`.
+
+Основание — не слова, а даты и цифры, снятые 2026-10-22: последний коммит NUKE —
+**2025-12-02** (324 дня назад), **0** коммитов за последние 6 месяцев, **0**
+ответов мейнтейнера после той же даты при 65 открытых issue и 55 открытых PR, сайт
+`nuke.build` не открывается, отчёт о CVE с 1 critical (issue #1591) без ответа с
+2026-04-16, запрос поддержки `.slnx` (issue #1586) без ответа с 2026-01-09. Флаг
+`archived` на GitHub при этом **не выставлен** (`archived: false`) — заброшенность
+фактическая, а не формально помеченная.
+
+Fallout: точка форка — NUKE `develop` = `27e8077b8` (2025-12-02), проверено
+`git merge-base --is-ancestor`; **459** своих коммитов от 17 авторов, 21 за
+последние 30 дней; `lib/net10.0/` — единственный TFM у `Fallout.Common`;
+`Fallout.Persistence.Solution` несёт `.slnx`-читалку; путь миграции документирован
+(`fallout-migrate`, `Fallout.Migrate.Analyzers`, переходный shim). Разрыв по
+скачиваниям — 103 378 против 39 894 159 у NUKE, то есть проект молодой, и это
+зафиксировано как риск, а не как аргумент «за».
+
+Решено: пиним **`Fallout.Common 10.4.0`** (последняя листинговая на nuget.org;
+`11.x` по ADR-0002 проекта fallout'а публикуется на nuget.org только по явному
+флагу). Переезд идёт шестью шагами, и **первый шаг ничего не ломает**: пилот
+(`Pack`, сравнение артефакта) идёт параллельно NUKE-пути, переключение — отдельный
+шаг с одной точкой входа, удаление NUKE — последним. Пятый шаг — гейт
+`tools/gates/check-no-nuke/`, который не даёт вернуться к NUKE, по образцу
+`tools/check-no-test-sdk`.
+
+Что остаётся в YAML: всё, что решает GitHub, а не клиент, — `on:`, `runs-on:`,
+`permissions:`, `secrets`, публикация артефактов, `needs:` как топология, required
+checks в ruleset. Из 9 691 строки в 17 workflow-файлах невыразимое в C# — блоки
+`on:`/`permissions:`/`runs-on:` и заголовки джобов (931 строка, 9,6 %) плюс
+`needs:` (19 строк); шелл-код в `run:`-блоках — 2 728 строк (28,1 %) — это то, что
+имеет смысл унести в C#, но в объём переезда оно не входит. Генерация
+workflow-файлов средствами Fallout реальна (`[GitHubActions]` пишет `on:`,
+`permissions:`, `runs-on:`, шаги), но `needs:` он не пишет, поэтому вопрос вынесен в
+отдельную задачу.
+
+- Эпик переезда: [#2178](https://github.com/refusedguy/Harbor-Harness/issues/2178);
+  подзадачи по шагам: #2179 (пилот), #2180 (`build/_build/`), #2181 (CI и
+  bootstrap), #2182 (документация), #2183 (удаление NUKE), #2184 (гейт).
+- Полный текст, план по шагам, смета в числах, риск-реестр и граница YAML:
+  [ADR-023](ADR-023-build-orchestrator-moves-to-fallout.md) и
+  [BUILDSYSTEM_STUDY.md](../BUILDSYSTEM_STUDY.md).
