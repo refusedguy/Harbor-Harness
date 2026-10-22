@@ -27,7 +27,6 @@
     <!-- Build features -->
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
-    <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
 
     <!--
@@ -71,6 +70,49 @@
       (0.4.0.0) are untouched.
     -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!--
+      PublishSingleFile — MOVED OUT OF THIS FILE (#2109).
+
+      It used to be `true` here, repo-wide, and that one line is the
+      reason the SDK pulled the ILLink PACK into every project of the tree:
+      `EnableSingleFileAnalyzer` is inferred true from PublishSingleFile,
+      and `EnableSingleFileAnalyzer` is one of the six ways the SDK's
+      `ProcessFrameworkReferences` decides that the ILLink pack is
+      required (`_RequiresILLinkPack`). The pack ships
+      `analyzers/dotnet/cs/ILLink.RoslynAnalyzer.dll`, and NuGet hands
+      every file in a package's `analyzers/` folder to the compiler of
+      every project that references the package. So one property in this
+      file put the SDK's own AOT/trim analyzer into all 113 compilations
+      of the build.
+
+      MEASURED, not assumed: the compiler's own report
+      (`-p:ReportAnalyzer=true`) attributes 212.2 analyzer-seconds to
+      `ILLink.RoslynAnalyzer` — 32 % of every analyzer-second in the tree
+      and the single largest analyzer cost in it. Run 39527271843, the
+      `narrowed-report` arm; the full table is in docs/BENCHMARKS.md.
+
+      WHAT IT BOUGHT, MEASURED ON THE SAME RUN: three IL3000 warnings,
+      all of them under tests/ (`Assembly.Location` in
+      tests/Harbor.TestKit.Generators.Tests and
+      tests/Harbor.Plugins.Runtime.Tests), and the test tree sets
+      TreatWarningsAsErrors=false — so not one of them could fail a
+      build. The product tree's own IL3000 sites are three
+      `#pragma warning disable IL3000` in
+      src/Harbor.Plugins.Compilation/PluginAssemblyReferences.cs, and
+      THAT coverage is preserved: the single-file analyzer now runs where
+      single-file publishing is declared (apps/Harbor.App.Cli) and where
+      AOT compatibility is declared (the six `IsAotCompatible=true`
+      projects), and the `aot-publish` job publishes the product tree
+      with the analyzer ON, which is where the rest of the coverage went.
+      See docs/ANALYZERS.md §The ILLink analyzer.
+
+      The property now lives where the app that actually ships
+      single-file declares it: apps/Harbor.App.Cli/Harbor.App.Cli.csproj.
+      The two publish recipes in CI already passed it on the command
+      line (`-p:PublishSingleFile=true`), so nothing about what CI
+      publishes changed.
+    -->
 
     <!--
       Every project a Release build touches must be BUILT in Release (#1921).
@@ -477,7 +519,6 @@
     <HarborAnalyzerDiLifetime Condition="'$(HarborAnalyzerDiLifetime)' == ''">off</HarborAnalyzerDiLifetime>
     <HarborAnalyzerCfe Condition="'$(HarborAnalyzerCfe)' == ''">on</HarborAnalyzerCfe>
     <HarborAnalyzerProjectFile Condition="'$(HarborAnalyzerProjectFile)' == ''">on</HarborAnalyzerProjectFile>
-    <HarborAnalyzerVsThreading Condition="'$(HarborAnalyzerVsThreading)' == ''">on</HarborAnalyzerVsThreading>
     <HarborAnalyzerExcubo Condition="'$(HarborAnalyzerExcubo)' == ''">on</HarborAnalyzerExcubo>
     <HarborAnalyzerPublicApi Condition="'$(HarborAnalyzerPublicApi)' == ''">on</HarborAnalyzerPublicApi>
   </PropertyGroup>

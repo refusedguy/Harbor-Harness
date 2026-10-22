@@ -42,41 +42,42 @@ import (
 	"sort"
 	"strings"
 
+	aggregateanalyzercost "harbor.local/gates/aggregate-analyzer-cost"
+	aggregatebuildvcpu "harbor.local/gates/aggregate-build-vcpu"
+	aotpublish "harbor.local/gates/aot-publish-gate"
+	changelog "harbor.local/gates/changelog-assemble"
+	checkabstractionscontract "harbor.local/gates/check-abstractions-contract"
+	checkanalyzerscope "harbor.local/gates/check-analyzer-scope"
+	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
 	dupjscpd "harbor.local/gates/check-dup-jscpd"
+	mergeloss "harbor.local/gates/check-local-merge-loss"
+	checknotestsdk "harbor.local/gates/check-no-test-sdk"
+	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
+	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
+	shardbalance "harbor.local/gates/check-shard-balance"
 	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
 	testpackages "harbor.local/gates/check-test-packages"
 	testprojects "harbor.local/gates/check-test-projects"
 	pinschema "harbor.local/gates/check-tool-schema-pin"
 	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
+	checkxmldoccoverage "harbor.local/gates/check-xml-doc-coverage"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
-	"harbor.local/gates/gen-seam-graph"
-	"harbor.local/gates/internal/gate"
-	"harbor.local/gates/aggregate-analyzer-cost"
-	"harbor.local/gates/aggregate-build-vcpu"
-	changelog "harbor.local/gates/changelog-assemble"
-	"harbor.local/gates/check-abstractions-contract"
-	"harbor.local/gates/check-analyzer-scope"
-	"harbor.local/gates/check-no-test-sdk"
-	"harbor.local/gates/check-public-api-resign"
-	"harbor.local/gates/check-reference-trimmer"
-	shardbalance "harbor.local/gates/check-shard-balance"
-	"harbor.local/gates/check-xml-doc-coverage"
-	"harbor.local/gates/measure-build-cpu"
-	"harbor.local/gates/measure-project-graph"
-	"harbor.local/gates/msbuild-evaluation-cost"
-	normalizemtimes "harbor.local/gates/normalize-mtimes"
-	packvalidate "harbor.local/gates/pack-validate"
-	"harbor.local/gates/test-census"
-	"harbor.local/gates/test-measurements"
-	"harbor.local/gates/test-skips"
-	registrygate "harbor.local/gates/check-coverage-registry"
-	mergeloss "harbor.local/gates/check-local-merge-loss"
 	coveragereport "harbor.local/gates/coverage-report"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
+	genseamgraph "harbor.local/gates/gen-seam-graph"
+	goquality "harbor.local/gates/go-quality"
+	gate "harbor.local/gates/internal/gate"
+	measurebuildcpu "harbor.local/gates/measure-build-cpu"
+	measureprojectgraph "harbor.local/gates/measure-project-graph"
+	msbuildevaluationcost "harbor.local/gates/msbuild-evaluation-cost"
+	normalizemtimes "harbor.local/gates/normalize-mtimes"
+	packvalidate "harbor.local/gates/pack-validate"
 	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
-
+	testcensus "harbor.local/gates/test-census"
+	testmeasurements "harbor.local/gates/test-measurements"
+	testskips "harbor.local/gates/test-skips"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -85,6 +86,9 @@ import (
 // The gate's name is the name of its directory under tools/gates/, and the
 // name of the subcommand that runs it: one directory, one gate, one
 // workflow line.
+//
+// The table is in alphabetical order, so two porters who add a gate at the
+// same time do not fight over one place in the file.
 type registered struct {
 	name    string
 	summary string
@@ -92,56 +96,6 @@ type registered struct {
 }
 
 var registry = []registered{
-	{
-		name:    "check-doc-facts",
-		summary: "a count a document states still equals the count of tracked files",
-		run:     docfacts.Run,
-	},
-	{
-		name:    "check-dup-jscpd",
-		summary: "the second duplication detector, against the committed baseline",
-		run:     dupjscpd.Run,
-	},
-	{
-		name:    "check-test-json-reflection",
-		summary: "no test serializes through the reflection resolver",
-		run:     jsonreflection.Run,
-	},
-	{
-		name:    "check-test-dup",
-		summary: "a test body is a copy of another test body",
-		run:     testdup.Run,
-	},
-	{
-		name:    "check-test-packages",
-		summary: "which packages a test or sample project may reference, and whether a banned one is among them",
-		run:     testpackages.Run,
-	},
-	{
-		name:    "check-test-projects",
-		summary: "every test project in the solution is discovered by a CI run",
-		run:     testprojects.Run,
-	},
-	{
-		name:    "check-tool-schema-pin",
-		summary: "the parameter schema of every builtin tool still is the one that was pinned",
-		run:     pinschema.Run,
-	},
-	{
-		name:    "check-tunit-analyzer-gate",
-		summary: "the analyzer must report a planted offender, and a waiver must suppress exactly its own site",
-		run:     tunitanalyzer.Run,
-	},
-	{
-		name:    "codemod-tool-schemas",
-		summary: "the one-shot migration of the tool schemas, and the writer of the pin",
-		run:     codemodschemas.Run,
-	},
-	{
-		name:    "gen-seam-graph",
-		summary: "the committed seam graph still matches the tree",
-		run:     genseamgraph.Run,
-	},
 	{
 		name:    "aggregate-analyzer-cost",
 		summary: "the analyzer cost table: what each analyzer pack costs the compiler",
@@ -151,6 +105,11 @@ var registry = []registered{
 		name:    "aggregate-build-vcpu",
 		summary: "the measurement table: the wall time, the CPU utilisation and the ratios",
 		run:     aggregatebuildvcpu.Run,
+	},
+	{
+		name:    "aot-publish-gate",
+		summary: "the AOT publish's outcome and diagnostics match the committed record",
+		run:     aotpublish.Run,
 	},
 	{
 		name:    "changelog-assemble",
@@ -166,6 +125,26 @@ var registry = []registered{
 		name:    "check-analyzer-scope",
 		summary: "where each analyzer package is allowed to run",
 		run:     checkanalyzerscope.Run,
+	},
+	{
+		name:    "check-coverage-registry",
+		summary: "the registry of consciously uncovered files still matches the measurement",
+		run:     registrygate.Run,
+	},
+	{
+		name:    "check-doc-facts",
+		summary: "a count a document states still equals the count of tracked files",
+		run:     docfacts.Run,
+	},
+	{
+		name:    "check-dup-jscpd",
+		summary: "the second duplication detector, against the committed baseline",
+		run:     dupjscpd.Run,
+	},
+	{
+		name:    "check-local-merge-loss",
+		summary: "a local squash-merge into dev dropped no content",
+		run:     mergeloss.Run,
 	},
 	{
 		name:    "check-no-test-sdk",
@@ -188,9 +167,64 @@ var registry = []registered{
 		run:     shardbalance.Run,
 	},
 	{
+		name:    "check-test-dup",
+		summary: "a test body is a copy of another test body",
+		run:     testdup.Run,
+	},
+	{
+		name:    "check-test-json-reflection",
+		summary: "no test serializes through the reflection resolver",
+		run:     jsonreflection.Run,
+	},
+	{
+		name:    "check-test-packages",
+		summary: "which packages a test or sample project may reference, and whether a banned one is among them",
+		run:     testpackages.Run,
+	},
+	{
+		name:    "check-test-projects",
+		summary: "every test project in the solution is discovered by a CI run",
+		run:     testprojects.Run,
+	},
+	{
+		name:    "check-tool-schema-pin",
+		summary: "the parameter schema of every builtin tool still is the one that was pinned",
+		run:     pinschema.Run,
+	},
+	{
+		name:    "check-tunit-analyzer-gate",
+		summary: "the analyzer must report a planted offender, and a waiver must suppress exactly its own site",
+		run:     tunitanalyzer.Run,
+	},
+	{
 		name:    "check-xml-doc-coverage",
 		summary: "every public member of the frozen contract assembly carries an XML doc",
 		run:     checkxmldoccoverage.Run,
+	},
+	{
+		name:    "codemod-tool-schemas",
+		summary: "the one-shot migration of the tool schemas, and the writer of the pin",
+		run:     codemodschemas.Run,
+	},
+	{
+		name:    "coverage-report",
+		summary: "the per-project and per-file coverage report of a run",
+		run:     coveragereport.Run,
+	},
+	{
+		name:    "gen-e2e-shards",
+		summary: "the process plan of the headless Avalonia E2E suite",
+		run:     gene2eshards.Run,
+	},
+	{
+		name:    "gen-seam-graph",
+		summary: "the committed seam graph still matches the tree",
+		run:     genseamgraph.Run,
+	},
+	{
+		name:    "go-quality",
+		summary: "the Go sources of the gates: formatted, vet-clean, and registered",
+		run:     goquality.Run,
 	},
 	{
 		name:    "measure-build-cpu",
@@ -218,6 +252,11 @@ var registry = []registered{
 		run:     packvalidate.Run,
 	},
 	{
+		name:    "run-e2e-avalonia-shards",
+		summary: "the headless Avalonia E2E plan, one process per shard",
+		run:     rune2eshards.Run,
+	},
+	{
 		name:    "test-census",
 		summary: "the per-test and per-project wall census of a CI run",
 		run:     testcensus.Run,
@@ -231,31 +270,6 @@ var registry = []registered{
 		name:    "test-skips",
 		summary: "the tests a run skipped, and the reason each declared",
 		run:     testskips.Run,
-	},
-	{
-		name:    "check-coverage-registry",
-		summary: "the registry of consciously uncovered files still matches the measurement",
-		run:     registrygate.Run,
-	},
-	{
-		name:    "check-local-merge-loss",
-		summary: "a local squash-merge into dev dropped no content",
-		run:     mergeloss.Run,
-	},
-	{
-		name:    "coverage-report",
-		summary: "the per-project and per-file coverage report of a run",
-		run:     coveragereport.Run,
-	},
-	{
-		name:    "gen-e2e-shards",
-		summary: "the process plan of the headless Avalonia E2E suite",
-		run:     gene2eshards.Run,
-	},
-	{
-		name:    "run-e2e-avalonia-shards",
-		summary: "the headless Avalonia E2E plan, one process per shard",
-		run:     rune2eshards.Run,
 	},
 }
 

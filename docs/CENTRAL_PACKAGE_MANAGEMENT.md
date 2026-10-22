@@ -141,7 +141,8 @@ Harbor has three MSBuild files at the repo root that work together. They are eas
 - `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` — strict warnings
 - `<GenerateDocumentationFile>true</GenerateDocumentationFile>` — XML docs
 - Versioning: `<Version>0.4.0-alpha</Version>` etc.
-- Build features: `<Deterministic>true</Deterministic>`, `<PublishSingleFile>true</PublishSingleFile>`
+- Build features: `<Deterministic>true</Deterministic>`
+- **NOT** `<PublishSingleFile>` any more (#2109): it used to be `true` here, repo-wide, and that one line is what made the SDK pull the ILLink pack into every project of the tree — 212.2 analyzer-seconds, 32 % of the build's analyzer time. It now lives in `apps/Harbor.App.Cli/Harbor.App.Cli.csproj`, the app that actually ships single-file. See [docs/ANALYZERS.md §The ILLink analyzer](./ANALYZERS.md#the-illink-analyzer).
 - **CPM switch:** `<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>` ← this is what enables CPM
 - **Analyzer `PackageReference`s:** analyzers (Roslynator, SonarAnalyzer, NetAnalyzers, AsyncFixer, ReflectionAnalyzers, BannedApiAnalyzers, Meziantou) are declared here because they apply to every project. Their versions come from `Directory.Packages.props` (CPM).
 

@@ -105,7 +105,7 @@ public class JsonlUnboundedAllocationTests
         for (int i = 0; i < messageCount; i++)
         {
             var appended = await store.AppendMessageAsync(session.Id, TestMessages.User($"message {i}", id: $"m{i}", sessionId: session.Id, createdAt: Epoch.AddSeconds(i + 1), model: "claude-opus-4"));
-            await Assert.That(appended.IsSuccess).IsTrue();
+            await Assert.That(appended).IsSuccessful();
         }
         return (store, session.Id);
     }
@@ -118,7 +118,7 @@ public class JsonlUnboundedAllocationTests
         JsonlSessionStore store, string sessionId, string id, int payloadBytes)
     {
         var appended = await store.AppendMessageAsync(sessionId, TestMessages.User(new string('x', payloadBytes), id: id, sessionId: sessionId, createdAt: Epoch, model: "claude-opus-4"));
-        await Assert.That(appended.IsSuccess).IsTrue();
+        await Assert.That(appended).IsSuccessful();
     }
 
     // --------------------------------------------------- the bound, directly
@@ -460,7 +460,7 @@ public class JsonlUnboundedAllocationTests
                     () => SessionFileReader.ParseMessagesFromDiskAsync(
                         path, sessionId, NullLogger.Instance, CancellationToken.None));
 
-                await Assert.That(attemptRead.IsSuccess).IsTrue();
+                await Assert.That(attemptRead).IsSuccessful();
                 firstRead ??= attemptRead.Value;
                 if (attemptBytes < allocated)
                 {
@@ -561,7 +561,7 @@ public class JsonlUnboundedAllocationTests
             var read = await SessionFileReader.ParseMessagesFromDiskAsync(
                 path, sessionId, NullLogger.Instance, CancellationToken.None);
 
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
 
             var ids = read.Value.Messages.Select(m => m.Id).ToList();
             await Assert.That(ids).DoesNotContain("huge");
@@ -600,7 +600,7 @@ public class JsonlUnboundedAllocationTests
                 path, sessionId, logger, CancellationToken.None);
 
             // The good record before the garbage is still there.
-            await Assert.That(read.IsSuccess).IsTrue();
+            await Assert.That(read).IsSuccessful();
             await Assert.That(read.Value.Messages.Select(m => m.Id)).IsEquivalentTo(new[] { "m0" });
 
             await Assert.That(logger.Warnings).IsNotEmpty();
@@ -746,15 +746,15 @@ public class JsonlUnboundedAllocationTests
             // MEMORY claim is the streaming copy's, and it is measured above
             // through the synchronous seam.
             var session = await store.GetAsync(sessionId);
-            await Assert.That(session.IsSuccess).IsTrue();
+            await Assert.That(session).IsSuccessful();
             var renamed = session.Value with { Title = "renamed by #460" };
             var renamedResult = await store.UpdateAsync(renamed);
-            await Assert.That(renamedResult.IsSuccess).IsTrue();
+            await Assert.That(renamedResult).IsSuccessful();
 
             // And every record survived the rewrite — the count first, because a
             // byte-piping bug shows up as a missing record, not as a wrong one.
             var reread = await store.GetMessagesAsync(sessionId);
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread).IsSuccessful();
             await Assert.That(reread.Value.Count).IsEqualTo(2);
             await Assert.That(((UserMessage)reread.Value.Single(m => m.Id == "fat")).Content.Length)
                 .IsEqualTo(payloadBytes);
@@ -859,10 +859,10 @@ public class JsonlUnboundedAllocationTests
             await AppendFatMessageAsync(store, sessionId, "m1", 33);
 
             var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("final body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(99), model: "claude-opus-4"));
-            await Assert.That(updated.IsSuccess).IsTrue();
+            await Assert.That(updated).IsSuccessful();
 
             var reread = await store.GetMessagesAsync(sessionId);
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread).IsSuccessful();
 
             // Exactly one m1 in the surface — and it is the one we just wrote.
             await Assert.That(reread.Value.Count(m => m.Id == "m1")).IsEqualTo(1);
@@ -873,7 +873,7 @@ public class JsonlUnboundedAllocationTests
             // The versions that were replaced are still in the log — nothing
             // was dropped.
             var log = await store.GetSessionLogAsync(sessionId);
-            await Assert.That(log.IsSuccess).IsTrue();
+            await Assert.That(log).IsSuccessful();
             await Assert.That(log.Value.Count(e => e.Kind == Harbor.Abstractions.Sessions.SessionLogEntryKind.Message))
                 .IsEqualTo(7);
         }
@@ -894,10 +894,10 @@ public class JsonlUnboundedAllocationTests
         try
         {
             var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("edited body", id: "m1", sessionId: sessionId, createdAt: Epoch.AddSeconds(99), model: "claude-opus-4"));
-            await Assert.That(updated.IsSuccess).IsTrue();
+            await Assert.That(updated).IsSuccessful();
 
             var reread = await store.GetMessagesAsync(sessionId);
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread).IsSuccessful();
             await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m2", "m1" });
             await Assert.That(((UserMessage)reread.Value.Single(m => m.Id == "m1")).Content)
                 .IsEqualTo("edited body");
@@ -929,7 +929,7 @@ public class JsonlUnboundedAllocationTests
 
             var updated = await store.UpdateMessageAsync(sessionId, TestMessages.User("nope", id: "does-not-exist", sessionId: sessionId, createdAt: Epoch, model: "claude-opus-4"));
 
-            await Assert.That(updated.IsFailure).IsTrue();
+            await Assert.That(updated).IsFailed();
             await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo(before);
             await Assert.That(File.GetLastWriteTimeUtc(path)).IsEqualTo(stampBefore);
             await Assert.That(File.GetLastWriteTimeUtc(store.GetRootDirectory())).IsEqualTo(dirStampBefore);
@@ -956,7 +956,7 @@ public class JsonlUnboundedAllocationTests
 
             var updated = await store.UpdateAsync(session);
 
-            await Assert.That(updated.IsFailure).IsTrue();
+            await Assert.That(updated).IsFailed();
             await Assert.That(updated.Error).Contains("is empty");
             await Assert.That(LeftoverTemps(store)).IsEmpty();
         }
@@ -984,7 +984,7 @@ public class JsonlUnboundedAllocationTests
 
             var result = await store.DeleteMessagesAfterAsync(sessionId, "m1");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
 
             // Two MESSAGES left the surface: m2 and m3. The duplicate m1 is
             // not a message of its own — it is another version of the anchor,
@@ -992,7 +992,7 @@ public class JsonlUnboundedAllocationTests
             await Assert.That(result.Value).IsEqualTo(2);
 
             var reread = await store.GetMessagesAsync(sessionId);
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread).IsSuccessful();
 
             // The prefix up to and including the FIRST m1, and nothing after.
             await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1" });
@@ -1011,11 +1011,11 @@ public class JsonlUnboundedAllocationTests
         {
             var result = await store.DeleteMessagesAfterAsync(sessionId, "m2");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value).IsEqualTo(2);
 
             var reread = await store.GetMessagesAsync(sessionId);
-            await Assert.That(reread.IsSuccess).IsTrue();
+            await Assert.That(reread).IsSuccessful();
             await Assert.That(reread.Value.Select(m => m.Id)).IsEquivalentTo(new[] { "m0", "m1", "m2" });
         }
         finally
@@ -1039,7 +1039,7 @@ public class JsonlUnboundedAllocationTests
 
             var result = await store.DeleteMessagesAfterAsync(sessionId, "m2");
 
-            await Assert.That(result.IsSuccess).IsTrue();
+            await Assert.That(result).IsSuccessful();
             await Assert.That(result.Value).IsEqualTo(0);
             await Assert.That((await File.ReadAllTextAsync(path)).Length).IsGreaterThan(before.Length);
             await Assert.That(LeftoverTemps(store)).IsEmpty();
@@ -1064,7 +1064,7 @@ public class JsonlUnboundedAllocationTests
 
             var result = await store.DeleteMessagesAfterAsync(sessionId, "no-such-message");
 
-            await Assert.That(result.IsFailure).IsTrue();
+            await Assert.That(result).IsFailed();
             await Assert.That(await File.ReadAllTextAsync(path)).IsEqualTo(before);
             await Assert.That(LeftoverTemps(store)).IsEmpty();
         }

@@ -243,16 +243,13 @@ findings that are not defects.
 
 ## The gate table
 
-Every python tool in `tools/` (26 files), plus the COMPILED gates, whose
+Every python tool in `tools/` (16 files), plus the COMPILED gates, whose
 sources are in `tools/gates/<gate>/` and whose binary is committed to the
-tree. 19 tools are run by a workflow; the other seven are
-`gen-e2e-shards.py`, a generator a human runs, `md_gate.py`,
-`string-switch-rewrites.py` and `tool_schema_model.py`, which are loaded by
-other tools rather than run, `measure-project-graph.py`, which a human runs to
-read the project graph, `codemod-test-events.py`, `codemod-tool-schemas.py`
-and `codemod-tool-names.py`, which rewrite hand-built sources, because a tool that
+tree. 12 tools are run by a workflow; the other four are `md_gate.py` and
+`string-switch-rewrites.py`, which are loaded by other tools rather than run,
+and `codemod-test-events.py` and `codemod-tool-names.py`, which rewrite
+hand-built sources, because a tool that
 is not listed is a tool nobody
-reviews. is a tool nobody
 reviews. The table records, for each one, the question
 it answers, where its implementation lives, where it runs, whether it blocks a
 build, whether it has a
@@ -274,7 +271,6 @@ The modes are:
 
 | Script | Implementation | What it checks | Runs in | Jobs | Mode | Self-test | Baseline | Floors |
 |---|---|---|---|---|---|---|---|---|
-| `tools/aot-publish-gate.py` | python | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
 | `tools/check-arch-anchors.py` | python | may an architecture rule anchor on a LINE NUMBER: a `file:line` is a coordinate, and every line inserted above it moves the coordinate | docs.yml | archanchors, selftest | gate | `--self-test` | `tools/arch-anchor-exceptions.txt` | `--min-files 40` |
 | `tools/check-doc-cites.py` | python | a `file:line` in a normative document still points at a line, and a type it names is still built | docs.yml | cites, selftest | gate | `--self-test` | — | `--min-files 2 --min-cites 100 --min-types 50 --min-api 12 --min-counts 1 --min-test-cites 70 --min-guide-usings 30 --min-base-lists 2` |
 | `tools/bin/harbor-gates-linux-x64 check-dup-jscpd` | compiled: `tools/gates/check-dup-jscpd` | the second duplication detector: jscpd over the whole maintained C# surface, against a committed snapshot of the clones the tree has today | docs.yml | dupjscpd, selftest | gate | `--self-test` | `tools/jscpd-baseline.json` | — |
@@ -296,7 +292,7 @@ The modes are:
 | `tools/demo_repro.py` | python | the demo playback is reproducible, and the GIFs are within their frame budget | demo.yml | demo-gifs, demo-reproducibility | gate | — | `assets/demo/baseline.json` | — |
 | `tools/md-lint.py` | python | the tracked markdown obeys the invariants the repository claims | docs.yml | lint, selftest | gate | `--self-test` | — | `--min-files 250 --min-lines 60000` |
 | `tools/md_gate.py` | python | shared plumbing for the two markdown gates: the tracked-file list, the floors, the fixture harness | — | — | library | — | — | — |
-| `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on the pull-request lane: the build job switches the build-time gate off for pull_request events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a merge path that lost the gate | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
+| `tools/check-arch-suite-once.py` | python | the architecture suite runs EXACTLY ONCE on every lane of ci.yml: the build job switches the build-time gate off for pull_request AND push events, the `arch` shard runs the suite, and no other job does. Zero executions is a finding too, and so is a lane that switched the gate back on | ci.yml | build | gate | `--self-test` | — | `--min-shards 4` |
 | `tools/guard-triage.py` | python | what each architecture-guard firing MEANT: a defect, a style rule, or noise on code the repository allows | ci.yml, docs.yml | test, selftest | reporter | `--self-test` | `tools/guard-triage-classes.json` | `--min-guard-files 100` |
 | `tools/bin/harbor-gates-linux-x64 gen-seam-graph` | compiled: `tools/gates/gen-seam-graph` | the committed seam graph still matches the tree: who implements a seam, who consumes it, who is registered in the container, and what each route does with each extension axis | docs.yml | seamgraph, selftest | gate | `--self-test` | `docs/SEAM_GRAPH.md` | `--min-files 2523 --min-interfaces 191` |
 | `tools/gen-plugin-inventory.py` | python | the committed plugin inventory snapshot still matches the tree: the extension axes, the per-route verdicts and the plugins the repository ships, in the same schema the product writes at runtime for the live composition | docs.yml | plugininventory, selftest | gate | `--self-test` | `docs/PLUGIN_INVENTORY.json` | `--min-axes 7 --min-routes 7 --min-plugins 6` |
@@ -324,6 +320,51 @@ The modes are:
 | `tools/bin/harbor-gates-linux-x64 gen-e2e-shards` | compiled: `tools/gates/gen-e2e-shards` | generates the process plan of the headless Avalonia E2E suite. A tool a human runs, and no workflow runs it | docs.yml | selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 run-e2e-avalonia-shards` | compiled: `tools/gates/run-e2e-avalonia-shards` | runs the headless Avalonia E2E plan, one process per shard, each with its own filter and screenshot directory | ci.yml, docs.yml | test, selftest | helper | `--self-test` | — | — |
 | `tools/bin/harbor-gates-linux-x64 check-local-merge-loss` | compiled: `tools/gates/check-local-merge-loss` | a local squash-merge into dev dropped no content: what each merge removed is still missing | docs.yml | merge-loss, selftest | gate | `--self-test` | `tools/merge-loss-exceptions.txt` | `--min-merges 1` |
+| `tools/bin/harbor-gates-linux-x64 aot-publish-gate` | compiled: `tools/gates/aot-publish-gate` | the AOT publish's outcome and diagnostics against the committed record | ci.yml | aot-publish | gate | `--selftest` | `.github/aot-warning-baseline.txt` | — |
+| `tools/bin/harbor-gates-linux-x64 go-quality` | compiled: `tools/gates/go-quality` | the Go sources of the gates themselves: every file under `tools/gates/` parses and is gofmt-clean, the module vets and builds, every package the table calls a gate carries a `selftest.go`, and the registry in `tools/gates/main.go` names exactly the packages that exist, once each. The formatting rule needs no toolchain (go/format is the code gofmt is built on); the vet and the build do, and the gate exits 2 rather than green when they cannot run | docs.yml, gates-binary.yml | go-quality, selftest | gate | `--self-test` | — | `--min-files 73 --min-packages 27` |
+Two things the table says that are easy to miss:
+
+- The compiled `msbuild-evaluation-cost` gate measures time, and it is NOT a
+  gate. It
+  is a reporter in a workflow of its own, and the policy's "a gate must not
+  measure time" rule applies to gates alone: a measurement that fails a build
+  on a slow runner is a gate that gets switched off, and a measurement that
+  only reports belongs where this one is.
+- `tools/demo_repro.py` has no self-test. It is a gate, and it is the one
+  gap left in the "every gate has a self-test" rule. It compares two
+  recordings of the same tape (the demo played twice), so a planted
+  control for it is a fixture of that shape rather than a flag.
+- `tools/ci-shard-slices.py` USED to have no self-test, for the same
+  reason: it compared two things CI itself produced (the shard list
+  against the slice list, two recordings of the same tape). Since the
+  lists came from one source (issue #1800), the fixture is a desync
+  planted in the tree rather than a flag, and the gate has one.
+
+## The checker
+
+[`tools/check-gate-policy.py`](../tools/check-gate-policy.py) is the rule
+above, in code. It reads three sources - the table, the scripts in `tools/`,
+and the workflow files - and fails when they disagree:
+
+| Rule | What it catches |
+|---|---|
+| `POLICY-SCRIPT-UNDOCUMENTED` | a script CI runs that the table does not name |
+| `POLICY-INVOCATION-DEAD` | a workflow running a script that is not in the tree |
+| `POLICY-WORKFLOW-UNDECLARED` | a script run by a workflow the table does not name, or a workflow the table names that does not run it |
+| `POLICY-JOB-UNKNOWN` | a job the table names that does not exist, or that does not run the script |
+| `POLICY-MODE-GATE-NO-RUN` | a gate whose only CI use is its own self-test |
+| `POLICY-MODE-GATE-WARN-ONLY` | a gate CI runs with `--warn-only` |
+| `POLICY-MODE-ADVISORY-NOT-WARN-ONLY` | an advisory gate CI runs without `--warn-only` |
+| `POLICY-SELFTEST-UNSUPPORTED` | a self-test flag the script does not accept, or a script that has one the table denies |
+| `POLICY-SELFTEST-NOT-RUN` | a script with a self-test that no workflow ever runs |
+| `POLICY-FLOORS-DIVERGE` | floors the table claims that CI does not pass, and floors CI passes that the script does not accept |
+| `POLICY-BASELINE-MISSING` | a ratchet the table names that is not in the tree, or that the script never reads |
+| `POLICY-HEADER-MISSING` | a gate whose header does not say why it is python |
+| `POLICY-DOTNET-CALL` | a gate that shells out to dotnet |
+| `POLICY-TIME-CALL` | a gate that measures time |
+| `POLICY-SCRIPT-MISSING` | a row naming a script that is not in the tree |
+| `POLICY-DUPLICATE-SCRIPT` | two rows for one script |
+| `POLICY-TABLE-EMPTY` | a table that lost rows |
 
 The rules it does not enforce are the ones no file can answer: what a gate
 checks, that its message names the violator, that it has no allow-list, and

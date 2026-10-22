@@ -1,4 +1,5 @@
 using Harbor.Abstractions.Agents;
+using Harbor.Abstractions.Extensions;
 using Harbor.Abstractions.Models.Identifiers;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
@@ -18,7 +19,7 @@ internal sealed class AgentCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
         if (host.Agent.IsRunning())
         {
