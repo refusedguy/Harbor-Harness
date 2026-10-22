@@ -3683,12 +3683,13 @@ still in it. Four things changed inside the lane since:
 | [#2153](https://github.com/refusedguy/Harbor-Harness/pull/2153) | the ILLink analyzer and the vs-threading family leave the ordinary build: 801.3 analyzer-seconds become 491.4, the change's own measurement. Its WALL effect was inside the 28 s noise floor of the harness that measured it, so the compile is cheaper by an amount the harness could not resolve |
 | [#2155](https://github.com/refusedguy/Harbor-Harness/pull/2155), [#2158](https://github.com/refusedguy/Harbor-Harness/pull/2158) | `MSBUILDDISABLENODEREUSE=1` in the `build` job, and `HarborArchGate: 'false'` for every event. The pull-request lane already had the architecture gate off, so the second half of that change does not touch it |
 
-Two more changed the lane's shape since, one of them still in flight. PR
-#2162's `go-quality` gate joined the `docs.yml` gate lane: that lane runs
-twenty-two jobs today, and the sample's twenty-one had no such job. PR
-#2138 moves the unused-reference analyzer into the ordinary compile and
-deletes the `reference-trimmer` job, and it is not merged yet: the job is
-still in dev's `ci.yml`, and §11.6 measures the lane it will produce.
+Two more changed the lane's shape since, one of them still in flight. The
+`go-quality` gate of PR #2162 joined the `docs.yml` gate lane: that lane
+runs twenty-two jobs today, and the sample's twenty-one had no such job. The
+unused-reference analyzer moves into the ordinary compile in PR #2138, and
+the `reference-trimmer` job is deleted with it. That pull request is not
+merged yet: the job is still in dev's `ci.yml`, and §11.6 measures the
+lane it will produce.
 
 **THE WALL IS NOT THE SUM, AND THAT IS THE POINT.** `ci.yml` and `docs.yml`
 have no `needs:` between them, so they start together, and the pull request
