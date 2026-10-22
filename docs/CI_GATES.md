@@ -23,7 +23,7 @@ the tree the table was last reconciled against:
 | python tools in `tools/` | 35 files, 30 553 lines |
 | of them, the `check-*.py` family | 17 files, 19 055 lines |
 | workflows that run a python tool | 4: `ci.yml`, `demo.yml`, `docs.yml`, `nightly.yml` |
-| gates that block a build | 30 |
+| gates that block a build | 32 |
 | gates that report and let the build pass | 1 (`check-test-dup.py`, `--warn-only` while the removal programme runs) |
 | controls for compile-time gates | 1 (`check-tunit-analyzer-gate.py`) |
 | reporters, helpers, libraries | 9 reporters, 8 helpers, 3 libraries |
