@@ -2525,19 +2525,20 @@ which used to walk the same 64 product compilations FOUR times.
 The first two columns are on the SAME base commit (`a019e928`), so the
 difference between them is the branch's work and nothing else:
 
-| | dev @ `a019e928` (run 39717885532) | the branch @ `a019e928` (run 39718941803) | the branch's later runs (39721154583, 39722755948) | |
+| | dev @ `a019e928` (run 39717885532) | the branch @ `a019e928` (run 39718941803) | the branch's later runs (39721154583, 39722755948, 39723469087) | |
 |---|---:|---:|---:|---|
 | tests discovered / passed | 1129 / 1129 | 1136 / 1136 | 1136 / 1136 | |
-| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | 85.00 s / 80.00 s | −20.3 … −25.0 % |
-| sum of the per-test durations | 1325.38 s | 1010.60 s | 1037.64 s / 924.00 s | −21.7 … −30.3 % |
-| parallelism factor | 12.43× | 12.34× | 12.21× / 11.55× | |
-| the `test (arch)` job | 127 s | 98 s | 99 s / 93 s | −22 … −27 % |
+| **wall (the TRX `<Times>` window)** | **106.63 s** | **81.91 s** | 85.00 / 80.00 / 83.00 s | −22.1 … −25.0 % |
+| sum of the per-test durations | 1325.38 s | 1010.60 s | 1037.64 / 924.00 / 1026.15 s | −22.6 … −30.3 % |
+| parallelism factor | 12.43× | 12.34× | 12.21× / 11.55× / 12.37× | |
+| the `test (arch)` job | 127 s | 98 s | 99 / 102 / 96 s | −22 … −25 % |
 
-Three green runs of the branch read 80.00 / 81.91 / 85.00 s against the
-baseline's 106.63 s: a spread of 6.2 % of the wall, which is the runner's
-own noise, and a median of 81.91 s — **−23.2 %**. The last two runs sit on a
-base two commits ahead of `a019e928` (the real MSBuild switches of #2111 and
-the Go-source gate of #2078), and neither touches the architecture suite.
+Four green runs of the branch read 80.00 / 81.91 / 83.00 / 85.00 s against
+the baseline's 106.63 s: a spread of 6.2 % of the wall, which is the
+runner's own noise, and a median of 82.5 s — **−22.6 %**. The later runs
+sit on a base two commits ahead of `a019e928` (the real MSBuild switches of
+#2111 and the Go-source gate of #2078), and neither touches the architecture
+suite.
 
 **What moved**, the class spans (last end − first start) and the single
 tests, from the same TRX sets:
