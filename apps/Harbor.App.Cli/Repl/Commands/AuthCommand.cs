@@ -1,4 +1,5 @@
 using System.Text;
+using Harbor.Abstractions.Extensions;
 using Harbor.Application.Configuration;
 using Harbor.Tui.CellForge.Widgets;
 
@@ -15,7 +16,7 @@ internal sealed class AuthCommand : IReplCommand
 
     public Task ExecuteAsync(ReplCommandContext ctx, CancellationToken ct)
     {
-        ArgumentNullException.ThrowIfNull(ctx);
+        Ensure.NotNull(ctx);
         var host = ctx.Host;
 
         host.Palette.PushFrame(new PaletteFrame(
