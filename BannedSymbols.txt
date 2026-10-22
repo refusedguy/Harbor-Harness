@@ -2,7 +2,6 @@
 # https://learn.microsoft.com/dotnet/fundamentals/code-analysis/code-banned-api-analyzer
 
 # Ban Newtonsoft.Json — use System.Text.Json only.
-#
 # RS0030 covers SOURCE CODE: it fires on a use of the symbol in our code, and
 # on nothing else. The package graph is a different question, and the `N:`
 # entry is what answers it: tools/check-test-packages.py reads the banned
@@ -54,12 +53,23 @@ M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAw
 # Every exemption below carries a matching `#pragma warning disable RS0030`
 # with a reason at its call site. New call sites of banned APIs must either
 # use the non-banned alternative or justify + pragma + extend this catalogue.
+# A ROW IS A FILE AND A REASON. One row per suppression: a file that
+# carries two of them carries two rows, because one row cannot justify two
+# suppressions. The gate that holds this is
+# `harbor-gates banned-api-exemptions`
+# (tools/gates/banned-api-exemptions), and it compares the catalogue with
+# the tree in BOTH directions: a suppression with no row is unjustified, a
+# row whose file carries no suppression is stale, and a file whose count
+# differs from its row count is a mismatch.
+# NO LINE NUMBER. A line number is a coordinate, and every line inserted
+# above it moves the coordinate — the architecture tree removed its line
+# anchors for exactly that reason (#1728). No gate checks one here, so a
+# stale coordinate would be a lie nobody could catch.
 # --- <48>
 # Class 1 — composition-root startup loads (host is built synchronously):
-#   apps/Harbor.App.Avalonia/Program.cs:41                BuildAsync().GetAwaiter().GetResult()
+#   apps/Harbor.App.Avalonia/Program.cs                   BuildAsync().GetAwaiter().GetResult()
 #   apps/Harbor.App.Cli/Hosting/HostBuilder.CliConfig.cs  CliConfig eager load
 #   src/Harbor.Hosting/Modules/ConfigurationModule.cs     Common+Harbor config eager load
-#   src/Harbor.Hosting/Modules/RegistriesModule.cs        CS-plugin LoadAllAsync
 #   Reason: Main/module Configure are sync; no SynchronizationContext exists
 #   yet, so the blocking wait cannot deadlock. Making them async would push
 #   async through the whole host-builder chain for zero benefit at t=0.
@@ -70,7 +80,8 @@ M:System.Runtime.CompilerServices.ConfigurableTaskAwaitable`1.ConfigurableTaskAw
 #   Dispatcher.Invoke semantics); caller is always a non-UI thread.
 # --- <62>
 # Class 3 — ViewModel constructor one-shot local-disk IO (<10ms):
-#   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs ctor loads + auth probe
+#   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs ctor loads the local config
+#   apps/Harbor.App.Avalonia/ViewModels/SettingsViewModel.cs auth probe in the ctor path
 #   Reason: async-ctor dance (IAsyncInitializable / async factory) would ripple
 #   through every consumer for a sub-10ms read; failure paths already handled.
 # ============================================================================ <67>

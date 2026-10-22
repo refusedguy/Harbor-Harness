@@ -82,6 +82,8 @@
   href: GETTING_STARTED.md
 - name: Generic Layout
   href: GENERIC_LAYOUT.md
+- name: Guard Vacuity
+  href: GUARD_VACUITY.md
 - name: Guard Value Measurement
   href: GUARD_VALUE_MEASUREMENT.md
 - name: I18N String Inventory

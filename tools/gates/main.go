@@ -42,6 +42,7 @@ import (
 	"harbor.local/gates/aggregate-build-vcpu"
 	"harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
+	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
 	"harbor.local/gates/check-abstractions-contract"
 	"harbor.local/gates/check-analyzer-scope"
@@ -113,6 +114,11 @@ var registry = []registered{
 		name:    "aot-publish-gate",
 		summary: "the AOT publish's outcome and diagnostics match the committed record",
 		run:     aotpublish.Run,
+	},
+	{
+		name:    "banned-api-exemptions",
+		summary: "every banned-API suppression in the product tree is justified by the catalogue",
+		run:     bannedapiexemptions.Run,
 	},
 	{
 		name:    "changelog-assemble",
