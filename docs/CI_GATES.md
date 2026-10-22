@@ -488,4 +488,3 @@ implementation living in `tools/gates/<gate>/` instead of in
    gate, and they drift.
 6. The workflow runs `tools/bin/harbor-gates-linux-x64 <gate> ...`, and the
    table row names that command and the source directory.
-

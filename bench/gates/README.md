@@ -115,13 +115,13 @@ number.
 | `aot-publish-gate` | `publish/aot-publish.log` | the walk to the log; the log is empty, so the gate reports that it could not judge the publish (exit 2) |
 | `aggregate-analyzer-cost` | `meas/` | the walk of an empty measurement directory |
 | `aggregate-build-vcpu` | `meas/` | the walk of an empty measurement directory |
-| `check-coverage-registry.py` | `Coverage/` | the walk of an empty coverage directory |
-| `coverage_report.py` | `Coverage/` | the walk of an empty coverage directory |
+| `check-coverage-registry` | `Coverage/` | the walk of an empty coverage directory |
+| `coverage-report` | `Coverage/` | the walk of an empty coverage directory |
 | `check-reference-trimmer` | `rt-warnings.log`, `rt-coverage.txt` | the walk of two empty files |
 | `check-test-packages.py` | `obj/project.assets.json` of every test project | the walk of the project list; the resolved package graph is not there, because a restore needs the SDK |
 | `gen-seam-graph` | the tree itself | the whole scan; this gate reads the tree, not an artifact |
 | `guard-triage.py` | `TestResults/*.trx` | the walk of an empty results directory |
-| `pack-validate.py` | `out/packages/*.nupkg` | the walk of an empty package directory |
+| `pack-validate` | `out/packages/*.nupkg` | the walk of an empty package directory |
 | `test-census`, `test-measurements`, `test-skips` | `TestResults/*.trx` | the walk of an empty results directory |
 
 The gate `check-local-merge-loss.py` needs the git history and the pull
