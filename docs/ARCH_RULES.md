@@ -1,7 +1,7 @@
 # Architecture rules: what each one catches, and what it only nags about
 
 > Status (2026-10-22): an audit of the architecture rule set of `dev`, re-counted on the tree this
-> branch merges into (`dev` at `bfa1c99d` plus #1725 and #1730). The first count was made on
+> branch merges into (`dev` at `d0242260` plus #1725 and #1730). The first count was made on
 > `c75dbfdd` (2026-10-21) and every number below was recomputed after the merge. A dated
 > record, not a normative claim about the current tree. The machine-readable
 > form of everything below is [`tests/Harbor.Architecture.Tests/rule-tiers.json`](../tests/Harbor.Architecture.Tests/rule-tiers.json);
@@ -26,15 +26,15 @@ from the tree, not from a hand-kept list.
 
 | | count | what it is |
 |---|---:|---|
-| `.cs` files in the tree | 185 | |
-| top-level classes | 244 | |
-| classes with at least one `[Test]` | 169 | |
+| `.cs` files in the tree | 190 | |
+| top-level classes | 249 | |
+| classes with at least one `[Test]` | 172 | |
 | **rules (guards about the repository)** | **160** | the population of this audit |
-| instrument self-tests | 9 | the guard machinery proving it can fail, not a rule about the product |
+| instrument self-tests | 14 | the guard machinery proving it can fail, not a rule about the product |
 | engine / probe | 2 | `ScanRule` (the shared runner) and the #861 probe file |
-| helper classes without tests | 75 | probes, fixtures, records, planted controls |
-| `[Test]` attributes | 1115 | |
-| lines in the tree | 109,342 | |
+| helper classes without tests | 77 | probes, fixtures, records, planted controls |
+| `[Test]` attributes | 1121 | |
+| lines in the tree | 110,834 | |
 
 ### The "110" of the issue
 
@@ -44,7 +44,7 @@ ends in `Rule` or `Rules`:
 ```
 commit d96b66ec (2026-10-20)  ->  110 classes named *Rule / *Rules
 this tree (2026-10-22)         ->  129 classes named *Rule / *Rules
-this tree, the real population  ->  160 rules (169 test-bearing classes, minus 9 self-tests)
+this tree, the real population  ->  160 rules (172 test-bearing classes, minus 14 self-tests)
 ```
 
 Two corrections turn that into the real number. **19** `*Rule`-named classes were added since,
@@ -323,7 +323,7 @@ This is the preparation for #1724, and the JSON names the shape per rule
 | `il-probe` | the rule **already** decides by symbol (reflection over the loaded assembly, Mono.Cecil over the IL, or a Roslyn analyzer over the syntax tree). No conversion is needed -- this is the shape the others should move to | 43 |
 
 **120 rules** are in the semantic family — 77 to convert, 43 already there — and the estimate for
-the code that comes off the tree is **17 840 lines**, which is **16.3%** of the 109 342 lines in
+the code that comes off the tree is **17 840 lines**, which is **16.1%** of the 110 834 lines in
 the architecture tree. The estimate is a projection: it is the mechanism (the file walk, the
 comment stripper, the regex matcher, the baseline subtraction, the planted controls) that a
 symbol-level question does not need, and the prose that states the rule stays. It is not
@@ -381,18 +381,18 @@ The census is a computation over the tree, not a list anyone maintains:
 
 ```bash
 # the population: one entry per class with at least one [Test]
-grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1115 test attributes
+grep -rn '^\s*\[Test' tests/Harbor.Architecture.Tests/*.cs | wc -l   # 1121 test attributes
 
 # the files and the lines of the tree
-ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 185 files
-cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 109342 lines
+ls tests/Harbor.Architecture.Tests/*.cs | wc -l                        # 190 files
+cat tests/Harbor.Architecture.Tests/*.cs | wc -l                      # 110834 lines
 
 # the classes, and the ones that carry a [Test]. A [Test] method belongs to
 # the type that encloses it, so the last declaration before it is its class.
 awk 'match($0, /^(public|internal|private|protected)[A-Za-z ]*(class|record|struct|interface|enum) [A-Za-z_][A-Za-z0-9_]*/) { n = split(substr($0, RSTART, RLENGTH), a, " "); if (a[n-1] == "class") c[a[n]] = 1; cur = a[n] } /^[ \t]*\[Test/ { if (cur != "") t[cur] = 1 } END { nc = 0; for (k in c) nc++; nt = 0; for (k in t) if (k in c) nt++; print "top-level classes:", nc; print "classes with a [Test]:", nt }' \
     tests/Harbor.Architecture.Tests/*.cs
-# top-level classes: 244
-# classes with a [Test]: 169
+# top-level classes: 249
+# classes with a [Test]: 172
 
 # the tiers
 python3 -c "import json;d=json.load(open('tests/Harbor.Architecture.Tests/rule-tiers.json'));print(d['tier_counts'])"

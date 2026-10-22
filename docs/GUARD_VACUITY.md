@@ -1,7 +1,7 @@
 # Can each guard fail? The vacuity sweep of issue #1730
 
 > Status (2026-10-22): an audit, re-run on the tree this branch merges into (`dev` at
-> `bfa1c99d` plus #1725 and #1730). The first sweep was made on the tree at `550b5969`
+> `d0242260` plus #1725 and #1730). The first sweep was made on the tree at `550b5969`
 > (2026-10-21); every self-test in the table below was **executed** again on the merged tree,
 > and its verdict recorded. A dated record, not a normative claim about the current tree. Every
 > "умеет падать" verdict below was **executed**, not read: the self-test of every gate in scope
@@ -93,6 +93,16 @@ The table names the gates as the merged tree has them: eight of the scripts that
 were python when the sweep started are now subcommands of the compiled binary
 (#2085, #2115, #2127, #2134), and their self-tests were run through the binary
 on the merged tree.
+
+**Three more gates landed in the perimeter while the sweep was open**, and all
+three carry the same kind of proof — a self-test that plants the violation of
+their own invariant. They were run on the merged tree too:
+
+| gate | умеет падать? | чем доказано |
+|---|---|---|
+| `tools/bin/harbor-gates-linux-x64 go-quality` | yes | `--self-test` plants an unformatted file, a package the registry does not name and a package without a self-test, and asserts each fires (rc=0, "self-test PASS"). The gate on the live tree also found a real defect in this pull request: the banned-API gate's own self-test was not gofmt-clean |
+| `tools/bin/harbor-gates-linux-x64 check-event-topology` | yes | `--self-test` plants a producer row that names a call site the file does not hold (rc=0, "self-test PASS") |
+| `tools/bin/harbor-gates-linux-x64 check-workflows` | yes | `--self-test` plants a duplicate key in a mapping and a block sequence's entry at the wrong indent, and asserts each fires (rc=0). It is the gate that would have caught the 2026-10-21 workflow-file failure this pull request inherited |
 
 ## The eight that declare neither
 

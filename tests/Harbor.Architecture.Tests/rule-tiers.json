@@ -4,15 +4,15 @@
   "issue": 1725,
   "population": {
     "tree": "tests/Harbor.Architecture.Tests",
-    "cs_files": 185,
-    "top_level_classes": 244,
-    "classes_with_tests": 169,
+    "cs_files": 190,
+    "top_level_classes": 249,
+    "classes_with_tests": 172,
     "guards": 160,
-    "instrument_self_tests": 9,
+    "instrument_self_tests": 14,
     "engine_or_probe": 2,
-    "helper_classes_without_tests": 75,
-    "test_attributes": 1115,
-    "tree_lines": 109342,
+    "helper_classes_without_tests": 77,
+    "test_attributes": 1121,
+    "tree_lines": 110834,
     "ticket_claim_110": {
       "value": 110,
       "measured_at_commit": "d96b66ec",
@@ -67,7 +67,7 @@
     },
     "already_semantic_rules": 43,
     "estimated_lines_saved": 17840,
-    "share_of_tree_lines": 0.1632
+    "share_of_tree_lines": 0.161
   },
   "rules": [
     {
@@ -764,6 +764,27 @@
       "estimated_lines_saved": 0
     },
     {
+      "id": "CommentStripperEquivalenceTests",
+      "file": "tests/Harbor.Architecture.Tests/CommentStripperEquivalenceTests.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 3,
+      "file_lines": 321,
+      "subject": "The comment blanker that replaced the old stripper produces the BYTES the old one produced.",
+      "checks": "Compares the new scanner (SourceCommentBlanker) with the kept old implementation (CommentStripperOracle) over the three trees the rules read: src/, apps/ and tests/.",
+      "defect_signal": "Nothing about the product: this is the control that proves the blanker can fail. A blanker that produced different bytes would move every finding a rule reports, and a rule whose finding moved is a rule whose verdict changed, however green the test stays.",
+      "refactor_signal": "Nothing. It grades the instrument against its oracle.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit e237a93c 'the comment stripper allocated the SQUARE of every block comment, and one comment was 10.6 GiB' (#2167)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
       "id": "CommonConfigContractRules",
       "file": "tests/Harbor.Architecture.Tests/CommonConfigContractRules.cs",
       "kind": "guard",
@@ -958,7 +979,7 @@
       "kind": "guard",
       "note": null,
       "tests": 6,
-      "file_lines": 1349,
+      "file_lines": 1210,
       "subject": "Every public interface in a contract assembly has an implementor or a consumer.",
       "checks": "Reads the published contract assemblies' public interfaces through reflection, then searches the product tree for an implementor or a consumer of each; a named reservation table excuses the rest.",
       "defect_signal": "#1831 measured a published contract nobody keeps: an interface with zero implementors and zero consumers.",
@@ -974,12 +995,33 @@
       "estimated_lines_saved": 0
     },
     {
+      "id": "DeadPublicMemberEquivalenceTests",
+      "file": "tests/Harbor.Architecture.Tests/DeadPublicMemberEquivalenceTests.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 0,
+      "file_lines": 0,
+      "subject": "The rewritten member scan says the SAME thing as the scan before the rewrite.",
+      "checks": "Runs both scan modes of DeadPublicMemberRule -- the current one and the kept legacy one -- over the live tree and requires the same answer.",
+      "defect_signal": "Nothing about the product: this is the control that proves the rewrite changed no verdict. An optimisation that changes a rule's answers is a change to every rule that reads it.",
+      "refactor_signal": "Nothing. It grades the instrument against its oracle.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit d0242260 'the source parser is rewritten on modern APIs, and the same tree is graded' (#2156)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
       "id": "DeadPublicMemberRule",
       "file": "tests/Harbor.Architecture.Tests/DeadPublicMemberRule.cs",
       "kind": "guard",
       "note": null,
       "tests": 6,
-      "file_lines": 1114,
+      "file_lines": 1300,
       "subject": "A public member nobody calls is dead weight in a published surface.",
       "checks": "Reads the published assemblies' public members through reflection, then searches the tree for a caller; inherited members are counted, and a named reservation excuses the rest.",
       "defect_signal": "A public member in a published assembly had no caller at all.",
@@ -2150,6 +2192,27 @@
       "estimated_lines_saved": 0
     },
     {
+      "id": "ParseCostMeasurement",
+      "file": "tests/Harbor.Architecture.Tests/ParseCostMeasurement.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 2,
+      "file_lines": 441,
+      "subject": "What the architecture suite's source parsing costs, and what the retired stripper would have cost.",
+      "checks": "Measures the per-file cost of the retired quadratic blanking, of the linear oracle and of the current scanner over the repository's own tree, and prints the [arch-cost] lines the CI measurement lane renders.",
+      "defect_signal": "Nothing about the product: the retired blanking allocated in proportion to the SQUARE of each block comment's length, and 11.40 GB of its 12.82 GB came from ONE 75 497-character doc comment.",
+      "refactor_signal": "Nothing. It measures the instrument; the rules keep their own assertions.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit e237a93c 'the comment stripper allocated the SQUARE of every block comment, and one comment was 10.6 GiB' (#2167)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
       "id": "PresentationCapabilityInstrumentationTests",
       "file": "tests/Harbor.Architecture.Tests/PresentationCapabilityInstrumentationTests.cs",
       "kind": "instrument-self-test",
@@ -3088,6 +3151,48 @@
       "tier": "A",
       "evidence": [
         "measured: no firing in the window"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
+      "id": "SourceParseCostMeasurement",
+      "file": "tests/Harbor.Architecture.Tests/SourceParseCostMeasurement.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 0,
+      "file_lines": 0,
+      "subject": "What the architecture suite's parsing substrate costs, and what the forms it replaced cost.",
+      "checks": "Measures the per-file cost of the retired lexer and of the current one over the corpus the rules read, and prints the [arch-cost] and [arch-count] lines the CI measurement lane renders.",
+      "defect_signal": "Nothing about the product: the retired blanking allocated in proportion to the SQUARE of each block comment's length, and 11.40 GB of its 12.82 GB came from ONE 75 497-character doc comment.",
+      "refactor_signal": "Nothing. It measures the instrument; the rules keep their own assertions.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit d0242260 'the source parser is rewritten on modern APIs, and the same tree is graded' (#2156)"
+      ],
+      "semantic_candidate": false,
+      "semantic_kind": null,
+      "already_semantic": false,
+      "estimated_lines_saved": 0
+    },
+    {
+      "id": "SourceParseParityTests",
+      "file": "tests/Harbor.Architecture.Tests/SourceParseParityTests.cs",
+      "kind": "instrument-self-test",
+      "note": null,
+      "tests": 0,
+      "file_lines": 0,
+      "subject": "The rewritten text parser grades the SAME tree the old one graded.",
+      "checks": "Compares the new in-place lexer with the StringBuilder lexer it replaced, and the new span lookup with the Regex.Matches walk it replaced, over the graded corpus.",
+      "defect_signal": "Nothing about the product: this is the control that proves the rewrite changed no bytes. A rule that starts catching something else is a rule that moved without anybody deciding that it should.",
+      "refactor_signal": "Nothing. It grades the instrument against its oracle.",
+      "false_positive_cost": 0,
+      "tier": "A",
+      "evidence": [
+        "commit d0242260 'the source parser is rewritten on modern APIs, and the same tree is graded' (#2156)"
       ],
       "semantic_candidate": false,
       "semantic_kind": null,
