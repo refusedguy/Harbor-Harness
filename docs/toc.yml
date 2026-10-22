@@ -34,6 +34,8 @@
   href: CENTRAL_PACKAGE_MANAGEMENT.md
 - name: Citation Drift Measurement
   href: CITATION_DRIFT_MEASUREMENT.md
+- name: Ci As Code
+  href: CI_AS_CODE.md
 - name: Ci Gates
   href: CI_GATES.md
 - name: Ci Ui Tests

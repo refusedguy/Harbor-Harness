@@ -695,6 +695,13 @@ jobs:
       # indistinguishable from a gate that found nothing.
       - name: The gate-bench-set gate fails on a gate the set does not hold
         run: tools/bin/harbor-gates-linux-x64 check-gate-bench-set --self-test
+      # #2185. The gate that makes a workflow file an artifact has to be
+      # able to FAIL: a checker that cannot tell a hand edit from a
+      # generated file is a checker that finds nothing. The fixtures here
+      # are a generated file, one line of it changed by hand, and the file
+      # deleted.
+      - name: Generated-workflow gate fails on a hand-edited file
+        run: tools/bin/harbor-gates-linux-x64 gen-workflows --self-test
 
   # The tree gates, in ONE command.
   #
@@ -1615,6 +1622,15 @@ jobs:
       - uses: actions/checkout@v7
       - name: Check that no workflow file declares a key twice
         run: tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
+      # #2185. A workflow file that this gate GENERATES is an artifact, not
+      # a manuscript: its source of truth is the Go model next to it, under
+      # tools/gates/gen-workflows/workflows/, and this step refuses a
+      # committed file the model does not produce. It lives here, in the
+      # documentation lane, and not in the lane of the file it polices, for
+      # the same reason as the step above: a check that lives inside the
+      # broken file disappears together with it.
+      - name: The generated workflow file still matches its Go model
+        run: tools/bin/harbor-gates-linux-x64 gen-workflows --check --min-files 1
 
   # #431 (slice 1). Docs-site assembly from the existing markdown tree.
   #
