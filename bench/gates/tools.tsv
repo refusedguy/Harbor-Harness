@@ -61,6 +61,7 @@ coverage-report	tools/bin/harbor-gates-linux-x64 coverage-report --coverage-dir 
 demo-repro	tools/bin/harbor-gates-linux-x64 demo-repro check-manifest
 gen-plugin-inventory	tools/bin/harbor-gates-linux-x64 gen-plugin-inventory --check --min-axes 7 --min-routes 7 --min-plugins 6
 gen-seam-graph	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-files 2523 --min-interfaces 191
+gen-workflows	tools/bin/harbor-gates-linux-x64 gen-workflows --check --min-files 1
 guard-triage.py	python3 tools/guard-triage.py --trx "TestResults/*.trx" --trx "tests/**/TestResults/*.trx" --project Harbor.Architecture.Tests --repo-root . --min-guard-files 100 --out guard-firings.json --summary TestResults/summary.md
 md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
 pack-validate	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
