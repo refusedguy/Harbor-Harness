@@ -71,6 +71,7 @@ import (
 	codemodtestevents "harbor.local/gates/codemod-test-events"
 	codemodtoolnames "harbor.local/gates/codemod-tool-names"
 	codemodschemas "harbor.local/gates/codemod-tool-schemas"
+	contractdomains "harbor.local/gates/contract-domains"
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
@@ -251,6 +252,11 @@ var registry = []registered{
 		name:    "codemod-tool-schemas",
 		summary: "the one-shot migration of the tool schemas, and the writer of the pin",
 		run:     codemodschemas.Run,
+	},
+	{
+		name:    "contract-domains",
+		summary: "who uses the contract roots, the domains they fall into, and what cutting them costs",
+		run:     contractdomains.Run,
 	},
 	{
 		name:    "coverage-report",
