@@ -170,4 +170,40 @@ public static class AllocationProbe
 
         return allocated;
     }
+
+    /// <summary>
+    ///     Measures a synchronous body and returns it as a
+    ///     <see cref="PerfGateLeg" />: the wall time of the window and the
+    ///     bytes it allocated.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The ONE place a perf gate's byte count is taken from
+    ///         <c>GC.GetAllocatedBytesForCurrentThread()</c>. A gate that
+    ///         reads the counter itself has to re-implement the guard below
+    ///         (and the housekeeping around it) at every call site, and the
+    ///         repository has already paid for one counter that could go
+    ///         backwards and report itself as a cheap turn (#741). This
+    ///         method keeps the reading and the guard in the probe and lets
+    ///         the gate hand over a plain body.
+    ///     </para>
+    ///     <para>
+    ///         The body must not suspend: the counter is per-thread, and a
+    ///         continuation on another thread would make the two samples
+    ///         come from different counters. The backwards-counter guard is
+    ///         what catches that case — it throws instead of reporting a
+    ///         number.
+    ///     </para>
+    /// </remarks>
+    /// <param name="body">The operation to measure. Must not suspend.</param>
+    public static PerfGateLeg MeasureThreadLeg(Action body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        long allocated = MeasureThread(body);
+        sw.Stop();
+
+        return new PerfGateLeg(sw.Elapsed.TotalMilliseconds, allocated);
+    }
 }
