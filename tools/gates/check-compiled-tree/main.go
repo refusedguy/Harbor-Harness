@@ -1,7 +1,7 @@
 // Package checkcompiledtree is the gate that proves the lane compiled the
 // tree it was given.
 //
-// THE FACT THIS GATE CHECKS
+// # THE FACT THIS GATE CHECKS
 //
 // The build-output cache (#1927) restores obj/ and bin/ from a commit, and
 // the mtime normalisation stamps the restored outputs so that MSBuild skips
@@ -15,17 +15,17 @@
 // that it compiled the tree it was handed, and a tree that does not compile
 // must not be able to pass.
 //
-// HOW THE GATE KNOWS
+// # HOW THE GATE KNOWS
 //
 // Two facts, one from git and one from the clock.
 //
-//   * the CHANGED set: the files whose CONTENT differs between the tree the
+//   - the CHANGED set: the files whose CONTENT differs between the tree the
 //     restored outputs were built from (--base) and the tree under test. The
 //     tree under test is the WORKING TREE, not HEAD: the working tree is
 //     what the compiler read, and a lane that patched the tree after the
 //     checkout compiled something other than the commit.
 //
-//   * the BUILD START: the moment the compile began, taken from a marker file
+//   - the BUILD START: the moment the compile began, taken from a marker file
 //     the workflow touches right before it compiles.
 //
 // A project whose sources changed MUST have been compiled during this run,
@@ -33,7 +33,7 @@
 // build start is an output the compile did not produce: the project was
 // skipped, and whatever is in it was never compiled.
 //
-// WHY THE ANCHOR IS THE BUILD START AND NOT THE SOURCE
+// # WHY THE ANCHOR IS THE BUILD START AND NOT THE SOURCE
 //
 // The mtimes of the sources are exactly what the normalisation is allowed to
 // lie about: it stamps a file it believes unchanged with the base commit's
@@ -43,12 +43,12 @@
 // start is a fact the normalisation cannot reach: the workflow writes it
 // after the normalisation, and nothing the normalisation does can move it.
 //
-// WHY THE OUTPUTS AND NOT THE BUILD LOG
+// # WHY THE OUTPUTS AND NOT THE BUILD LOG
 //
 // The gate reads the FILES the build left behind, so it works where the
 // build ran and needs neither the SDK nor a log parser.
 //
-// WHAT IS IN SCOPE, AND WHY
+// # WHAT IS IN SCOPE, AND WHY
 //
 // The scope is the C# sources a project compiles, and nothing else. A
 // compile error lives in a source file, so a source file is what the gate
