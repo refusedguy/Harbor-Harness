@@ -274,7 +274,7 @@ itself (what is compiled, which flags, which configuration) does not change.
 ### The key
 
 ```
-msbuild-v1-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
+msbuild-v2-<os>-<arch>-sdk<sdk>-nuget<packages path>-<props hash>-<sha>
 ```
 
 | field | what it pins | why it is in the key |
@@ -290,16 +290,34 @@ The key is deliberately COARSE: it names the toolchain, not the source tree.
 no entry for its own commit restores the most recent entry built from the
 same toolchain — the base branch's cache.
 
+The `v2` is the human version of the cache. It moves when the path list moves:
+the path list is part of the cache's own version (a hash of its lines), so a
+changed list already hides the entries written under the old one. Naming it in
+the key makes the cold start readable — the lane says "no build-output cache
+entry for this prefix — this lane compiles from scratch" — instead of a
+restore that silently misses.
+
 The NuGet folder is pinned to `/home/runner/.nuget/packages` in the job's
 environment. That IS the runner default; it is written down explicitly so
 that the key and the restore agree by construction, and a runner that moves
 the folder gets a cold build instead of a wrong one.
 
 The cached payload is `obj/` and `bin/` minus the runtime assets (the native
-libraries of every RID), the satellite assemblies and the debug symbols:
-those are copies of what the NuGet folder already holds, nothing in
-MSBuild's up-to-date check reads them, and the build re-copies them. They
-were the bulk of the payload, and the repository's cache budget is 10 GB.
+libraries of every RID) and the satellite assemblies: those are copies of what
+the NuGet folder already holds, nothing in MSBuild's up-to-date check reads
+them, and the build re-copies them. They were the bulk of the payload, and the
+repository's cache budget is 10 GB. The debug symbols STAY: a missing `.pdb`
+is a missing OUTPUT of `CoreCompile`, and MSBuild treats a missing output as
+"must build" (issue #2117).
+
+`tools/bin` does NOT go into the cache. It is the COMMITTED gate binary, not
+a build output: the glob `**/bin` matched it, the restore unpacked the base
+commit's copy of it over the one the checkout had just written, and the lane
+then ran a gate that was not in the tree it was checking (pull request 2170,
+run 39659933127 — "unknown gate: check-compiled-tree"). A cache of build
+outputs must never be able to replace a committed artifact. The `build` job
+also proves it on every lane: it restores `tools/bin` from the checkout and
+checks it against `tools/bin/SHA256SUMS` before it runs a gate out of it.
 
 ### The mtime trap, and what the cache does about it
 
@@ -333,6 +351,41 @@ job DISCARDS the restored outputs and rebuilds from scratch: a cache whose
 base is unknown cannot be told apart from a stale one, and a stale build is
 worse than a slow one.
 
+### The safety net: did the lane compile the tree it was given?
+
+The normalisation above decides what MSBuild may skip, and a decision that is
+wrong hides a COMPILE ERROR: a skipped project is never handed to the
+compiler, so the error in it never reaches the build. That is issue #2100,
+and the `build` job now checks the decision instead of trusting it.
+
+`tools/bin/harbor-gates-linux-x64 check-compiled-tree` runs right after the
+compile and asks, for every project whose SOURCES changed since the commit
+the restored outputs were built from: was the project COMPILED in this run?
+
+- the CHANGED set is read by CONTENT, and against the WORKING TREE — the
+  tree the compiler read, not `HEAD`. A file the lane patched after the
+  checkout is part of what was compiled, and the gate has to see it;
+- the BUILD START is a marker file the workflow touches between the
+  normalisation and the compile. Every output the compile produced is newer
+  than it, and every output the compile skipped kept the one the cache
+  carried, which is older. The marker is the one fact the normalisation
+  cannot reach: it is written after it, and nothing it does can move it.
+
+An output that is older than the build start, in a project whose sources
+changed, is a project the compile skipped — and the gate turns that into a
+RED lane. Without it, a tree that does not compile can ship behind a green
+build.
+
+The gate has a self-test (the planted compile error, with the outputs the
+cache left behind) and it can be shown failing on the real lane: the `ci`
+workflow takes a `plant_compile_error` input, and a dispatch with it plants
+the shape of #2100 in the working tree — a source file of a project the cache
+holds, carrying a compile error, identical in the cached base and in `HEAD`,
+with the base commit's mtime. The compile then skips the project and stays
+green, and the gate turns the lane red. It needs the cache, so the demo is a
+pair of dispatches: the first one warms the cache, the second one plants the
+error.
+
 ### Who writes, who only reads
 
 | lane | restores | writes |
@@ -353,7 +406,7 @@ is a different configuration from the one the cache holds.
   NuGet folder moves — a package bump or an SDK bump is a cold build with no
   action needed.
 - **On purpose.** Delete the entries (GitHub → the repository → Actions →
-  Caches, or `gh cache delete --all`), or change the `v1` prefix in the key.
+  Caches, or `gh cache delete --all`), or change the `v2` prefix in the key.
 - **Locally.** `find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf
   {} +` — the same thing the "Clean build artifacts" section above does.
 - **If a restored cache is suspected of being wrong.** The mtime step throws
