@@ -18,6 +18,28 @@ namespace Harbor.E2E.Framework;
 internal static class AnsiStripper
 {
     /// <summary>
+    ///     The builder the scrubber writes into, one per thread.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The scrubber used to build a fresh <c>StringBuilder</c> per
+    ///         call, and <c>TuiDriver</c> calls it on every chunk it reads off
+    ///         the PTY — a 4 KiB chunk, so a builder with a 4 KiB character
+    ///         array, thrown away after every chunk. A megabyte of terminal
+    ///         output is two hundred and fifty-six of those.
+    ///     </para>
+    ///     <para>
+    ///         The builder is REUSED instead, per thread, and the TEXT it
+    ///         produces is unchanged: the same loop, the same order, the same
+    ///         characters, and the result is still a fresh string handed to the
+    ///         caller. <c>AnsiStripperParityTests</c> in
+    ///         <c>Harbor.E2E.Framework.Tests</c> pins that.
+    ///     </para>
+    /// </remarks>
+    [ThreadStatic]
+    private static StringBuilder? _scratch;
+
+    /// <summary>
     ///     Remove ANSI escape sequences from <paramref name="raw" /> and return
     ///     the visible text. Newlines (\r\n, \r, \n) are preserved as \n.
     /// </summary>
@@ -26,7 +48,9 @@ internal static class AnsiStripper
         if (string.IsNullOrEmpty(raw))
             return string.Empty;
 
-        var sb = new StringBuilder(raw.Length);
+        StringBuilder sb = _scratch ??= new StringBuilder(raw.Length);
+        sb.Clear();
+
         int i = 0;
         while (i < raw.Length)
         {

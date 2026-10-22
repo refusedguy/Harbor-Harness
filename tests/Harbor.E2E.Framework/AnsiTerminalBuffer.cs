@@ -1,3 +1,5 @@
+using System;
+using System.Buffers;
 using System.Net;
 using System.Text;
 
@@ -77,6 +79,18 @@ internal sealed class AnsiTerminalBuffer
     public int Height => _height;
     public int CursorRow => _cursorRow;
     public int CursorCol => _cursorCol;
+
+    /// <summary>
+    ///     The grid, by reference — the seam <c>AnsiTerminalBufferOracle</c>
+    ///     reads to rebuild the OLD searches over the same bytes.
+    /// </summary>
+    /// <remarks>
+    ///     The oracle needs the grid and not a copy of it: a copy would be a
+    ///     second source of truth about what the grid holds, and the parity
+    ///     test would then be comparing two different grids instead of two
+    ///     searches over one.
+    /// </remarks>
+    internal TerminalCell[,] GridForOracle => _grid;
 
     public void Write(string input)
     {
@@ -597,6 +611,12 @@ internal sealed class AnsiTerminalBuffer
                   <body>
                   """);
 
+        // ONE builder for every run of every row, cleared between runs. The
+        // old shape built a builder per run, and a screenshot frame is a
+        // screenful of runs — one builder each, all of them thrown away at the
+        // end of the run.
+        var runSb = new StringBuilder(_width);
+
         for (int r = 0; r <= lastRow; r++)
         {
             sb.Append("<div class=\"term-row\">");
@@ -609,7 +629,7 @@ internal sealed class AnsiTerminalBuffer
                 bool bold = cell.Bold;
                 bool underline = cell.Underline;
 
-                var runSb = new StringBuilder();
+                runSb.Clear();
                 while (c < _width &&
                        _grid[r, c].FgColor == fg &&
                        _grid[r, c].BgColor == bg &&
@@ -669,19 +689,53 @@ internal sealed class AnsiTerminalBuffer
     ///     Returns the entire visible grid as a single string with rows
     ///     separated by newlines. Trailing whitespace on each row is trimmed.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The rows are appended into ONE builder. The old shape built a
+    ///         <c>StringBuilder</c> per row and then called <c>ToString()</c> on
+    ///         it, so one call allocated fifty short-lived builders and fifty
+    ///         short-lived strings — for a 120x50 grid — and then threw all of
+    ///         them away to keep the one string the caller wanted.
+    ///         <c>TuiDriver.WaitForTextAsync</c> calls this on every poll of
+    ///         every PTY scenario, so the garbage was paid a hundred times per
+    ///         wait.
+    ///     </para>
+    ///     <para>
+    ///         The TEXT is unchanged: the same characters, the same trimming,
+    ///         the same line separator. <c>AnsiTerminalBufferParityTests</c> in
+    ///         <c>Harbor.E2E.Framework.Tests</c> pins the new shape against the
+    ///         old one, and measures what the old one cost.
+    ///     </para>
+    /// </remarks>
     public string GetVisibleText()
     {
         var sb = new StringBuilder(_height * (_width + 1));
         for (int r = 0; r < _height; r++)
         {
-            var rowSb = new StringBuilder(_width);
-            for (int c = 0; c < _width; c++)
+            // The row, trimmed of its trailing whitespace — the same trim the
+            // old per-row builder did, on the same mapped characters ('\0' is
+            // a space, and a space is whitespace, so it is trimmed too).
+            int end = _width;
+            while (end > 0)
+            {
+                char ch = _grid[r, end - 1].Character;
+                if (ch != '\0' && !char.IsWhiteSpace(ch))
+                {
+                    break;
+                }
+
+                end--;
+            }
+
+            for (int c = 0; c < end; c++)
             {
                 char ch = _grid[r, c].Character;
-                rowSb.Append(ch == '\0' ? ' ' : ch);
+                sb.Append(ch == '\0' ? ' ' : ch);
             }
-            sb.AppendLine(rowSb.ToString().TrimEnd());
+
+            sb.AppendLine();
         }
+
         return sb.ToString();
     }
 
@@ -693,23 +747,123 @@ internal sealed class AnsiTerminalBuffer
     ///     region) — the grid reflects what is actually visible, not the raw
     ///     append-only byte stream.
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The grid is searched IN PLACE. The old shape built a string per
+    ///         row — fifty of them per call — and searched that, and
+    ///         <c>TuiDriver.WaitForTextAsync</c> calls this on every poll of
+    ///         every PTY scenario, so a hundred polls cost a hundred times
+    ///         fifty strings.
+    ///     </para>
+    ///     <para>
+    ///         The ANSWER is unchanged: the same rows, the same order, the same
+    ///         ordinal comparison, the same '\0'-is-a-space mapping.
+    ///         <c>AnsiTerminalBufferParityTests</c> pins the new shape against
+    ///         the old one over generated grids.
+    ///     </para>
+    /// </remarks>
     public bool ContainsText(string pattern)
     {
         if (string.IsNullOrEmpty(pattern))
             return false;
 
+        int length = pattern.Length;
+
         for (int r = 0; r < _height; r++)
         {
-            var rowSb = new StringBuilder(_width);
-            for (int c = 0; c < _width; c++)
+            for (int c = 0; c + length <= _width; c++)
             {
-                char ch = _grid[r, c].Character;
-                rowSb.Append(ch == '\0' ? ' ' : ch);
+                bool hit = true;
+
+                for (int k = 0; k < length; k++)
+                {
+                    char ch = _grid[r, c + k].Character;
+                    if (ch == '\0')
+                    {
+                        ch = ' ';
+                    }
+
+                    if (ch != pattern[k])
+                    {
+                        hit = false;
+                        break;
+                    }
+                }
+
+                if (hit)
+                {
+                    return true;
+                }
             }
-            if (rowSb.ToString().Contains(pattern, StringComparison.Ordinal))
-                return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    ///     The tear-tolerant matcher, over the grid: the visible text with its
+    ///     whitespace removed, searched for <paramref name="needle" />.
+    /// </summary>
+    /// <param name="needle">The text to look for, already free of whitespace.</param>
+    /// <returns>
+    ///     <c>true</c> when the needle occurs in the whitespace-stripped
+    ///     visible text.
+    /// </returns>
+    /// <remarks>
+    ///     <para>
+    ///         The old shape of this search was
+    ///         <c>StripWhitespace(GetVisibleText()).Contains(needle)</c> — the
+    ///         whole visible text built as a string, then copied again with the
+    ///         whitespace removed. <c>TuiDriver.WaitForTextAsync</c> runs it on
+    ///         every poll of every PTY scenario.
+    ///     </para>
+    ///     <para>
+    ///         The ANSWER is unchanged. The visible text is the rows joined by
+    ///         line separators, each row right-trimmed; the trimming removes
+    ///         whitespace only, and the separators ARE whitespace, so the
+    ///         sequence of non-whitespace characters is the same whether the
+    ///         text was trimmed, joined and stripped, or read cell by cell.
+    ///         <c>AnsiTerminalBufferParityTests</c> pins that.
+    ///     </para>
+    /// </remarks>
+    public bool ContainsTextIgnoringWhitespace(string needle)
+    {
+        if (needle.Length == 0)
+        {
+            // `string.Contains("")` is true, and the old spelling was true too.
+            return true;
+        }
+
+        char[] buffer = ArrayPool<char>.Shared.Rent(_height * _width + 1);
+        try
+        {
+            int written = 0;
+
+            for (int r = 0; r < _height; r++)
+            {
+                for (int c = 0; c < _width; c++)
+                {
+                    char ch = _grid[r, c].Character;
+                    if (ch == '\0')
+                    {
+                        ch = ' ';
+                    }
+
+                    if (char.IsWhiteSpace(ch))
+                    {
+                        continue;
+                    }
+
+                    buffer[written] = ch;
+                    written++;
+                }
+            }
+
+            return MemoryExtensions.Contains(buffer.AsSpan(0, written), needle.AsSpan());
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
     }
 }
