@@ -19,6 +19,7 @@
 > - [docs/PLUGIN_DEVELOPMENT.md](./docs/PLUGIN_DEVELOPMENT.md) — Roslyn plugin system.
 > - [docs/SEAM_GRAPH.md](./docs/SEAM_GRAPH.md) — the generated seam graph: who implements a seam, who consumes it, who is registered in the container, and which route carries each plugin extension axis. Regenerate with `tools/bin/harbor-gates-linux-x64 gen-seam-graph --write` after changing a type under `src/` or `apps/`; the `tree gates` CI job fails when the committed copy is stale.
 > - [docs/DEMO_GIFS.md](./docs/DEMO_GIFS.md) — README demo GIFs: how they are recorded, and what counts as an *intentional* re-record (never hand-edit `assets/demo/*.gif`; never commit regenerated GIFs in a PR).
+> - [docs/ARCH_RULES.md](./docs/ARCH_RULES.md) — the architecture rule set, classified: 160 guards into tiers A (catches a defect and is cheap) / B (catches a defect but nags) / C (catches the tree's shape), with the false-positive cost of each and the commits that proved the tier. The machine-readable form is `tests/Harbor.Architecture.Tests/rule-tiers.json`.
 
 ## What Harbor is
 
@@ -125,7 +126,7 @@ samples/plugins-cs/                   — CS-source sample plugins (HelloWorldPl
 samples/mcp/                          — sample MCP servers (node/python/rust/csharp-hello)
 providers/                            — 13 JSON LLM provider configs (embedded via <EmbedProviders>)
 docs/specs/                           — 20 design specification documents (top-level specs/ no longer exists)
-docs/                                 — 83 top-level docs (architecture, tools catalog, roadmap, patterns, …)
+docs/                                 — 84 top-level docs (architecture, tools catalog, roadmap, patterns, …)
                                         + adr/, specs/, standards/, ui/, themes/, notes/, .kilo-docs/ (archived sprint notes)
 tests/                                — 48 test/bench projects, one directory each
                                         incl. shared Harbor.TestKit (+ its Harbor.TestKit.Tui
