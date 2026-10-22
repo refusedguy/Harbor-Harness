@@ -1177,6 +1177,7 @@ jobs:
       # The base commit is the last field of the cache key that MATCHED
       # (the key ends in the commit the outputs were built from).
       - name: Normalise the source mtimes (so MSBuild can skip the unchanged)
+        id: mtimes
         if: steps.cache-restore.outputs.cache-matched-key != ''
         shell: bash
         run: |
@@ -1185,7 +1186,13 @@ jobs:
           base="${key##*-}"
           echo "restored cache entry: ${key} (built from ${base})"
           rc=0
-          tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo "$GITHUB_WORKSPACE" --base "$base" || rc=$?
+          report="$(tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo "$GITHUB_WORKSPACE" --base "$base")" || rc=$?
+          echo "$report"
+          # The stamping timestamp, as the tool reported it. The diagnostic
+          # below measures against it: a file under obj/ that is NEWER than the
+          # stamping was written by THIS run, not by the cache.
+          epoch="$(echo "$report" | sed -n 's/.*[[:space:]]now=\([0-9][0-9]*\).*/\1/p')"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
           if [ "$rc" -eq 3 ]; then
             echo "::error::the cached base ${base} could not be resolved, so the changed set is unknown: the restored outputs cannot be told apart from stale ones. They are discarded and the tree is rebuilt from scratch."
             find . -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
@@ -1346,6 +1353,14 @@ jobs:
           find . -path '*/obj/Release/net10.0/*.dll' -type f -not -path '*/refint/*' -newermt "@$start" | sort | sed -n '1,20p'
           echo "=== the newest file under obj/ and bin/ (the compile's own writes) ==="
           find . \( -path '*/obj/*' -o -path '*/bin/*' \) -type f -printf '%T@ %TY-%Tm-%Td %TH:%TM:%TS %p\n' 2>/dev/null | sort -rn | sed -n '1,10p'
+          echo "=== the files under obj/ that are NEWER than the stamping, by kind ==="
+          stamp="${{ steps.mtimes.outputs.epoch }}"
+          echo "stamping=$stamp ($(date -u -d "@$stamp" +%H:%M:%S 2>/dev/null || echo unknown))"
+          for kind in '*.nuget.g.props' '*.nuget.g.targets' 'project.assets.json' '*.assets.cache' '*.editorconfig' '*.AssemblyInfo.cs' '*.GlobalUsings.g.cs' '*.dll'; do
+            n="$(find . -path '*/obj/*' -name "$kind" -type f -newermt "@$stamp" 2>/dev/null | wc -l)"
+            t="$(find . -path '*/obj/*' -name "$kind" -type f 2>/dev/null | wc -l)"
+            printf '%-24s newer than the stamping: %6s  of %6s\n' "$kind" "$n" "$t"
+          done
           exit 0
 
       # The zero-test guard is only a guard if it can go red (#1795). This
