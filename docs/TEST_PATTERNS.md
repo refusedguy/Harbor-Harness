@@ -836,22 +836,24 @@ probe whose window is the assertion.
 
 #### The three CTS shapes, and which one owns what
 
-The scan of `tests/` on this tree counts **67 hand-rolled
-`new CancellationTokenSource(...)` sites in 43 files**. The count is the grep
-`new CancellationTokenSource(` over `tests/**/*.cs` (the helper's own file
-excluded), and the shapes below are classified from the same lines: a source
-built with a time span is a DEADLINE, a source whose variable is cancelled on
-a LATER line of the same file is the test's own instrument, and a source whose
-variable is handed to something other than `.Token` is a collaborator's.
+The scan of `tests/` on this tree counts **63 hand-rolled
+`new CancellationTokenSource(...)` sites in 42 files**. The count is the grep
+`new CancellationTokenSource(` over `tests/**/*.cs`, with the four matches
+that are string literals inside architecture scan controls (they quote the
+shape they forbid) left out, and with the helper's own file left out. The
+shapes below are classified from the same lines: a source built with a time
+span is a BOUND, a source whose variable is cancelled on a LATER line of the
+same file is the test's own instrument, and a source whose variable is handed
+to something other than `.Token` is a collaborator's.
 
 | Shape | Count | Where it lives |
 |---|---|---|
-| the source is a DEADLINE | 11 | TUnit's `[Timeout(ms)]` + the injected `CancellationToken` |
+| the source is a BOUND (`TimeSpan`) | 8 | a negative probe whose window IS the assertion — the manual source is the point |
 | the test cancels the source LATER | 44 | the test's own instrument — write it out |
-| the source is handed to a collaborator that cancels it | 7 | the test's own instrument — write it out |
+| the source is handed to a collaborator that cancels it | 6 | the test's own instrument — write it out |
 | neither (long test, cancel further down) | 5 | the test's own instrument — write it out |
 
-Issue #1837 already moved the sites that were pure deadlines to `[Timeout]`.
+Issue #1837 already moved the sites that were a pure DEADLINE to `[Timeout]`.
 What is left is the test's own instrument: the source has to stay writable,
 because the test (or the code under test) cancels it.
 
