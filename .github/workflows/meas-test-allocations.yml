@@ -38,6 +38,11 @@
 #   Harbor.TestKit.Tests       — the art dump: the same shape.
 #   Harbor.Tui.CellForge.Tests — the biggest CONSUMER of the art dump, so the
 #                                 ui shard's own duration is measured here too.
+#   Harbor.Tui.CellForge.PtyTests — the PTY scenarios: the poll loop of
+#                                 `TuiDriver.WaitForTextAsync` is the biggest
+#                                 consumer of the terminal-grid searches, and
+#                                 this suite is long enough for its wall to be
+#                                 a number and not a rounding.
 #   Harbor.App.Cli.Tests       — the second consumer of the art dump.
 #
 # THE OUTPUT
@@ -117,6 +122,7 @@ jobs:
             Harbor.E2E.Framework.Tests \
             Harbor.TestKit.Tests \
             Harbor.Tui.CellForge.Tests \
+            Harbor.Tui.CellForge.PtyTests \
             Harbor.App.Cli.Tests; do
             dll="tests/$p/bin/Release/net10.0/$p.dll"
             echo "::group::measure $p"
