@@ -22,16 +22,17 @@
 //
 // WHAT IS MEASURED
 // ----------------
-//   * the comment stripper: the span-based pass, the regex pair it replaced,
-//     and the QUADRATIC form that came before the regex pair — the last one
-//     is measured ARITHMETICALLY, because running it over the tree would
-//     allocate 12.8 GB of strings and take the runner down with it;
 //   * the literal blanker: the in-place lexer against the `StringBuilder`
 //     lexer;
 //   * the identifier counter: the span lookup against the `Regex.Matches`
 //     walk;
-//   * the Roslyn stripper, over a SAMPLE, because it parses a file to find
-//     what a single pass over its characters finds.
+//   * the Roslyn stripper against the TEXT stripper the rules read, over the
+//     same sample, because "the modern API" is Roslyn and the question this
+//     measurement answers is whether Roslyn is affordable here.
+//
+// The comment stripper itself is NOT measured here: it is `SourceCommentBlanker`,
+// it was rewritten on its own (#2167), and `ParseCostMeasurement` measures it
+// — legacy, oracle and scanner — over the same tree.
 //
 // The allocations are the thread's own, read with
 // `GC.GetAllocatedBytesForCurrentThread()`: the work is single-threaded
@@ -52,10 +53,7 @@ public sealed class SourceParseCostMeasurement
     /// <remarks>
     ///     The sample is the LARGEST files — the worst case for every one of
     ///     these variants — and the per-byte cost it reports is what the
-    ///     projection for the whole tree rests on. The comment stripper is
-    ///     measured over the WHOLE tree instead, because its numbers are the
-    ///     headline: the quadratic form's allocation and the form that
-    ///     replaced it, over the same bytes.
+    ///     projection for the whole tree rests on.
     /// </remarks>
     private const int SampleSize = 300;
 
@@ -67,39 +65,15 @@ public sealed class SourceParseCostMeasurement
         IReadOnlyList<string> texts = SourceParseCorpus.Texts();
 
         long treeBytes = 0;
-        long blockCommentChars = 0;
-        long quadraticChars = 0;
 
         foreach (string text in texts)
         {
             treeBytes += text.Length;
-            blockCommentChars += SourceParse.BlockCommentChars(text);
-            quadraticChars += SourceParse.QuadraticAllocationChars(text);
         }
 
         Console.WriteLine(
-            $"[arch-count] parse-corpus files={files.Count} bytes={treeBytes} "
-            + $"block-comment-chars={blockCommentChars} quadratic-chars={quadraticChars}");
+            $"[arch-count] parse-corpus files={files.Count} bytes={treeBytes}");
 
-        // ── the comment stripper ──────────────────────────────────────────
-        (long legacyMs, long legacyBytes) = Measure(
-            texts,
-            static text => SourceParse.StripCommentsLegacy(text).Length);
-
-        (long spanMs, long spanBytes) = Measure(
-            texts,
-            static text => SourceParse.StripComments(text).Length);
-
-        Console.WriteLine($"[arch-cost] parse strip-legacy ms={legacyMs} bytes={legacyBytes}");
-        Console.WriteLine($"[arch-cost] parse strip-span ms={spanMs} bytes={spanBytes}");
-
-        // The quadratic form, measured arithmetically: the evaluator
-        // materialised the matched substring once per character of every block
-        // comment, so the allocation is the sum of the squares, and a char is
-        // two bytes.
-        Console.WriteLine($"[arch-cost] parse strip-quadratic ms=- bytes={quadraticChars * 2}");
-
-        // ── the literal blanker ───────────────────────────────────────────
         // The blanker and the counter are measured over a SAMPLE: the legacy
         // counter materialises a `Match` and a `string` for every identifier
         // of every file, and running that over the whole corpus twice — once
@@ -121,6 +95,7 @@ public sealed class SourceParseCostMeasurement
             sampleBytes += texts[i].Length;
         }
 
+        // ── the literal blanker ───────────────────────────────────────────
         (long blankLegacyMs, long blankLegacyBytes) = Measure(
             sample,
             static text => SourceParse.BlankLiteralsAndCommentsLegacy(text).Length);
@@ -153,18 +128,37 @@ public sealed class SourceParseCostMeasurement
             + $"legacy-ms={countLegacyMs} legacy-bytes={countLegacyBytes} "
             + $"span-ms={countSpanMs} span-bytes={countSpanBytes}");
 
-        // ── the Roslyn variant, over the same sample ──────────────────────
+        // ── the Roslyn variant, against the TEXT stripper, over the same sample ──
+        //
+        // The two are measured side by side on purpose: "the modern API is
+        // Roslyn" is a claim, and the claim is answered by putting the two
+        // over the same bytes and reading the two numbers next to each other.
+        (long textStripMs, long textStripBytes) = Measure(
+            sample,
+            static text => SourceCommentBlanker.Blank(text).Length);
+
         (long roslynMs, long roslynBytes) = Measure(
             sample,
             static text => SourceParse.StripCommentsRoslyn(text).Length);
 
         Console.WriteLine(
+            $"[arch-cost] parse strip-text sample={sample.Count} sample-bytes={sampleBytes} "
+            + $"ms={textStripMs} bytes={textStripBytes}");
+
+        Console.WriteLine(
             $"[arch-cost] parse strip-roslyn sample={sample.Count} sample-bytes={sampleBytes} "
             + $"ms={roslynMs} bytes={roslynBytes}");
 
+        if (textStripMs > 0)
+        {
+            Console.WriteLine(
+                $"[arch-cost] parse strip-roslyn over strip-text ratio="
+                + $"{(double)roslynMs / textStripMs:F1}");
+        }
+
         // The per-byte cost is what the projection for the whole tree rests on,
-        // and it is a PROJECTION: the whole tree was not measured with this
-        // variant, because it would have cost minutes.
+        // and it is a PROJECTION: the whole tree was not measured with the
+        // Roslyn variant, because it would have cost minutes.
         if (sampleBytes > 0 && treeBytes > 0)
         {
             long projectedMs = (long)((double)roslynMs / sampleBytes * treeBytes);

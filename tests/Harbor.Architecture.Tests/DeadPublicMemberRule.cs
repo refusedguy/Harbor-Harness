@@ -168,6 +168,35 @@ internal sealed record DeadPublicMemberReport(
     int FilesScanned);
 
 /// <summary>
+///     Which of the two member scans to run.
+/// </summary>
+/// <remarks>
+///     The rewrite made the scan cheaper in two ways: the types of a file are
+///     parsed only in the contract trees (the only trees whose types are
+///     graded), and the member list is walked once per FILE instead of once
+///     per TYPE. Both are optimisations, and an optimisation that changes a
+///     rule's verdicts is not an optimisation — so the scan before the
+///     rewrite is kept as the ORACLE, and
+///     <c>DeadPublicMemberEquivalenceTests</c> runs both over the live tree
+///     and requires the same answer.
+/// </remarks>
+internal enum DeadPublicMemberScanMode
+{
+    /// <summary>
+    ///     The current scan: the types of a file are parsed only in the
+    ///     contract trees, and the member list is walked once per file.
+    /// </summary>
+    Current,
+
+    /// <summary>
+    ///     The scan before the rewrite: every file's types are parsed, and the
+    ///     member list is walked once per type. This is the oracle, not a
+    ///     production path.
+    /// </summary>
+    Legacy,
+}
+
+/// <summary>
 ///     The scanner behind <see cref="DeadPublicMemberRule" />. It is
 ///     source-based and drivable from synthetic sources, so the rule can be
 ///     proven rather than merely observed.
@@ -268,9 +297,40 @@ internal static class DeadPublicMemberProbe
             return new DeadPublicMemberReport([], [], 0);
         }
 
+        return ScanFiles(ReadSources(repoRoot));
+    }
+
+    /// <summary>
+    ///     Reads the tree the rule grades: every <c>.cs</c> and every
+    ///     <c>.axaml</c> file under the scan trees, minus the pruned
+    ///     directories and the rule's own file.
+    /// </summary>
+    /// <param name="repoRoot">The checkout to read.</param>
+    /// <returns>The repo-relative path and the raw source of every file.</returns>
+    /// <remarks>
+    ///     The reading is its own method because the equivalence test needs
+    ///     the SAME BYTES twice: it scans them with the current parse and with
+    ///     the parse before the rewrite, and two reads could differ.
+    /// </remarks>
+    internal static List<(string Rel, string Source)> ReadSources(string? repoRoot) =>
+        ReadSources(repoRoot, ScanTrees);
+
+    /// <summary>
+    ///     Reads the named trees the rule grades.
+    /// </summary>
+    /// <param name="repoRoot">The checkout to read.</param>
+    /// <param name="trees">The trees to read, relative to the checkout.</param>
+    /// <returns>The repo-relative path and the raw source of every file.</returns>
+    internal static List<(string Rel, string Source)> ReadSources(string? repoRoot, IReadOnlyList<string> trees)
+    {
         var sources = new List<(string Rel, string Source)>();
 
-        foreach (string tree in ScanTrees)
+        if (repoRoot is null)
+        {
+            return sources;
+        }
+
+        foreach (string tree in trees)
         {
             string dir = Path.Combine(repoRoot, tree);
             if (!Directory.Exists(dir))
@@ -310,7 +370,7 @@ internal static class DeadPublicMemberProbe
             }
         }
 
-        return ScanFiles(sources);
+        return sources;
     }
 
     /// <summary>
@@ -318,7 +378,18 @@ internal static class DeadPublicMemberProbe
     ///     same code that grades the tree grades a synthetic one.
     /// </summary>
     /// <param name="sources">Repo-relative path and raw source, one pair per file.</param>
-    internal static DeadPublicMemberReport ScanFiles(IReadOnlyList<(string Rel, string Source)> sources)
+    internal static DeadPublicMemberReport ScanFiles(IReadOnlyList<(string Rel, string Source)> sources) =>
+        ScanFiles(sources, DeadPublicMemberScanMode.Current);
+
+    /// <summary>
+    ///     Grades an explicit set of sources with the given scan.
+    /// </summary>
+    /// <param name="sources">Repo-relative path and raw source, one pair per file.</param>
+    /// <param name="mode">Which scan to run.</param>
+    /// <returns>The report: the findings, the graded surface and the file count.</returns>
+    internal static DeadPublicMemberReport ScanFiles(
+        IReadOnlyList<(string Rel, string Source)> sources,
+        DeadPublicMemberScanMode mode)
     {
         var files = new List<ParsedFile>(sources.Count);
         foreach ((string rel, string source) in sources)
@@ -328,7 +399,7 @@ internal static class DeadPublicMemberProbe
             // identifiers — it may reference a contract member — and nothing
             // else, and the seven contract trees hold 224 files out of the
             // 2 665 the rule reads.
-            files.Add(ParsedFile.Parse(rel, source, IsInContractTree(rel)));
+            files.Add(ParsedFile.Parse(rel, source, mode));
         }
 
         // How often each identifier occurs in the whole reference set.
@@ -437,6 +508,21 @@ internal static class DeadPublicMemberProbe
         return false;
     }
 
+    /// <summary>
+    ///     How many public types the scan finds in one file.
+    /// </summary>
+    /// <param name="rel">The repo-relative path.</param>
+    /// <param name="source">The raw source.</param>
+    /// <param name="mode">Which scan to run.</param>
+    /// <returns>The number of public types the file declares.</returns>
+    /// <remarks>
+    ///     The equivalence test uses it to show that the gate really does
+    ///     skip work: a file outside the contract trees has public types
+    ///     under the legacy scan and NONE under the current one.
+    /// </remarks>
+    internal static int PublicTypeCount(string rel, string source, DeadPublicMemberScanMode mode) =>
+        ParsedFile.Parse(rel, source, mode).PublicTypes.Count;
+
     /// <summary>Whether a repo-relative path sits under a pruned directory.</summary>
     /// <param name="rel">The repo-relative path.</param>
     private static bool IsPruned(string rel)
@@ -506,13 +592,8 @@ internal static class DeadPublicMemberProbe
         /// <summary>Parses one file into the facts above.</summary>
         /// <param name="rel">The repo-relative path.</param>
         /// <param name="source">The raw source.</param>
-        /// <param name="parseTypes">
-        ///     Whether the file's public types are graded. A file outside the
-        ///     contract trees contributes its identifiers — it may reference a
-        ///     contract member — and its JSON type names, and NOTHING else, so
-        ///     its types are never read and never parsed.
-        /// </param>
-        internal static ParsedFile Parse(string rel, string source, bool parseTypes)
+        /// <param name="mode">Which scan to run.</param>
+        internal static ParsedFile Parse(string rel, string source, DeadPublicMemberScanMode mode)
         {
             // TWO views of the same file, on purpose.
             //
@@ -553,6 +634,11 @@ internal static class DeadPublicMemberProbe
             // so they are never parsed: the brace frames, the two declaration
             // regexes and the member walk are the expensive half of this
             // method, and 94 % of the files the rule reads do not need them.
+            //
+            // The LEGACY scan parses them anyway — that is what makes it the
+            // oracle: it is the scan before the rewrite, and the equivalence
+            // test requires the two to say the same thing.
+            bool parseTypes = mode == DeadPublicMemberScanMode.Legacy || IsInContractTree(rel);
             if (!parseTypes)
             {
                 return new ParsedFile
@@ -613,45 +699,76 @@ internal static class DeadPublicMemberProbe
                 var members = new List<ParsedMember>();
                 int bodyEnd = EndOfType(structure, declaration);
 
-                while (memberCursor < memberMatches.Count
-                    && memberMatches[memberCursor].Index < declaration.Index)
+                if (mode == DeadPublicMemberScanMode.Legacy)
                 {
-                    memberCursor++;
+                    // The scan BEFORE the rewrite: EVERY member declaration of
+                    // the file is walked for EVERY type of the file. This is the
+                    // "a loop inside a loop" shape — a file with twenty types
+                    // and two hundred members cost four thousand iterations,
+                    // and each of them materialised the member's text twice.
+                    // It is kept because it is the ORACLE: the equivalence
+                    // test requires this walk and the cursor walk below to
+                    // find the same members.
+                    foreach (Match member in memberMatches)
+                    {
+                        // A member of THIS type: inside the type's own body,
+                        // one level down. A member of a LATER type in the same
+                        // file is outside the body, and a member of a NESTED
+                        // type is deeper — neither is this type's surface.
+                        if (member.Index < declaration.Index || member.Index > bodyEnd)
+                        {
+                            continue;
+                        }
+
+                        if (DepthAt(frames, member.Index) != baseDepth + 1)
+                        {
+                            continue;
+                        }
+
+                        // A nested type is a type, not a member of the contract.
+                        if (NestedTypeDeclaration.IsMatch(member.Value))
+                        {
+                            continue;
+                        }
+
+                        members.Add(MemberOf(member, name));
+                    }
                 }
-
-                for (int m = memberCursor; m < memberMatches.Count; m++)
+                else
                 {
-                    Match member = memberMatches[m];
-
-                    // A member of a LATER type in the same file is outside this
-                    // type's body, and it starts a later type's window.
-                    if (member.Index > bodyEnd)
+                    while (memberCursor < memberMatches.Count
+                        && memberMatches[memberCursor].Index < declaration.Index)
                     {
-                        break;
+                        memberCursor++;
                     }
 
-                    // A member of THIS type: inside the type's own body, one
-                    // level down. A member of a NESTED type is deeper — it is
-                    // not this type's surface.
-                    if (DepthAt(frames, member.Index) != baseDepth + 1)
+                    for (int m = memberCursor; m < memberMatches.Count; m++)
                     {
-                        continue;
+                        Match member = memberMatches[m];
+
+                        // A member of a LATER type in the same file is outside this
+                        // type's body, and it starts a later type's window.
+                        if (member.Index > bodyEnd)
+                        {
+                            break;
+                        }
+
+                        // A member of THIS type: inside the type's own body, one
+                        // level down. A member of a NESTED type is deeper — it is
+                        // not this type's surface.
+                        if (DepthAt(frames, member.Index) != baseDepth + 1)
+                        {
+                            continue;
+                        }
+
+                        // A nested type is a type, not a member of the contract.
+                        if (NestedTypeDeclaration.IsMatch(member.Value))
+                        {
+                            continue;
+                        }
+
+                        members.Add(MemberOf(member, name));
                     }
-
-                    // A nested type is a type, not a member of the contract.
-                    if (NestedTypeDeclaration.IsMatch(member.Value))
-                    {
-                        continue;
-                    }
-
-                    string memberName = member.Groups["name"].Value;
-                    string rest = member.Groups["rest"].Value;
-
-                    members.Add(new ParsedMember
-                    {
-                        Name = memberName,
-                        Kind = MemberKind(member.Value, memberName, name, rest),
-                    });
                 }
 
                 publicTypes.Add(new ParsedType
@@ -670,6 +787,24 @@ internal static class DeadPublicMemberProbe
                 TokenCounts = tokenCounts,
                 JsonTypeNames = jsonTypeNames,
                 PublicTypes = publicTypes,
+            };
+        }
+
+        /// <summary>
+        ///     One member declaration, reduced to the two facts the rule
+        ///     grades: its name and what kind of member it is.
+        /// </summary>
+        /// <param name="member">The member declaration match.</param>
+        /// <param name="typeName">The name of the type that declares it.</param>
+        private static ParsedMember MemberOf(Match member, string typeName)
+        {
+            string memberName = member.Groups["name"].Value;
+            string rest = member.Groups["rest"].Value;
+
+            return new ParsedMember
+            {
+                Name = memberName,
+                Kind = MemberKind(member.Value, memberName, typeName, rest),
             };
         }
 

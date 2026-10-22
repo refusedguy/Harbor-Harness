@@ -16,8 +16,6 @@
 //
 // WHAT IS COMPARED
 // ----------------
-//   * the comment stripper — the new span-based pass against the regex pair
-//     it replaced;
 //   * the literal blanker — the new in-place lexer against the
 //     `StringBuilder` lexer it replaced;
 //   * the identifier counter — the new span lookup against the
@@ -26,15 +24,24 @@
 // A difference in ANY of them is a difference in some rule's verdict, so a
 // difference here fails the build before it reaches a rule.
 //
+// WHAT IS NOT COMPARED HERE, AND WHERE IT LIVES
+// ----------------------------------------------
+// The comment stripper is NOT compared here: it is `SourceCommentBlanker`,
+// it was rewritten on its own (#2167), and `CommentStripperEquivalenceTests`
+// proves its equivalence over the whole live tree against an oracle that is
+// the old regular expressions with the quadratic read replaced by a linear
+// one. A second proof of the same property would be a second answer to the
+// same question.
+//
 // THE ROSLYN VARIANT IS COMPARED TOO, AND IT IS EXPECTED TO DIFFER
 // -----------------------------------------------------------------
 // `SourceParse.StripCommentsRoslyn` finds the comments by PARSING the file,
 // which is the textbook way and the one this suite cannot afford — but it is
-// also RIGHT where the regex stripper is wrong: the regex cannot tell a
-// comment from a `//` inside a string literal, so it eats the rest of a line
-// that holds a URL. The differences are counted and printed, not asserted
+// also RIGHT where the text stripper is wrong: the text stripper cannot tell
+// a comment from a `//` inside a string literal, so it eats the rest of a
+// line that holds a URL. The differences are counted and printed, not asserted
 // away: they are the evidence for the choice, and the reader is told how many
-// lines of the corpus the regex stripper was eating.
+// lines of the corpus the text stripper was eating.
 
 namespace Harbor.Architecture.Tests;
 
@@ -71,7 +78,6 @@ public sealed class SourceParseParityTests
                 + "every file of src/, apps/ and tests/, and a corpus that shrank means the WALK broke "
                 + "rather than the parser agreeing. Files: " + files.Count);
 
-        var stripDifferences = new List<string>();
         var blankDifferences = new List<string>();
         var countDifferences = new List<string>();
 
@@ -79,14 +85,6 @@ public sealed class SourceParseParityTests
         {
             string text = texts[i];
             string file = files[i];
-
-            if (!string.Equals(
-                    SourceParse.StripComments(text),
-                    SourceParse.StripCommentsLegacy(text),
-                    StringComparison.Ordinal))
-            {
-                stripDifferences.Add(file);
-            }
 
             if (!string.Equals(
                     SourceParse.BlankLiteralsAndComments(text),
@@ -106,15 +104,8 @@ public sealed class SourceParseParityTests
         }
 
         Console.WriteLine(
-            $"[arch-count] parse-parity files={files.Count} strip-diffs={stripDifferences.Count} "
+            $"[arch-count] parse-parity files={files.Count} "
             + $"blank-diffs={blankDifferences.Count} count-diffs={countDifferences.Count}");
-
-        await Assert.That(stripDifferences).IsEmpty()
-            .Because(
-                "the comment stripper is the input of every line-scanning rule in this suite, and a "
-                + "different byte is a different verdict: a rule that matched yesterday matches "
-                + "something else today, and the difference is invisible in a green test. Files whose "
-                + "stripped text changed: " + string.Join(" | ", stripDifferences.Take(20)));
 
         await Assert.That(blankDifferences).IsEmpty()
             .Because(
@@ -137,7 +128,7 @@ public sealed class SourceParseParityTests
     /// <remarks>
     ///     <para>
     ///         This is a MEASUREMENT, not a parity proof: the two strippers are
-    ///         expected to differ, because the regex stripper cannot tell a
+    ///         expected to differ, because the text stripper cannot tell a
     ///         comment from a <c>//</c> inside a string literal, and it eats the
     ///         rest of such a line. The difference is the evidence for the
     ///         choice, and it is printed rather than asserted away.
@@ -168,13 +159,15 @@ public sealed class SourceParseParityTests
 
         foreach (int i in order)
         {
-            string regexStripped = SourceParse.StripCommentsLegacy(texts[i]);
+            // The stripper the rules actually read: `SourceCommentBlanker`,
+            // rewritten on its own in #2167.
+            string textStripped = SourceCommentBlanker.Blank(texts[i]);
             string roslynStripped = SourceParse.StripCommentsRoslyn(texts[i]);
             roslynChars += roslynStripped.Length;
 
-            if (!string.Equals(regexStripped, roslynStripped, StringComparison.Ordinal))
+            if (!string.Equals(textStripped, roslynStripped, StringComparison.Ordinal))
             {
-                differing.Add(files[i] + " (regex " + regexStripped.Length + " B, roslyn " + roslynStripped.Length + " B)");
+                differing.Add(files[i] + " (text " + textStripped.Length + " B, roslyn " + roslynStripped.Length + " B)");
             }
         }
 
