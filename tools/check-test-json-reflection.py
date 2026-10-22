@@ -68,11 +68,41 @@ THE EXCEPTIONS FILE
   It is a RATCHET, not a target: an exception the tree no longer produces is
   a failure, exactly like `tools/test-project-baseline.txt`. A gate whose
   exception list only grows is a gate that stops being a gate.
+
+WHAT A "USED EXCEPTION" IS
+
+  One rule, and EVERY path of this gate counts the same way (#2122):
+
+    An exception is USED when a reflection finding matched THAT exception:
+    the finding's path is the exception's path, and the exception's text
+    appears in the call the finding names. An exception that no finding
+    matched is STALE, and a stale exception fails the gate.
+
+  The rule is per EXCEPTION, not per file. Two exceptions for two different
+  calls in one file are two permissions, and closing one of them says
+  nothing about the other.
+
+  BEFORE #2122 the gate had two counters and did not say so anywhere. The
+  plain path -- the one CI runs -- marked EVERY exception used as soon as
+  ONE of them was used: its set comprehension named the finding but never
+  the exception it was adding, so it added all of them. The report path
+  counted per exception. On a tree where one exception was used and another
+  was stale, the plain path said green and the report path said red: one
+  tree, two verdicts, and nothing in the repository said which was right.
+
+  The report path's rule is the one the exceptions file already states -- "a
+  row the tree no longer produces is RED" -- so the plain path counts that
+  way now, and the plain path, `--report` and `--json-out` answer with the
+  same verdict on the same tree. The self-test plants the tree where the
+  two counters disagreed and asserts that they agree.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
+import json
 import os
 import re
 import sys
@@ -366,7 +396,21 @@ def match_exception(finding: dict, exceptions: list[dict]) -> dict | None:
     return None
 
 
-def report(findings: list[dict], exceptions: list[dict], as_json: bool) -> int:
+def partition(findings: list[dict], exceptions: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Return (violations, stale) -- THE counter of this gate.
+
+    An exception is USED when a reflection finding matched THAT exception:
+    the same path, and the exception's text inside the call. An exception no
+    finding matched is STALE.
+
+    There is ONE counter, and every path of the gate goes through it (#2122).
+    The plain path used to have a second one: a set comprehension whose
+    condition named the finding but never the exception it was adding, so it
+    marked every exception used as soon as one of them was used. The two
+    counters disagreed on a tree where one exception was used and another
+    was stale, and the path CI runs was the one that could not see the
+    stale one.
+    """
     violations = []
     used = set()
     for finding in findings:
@@ -377,6 +421,12 @@ def report(findings: list[dict], exceptions: list[dict], as_json: bool) -> int:
             used.add(exception["line"])
             continue
         violations.append(finding)
+    stale = [e for e in exceptions if e["line"] not in used]
+    return violations, stale
+
+
+def report(findings: list[dict], exceptions: list[dict], as_json: bool) -> int:
+    violations, stale = partition(findings, exceptions)
 
     if as_json:
         import json
@@ -395,11 +445,19 @@ def report(findings: list[dict], exceptions: list[dict], as_json: bool) -> int:
                         }
                         for v in violations
                     ],
+                    "stale_exceptions": [
+                        {
+                            "path": e["path"],
+                            "line": e["line"],
+                            "reason": e["reason"],
+                        }
+                        for e in stale
+                    ],
                 },
                 indent=2,
             )
         )
-        return 1 if violations else 0
+        return 1 if violations or stale else 0
 
     print("reflection-JSON census (tests/, excluding tests/Harbor.Architecture.Tests)")
     print("  JsonSerializer calls      : %d" % len(findings))
@@ -408,12 +466,53 @@ def report(findings: list[dict], exceptions: list[dict], as_json: bool) -> int:
     print("  reflection (VIOLATION)    : %d" % len(violations))
     for violation in violations:
         print("    %s:%d  %s" % (violation["path"], violation["line"], violation["call"][:110]))
-    stale = [e for e in exceptions if e["line"] not in used]
     for exception in stale:
         print(
             "  STALE EXCEPTION %s:%d — %s"
             % (exception["path"], exception["line"], exception["reason"])
         )
+    return 1 if violations or stale else 0
+
+
+def gate_verdict(findings: list[dict], exceptions: list[dict], stream=None) -> int:
+    """The plain path: say what is wrong, and return the exit code.
+
+    It is a function of the findings and the exceptions, not of the command
+    line, so the self-test can run it on a planted tree and compare its
+    verdict with the report path's (#2122).
+    """
+    if stream is None:
+        stream = sys.stderr
+    violations, stale = partition(findings, exceptions)
+    if violations:
+        print(
+            "reflection JSON in tests/: %d call(s) do not name a source-generated "
+            "type info." % len(violations),
+            file=stream,
+        )
+        for violation in violations:
+            print(
+                "  %s:%d  %s" % (violation["path"], violation["line"], violation["call"][:110]),
+                file=stream,
+            )
+        print(
+            "\nPass the type info from a source-generated context "
+            "(JsonSerializer.Serialize(value, SomeContext.Default.SomeType)), or add a "
+            "documented exception to tools/test-json-reflection-exceptions.txt.",
+            file=stream,
+        )
+    if stale:
+        print(
+            "reflection JSON in tests/: %d exception(s) no longer apply — delete them."
+            % len(stale),
+            file=stream,
+        )
+        for exception in stale:
+            print(
+                "  %s (tools/test-json-reflection-exceptions.txt:%d)"
+                % (exception["path"], exception["line"]),
+                file=stream,
+            )
     return 1 if violations or stale else 0
 
 
@@ -491,10 +590,71 @@ def self_test() -> int:
             if names != ["Hole.cs", "Sample.cs"]:
                 print("self-test FAILED: the wrong calls were flagged: %s" % names)
                 return 1
+
+            # The counter (#2122). The tree produces ONE reflection call, so
+            # ONE exception is used and a SECOND one -- a row for a file the
+            # tree does not have -- is stale. Before the fix the plain path
+            # marked both used and answered green while the report path
+            # answered red: one tree, two verdicts. The three paths must
+            # answer the SAME verdict now, and they must name the same stale
+            # exception.
+            divergence = os.path.join(tmp, "divergence.txt")
+            with open(divergence, "w", encoding="utf-8") as handle:
+                handle.write(
+                    "tests/Harbor.Sample.Tests/Sample.cs | Serialize(payload) | "
+                    "the row the tree still produces\n"
+                    "tests/Harbor.Sample.Tests/Hole.cs | Serialize(path) | "
+                    "the other row the tree still produces\n"
+                    "tests/Harbor.Sample.Tests/Gone.cs | Serialize(payload) | "
+                    "the row the tree no longer produces\n"
+                )
+            exceptions = load_exceptions(divergence)
+            plain_text = io.StringIO()
+            plain = gate_verdict(findings, exceptions, plain_text)
+            report_text = io.StringIO()
+            with contextlib.redirect_stdout(report_text):
+                reported = report(findings, exceptions, False)
+            json_text = io.StringIO()
+            with contextlib.redirect_stdout(json_text):
+                as_json = report(findings, exceptions, True)
+            if plain != reported or plain != as_json:
+                print(
+                    "self-test FAILED: the paths disagree on the same tree "
+                    "(plain %d, report %d, json %d)" % (plain, reported, as_json)
+                )
+                return 1
+            if plain != 1:
+                print(
+                    "self-test FAILED: a stale exception must fail the gate, "
+                    "the paths answered %d" % plain
+                )
+                return 1
+            stale_path = "tests/Harbor.Sample.Tests/Gone.cs"
+            if stale_path not in plain_text.getvalue():
+                print("self-test FAILED: the plain path did not name the stale exception")
+                return 1
+            if stale_path not in report_text.getvalue():
+                print("self-test FAILED: the report path did not name the stale exception")
+                return 1
+            census = json.loads(json_text.getvalue())
+            stale_rows = census.get("stale_exceptions", [])
+            if [row["path"] for row in stale_rows] != [stale_path]:
+                print(
+                    "self-test FAILED: the json path named the stale exceptions %s"
+                    % [row["path"] for row in stale_rows]
+                )
+                return 1
+            if census.get("violations"):
+                print("self-test FAILED: the json path named a violation")
+                return 1
+            if len(census.get("stale_exceptions", [])) != 1:
+                print("self-test FAILED: the json path did not name the stale exception")
+                return 1
         finally:
             REPO_ROOT, EXCEPTIONS_FILE = saved_root, saved_exceptions
 
-    print("self-test ok: the gate still fails on a planted reflection call.")
+    print("self-test ok: the gate still fails on a planted reflection call, "
+          "and every path counts a used exception the same way.")
     return 0
 
 
@@ -515,7 +675,8 @@ def main() -> int:
     parser.add_argument(
         "--report",
         action="store_true",
-        help="print the census and exit 0 even when there are violations",
+        help="print the census and the stale exceptions; exit 1 when the "
+        "census holds a violation or a stale exception, like the plain path",
     )
     parser.add_argument(
         "--json-out",
@@ -543,53 +704,7 @@ def main() -> int:
     if args.report or args.json_out:
         return report(findings, exceptions, args.json_out)
 
-    violations = []
-    for finding in findings:
-        if finding["source_generated"]:
-            continue
-        if match_exception(finding, exceptions) is not None:
-            continue
-        violations.append(finding)
-
-    used = {
-        e["line"]
-        for e in exceptions
-        for f in findings
-        if not f["source_generated"] and match_exception(f, exceptions) is not None
-    }
-    stale = [e for e in exceptions if e["line"] not in used]
-
-    if violations:
-        print(
-            "reflection JSON in tests/: %d call(s) do not name a source-generated "
-            "type info." % len(violations),
-            file=sys.stderr,
-        )
-        for violation in violations:
-            print(
-                "  %s:%d  %s" % (violation["path"], violation["line"], violation["call"][:110]),
-                file=sys.stderr,
-            )
-        print(
-            "\nPass the type info from a source-generated context "
-            "(JsonSerializer.Serialize(value, SomeContext.Default.SomeType)), or add a "
-            "documented exception to tools/test-json-reflection-exceptions.txt.",
-            file=sys.stderr,
-        )
-    if stale:
-        print(
-            "reflection JSON in tests/: %d exception(s) no longer apply — delete them."
-            % len(stale),
-            file=sys.stderr,
-        )
-        for exception in stale:
-            print(
-                "  %s (tools/test-json-reflection-exceptions.txt:%d)"
-                % (exception["path"], exception["line"]),
-                file=sys.stderr,
-            )
-
-    return 1 if violations or stale else 0
+    return gate_verdict(findings, exceptions)
 
 
 if __name__ == "__main__":
