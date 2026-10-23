@@ -229,7 +229,7 @@ row for it is written here, and nothing in this PR touches those 16 files.
 
 the compiled `check-reference-trimmer` gate reads the analyzer's log and compares it
 with the baseline. It is stdlib python, no dotnet, no network, in the same
-family as `check-test-projects.py` and `check-test-dup.py`.
+family as `check-test-projects` and `check-test-dup`.
 
 The baseline is a **ratchet**, the same shape as
 `tools/test-project-baseline.txt`:

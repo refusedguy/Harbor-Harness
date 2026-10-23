@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generator": "tools/check-test-dup.py",
+  "generator": "tools/bin/harbor-gates-linux-x64 check-test-dup",
   "policy": {
     "scope": "tests/**/*.cs minus bin/, obj/ and tests/Harbor.Architecture.Tests",
     "min_body_lines": 6,

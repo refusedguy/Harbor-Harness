@@ -26,9 +26,9 @@
 # The last row rewrites the mtimes of the tree, so it is last.
 
 # gate	command
-aot-publish-gate	tools/bin/harbor-gates-linux-x64 aot-publish-gate --log publish/aot-publish.log --baseline .github/aot-warning-baseline.txt --expect-rid linux-x64 --expect-recipe fulltree --expect-status published
 aggregate-analyzer-cost	tools/bin/harbor-gates-linux-x64 aggregate-analyzer-cost meas --summary meas/summary.md
 aggregate-build-vcpu	tools/bin/harbor-gates-linux-x64 aggregate-build-vcpu meas --baseline a-prop0
+aot-publish-gate	tools/bin/harbor-gates-linux-x64 aot-publish-gate --log publish/aot-publish.log --baseline .github/aot-warning-baseline.txt --expect-rid linux-x64 --expect-recipe fulltree --expect-status published
 banned-api-exemptions	tools/bin/harbor-gates-linux-x64 banned-api-exemptions --min-exemptions 6
 changelog-assemble	tools/bin/harbor-gates-linux-x64 changelog-assemble --check
 check-abstractions-contract	tools/bin/harbor-gates-linux-x64 check-abstractions-contract --min-packages 19 --min-namespaces 7 --min-files 141
@@ -49,11 +49,11 @@ check-reference-trimmer	tools/bin/harbor-gates-linux-x64 check-reference-trimmer
 check-result-chains.py	python3 tools/check-result-chains.py --check --baseline tools/result-chains-baseline.json
 check-shard-balance	tools/bin/harbor-gates-linux-x64 check-shard-balance --min-projects 37 --max-skew 4.0
 check-string-switch.py	python3 tools/check-string-switch.py --check --min-labels 280
-check-test-dup.py	python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+check-test-dup	tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
 check-test-json-reflection	tools/bin/harbor-gates-linux-x64 check-test-json-reflection
-check-test-packages.py	python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
-check-test-projects.py	python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
-check-tool-schema-pin.py	python3 tools/check-tool-schema-pin.py --min-tools 25
+check-test-packages	tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
+check-test-projects	tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+check-tool-schema-pin	tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 check-workflows	tools/bin/harbor-gates-linux-x64 check-workflows --min-files 17
 check-xml-doc-coverage	tools/bin/harbor-gates-linux-x64 check-xml-doc-coverage --min-members 493 --min-documented 478 --min-coverage 0.96
 ci-shard-slices.py	python3 tools/ci-shard-slices.py --min-shards 4 --min-projects 37
@@ -64,8 +64,8 @@ gen-seam-graph	tools/bin/harbor-gates-linux-x64 gen-seam-graph --check --min-fil
 gen-workflows	tools/bin/harbor-gates-linux-x64 gen-workflows --check --min-files 1
 guard-triage.py	python3 tools/guard-triage.py --trx "TestResults/*.trx" --trx "tests/**/TestResults/*.trx" --project Harbor.Architecture.Tests --repo-root . --min-guard-files 100 --out guard-firings.json --summary TestResults/summary.md
 md-lint.py	python3 tools/md-lint.py --min-files 250 --min-lines 60000
+normalize-mtimes	tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo . --base HEAD~1
 pack-validate	tools/bin/harbor-gates-linux-x64 pack-validate out/packages
 test-census	tools/bin/harbor-gates-linux-x64 test-census TestResults --summary TestResults/summary.md --top 15
 test-measurements	tools/bin/harbor-gates-linux-x64 test-measurements TestResults --summary TestResults/summary.md
 test-skips	tools/bin/harbor-gates-linux-x64 test-skips TestResults --summary TestResults/summary.md
-normalize-mtimes	tools/bin/harbor-gates-linux-x64 normalize-mtimes --repo . --base HEAD~1

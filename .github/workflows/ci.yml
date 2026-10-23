@@ -208,6 +208,11 @@ jobs:
               # the gate must run the job that executes it. Same #618
               # argument, one line over.
               - 'tools/check-arch-suite-once.py'
+              # The control for the TUnit analyzer gate (#1836) runs INSIDE
+              # the build job, and it is compiled now. Same #618 argument: an
+              # edit to its sources must run the job that executes it, or the
+              # edit lands unvalidated.
+              - 'tools/gates/check-tunit-analyzer-gate/**'
               # The build-output cache's mtime normalisation (issue #1927).
               # It runs INSIDE the build job, and it decides whether MSBuild
               # may skip a project — so an edit to it must set dotnet=true,
@@ -244,8 +249,9 @@ jobs:
               # argument as the lines above: editing the tool that proves the
               # gate must run the job that executes it, or the edit lands
               # unvalidated. The canary's own source is under tests/, which the
-              # dotnet filter already covers.
-              - 'tools/check-tunit-analyzer-gate.py'
+              # dotnet filter already covers. The instrument is compiled now;
+              # its sources are under `tools/gates/`, which the filter below
+              # already covers.
               # NUKE build code, the installer and the native-packaging
               # scripts. Same #618 argument: without these lines an edit to
               # the build tool would set dotnet=false, skip the build job
@@ -288,7 +294,7 @@ jobs:
               - 'Directory.Build.props'
               - 'Directory.Packages.props'
               - 'BannedSymbols.txt'
-              - 'tools/check-test-packages.py'
+              - 'tools/gates/check-test-packages/**'
               - 'tools/test-package-exceptions.txt'
             ui:
               - 'src/Harbor.Tui*/**'
@@ -579,9 +585,9 @@ jobs:
           # job (the build job) builds it on purpose to prove the gate.
           dotnet restore tests/TUnitAnalyzerCanary/TUnitAnalyzerCanary.csproj
       - name: Package-set gate fails on an injected banned package
-        run: python3 tools/check-test-packages.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --self-test
       - name: Check the resolved package set of every test and sample project
-        run: python3 tools/check-test-packages.py --min-projects 43 --min-declared 50 --min-packages 1400
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 50 --min-packages 1400
 
   # #1893. The VSTest test host must not come back.
   #
@@ -839,11 +845,21 @@ jobs:
       # The debug symbols are NOT excluded: the `.pdb` is not an output of
       # CoreCompile in Release (Directory.Build.props sets DebugType=none
       # there), so excluding it changes nothing but the payload.
+      #   !tools/bin/**         the COMPILED GATE BINARY: a committed
+      #                           artifact, not a build output. `**/bin`
+      #                           matches `tools/bin` too, so a restored
+      #                           entry would overwrite the binary of the
+      #                           commit under test with the binary of the
+      #                           commit the entry was built from -- and the
+      #                           lane would then run a gate that the tree
+      #                           does not have (run 39651172996: "unknown
+      #                           gate: check-test-packages").
       HARBOR_BUILD_OUTPUT_CACHE_PATHS: |
         **/obj
         **/bin
         !**/runtimes/**
         !**/*.resources.dll
+        !tools/bin/**
       # ── Node reuse OFF, the way dotnet/arcade does it (#2111) ───────────
       #
       # MSBuild nodes are kept alive between builds by default, and a
@@ -1109,6 +1125,20 @@ jobs:
           # is NOT an output of CoreCompile there and there is no `.pdb` in
           # the payload to keep or to drop. (The exclusion of `!**/*.pdb`
           # that #2117 removed was never the reason a project looked stale.)
+          #
+          # tools/bin/** IS EXCLUDED, and it is the one exclusion that is not
+          # about build outputs. `**/bin` matches `tools/bin` as well, and
+          # `tools/bin/` holds the COMPILED GATE BINARY -- the committed
+          # harbor-gates-linux-x64 that the gates-binary workflow rebuilds and
+          # compares byte for byte. A restored entry therefore OVERWRITES the
+          # committed binary with the one of the commit the entry was built
+          # from, and the lane then runs a binary that is not the one in the
+          # tree: on run 39651172996 the restored entry (built from 2549ac77)
+          # carried a binary without `check-test-packages`, the build job ran
+          # it, got "unknown gate: check-test-packages", and went red; the
+          # `gate` job then failed on the red `build`. The binary is a
+          # COMMITTED ARTIFACT, not a build output: it must come from the
+          # commit under test, never from a cache entry of an older one.
           path: ${{ env.HARBOR_BUILD_OUTPUT_CACHE_PATHS }}
           # The entry the step above resolved, when there is one. The
           # fallbacks are the old behaviour: the key for THIS commit first,
@@ -1485,7 +1515,7 @@ jobs:
       # mechanisms: a file can reach an output directory without being a
       # package in the graph.
       - name: No banned assembly in any test/sample output directory
-        run: python3 tools/check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40
+        run: tools/bin/harbor-gates-linux-x64 check-test-packages --output-only --min-projects 43 --min-output-dirs 40
 
       # #1836 — the TUnit analyzer gate, proved rather than assumed.
       #
@@ -1510,8 +1540,8 @@ jobs:
       # diagnostic on the wrong line.
       - name: The TUnit analyzer gate is armed (planted offender, waived site)
         run: |
-          python3 tools/check-tunit-analyzer-gate.py --selftest
-          python3 tools/check-tunit-analyzer-gate.py
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate --selftest
+          tools/bin/harbor-gates-linux-x64 check-tunit-analyzer-gate
 
       - name: Smoke — CLI binary runs
         run: dotnet exec apps/Harbor.App.Cli/bin/Release/net10.0/Harbor.App.Cli.dll --version

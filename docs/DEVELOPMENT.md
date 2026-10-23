@@ -176,8 +176,8 @@ scripts themselves and runs three jobs in ~30s with no .NET SDK.
 | `checker self-test` | both gates still **fail** on fixtures that are known-broken |
 | `internal links` | `check-md-links.py --min-files 250 --min-refs 600` |
 | `markdown lint` | `md-lint.py --min-files 250 --min-lines 60000` |
-| `test duplication` | `check-test-dup.py --min-files 800 --min-methods 9000` (#1778) |
-| `duplication (jscpd)` | `check-dup-jscpd.py` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
+| `test duplication` | `harbor-gates check-test-dup --min-files 800 --min-methods 9000` (#1778) |
+| `duplication (jscpd)` | `harbor-gates check-dup-jscpd` — the second duplication detector, over `src/` + `apps/` + `tests/` (#1847) |
 | `reflection JSON` | `harbor-gates check-test-json-reflection` — no test serializes through the reflection resolver (#1822) |
 | `local squash-merges dropped nothing` | `harbor-gates check-local-merge-loss` — no local squash-merge dropped content that is still missing |
 | `seam graph` | `tools/bin/harbor-gates-linux-x64 gen-seam-graph --check` — the committed seam graph still matches the tree (#1731) |
@@ -316,16 +316,16 @@ The measurement and the numbers are in
 
 ## Test duplication gate — issue 1778
 
-`tools/check-test-dup.py` finds duplicated **test bodies** in `tests/` and
+`harbor-gates check-test-dup` finds duplicated **test bodies** in `tests/` and
 fails when a NEW one appears. It is the mandatory tail of epic #1808: that
 epic removes ~21 000 lines of copy-pasted test code, and without this gate the
 copy-paste comes straight back.
 
 ```bash
-./tools/check-test-dup.py --report        # census + every duplicate group, exit 0
-./tools/check-test-dup.py --self-test     # prove the gate still fails on a planted duplicate
-./tools/check-test-dup.py --update        # regenerate the baseline after the programme lands
-./tools/check-test-dup.py --new-since origin/dev   # only groups touching files this branch changed
+tools/bin/harbor-gates-linux-x64 check-test-dup --report        # census + every duplicate group, exit 0
+tools/bin/harbor-gates-linux-x64 check-test-dup --self-test     # prove the gate still fails on a planted duplicate
+tools/bin/harbor-gates-linux-x64 check-test-dup --update        # regenerate the baseline after the programme lands
+tools/bin/harbor-gates-linux-x64 check-test-dup --new-since origin/dev   # only groups touching files this branch changed
 ```
 
 **How it matches.** Every method body in `tests/**/*.cs` (minus `bin/`, `obj/`
@@ -353,15 +353,15 @@ expiry date, and an expired exemption fails the gate.
 
 ## The second duplication detector — issue 1847
 
-`tools/check-dup-jscpd.py` is a **second** detector. It does not replace
-`check-test-dup.py`, and it is not a second copy of it: the two engines
+`harbor-gates check-dup-jscpd` is a **second** detector. It does not replace
+`harbor-gates check-test-dup`, and it is not a second copy of it: the two engines
 answer different questions, and the answers only partly overlap.
 
 ```bash
-./tools/check-dup-jscpd.py --run                  # download the pinned binary, scan, compare
-./tools/check-dup-jscpd.py --self-test            # prove the gate still fails on an empty scan
-./tools/check-dup-jscpd.py --update               # re-measure the baseline after the tree changes
-./tools/check-dup-jscpd.py --run --baseline-ref origin/dev   # add the new-clone delta
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run                  # download the pinned binary, scan, compare
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --self-test            # prove the gate still fails on an empty scan
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --update               # re-measure the baseline after the tree changes
+tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --baseline-ref origin/dev   # add the new-clone delta
 ```
 
 **What it is.** jscpd 5.4.1 (MIT, a self-contained Rust binary) matches
@@ -384,8 +384,8 @@ gate scans `tests/` only, so the product code has no duplication gate at all.
 
 | | files | clones / groups | duplicated lines | wall |
 |---|---|---|---|---|
-| `check-test-dup.py` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
-| `check-dup-jscpd.py` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
+| `check-test-dup` (`tests/` only) | 1017 | 206 groups | 2987 | 14.0 s |
+| `check-dup-jscpd` (`src/` + `apps/` + `tests/`) | 1971 | 286 clones | 8353 | 1.2 s |
 
 Over the test tree the two overlap on 1965 lines: 30.0% of the python gate's
 duplicated lines, 23.3% of jscpd's. 37 of the python gate's 206 groups sit
@@ -599,7 +599,7 @@ tools/bin/harbor-gates-linux-x64 gen-seam-graph --write
 
 ## Package-set checks (test and sample projects)
 
-`tools/check-test-packages.py` answers one question about every project under
+`harbor-gates check-test-packages` answers one question about every project under
 `tests/` and `samples/`: **which packages may it reference, directly or
 transitively, and is any banned one among them?**
 
@@ -613,9 +613,9 @@ covers four `src/` projects, `harbor-gates aot-publish-gate` covers `src/` and
 
 ```bash
 dotnet restore Harbor.slnx        # the gate reads what the restore resolves
-./tools/check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400
-./tools/check-test-packages.py --self-test   # prove the gate still fails on a banned package
-./tools/check-test-packages.py --report      # the census, per project
+tools/bin/harbor-gates-linux-x64 check-test-packages --min-projects 43 --min-declared 40 --min-packages 1400
+tools/bin/harbor-gates-linux-x64 check-test-packages --self-test   # prove the gate still fails on a banned package
+tools/bin/harbor-gates-linux-x64 check-test-packages --report      # the census, per project
 ```
 
 **How it reads the graph.** Two sources, and the difference matters. The
@@ -664,8 +664,8 @@ What must not happen is the package arriving quietly.
 
 | Job | What it asserts |
 |---|---|
-| `test/sample package set` (`ci.yml`) | the resolved package graph of every test and sample project — `check-test-packages.py --min-projects 43 --min-declared 40 --min-packages 1400`, after `dotnet restore` |
-| `build` (`ci.yml`, one step after the solution build) | the output directories the build produced — `check-test-packages.py --output-only --min-projects 43 --min-output-dirs 40` |
+| `test/sample package set` (`ci.yml`) | the resolved package graph of every test and sample project — `harbor-gates check-test-packages --min-projects 43 --min-declared 40 --min-packages 1400`, after `dotnet restore` |
+| `build` (`ci.yml`, one step after the solution build) | the output directories the build produced — `harbor-gates check-test-packages --output-only --min-projects 43 --min-output-dirs 40` |
 
 The first answers "which packages may this project pull in, directly or
 transitively" from the graph NuGet resolved. The second answers the issue's

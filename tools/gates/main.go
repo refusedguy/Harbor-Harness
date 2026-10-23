@@ -38,49 +38,57 @@ package main
 
 import (
 	"fmt"
-	"harbor.local/gates/aggregate-analyzer-cost"
-	"harbor.local/gates/aggregate-build-vcpu"
-	"harbor.local/gates/all"
+	"os"
+	"sort"
+	"strings"
+
+	aggregateanalyzercost "harbor.local/gates/aggregate-analyzer-cost"
+	aggregatebuildvcpu "harbor.local/gates/aggregate-build-vcpu"
+	all "harbor.local/gates/all"
 	aotpublish "harbor.local/gates/aot-publish-gate"
 	bannedapiexemptions "harbor.local/gates/banned-api-exemptions"
 	changelog "harbor.local/gates/changelog-assemble"
-	"harbor.local/gates/check-abstractions-contract"
-	"harbor.local/gates/check-analyzer-scope"
+	checkabstractionscontract "harbor.local/gates/check-abstractions-contract"
+	checkanalyzerscope "harbor.local/gates/check-analyzer-scope"
 	registrygate "harbor.local/gates/check-coverage-registry"
 	docfacts "harbor.local/gates/check-doc-facts"
-	"harbor.local/gates/check-event-topology"
+	dupjscpd "harbor.local/gates/check-dup-jscpd"
+	eventtopology "harbor.local/gates/check-event-topology"
 	benchset "harbor.local/gates/check-gate-bench-set"
 	mergeloss "harbor.local/gates/check-local-merge-loss"
-	"harbor.local/gates/check-no-test-sdk"
-	"harbor.local/gates/check-public-api-resign"
-	"harbor.local/gates/check-reference-trimmer"
+	checknotestsdk "harbor.local/gates/check-no-test-sdk"
+	checkpublicapiresign "harbor.local/gates/check-public-api-resign"
+	checkreferencetrimmer "harbor.local/gates/check-reference-trimmer"
 	shardbalance "harbor.local/gates/check-shard-balance"
+	testdup "harbor.local/gates/check-test-dup"
 	jsonreflection "harbor.local/gates/check-test-json-reflection"
-	"harbor.local/gates/check-workflows"
-	"harbor.local/gates/check-xml-doc-coverage"
+	testpackages "harbor.local/gates/check-test-packages"
+	testprojects "harbor.local/gates/check-test-projects"
+	pinschema "harbor.local/gates/check-tool-schema-pin"
+	tunitanalyzer "harbor.local/gates/check-tunit-analyzer-gate"
+	checkworkflows "harbor.local/gates/check-workflows"
+	checkxmldoccoverage "harbor.local/gates/check-xml-doc-coverage"
 	codemodtestevents "harbor.local/gates/codemod-test-events"
 	codemodtoolnames "harbor.local/gates/codemod-tool-names"
+	codemodschemas "harbor.local/gates/codemod-tool-schemas"
 	coveragereport "harbor.local/gates/coverage-report"
 	demorepro "harbor.local/gates/demo-repro"
 	gene2eshards "harbor.local/gates/gen-e2e-shards"
 	genplugininventory "harbor.local/gates/gen-plugin-inventory"
-	"harbor.local/gates/gen-seam-graph"
+	genseamgraph "harbor.local/gates/gen-seam-graph"
 	genworkflows "harbor.local/gates/gen-workflows"
 	goquality "harbor.local/gates/go-quality"
-	"harbor.local/gates/internal/gate"
-	"harbor.local/gates/measure-build-cpu"
-	"harbor.local/gates/measure-project-graph"
-	"harbor.local/gates/msbuild-evaluation-cost"
+	gate "harbor.local/gates/internal/gate"
+	measurebuildcpu "harbor.local/gates/measure-build-cpu"
+	measureprojectgraph "harbor.local/gates/measure-project-graph"
+	msbuildevaluationcost "harbor.local/gates/msbuild-evaluation-cost"
 	normalizemtimes "harbor.local/gates/normalize-mtimes"
 	packvalidate "harbor.local/gates/pack-validate"
 	prcost "harbor.local/gates/pr-cost"
 	rune2eshards "harbor.local/gates/run-e2e-avalonia-shards"
-	"harbor.local/gates/test-census"
-	"harbor.local/gates/test-measurements"
-	"harbor.local/gates/test-skips"
-	"os"
-	"sort"
-	"strings"
+	testcensus "harbor.local/gates/test-census"
+	testmeasurements "harbor.local/gates/test-measurements"
+	testskips "harbor.local/gates/test-skips"
 )
 
 // registered is the gate table. Every entry is one gate, one subcommand,
@@ -89,6 +97,9 @@ import (
 // The gate's name is the name of its directory under tools/gates/, and the
 // name of the subcommand that runs it: one directory, one gate, one
 // workflow line.
+//
+// The table is in alphabetical order, so two porters who add a gate at the
+// same time do not fight over one place in the file.
 type registered struct {
 	name    string
 	summary string
@@ -147,6 +158,11 @@ var registry = []registered{
 		run:     docfacts.Run,
 	},
 	{
+		name:    "check-dup-jscpd",
+		summary: "the second duplication detector, against the committed baseline",
+		run:     dupjscpd.Run,
+	},
+	{
 		name:    "check-event-topology",
 		summary: "the event-topology document's producer rows name the tree's real PublishAsync call sites",
 		run:     eventtopology.Run,
@@ -182,9 +198,34 @@ var registry = []registered{
 		run:     shardbalance.Run,
 	},
 	{
+		name:    "check-test-dup",
+		summary: "a test body is a copy of another test body",
+		run:     testdup.Run,
+	},
+	{
 		name:    "check-test-json-reflection",
 		summary: "no test serializes through the reflection resolver",
 		run:     jsonreflection.Run,
+	},
+	{
+		name:    "check-test-packages",
+		summary: "which packages a test or sample project may reference, and whether a banned one is among them",
+		run:     testpackages.Run,
+	},
+	{
+		name:    "check-test-projects",
+		summary: "every test project in the solution is discovered by a CI run",
+		run:     testprojects.Run,
+	},
+	{
+		name:    "check-tool-schema-pin",
+		summary: "the parameter schema of every builtin tool still is the one that was pinned",
+		run:     pinschema.Run,
+	},
+	{
+		name:    "check-tunit-analyzer-gate",
+		summary: "the analyzer must report a planted offender, and a waiver must suppress exactly its own site",
+		run:     tunitanalyzer.Run,
 	},
 	{
 		name:    "check-workflows",
@@ -205,6 +246,11 @@ var registry = []registered{
 		name:    "codemod-tool-names",
 		summary: "the tool-name literals move onto the WellKnownTools catalog",
 		run:     codemodtoolnames.Run,
+	},
+	{
+		name:    "codemod-tool-schemas",
+		summary: "the one-shot migration of the tool schemas, and the writer of the pin",
+		run:     codemodschemas.Run,
 	},
 	{
 		name:    "coverage-report",

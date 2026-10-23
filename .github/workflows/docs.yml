@@ -99,43 +99,47 @@ on:
       # run it, or the snapshot drifts from the tree it describes.
       - 'tools/gates/gen-plugin-inventory/**'
       - 'docs/PLUGIN_INVENTORY.json'
-      # #1778. `check-test-dup.py` scans `tests/**/*.cs` and compares the
+      # #1778. The duplicate-body gate scans `tests/**/*.cs` and compares the
       # result against its committed baseline, so a PR that edits the gate or
       # the baseline must run it — and so must a PR that edits the tree it
-      # measures.
-      - 'tools/check-test-dup.py'
+      # measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, which the trigger below already covers.
       - 'tools/test-dup-baseline.json'
-      # #1847. `check-dup-jscpd.py` scans `src/`, `apps/` and `tests/` and
-      # compares the result against its committed baseline, so a PR that
+      # #1847. The second duplication gate scans `src/`, `apps/` and `tests/`
+      # and compares the result against its committed baseline, so a PR that
       # edits the gate, the config or the baseline must run it — and so must
-      # a PR that edits the tree it measures.
-      - 'tools/check-dup-jscpd.py'
+      # a PR that edits the tree it measures. The gate is compiled now; its
+      # sources are under `tools/gates/`, which the trigger below already
+      # covers.
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
       # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
       # the result against its committed exceptions file, so a PR that edits
       # the gate or the exceptions must run it — and so must a PR that edits
-      # the tree it measures.
+      # the tree it measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, and the trigger below names the gate's own directory
+      # as well, so an edit of either runs the job.
       - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
-      # #1823. `check-test-projects.py` reads the test projects, the solution
+      # #1823. The completeness gate reads the test projects, the solution
       # that carries them and the CI lists that name them, so a PR that
       # touches any of the three has to run it: a new test project (its
       # .csproj and the solution entry that goes with it), a change to a CI
       # list, a change to the gate or to its baseline, and the NUKE `Test`
-      # target whose exclusions the census reads.
+      # target whose exclusions the census reads. The gate is compiled now;
+      # its sources are under `tools/gates/`, which the trigger below
+      # already covers.
       - 'tests/**/*.csproj'
       - 'Harbor.slnx'
       # #1780. The tool-schema pin is read by a gate and by the compiler
       # (Harbor.CodeGen.ToolSchemaGenerator), so a PR that edits the pin, the
       # gate or the model it reads has to run it — and so must a PR that edits
-      # the tool declarations the pin describes.
-      - 'tools/check-tool-schema-pin.py'
-      - 'tools/tool_schema_model.py'
+      # the tool declarations the pin describes. The gate and the model are
+      # compiled now; their sources are under `tools/gates/`, which the
+      # trigger below already covers.
       - 'src/Harbor.Tools.Builtin/Schemas/*.json'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
       # #1575. The string-switch gate reads `src/` and `apps/`, and compares
@@ -248,30 +252,33 @@ on:
       # #1778. Same trigger as above: the duplicate-body gate measures
       # `tests/**/*.cs` and compares the result against its committed
       # baseline, so a PR that edits the tree it measures — or the gate, or
-      # the baseline — must run it.
-      - 'tools/check-test-dup.py'
+      # the baseline — must run it. The gate is compiled now; its sources
+      # are under `tools/gates/`, which the trigger below already covers.
       - 'tools/test-dup-baseline.json'
       # #1847. Same trigger as above: the second duplication gate measures
       # `src/`, `apps/` and `tests/` and compares the result against its
       # committed baseline, so a PR that edits the tree it measures — or the
-      # gate, the config, or the baseline — must run it.
-      - 'tools/check-dup-jscpd.py'
+      # gate, the config, or the baseline — must run it. The gate is compiled
+      # now; its sources are under `tools/gates/`, which the trigger below
+      # already covers.
       - 'tools/jscpd-baseline.json'
       - '.jscpd.json'
       # #1822. The reflection-JSON gate scans `tests/**/*.cs` and compares
       # the result against its committed exceptions file, so a PR that edits
       # the gate or the exceptions must run it — and so must a PR that edits
-      # the tree it measures.
+      # the tree it measures. The gate is compiled now; its sources are under
+      # `tools/gates/`, and the trigger below names the gate's own directory
+      # as well, so an edit of either runs the job.
       - 'tools/gates/check-test-json-reflection/**'
       - 'tools/test-json-reflection-exceptions.txt'
       # #1823. Same trigger as above: the completeness gate reads the test
       # projects, the solution and the CI lists, so a PR that edits any of
-      # the three must run it.
+      # the three must run it. The gate is compiled now; its sources are
+      # under `tools/gates/`, which the trigger below already covers.
       - 'tests/**/*.csproj'
       - 'Harbor.slnx'
       - '.github/workflows/ci.yml'
       - '.github/workflows/test-os.yml'
-      - 'tools/check-test-projects.py'
       - 'tools/test-project-baseline.txt'
       - 'build/_build/Targets/TestTarget.cs'
       # #1575. Same trigger as above: the string-switch gate reads `src/` and
@@ -437,7 +444,7 @@ jobs:
       # the only one that asks whether a test body is a copy of another test
 
       - name: Duplicate-test-body gate fails on a planted duplicate
-        run: python3 tools/check-test-dup.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-dup --self-test
       # #1847. The second duplication detector, the one that scans the
       # PRODUCT code and the duplication that is not a method body. Its
       # failure path is tested for the same reason as the others, and its
@@ -446,7 +453,7 @@ jobs:
       # nothing. The second fixture is the growth: a tree that duplicated
       # more than the baseline allows must fail.
       - name: Second duplication gate fails on an empty scan and on growth
-        run: python3 tools/check-dup-jscpd.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-dup-jscpd --self-test
       # #1823. The ninth gate is the only one that asks whether a test
       # project is claimed by a CI list AT ALL. The other gates read the
       # contents of the test tree; this one reads the lists that decide
@@ -456,7 +463,7 @@ jobs:
       # list entry, a project claimed only behind a condition, and a
       # baseline row that no longer matches anything.
       - name: Test-project completeness gate fails on a project left out of CI
-        run: python3 tools/check-test-projects.py --self-test
+        run: tools/bin/harbor-gates-linux-x64 check-test-projects --self-test
       # #1884. The last two are REPORTERS, not gates: they read the TRX
       # artifacts a CI run produced and print what they find (the per-test
       # measurements, the per-project wall census). They never fail a build,
@@ -576,7 +583,7 @@ jobs:
       # the fixture is the one that matters: a schema that moved while the
       # pin did not. The gate MUST fail on it, or the pin protects nothing.
       - name: Tool-schema pin gate fails on a planted divergence
-        run: python3 tools/check-tool-schema-pin.py --selftest
+        run: tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --selftest
       # #1722. The plugin-inventory gate compares the committed snapshot with
       # the tree it describes, so its failure path has to be tested here for
       # the same reason as the others: a gate edited until it matches nothing
@@ -986,7 +993,7 @@ jobs:
       # `--update`, not before. The findings are printed as WARN and the job
       # goes green; the blocking default of the script is unchanged.
       - name: Check the test tree for duplicated bodies
-        run: python3 tools/check-test-dup.py --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
+        run: tools/bin/harbor-gates-linux-x64 check-test-dup --min-files 800 --min-methods 9000 --json-out test-dup-groups.json --warn-only
       - name: Upload the duplicate-group list
         if: always()
         uses: actions/upload-artifact@v7
@@ -998,7 +1005,7 @@ jobs:
   # #1847. The SECOND duplication detector, and the one that covers the
   # ground the python gate above cannot see.
   #
-  # `check-test-dup.py` matches duplicated TEST METHOD BODIES, and only
+  # `harbor-gates check-test-dup` matches duplicated TEST METHOD BODIES, and only
   # method bodies: it slices a body out of the file, normalises it and
   # hashes it. What it cannot see is duplication that is not a method body —
   # a duplicated record declaration, a duplicated nested class, a duplicated
@@ -1040,8 +1047,8 @@ jobs:
   # diff, where a reviewer sees it.
   #
   # The binary is downloaded from the release, sha256-pinned per platform
-  # inside `tools/check-dup-jscpd.py`, and it is a build-time tool: it never
-  # reaches the product, and no `PackageReference` is added, so the
+  # inside `tools/gates/check-dup-jscpd`, and it is a build-time tool: it
+  # never reaches the product, and no `PackageReference` is added, so the
   # dependency gate does not see it.
   merge-loss:
     name: local squash-merges dropped nothing
@@ -1164,9 +1171,9 @@ jobs:
             base="$(git rev-parse HEAD^ 2>/dev/null || true)"
           fi
           if [ -n "$base" ]; then
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json --baseline-ref "$base"
+            tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --report jscpd-report.json --baseline-ref "$base"
           else
-            python3 tools/check-dup-jscpd.py --run --report jscpd-report.json
+            tools/bin/harbor-gates-linux-x64 check-dup-jscpd --run --report jscpd-report.json
           fi
       # The report is the work list: every clone with its file, its line
       # range and its size, which is what the next duplication ticket needs.
@@ -1320,7 +1327,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check every test project is discovered by a CI run
-        run: python3 tools/check-test-projects.py --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
+        run: tools/bin/harbor-gates-linux-x64 check-test-projects --min-projects 43 --min-tested 38 --min-lists 7 --min-claims 37 --min-contexts 41
 
   # #1781. Twelfth question, and the only one about the LAYOUT of the test
   # shards rather than about the tests in them: are the shards balanced by
@@ -1383,7 +1390,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: The pinned tool schemas agree with the declarations
-        run: python3 tools/check-tool-schema-pin.py --min-tools 25
+        run: tools/bin/harbor-gates-linux-x64 check-tool-schema-pin --min-tools 25
 
   # #431 (slice D3). XML-doc coverage gate for the frozen contract assembly.
   #

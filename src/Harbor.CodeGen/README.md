@@ -39,7 +39,7 @@ Internal Roslyn source generator for Harbor. Emits `R` constant classes from AXI
 
 The others have no dedicated test project. Covered indirectly: `ReactiveHookGenerator` by `tests/Harbor.Terminal.Abstractions.Tests/ReactiveViewModelTests.cs` (the stub's generated hooks end-to-end) and the builtin view models by `tests/Harbor.Tui.Tests` / CellForge render tests; the others by the Avalonia app build and UI tests.
 
-`ToolSchemaGenerator` is covered from both sides: the compile-time half is the generator itself (a schema that differs from its pin is a build error, `HTOOL001`), and the runtime half is `tests/Harbor.Tools.Builtin.Tests/ParameterSchemaPinTests.cs`, which checks that what the runtime hands out hashes to the value that was pinned. The python control for the compile-time half is `tools/check-tool-schema-pin.py`; its `--selftest` plants a divergence and requires the analysis to find it.
+`ToolSchemaGenerator` is covered from both sides: the compile-time half is the generator itself (a schema that differs from its pin is a build error, `HTOOL001`), and the runtime half is `tests/Harbor.Tools.Builtin.Tests/ParameterSchemaPinTests.cs`, which checks that what the runtime hands out hashes to the value that was pinned. The control for the compile-time half is `harbor-gates check-tool-schema-pin`; its `--selftest` plants a divergence and requires the analysis to find it. The pin is written by `harbor-gates codemod-tool-schemas --write-pin`, and both read the declaration through the same model (`tools/gates/internal/toolschema`), so the two cannot drift apart.
 
 ## Build
 

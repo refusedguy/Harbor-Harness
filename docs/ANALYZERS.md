@@ -471,7 +471,7 @@ API.
 | `aweXpect.Migration` | 0.7.0 | MIT | NOT-ADOPT (#1877) | It migrates FluentAssertions and xUnit assertions to aweXpect (`aweXpectM002` and `aweXpectM003`, both `warning`), and this repository has neither library, so the package would report zero diagnostics here. There is no TUnit rule in it: every published version, 0.0.1 to 0.7.0, ships exactly two analyzers, `FluentAssertionsAnalyzer` and `XunitAssertionAnalyzer` (the upstream tree on `main` holds those two files and no third). So the question the issue asked has no mechanical answer, and the 22 716 `Assert.That(` call sites in `tests/` would be rewritten by hand — 1 070 test files, 8 231 `[Test]` methods, measured on `dev@ce9ef1e2`. On the axes this table checks the package is admissible (MIT, no package dependencies, no runtime code, a Roslyn floor of 4.8.0 against our 5.9.0 pin), so it is the premise, not the packaging, that fails. The reason this row carried before, "it migrates Moq and NSubstitute assertions", was wrong: no version of the package ever shipped a rule for either. |
 | `aweXpect.Logging` | 0.2.0 | MIT | WATCH (#1886) | It would pull `Microsoft.Extensions.Diagnostics.Testing` 10.11.0, which asks for `Microsoft.Extensions.Logging` 10.0.13 while this repository pins 10.0.10, and it does not cancel the shared `ILogger` double work. |
 | `aweXpect.Json` | 2.1.0 | MIT | NOT-ADOPT (#1886) | The JSON layer is closed by source generators, and the assertions it would replace mostly check our own types rather than arbitrary JSON. |
-| `jscpd` | 5.4.1 | MIT | ADOPT as a SECOND detector (#1847) | `tools/check-test-dup.py` stays the gate for duplicated test bodies, and jscpd runs beside it over `src/` + `apps/` + `tests/` (`.jscpd.json`, `tools/check-dup-jscpd.py`). It was REJECTED as a replacement, and the measurement says why: its own `--fail-on-new-clones` is keyed on a content hash, so editing a duplicated body reads as new duplication — on 13 real commits of `dev` it was red on 1 (3 with the `renamed` configuration), and 3 of the 4 "new clones" it reported on commit `8bde0944` were clones that already existed before it. The aggregate rule (the tree's duplicated lines must not exceed the baseline's) has the property the fingerprint rule lacks: the same edit leaves the total unchanged. As a second detector it finds what the python gate structurally cannot see — duplication that is not a method body, and duplication in the product code, which no gate covered. |
+| `jscpd` | 5.4.1 | MIT | ADOPT as a SECOND detector (#1847) | `harbor-gates check-test-dup` stays the gate for duplicated test bodies, and jscpd runs beside it over `src/` + `apps/` + `tests/` (`.jscpd.json`, `harbor-gates check-dup-jscpd`). It was REJECTED as a replacement, and the measurement says why: its own `--fail-on-new-clones` is keyed on a content hash, so editing a duplicated body reads as new duplication — on 13 real commits of `dev` it was red on 1 (3 with the `renamed` configuration), and 3 of the 4 "new clones" it reported on commit `8bde0944` were clones that already existed before it. The aggregate rule (the tree's duplicated lines must not exceed the baseline's) has the property the fingerprint rule lacks: the same edit leaves the total unchanged. As a second detector it finds what the python gate structurally cannot see — duplication that is not a method body, and duplication in the product code, which no gate covered. |
 | `Philips.CodeAnalysis.DuplicateCodeAnalyzer` | 2.0.0 | MIT | REJECT as a gate (#1847) | It compares inside one compilation, so it cannot see the cross-project duplication that is half of the problem; it has no baseline concept, and its cost is paid on every build of every project. |
 | `PMD CPD` | 7.28.0 | LGPL-2.1 | REJECT (#1847) | It needs a JRE in CI, where this repository has neither node nor java. It also has no baseline that compares "only what is new", which is the one thing a duplication gate in this repository has to do: the aggregate rule the jscpd gate uses would be its `minimum-tokens` count and a committed snapshot of it, and the tool is 30 years older than the engine that was measured against it (#1847). |
 | `Microsoft.CodeAnalysis.DuplicateCodeAnalyzer` | no such package | none | REJECT | The NuGet flat-container index for that id answers `BlobNotFound`. There is nothing to evaluate. |
@@ -1279,7 +1279,7 @@ Scope and enforcement:
   builds, so review is the only backstop there.
 - **Package set** — RS0030 reads source code, so it says nothing about a
   package that drags a banned assembly into a test project's `bin/`.
-  `tools/check-test-packages.py` is that gate: it reads the resolved package
+  `harbor-gates check-test-packages` is that gate: it reads the resolved package
   graph of every test and sample project and fails on a banned package, direct
   or transitive, and the named exceptions live in
   `tools/test-package-exceptions.txt`. `AGENTS.md` §"What NOT to do" #2 states
@@ -1462,10 +1462,10 @@ advisories this repository has had to act on inside the gate.
 | ID | Title | Severity | Why |
 |----|-------|----------|-----|
 | Proj0043 | Use lock files | suggestion | **Decided on 2026-10-20 (#1857): not adopted, and the tree stays all-or-nothing.** The measured reason is in `docs/CENTRAL_PACKAGE_MANAGEMENT.md` §14: the restore is already reproducible (196 packages in the graph, 0 of the 68 version ranges floating or open at the bottom), so a lock file would add a detector rather than a fix, at the cost of one file per project that every dependabot PR has to reconcile. The rule stays visible so the question is not forgotten. |
-| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. `RestoreLockedMode` without lock files is a restore that fails, which is why `tools/check-test-packages.py` reports that state (`RESTORE-LOCKED-WITHOUT-FILES`) rather than letting it reach CI. |
+| Proj0044 | Enable `RestoreLockedMode` when `ContinuousIntegrationBuild` is on | suggestion | Follows Proj0043; both wait on the same decision. `RestoreLockedMode` without lock files is a restore that fails, which is why `harbor-gates check-test-packages` reports that state (`RESTORE-LOCKED-WITHOUT-FILES`) rather than letting it reach CI. |
 
 **The gate that keeps the lock-file decision honest** is
-`tools/check-test-packages.py` (the `test-packages` CI job). It reports four
+`harbor-gates check-test-packages` (the `test-packages` CI job). It reports four
 states the tree must never be in: a lock file nobody regenerates
 (`RESTORE-INPUTS-UNENFORCED`), the property set with no lock file
 (`RESTORE-INPUTS-UNWRITTEN`), locked mode without lock files
@@ -2107,7 +2107,7 @@ site and says why the constant is the subject.
 
 ### The control
 
-`tools/check-tunit-analyzer-gate.py` builds `tests/TUnitAnalyzerCanary` —
+`harbor-gates check-tunit-analyzer-gate` builds `tests/TUnitAnalyzerCanary` —
 a project deliberately kept out of `Harbor.slnx`, because its planted
 offender is an error by design — and asserts that the planted offender is
 reported as an error and that the planted *waived* offender is not. If the

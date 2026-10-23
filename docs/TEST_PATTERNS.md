@@ -1220,7 +1220,7 @@ whole file, a `NoWarn` in a `.csproj`, or a `.editorconfig` entry that
 silences the rule for a project. Each waiver covers its own site and carries
 the reason that says why the constant is the subject.
 
-The gate is proved, not assumed: `tools/check-tunit-analyzer-gate.py` builds
+The gate is proved, not assumed: `harbor-gates check-tunit-analyzer-gate` builds
 `tests/TUnitAnalyzerCanary` — a project that is deliberately not a row of
 `Harbor.slnx` — and asserts that its planted offender is reported as an
 error while its planted *waived* offender is not. If the analyzer stopped
