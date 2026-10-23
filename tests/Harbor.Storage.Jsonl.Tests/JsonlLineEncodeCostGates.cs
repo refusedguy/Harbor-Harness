@@ -56,27 +56,32 @@ public class JsonlLineEncodeCostGates
     ///     Allocation budget for ONE encoded line, in bytes.
     ///     Machine-independent, so it is compared as measured, with no band.
     ///     <para>
-    ///         The number is pinned from a CI MEASUREMENT of the tree this
-    ///         gate was introduced on (the pre-fix tree), and it is stated
-    ///         with the run number in the commit that pins it. The budget
-    ///         carries the headroom the house recipe asks for over that
-    ///         measurement — the byte count does not move with the runner's
-    ///         speed, so it is the branch that can be a hard gate on any
-    ///         machine.
+    ///         Pinned from the CI measurement of the pre-fix tree (run
+    ///         39736511148, <c>test (platform)</c>): 13 600 000 B over 20 000
+    ///         lines = 680 B per line — the serializer's own payload array
+    ///         (192 B) AND the line array that carries it (192 B), plus the
+    ///         writer and the source-generated payload's own work. The fix
+    ///         removes the payload array and nothing else, so the tree this
+    ///         budget describes measures ~456–488 B per line, and the budget
+    ///         leaves ~1.3x headroom over that. It is BELOW the pre-fix
+    ///         number on purpose: the ceiling is the tripwire, and an
+    ///         encoder that went back to two arrays (680 B) fails it.
     ///     </para>
     /// </summary>
-    private const long MaxBytesPerLine = 2_000;
+    private const long MaxBytesPerLine = 600;
 
     /// <summary>
     ///     Time budget for ONE encoded line, in PROBE UNITS (see
     ///     <see cref="Harbor.TestKit.PerfGate" />). Machine-scaled and SOFT.
     ///     <para>
-    ///         The budget is wide on purpose: the probe's OWN measured cost
-    ///         moved 5.3x between two CI runs of the SAME tree, so the
-    ///         probe-unit currency is only as stable as the yardstick behind
-    ///         it. The BYTE budget is the branch that can fail on any runner
-    ///         — it is exact — and the time budget is the gross-regression
-    ///         detector.
+    ///         Pinned from the same run: 0.0030 ms per line against a probe
+    ///         that costs 0.000350 ms/unit on that runner, i.e. ~8.6 probe
+    ///         units per line. The budget is wide on purpose: the probe's
+    ///         OWN measured cost moved 5.3x between two CI runs of the SAME
+    ///         tree, so the probe-unit currency is only as stable as the
+    ///         yardstick behind it. The BYTE budget is the branch that can
+    ///         fail on any runner — it is exact — and the time budget is the
+    ///         gross-regression detector.
     ///     </para>
     /// </summary>
     private const double MaxProbeUnitsPerLine = 150.0;

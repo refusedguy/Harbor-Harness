@@ -177,9 +177,12 @@ internal static class OpenAiWire
 
                 case JsonTokenType.PropertyName:
                     // Capture the name BEFORE consuming the value: the reader
-                    // forgets it afterwards. One small string per property is
-                    // the only per-chunk dispatch cost (no DOM).
-                    string prop = reader.GetString() ?? string.Empty;
+                    // forgets it afterwards. The name is matched against this
+                    // parser's own literal table, so the dispatch costs NO
+                    // string: the old path allocated one per property per
+                    // chunk, and a chunk is what every token of every answer
+                    // arrives as (see Utf8JsonReaderExtensions.PropertyName).
+                    string prop = ChunkPropertyName(ref reader);
                     if (!reader.Read())
                         throw new JsonException("Truncated chunk: property without value.");
                     HandleValue(ref reader, depth, prop,
@@ -234,6 +237,54 @@ internal static class OpenAiWire
 
         return events;
     }
+
+    /// <summary>
+    ///     The name of the property the reader is on, as one of the literals
+    ///     this parser dispatches on — or <see cref="string.Empty" /> for a
+    ///     name it does not know.
+    /// </summary>
+    /// <remarks>
+    ///     The table is matched against the RAW bytes of the name, so the
+    ///     dispatch allocates nothing: the old path built a
+    ///     <see cref="string" /> per property per chunk, and a chunk is what
+    ///     every token of every answer arrives as. The literals themselves are
+    ///     interned, so the comparisons below are the same comparisons the old
+    ///     path made — against the same text.
+    /// </remarks>
+    private static string ChunkPropertyName(ref Utf8JsonReader reader)
+    {
+        string? known = MatchChunkProperty(reader.ValueSpan);
+        return Utf8JsonReaderExtensions.PropertyName(ref reader, known);
+    }
+
+    /// <summary>
+    ///     The property names this parser dispatches on, matched against the
+    ///     raw UTF-8 bytes of the name. The table is EXHAUSTIVE over the
+    ///     literals <see cref="HandleValue" /> compares against — a name
+    ///     missing from it would stop being dispatched on, which is why the
+    ///     parity test pins the whole set.
+    /// </summary>
+    private static string? MatchChunkProperty(ReadOnlySpan<byte> raw) => raw switch
+    {
+        // Ordered by how often a chunk carries them, not alphabetically: the
+        // chain is walked from the top, and the length check rejects a
+        // mismatch before any byte is compared.
+        var x when x.SequenceEqual("choices"u8) => "choices",
+        var x when x.SequenceEqual("content"u8) => "content",
+        var x when x.SequenceEqual("delta"u8) => "delta",
+        var x when x.SequenceEqual("id"u8) => "id",
+        var x when x.SequenceEqual("index"u8) => "index",
+        var x when x.SequenceEqual("finish_reason"u8) => "finish_reason",
+        var x when x.SequenceEqual("usage"u8) => "usage",
+        var x when x.SequenceEqual("tool_calls"u8) => "tool_calls",
+        var x when x.SequenceEqual("function"u8) => "function",
+        var x when x.SequenceEqual("name"u8) => "name",
+        var x when x.SequenceEqual("arguments"u8) => "arguments",
+        var x when x.SequenceEqual("reasoning_content"u8) => "reasoning_content",
+        var x when x.SequenceEqual("prompt_tokens"u8) => "prompt_tokens",
+        var x when x.SequenceEqual("completion_tokens"u8) => "completion_tokens",
+        _ => null
+    };
 
     private static void EmitToolCall(
         List<LlmEvent> events, Dictionary<int, string> indexToId, ChunkStreamState? state,
