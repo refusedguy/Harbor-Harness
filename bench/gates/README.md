@@ -85,6 +85,7 @@ Three reasons a gate CI runs is out of the measured set, and only three.
 | `all` | the runner is not a gate: it starts the gates of the tree list in parallel, and the set measures each of them on its own. The job's wall is the slowest of them, not their sum |
 | `check-dup-jscpd.py` | the gate downloads the jscpd binary from the network on first use, and there is no network and no binary on the measuring machine |
 | `check-tunit-analyzer-gate.py` | the control runs the compiler: it builds a throwaway project and reads its output, and the measuring machine has no .NET SDK |
+| `contract-domains` | CI runs only its own self-test: the census of who uses the two contract roots is a measurement a human runs before deciding whether to cut the root, and no build reads it |
 | `go-quality` | the gate runs `go vet` and `go build`, and the toolchain CI uses is fetched from the network; the measuring machine has none it may rely on |
 | `measure-aot-workload.sh` | the workload publishes the CLI with NativeAOT and runs it, so it needs the .NET SDK |
 | `measure-build-cpu` | the instrument runs `dotnet build` and meters it, so it needs the .NET SDK; the numbers it produces live in [docs/BENCHMARKS.md](../../docs/BENCHMARKS.md) §6 |
