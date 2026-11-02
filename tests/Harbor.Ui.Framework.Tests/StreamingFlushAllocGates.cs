@@ -119,9 +119,22 @@ public sealed class StreamingFlushAllocGates
 
     [Test]
     [Timeout(300_000)]
-    public async Task Flush_CostPerDelta_StaysWithinBudget() =>
-        await RunGate("streaming flush of a 4 KiB prefix plus one delta", FlushesPerWindow,
-            Gate("streaming-flush-cost", MaxBytesPerFlush, MaxProbeUnitsPerFlush), DriveFlushCost);
+    public async Task Flush_CostPerDelta_StaysWithinBudget()
+    {
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: (Func<int, PerfGateLeg>)DriveFlushCost,
+            units: FlushesPerWindow,
+            options: new PerfGateOptions
+            {
+                Label = "streaming-flush-cost",
+                MaxBytesPerUnit = MaxBytesPerFlush,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerFlush,
+                RequirePositiveBytes = true,
+                MinMeasurableLegMs = MinLegMs,
+            });
+
+        await result.AssertWithinBudgetsAsync("streaming flush of a 4 KiB prefix plus one delta");
+    }
 
     private static PerfGateLeg DriveFlushCost(int flushes)
     {
@@ -195,41 +208,5 @@ public sealed class StreamingFlushAllocGates
         const string Prefix = "untouched";
 
         await Assert.That(StreamingSync.Concat(Prefix, ChunkedBuffer.Empty)).IsSameReferenceAs(Prefix);
-    }
-
-    // ── The shared gate shape ────────────────────────────────────────────────
-
-    /// <summary>
-    ///     The budget shape every gate here shares: a constant per unit of
-    ///     work, the allocation branch asserted hard and the time branch
-    ///     asserted only when the measurement is reproducible.
-    /// </summary>
-    private static PerfGateOptions Gate(string label, long maxBytesPerUnit, double maxProbeUnitsPerUnit) =>
-        new()
-        {
-            Label = label,
-            MaxBytesPerUnit = maxBytesPerUnit,
-            MaxProbeUnitsPerUnit = maxProbeUnitsPerUnit,
-            RequirePositiveBytes = true,
-            MinMeasurableLegMs = MinLegMs,
-        };
-
-    /// <summary>
-    ///     Measure → report → assert. The report is printed before the
-    ///     assertions run, so a red gate still leaves the numbers that
-    ///     produced it in the log.
-    /// </summary>
-    private static async Task RunGate(
-        string topic,
-        int units,
-        PerfGateOptions options,
-        Func<int, PerfGateLeg> work)
-    {
-        PerfGateResult result = await PerfGate.MeasureAsync(
-            work: u => Task.FromResult(work(u)),
-            units: units,
-            options: options);
-
-        await result.AssertWithinBudgetsAsync(topic);
     }
 }
