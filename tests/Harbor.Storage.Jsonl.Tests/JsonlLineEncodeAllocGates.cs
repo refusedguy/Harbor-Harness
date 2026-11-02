@@ -131,9 +131,22 @@ public sealed class JsonlLineEncodeAllocGates
 
     [Test]
     [Timeout(300_000)]
-    public async Task EncodeLine_CostPerRecord_StaysWithinBudget() =>
-        await RunGate("encoded JSONL record carrying a 32 KiB tool output", LinesPerWindow,
-            Gate("jsonl-line-encode-cost", MaxBytesPerLine, MaxProbeUnitsPerLine), DriveEncodeCost);
+    public async Task EncodeLine_CostPerRecord_StaysWithinBudget()
+    {
+        PerfGateResult result = await PerfGate.MeasureAsync(
+            work: (Func<int, PerfGateLeg>)DriveEncodeCost,
+            units: LinesPerWindow,
+            options: new PerfGateOptions
+            {
+                Label = "jsonl-line-encode-cost",
+                MaxBytesPerUnit = MaxBytesPerLine,
+                MaxProbeUnitsPerUnit = MaxProbeUnitsPerLine,
+                RequirePositiveBytes = true,
+                MinMeasurableLegMs = MinLegMs,
+            });
+
+        await result.AssertWithinBudgetsAsync("encoded JSONL record carrying a 32 KiB tool output");
+    }
 
     private static PerfGateLeg DriveEncodeCost(int lines) => Measure(Entry(), lines);
 
@@ -204,41 +217,5 @@ public sealed class JsonlLineEncodeAllocGates
                 "the small record's line must be exactly the small record's bytes plus the LF; a longer "
                 + "line means the scratch buffer carried a tail of the previous (bigger) record.");
         await Assert.That(smallLine).IsEquivalentTo(smallExpected);
-    }
-
-    // ── The shared gate shape ────────────────────────────────────────────────
-
-    /// <summary>
-    ///     The budget shape every gate here shares: a constant per unit of
-    ///     work, the allocation branch asserted hard and the time branch
-    ///     asserted only when the measurement is reproducible.
-    /// </summary>
-    private static PerfGateOptions Gate(string label, long maxBytesPerUnit, double maxProbeUnitsPerUnit) =>
-        new()
-        {
-            Label = label,
-            MaxBytesPerUnit = maxBytesPerUnit,
-            MaxProbeUnitsPerUnit = maxProbeUnitsPerUnit,
-            RequirePositiveBytes = true,
-            MinMeasurableLegMs = MinLegMs,
-        };
-
-    /// <summary>
-    ///     Measure → report → assert. The report is printed before the
-    ///     assertions run, so a red gate still leaves the numbers that
-    ///     produced it in the log.
-    /// </summary>
-    private static async Task RunGate(
-        string topic,
-        int units,
-        PerfGateOptions options,
-        Func<int, PerfGateLeg> work)
-    {
-        PerfGateResult result = await PerfGate.MeasureAsync(
-            work: u => Task.FromResult(work(u)),
-            units: units,
-            options: options);
-
-        await result.AssertWithinBudgetsAsync(topic);
     }
 }
